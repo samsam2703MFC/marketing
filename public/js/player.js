@@ -87,6 +87,7 @@ class Player extends Component {
   playlistMods() {
     const s = this.state.snapshot;
     if (!s) return [];
+    if (s.schedule && !scheduledNow({ schedule: s.schedule }, new Date())) return [];
     const byId = new Map(s.modules.map((m) => [m.id, m]));
     const now = new Date();
     return s.playlist.map((id) => byId.get(id)).filter(Boolean).filter((m) => scheduledNow(m, now));

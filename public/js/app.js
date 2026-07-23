@@ -55,8 +55,9 @@ class App extends Component {
     dirty: false, saved: true, scope: 'module', clipboard: null, past: [], future: [],
     selId: null, playlist: [],
     playlists: [], activePl: null, editingFilm: false, editFilmName: '',
-    view: 'composer', publishing: false, deploying: false, version: 1, dataVer: 1, hbTick: 0, toast: '',
+    view: 'composer', composerTab: 'lib', publishing: false, deploying: false, version: 1, dataVer: 1, hbTick: 0, toast: '',
     pubTargets: {}, pubSlot: 'Toute la journée', pubWhen: 'now', activateAt: '', pubMode: 'full',
+    pubDays: [true, true, true, true, true, true, true], pubDone: null,
     override: false,
     srvUrl: '', srvIp: '', srvToken: '',
     test: { state: 'idle', rows: [] },
@@ -462,12 +463,40 @@ class App extends Component {
   };
 
   setView(v) { this.setState({ view: v }); if (v === 'fleet') this.refreshFleet(); }
+  setComposerTab(t) {
+    this.setState({ composerTab: t, scope: t === 'timeline' ? 'playlist' : 'module', t: 0 });
+  }
+  // Insertion / déplacement sur la ligne du temps (drag & drop).
+  insertAtTimeline(i, libId) {
+    if (!this.getMod(libId)) return;
+    const items = [...this.state.playlist];
+    items.splice(Math.max(0, Math.min(i, items.length)), 0, libId);
+    this.dirty(this.playlistPatch(items));
+  }
+  appendToTimeline(libId) { this.insertAtTimeline(this.state.playlist.length, libId); }
+  moveToEndTimeline(from) {
+    const items = [...this.state.playlist];
+    const [x] = items.splice(from, 1);
+    items.push(x);
+    this.dirty(this.playlistPatch(items));
+  }
+  togglePubDay(d) {
+    this.setState((s) => {
+      const pubDays = [...s.pubDays];
+      pubDays[d] = !pubDays[d];
+      return { pubDays };
+    });
+  }
   openPublish() {
     const t = {};
     this.state.fleet.forEach((s) => { t[s.id] = true; });
-    this.setState({ publishing: true, pubTargets: t });
+    this.setState({ publishing: true, pubTargets: t, pubDone: null });
   }
-  closePublish() { this.setState({ publishing: false }); }
+  closePublish() {
+    const wasDone = !!this.state.pubDone;
+    this.setState({ publishing: false, pubDone: null, ...(wasDone ? { view: 'fleet' } : {}) });
+    if (wasDone) this.refreshFleet();
+  }
   toggleTarget(id) { this.setState((s) => ({ pubTargets: { ...s.pubTargets, [id]: !s.pubTargets[id] } })); }
   targetCount() {
     return this.state.fleet.filter((s) => this.state.pubTargets[s.id]).reduce((n, s) => n + s.players.length, 0);
@@ -489,6 +518,14 @@ class App extends Component {
     return `tests live ${okN}/${out.tests.length} OK`;
   }
 
+  pubSchedule() {
+    const SLOTMAP = {
+      'Matin': ['06:00', '11:00'], 'Midi': ['11:00', '14:00'],
+      'Après-midi': ['15:00', '19:00'], 'Toute la journée': ['00:00', '23:59'],
+    };
+    const w = SLOTMAP[this.state.pubSlot] || SLOTMAP['Toute la journée'];
+    return { days: this.state.pubDays.map(Boolean), from: w[0], to: w[1] };
+  }
   deploy = async () => {
     const st = this.state;
     if (this.targetCount() === 0 || st.deploying) return;
@@ -500,21 +537,29 @@ class App extends Component {
         mode: st.pubMode === 'data' ? 'data' : 'full',
         playlistId: st.activePl,
         targets, slot: st.pubSlot, when: st.pubWhen, activateAt: st.activateAt,
+        schedule: this.pubSchedule(),
       });
       const testMsg = this.applyTests(out);
       const sched = st.pubWhen === 'scheduled';
-      this.setState({
-        version: out.mode === 'full' ? out.version : st.version,
-        dataVer: out.mode === 'data' ? out.version : st.dataVer,
-        publishing: false, dirty: false, saved: true, view: 'fleet',
-      });
-      const filmName = out.film ? `« ${out.film.name} » ` : '';
-      this.showToast(out.mode === 'data'
-        ? `Snapshot prix d${out.version} poussé sur ${out.playerCount} écran(s) · ${testMsg}`
-        : (sched
-          ? `Film ${filmName}v${out.version} planifié · ${testMsg}`
-          : `Film ${filmName}v${out.version} déployé sur ${out.playerCount} écran(s) · ${testMsg}`));
-      this.refreshFleet();
+      if (out.mode === 'data') {
+        this.setState({ dataVer: out.version, publishing: false, dirty: false, saved: true, view: 'fleet' });
+        this.showToast(`Snapshot prix d${out.version} poussé sur ${out.playerCount} écran(s) · ${testMsg}`);
+        this.refreshFleet();
+      } else {
+        // Le modal reste ouvert et affiche le lien de visionnage du film déployé.
+        const okN = out.tests.filter((t) => t.ok).length;
+        this.setState({
+          version: out.version, dirty: false, saved: true,
+          pubDone: {
+            version: out.version,
+            name: out.film ? out.film.name : this.activeFilm().name,
+            playerCount: out.playerCount,
+            testsOk: okN, testsTotal: out.tests.length,
+            scheduled: sched,
+            url: this.filmUrl({ film: st.activePl, w: 3840, h: 2160 }),
+          },
+        });
+      }
     } catch (e) {
       this.showToast(e.status === 401
         ? 'Session expirée — recharge la page (F5) et reconnecte-toi, puis réessaie'
@@ -789,6 +834,61 @@ class App extends Component {
       style: `width:52px;padding:9px 0;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;${m.schedule.days[d] ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#8A847C;border:1px solid rgba(35,34,32,0.14);'}`,
     }));
 
+    // ---- ligne du temps (onglet Playlist) ----
+    let cumT = 0;
+    const timelineBlocks = st.playlist.map((id, i) => {
+      const mm = this.getMod(id);
+      if (!mm) return null;
+      const dur = this.moduleDur(mm);
+      const startT = cumT;
+      cumT += dur;
+      const isLi = mm.type === 'liaison';
+      const playingHere = st.scope === 'playlist' && st.t >= startT && st.t < startT + dur;
+      return {
+        i, name: mm.name, order: i + 1,
+        durLabel: `${(Math.round(dur * 10) / 10).toString().replace('.', ',')} s`,
+        typeIcon: isLi ? '⧉' : '▤',
+        width: Math.max(104, Math.round(dur * 14)),
+        blockStyle: `flex:0 0 auto;display:flex;flex-direction:column;justify-content:space-between;gap:4px;padding:9px 11px;border-radius:10px;cursor:grab;background:${playingHere ? '#8D1D2C' : '#fff'};color:${playingHere ? '#fff' : '#232220'};border:1px solid ${playingHere ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};box-shadow:0 2px 6px rgba(0,0,0,0.05);`,
+        jump: () => this.setState({ scope: 'playlist', t: startT, playing: true }),
+        remove: (e) => { e.stopPropagation(); this.removeFromPlaylist(i); },
+        onDragStart: (e) => { e.dataTransfer.setData('text/plain', 'idx:' + i); e.dataTransfer.effectAllowed = 'move'; e.currentTarget.classList.add('dragging'); },
+        onDragOver: (e) => { e.preventDefault(); e.currentTarget.classList.add('drag-over'); },
+        onDragLeave: (e) => e.currentTarget.classList.remove('drag-over'),
+        onDrop: (e) => {
+          e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('drag-over');
+          const d = e.dataTransfer.getData('text/plain');
+          if (d.startsWith('lib:')) this.insertAtTimeline(i, d.slice(4));
+          else if (d.startsWith('idx:')) this.reorderPlaylist(parseInt(d.slice(4), 10), i);
+        },
+        onDragEnd: (e) => { e.currentTarget.classList.remove('dragging'); document.querySelectorAll('.pl-item,.tl-block').forEach((el) => el.classList.remove('drag-over')); },
+      };
+    }).filter(Boolean);
+    const timelineTotal = fmtTime(cumT);
+    const timelineEndDrop = {
+      onDragOver: (e) => e.preventDefault(),
+      onDrop: (e) => {
+        e.preventDefault();
+        const d = e.dataTransfer.getData('text/plain');
+        if (d.startsWith('lib:')) this.appendToTimeline(d.slice(4));
+        else if (d.startsWith('idx:')) this.moveToEndTimeline(parseInt(d.slice(4), 10));
+      },
+    };
+    const libCards = st.library.map((mm) => ({
+      name: mm.name,
+      typeIcon: mm.type === 'liaison' ? '⧉' : '▤',
+      meta: mm.type === 'liaison' ? 'liaison' : `${this.activeItems(mm).length} produits`,
+      inFilm: (inPlaylistCount[mm.id] || 0) > 0,
+      onDragStart: (e) => { e.dataTransfer.setData('text/plain', 'lib:' + mm.id); e.dataTransfer.effectAllowed = 'copy'; },
+      add: () => this.appendToTimeline(mm.id),
+      edit: () => { this.setComposerTab('lib'); this.selectMod(mm.id); },
+    }));
+    const pubDaysVals = DAYS.map((lab, d) => ({
+      label: lab,
+      toggle: () => this.togglePubDay(d),
+      style: `width:52px;padding:9px 0;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;${st.pubDays[d] ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#8A847C;border:1px solid rgba(35,34,32,0.14);'}`,
+    }));
+
     let liveLine = '—';
     if (playM && playM.type === 'category') {
       const n = this.activeItems(playM).length;
@@ -899,8 +999,16 @@ class App extends Component {
       return arr;
     })();
 
+    const subTab = 'padding:8px 18px;font-size:13px;font-weight:600;border:none;border-radius:999px;cursor:pointer;';
     return {
       playlist, library, layoutOptions, motionGroups, items, days, posFields, timeSlots, crumbs,
+      timelineBlocks, timelineTotal, timelineEndDrop, libCards, pubDaysVals,
+      isLibTab: st.composerTab !== 'timeline',
+      isTimelineTab: st.composerTab === 'timeline',
+      setTabLib: () => this.setComposerTab('lib'),
+      setTabTimeline: () => this.setComposerTab('timeline'),
+      tabLibStyle: subTab + (st.composerTab !== 'timeline' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
+      tabTimelineStyle: subTab + (st.composerTab === 'timeline' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       resetPos: () => this.resetPos(),
       undo: () => this.undo(), redo: () => this.redo(),
       undoStyle: `display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;font-size:16px;${st.past.length ? 'background:#FBF8F2;border:1px solid rgba(35,34,32,0.14);color:#232220;cursor:pointer;' : 'background:rgba(35,34,32,0.03);border:1px solid rgba(35,34,32,0.06);color:#C9C3B8;cursor:not-allowed;'}`,
@@ -1047,6 +1155,72 @@ class App extends Component {
       </div>`;
     }
     const v = this.vals();
+
+    // Aperçu + transport + réglages de diffusion — utilisé par les deux onglets.
+    const previewBlock = html`
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:12px;">
+        <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8A847C;">Aperçu · 6480 × 3840</h2>
+        <div style="display:inline-flex;background:#E0D9CE;border-radius:999px;padding:3px;">
+          <button onClick=${v.setScopeModule} style=${v.scopeModuleStyle}>Ce module</button>
+          <button onClick=${v.setScopePlaylist} style=${v.scopePlaylistStyle}>Playlist</button>
+        </div>
+      </div>
+      ${v.dragHint && html`
+        <p style="margin:-4px 0 12px;font-size:11.5px;color:#8A847C;">✥ Glisse l'illustration ou le bandeau sur l'aperçu pour les positionner.</p>
+      `}
+      <div style="background:#232220;border-radius:16px;padding:20px;box-shadow:0 24px 60px rgba(0,0,0,0.16);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <span style="font-size:12px;color:rgba(255,255,255,0.55);letter-spacing:0.06em;">${v.nowPlaying}</span>
+          <span style="font-size:12px;color:rgba(255,255,255,0.55);">Ligne <strong style="color:#fff;">${v.liveLine}</strong></span>
+        </div>
+        <div style="background:#0a0a0a;border-radius:10px;overflow:hidden;">${v.preview}</div>
+        <div style="display:flex;align-items:center;gap:14px;margin-top:18px;">
+          <button onClick=${v.togglePlay} style="display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;background:#8D1D2C;color:#fff;border:none;cursor:pointer;font-size:16px;flex:0 0 auto;">${v.playIcon}</button>
+          <button onClick=${v.restart} title="Recommencer" style="display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,0.10);color:#fff;border:none;cursor:pointer;font-size:14px;flex:0 0 auto;">↺</button>
+          <div onClick=${v.scrub} ref=${v.trackRef} style="flex:1 1 auto;height:8px;border-radius:4px;background:rgba(255,255,255,0.14);position:relative;cursor:pointer;">
+            <div style="position:absolute;left:0;top:0;height:100%;border-radius:4px;background:#8D1D2C;width:${v.progressPct};"></div>
+            <div style="position:absolute;top:50%;transform:translate(-50%,-50%);left:${v.progressPct};width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.4);"></div>
+          </div>
+          <span style="font-variant-numeric:tabular-nums;font-size:12.5px;color:rgba(255,255,255,0.7);flex:0 0 auto;min-width:84px;text-align:right;">${v.timeLabel}</span>
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:20px 22px;margin-top:18px;">
+        <h2 style="margin:0 0 16px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Diffusion</h2>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <label style="font-size:13px;font-weight:500;color:#8A847C;">Durée par ligne</label>
+          <span style="font-size:14px;font-weight:600;">${v.secLabel}</span>
+        </div>
+        <input type="range" min="1" max="8" step="0.5" value=${v.secPerLine} onInput=${v.onSec} style="width:100%;accent-color:#8D1D2C;margin-bottom:18px;" />
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:14px;font-weight:500;">Boucle continue</span>
+          <button onClick=${v.toggleLoop} style=${v.loopTrackStyle}><span style=${v.loopKnobStyle}></span></button>
+        </div>
+        <div style="display:flex;gap:14px;margin-top:16px;padding-top:14px;border-top:1px solid rgba(35,34,32,0.08);font-size:12.5px;color:#8A847C;">
+          <span>Playlist <strong style="color:#232220;">${v.moduleCount} modules</strong></span>
+          <span style="color:rgba(35,34,32,0.18);">·</span>
+          <span>Durée totale <strong style="color:#232220;">${v.playlistTotal}</strong></span>
+        </div>
+      </div>`;
+
+    // Sélecteur de film — utilisé dans l'onglet Playlist.
+    const filmSelector = html`
+      <div style="display:flex;gap:5px;align-items:center;">
+        ${st.editingFilm
+          ? html`<input autofocus value=${st.editFilmName}
+              onInput=${(e) => this.setState({ editFilmName: e.target.value })}
+              onKeyDown=${(e) => { if (e.key === 'Enter') this.renameFilm(st.editFilmName); if (e.key === 'Escape') this.setState({ editingFilm: false }); }}
+              onBlur=${() => this.renameFilm(st.editFilmName)}
+              style="flex:1 1 auto;min-width:180px;padding:7px 9px;font-size:13px;font-weight:600;border:1px solid #8D1D2C;border-radius:8px;background:#fff;" />`
+          : html`<select value=${st.activePl} onChange=${(e) => this.selectFilm(e.target.value)}
+              style="flex:1 1 auto;min-width:180px;padding:7px 9px;font-size:13px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;cursor:pointer;">
+              ${st.playlists.map((p) => html`<option value=${p.id}>${p.name} (${p.items.length})</option>`)}
+            </select>`}
+        <button onClick=${() => this.setState({ editingFilm: true, editFilmName: this.activeFilm().name })} title="Renommer le film" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;flex:0 0 auto;">✎</button>
+        <button onClick=${() => this.newFilm()} title="Nouveau film (vide)" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:#8D1D2C;color:#fff;border:none;cursor:pointer;font-size:14px;font-weight:700;flex:0 0 auto;">＋</button>
+        <button onClick=${() => this.dupFilm()} title="Dupliquer le film" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;flex:0 0 auto;">⎘</button>
+        <button onClick=${() => this.delFilm()} title="Supprimer le film (les modules restent en bibliothèque)" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;color:#8D1D2C;flex:0 0 auto;">🗑</button>
+      </div>`;
 
     return html`
 <div style="height:100vh;background:#E7E1D8;color:#232220;display:flex;flex-direction:column;overflow:hidden;">
@@ -1248,52 +1422,22 @@ class App extends Component {
   `}
 
   ${v.isComposerView && html`
+  <div style="flex:0 0 auto;display:flex;align-items:center;gap:16px;padding:10px 30px;background:#EDE7DE;border-bottom:1px solid rgba(35,34,32,0.08);flex-wrap:wrap;">
+    <div style="display:inline-flex;background:#E0D9CE;border-radius:999px;padding:3px;">
+      <button onClick=${v.setTabLib} style=${v.tabLibStyle}>1 · Bibliothèque — construire</button>
+      <button onClick=${v.setTabTimeline} style=${v.tabTimelineStyle}>2 · Playlist — ligne du temps</button>
+    </div>
+    <span style="font-size:12px;color:#8A847C;">${v.isTimelineTab ? 'Glisse les éléments de la bibliothèque sur la ligne du temps, puis Enregistrer et Publier sur la flotte.' : 'Construis ici les éléments (catégories, liaisons) qui composeront tes films.'}</span>
+  </div>
+  `}
+
+  ${v.isComposerView && v.isLibTab && html`
   <div style="flex:1 1 auto;display:grid;grid-template-columns:300px minmax(440px,1fr) minmax(560px,0.95fr);min-height:0;">
 
     <aside style="background:#F3EEE6;border-right:1px solid rgba(35,34,32,0.10);display:flex;flex-direction:column;min-height:0;overflow:auto;">
       <div style="flex:0 0 auto;padding:18px 18px 10px;">
-        <h2 style="margin:0 0 3px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Film (playlist)</h2>
-        <div style="display:flex;gap:5px;align-items:center;margin:7px 0 6px;">
-          ${st.editingFilm
-            ? html`<input autofocus value=${st.editFilmName}
-                onInput=${(e) => this.setState({ editFilmName: e.target.value })}
-                onKeyDown=${(e) => { if (e.key === 'Enter') this.renameFilm(st.editFilmName); if (e.key === 'Escape') this.setState({ editingFilm: false }); }}
-                onBlur=${() => this.renameFilm(st.editFilmName)}
-                style="flex:1 1 auto;min-width:0;padding:7px 9px;font-size:13px;font-weight:600;border:1px solid #8D1D2C;border-radius:8px;background:#fff;" />`
-            : html`<select value=${st.activePl} onChange=${(e) => this.selectFilm(e.target.value)}
-                style="flex:1 1 auto;min-width:0;padding:7px 9px;font-size:13px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;cursor:pointer;">
-                ${st.playlists.map((p) => html`<option value=${p.id}>${p.name} (${p.items.length})</option>`)}
-              </select>`}
-          <button onClick=${() => this.setState({ editingFilm: true, editFilmName: this.activeFilm().name })} title="Renommer le film" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;flex:0 0 auto;">✎</button>
-          <button onClick=${() => this.newFilm()} title="Nouveau film (vide)" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:#8D1D2C;color:#fff;border:none;cursor:pointer;font-size:14px;font-weight:700;flex:0 0 auto;">＋</button>
-          <button onClick=${() => this.dupFilm()} title="Dupliquer le film" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;flex:0 0 auto;">⎘</button>
-          <button onClick=${() => this.delFilm()} title="Supprimer le film (les modules restent en bibliothèque)" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;color:#8D1D2C;flex:0 0 auto;">🗑</button>
-        </div>
-        <p style="margin:0;font-size:11.5px;color:#8A847C;line-height:1.4;">Composé d'éléments de la bibliothèque · glisse pour l'ordre · ✕ retire (sans supprimer)</p>
-      </div>
-      <div style="flex:0 0 auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:7px;">
-        ${v.playlist.map((mp) => html`
-          <div class="pl-item" draggable="true" onDragStart=${mp.onDragStart} onDragOver=${mp.onDragOver} onDrop=${mp.onDrop} onDragEnd=${mp.onDragEnd} onClick=${mp.select} style=${mp.cardStyle}>
-            <span style="cursor:grab;color:#B8B2A8;font-size:14px;line-height:1;flex:0 0 auto;">⠿</span>
-            <span style=${mp.badgeStyle}>${mp.order}</span>
-            <div style="flex:1 1 auto;min-width:0;">
-              <div style="display:flex;align-items:center;gap:6px;">
-                <span style="font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${mp.name}</span>
-                ${mp.tagChip}
-              </div>
-              <div style="font-size:11px;color:#8A847C;letter-spacing:0.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${mp.meta}</div>
-            </div>
-            <button onClick=${mp.remove} title="Retirer de la playlist" style=${mp.miniBtnDel}>✕</button>
-          </div>
-        `)}
-        ${v.playlistEmpty && html`
-          <div style="padding:16px;text-align:center;font-size:12px;color:#B8B2A8;border:1px dashed rgba(35,34,32,0.18);border-radius:10px;">Ajoute des modules depuis la bibliothèque ↓</div>
-        `}
-      </div>
-
-      <div style="flex:0 0 auto;padding:14px 18px 10px;border-top:1px solid rgba(35,34,32,0.10);">
         <h2 style="margin:0 0 3px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Bibliothèque</h2>
-        <p style="margin:0;font-size:11.5px;color:#8A847C;line-height:1.4;">Tous les modules · ＋ ajoute à la playlist</p>
+        <p style="margin:0;font-size:11.5px;color:#8A847C;line-height:1.4;">Tous les éléments · clique pour éditer · ＋ ajoute au film affiché dans l'onglet Playlist</p>
       </div>
       <div style="flex:1 1 auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:7px;">
         ${v.library.map((ml) => html`
@@ -1490,53 +1634,75 @@ class App extends Component {
     </section>
 
     <section style="overflow:auto;padding:24px 26px 40px;background:#EDE7DE;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:12px;">
-        <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8A847C;">Aperçu · 6480 × 3840</h2>
-        <div style="display:inline-flex;background:#E0D9CE;border-radius:999px;padding:3px;">
-          <button onClick=${v.setScopeModule} style=${v.scopeModuleStyle}>Ce module</button>
-          <button onClick=${v.setScopePlaylist} style=${v.scopePlaylistStyle}>Playlist</button>
-        </div>
-      </div>
-      ${v.dragHint && html`
-        <p style="margin:-4px 0 12px;font-size:11.5px;color:#8A847C;">✥ Glisse l'illustration ou le bandeau sur l'aperçu pour les positionner.</p>
-      `}
-      <div style="background:#232220;border-radius:16px;padding:20px;box-shadow:0 24px 60px rgba(0,0,0,0.16);">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-          <span style="font-size:12px;color:rgba(255,255,255,0.55);letter-spacing:0.06em;">${v.nowPlaying}</span>
-          <span style="font-size:12px;color:rgba(255,255,255,0.55);">Ligne <strong style="color:#fff;">${v.liveLine}</strong></span>
-        </div>
-        <div style="background:#0a0a0a;border-radius:10px;overflow:hidden;">${v.preview}</div>
-        <div style="display:flex;align-items:center;gap:14px;margin-top:18px;">
-          <button onClick=${v.togglePlay} style="display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;background:#8D1D2C;color:#fff;border:none;cursor:pointer;font-size:16px;flex:0 0 auto;">${v.playIcon}</button>
-          <button onClick=${v.restart} title="Recommencer" style="display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,0.10);color:#fff;border:none;cursor:pointer;font-size:14px;flex:0 0 auto;">↺</button>
-          <div onClick=${v.scrub} ref=${v.trackRef} style="flex:1 1 auto;height:8px;border-radius:4px;background:rgba(255,255,255,0.14);position:relative;cursor:pointer;">
-            <div style="position:absolute;left:0;top:0;height:100%;border-radius:4px;background:#8D1D2C;width:${v.progressPct};"></div>
-            <div style="position:absolute;top:50%;transform:translate(-50%,-50%);left:${v.progressPct};width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.4);"></div>
-          </div>
-          <span style="font-variant-numeric:tabular-nums;font-size:12.5px;color:rgba(255,255,255,0.7);flex:0 0 auto;min-width:84px;text-align:right;">${v.timeLabel}</span>
-        </div>
-      </div>
-
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:20px 22px;margin-top:18px;">
-        <h2 style="margin:0 0 16px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Diffusion</h2>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-          <label style="font-size:13px;font-weight:500;color:#8A847C;">Durée par ligne</label>
-          <span style="font-size:14px;font-weight:600;">${v.secLabel}</span>
-        </div>
-        <input type="range" min="1" max="8" step="0.5" value=${v.secPerLine} onInput=${v.onSec} style="width:100%;accent-color:#8D1D2C;margin-bottom:18px;" />
-        <div style="display:flex;align-items:center;justify-content:space-between;">
-          <span style="font-size:14px;font-weight:500;">Boucle continue</span>
-          <button onClick=${v.toggleLoop} style=${v.loopTrackStyle}><span style=${v.loopKnobStyle}></span></button>
-        </div>
-        <div style="display:flex;gap:14px;margin-top:16px;padding-top:14px;border-top:1px solid rgba(35,34,32,0.08);font-size:12.5px;color:#8A847C;">
-          <span>Playlist <strong style="color:#232220;">${v.moduleCount} modules</strong></span>
-          <span style="color:rgba(35,34,32,0.18);">·</span>
-          <span>Durée totale <strong style="color:#232220;">${v.playlistTotal}</strong></span>
-        </div>
-      </div>
-
+      ${previewBlock}
     </section>
 
+  </div>
+  `}
+
+  ${v.isComposerView && v.isTimelineTab && html`
+  <div style="flex:1 1 auto;overflow:auto;padding:20px 30px 44px;background:#EDE7DE;">
+    <div style="max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
+
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Film</h2>
+        ${filmSelector}
+        <span style="font-size:12px;color:#8A847C;">durée totale <strong style="color:#232220;">${v.timelineTotal}</strong> · ${v.moduleCount} module(s)</span>
+      </div>
+
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 18px;">
+        <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">Bibliothèque — glisse un élément sur la ligne du temps (ou clique ＋)</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          ${v.libCards.map((c) => html`
+            <div draggable="true" onDragStart=${c.onDragStart} style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.12);cursor:grab;">
+              <span style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;flex:0 0 auto;font-size:11px;background:rgba(141,29,44,0.12);color:#8D1D2C;">${c.typeIcon}</span>
+              <div style="min-width:0;">
+                <div style="font-size:12.5px;font-weight:600;white-space:nowrap;">${c.name}</div>
+                <div style="font-size:10px;color:#8A847C;">${c.meta}${c.inFilm ? '' : ' · hors film'}</div>
+              </div>
+              <button onClick=${c.add} title="Ajouter à la fin du film" style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:#8D1D2C;color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:700;flex:0 0 auto;">＋</button>
+              <button onClick=${c.edit} title="Éditer dans la bibliothèque" style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:rgba(255,255,255,0.8);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:11px;flex:0 0 auto;">✎</button>
+            </div>
+          `)}
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 18px;">
+        <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">Ligne du temps · « ${this.activeFilm().name} »</h3>
+        <div onDragOver=${v.timelineEndDrop.onDragOver} onDrop=${v.timelineEndDrop.onDrop} style="display:flex;align-items:stretch;gap:7px;overflow-x:auto;padding:12px;background:#EFE9E0;border-radius:12px;min-height:96px;">
+          ${v.timelineBlocks.map((b) => html`
+            <div class="tl-block pl-item" draggable="true" onClick=${b.jump} onDragStart=${b.onDragStart} onDragOver=${b.onDragOver} onDragLeave=${b.onDragLeave} onDrop=${b.onDrop} onDragEnd=${b.onDragEnd} style="${b.blockStyle}width:${b.width}px;" title="Clique pour caler l'aperçu sur ce bloc">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                <span style="font-size:10px;font-weight:700;opacity:0.7;">${b.order}</span>
+                <button onClick=${b.remove} title="Retirer du film (reste en bibliothèque)" style="display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:5px;background:rgba(0,0,0,0.08);border:none;cursor:pointer;font-size:10px;color:inherit;">✕</button>
+              </div>
+              <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${b.typeIcon} ${b.name}</div>
+              <div style="font-size:10px;opacity:0.7;font-variant-numeric:tabular-nums;">${b.durLabel}</div>
+            </div>
+          `)}
+          ${v.playlistEmpty && html`
+            <div style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:#B8B2A8;border:1px dashed rgba(35,34,32,0.2);border-radius:10px;padding:18px;">Glisse ici les éléments de la bibliothèque pour composer le film</div>
+          `}
+          <div style="flex:1 1 64px;min-width:64px;border:1px dashed rgba(35,34,32,0.18);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#B8B2A8;font-size:18px;" title="Dépose ici pour ajouter à la fin">＋</div>
+        </div>
+        <p style="margin:10px 0 0;font-size:11.5px;color:#8A847C;">Clique un bloc pour caler l'aperçu dessus · glisse pour réordonner · ✕ retire (l'élément reste en bibliothèque) · la largeur d'un bloc reflète sa durée.</p>
+      </div>
+
+      <div style="display:grid;grid-template-columns:minmax(520px,1fr) 340px;gap:16px;align-items:start;">
+        <div>${previewBlock}</div>
+        <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:20px 22px;">
+          <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">3 · Enregistrer & déployer</h3>
+          <p style="margin:0 0 14px;font-size:12px;color:#8A847C;line-height:1.55;">Enregistre le film, puis publie-le : tu choisiras les <strong>jours</strong>, la <strong>fenêtre horaire</strong> et les <strong>magasins</strong>. Le lien de visionnage s'affiche juste après le déploiement.</p>
+          <button onClick=${v.save} style="width:100%;margin-bottom:8px;${v.saveStyle}">${v.saveLabel}</button>
+          <button onClick=${v.openPublish} style="width:100%;padding:11px;font-size:13.5px;font-weight:600;border-radius:999px;border:none;cursor:pointer;background:#232220;color:#fff;">Publier sur la flotte ↗</button>
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(35,34,32,0.08);font-size:11.5px;color:#8A847C;line-height:1.5;">Lien direct de ce film (55″) :<br/>
+            <button onClick=${() => this.copyLink(this.filmUrl({ film: st.activePl, w: 3840, h: 2160 }))} style="margin-top:6px;padding:8px 13px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Copier le lien</button>
+            <a href=${this.filmUrl({ film: st.activePl, w: 3840, h: 2160 })} target="_blank" style="margin-left:6px;font-size:12px;font-weight:600;">↗ Ouvrir</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
   </div>
   `}
 
@@ -1550,6 +1716,30 @@ class App extends Component {
           </div>
           <button onClick=${v.closePublish} style="width:34px;height:34px;border-radius:50%;border:none;background:rgba(35,34,32,0.08);cursor:pointer;font-size:15px;">✕</button>
         </div>
+        ${st.pubDone && html`
+        <div style="padding:26px;display:flex;flex-direction:column;gap:16px;">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <span style="display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;background:rgba(46,125,50,0.14);color:#2E7D32;font-size:22px;flex:0 0 auto;">✓</span>
+            <div>
+              <div style="font-size:16px;font-weight:600;">Film « ${st.pubDone.name} » ${st.pubDone.scheduled ? 'planifié' : 'déployé'} · v${st.pubDone.version}</div>
+              <div style="font-size:12.5px;color:#8A847C;">${st.pubDone.playerCount} écran(s) ciblés · tests live ${st.pubDone.testsOk}/${st.pubDone.testsTotal} OK</div>
+            </div>
+          </div>
+          <div style="background:#FBF8F2;border:1px solid rgba(35,34,32,0.10);border-radius:12px;padding:14px 16px;">
+            <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#8A847C;margin-bottom:8px;">Ton lien pour voir le film (public · 55″)</div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input readonly value=${st.pubDone.url} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:9px 11px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;" />
+              <button onClick=${() => this.copyLink(st.pubDone.url)} style="flex:0 0 auto;padding:9px 14px;font-size:12.5px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">Copier</button>
+              <a href=${st.pubDone.url} target="_blank" style="flex:0 0 auto;padding:9px 12px;font-size:12.5px;font-weight:600;border-radius:8px;border:1px solid rgba(35,34,32,0.14);background:#fff;color:#232220;">↗ Ouvrir</a>
+            </div>
+            <p style="margin:10px 0 0;font-size:11.5px;color:#8A847C;line-height:1.5;">Les liens par magasin sont dans ⚙ Paramètres → Liens de diffusion. Les écrans basculent automatiquement dès leur cache prêt.</p>
+          </div>
+          <div style="display:flex;justify-content:flex-end;">
+            <button onClick=${v.closePublish} style="padding:11px 22px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:pointer;background:#232220;color:#fff;">Voir la flotte →</button>
+          </div>
+        </div>
+        `}
+        ${!st.pubDone && html`
         <div style="padding:24px 26px;display:flex;flex-direction:column;gap:22px;">
           <div>
             <h3 style="margin:0 0 10px;font-size:12px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Type de synchronisation</h3>
@@ -1576,7 +1766,10 @@ class App extends Component {
             </div>
           </div>
           <div>
-            <h3 style="margin:0 0 10px;font-size:12px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Fenêtre horaire (day-parting)</h3>
+            <h3 style="margin:0 0 10px;font-size:12px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Jours & fenêtre horaire (day-parting)</h3>
+            <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px;">
+              ${v.pubDaysVals.map((d) => html`<button onClick=${d.toggle} style=${d.style}>${d.label}</button>`)}
+            </div>
             <div style="display:flex;flex-wrap:wrap;gap:7px;">
               ${v.pubSlots.map((s) => html`<button onClick=${s.pick} style=${s.style}>${s.label}</button>`)}
             </div>
@@ -1602,6 +1795,7 @@ class App extends Component {
           <button onClick=${v.closePublish} style="padding:11px 20px;font-size:14px;font-weight:500;border-radius:999px;border:1px solid rgba(35,34,32,0.16);background:#fff;cursor:pointer;">Annuler</button>
           <button onClick=${v.deploy} style=${v.deployStyle}>${v.deployLabel}</button>
         </div>
+        `}
       </div>
     </div>
   `}

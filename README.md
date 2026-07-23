@@ -71,8 +71,13 @@ reverse proxy expose l'application.
 
 ## Fonctionnement
 
-### Compositeur
-Playlist (drag & drop, retrait sans suppression), bibliothèque (copier / dupliquer / supprimer),
+### Compositeur — flow en 3 étapes
+**1 · Bibliothèque (construire)** : création des éléments. **2 · Playlist (ligne du temps)** :
+glisser-déposer les éléments de la bibliothèque sur la timeline du film (blocs proportionnels
+à la durée, réordonnancement par drag, films multiples nommés). **3 · Enregistrer & déployer** :
+publication avec jours + fenêtre horaire + magasins ciblés, puis le lien public de visionnage
+s'affiche immédiatement. Détail des capacités :
+playlist (drag & drop, retrait sans suppression), bibliothèque (copier / dupliquer / supprimer),
 tag campagne, programmation (jours + fenêtre horaire), 7 mises en page, mouvement par élément,
 positions fines (curseurs **et** glisser-déposer directement sur l'aperçu), produits & tarifs
 (illustration ou photo importée), aperçu animé 6480 × 3840 avec transport (lecture, boucle,

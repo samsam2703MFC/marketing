@@ -104,9 +104,14 @@ class Film extends Component {
     }
   }
 
+  filmOnAir() {
+    const s = this.state.snap;
+    if (!s || !s.schedule) return true;
+    return scheduledNow({ schedule: s.schedule }, new Date());
+  }
   playlistMods() {
     const s = this.state.snap;
-    if (!s) return [];
+    if (!s || !this.filmOnAir()) return [];
     const byId = new Map(s.modules.map((m) => [m.id, m]));
     const now = new Date();
     return s.playlist.map((id) => byId.get(id)).filter(Boolean).filter((m) => scheduledNow(m, now));

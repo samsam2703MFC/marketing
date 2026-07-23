@@ -97,7 +97,14 @@ function collectMedia(modules) {
   return [...media];
 }
 
-async function publish({ mode, targets, slot, when, activateAt, playlistId, baseUrl, publicDir }) {
+function cleanSchedule(s) {
+  if (!s || typeof s !== 'object') return null;
+  const days = Array.isArray(s.days) && s.days.length === 7 ? s.days.map(Boolean) : [true, true, true, true, true, true, true];
+  const time = (v, fb) => (/^\d{1,2}:\d{2}$/.test(String(v || '')) ? String(v) : fb);
+  return { days, from: time(s.from, '00:00'), to: time(s.to, '23:59') };
+}
+
+async function publish({ mode, targets, slot, when, activateAt, playlistId, schedule, baseUrl, publicDir }) {
   const db = getDb();
   const allStores = db.prepare('SELECT id FROM sig_stores').all().map((s) => s.id);
   const targetIds = (targets && targets.length ? targets : allStores).filter((t) => allStores.includes(t));
@@ -131,6 +138,7 @@ async function publish({ mode, targets, slot, when, activateAt, playlistId, base
     payload = {
       kind: 'playlist', version, generatedAt: nowIso(),
       playlistId: film.id, playlistName: film.name,
+      schedule: cleanSchedule(schedule),
       secPerLine: parseFloat(getSetting('sec_per_line', '4')),
       loop: getSetting('loop', '1') === '1',
       dataVer: getIntSetting('data_ver', 1),
@@ -448,6 +456,7 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
         targets: Array.isArray(body.targets) ? body.targets : [],
         slot: body.slot, when: body.when, activateAt: body.activateAt,
         playlistId: body.playlistId || null,
+        schedule: body.schedule || null,
         baseUrl: `${ctx.selfBase(req)}/api/v1`, publicDir: ctx.publicDir,
       });
       return send(200, out);
