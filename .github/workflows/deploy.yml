@@ -38,17 +38,27 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Préparer et valider la clé SSH
+        env:
+          KEY_RAW: ${{ secrets.SERVER_SSH_KEY }}
         run: |
           mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.SERVER_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_deploy
+          if printf '%s' "$KEY_RAW" | grep -q 'BEGIN .*PRIVATE KEY'; then
+            # Clé collée telle quelle (multi-lignes)
+            printf '%s\n' "$KEY_RAW" | tr -d '\r' > ~/.ssh/id_deploy
+          else
+            # Clé fournie encodée en base64 sur UNE seule ligne (recommandé, copie fiable) :
+            #   base64 -w0 /root/signage_deploy
+            printf '%s' "$KEY_RAW" | tr -d ' \t\r\n' | base64 -d > ~/.ssh/id_deploy 2>/dev/null || true
+          fi
           chmod 600 ~/.ssh/id_deploy
           if ! ssh-keygen -y -P "" -f ~/.ssh/id_deploy > /dev/null 2>&1; then
             echo "::error::Secret SERVER_SSH_KEY invalide."
-            echo "La clé privée est illisible : soit elle est protégée par une passphrase,"
-            echo "soit le collage a perdu des lignes. Générer une clé SANS passphrase :"
-            echo "    ssh-keygen -t ed25519 -N \"\" -f signage_deploy"
-            echo "puis coller TOUT le fichier signage_deploy (de -----BEGIN à -----END inclus)"
-            echo "dans le secret, et ajouter signage_deploy.pub dans ~/.ssh/authorized_keys du serveur."
+            echo "La clé privée est illisible : passphrase, lignes perdues au collage, ou base64 tronqué."
+            echo "Méthode fiable : sur le serveur, générer puis encoder la clé en UNE ligne :"
+            echo "    ssh-keygen -t ed25519 -N \"\" -f /root/signage_deploy"
+            echo "    cat /root/signage_deploy.pub >> /root/.ssh/authorized_keys"
+            echo "    base64 -w0 /root/signage_deploy ; echo"
+            echo "et coller cette unique longue ligne dans le secret SERVER_SSH_KEY."
             exit 1
           fi
           ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
