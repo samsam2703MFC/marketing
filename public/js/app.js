@@ -495,23 +495,33 @@ class App extends Component {
     }
   };
 
+  filmUrl({ w, h: hh, fit, store } = {}) {
+    const u = new URL('film', location.href);
+    if (store) u.searchParams.set('store', store);
+    if (w) {
+      u.searchParams.set('w', w);
+      u.searchParams.set('h', hh);
+      u.searchParams.set('fit', fit || 'cover');
+    }
+    return u.toString();
+  }
   filmLinks() {
-    const mk = (w, hh, fit) => {
-      const u = new URL('film', location.href);
-      if (w) {
-        u.searchParams.set('w', w);
-        u.searchParams.set('h', hh);
-        u.searchParams.set('fit', fit || 'cover');
-      }
-      return u.toString();
-    };
     return [
-      { label: '55″ TV · 16:9 (standard)', sub: '3840 × 2160 · remplir', url: mk(3840, 2160) },
-      { label: '55″ portrait · 9:16', sub: '2160 × 3840 · dalle centrale du mur', url: mk(2160, 3840) },
-      { label: 'Full HD · 16:9', sub: '1920 × 1080 · remplir', url: mk(1920, 1080) },
-      { label: 'Mur 3 dalles · natif', sub: '6480 × 3840', url: mk(6480, 3840) },
-      { label: 'Auto (fenêtre)', sub: 's’adapte au navigateur · letterbox', url: mk(null) },
+      { label: '55″ TV · 16:9 (standard)', sub: '3840 × 2160 · remplir', url: this.filmUrl({ w: 3840, h: 2160 }) },
+      { label: '55″ portrait · 9:16', sub: '2160 × 3840 · dalle centrale du mur', url: this.filmUrl({ w: 2160, h: 3840 }) },
+      { label: 'Full HD · 16:9', sub: '1920 × 1080 · remplir', url: this.filmUrl({ w: 1920, h: 1080 }) },
+      { label: 'Mur 3 dalles · natif', sub: '6480 × 3840', url: this.filmUrl({ w: 6480, h: 3840 }) },
+      { label: 'Auto (fenêtre)', sub: 's’adapte au navigateur · letterbox', url: this.filmUrl() },
     ];
+  }
+  storeFilmLinks() {
+    // Lien direct par magasin (format standard 55″) : montre la version
+    // actuellement assignée à ce magasin.
+    return this.state.fleet.map((s) => ({
+      label: s.store,
+      sub: `${s.group} · ${s.players.length} écran(s)`,
+      url: this.filmUrl({ w: 3840, h: 2160, store: s.id }),
+    }));
   }
 
   testConn = async () => {
@@ -718,6 +728,8 @@ class App extends Component {
     ];
     const fleet = st.fleet.map((s) => ({
       store: s.store, group: s.group,
+      filmUrl: this.filmUrl({ w: 3840, h: 2160, store: s.id }),
+      copyFilm: () => this.copyLink(this.filmUrl({ w: 3840, h: 2160, store: s.id })),
       connColor: s.conn === 'offline' ? '#8D1D2C' : s.conn === '4G' ? '#B8860B' : '#2E7D32',
       connLabel: s.conn === 'offline' ? 'Magasin injoignable' : s.conn === '4G' ? 'Connectivité 4G' : 'Fibre',
       players: s.players.map((p) => {
@@ -1041,6 +1053,23 @@ class App extends Component {
             </div>
           `)}
         </div>
+        ${this.storeFilmLinks().length > 0 && html`
+          <h3 style="margin:20px 0 4px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">Par magasin · version assignée au magasin (55″ standard)</h3>
+          <p style="margin:0 0 12px;font-size:11.5px;color:#8A847C;line-height:1.5;">Chaque lien montre le film que CE magasin doit jouer — pratique à envoyer au responsable du point de vente.</p>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            ${this.storeFilmLinks().map((l) => html`
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.08);">
+                <div style="flex:0 0 190px;min-width:0;">
+                  <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.label}</div>
+                  <div style="font-size:10.5px;color:#8A847C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.sub}</div>
+                </div>
+                <input readonly value=${l.url} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:8px 10px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:7px;background:#fff;color:#232220;" />
+                <button onClick=${() => this.copyLink(l.url)} title="Copier le lien" style="flex:0 0 auto;padding:8px 13px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">Copier</button>
+                <a href=${l.url} target="_blank" title="Ouvrir dans un onglet" style="flex:0 0 auto;padding:8px 11px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(35,34,32,0.14);background:#fff;color:#232220;">↗</a>
+              </div>
+            `)}
+          </div>
+        `}
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:16px;">
         <button onClick=${this.logout} style="padding:10px 18px;font-size:13px;font-weight:500;border-radius:999px;border:1px solid rgba(35,34,32,0.16);background:#fff;color:#8A847C;cursor:pointer;">Se déconnecter</button>
@@ -1074,6 +1103,8 @@ class App extends Component {
             <div style="display:flex;align-items:center;gap:12px;">
               <span style="font-size:16px;font-weight:600;">${s.store}</span>
               <span style="font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;background:rgba(35,34,32,0.07);border-radius:999px;padding:3px 10px;">${s.group}</span>
+              <button onClick=${s.copyFilm} title="Copier le lien direct du film de ce magasin (55″ standard)" style="padding:5px 11px;font-size:11.5px;font-weight:600;border-radius:999px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Lien film</button>
+              <a href=${s.filmUrl} target="_blank" title="Ouvrir le film de ce magasin" style="font-size:11.5px;font-weight:600;color:#8D1D2C;">↗</a>
             </div>
             <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:${s.connColor};"><span style="width:8px;height:8px;border-radius:50%;background:${s.connColor};"></span>${s.connLabel}</div>
           </div>

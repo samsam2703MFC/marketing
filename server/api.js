@@ -241,10 +241,26 @@ function assignment(id, url) {
 // Le « film » public : dernière playlist publiée (ou brouillon si rien n'a
 // jamais été publié), avec le dernier snapshot de prix appliqué. Lecture seule,
 // sans token — c'est le contenu affiché en vitrine.
-function filmJson() {
+// Avec ?store=<id> : la version actuellement assignée à CE magasin (lien
+// direct par magasin, partageable).
+function filmJson(storeId) {
   const db = getDb();
-  const snapRow = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' ORDER BY version DESC LIMIT 1`).get();
-  const snap = snapRow ? JSON.parse(snapRow.payload) : currentDraftSnapshot();
+  let snap = null;
+  let storeName = null;
+  if (storeId) {
+    const store = db.prepare('SELECT * FROM sig_stores WHERE id = ?').get(storeId);
+    if (!store) return { status: 404, json: { error: `magasin inconnu : ${storeId}` } };
+    storeName = store.name;
+    const row = db.prepare('SELECT MAX(assigned_ver) AS v FROM sig_players WHERE store_id = ?').get(storeId);
+    if (row && row.v) {
+      const s = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' AND version <= ? ORDER BY version DESC LIMIT 1`).get(row.v);
+      if (s) snap = JSON.parse(s.payload);
+    }
+  }
+  if (!snap) {
+    const snapRow = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' ORDER BY version DESC LIMIT 1`).get();
+    snap = snapRow ? JSON.parse(snapRow.payload) : currentDraftSnapshot();
+  }
   const dv = getIntSetting('data_ver', 1);
   const dataRow = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'data' AND version = ?`).get(dv);
   if (dataRow) {
@@ -260,7 +276,9 @@ function filmJson() {
   }
   snap.dataVer = dv;
   snap.override = getSetting('override', '0') === '1';
-  return snap;
+  snap.storeId = storeId || null;
+  snap.storeName = storeName;
+  return { status: 200, json: snap };
 }
 
 // Si aucune publication n'existe encore pour la version assignée, on sert le brouillon courant.
@@ -344,7 +362,10 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
     }
 
     // ---- film public (visionneuse plein écran, lecture seule) ---------------
-    if (req.method === 'GET' && path === '/film') return send(200, filmJson());
+    if (req.method === 'GET' && path === '/film') {
+      const out = filmJson(url.searchParams.get('store') || null);
+      return send(out.status, out.json);
+    }
 
     // ---- endpoints players (auth par token de player) -----------------------
     if (req.method === 'GET' && (mm = m(/^\/players\/([\w-]+)\/assignment$/))) {

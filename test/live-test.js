@@ -141,6 +141,18 @@ async function main() {
     if (!Array.isArray(f.playlist)) throw new Error('playlist absente');
     return `v${f.version} · d${f.dataVer} · ${f.playlist.length} module(s) au programme`;
   });
+  await step('GET /api/v1/film?store=… — lien direct par magasin', async () => {
+    const fleetRes = await call('GET', '/api/v1/fleet');
+    const store = fleetRes.stores[0];
+    if (!store) throw new Error('aucun magasin en base');
+    const res = await fetch(BASE + `/api/v1/film?store=${encodeURIComponent(store.id)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const f = await res.json();
+    if (f.storeId !== store.id) throw new Error('storeId inattendu');
+    const bad = await fetch(BASE + '/api/v1/film?store=inexistant');
+    if (bad.status !== 404) throw new Error(`magasin inconnu : HTTP ${bad.status} au lieu de 404`);
+    return `${f.storeName} → v${f.version}`;
+  });
   await step('POST /api/v1/test — test de connexion live (auto-ciblé)', async () => {
     const anyToken = await firstToken();
     const out = await call('POST', '/api/v1/test', { url: `${BASE}/api/v1`, ip: new URL(BASE).hostname, token: anyToken });
