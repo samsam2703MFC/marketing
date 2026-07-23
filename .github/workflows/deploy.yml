@@ -1,0 +1,80 @@
+# Déploiement automatique du CMS signage sur le serveur, puis tests live.
+#
+# Secrets requis (Settings → Secrets and variables → Actions) :
+#   SERVER_HOST         → 185.180.206.46
+#   SERVER_USER         → utilisateur SSH du serveur
+#   SERVER_SSH_KEY      → clé privée SSH (ed25519) dédiée au déploiement
+#   SIG_ADMIN_PASSWORD  → mot de passe admin du back office (pour les tests live)
+#
+# Prérequis côté serveur (une seule fois, cf. README) :
+#   - Node ≥ 22.5, dossier /var/www/signage accessible à SERVER_USER
+#   - service systemd installé (deploy/signage.service)
+#   - sudo sans mot de passe pour le redémarrage du service :
+#       echo "SERVER_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart signage" | sudo tee /etc/sudoers.d/signage
+name: Déploiement signage
+
+on:
+  push:
+    branches: [claude/back-office-signage-uqnpca]
+  workflow_dispatch:
+    inputs:
+      mutate:
+        description: "Cycle complet de tests (publie réellement une version sur la flotte)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-signage
+  cancel-in-progress: false
+
+env:
+  DEPLOY_PATH: /var/www/signage
+  PUBLIC_URL: http://185.180.206.46/pwa_consultant/signage
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Préparer la clé SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Copier le code (rsync — la base data/ du serveur est préservée)
+        run: |
+          rsync -az --delete \
+            --exclude '.git' --exclude 'data' --exclude '.github' \
+            -e "ssh -i ~/.ssh/id_deploy" \
+            ./ "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${DEPLOY_PATH}/"
+
+      - name: Redémarrer le service
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            "sudo -n systemctl restart signage"
+
+      - name: Attendre que le CMS réponde
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fsS "$PUBLIC_URL/api/v1/health" >/dev/null 2>&1; then
+              echo "CMS en ligne ✓"; exit 0
+            fi
+            sleep 3
+          done
+          echo "CMS injoignable sur $PUBLIC_URL après 60 s" >&2
+          exit 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Tests live post-déploiement
+        env:
+          SIG_ADMIN_PASSWORD: ${{ secrets.SIG_ADMIN_PASSWORD }}
+        run: |
+          EXTRA=""
+          if [ "${{ inputs.mutate }}" = "true" ]; then EXTRA="--mutate"; fi
+          node test/live-test.js "$PUBLIC_URL" $EXTRA
