@@ -80,12 +80,70 @@ jobs:
             -e "ssh -i ~/.ssh/id_deploy" \
             ./ "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${DEPLOY_PATH}/"
 
-      - name: Redémarrer le service
+      - name: Provisionner le serveur (si besoin) et redémarrer le service
+        env:
+          SIG_PW: ${{ secrets.SIG_ADMIN_PASSWORD }}
         run: |
           ssh -i ~/.ssh/id_deploy "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
-            "sudo -n systemctl restart signage"
+            "SIG_PW='$SIG_PW' bash -s" <<'PROVISION'
+          set -e
+          cd /var/www/signage
 
-      - name: Attendre que le CMS réponde
+          echo "— Node.js"
+          if ! command -v node >/dev/null 2>&1 || ! node -e 'process.exit(+process.versions.node.split(".")[0] >= 22 ? 0 : 1)'; then
+            echo "Node ≥ 22 absent → installation via NodeSource…"
+            export DEBIAN_FRONTEND=noninteractive
+            curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+            apt-get install -y nodejs
+          fi
+          node --version
+
+          echo "— Service systemd"
+          cp deploy/signage.service /etc/systemd/system/signage.service
+          sed -i 's/^User=www-data/User=root/' /etc/systemd/system/signage.service
+          mkdir -p /etc/systemd/system/signage.service.d
+          if [ -n "$SIG_PW" ]; then
+            printf '[Service]\nEnvironment=SIG_ADMIN_PASSWORD=%s\n' "$SIG_PW" > /etc/systemd/system/signage.service.d/override.conf
+          fi
+          mkdir -p /var/www/signage/data
+          systemctl daemon-reload
+          systemctl enable signage >/dev/null 2>&1 || true
+          systemctl restart signage
+
+          echo "— Santé locale (127.0.0.1:8080)"
+          ok=""
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS http://127.0.0.1:8080/api/v1/health >/dev/null 2>&1; then ok=1; echo "CMS local OK ✓"; break; fi
+            sleep 2
+          done
+          if [ -z "$ok" ]; then
+            echo "CMS local injoignable — journaux du service :"
+            journalctl -u signage -n 25 --no-pager || true
+            exit 1
+          fi
+
+          echo "— Reverse proxy public (/pwa_consultant/signage/)"
+          if curl -fsS http://127.0.0.1/pwa_consultant/signage/api/v1/health >/dev/null 2>&1; then
+            echo "proxy déjà en place ✓"
+          elif command -v apache2ctl >/dev/null 2>&1 && [ -d /etc/apache2/conf-available ]; then
+            echo "Apache détecté → installation d'une conf isolée signage.conf…"
+            a2enmod proxy proxy_http >/dev/null
+            cat > /etc/apache2/conf-available/signage.conf <<'ACONF'
+          RedirectMatch 301 ^/pwa_consultant/signage$ /pwa_consultant/signage/
+          ProxyPreserveHost On
+          ProxyPass        /pwa_consultant/signage/ http://127.0.0.1:8080/
+          ProxyPassReverse /pwa_consultant/signage/ http://127.0.0.1:8080/
+          ACONF
+            a2enconf signage >/dev/null
+            systemctl reload apache2
+            sleep 1
+            curl -fsS http://127.0.0.1/pwa_consultant/signage/api/v1/health >/dev/null 2>&1 && echo "proxy Apache OK ✓" || echo "⚠ proxy Apache configuré mais la santé locale via port 80 ne répond pas encore"
+          else
+            echo "⚠ Apache non détecté — configurer le reverse proxy manuellement (voir deploy/nginx-signage.conf)"
+          fi
+          PROVISION
+
+      - name: Attendre que le CMS réponde (URL publique)
         run: |
           for i in $(seq 1 20); do
             if curl -fsS "$PUBLIC_URL/api/v1/health" >/dev/null 2>&1; then
@@ -93,7 +151,7 @@ jobs:
             fi
             sleep 3
           done
-          echo "CMS injoignable sur $PUBLIC_URL après 60 s" >&2
+          echo "::error::Le service tourne mais $PUBLIC_URL/api/v1/health ne répond pas — reverse proxy à vérifier (deploy/apache-signage.conf ou nginx-signage.conf)." >&2
           exit 1
 
       - uses: actions/setup-node@v4
