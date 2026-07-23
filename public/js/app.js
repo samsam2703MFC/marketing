@@ -356,6 +356,10 @@ class App extends Component {
   }
   delMod(id) {
     if (this.state.library.length <= 1) return;
+    const mod = this.getMod(id);
+    const usedIn = this.state.playlists.filter((p) => p.items.includes(id)).map((p) => p.name);
+    const warn = usedIn.length ? `\nIl sera aussi retiré de : ${usedIn.join(', ')}.` : '';
+    if (!window.confirm(`Supprimer « ${mod ? mod.name : id} » de la bibliothèque ?${warn}\nCette action est définitive (après Enregistrer).`)) return;
     const lib = this.state.library.filter((m) => m.id !== id);
     // Le module disparaît de TOUS les films.
     const playlists = this.state.playlists.map((p) => ({ ...p, items: p.items.filter((x) => x !== id) }));
@@ -399,6 +403,8 @@ class App extends Component {
   delItem(i) {
     const m = this.sel();
     if (m.items.length <= 1) return;
+    const it = m.items[i];
+    if (!window.confirm(`Supprimer le produit « ${it && it.name ? it.name : 'sans nom'} » ?`)) return;
     const lib = this.cloneLib();
     lib.find((x) => x.id === this.state.selId).items.splice(i, 1);
     this.setLib(lib);
