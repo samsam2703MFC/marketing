@@ -104,17 +104,43 @@ class Film extends Component {
     }
   }
 
+  // Le lien de partage (?film= ou lien général) montre TOUJOURS le film :
+  // la programmation (jours/heures) ne s'applique qu'aux liens d'écran
+  // (?store=) et aux players — sinon un lien partagé le soir semble « vide ».
+  isScreenMode() { return !!STORE && !FILM; }
+  schedLabel(s) {
+    const DAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+    const all = s.days.every(Boolean);
+    const d = all ? 'tous les jours' : DAYS.filter((_, i) => s.days[i]).join(' ');
+    const hh = (s.from === '00:00' && (s.to === '23:59' || s.to === '24:00')) ? '24h/24' : `${s.from}–${s.to}`;
+    return `${d} · ${hh}`;
+  }
   filmOnAir() {
     const s = this.state.snap;
     if (!s || !s.schedule) return true;
     return scheduledNow({ schedule: s.schedule }, new Date());
   }
-  playlistMods() {
+  // Ce qu'un écran diffuserait maintenant (programmation film + éléments).
+  onAirMods() {
     const s = this.state.snap;
     if (!s || !this.filmOnAir()) return [];
     const byId = new Map(s.modules.map((m) => [m.id, m]));
     const now = new Date();
     return s.playlist.map((id) => byId.get(id)).filter(Boolean).filter((m) => scheduledNow(m, now));
+  }
+  playlistMods() {
+    const s = this.state.snap;
+    if (!s) return [];
+    if (this.isScreenMode()) return this.onAirMods();
+    // mode partage : tout le film, sans filtre horaire
+    const byId = new Map(s.modules.map((m) => [m.id, m]));
+    return s.playlist.map((id) => byId.get(id)).filter(Boolean);
+  }
+  offAirNote() {
+    if (this.isScreenMode() || !this.state.snap) return '';
+    if (!this.filmOnAir()) return ` · ⏾ hors créneau (${this.schedLabel(this.state.snap.schedule)}) — les écrans affichent l'attente`;
+    if (this.onAirMods().length === 0 && this.playlistMods().length > 0) return ' · ⏾ éléments hors créneau à cette heure — les écrans affichent l\'attente';
+    return '';
   }
   total() {
     const s = this.state.snap;
@@ -181,11 +207,16 @@ class Film extends Component {
         h('div', { style: { fontFamily: FUI, fontWeight: 400, fontSize: 80, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)' } }, 'playlists suspendues par la régie'));
     } else {
       const { m, lt } = this.current();
+      const idleMsg = this.state.snap.schedule && !this.filmOnAir()
+        ? `hors créneau de diffusion — ${this.schedLabel(this.state.snap.schedule)}`
+        : (this.playlistMods().length === 0 && (this.state.snap.playlist || []).length > 0
+          ? 'éléments hors créneau à cette heure'
+          : 'film vide — ajoute des éléments dans la régie');
       content = m
         ? renderModule(h, m, lt, { secPerLine: st.snap.secPerLine })
         : h('div', { style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', gap: 90, alignItems: 'center', justifyContent: 'center' } },
           h('img', { src: 'assets/logo.png', style: { height: 420 } }),
-          h('div', { style: { fontFamily: FUI, fontSize: 90, color: '#8A847C', letterSpacing: '0.14em', textTransform: 'uppercase' } }, 'aucun module programmé sur ce créneau'));
+          h('div', { style: { fontFamily: FUI, fontSize: 90, color: '#8A847C', letterSpacing: '0.14em', textTransform: 'uppercase', textAlign: 'center', padding: '0 200px' } }, idleMsg));
     }
 
     const b = this.box();
@@ -225,7 +256,7 @@ class Film extends Component {
           <div style="display:flex;align-items:center;gap:10px;">
             <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-radius:999px;background:rgba(10,10,10,0.75);color:#fff;font-size:12.5px;backdrop-filter:blur(6px);">
               <span style="width:8px;height:8px;border-radius:50%;background:#5BBE7A;"></span>
-              <span>${st.snap.playlistName || 'Film'}${st.snap.storeName ? ` · ${st.snap.storeName}` : ''}${st.snap.draft ? ' · brouillon (pas encore publié)' : ''} · v${st.snap.version} · prix d${st.snap.dataVer} · ${st.fmt.w}×${st.fmt.h}</span>
+              <span>${st.snap.playlistName || 'Film'}${st.snap.storeName ? ` · ${st.snap.storeName}` : ''}${st.snap.draft ? ' · brouillon (pas encore publié)' : ''} · v${st.snap.version} · prix d${st.snap.dataVer} · ${st.fmt.w}×${st.fmt.h}${this.offAirNote()}</span>
             </div>
             <button onClick=${() => { this.setState({ panel: !st.panel }); this._armBadge(); }} title="Choisir le format d'écran" style="padding:10px 14px;border-radius:999px;border:1px solid rgba(255,255,255,0.22);background:rgba(10,10,10,0.75);color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;backdrop-filter:blur(6px);">⛶ Format</button>
           </div>

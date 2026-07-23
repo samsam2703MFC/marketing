@@ -23,6 +23,12 @@ export function getDb() {
   seed(db);
   ensureAdmin(db);
   ensurePlaylists(db);
+  // Migration ponctuelle : l'ancien créneau par défaut (08:00–20:00) éteignait
+  // les écrans le soir sans que ce soit un choix — passage en 24h/24.
+  if (!getSetting('mig_sched_24h')) {
+    db.prepare(`UPDATE sig_modules SET sched_from = '00:00', sched_to = '23:59' WHERE sched_from = '08:00' AND sched_to = '20:00'`).run();
+    setSetting('mig_sched_24h', '1');
+  }
   db.prepare(`DELETE FROM sig_sessions WHERE expires_at < datetime('now')`).run();
   return db;
 }
@@ -66,8 +72,8 @@ function migrate(db) {
     tag_label    TEXT NOT NULL DEFAULT 'Nouveauté',
     tag_img      TEXT NOT NULL DEFAULT 'assets/cherry.png',
     sched_days   TEXT NOT NULL DEFAULT '[1,1,1,1,1,1,1]',
-    sched_from   TEXT NOT NULL DEFAULT '08:00',
-    sched_to     TEXT NOT NULL DEFAULT '20:00',
+    sched_from   TEXT NOT NULL DEFAULT '00:00',
+    sched_to     TEXT NOT NULL DEFAULT '23:59',
     pos          TEXT NOT NULL DEFAULT '{}',
     sort_order   INTEGER NOT NULL DEFAULT 0,
     created_at   TEXT NOT NULL DEFAULT (datetime('now')),
@@ -257,7 +263,7 @@ function seed(db) {
     (module_id, position, name, price, img, src, active) VALUES (?, ?, ?, ?, ?, ?, 1)`);
 
   insMod.run('c1', 'category', 'Tartes', '', 'illo-right', 'm1', 0, 'Nouveauté', 'assets/cherry.png',
-    '[1,1,1,1,1,1,1]', '08:00', '20:00', '{}', 0);
+    '[1,1,1,1,1,1,1]', '00:00', '23:59', '{}', 0);
   const items = [
     ['Brookie', '24,90', 'assets/cookies.png'],
     ['Brownies', '24,90', 'assets/cake-slice.png'],
@@ -271,7 +277,7 @@ function seed(db) {
   items.forEach(([name, price, img], i) => insItem.run('c1', i, name, price, img, 'illus'));
 
   insMod.run('l1', 'liaison', 'Fait maison', 'faites maison chaque matin', 'illo-right', 'm1', 0, 'Nouveauté',
-    'assets/cherry.png', '[1,1,1,1,1,1,1]', '08:00', '20:00', '{}', 1);
+    'assets/cherry.png', '[1,1,1,1,1,1,1]', '00:00', '23:59', '{}', 1);
 
   db.prepare('INSERT INTO sig_playlist(position, module_id) VALUES (0, ?), (1, ?)').run('c1', 'l1');
 
@@ -378,7 +384,7 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
         m.motionTitle || null, m.motionList || null, m.motionIllo || null,
         tag.enabled ? 1 : 0, String(tag.label || ''), String(tag.img || ''),
         JSON.stringify((sched.days || [1, 1, 1, 1, 1, 1, 1]).map((d) => (d ? 1 : 0))),
-        String(sched.from || '08:00'), String(sched.to || '20:00'),
+        String(sched.from || '00:00'), String(sched.to || '23:59'),
         JSON.stringify(m.pos || {}), i
       );
       (m.items || []).forEach((it, j) => insItem.run(

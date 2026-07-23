@@ -54,7 +54,7 @@ export const MO = {
 };
 
 export const newTag = () => ({ enabled: false, label: 'Nouveauté', img: 'assets/cherry.png' });
-export const newSched = () => ({ days: [true, true, true, true, true, true, true], from: '08:00', to: '20:00' });
+export const newSched = () => ({ days: [true, true, true, true, true, true, true], from: '00:00', to: '23:59' });
 export const newPos = () => ({ titleY: 0, listX: 0, listY: 0, illoX: 0, illoY: 0, illoScale: 1 });
 
 export const activeItems = (m) => ((m && m.items) ? m.items : []).filter((x) => x.active);
