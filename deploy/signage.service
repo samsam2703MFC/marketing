@@ -1,0 +1,27 @@
+# Unité systemd — CMS signage (à copier dans /etc/systemd/system/signage.service)
+#   sudo cp deploy/signage.service /etc/systemd/system/signage.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now signage
+# Adapter WorkingDirectory, User et SIG_ADMIN_PASSWORD.
+[Unit]
+Description=Signage CMS — Régie d'affichage L'Atelier By
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/signage
+ExecStart=/usr/bin/node server/index.js
+Restart=always
+RestartSec=3
+# Écoute locale uniquement : c'est le reverse proxy qui expose l'application.
+Environment=HOST=127.0.0.1
+Environment=PORT=8080
+# Chemin public de montage (cookie de session + redirections).
+Environment=BASE_PATH=/pwa_consultant/signage
+# Mot de passe du compte « admin » du back office — À CHANGER.
+Environment=SIG_ADMIN_PASSWORD=signage
+# Emplacement de la base SQLite (tables préfixées sig_).
+Environment=SIG_DB=/var/www/signage/data/signage.db
+
+[Install]
+WantedBy=multi-user.target

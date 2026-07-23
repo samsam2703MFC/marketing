@@ -6,8 +6,10 @@ avec CMS, base de données, player d'écran et **tests live exécutés à chaque
 - **Zéro dépendance** : Node.js ≥ 22.5 uniquement (`node:http` + `node:sqlite`). Pas de `npm install`.
 - **Base SQLite** : toutes les tables sont préfixées **`sig_`** (`sig_modules`, `sig_module_items`,
   `sig_playlist`, `sig_stores`, `sig_players`, `sig_snapshots`, `sig_publications`,
-  `sig_heartbeats`, `sig_settings`).
+  `sig_heartbeats`, `sig_settings`, `sig_users`, `sig_sessions`).
 - **Front** : Preact + HTM embarqués (`public/js/vendor/`), aucun build.
+- **Accès protégé** : le back office demande une connexion (`admin` / mot de passe
+  `SIG_ADMIN_PASSWORD`, défaut `signage`) ; les players s'authentifient par token.
 
 ## Démarrer
 
@@ -17,13 +19,54 @@ npm start            # ou : node server/index.js
 
 | URL | Rôle |
 |---|---|
-| `http://localhost:8080/` | Back office (Compositeur · Flotte & supervision · Paramètres) |
+| `http://localhost:8080/` | Back office (connexion → Compositeur · Flotte · Paramètres) |
 | `http://localhost:8080/player.html?id=p1&token=plyr_9F3A2C7E` | Player d'exemple (magasin Centre-Ville) |
-| `http://localhost:8080/api/v1/health` | Sonde de santé |
+| `http://localhost:8080/api/v1/health` | Sonde de santé (publique) |
 
-Variables : `PORT` (défaut 8080), `HOST`, `SIG_DB` (chemin SQLite, défaut `data/signage.db`).
+Variables : `PORT` (défaut 8080), `HOST`, `SIG_DB` (chemin SQLite, défaut `data/signage.db`),
+`SIG_ADMIN_PASSWORD` (mot de passe du compte `admin`, appliqué à chaque démarrage),
+`BASE_PATH` (chemin public si l'app est montée sous un sous-chemin, ex. `/pwa_consultant/signage`).
 Au premier démarrage la base est créée et **seedée** avec le contenu de la maquette
 (catégorie *Tartes* 8 produits, liaison *Fait maison*, 3 magasins / 5 écrans de démo).
+
+## Déploiement sur http://185.180.206.46/pwa_consultant/signage/
+
+Prérequis serveur : Node.js ≥ 22.5 (`node --version`).
+
+```bash
+# 1) Copier le dépôt sur le serveur
+sudo mkdir -p /var/www/signage && sudo chown www-data: /var/www/signage
+git clone <repo> /var/www/signage          # ou rsync/scp du dossier
+
+# 2) Service systemd (écoute en local sur 127.0.0.1:8080)
+sudo cp /var/www/signage/deploy/signage.service /etc/systemd/system/signage.service
+sudo nano /etc/systemd/system/signage.service   # → changer SIG_ADMIN_PASSWORD !
+sudo systemctl daemon-reload && sudo systemctl enable --now signage
+curl http://127.0.0.1:8080/api/v1/health        # → {"ok":true,...}
+
+# 3) Reverse proxy sur le site existant (Apache OU Nginx)
+#    → deploy/apache-signage.conf  ou  deploy/nginx-signage.conf
+#    montent l'app sous /pwa_consultant/signage/
+
+# 4) Tests live post-déploiement, depuis n'importe où :
+node test/live-test.js http://185.180.206.46/pwa_consultant/signage --password=VOTREMDP
+node test/live-test.js http://185.180.206.46/pwa_consultant/signage --password=VOTREMDP --mutate
+```
+
+L'application est conçue pour fonctionner sous ce sous-chemin : toutes les URLs du front
+sont relatives, et le serveur accepte les requêtes avec ou sans le préfixe (proxy qui
+réécrit ou non). `BASE_PATH` sert au cookie de session et à la redirection
+`…/signage` → `…/signage/`. Ne pas ouvrir le port 8080 sur l'extérieur : seul le
+reverse proxy expose l'application.
+
+### Comptes & sécurité
+
+- Back office : utilisateur **`admin`**, mot de passe **`SIG_ADMIN_PASSWORD`**
+  (défaut `signage` — à changer avant l'exposition publique). Sessions de 30 jours,
+  verrouillage 60 s après 8 échecs.
+- Players : token `plyr_…` par écran (`sig_players.token`). Un player inconnu muni d'un
+  token `plyr_…` s'auto-enregistre dans « Nouveaux écrans ».
+- Endpoints publics : uniquement `GET /api/v1/health` et les fichiers statiques.
 
 ## Fonctionnement
 
@@ -74,32 +117,37 @@ exécute côté serveur : ping TCP de l'hôte, `GET assignment`, `GET dataset pr
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + cycle complet — 14 tests
+npm test              # serveur jetable (BDD temporaire) + cycle complet — 16 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
-node test/live-test.js https://cms.example.com --mutate   # après déploiement, en CI/CD
+node test/live-test.js http://185.180.206.46/pwa_consultant/signage --password=… --mutate
 ```
 
-Le runner sort avec un code ≠ 0 si un test échoue — à brancher en post-deploy.
+Options du runner : `--user=…` `--password=…` (défaut `admin` / `signage`, ou
+`SIG_ADMIN_PASSWORD`). Sort avec un code ≠ 0 si un test échoue — à brancher en post-deploy.
+Le cycle `--mutate` vérifie notamment : protection 401 du back office, login, aller-retour
+du brouillon, publication complète + **tests auto-exécutés au déploiement**, snapshot prix,
+livraison de l'assignation au player, remontée de version par heartbeat.
 
 ## API (extrait)
 
 ```
-GET  /api/v1/health                        GET  /api/v1/state
-PUT  /api/v1/draft                         GET  /api/v1/fleet
-POST /api/v1/publish                       POST /api/v1/push-prices
-POST /api/v1/override                      POST /api/v1/test
-GET  /api/v1/publications                  POST /api/v1/settings
-GET  /api/v1/players/{id}/assignment?token=…
-POST /api/v1/players/{id}/heartbeat
-GET  /api/v1/datasets/latest?token=…       GET  /api/v1/snapshots/{version}?token=…
+publics        : GET /api/v1/health · fichiers statiques
+session admin  : POST /api/v1/login · /logout · GET /me
+                 GET /state · PUT /draft · GET /fleet · POST /publish
+                 POST /push-prices · POST /override · POST /test
+                 GET /publications · POST /settings · GET /ping-host
+token player   : GET  /api/v1/players/{id}/assignment?token=…
+                 POST /api/v1/players/{id}/heartbeat
+                 GET  /api/v1/datasets/latest?token=…
+                 GET  /api/v1/snapshots/{version}?token=…
 ```
 
 ## Notes
 
-- Le back office est prévu pour un réseau interne / ERP : pas d'authentification sur l'UI
-  (les endpoints player sont, eux, protégés par token). À placer derrière le SSO/reverse-proxy
-  de l'ERP si exposé.
 - Les photos importées sont stockées en dataURL dans `sig_module_items.img` (simple et
   autonome ; migrer vers un stockage fichier si les volumes grossissent).
 - Polices : sous-ensemble Gotham (300/400/500·600/700+) + Vank, servies depuis `public/fonts/`.
+- Base : SQLite embarquée (fichier `data/signage.db`, tables `sig_*`). Si les tables doivent
+  vivre dans une base MySQL/MariaDB existante de l'ERP, ajouter un driver est prévu —
+  la couche d'accès est isolée dans `server/db.js`.

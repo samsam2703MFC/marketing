@@ -4,8 +4,17 @@ import { join } from 'node:path';
 import {
   getDb, getSetting, setSetting, getIntSetting,
   loadModules, loadPlaylist, saveDraft, DB_PATH,
+  checkLogin, createSession, sessionUser, destroySession,
 } from './db.js';
+import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
 import { runConnectionTest, runDeployTests, tcpPing } from './livetest.js';
+
+function sessionToken(req) {
+  const auth = req.headers.authorization || '';
+  if (auth.startsWith('Bearer ')) return auth.slice(7).trim();
+  const m = /(?:^|;\s*)sig_session=([A-Za-z0-9]+)/.exec(req.headers.cookie || '');
+  return m ? m[1] : null;
+}
 
 const ONLINE_WINDOW_S = 30; // heartbeat attendu toutes les ~5 s
 
@@ -265,13 +274,16 @@ function latestDataset(url) {
 
 // ---------------------------------------------------------------------------
 // Routage
-export async function handleApi(req, res, url, readBody, ctx) {
+export async function handleApi(req, res, url, readBody, ctx, pathname) {
+  const setCookies = [];
   const send = (status, json) => {
     const buf = Buffer.from(JSON.stringify(json));
-    res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': buf.length, 'cache-control': 'no-store' });
+    const headers = { 'content-type': 'application/json; charset=utf-8', 'content-length': buf.length, 'cache-control': 'no-store' };
+    if (setCookies.length) headers['set-cookie'] = setCookies;
+    res.writeHead(status, headers);
     res.end(buf);
   };
-  const path = url.pathname.replace(/^\/api\/v1/, '') || '/';
+  const path = (pathname || url.pathname).replace(/^\/api\/v1/, '') || '/';
   const m = (re) => path.match(re);
   let mm;
 
@@ -286,6 +298,54 @@ export async function handleApi(req, res, url, readBody, ctx) {
       });
     }
 
+    // ---- session back office ------------------------------------------------
+    if (req.method === 'POST' && path === '/login') {
+      const ip = req.socket.remoteAddress || '?';
+      if (!loginAllowed(ip)) return send(429, { error: 'Trop de tentatives — réessaie dans une minute' });
+      const body = await readBody();
+      if (!checkLogin(body.username, body.password)) {
+        loginFailed(ip);
+        return send(401, { error: 'Identifiants invalides' });
+      }
+      loginSucceeded(ip);
+      const token = createSession(String(body.username));
+      setCookies.push(`sig_session=${token}; Path=${ctx.cookiePath}; HttpOnly; SameSite=Lax; Max-Age=2592000`);
+      return send(200, { ok: true, user: String(body.username), token });
+    }
+    if (req.method === 'POST' && path === '/logout') {
+      destroySession(sessionToken(req));
+      setCookies.push(`sig_session=; Path=${ctx.cookiePath}; HttpOnly; SameSite=Lax; Max-Age=0`);
+      return send(200, { ok: true });
+    }
+
+    // ---- endpoints players (auth par token de player) -----------------------
+    if (req.method === 'GET' && (mm = m(/^\/players\/([\w-]+)\/assignment$/))) {
+      const out = assignment(mm[1], url);
+      return send(out.status, out.json);
+    }
+    if (req.method === 'POST' && (mm = m(/^\/players\/([\w-]+)\/heartbeat$/))) {
+      const body = await readBody();
+      const out = heartbeat(mm[1], body, url);
+      return send(out.status, out.json);
+    }
+    if (req.method === 'GET' && path === '/datasets/latest') {
+      const out = latestDataset(url);
+      return send(out.status, out.json);
+    }
+    if (req.method === 'GET' && (mm = m(/^\/snapshots\/(\d+)$/))) {
+      const token = url.searchParams.get('token') || '';
+      const known = getDb().prepare('SELECT 1 AS ok FROM sig_players WHERE token = ?').get(token);
+      if (!known) return send(401, { error: 'unauthorized' });
+      const snap = getDb().prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' AND version = ?`).get(+mm[1]);
+      if (!snap) return send(404, { error: 'snapshot introuvable' });
+      return send(200, JSON.parse(snap.payload));
+    }
+
+    // ---- tout le reste exige une session back office ------------------------
+    const user = sessionUser(sessionToken(req));
+    if (!user) return send(401, { error: 'Authentification requise' });
+
+    if (req.method === 'GET' && path === '/me') return send(200, { ok: true, user });
     if (req.method === 'GET' && path === '/state') return send(200, stateJson());
     if (req.method === 'GET' && path === '/fleet') return send(200, fleetJson());
 
@@ -343,28 +403,6 @@ export async function handleApi(req, res, url, readBody, ctx) {
       const rows = getDb().prepare('SELECT * FROM sig_publications ORDER BY id DESC LIMIT 20').all()
         .map((r) => ({ ...r, targets: JSON.parse(r.targets), tests: JSON.parse(r.tests) }));
       return send(200, { publications: rows });
-    }
-
-    if (req.method === 'GET' && (mm = m(/^\/players\/([\w-]+)\/assignment$/))) {
-      const out = assignment(mm[1], url);
-      return send(out.status, out.json);
-    }
-    if (req.method === 'POST' && (mm = m(/^\/players\/([\w-]+)\/heartbeat$/))) {
-      const body = await readBody();
-      const out = heartbeat(mm[1], body, url);
-      return send(out.status, out.json);
-    }
-    if (req.method === 'GET' && path === '/datasets/latest') {
-      const out = latestDataset(url);
-      return send(out.status, out.json);
-    }
-    if (req.method === 'GET' && (mm = m(/^\/snapshots\/(\d+)$/))) {
-      const token = url.searchParams.get('token') || '';
-      const known = getDb().prepare('SELECT 1 AS ok FROM sig_players WHERE token = ?').get(token);
-      if (!known) return send(401, { error: 'unauthorized' });
-      const snap = getDb().prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' AND version = ?`).get(+mm[1]);
-      if (!snap) return send(404, { error: 'snapshot introuvable' });
-      return send(200, JSON.parse(snap.payload));
     }
 
     if (req.method === 'GET' && path === '/ping-host') {

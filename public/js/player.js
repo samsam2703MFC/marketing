@@ -11,8 +11,11 @@ const TOKEN = qs.get('token') || '';
 const NAME = qs.get('name') || '';
 const HB_EVERY = 5000;
 
+// URLs relatives à la page → fonctionne aussi monté sous un sous-chemin.
+const apiUrl = (p) => new URL('api/v1' + p, location.href).toString();
+
 async function api(method, path, body) {
-  const res = await fetch('/api/v1' + path, {
+  const res = await fetch(apiUrl(path), {
     method,
     headers: body ? { 'content-type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,

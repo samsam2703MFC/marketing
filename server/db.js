@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { hashPassword, verifyPassword, newSessionToken } from './auth.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const DB_PATH = process.env.SIG_DB || join(ROOT, 'data', 'signage.db');
@@ -20,6 +21,8 @@ export function getDb() {
   db.exec('PRAGMA foreign_keys = ON;');
   migrate(db);
   seed(db);
+  ensureAdmin(db);
+  db.prepare(`DELETE FROM sig_sessions WHERE expires_at < datetime('now')`).run();
   return db;
 }
 
@@ -129,7 +132,65 @@ function migrate(db) {
     temp      TEXT
   );
   CREATE INDEX IF NOT EXISTS sig_heartbeats_player ON sig_heartbeats(player_id, at);
+
+  CREATE TABLE IF NOT EXISTS sig_users (
+    username   TEXT PRIMARY KEY,
+    pass_salt  TEXT NOT NULL,
+    pass_hash  TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS sig_sessions (
+    token      TEXT PRIMARY KEY,
+    username   TEXT NOT NULL REFERENCES sig_users(username) ON DELETE CASCADE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT NOT NULL,
+    last_used  TEXT
+  );
+  CREATE INDEX IF NOT EXISTS sig_sessions_user ON sig_sessions(username);
   `);
+}
+
+// ---------------------------------------------------------------------------
+// Compte d'administration du back office.
+// Mot de passe : SIG_ADMIN_PASSWORD (env) — défaut « signage ». Si la variable
+// est définie au démarrage, le mot de passe du compte admin est aligné dessus.
+function ensureAdmin(db) {
+  const row = db.prepare('SELECT pass_salt, pass_hash FROM sig_users WHERE username = ?').get('admin');
+  const envPw = process.env.SIG_ADMIN_PASSWORD;
+  if (!row) {
+    const { salt, hash } = hashPassword(envPw || 'signage');
+    db.prepare('INSERT INTO sig_users(username, pass_salt, pass_hash) VALUES (?, ?, ?)').run('admin', salt, hash);
+  } else if (envPw && !verifyPassword(envPw, row.pass_salt, row.pass_hash)) {
+    const { salt, hash } = hashPassword(envPw);
+    db.prepare(`UPDATE sig_users SET pass_salt = ?, pass_hash = ?, updated_at = datetime('now') WHERE username = 'admin'`).run(salt, hash);
+    db.prepare(`DELETE FROM sig_sessions WHERE username = 'admin'`).run();
+  }
+}
+
+export function checkLogin(username, password) {
+  const row = getDb().prepare('SELECT pass_salt, pass_hash FROM sig_users WHERE username = ?').get(String(username || ''));
+  return !!row && verifyPassword(password, row.pass_salt, row.pass_hash);
+}
+
+export function createSession(username) {
+  const token = newSessionToken();
+  getDb().prepare(`INSERT INTO sig_sessions(token, username, expires_at) VALUES (?, ?, datetime('now', '+30 days'))`)
+    .run(token, String(username));
+  return token;
+}
+
+export function sessionUser(token) {
+  if (!token) return null;
+  const row = getDb().prepare(`SELECT username FROM sig_sessions WHERE token = ? AND expires_at > datetime('now')`).get(String(token));
+  if (!row) return null;
+  getDb().prepare(`UPDATE sig_sessions SET last_used = datetime('now') WHERE token = ?`).run(String(token));
+  return row.username;
+}
+
+export function destroySession(token) {
+  if (token) getDb().prepare('DELETE FROM sig_sessions WHERE token = ?').run(String(token));
 }
 
 // ---------------------------------------------------------------------------

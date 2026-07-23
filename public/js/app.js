@@ -28,20 +28,29 @@ const POSF = [
 let UIDC = 0;
 const uid = () => 'm' + Date.now().toString(36) + (UIDC++).toString(36);
 
+// URLs relatives à la page → fonctionne aussi monté sous un sous-chemin
+// (ex. http://185.180.206.46/pwa_consultant/signage/).
+const apiUrl = (p) => new URL('api/v1' + p, location.href).toString();
+
 async function api(method, path, body) {
-  const res = await fetch('/api/v1' + path, {
+  const res = await fetch(apiUrl(path), {
     method,
     headers: body ? { 'content-type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+  if (!res.ok) {
+    const err = new Error(json.error || `HTTP ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
   return json;
 }
 
 class App extends Component {
   state = {
     loading: true, loadError: '',
+    authRequired: false, loginUser: 'admin', loginPass: '', loginError: '', loggingIn: false,
     secPerLine: 4, loop: true, playing: true, t: 0,
     dirty: false, saved: true, scope: 'module', clipboard: null, past: [], future: [],
     selId: null, playlist: [],
@@ -97,7 +106,7 @@ class App extends Component {
     try {
       const st = await api('GET', '/state');
       this.setState({
-        loading: false,
+        loading: false, authRequired: false,
         library: st.modules,
         playlist: st.playlist,
         secPerLine: st.secPerLine,
@@ -105,23 +114,46 @@ class App extends Component {
         version: st.version,
         dataVer: st.dataVer,
         override: st.override,
-        srvUrl: st.settings.srvUrl || `${location.origin}/api/v1`,
+        srvUrl: st.settings.srvUrl || new URL('api/v1', location.href).toString(),
         srvIp: st.settings.srvIp || location.hostname,
         srvToken: st.settings.srvToken || '',
         selId: st.modules.length ? st.modules[0].id : null,
         dirty: false, saved: true,
       });
     } catch (e) {
-      this.setState({ loading: false, loadError: String(e.message || e) });
+      if (e.status === 401) this.setState({ loading: false, authRequired: true });
+      else this.setState({ loading: false, loadError: String(e.message || e) });
     }
   }
 
   async refreshFleet() {
+    if (this.state.authRequired) return;
     try {
       const f = await api('GET', '/fleet');
       this.setState({ fleet: f.stores, version: f.version, dataVer: f.dataVer, override: f.override });
     } catch { /* serveur momentanément indisponible : on garde l'état local */ }
   }
+
+  doLogin = async (e) => {
+    e.preventDefault();
+    if (this.state.loggingIn) return;
+    this.setState({ loggingIn: true, loginError: '' });
+    try {
+      await api('POST', '/login', { username: this.state.loginUser, password: this.state.loginPass });
+      this.setState({ loading: true, authRequired: false, loginPass: '' });
+      await this.loadState();
+      this.refreshFleet();
+    } catch (err) {
+      this.setState({ loginError: String(err.message || err) });
+    } finally {
+      this.setState({ loggingIn: false });
+    }
+  };
+
+  logout = async () => {
+    try { await api('POST', '/logout'); } catch { /* la session locale est de toute façon abandonnée */ }
+    this.setState({ authRequired: true, loginPass: '' });
+  };
 
   // ------------------------------------------------------------ drag position
   startDrag(kind, e) {
@@ -653,7 +685,7 @@ class App extends Component {
         const ov = st.override && p.state !== 'offline';
         return {
           name: p.name, hw: p.hw, orient: p.orient,
-          playerUrl: `/player.html?id=${encodeURIComponent(p.id)}&token=${encodeURIComponent(p.token)}`,
+          playerUrl: `player.html?id=${encodeURIComponent(p.id)}&token=${encodeURIComponent(p.token)}`,
           kioskLabel: p.kiosk ? 'KIOSK' : '⚠ non verrouillé',
           kioskStyle: `flex:0 0 auto;font-size:9px;font-weight:700;letter-spacing:0.06em;border-radius:999px;padding:2px 7px;${p.kiosk ? 'background:rgba(46,125,50,0.14);color:#2E7D32;' : 'background:rgba(141,29,44,0.12);color:#8D1D2C;'}`,
           statusDotStyle: `width:12px;height:12px;border-radius:50%;flex:0 0 auto;background:${ov ? '#8D1D2C' : STCOL[p.state]};box-shadow:0 0 0 4px ${ov ? '#8D1D2C' : STCOL[p.state]}22;`,
@@ -846,6 +878,21 @@ class App extends Component {
     if (st.loading) {
       return html`<div style="height:100vh;display:flex;align-items:center;justify-content:center;color:#8A847C;font-size:15px;">Chargement de la régie…</div>`;
     }
+    if (st.authRequired) {
+      return html`<div style="height:100vh;display:flex;align-items:center;justify-content:center;background:#E7E1D8;padding:24px;">
+        <form onSubmit=${this.doLogin} style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:20px;padding:36px 38px;width:360px;max-width:100%;box-shadow:0 30px 80px rgba(0,0,0,0.10);display:flex;flex-direction:column;gap:13px;">
+          <img src="assets/logo.png" alt="L'Atelier By" style="height:44px;width:auto;align-self:center;margin-bottom:4px;" />
+          <div style="text-align:center;font-weight:600;font-size:16px;">Régie d'affichage</div>
+          <div style="text-align:center;font-size:12px;color:#8A847C;margin-bottom:6px;">Connexion requise pour piloter la flotte</div>
+          <label style="font-size:12.5px;font-weight:500;color:#8A847C;">Utilisateur</label>
+          <input value=${st.loginUser} onInput=${(e) => this.setState({ loginUser: e.target.value })} autocomplete="username" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:14px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;" />
+          <label style="font-size:12.5px;font-weight:500;color:#8A847C;">Mot de passe</label>
+          <input type="password" value=${st.loginPass} onInput=${(e) => this.setState({ loginPass: e.target.value })} autocomplete="current-password" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:14px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;" />
+          ${st.loginError && html`<div style="font-size:12.5px;color:#8D1D2C;">${st.loginError}</div>`}
+          <button type="submit" style="margin-top:6px;padding:12px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:pointer;background:#232220;color:#fff;opacity:${st.loggingIn ? 0.7 : 1};">${st.loggingIn ? 'Connexion…' : 'Se connecter'}</button>
+        </form>
+      </div>`;
+    }
     if (st.loadError) {
       return html`<div style="height:100vh;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;color:#8D1D2C;font-size:15px;">
         <div>Impossible de joindre le CMS : ${st.loadError}</div>
@@ -931,6 +978,9 @@ class App extends Component {
             `)}
           </div>
         `}
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+        <button onClick=${this.logout} style="padding:10px 18px;font-size:13px;font-weight:500;border-radius:999px;border:1px solid rgba(35,34,32,0.16);background:#fff;color:#8A847C;cursor:pointer;">Se déconnecter</button>
       </div>
     </div>
   </div>

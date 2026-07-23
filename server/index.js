@@ -1,5 +1,10 @@
 // Serveur HTTP du CMS signage — fichiers statiques (back office + player) + API.
 // Zéro dépendance : node:http + node:sqlite (Node ≥ 22.5).
+//
+// Peut être servi sous un sous-chemin (ex. reverse proxy Apache/Nginx sur
+// http://185.180.206.46/pwa_consultant/signage/) : définir BASE_PATH=/pwa_consultant/signage.
+// Le serveur accepte alors les requêtes avec ou sans le préfixe (proxy qui
+// réécrit ou non), et le cookie de session est limité à ce chemin.
 import http from 'node:http';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { join, extname, normalize } from 'node:path';
@@ -13,6 +18,9 @@ const PUBLIC_DIR = join(ROOT, 'public');
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const MAX_BODY = 15 * 1024 * 1024; // photos importées en dataURL
+
+const rawBase = (process.env.BASE_PATH || '').trim().replace(/^\/+|\/+$/g, '');
+const BASE_PATH = rawBase ? `/${rawBase}` : '';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -72,21 +80,42 @@ function readBodyFactory(req) {
 
 const ctx = {
   publicDir: PUBLIC_DIR,
-  selfBase(req) {
-    const host = req.headers.host || `127.0.0.1:${PORT}`;
-    return `http://${host}`;
-  },
+  basePath: BASE_PATH,
+  cookiePath: BASE_PATH ? `${BASE_PATH}/` : '/',
+  localBase: `http://127.0.0.1:${PORT}`,
+  // Les auto-tests de déploiement bouclent sur le serveur lui-même (127.0.0.1),
+  // indépendamment du reverse proxy : on valide la pile HTTP réelle du CMS.
+  selfBase() { return this.localBase; },
 };
+
+// Réduit le chemin entrant à un chemin interne (sans BASE_PATH).
+function internalPath(pathname) {
+  if (BASE_PATH) {
+    if (pathname === BASE_PATH) return null; // → redirection vers BASE_PATH/
+    if (pathname.startsWith(`${BASE_PATH}/`)) pathname = pathname.slice(BASE_PATH.length) || '/';
+  }
+  if (!pathname.startsWith('/api/v1/')) {
+    const i = pathname.indexOf('/api/v1/');
+    if (i > 0) pathname = pathname.slice(i); // proxy qui transmet un préfixe non configuré
+  }
+  return pathname;
+}
 
 export function createServer() {
   getDb(); // ouvre + migre + seed au démarrage
   return http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     try {
-      if (url.pathname.startsWith('/api/v1/')) {
-        await handleApi(req, res, url, readBodyFactory(req), ctx);
+      const pathname = internalPath(url.pathname);
+      if (pathname === null) {
+        res.writeHead(301, { location: `${BASE_PATH}/${url.search || ''}` });
+        res.end();
+        return;
+      }
+      if (pathname.startsWith('/api/v1/')) {
+        await handleApi(req, res, url, readBodyFactory(req), ctx, pathname);
       } else if (req.method === 'GET' || req.method === 'HEAD') {
-        serveStatic(req, res, url.pathname);
+        serveStatic(req, res, pathname);
       } else {
         res.writeHead(405, { 'content-type': 'text/plain' });
         res.end('405');
@@ -100,10 +129,14 @@ export function createServer() {
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === normalize(process.argv[1]);
 if (isMain) {
-  createServer().listen(PORT, HOST, () => {
-    console.log(`▶ Signage CMS — back office : http://localhost:${PORT}/`);
-    console.log(`  player d'exemple        : http://localhost:${PORT}/player.html?id=p1&token=plyr_9F3A2C7E`);
-    console.log(`  API                     : http://localhost:${PORT}/api/v1/health`);
+  const server = createServer();
+  server.listen(PORT, HOST, () => {
+    ctx.localBase = `http://127.0.0.1:${server.address().port}`;
+    const pub = BASE_PATH ? ` (monté publiquement sous ${BASE_PATH}/)` : '';
+    console.log(`▶ Signage CMS — back office : http://localhost:${PORT}${BASE_PATH}/${pub}`);
+    console.log(`  player d'exemple        : http://localhost:${PORT}${BASE_PATH}/player.html?id=p1&token=plyr_9F3A2C7E`);
+    console.log(`  API                     : http://localhost:${PORT}${BASE_PATH}/api/v1/health`);
     console.log(`  base SQLite (tables sig_) : ${DB_PATH}`);
+    console.log(`  compte back office : admin (mot de passe : SIG_ADMIN_PASSWORD, défaut « signage »)`);
   });
 }

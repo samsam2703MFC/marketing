@@ -14,11 +14,18 @@ import { fileURLToPath } from 'node:url';
 const args = process.argv.slice(2);
 const MUTATE = args.includes('--mutate');
 const LOCAL = args.includes('--local');
+const argVal = (name, fb) => {
+  const a = args.find((x) => x.startsWith(`--${name}=`));
+  return a ? a.split('=').slice(1).join('=') : fb;
+};
+const USER = argVal('user', process.env.SIG_TEST_USER || 'admin');
+const PASSWORD = argVal('password', process.env.SIG_ADMIN_PASSWORD || 'signage');
 const baseArg = args.find((a) => !a.startsWith('--'));
 let BASE = (baseArg || process.env.BASE_URL || 'http://localhost:8080').replace(/\/+$/, '');
 
 const results = [];
 let child = null;
+let authToken = null;
 
 function report(label, ok, ms, detail = '') {
   results.push({ label, ok });
@@ -39,9 +46,12 @@ async function step(label, fn) {
 }
 
 async function call(method, path, body) {
+  const headers = {};
+  if (body) headers['content-type'] = 'application/json';
+  if (authToken) headers.authorization = `Bearer ${authToken}`;
   const res = await fetch(BASE + path, {
     method,
-    headers: body ? { 'content-type': 'application/json' } : undefined,
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   const json = await res.json().catch(() => ({}));
@@ -81,6 +91,20 @@ async function main() {
     if (h.tablePrefix !== 'sig_') throw new Error('préfixe de tables inattendu');
     return `v${h.version} · d${h.dataVer} · tables ${h.tablePrefix}*`;
   });
+  await step('API protégée sans session → 401 attendu', async () => {
+    const res = await fetch(BASE + '/api/v1/state');
+    if (res.status !== 401) throw new Error(`HTTP ${res.status} au lieu de 401 — back office non protégé !`);
+  });
+  const loginOk = await step(`POST /api/v1/login (${USER})`, async () => {
+    const out = await call('POST', '/api/v1/login', { username: USER, password: PASSWORD });
+    if (!out.token) throw new Error('pas de jeton de session');
+    authToken = out.token;
+  });
+  if (!loginOk) {
+    console.log('\n\x1b[31mConnexion impossible — passe --user=… --password=… (ou SIG_ADMIN_PASSWORD).\x1b[0m\n');
+    if (child) child.kill();
+    process.exit(1);
+  }
   await step('GET /api/v1/state — brouillon complet', async () => {
     state = await call('GET', '/api/v1/state');
     if (!Array.isArray(state.modules) || !state.modules.length) throw new Error('aucun module');
