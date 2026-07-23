@@ -473,6 +473,47 @@ class App extends Component {
     }, 600);
   };
 
+  // Copie compatible HTTP (navigator.clipboard exige un contexte sécurisé).
+  copyText(t) {
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(t);
+    const ta = document.createElement('textarea');
+    ta.value = t;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    return Promise.resolve();
+  }
+  copyLink = async (url) => {
+    try {
+      await this.copyText(url);
+      this.showToast('Lien copié ✓');
+    } catch {
+      this.showToast('Copie impossible — sélectionne le lien à la main');
+    }
+  };
+
+  filmLinks() {
+    const mk = (w, hh, fit) => {
+      const u = new URL('film', location.href);
+      if (w) {
+        u.searchParams.set('w', w);
+        u.searchParams.set('h', hh);
+        u.searchParams.set('fit', fit || 'cover');
+      }
+      return u.toString();
+    };
+    return [
+      { label: '55″ TV · 16:9 (standard)', sub: '3840 × 2160 · remplir', url: mk(3840, 2160) },
+      { label: '55″ portrait · 9:16', sub: '2160 × 3840 · dalle centrale du mur', url: mk(2160, 3840) },
+      { label: 'Full HD · 16:9', sub: '1920 × 1080 · remplir', url: mk(1920, 1080) },
+      { label: 'Mur 3 dalles · natif', sub: '6480 × 3840', url: mk(6480, 3840) },
+      { label: 'Auto (fenêtre)', sub: 's’adapte au navigateur · letterbox', url: mk(null) },
+    ];
+  }
+
   testConn = async () => {
     const st = this.state;
     if (st.test.state === 'testing') return;
@@ -980,6 +1021,26 @@ class App extends Component {
             `)}
           </div>
         `}
+      </div>
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;margin-top:20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Liens de diffusion — film</h2>
+          <a href="film" target="_blank" style="font-size:12.5px;font-weight:600;color:#8D1D2C;">▶ Ouvrir le film</a>
+        </div>
+        <p style="margin:0 0 16px;font-size:12px;color:#8A847C;line-height:1.5;">Le format d'écran (pixels + ratio) est inscrit dans l'URL : copie le lien du format voulu et pointe la TV / box / navigateur directement dessus. La lecture ne demande aucune connexion.</p>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          ${this.filmLinks().map((l) => html`
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.08);">
+              <div style="flex:0 0 190px;min-width:0;">
+                <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.label}</div>
+                <div style="font-size:10.5px;color:#8A847C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.sub}</div>
+              </div>
+              <input readonly value=${l.url} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:8px 10px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:7px;background:#fff;color:#232220;" />
+              <button onClick=${() => this.copyLink(l.url)} title="Copier le lien" style="flex:0 0 auto;padding:8px 13px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">Copier</button>
+              <a href=${l.url} target="_blank" title="Ouvrir dans un onglet" style="flex:0 0 auto;padding:8px 11px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(35,34,32,0.14);background:#fff;color:#232220;">↗</a>
+            </div>
+          `)}
+        </div>
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:16px;">
         <button onClick=${this.logout} style="padding:10px 18px;font-size:13px;font-weight:500;border-radius:999px;border:1px solid rgba(35,34,32,0.16);background:#fff;color:#8A847C;cursor:pointer;">Se déconnecter</button>
