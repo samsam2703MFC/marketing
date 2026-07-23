@@ -172,23 +172,39 @@ async function main() {
       if (!hb.ok) throw new Error('heartbeat refusé');
       return `assignée v${hb.assignedVer}`;
     });
-    await step('PUT /api/v1/draft — aller-retour du brouillon', async () => {
+    const basePlaylists = (state.playlists && state.playlists.length)
+      ? state.playlists
+      : [{ id: 'pl1', name: 'Film principal', items: state.playlist }];
+    const activeId = state.activePlaylistId || basePlaylists[0].id;
+    await step('PUT /api/v1/draft — aller-retour du brouillon (films multiples)', async () => {
       await call('PUT', '/api/v1/draft', {
-        modules: state.modules, playlist: state.playlist,
+        modules: state.modules,
+        playlists: [...basePlaylists, { id: 'pltest', name: 'Film de test', items: state.playlist }],
+        activePlaylistId: activeId,
+        secPerLine: state.secPerLine, loop: state.loop,
+      });
+      const mid = await call('GET', '/api/v1/state');
+      if (mid.modules.length !== state.modules.length) throw new Error('perte de modules après enregistrement');
+      if (!mid.playlists.some((p) => p.id === 'pltest')) throw new Error('film de test perdu à l\'aller-retour');
+      const namesBefore = JSON.stringify(state.modules.map((m) => [m.id, m.name, (m.items || []).length]));
+      const namesAfter = JSON.stringify(mid.modules.map((m) => [m.id, m.name, (m.items || []).length]));
+      if (namesBefore !== namesAfter) throw new Error('brouillon modifié par l\'aller-retour');
+      // nettoyage : on retire le film de test
+      await call('PUT', '/api/v1/draft', {
+        modules: state.modules, playlists: basePlaylists, activePlaylistId: activeId,
         secPerLine: state.secPerLine, loop: state.loop,
       });
       const after = await call('GET', '/api/v1/state');
-      if (after.modules.length !== state.modules.length) throw new Error('perte de modules après enregistrement');
-      const namesBefore = JSON.stringify(state.modules.map((m) => [m.id, m.name, (m.items || []).length]));
-      const namesAfter = JSON.stringify(after.modules.map((m) => [m.id, m.name, (m.items || []).length]));
-      if (namesBefore !== namesAfter) throw new Error('brouillon modifié par l\'aller-retour');
+      if (after.playlists.some((p) => p.id === 'pltest')) throw new Error('film de test non supprimé');
+      return `${after.playlists.length} film(s) · actif : ${after.activePlaylistId}`;
     });
     let pub = null;
-    await step('POST /api/v1/publish — playlist complète + tests auto', async () => {
-      pub = await call('POST', '/api/v1/publish', { mode: 'full', targets: [], slot: 'Toute la journée', when: 'now' });
+    await step('POST /api/v1/publish — film actif + tests auto', async () => {
+      pub = await call('POST', '/api/v1/publish', { mode: 'full', playlistId: activeId, targets: [], slot: 'Toute la journée', when: 'now' });
       const ok = pub.tests.filter((t) => t.ok).length;
       if (!pub.ok) throw new Error(`tests post-déploiement : ${ok}/${pub.tests.length} OK`);
-      return `v${pub.version} · tests ${ok}/${pub.tests.length} OK`;
+      if (!pub.film || !pub.film.name) throw new Error('nom du film absent de la publication');
+      return `« ${pub.film.name} » v${pub.version} · tests ${ok}/${pub.tests.length} OK`;
     });
     await step('GET assignment — le player reçoit la nouvelle version', async () => {
       const a = await call('GET', `/api/v1/players/${pid}/assignment?token=${token}`);

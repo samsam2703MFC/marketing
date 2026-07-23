@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   getDb, getSetting, setSetting, getIntSetting,
-  loadModules, loadPlaylist, saveDraft, DB_PATH,
+  loadModules, loadPlaylist, loadPlaylists, activePlaylistId, saveDraft, DB_PATH,
   checkLogin, createSession, sessionUser, destroySession,
 } from './db.js';
 import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
@@ -40,6 +40,8 @@ export function stateJson() {
     loop: getSetting('loop', '1') === '1',
     modules: loadModules(),
     playlist: loadPlaylist(),
+    playlists: loadPlaylists(),
+    activePlaylistId: activePlaylistId(),
     settings: {
       srvUrl: getSetting('srv_url', ''),
       srvIp: getSetting('srv_ip', ''),
@@ -95,7 +97,7 @@ function collectMedia(modules) {
   return [...media];
 }
 
-async function publish({ mode, targets, slot, when, activateAt, baseUrl, publicDir }) {
+async function publish({ mode, targets, slot, when, activateAt, playlistId, baseUrl, publicDir }) {
   const db = getDb();
   const allStores = db.prepare('SELECT id FROM sig_stores').all().map((s) => s.id);
   const targetIds = (targets && targets.length ? targets : allStores).filter((t) => allStores.includes(t));
@@ -105,7 +107,12 @@ async function publish({ mode, targets, slot, when, activateAt, baseUrl, publicD
     : [];
 
   const modules = loadModules();
-  const playlist = loadPlaylist();
+  const playlists = loadPlaylists();
+  const film = playlists.find((p) => p.id === playlistId)
+    || playlists.find((p) => p.id === activePlaylistId())
+    || playlists[0]
+    || { id: 'pl1', name: 'Film principal', items: [] };
+  const playlist = film.items;
   let version;
   let payload;
 
@@ -123,6 +130,7 @@ async function publish({ mode, targets, slot, when, activateAt, baseUrl, publicD
     version = getIntSetting('version', 1) + 1;
     payload = {
       kind: 'playlist', version, generatedAt: nowIso(),
+      playlistId: film.id, playlistName: film.name,
       secPerLine: parseFloat(getSetting('sec_per_line', '4')),
       loop: getSetting('loop', '1') === '1',
       dataVer: getIntSetting('data_ver', 1),
@@ -166,6 +174,7 @@ async function publish({ mode, targets, slot, when, activateAt, baseUrl, publicD
     publicationId: Number(pub.lastInsertRowid),
     mode: mode === 'data' ? 'data' : 'full',
     version,
+    film: mode === 'data' ? null : { id: film.id, name: film.name },
     targets: targetIds,
     playerCount: targetedPlayers.length,
     tests,
@@ -283,10 +292,13 @@ function filmJson(storeId) {
 
 // Si aucune publication n'existe encore pour la version assignée, on sert le brouillon courant.
 function currentDraftSnapshot() {
+  const pls = loadPlaylists();
+  const film = pls.find((p) => p.id === activePlaylistId()) || pls[0] || { id: 'pl1', name: 'Film principal' };
   return {
     kind: 'playlist',
     version: getIntSetting('version', 1),
     generatedAt: nowIso(),
+    playlistId: film.id, playlistName: film.name,
     secPerLine: parseFloat(getSetting('sec_per_line', '4')),
     loop: getSetting('loop', '1') === '1',
     dataVer: getIntSetting('data_ver', 1),
@@ -419,6 +431,7 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
         mode: body.mode === 'data' ? 'data' : 'full',
         targets: Array.isArray(body.targets) ? body.targets : [],
         slot: body.slot, when: body.when, activateAt: body.activateAt,
+        playlistId: body.playlistId || null,
         baseUrl: `${ctx.selfBase(req)}/api/v1`, publicDir: ctx.publicDir,
       });
       return send(200, out);

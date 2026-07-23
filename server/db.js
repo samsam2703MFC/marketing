@@ -22,8 +22,27 @@ export function getDb() {
   migrate(db);
   seed(db);
   ensureAdmin(db);
+  ensurePlaylists(db);
   db.prepare(`DELETE FROM sig_sessions WHERE expires_at < datetime('now')`).run();
   return db;
+}
+
+// Migration : les bases existantes n'avaient qu'une playlist anonyme
+// (sig_playlist) — on la promeut en premier film nommé.
+function ensurePlaylists(db) {
+  const n = db.prepare('SELECT COUNT(*) AS n FROM sig_playlists').get().n;
+  if (n === 0) {
+    db.prepare(`INSERT INTO sig_playlists(id, name, sort_order) VALUES ('pl1', 'Film principal', 0)`).run();
+    const legacy = db.prepare('SELECT module_id FROM sig_playlist ORDER BY position').all();
+    const ins = db.prepare('INSERT INTO sig_playlist_items(playlist_id, position, module_id) VALUES (?, ?, ?)');
+    legacy.forEach((r, i) => ins.run('pl1', i, r.module_id));
+  }
+  const act = getSetting('active_playlist');
+  const exists = act && db.prepare('SELECT 1 AS ok FROM sig_playlists WHERE id = ?').get(act);
+  if (!exists) {
+    const first = db.prepare('SELECT id FROM sig_playlists ORDER BY sort_order, created_at').get();
+    if (first) setSetting('active_playlist', first.id);
+  }
 }
 
 function migrate(db) {
@@ -70,6 +89,21 @@ function migrate(db) {
   CREATE TABLE IF NOT EXISTS sig_playlist (
     position  INTEGER PRIMARY KEY,
     module_id TEXT NOT NULL REFERENCES sig_modules(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS sig_playlists (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS sig_playlist_items (
+    playlist_id TEXT NOT NULL REFERENCES sig_playlists(id) ON DELETE CASCADE,
+    position    INTEGER NOT NULL,
+    module_id   TEXT NOT NULL REFERENCES sig_modules(id) ON DELETE CASCADE,
+    PRIMARY KEY (playlist_id, position)
   );
 
   CREATE TABLE IF NOT EXISTS sig_stores (
@@ -293,16 +327,41 @@ export function loadModules() {
   }));
 }
 
-export function loadPlaylist() {
-  return getDb().prepare('SELECT module_id FROM sig_playlist ORDER BY position').all().map((r) => r.module_id);
+export function loadPlaylists() {
+  const db = getDb();
+  const pls = db.prepare('SELECT * FROM sig_playlists ORDER BY sort_order, created_at').all();
+  const it = db.prepare('SELECT module_id FROM sig_playlist_items WHERE playlist_id = ? ORDER BY position');
+  return pls.map((p) => ({ id: p.id, name: p.name, items: it.all(p.id).map((r) => r.module_id) }));
 }
 
-export function saveDraft({ modules, playlist, secPerLine, loop }) {
+export function activePlaylistId() {
+  const pls = loadPlaylists();
+  const act = getSetting('active_playlist');
+  const found = pls.find((p) => p.id === act);
+  return found ? found.id : (pls[0] ? pls[0].id : null);
+}
+
+// Items du film actif (compat : le « film » historique unique).
+export function loadPlaylist() {
+  const pls = loadPlaylists();
+  const act = activePlaylistId();
+  const p = pls.find((x) => x.id === act) || pls[0];
+  return p ? p.items : [];
+}
+
+export function saveDraft({ modules, playlist, playlists, activePlaylistId: activeId, secPerLine, loop }) {
   const db = getDb();
+  // Compat : un client qui n'envoie qu'une liste plate devient un film unique.
+  if (!Array.isArray(playlists) || playlists.length === 0) {
+    playlists = [{ id: 'pl1', name: 'Film principal', items: Array.isArray(playlist) ? playlist : [] }];
+    activeId = 'pl1';
+  }
   db.exec('BEGIN');
   try {
     db.exec('DELETE FROM sig_module_items');
     db.exec('DELETE FROM sig_playlist');
+    db.exec('DELETE FROM sig_playlist_items');
+    db.exec('DELETE FROM sig_playlists');
     db.exec('DELETE FROM sig_modules');
     const insMod = db.prepare(`INSERT INTO sig_modules
       (id, type, name, sub, layout, motion, motion_title, motion_list, motion_illo,
@@ -328,8 +387,18 @@ export function saveDraft({ modules, playlist, secPerLine, loop }) {
       ));
     });
     const validIds = new Set(modules.map((m) => m.id));
+    const insPls = db.prepare('INSERT INTO sig_playlists(id, name, sort_order) VALUES (?, ?, ?)');
+    const insIt = db.prepare('INSERT INTO sig_playlist_items(playlist_id, position, module_id) VALUES (?, ?, ?)');
+    playlists.forEach((pl, i) => {
+      insPls.run(String(pl.id), String(pl.name || `Film ${i + 1}`), i);
+      (pl.items || []).filter((id) => validIds.has(id)).forEach((id, j) => insIt.run(String(pl.id), j, id));
+    });
+    const act = playlists.some((p) => p.id === activeId) ? activeId : playlists[0].id;
+    setSetting('active_playlist', String(act));
+    // Table historique maintenue en miroir du film actif (compat).
     const insPl = db.prepare('INSERT INTO sig_playlist(position, module_id) VALUES (?, ?)');
-    (playlist || []).filter((id) => validIds.has(id)).forEach((id, i) => insPl.run(i, id));
+    const actItems = (playlists.find((p) => p.id === act) || playlists[0]).items || [];
+    actItems.filter((id) => validIds.has(id)).forEach((id, i) => insPl.run(i, id));
     if (secPerLine != null) setSetting('sec_per_line', String(secPerLine));
     if (loop != null) setSetting('loop', loop ? '1' : '0');
     db.exec('COMMIT');

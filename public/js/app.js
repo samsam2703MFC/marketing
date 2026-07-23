@@ -54,6 +54,7 @@ class App extends Component {
     secPerLine: 4, loop: true, playing: true, t: 0,
     dirty: false, saved: true, scope: 'module', clipboard: null, past: [], future: [],
     selId: null, playlist: [],
+    playlists: [], activePl: null, editingFilm: false, editFilmName: '',
     view: 'composer', publishing: false, deploying: false, version: 1, dataVer: 1, hbTick: 0, toast: '',
     pubTargets: {}, pubSlot: 'Toute la journée', pubWhen: 'now', activateAt: '', pubMode: 'full',
     override: false,
@@ -105,10 +106,18 @@ class App extends Component {
   async loadState() {
     try {
       const st = await api('GET', '/state');
+      const playlists = (Array.isArray(st.playlists) && st.playlists.length)
+        ? st.playlists
+        : [{ id: 'pl1', name: 'Film principal', items: st.playlist || [] }];
+      const activePl = playlists.some((p) => p.id === st.activePlaylistId)
+        ? st.activePlaylistId
+        : playlists[0].id;
       this.setState({
         loading: false, authRequired: false,
         library: st.modules,
-        playlist: st.playlist,
+        playlists,
+        activePl,
+        playlist: [...(playlists.find((p) => p.id === activePl).items)],
         secPerLine: st.secPerLine,
         loop: st.loop,
         version: st.version,
@@ -222,10 +231,50 @@ class App extends Component {
     this._raf = requestAnimationFrame(this.tick);
   };
 
+  // ------------------------------------------------------ films (playlists)
+  activeFilm() {
+    return this.state.playlists.find((p) => p.id === this.state.activePl) || this.state.playlists[0] || { id: 'pl1', name: 'Film principal', items: [] };
+  }
+  // Patch d'état synchronisant le film actif (source de vérité : playlists)
+  // et son miroir plat `playlist` utilisé par le reste du composant.
+  playlistPatch(items) {
+    const playlists = this.state.playlists.map((p) => (p.id === this.state.activePl ? { ...p, items: [...items] } : p));
+    return { playlists, playlist: [...items] };
+  }
+  selectFilm(id) {
+    const p = this.state.playlists.find((x) => x.id === id);
+    if (!p) return;
+    this.setState({ activePl: id, playlist: [...p.items], t: 0, editingFilm: false });
+  }
+  newFilm() {
+    const id = 'pl' + uid();
+    const playlists = [...this.state.playlists, { id, name: 'Nouveau film', items: [] }];
+    this.dirty({ playlists, activePl: id, playlist: [], editingFilm: true, editFilmName: 'Nouveau film', t: 0 });
+  }
+  dupFilm() {
+    const src = this.activeFilm();
+    const id = 'pl' + uid();
+    const playlists = [...this.state.playlists, { id, name: `${src.name} (copie)`, items: [...src.items] }];
+    this.dirty({ playlists, activePl: id, playlist: [...src.items], t: 0 });
+  }
+  renameFilm(name) {
+    const n = String(name || '').trim() || this.activeFilm().name;
+    const playlists = this.state.playlists.map((p) => (p.id === this.state.activePl ? { ...p, name: n } : p));
+    this.dirty({ playlists, editingFilm: false });
+  }
+  delFilm() {
+    if (this.state.playlists.length <= 1) { this.showToast('Il faut garder au moins un film'); return; }
+    if (!window.confirm(`Supprimer le film « ${this.activeFilm().name} » ? (les modules de la bibliothèque sont conservés)`)) return;
+    const playlists = this.state.playlists.filter((p) => p.id !== this.state.activePl);
+    const next = playlists[0];
+    this.dirty({ playlists, activePl: next.id, playlist: [...next.items], t: 0 });
+  }
+
   // ------------------------------------------------------------- undo / redo
   snapshot() {
     return JSON.stringify({
       library: this.state.library, playlist: this.state.playlist,
+      playlists: this.state.playlists, activePl: this.state.activePl,
       secPerLine: this.state.secPerLine, loop: this.state.loop, selId: this.state.selId,
     });
   }
@@ -233,14 +282,22 @@ class App extends Component {
     const snap = this.snapshot();
     this.setState((s) => ({ past: [...s.past, snap].slice(-60), future: [], dirty: true, saved: false, ...patch }));
   }
+  _restorePatch(o) {
+    const playlists = (o.playlists && o.playlists.length) ? o.playlists : [{ id: 'pl1', name: 'Film principal', items: o.playlist || [] }];
+    const activePl = playlists.some((p) => p.id === o.activePl) ? o.activePl : playlists[0].id;
+    return {
+      library: o.library, playlists, activePl,
+      playlist: [...(playlists.find((p) => p.id === activePl).items)],
+      secPerLine: o.secPerLine, loop: o.loop, selId: o.selId, dirty: true, saved: false,
+    };
+  }
   undo() {
     this.setState((s) => {
       if (!s.past.length) return null;
       const past = [...s.past];
       const snap = past.pop();
-      const cur = JSON.stringify({ library: s.library, playlist: s.playlist, secPerLine: s.secPerLine, loop: s.loop, selId: s.selId });
-      const o = JSON.parse(snap);
-      return { past, future: [...s.future, cur].slice(-60), library: o.library, playlist: o.playlist, secPerLine: o.secPerLine, loop: o.loop, selId: o.selId, dirty: true, saved: false };
+      const cur = JSON.stringify({ library: s.library, playlist: s.playlist, playlists: s.playlists, activePl: s.activePl, secPerLine: s.secPerLine, loop: s.loop, selId: s.selId });
+      return { past, future: [...s.future, cur].slice(-60), ...this._restorePatch(JSON.parse(snap)) };
     });
   }
   redo() {
@@ -248,9 +305,8 @@ class App extends Component {
       if (!s.future.length) return null;
       const future = [...s.future];
       const snap = future.pop();
-      const cur = JSON.stringify({ library: s.library, playlist: s.playlist, secPerLine: s.secPerLine, loop: s.loop, selId: s.selId });
-      const o = JSON.parse(snap);
-      return { future, past: [...s.past, cur].slice(-60), library: o.library, playlist: o.playlist, secPerLine: o.secPerLine, loop: o.loop, selId: o.selId, dirty: true, saved: false };
+      const cur = JSON.stringify({ library: s.library, playlist: s.playlist, playlists: s.playlists, activePl: s.activePl, secPerLine: s.secPerLine, loop: s.loop, selId: s.selId });
+      return { future, past: [...s.past, cur].slice(-60), ...this._restorePatch(JSON.parse(snap)) };
     });
   }
   cloneLib() {
@@ -272,13 +328,13 @@ class App extends Component {
     const id = uid();
     const lib = this.cloneLib();
     lib.push({ id, type: 'category', name: 'Nouvelle catégorie', layout: 'illo-right', motion: 'm1', tag: newTag(), schedule: newSched(), pos: newPos(), items: [{ name: 'Produit', price: '0,00', img: 'assets/cake.png', src: 'illus', active: true }] });
-    this.setLib(lib, { selId: id, playlist: [...this.state.playlist, id] });
+    this.setLib(lib, { selId: id, ...this.playlistPatch([...this.state.playlist, id]) });
   }
   addLiaison() {
     const id = uid();
     const lib = this.cloneLib();
     lib.push({ id, type: 'liaison', name: 'Liaison', sub: 'faites maison chaque matin', tag: newTag(), schedule: newSched(), pos: newPos(), items: [] });
-    this.setLib(lib, { selId: id, playlist: [...this.state.playlist, id] });
+    this.setLib(lib, { selId: id, ...this.playlistPatch([...this.state.playlist, id]) });
   }
   copyMod(id) { this.setState({ clipboard: JSON.parse(JSON.stringify(this.getMod(id))) }); }
   dupMod(id) {
@@ -300,18 +356,20 @@ class App extends Component {
   delMod(id) {
     if (this.state.library.length <= 1) return;
     const lib = this.state.library.filter((m) => m.id !== id);
-    const playlist = this.state.playlist.filter((x) => x !== id);
+    // Le module disparaît de TOUS les films.
+    const playlists = this.state.playlists.map((p) => ({ ...p, items: p.items.filter((x) => x !== id) }));
+    const active = playlists.find((p) => p.id === this.state.activePl) || playlists[0];
     const selId = lib.some((m) => m.id === this.state.selId) ? this.state.selId : lib[0].id;
-    this.dirty({ library: lib, playlist, selId });
+    this.dirty({ library: lib, playlists, playlist: [...active.items], selId });
   }
-  addToPlaylist(id) { this.dirty({ playlist: [...this.state.playlist, id] }); }
-  removeFromPlaylist(i) { this.dirty({ playlist: this.state.playlist.filter((_, j) => j !== i) }); }
+  addToPlaylist(id) { this.dirty(this.playlistPatch([...this.state.playlist, id])); }
+  removeFromPlaylist(i) { this.dirty(this.playlistPatch(this.state.playlist.filter((_, j) => j !== i))); }
   reorderPlaylist(from, to) {
     if (from === to) return;
     const playlist = [...this.state.playlist];
     const [x] = playlist.splice(from, 1);
     playlist.splice(to, 0, x);
-    this.dirty({ playlist });
+    this.dirty(this.playlistPatch(playlist));
   }
 
   setSelField(f, v) { const lib = this.cloneLib(); lib.find((x) => x.id === this.state.selId)[f] = v; this.setLib(lib); }
@@ -385,6 +443,8 @@ class App extends Component {
   draftBody() {
     return {
       modules: this.state.library,
+      playlists: this.state.playlists,
+      activePlaylistId: this.state.activePl,
       playlist: this.state.playlist,
       secPerLine: this.state.secPerLine,
       loop: this.state.loop,
@@ -438,6 +498,7 @@ class App extends Component {
       const targets = st.fleet.filter((s) => st.pubTargets[s.id]).map((s) => s.id);
       const out = await api('POST', '/publish', {
         mode: st.pubMode === 'data' ? 'data' : 'full',
+        playlistId: st.activePl,
         targets, slot: st.pubSlot, when: st.pubWhen, activateAt: st.activateAt,
       });
       const testMsg = this.applyTests(out);
@@ -447,11 +508,12 @@ class App extends Component {
         dataVer: out.mode === 'data' ? out.version : st.dataVer,
         publishing: false, dirty: false, saved: true, view: 'fleet',
       });
+      const filmName = out.film ? `« ${out.film.name} » ` : '';
       this.showToast(out.mode === 'data'
         ? `Snapshot prix d${out.version} poussé sur ${out.playerCount} écran(s) · ${testMsg}`
         : (sched
-          ? `Playlist v${out.version} planifiée · ${testMsg}`
-          : `Déploiement v${out.version} lancé sur ${out.playerCount} écran(s) · ${testMsg}`));
+          ? `Film ${filmName}v${out.version} planifié · ${testMsg}`
+          : `Film ${filmName}v${out.version} déployé sur ${out.playerCount} écran(s) · ${testMsg}`));
       this.refreshFleet();
     } catch (e) {
       this.showToast(e.status === 401
@@ -821,7 +883,7 @@ class App extends Component {
         arr.push(crumb('Serveur & connexion', null, true));
       } else {
         arr.push(crumb('Compositeur', () => this.setView('composer'), false));
-        arr.push(crumb('Playlist', null, false));
+        arr.push(crumb(`Film : ${this.activeFilm().name}`, null, false));
         arr.push(crumb(`${m.name}${isLia ? ' (liaison)' : ''}`, null, true));
       }
       return arr;
@@ -866,7 +928,7 @@ class App extends Component {
       onActivateAt: (e) => this.setState({ activateAt: e.target.value }),
       publishSummary: st.pubMode === 'data'
         ? `Snapshot prix d${st.dataVer + 1} → ${tgtCount} écran(s). Sync incrémentale légère : seules les données de prix changent, les médias et vidéos en cache ne sont pas re-téléchargés. Les écrans hors ligne l'appliqueront au retour du réseau. Des tests live vérifient le déploiement juste après la publication.`
-        : `Playlist v${nextV} → ${tgtCount} écran(s) · ${st.pubSlot} · activation ${whenLabel}. Bascule atomique : chaque player continue sa version actuelle jusqu'à ce que tous ses médias + templates + snapshots soient en cache et vérifiés. Des tests live vérifient le déploiement juste après la publication.`,
+        : `Film « ${this.activeFilm().name} » v${nextV} → ${tgtCount} écran(s) · ${st.pubSlot} · activation ${whenLabel}. Bascule atomique : chaque player continue sa version actuelle jusqu'à ce que tous ses médias + templates + snapshots soient en cache et vérifiés. Des tests live vérifient le déploiement juste après la publication.`,
       deploy: this.deploy,
       deployLabel: st.deploying ? 'Déploiement + tests live…' : (tgtCount ? (st.pubMode === 'data' ? `Pousser les prix sur ${tgtCount} écran(s)` : `Déployer sur ${tgtCount} écran(s)`) : 'Choisir une cible'),
       deployStyle: `padding:11px 22px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:${tgtCount && !st.deploying ? 'pointer' : 'not-allowed'};${tgtCount ? 'background:#8D1D2C;color:#fff;' : 'background:rgba(35,34,32,0.10);color:#8A847C;'}opacity:${st.deploying ? 0.7 : 1};`,
@@ -1163,8 +1225,24 @@ class App extends Component {
 
     <aside style="background:#F3EEE6;border-right:1px solid rgba(35,34,32,0.10);display:flex;flex-direction:column;min-height:0;overflow:auto;">
       <div style="flex:0 0 auto;padding:18px 18px 10px;">
-        <h2 style="margin:0 0 3px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Playlist diffusée</h2>
-        <p style="margin:0;font-size:11.5px;color:#8A847C;line-height:1.4;">Glisse pour l'ordre · ✕ retire (sans supprimer)</p>
+        <h2 style="margin:0 0 3px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Film (playlist)</h2>
+        <div style="display:flex;gap:5px;align-items:center;margin:7px 0 6px;">
+          ${st.editingFilm
+            ? html`<input autofocus value=${st.editFilmName}
+                onInput=${(e) => this.setState({ editFilmName: e.target.value })}
+                onKeyDown=${(e) => { if (e.key === 'Enter') this.renameFilm(st.editFilmName); if (e.key === 'Escape') this.setState({ editingFilm: false }); }}
+                onBlur=${() => this.renameFilm(st.editFilmName)}
+                style="flex:1 1 auto;min-width:0;padding:7px 9px;font-size:13px;font-weight:600;border:1px solid #8D1D2C;border-radius:8px;background:#fff;" />`
+            : html`<select value=${st.activePl} onChange=${(e) => this.selectFilm(e.target.value)}
+                style="flex:1 1 auto;min-width:0;padding:7px 9px;font-size:13px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;cursor:pointer;">
+                ${st.playlists.map((p) => html`<option value=${p.id}>${p.name} (${p.items.length})</option>`)}
+              </select>`}
+          <button onClick=${() => this.setState({ editingFilm: true, editFilmName: this.activeFilm().name })} title="Renommer le film" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;flex:0 0 auto;">✎</button>
+          <button onClick=${() => this.newFilm()} title="Nouveau film (vide)" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:#8D1D2C;color:#fff;border:none;cursor:pointer;font-size:14px;font-weight:700;flex:0 0 auto;">＋</button>
+          <button onClick=${() => this.dupFilm()} title="Dupliquer le film" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;flex:0 0 auto;">⎘</button>
+          <button onClick=${() => this.delFilm()} title="Supprimer le film (les modules restent en bibliothèque)" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;color:#8D1D2C;flex:0 0 auto;">🗑</button>
+        </div>
+        <p style="margin:0;font-size:11.5px;color:#8A847C;line-height:1.4;">Composé d'éléments de la bibliothèque · glisse pour l'ordre · ✕ retire (sans supprimer)</p>
       </div>
       <div style="flex:0 0 auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:7px;">
         ${v.playlist.map((mp) => html`
