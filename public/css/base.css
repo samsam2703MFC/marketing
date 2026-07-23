@@ -1,0 +1,44 @@
+/* Polices de marque — sous-ensemble embarqué du design system L'Atelier By.
+   Gotham (UI) : 300 Light · 400 Regular · 500/600 Medium · 700+ Black.
+   Vank (display) : glyphes ASCII, les accents retombent sur Gotham. */
+@font-face {
+  font-family: 'Gotham';
+  src: url('../fonts/Gotham_Light.otf') format('opentype');
+  font-weight: 100 300; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Gotham';
+  src: url('../fonts/Gotham_Regular_New.otf') format('opentype');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Gotham';
+  src: url('../fonts/Gotham_Medium.otf') format('opentype');
+  font-weight: 500 600; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Gotham';
+  src: url('../fonts/Gotham_Black.otf') format('opentype');
+  font-weight: 700 900; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Vank';
+  src: url('../fonts/GC_Vank.ttf') format('truetype');
+  font-weight: 400; font-style: normal; font-display: swap;
+  unicode-range: U+0020-007E;
+}
+
+html, body {
+  margin: 0; padding: 0;
+  background: #E7E1D8;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-family: 'Gotham', system-ui, sans-serif;
+}
+a { color: #8D1D2C; text-decoration: none; }
+a:hover { color: #6E1522; }
+input, select, button, textarea { font-family: 'Gotham', system-ui, sans-serif; }
+input:focus, select:focus, textarea:focus { outline: 2px solid rgba(141,29,44,0.35); outline-offset: 1px; }
+::placeholder { color: #B8B2A8; }
+.pl-item.drag-over { box-shadow: 0 0 0 2px #8D1D2C inset; }
+.pl-item.dragging { opacity: 0.4; }

@@ -1,0 +1,19 @@
+{
+  "name": "signage-back-office",
+  "version": "1.0.0",
+  "description": "Régie d'affichage L'Atelier By — back office signage hybride (cache local) + player + API CMS",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node test/live-test.js --local --mutate",
+    "test:live": "node test/live-test.js",
+    "test:live:full": "node test/live-test.js --mutate"
+  },
+  "engines": {
+    "node": ">=22.5"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}
