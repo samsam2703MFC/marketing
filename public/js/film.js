@@ -11,8 +11,16 @@ import { W, H, FUI, RUBY, renderModule, moduleDur, scheduledNow, clx } from './r
 const REFRESH_MS = 30000;
 const apiUrl = (p) => new URL('api/v1' + p, location.href).toString();
 // Lien par magasin : /film?store=st1 → version actuellement assignée à ce magasin.
+// Lien par film : /film?film=pl1 → dernière publication de ce film.
 const STORE = new URLSearchParams(location.search).get('store') || '';
-const filmApi = () => apiUrl(`/film${STORE ? `?store=${encodeURIComponent(STORE)}` : ''}`);
+const FILM = new URLSearchParams(location.search).get('film') || '';
+const filmApi = () => {
+  const q = new URLSearchParams();
+  if (FILM) q.set('film', FILM);
+  else if (STORE) q.set('store', STORE);
+  const s = q.toString();
+  return apiUrl(`/film${s ? `?${s}` : ''}`);
+};
 
 const PRESETS = [
   { id: 'tv55', label: '55″ TV · 16:9', w: 3840, h: 2160 },
@@ -212,7 +220,7 @@ class Film extends Component {
           <div style="display:flex;align-items:center;gap:10px;">
             <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-radius:999px;background:rgba(10,10,10,0.75);color:#fff;font-size:12.5px;backdrop-filter:blur(6px);">
               <span style="width:8px;height:8px;border-radius:50%;background:#5BBE7A;"></span>
-              <span>${st.snap.playlistName || 'Film'}${st.snap.storeName ? ` · ${st.snap.storeName}` : ''} · v${st.snap.version} · prix d${st.snap.dataVer} · ${st.fmt.w}×${st.fmt.h}</span>
+              <span>${st.snap.playlistName || 'Film'}${st.snap.storeName ? ` · ${st.snap.storeName}` : ''}${st.snap.draft ? ' · brouillon (pas encore publié)' : ''} · v${st.snap.version} · prix d${st.snap.dataVer} · ${st.fmt.w}×${st.fmt.h}</span>
             </div>
             <button onClick=${() => { this.setState({ panel: !st.panel }); this._armBadge(); }} title="Choisir le format d'écran" style="padding:10px 14px;border-radius:999px;border:1px solid rgba(255,255,255,0.22);background:rgba(10,10,10,0.75);color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;backdrop-filter:blur(6px);">⛶ Format</button>
           </div>

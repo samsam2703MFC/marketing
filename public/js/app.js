@@ -578,9 +578,10 @@ class App extends Component {
     }
   };
 
-  filmUrl({ w, h: hh, fit, store } = {}) {
+  filmUrl({ w, h: hh, fit, store, film } = {}) {
     const u = new URL('film', location.href);
-    if (store) u.searchParams.set('store', store);
+    if (film) u.searchParams.set('film', film);
+    else if (store) u.searchParams.set('store', store);
     if (w) {
       u.searchParams.set('w', w);
       u.searchParams.set('h', hh);
@@ -604,6 +605,15 @@ class App extends Component {
       label: s.store,
       sub: `${s.group} · ${s.players.length} écran(s)`,
       url: this.filmUrl({ w: 3840, h: 2160, store: s.id }),
+    }));
+  }
+  perFilmLinks() {
+    // Lien direct par film (format standard 55″) : dernière publication de ce
+    // film, ou sa composition enregistrée s'il n'a jamais été publié.
+    return this.state.playlists.map((p) => ({
+      label: p.name,
+      sub: `${p.items.length} module(s)${p.id === this.state.activePl ? ' · en cours d’édition' : ''}`,
+      url: this.filmUrl({ w: 3840, h: 2160, film: p.id }),
     }));
   }
 
@@ -1136,6 +1146,23 @@ class App extends Component {
             </div>
           `)}
         </div>
+        ${this.perFilmLinks().length > 0 && html`
+          <h3 style="margin:20px 0 4px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">Par film · dernière publication du film (55″ standard)</h3>
+          <p style="margin:0 0 12px;font-size:11.5px;color:#8A847C;line-height:1.5;">Un lien par film de la régie. Un film jamais publié s'affiche en prévisualisation (badge « brouillon ») — pense à Enregistrer puis Publier.</p>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            ${this.perFilmLinks().map((l) => html`
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.08);">
+                <div style="flex:0 0 190px;min-width:0;">
+                  <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.label}</div>
+                  <div style="font-size:10.5px;color:#8A847C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.sub}</div>
+                </div>
+                <input readonly value=${l.url} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:8px 10px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:7px;background:#fff;color:#232220;" />
+                <button onClick=${() => this.copyLink(l.url)} title="Copier le lien" style="flex:0 0 auto;padding:8px 13px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">Copier</button>
+                <a href=${l.url} target="_blank" title="Ouvrir dans un onglet" style="flex:0 0 auto;padding:8px 11px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(35,34,32,0.14);background:#fff;color:#232220;">↗</a>
+              </div>
+            `)}
+          </div>
+        `}
         ${this.storeFilmLinks().length > 0 && html`
           <h3 style="margin:20px 0 4px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">Par magasin · version assignée au magasin (55″ standard)</h3>
           <p style="margin:0 0 12px;font-size:11.5px;color:#8A847C;line-height:1.5;">Chaque lien montre le film que CE magasin doit jouer — pratique à envoyer au responsable du point de vente.</p>

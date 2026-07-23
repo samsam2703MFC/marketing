@@ -250,13 +250,29 @@ function assignment(id, url) {
 // Le « film » public : dernière playlist publiée (ou brouillon si rien n'a
 // jamais été publié), avec le dernier snapshot de prix appliqué. Lecture seule,
 // sans token — c'est le contenu affiché en vitrine.
-// Avec ?store=<id> : la version actuellement assignée à CE magasin (lien
-// direct par magasin, partageable).
-function filmJson(storeId) {
+// Avec ?store=<id> : la version actuellement assignée à CE magasin.
+// Avec ?film=<id> : la dernière publication de CE film (lien par film) ;
+// s'il n'a jamais été publié, sa composition enregistrée est servie en
+// prévisualisation (draft: true).
+function filmJson(storeId, filmId) {
   const db = getDb();
   let snap = null;
   let storeName = null;
-  if (storeId) {
+  if (filmId) {
+    const pls = loadPlaylists();
+    const film = pls.find((p) => p.id === filmId);
+    if (!film) return { status: 404, json: { error: `film inconnu : ${filmId}` } };
+    const rows = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' ORDER BY version DESC LIMIT 200`).all();
+    for (const r of rows) {
+      const p = JSON.parse(r.payload);
+      if ((p.playlistId || 'pl1') === filmId) { snap = p; break; }
+    }
+    if (!snap) {
+      snap = { ...currentDraftSnapshot(), playlistId: film.id, playlistName: film.name, playlist: film.items, draft: true };
+    } else if (!snap.playlistName) {
+      snap.playlistName = film.name;
+    }
+  } else if (storeId) {
     const store = db.prepare('SELECT * FROM sig_stores WHERE id = ?').get(storeId);
     if (!store) return { status: 404, json: { error: `magasin inconnu : ${storeId}` } };
     storeName = store.name;
@@ -375,7 +391,7 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
 
     // ---- film public (visionneuse plein écran, lecture seule) ---------------
     if (req.method === 'GET' && path === '/film') {
-      const out = filmJson(url.searchParams.get('store') || null);
+      const out = filmJson(url.searchParams.get('store') || null, url.searchParams.get('film') || null);
       return send(out.status, out.json);
     }
 
