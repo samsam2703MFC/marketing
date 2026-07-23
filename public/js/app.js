@@ -25,6 +25,14 @@ const LIB_TAGS = [
 ];
 const tagOf = (m) => LIB_TAGS.find((t) => t.id === (m.libTag || (m.type === 'liaison' ? 'liaison' : 'produit'))) || LIB_TAGS[0];
 
+// Pastille (i) : bulle d'aide au survol (ou au clic sur écran tactile).
+const infoTip = (text) => html`
+  <span class="sig-info" onClick=${(e) => { e.stopPropagation(); e.currentTarget.classList.toggle('open'); }}>
+    <button type="button" aria-label="Conseils">i</button>
+    <span class="sig-tip">${text}</span>
+  </span>`;
+const PHOTO_TIP = 'Qualité top : photo carrée d’au moins 2000 × 2000 px, idéal 2500 × 2500 — elle est affichée en très grand sur les écrans. Produit centré, fond clair et uni (ou PNG détouré). Trop grande ? Elle est réduite automatiquement. En dessous de 1500 px, elle risque de paraître floue.';
+
 const POSF = [
   { k: 'titleY', label: 'Titre · vertical', min: -400, max: 400, step: 10, unit: 'px' },
   { k: 'listX', label: 'Liste · horizontal', min: -800, max: 800, step: 10, unit: 'px' },
@@ -465,10 +473,11 @@ class App extends Component {
     const r = new FileReader();
     r.onload = () => {
       // Compression côté navigateur : une photo de téléphone (5-8 Mo) ferait
-      // échouer l'enregistrement — on la ramène à ≤1600 px en JPEG.
+      // échouer l'enregistrement — on la ramène à ≤2500 px en JPEG, la taille
+      // maximale à laquelle elle est affichée sur le mur d'écrans (6480×3840).
       const img = new Image();
       img.onload = () => {
-        const MAX = 1600;
+        const MAX = 2500;
         const sc = Math.min(1, MAX / Math.max(img.width, img.height));
         const cv = document.createElement('canvas');
         cv.width = Math.max(1, Math.round(img.width * sc));
@@ -1723,6 +1732,7 @@ class App extends Component {
                       <button onClick=${it.setIllus} style=${it.illusTabStyle}>Illustration</button>
                       <button onClick=${it.setPhoto} style=${it.photoTabStyle}>Photo</button>
                     </div>
+                    ${infoTip(PHOTO_TIP)}
                     ${it.isIllus && html`
                       <select value=${it.img} onChange=${it.onImg} style="flex:1 1 auto;padding:9px 10px;font-size:13px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;cursor:pointer;">
                         <option value="assets/cookies.png">Brookie / cookie</option>
