@@ -127,6 +127,20 @@ async function main() {
     const res = await fetch(BASE + '/player.html');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
   });
+  await step('GET /film — visionneuse publique servie', async () => {
+    const res = await fetch(BASE + '/film');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const txt = await res.text();
+    if (!txt.includes('Film')) throw new Error('HTML inattendu');
+  });
+  await step('GET /api/v1/film — film public (sans connexion)', async () => {
+    const res = await fetch(BASE + '/api/v1/film');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const f = await res.json();
+    if (!Array.isArray(f.modules) || !f.modules.length) throw new Error('film vide');
+    if (!Array.isArray(f.playlist)) throw new Error('playlist absente');
+    return `v${f.version} · d${f.dataVer} · ${f.playlist.length} module(s) au programme`;
+  });
   await step('POST /api/v1/test — test de connexion live (auto-ciblé)', async () => {
     const anyToken = await firstToken();
     const out = await call('POST', '/api/v1/test', { url: `${BASE}/api/v1`, ip: new URL(BASE).hostname, token: anyToken });

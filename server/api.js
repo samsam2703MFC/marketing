@@ -238,6 +238,31 @@ function assignment(id, url) {
   };
 }
 
+// Le « film » public : dernière playlist publiée (ou brouillon si rien n'a
+// jamais été publié), avec le dernier snapshot de prix appliqué. Lecture seule,
+// sans token — c'est le contenu affiché en vitrine.
+function filmJson() {
+  const db = getDb();
+  const snapRow = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' ORDER BY version DESC LIMIT 1`).get();
+  const snap = snapRow ? JSON.parse(snapRow.payload) : currentDraftSnapshot();
+  const dv = getIntSetting('data_ver', 1);
+  const dataRow = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'data' AND version = ?`).get(dv);
+  if (dataRow) {
+    const prices = JSON.parse(dataRow.payload).prices || [];
+    const byId = new Map(prices.map((p) => [p.moduleId, p.items]));
+    for (const m of snap.modules || []) {
+      const items = byId.get(m.id);
+      if (!items) continue;
+      m.items = (m.items || []).map((it, i) => (items[i]
+        ? { ...it, name: items[i].name, price: items[i].price, active: items[i].active }
+        : it));
+    }
+  }
+  snap.dataVer = dv;
+  snap.override = getSetting('override', '0') === '1';
+  return snap;
+}
+
 // Si aucune publication n'existe encore pour la version assignée, on sert le brouillon courant.
 function currentDraftSnapshot() {
   return {
@@ -317,6 +342,9 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       setCookies.push(`sig_session=; Path=${ctx.cookiePath}; HttpOnly; SameSite=Lax; Max-Age=0`);
       return send(200, { ok: true });
     }
+
+    // ---- film public (visionneuse plein écran, lecture seule) ---------------
+    if (req.method === 'GET' && path === '/film') return send(200, filmJson());
 
     // ---- endpoints players (auth par token de player) -----------------------
     if (req.method === 'GET' && (mm = m(/^\/players\/([\w-]+)\/assignment$/))) {

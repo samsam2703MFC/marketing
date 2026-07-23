@@ -43,6 +43,7 @@ const MIME = {
 function serveStatic(req, res, pathname) {
   if (pathname === '/') pathname = '/index.html';
   if (pathname === '/player') pathname = '/player.html';
+  if (pathname === '/film') pathname = '/film.html';
   const safe = normalize(pathname).replace(/^(\.\.[/\\])+/, '');
   const file = join(PUBLIC_DIR, safe);
   if (!file.startsWith(PUBLIC_DIR) || !existsSync(file) || !statSync(file).isFile()) {

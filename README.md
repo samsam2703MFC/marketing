@@ -20,6 +20,7 @@ npm start            # ou : node server/index.js
 | URL | Rôle |
 |---|---|
 | `http://localhost:8080/` | Back office (connexion → Compositeur · Flotte · Paramètres) |
+| `http://localhost:8080/film` | **Visionneuse publique du film** — dernière playlist publiée, plein écran, sans connexion |
 | `http://localhost:8080/player.html?id=p1&token=plyr_9F3A2C7E` | Player d'exemple (magasin Centre-Ville) |
 | `http://localhost:8080/api/v1/health` | Sonde de santé (publique) |
 

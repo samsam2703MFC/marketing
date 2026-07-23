@@ -10,6 +10,11 @@ const PLAYER_ID = qs.get('id') || 'web-' + Math.random().toString(36).slice(2, 8
 const TOKEN = qs.get('token') || '';
 const NAME = qs.get('name') || '';
 const HB_EVERY = 5000;
+// Format d'écran optionnel : ?w=3840&h=2160&fit=cover|contain (55″ 16:9 = 3840×2160).
+// Sans paramètres, le film s'adapte à la fenêtre (letterbox).
+const FMT_W = parseInt(qs.get('w'), 10) || 0;
+const FMT_H = parseInt(qs.get('h'), 10) || 0;
+const FMT_FIT = qs.get('fit') === 'contain' ? 'contain' : 'cover';
 
 // URLs relatives à la page → fonctionne aussi monté sous un sous-chemin.
 const apiUrl = (p) => new URL('api/v1' + p, location.href).toString();
@@ -58,10 +63,7 @@ class Player extends Component {
       this.setState({ phase: 'error', error: 'Token manquant — ajoute ?id=…&token=plyr_… à l\'URL' });
       return;
     }
-    this._resize = () => {
-      const s = Math.min(window.innerWidth / W, window.innerHeight / H);
-      this.setState({ scale: s });
-    };
+    this._resize = () => this.setState({ winW: window.innerWidth, winH: window.innerHeight });
     this._resize();
     window.addEventListener('resize', this._resize);
 
@@ -237,12 +239,23 @@ class Player extends Component {
           h('div', { style: { fontFamily: FUI, fontSize: 90, color: '#8A847C', letterSpacing: '0.14em', textTransform: 'uppercase' } }, 'aucun module programmé sur ce créneau'));
     }
 
+    // Boîte au ratio demandé (?w=&h=&fit=) ou plein cadre par défaut.
+    const winW = st.winW || window.innerWidth;
+    const winH = st.winH || window.innerHeight;
+    let bw = winW, bh = winH, fit = FMT_FIT;
+    if (FMT_W > 0 && FMT_H > 0) {
+      const ratio = FMT_W / FMT_H;
+      if (bw / bh > ratio) bw = Math.round(bh * ratio); else bh = Math.round(bw / ratio);
+    } else {
+      fit = 'contain';
+    }
+    const scale = fit === 'contain' ? Math.min(bw / W, bh / H) : Math.max(bw / W, bh / H);
     const stage = h('div', {
-      style: { position: 'absolute', left: 0, top: 0, width: W, height: H, background: '#F5EFE4', transform: `scale(${st.scale})`, transformOrigin: 'top left' },
+      style: { position: 'absolute', left: (bw - W * scale) / 2, top: (bh - H * scale) / 2, width: W, height: H, background: '#F5EFE4', transform: `scale(${scale})`, transformOrigin: 'top left' },
     }, content);
 
     return html`
-      <div style="position:relative;width:${Math.round(W * st.scale)}px;height:${Math.round(H * st.scale)}px;margin:auto;top:50%;transform:translateY(-50%);overflow:hidden;">
+      <div style="position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:${bw}px;height:${bh}px;overflow:hidden;background:#F5EFE4;">
         ${stage}
       </div>
       ${st.info && html`
