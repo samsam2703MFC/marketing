@@ -281,7 +281,7 @@ export function getIntSetting(key, fallback = 0) {
 }
 
 // ---------------------------------------------------------------------------
-// Seed — contenu par défaut identique à la maquette (Tartes + liaison), flotte démo.
+// Seed — contenu par défaut identique à la maquette (Tartes + liaison), réseau démo.
 function seed(db) {
   const count = db.prepare('SELECT COUNT(*) AS n FROM sig_modules').get().n;
   if (count > 0) return;

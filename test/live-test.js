@@ -111,7 +111,7 @@ async function main() {
     if (!Array.isArray(state.playlist)) throw new Error('playlist absente');
     return `${state.modules.length} modules · playlist ×${state.playlist.length}`;
   });
-  await step('GET /api/v1/fleet — flotte & magasins', async () => {
+  await step('GET /api/v1/fleet — réseau & magasins', async () => {
     const f = await call('GET', '/api/v1/fleet');
     if (!Array.isArray(f.stores)) throw new Error('stores absent');
     const n = f.stores.reduce((s, x) => s + x.players.length, 0);
@@ -257,9 +257,9 @@ async function main() {
       if (!hb.ok) throw new Error('heartbeat refusé');
       const f = await call('GET', '/api/v1/fleet');
       const me = f.stores.flatMap((s) => s.players).find((p) => p.id === pid);
-      if (!me) throw new Error('player absent de la flotte');
-      if (me.playedVer !== pub.version) throw new Error(`flotte : v${me.playedVer} ≠ v${pub.version}`);
-      return `flotte à jour : ${me.state} · v${me.playedVer}`;
+      if (!me) throw new Error('player absent du réseau');
+      if (me.playedVer !== pub.version) throw new Error(`réseau : v${me.playedVer} ≠ v${pub.version}`);
+      return `réseau à jour : ${me.state} · v${me.playedVer}`;
     });
     await step('GET /api/v1/publications — historique + tests archivés', async () => {
       const p = await call('GET', '/api/v1/publications');

@@ -114,7 +114,7 @@ async function publish({ mode, targets, slot, when, activateAt, playlistId, sche
     || { id: 'pl1', name: 'Film principal', items: [], schedule: null, stores: [] };
   const playlist = film.items;
 
-  // Cibles : explicites, sinon les magasins du film, sinon toute la flotte.
+  // Cibles : explicites, sinon les magasins du film, sinon tout le réseau.
   const allStores = db.prepare('SELECT id FROM sig_stores').all().map((s) => s.id);
   const filmStores = Array.isArray(film.stores) ? film.stores : [];
   const wanted = (targets && targets.length) ? targets
@@ -298,7 +298,7 @@ function filmJson(storeId, filmId) {
     }
     // Aucune publication ne correspond à la version assignée à ce magasin
     // (état initial) : on montre le brouillon du film destiné à ce magasin
-    // (premier film qui le cible ou qui vise toute la flotte), PAS la
+    // (premier film qui le cible ou qui vise tout le réseau), PAS la
     // publication d'un autre magasin.
     if (!snap) {
       const pls = loadPlaylists();

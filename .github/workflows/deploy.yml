@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
     inputs:
       mutate:
-        description: "Cycle complet de tests (publie réellement une version sur la flotte)"
+        description: "Cycle complet de tests (publie réellement une version sur le réseau)"
         type: boolean
         default: false
 

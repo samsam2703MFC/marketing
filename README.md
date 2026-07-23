@@ -19,7 +19,7 @@ npm start            # ou : node server/index.js
 
 | URL | Rôle |
 |---|---|
-| `http://localhost:8080/` | Back office (connexion → Compositeur · Flotte · Paramètres) |
+| `http://localhost:8080/` | Back office (connexion → Compositeur · Réseau · Paramètres) |
 | `http://localhost:8080/film` | **Visionneuse publique du film** — dernière playlist publiée, plein écran, sans connexion |
 | `http://localhost:8080/player.html?id=p1&token=plyr_9F3A2C7E` | Player d'exemple (magasin Centre-Ville) |
 | `http://localhost:8080/api/v1/health` | Sonde de santé (publique) |
@@ -86,7 +86,7 @@ durée par ligne, scope module / playlist). Annuler / rétablir (⌘Z / ⌘⇧Z)
 **Enregistrer** pousse le brouillon dans la base (`PUT /api/v1/draft`).
 
 ### Publication (versionnée, atomique) + tests live
-« Publier sur la flotte » crée un **snapshot** en base :
+« Publier sur le réseau » crée un **snapshot** en base :
 
 - **Playlist complète** → `sig_snapshots(kind='playlist', version=N)`, `assigned_ver = N`
   sur les players ciblés (activation immédiate ou `activate_at` planifié).
@@ -108,9 +108,9 @@ Respecte la programmation des modules (jours / fenêtre horaire) et le mode « �
 
 Un player inconnu qui se présente avec un token `plyr_…` est **auto-enregistré** dans le magasin
 « Nouveaux écrans » — ouvrir `player.html?id=monecran&token=plyr_TEST42&name=Vitrine` suffit pour
-le voir apparaître dans la flotte. Dans la vue Flotte, cliquer le nom d'un écran (↗) ouvre son player.
+le voir apparaître dans le réseau. Dans la vue Réseau, cliquer le nom d'un écran (↗) ouvre son player.
 
-### Flotte & supervision
+### Réseau & supervision
 KPIs, alertes, état par magasin / écran depuis les vrais heartbeats : en ligne (< 30 s),
 hors ligne (lecture depuis le cache local), version jouée vs assignée (« en retard »),
 fraîcheur des prix (périmé > 1 h), cache, disque, dernier contact.

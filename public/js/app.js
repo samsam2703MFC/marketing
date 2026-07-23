@@ -656,7 +656,7 @@ class App extends Component {
     try {
       await api('POST', '/override', { on });
       this.setState({ override: on, view: 'fleet' });
-      this.showToast(on ? '⚡ Diffusion flash active sur toute la flotte' : 'Reprise des playlists normales');
+      this.showToast(on ? '⚡ Diffusion flash active sur tout le réseau' : 'Reprise des playlists normales');
       this.refreshFleet();
     } catch (e) {
       this.showToast(`Échec : ${e.message}`);
@@ -714,7 +714,7 @@ class App extends Component {
   }
   storeFilmLinks() {
     // Lien direct par magasin : montre la version actuellement assignée à ce
-    // magasin, à la taille de son combo d'écrans (réglé dans Flotte).
+    // magasin, à la taille de son combo d'écrans (réglé dans Réseau).
     return this.state.fleet.map((s) => ({
       label: s.store,
       sub: `${s.group} · ${s.players.length} écran(s)${s.format ? ` · ${s.format.label} = ${s.format.px}` : ''}`,
@@ -1050,7 +1050,7 @@ class App extends Component {
       }
     }
 
-    // ---- vue flotte ----
+    // ---- vue réseau ----
     const stTab = 'padding:8px 16px;font-size:13px;font-weight:500;border:none;border-radius:999px;cursor:pointer;';
     const fmtAgo = (s) => (s >= 999999 ? 'jamais vu' : s < 60 ? `il y a ${s}s` : s < 3600 ? `il y a ${Math.floor(s / 60)} min` : `il y a ${Math.floor(s / 3600)} h`);
     const STCOL = { playing: '#2E7D32', syncing: '#B8860B', error: '#8D1D2C', offline: '#8A847C', idle: '#8A847C' };
@@ -1151,7 +1151,7 @@ class App extends Component {
       });
       if (st.view === 'fleet') {
         arr.push(crumb('Compositeur', () => this.setView('composer'), false));
-        arr.push(crumb('Flotte & supervision', () => this.setView('fleet'), false));
+        arr.push(crumb('Réseau & supervision', () => this.setView('fleet'), false));
         arr.push(crumb(`${online + offline} écrans · ${st.fleet.length} magasins`, null, true));
       } else if (st.view === 'settings') {
         arr.push(crumb('Compositeur', () => this.setView('composer'), false));
@@ -1313,7 +1313,7 @@ class App extends Component {
         <form onSubmit=${this.doLogin} style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:20px;padding:36px 38px;width:360px;max-width:100%;box-shadow:0 30px 80px rgba(0,0,0,0.10);display:flex;flex-direction:column;gap:13px;">
           <img src="assets/logo.png" alt="L'Atelier By" style="height:44px;width:auto;align-self:center;margin-bottom:4px;" />
           <div style="text-align:center;font-weight:600;font-size:16px;">Régie d'affichage</div>
-          <div style="text-align:center;font-size:12px;color:#8A847C;margin-bottom:6px;">Connexion requise pour piloter la flotte</div>
+          <div style="text-align:center;font-size:12px;color:#8A847C;margin-bottom:6px;">Connexion requise pour piloter le réseau</div>
           <label style="font-size:12.5px;font-weight:500;color:#8A847C;">Utilisateur</label>
           <input value=${st.loginUser} onInput=${(e) => this.setState({ loginUser: e.target.value })} autocomplete="username" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:14px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;" />
           <label style="font-size:12.5px;font-weight:500;color:#8A847C;">Mot de passe</label>
@@ -1413,7 +1413,7 @@ class App extends Component {
       </div>
       <div style="display:inline-flex;background:#EFE9E0;border-radius:999px;padding:3px;flex:0 0 auto;margin-left:6px;">
         <button onClick=${v.setViewComposer} style=${v.tabComposerStyle}>Compositeur</button>
-        <button onClick=${v.setViewFleet} style=${v.tabFleetStyle}>Flotte & supervision</button>
+        <button onClick=${v.setViewFleet} style=${v.tabFleetStyle}>Réseau & supervision</button>
       </div>
       <button onClick=${v.setViewSettings} title="Paramètres · serveur & connexion" style=${v.settingsIconStyle}>⚙</button>
     </div>
@@ -1433,7 +1433,7 @@ class App extends Component {
       <button onClick=${v.save} style=${v.saveStyle}>${v.saveLabel}</button>
       <button onClick=${v.pushPrices} title="Sync incrémentale légère — ne re-télécharge aucun média" style="padding:10px 16px;font-size:13.5px;font-weight:600;border-radius:999px;border:1px solid rgba(141,29,44,0.28);cursor:pointer;background:rgba(141,29,44,0.08);color:#8D1D2C;">⚡ Pousser les prix</button>
       <button onClick=${v.toggleOverride} style=${v.overrideStyle}>${v.overrideLabel}</button>
-      <button onClick=${v.openPublish} style="padding:10px 22px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:pointer;background:#232220;color:#fff;">Publier sur la flotte ↗</button>
+      <button onClick=${v.openPublish} style="padding:10px 22px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:pointer;background:#232220;color:#fff;">Publier sur le réseau ↗</button>
     </div>
   </header>
 
@@ -1628,7 +1628,7 @@ class App extends Component {
       <button onClick=${v.setTabLib} style=${v.tabLibStyle}>1 · Bibliothèque — construire</button>
       <button onClick=${v.setTabTimeline} style=${v.tabTimelineStyle}>2 · Playlist — ligne du temps</button>
     </div>
-    <span style="font-size:12px;color:#8A847C;">${v.isTimelineTab ? 'Glisse les éléments de la bibliothèque sur la ligne du temps, puis Enregistrer et Publier sur la flotte.' : 'Construis ici les éléments (catégories, liaisons) qui composeront tes films.'}</span>
+    <span style="font-size:12px;color:#8A847C;">${v.isTimelineTab ? 'Glisse les éléments de la bibliothèque sur la ligne du temps, puis Enregistrer et Publier sur le réseau.' : 'Construis ici les éléments (catégories, liaisons) qui composeront tes films.'}</span>
   </div>
   `}
 
@@ -1910,7 +1910,7 @@ class App extends Component {
             </div>
           </div>
         </div>
-        <p style="margin:12px 0 0;font-size:11.5px;color:#8A847C;">Hors créneau, les écrans affichent l'attente (le lien de partage montre toujours le film). « Tous » = le film part sur toute la flotte à la publication.</p>
+        <p style="margin:12px 0 0;font-size:11.5px;color:#8A847C;">Hors créneau, les écrans affichent l'attente (le lien de partage montre toujours le film). « Tous » = le film part sur tout le réseau à la publication.</p>
       </div>
 
       <div style="display:grid;grid-template-columns:minmax(520px,1fr) 340px;gap:16px;align-items:start;">
@@ -1921,7 +1921,7 @@ class App extends Component {
           <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">3 · Enregistrer & déployer</h3>
           <p style="margin:0 0 14px;font-size:12px;color:#8A847C;line-height:1.55;">Enregistre le film, puis publie-le : tu choisiras les <strong>jours</strong>, la <strong>fenêtre horaire</strong> et les <strong>magasins</strong>. Le lien de visionnage s'affiche juste après le déploiement.</p>
           <button onClick=${v.save} style="width:100%;margin-bottom:8px;${v.saveStyle}">${v.saveLabel}</button>
-          <button onClick=${v.openPublish} style="width:100%;padding:11px;font-size:13.5px;font-weight:600;border-radius:999px;border:none;cursor:pointer;background:#232220;color:#fff;">Publier sur la flotte ↗</button>
+          <button onClick=${v.openPublish} style="width:100%;padding:11px;font-size:13.5px;font-weight:600;border-radius:999px;border:none;cursor:pointer;background:#232220;color:#fff;">Publier sur le réseau ↗</button>
           <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(35,34,32,0.08);font-size:11.5px;color:#8A847C;line-height:1.5;">Lien direct de ce film (55″) :<br/>
             <button onClick=${() => this.copyLink(this.filmUrl({ film: st.activePl, w: 3840, h: 2160 }))} style="margin-top:6px;padding:8px 13px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Copier le lien</button>
             <a href=${this.filmUrl({ film: st.activePl, w: 3840, h: 2160 })} target="_blank" style="margin-left:6px;font-size:12px;font-weight:600;">↗ Ouvrir</a>
@@ -1939,7 +1939,7 @@ class App extends Component {
       <div onClick=${v.stop} style="background:#F5EFE4;border-radius:20px;width:640px;max-width:100%;max-height:90vh;overflow:auto;box-shadow:0 40px 100px rgba(0,0,0,0.35);">
         <div style="display:flex;align-items:center;justify-content:space-between;padding:22px 26px;border-bottom:1px solid rgba(35,34,32,0.10);">
           <div>
-            <h2 style="margin:0;font-size:19px;font-weight:600;">Publier sur la flotte</h2>
+            <h2 style="margin:0;font-size:19px;font-weight:600;">Publier sur le réseau</h2>
             <p style="margin:4px 0 0;font-size:12.5px;color:#8A847C;">Déploiement atomique · le player bascule quand tous les médias sont en cache</p>
           </div>
           <button onClick=${v.closePublish} style="width:34px;height:34px;border-radius:50%;border:none;background:rgba(35,34,32,0.08);cursor:pointer;font-size:15px;">✕</button>
@@ -1963,7 +1963,7 @@ class App extends Component {
             <p style="margin:10px 0 0;font-size:11.5px;color:#8A847C;line-height:1.5;">Les liens par magasin sont dans ⚙ Paramètres → Liens de diffusion. Les écrans basculent automatiquement dès leur cache prêt.</p>
           </div>
           <div style="display:flex;justify-content:flex-end;">
-            <button onClick=${v.closePublish} style="padding:11px 22px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:pointer;background:#232220;color:#fff;">Voir la flotte →</button>
+            <button onClick=${v.closePublish} style="padding:11px 22px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:pointer;background:#232220;color:#fff;">Voir le réseau →</button>
           </div>
         </div>
         `}
