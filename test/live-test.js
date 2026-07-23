@@ -160,9 +160,10 @@ async function main() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const f = await res.json();
     if (f.storeId !== store.id) throw new Error('storeId inattendu');
+    if (!f.format || !(f.format.w > 0) || !(f.format.h > 0)) throw new Error('combo écrans absent (format)');
     const bad = await fetch(BASE + '/api/v1/film?store=inexistant');
     if (bad.status !== 404) throw new Error(`magasin inconnu : HTTP ${bad.status} au lieu de 404`);
-    return `${f.storeName} → v${f.version}`;
+    return `${f.storeName} → v${f.version} · ${f.format.label} = ${f.format.px}`;
   });
   await step('POST /api/v1/test — test de connexion live (auto-ciblé)', async () => {
     const anyToken = await firstToken();
@@ -182,6 +183,21 @@ async function main() {
       });
       if (!hb.ok) throw new Error('heartbeat refusé');
       return `assignée v${hb.assignedVer}`;
+    });
+    await step('POST /api/v1/stores/<id> — combo d\'écrans du magasin', async () => {
+      const fleetRes = await call('GET', '/api/v1/fleet');
+      const store = fleetRes.stores[0];
+      if (!store) throw new Error('aucun magasin en base');
+      const before = store.format;
+      const out = await call('POST', `/api/v1/stores/${store.id}`, { screens: 3, size: 55, orient: 'portrait' });
+      if (!out.ok || out.format.w !== 3 * 2160 || out.format.h !== 3840) {
+        throw new Error(`combo 3×55″ portrait → ${out.format && out.format.px} (attendu 6480 × 3840 px)`);
+      }
+      const film = await (await fetch(BASE + `/api/v1/film?store=${encodeURIComponent(store.id)}`)).json();
+      if (!film.format || film.format.w !== 6480) throw new Error('le lien magasin ne reflète pas le combo');
+      // restauration de la configuration d'origine
+      await call('POST', `/api/v1/stores/${store.id}`, { screens: before.screens, size: before.size, orient: before.orient });
+      return `${store.store} : ${out.format.label} = ${out.format.px}, restauré ${before.label}`;
     });
     const basePlaylists = (state.playlists && state.playlists.length)
       ? state.playlists

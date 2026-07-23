@@ -29,6 +29,12 @@ const PRESETS = [
   { id: 'wall', label: 'Mur 3 dalles · natif', w: 6480, h: 3840 },
 ];
 
+// Format explicite dans l'URL (?w=&h=) : prioritaire sur tout le reste.
+const URL_FMT = (() => {
+  const qs = new URLSearchParams(location.search);
+  return parseInt(qs.get('w'), 10) > 0 && parseInt(qs.get('h'), 10) > 0;
+})();
+
 function initialFormat() {
   const qs = new URLSearchParams(location.search);
   const w = parseInt(qs.get('w'), 10);
@@ -76,6 +82,7 @@ class Film extends Component {
   }
 
   setFormat(fmt) {
+    this._userPicked = true;
     const next = { w: fmt.w, h: fmt.h, fit: fmt.fit || this.state.fmt.fit };
     this.setState({ fmt: next, customW: '', customH: '' });
     try { localStorage.setItem('sigFilmFormat', JSON.stringify(next)); } catch { /* stockage indisponible */ }
@@ -93,6 +100,15 @@ class Film extends Component {
         throw new Error(j.error || `HTTP ${res.status}`);
       }
       const snap = await res.json();
+      // Le combo d'écrans du magasin (réglé dans la régie, ex. 3 × 55″
+      // portrait = 6480 × 3840) donne la taille par défaut du lien ?store= —
+      // sauf format explicite dans l'URL ou choix manuel dans le panneau.
+      if (snap.format && !URL_FMT && !this._userPicked) {
+        const f = this.state.fmt;
+        if (f.w !== snap.format.w || f.h !== snap.format.h) {
+          this.setState({ fmt: { w: snap.format.w, h: snap.format.h, fit: f.fit || 'cover' } });
+        }
+      }
       const cur = this.state.snap;
       const newVersion = !cur || cur.version !== snap.version;
       const changed = newVersion || cur.dataVer !== snap.dataVer || cur.override !== snap.override;
@@ -236,6 +252,11 @@ class Film extends Component {
           ${st.panel && html`
             <div style="background:rgba(10,10,10,0.88);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.14);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;width:280px;color:#fff;">
               <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.55);">Format d'écran (px · ratio)</div>
+              ${st.snap.format && html`
+                <button onClick=${() => this.setFormat({ w: st.snap.format.w, h: st.snap.format.h })} style=${chip(st.fmt.w === st.snap.format.w && st.fmt.h === st.snap.format.h)}>
+                  Combo du magasin · ${st.snap.format.label} <span style="opacity:0.65;font-weight:400;">· ${st.snap.format.w}×${st.snap.format.h}</span>
+                </button>
+              `}
               ${PRESETS.map((p) => html`
                 <button onClick=${() => this.setFormat(p)} style=${chip(isPreset(p))}>
                   ${p.label} <span style="opacity:0.65;font-weight:400;">· ${p.w}×${p.h}</span>
@@ -256,7 +277,7 @@ class Film extends Component {
           <div style="display:flex;align-items:center;gap:10px;">
             <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-radius:999px;background:rgba(10,10,10,0.75);color:#fff;font-size:12.5px;backdrop-filter:blur(6px);">
               <span style="width:8px;height:8px;border-radius:50%;background:#5BBE7A;"></span>
-              <span>${st.snap.playlistName || 'Film'}${st.snap.storeName ? ` · ${st.snap.storeName}` : ''}${st.snap.draft ? ' · brouillon (pas encore publié)' : ''} · v${st.snap.version} · prix d${st.snap.dataVer} · ${st.fmt.w}×${st.fmt.h}${this.offAirNote()}</span>
+              <span>${st.snap.playlistName || 'Film'}${st.snap.storeName ? ` · ${st.snap.storeName}` : ''}${st.snap.draft ? ' · brouillon (pas encore publié)' : ''} · v${st.snap.version} · prix d${st.snap.dataVer} · ${st.fmt.w}×${st.fmt.h}${st.snap.format && st.fmt.w === st.snap.format.w && st.fmt.h === st.snap.format.h ? ` (${st.snap.format.label})` : ''}${this.offAirNote()}</span>
             </div>
             <button onClick=${() => { this.setState({ panel: !st.panel }); this._armBadge(); }} title="Choisir le format d'écran" style="padding:10px 14px;border-radius:999px;border:1px solid rgba(255,255,255,0.22);background:rgba(10,10,10,0.75);color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;backdrop-filter:blur(6px);">⛶ Format</button>
           </div>

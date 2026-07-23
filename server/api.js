@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   getDb, getSetting, setSetting, getIntSetting,
-  loadModules, loadPlaylist, loadPlaylists, activePlaylistId, saveDraft, DB_PATH,
+  loadModules, loadPlaylist, loadPlaylists, activePlaylistId, saveDraft, storeFormat, DB_PATH,
   checkLogin, createSession, sessionUser, destroySession,
 } from './db.js';
 import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
@@ -55,7 +55,7 @@ export function fleetJson() {
   const db = getDb();
   const stores = db.prepare('SELECT * FROM sig_stores ORDER BY id').all();
   const players = db.prepare('SELECT * FROM sig_players ORDER BY store_id, id').all();
-  const byStore = new Map(stores.map((s) => [s.id, { id: s.id, store: s.name, group: s.grp, conn: s.conn, players: [] }]));
+  const byStore = new Map(stores.map((s) => [s.id, { id: s.id, store: s.name, group: s.grp, conn: s.conn, format: storeFormat(s), players: [] }]));
   for (const p of players) {
     const seen = secsSince(p.last_seen);
     const online = seen != null && seen <= ONLINE_WINDOW_S;
@@ -271,6 +271,7 @@ function filmJson(storeId, filmId) {
   const db = getDb();
   let snap = null;
   let storeName = null;
+  let storeFmt = null;
   if (filmId) {
     const pls = loadPlaylists();
     const film = pls.find((p) => p.id === filmId);
@@ -289,6 +290,7 @@ function filmJson(storeId, filmId) {
     const store = db.prepare('SELECT * FROM sig_stores WHERE id = ?').get(storeId);
     if (!store) return { status: 404, json: { error: `magasin inconnu : ${storeId}` } };
     storeName = store.name;
+    storeFmt = storeFormat(store);
     const row = db.prepare('SELECT MAX(assigned_ver) AS v FROM sig_players WHERE store_id = ?').get(storeId);
     if (row && row.v) {
       const s = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' AND version <= ? ORDER BY version DESC LIMIT 1`).get(row.v);
@@ -329,6 +331,7 @@ function filmJson(storeId, filmId) {
   snap.override = getSetting('override', '0') === '1';
   snap.storeId = storeId || null;
   snap.storeName = storeName;
+  snap.format = storeFmt;
   return { status: 200, json: snap };
 }
 
@@ -465,6 +468,25 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       if (body.srvIp != null) setSetting('srv_ip', String(body.srvIp));
       if (body.srvToken != null) setSetting('srv_token', String(body.srvToken));
       return send(200, { ok: true });
+    }
+
+    // Configuration d'un magasin : nom + combo d'écrans (ex. 3 × 55″ portrait).
+    {
+      const mSt = path.match(/^\/stores\/([A-Za-z0-9_-]+)$/);
+      if (req.method === 'POST' && mSt) {
+        const db = getDb();
+        const store = db.prepare('SELECT * FROM sig_stores WHERE id = ?').get(mSt[1]);
+        if (!store) return send(404, { error: `magasin inconnu : ${mSt[1]}` });
+        const body = await readBody();
+        const name = body.name != null && String(body.name).trim() ? String(body.name).trim().slice(0, 120) : store.name;
+        const screens = Math.min(6, Math.max(1, parseInt(body.screens, 10) || store.screens || 1));
+        const size = Math.min(120, Math.max(20, parseInt(body.size, 10) || store.screen_size || 55));
+        const orient = body.orient === 'portrait' ? 'portrait' : (body.orient === 'paysage' ? 'paysage' : store.screen_orient || 'paysage');
+        db.prepare('UPDATE sig_stores SET name = ?, screens = ?, screen_size = ?, screen_orient = ? WHERE id = ?')
+          .run(name, screens, size, orient, store.id);
+        const updated = db.prepare('SELECT * FROM sig_stores WHERE id = ?').get(store.id);
+        return send(200, { ok: true, id: store.id, name: updated.name, format: storeFormat(updated) });
+      }
     }
 
     if (req.method === 'POST' && path === '/publish') {

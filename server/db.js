@@ -199,6 +199,28 @@ function migrate(db) {
   if (!plCols.includes('sched_from')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN sched_from TEXT NOT NULL DEFAULT '00:00'`);
   if (!plCols.includes('sched_to')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN sched_to TEXT NOT NULL DEFAULT '23:59'`);
   if (!plCols.includes('stores')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN stores TEXT NOT NULL DEFAULT '[]'`);
+  // Combo d'écrans du magasin (ex. 3 × 55″ portrait) → taille du film en px.
+  const stCols = db.prepare('PRAGMA table_info(sig_stores)').all().map((c) => c.name);
+  if (!stCols.includes('screens')) db.exec(`ALTER TABLE sig_stores ADD COLUMN screens INTEGER NOT NULL DEFAULT 1`);
+  if (!stCols.includes('screen_size')) db.exec(`ALTER TABLE sig_stores ADD COLUMN screen_size INTEGER NOT NULL DEFAULT 55`);
+  if (!stCols.includes('screen_orient')) db.exec(`ALTER TABLE sig_stores ADD COLUMN screen_orient TEXT NOT NULL DEFAULT 'paysage'`);
+}
+
+// Un écran signage standard est une dalle UHD : 3840×2160 en paysage,
+// 2160×3840 en portrait — quelle que soit sa diagonale (43″, 55″, 65″…).
+// Un combo de N écrans les aligne côte à côte : la largeur est multipliée.
+export function storeFormat(s) {
+  const n = Math.min(6, Math.max(1, parseInt(s.screens, 10) || 1));
+  const size = Math.min(120, Math.max(20, parseInt(s.screen_size, 10) || 55));
+  const portrait = s.screen_orient === 'portrait';
+  const w1 = portrait ? 2160 : 3840;
+  const h1 = portrait ? 3840 : 2160;
+  return {
+    screens: n, size, orient: portrait ? 'portrait' : 'paysage',
+    w: w1 * n, h: h1,
+    label: `${n} × ${size}″ ${portrait ? 'portrait' : 'paysage'}`,
+    px: `${w1 * n} × ${h1} px`,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -290,10 +312,10 @@ function seed(db) {
 
   db.prepare('INSERT INTO sig_playlist(position, module_id) VALUES (0, ?), (1, ?)').run('c1', 'l1');
 
-  const insStore = db.prepare('INSERT INTO sig_stores(id, name, grp, conn) VALUES (?, ?, ?, ?)');
-  insStore.run('st1', 'Magasin Centre-Ville', 'Groupe Ville', 'fibre');
-  insStore.run('st2', 'Magasin Gare', 'Groupe Ville', '4G');
-  insStore.run('st3', 'Magasin Nord', 'Groupe Périphérie', 'fibre');
+  const insStore = db.prepare('INSERT INTO sig_stores(id, name, grp, conn, screens, screen_size, screen_orient) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  insStore.run('st1', 'Magasin Centre-Ville', 'Groupe Ville', 'fibre', 3, 55, 'portrait');
+  insStore.run('st2', 'Magasin Gare', 'Groupe Ville', '4G', 1, 55, 'paysage');
+  insStore.run('st3', 'Magasin Nord', 'Groupe Périphérie', 'fibre', 1, 55, 'paysage');
 
   const insPlayer = db.prepare(`INSERT INTO sig_players
     (id, store_id, name, hw, kiosk, orient, token, state, played_ver, assigned_ver, data_ver, cache_pct, media, disk, temp, last_seen, data_at)

@@ -72,6 +72,7 @@ class App extends Component {
     dirty: false, saved: true, scope: 'module', clipboard: null, past: [], future: [],
     selId: null, playlist: [],
     playlists: [], activePl: null, editingFilm: false, editFilmName: '', libFilter: 'all',
+    editingStore: null, editStoreName: '',
     view: 'composer', composerTab: 'lib', publishing: false, deploying: false, version: 1, dataVer: 1, hbTick: 0, toast: '',
     pubTargets: {}, pubSlot: 'Toute la journée', pubWhen: 'now', activateAt: '', pubMode: 'full',
     pubDays: [true, true, true, true, true, true, true], pubDone: null, pubFilm: null,
@@ -712,13 +713,39 @@ class App extends Component {
     ];
   }
   storeFilmLinks() {
-    // Lien direct par magasin (format standard 55″) : montre la version
-    // actuellement assignée à ce magasin.
+    // Lien direct par magasin : montre la version actuellement assignée à ce
+    // magasin, à la taille de son combo d'écrans (réglé dans Flotte).
     return this.state.fleet.map((s) => ({
       label: s.store,
-      sub: `${s.group} · ${s.players.length} écran(s)`,
-      url: this.filmUrl({ w: 3840, h: 2160, store: s.id }),
+      sub: `${s.group} · ${s.players.length} écran(s)${s.format ? ` · ${s.format.label} = ${s.format.px}` : ''}`,
+      url: this.filmUrl({ store: s.id }),
     }));
+  }
+
+  // Combo d'écrans du magasin (ex. 3 × 55″ portrait) — enregistré côté serveur,
+  // le lien du magasin s'affiche alors automatiquement à cette taille.
+  async saveStore(id, patch) {
+    const cur = this.state.fleet.find((s) => s.id === id);
+    const f = (cur && cur.format) || {};
+    try {
+      const out = await api('POST', `/stores/${id}`, {
+        screens: patch.screens != null ? patch.screens : f.screens,
+        size: patch.size != null ? patch.size : f.size,
+        orient: patch.orient != null ? patch.orient : f.orient,
+        ...(patch.name != null ? { name: patch.name } : {}),
+      });
+      await this.refreshFleet();
+      this.showToast(`${out.name} : ${out.format.label} = ${out.format.px} ✓`);
+    } catch (e) {
+      this.showToast(e.status === 401
+        ? 'Session expirée — recharge la page (F5) et reconnecte-toi'
+        : `Erreur : ${e.message}`);
+    }
+  }
+  renameStore(id) {
+    const name = this.state.editStoreName.trim();
+    this.setState({ editingStore: null });
+    if (name) this.saveStore(id, { name });
   }
   perFilmLinks() {
     // Lien direct par film (format standard 55″) : dernière publication de ce
@@ -1045,8 +1072,17 @@ class App extends Component {
     ];
     const fleet = st.fleet.map((s) => ({
       store: s.store, group: s.group,
-      filmUrl: this.filmUrl({ w: 3840, h: 2160, store: s.id }),
-      copyFilm: () => this.copyLink(this.filmUrl({ w: 3840, h: 2160, store: s.id })),
+      filmUrl: this.filmUrl({ store: s.id }),
+      copyFilm: () => this.copyLink(this.filmUrl({ store: s.id })),
+      renaming: st.editingStore === s.id,
+      startRename: () => this.setState({ editingStore: s.id, editStoreName: s.store }),
+      onRenameInput: (e) => this.setState({ editStoreName: e.target.value }),
+      onRenameKey: (e) => { if (e.key === 'Enter') this.renameStore(s.id); if (e.key === 'Escape') this.setState({ editingStore: null }); },
+      commitRename: () => this.renameStore(s.id),
+      fmt: s.format || { screens: 1, size: 55, orient: 'paysage', label: '1 × 55″ paysage', px: '3840 × 2160 px', w: 3840, h: 2160 },
+      setScreens: (e) => this.saveStore(s.id, { screens: e.target.value }),
+      setSize: (e) => this.saveStore(s.id, { size: e.target.value }),
+      setOrient: (e) => this.saveStore(s.id, { orient: e.target.value }),
       connColor: s.conn === 'offline' ? '#8D1D2C' : s.conn === '4G' ? '#B8860B' : '#2E7D32',
       connLabel: s.conn === 'offline' ? 'Magasin injoignable' : s.conn === '4G' ? 'Connectivité 4G' : 'Fibre',
       players: s.players.map((p) => {
@@ -1525,14 +1561,37 @@ class App extends Component {
     <div style="max-width:1400px;margin:0 auto;display:flex;flex-direction:column;gap:18px;">
       ${v.fleet.map((s) => html`
         <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;overflow:hidden;">
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid rgba(35,34,32,0.08);background:#FBF8F2;">
-            <div style="display:flex;align-items:center;gap:12px;">
-              <span style="font-size:16px;font-weight:600;">${s.store}</span>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:16px 22px;border-bottom:1px solid rgba(35,34,32,0.08);background:#FBF8F2;">
+            <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+              ${s.renaming ? html`
+                <input value=${this.state.editStoreName} onInput=${s.onRenameInput} onKeyDown=${s.onRenameKey}
+                  ref=${(el) => { if (el && document.activeElement !== el && !el._focused) { el._focused = true; el.focus(); el.select(); } }}
+                  style="padding:7px 11px;font-size:15px;font-weight:600;border:1px solid #8D1D2C;border-radius:8px;background:#fff;min-width:260px;" />
+                <button onClick=${s.commitRename} style="padding:7px 13px;font-size:12px;font-weight:600;border-radius:8px;border:none;background:#8D1D2C;color:#fff;cursor:pointer;">OK</button>
+              ` : html`
+                <span style="font-size:16px;font-weight:600;">${s.store}</span>
+                <button onClick=${s.startRename} title="Renommer le magasin / l'écran" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.8);border:1px solid rgba(35,34,32,0.14);cursor:pointer;font-size:12px;color:#8A847C;">✎</button>
+              `}
               <span style="font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;background:rgba(35,34,32,0.07);border-radius:999px;padding:3px 10px;">${s.group}</span>
-              <button onClick=${s.copyFilm} title="Copier le lien direct du film de ce magasin (55″ standard)" style="padding:5px 11px;font-size:11.5px;font-weight:600;border-radius:999px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Lien film</button>
+              <button onClick=${s.copyFilm} title="Copier le lien direct du film de ce magasin (à la taille de son combo d'écrans)" style="padding:5px 11px;font-size:11.5px;font-weight:600;border-radius:999px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Lien film</button>
               <a href=${s.filmUrl} target="_blank" title="Ouvrir le film de ce magasin" style="font-size:11.5px;font-weight:600;color:#8D1D2C;">↗</a>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:${s.connColor};"><span style="width:8px;height:8px;border-radius:50%;background:${s.connColor};"></span>${s.connLabel}</div>
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;">
+              <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Combo écrans</span>
+              <select value=${s.fmt.screens} onChange=${s.setScreens} title="Nombre d'écrans côte à côte" style="padding:7px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;cursor:pointer;">
+                ${[1, 2, 3, 4, 5, 6].map((n) => html`<option value=${n}>${n}</option>`)}
+              </select>
+              <span style="font-size:12px;color:#8A847C;">×</span>
+              <select value=${s.fmt.size} onChange=${s.setSize} title="Diagonale d'une dalle" style="padding:7px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;cursor:pointer;">
+                ${[32, 43, 49, 55, 65, 75, 85].map((n) => html`<option value=${n}>${n}″</option>`)}
+              </select>
+              <select value=${s.fmt.orient} onChange=${s.setOrient} title="Orientation des dalles" style="padding:7px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;cursor:pointer;">
+                <option value="paysage">paysage</option>
+                <option value="portrait">portrait</option>
+              </select>
+              <span style="font-size:12.5px;font-weight:700;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.2);border-radius:999px;padding:5px 12px;">= ${s.fmt.px}</span>
+              <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:${s.connColor};"><span style="width:8px;height:8px;border-radius:50%;background:${s.connColor};"></span>${s.connLabel}</div>
+            </div>
           </div>
           <div style="display:flex;flex-direction:column;">
             ${s.players.map((p) => html`
