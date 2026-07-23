@@ -266,17 +266,19 @@ class App extends Component {
 
   // ------------------------------------------------------- modules & playlist
   selectMod(id) { this.setState({ selId: id, t: 0 }); }
+  // Un nouveau module rejoint directement la playlist (retirable avec ✕) :
+  // sinon il n'apparaîtrait pas dans le film publié et c'est trop facile à rater.
   addCategory() {
     const id = uid();
     const lib = this.cloneLib();
     lib.push({ id, type: 'category', name: 'Nouvelle catégorie', layout: 'illo-right', motion: 'm1', tag: newTag(), schedule: newSched(), pos: newPos(), items: [{ name: 'Produit', price: '0,00', img: 'assets/cake.png', src: 'illus', active: true }] });
-    this.setLib(lib, { selId: id });
+    this.setLib(lib, { selId: id, playlist: [...this.state.playlist, id] });
   }
   addLiaison() {
     const id = uid();
     const lib = this.cloneLib();
     lib.push({ id, type: 'liaison', name: 'Liaison', sub: 'faites maison chaque matin', tag: newTag(), schedule: newSched(), pos: newPos(), items: [] });
-    this.setLib(lib, { selId: id });
+    this.setLib(lib, { selId: id, playlist: [...this.state.playlist, id] });
   }
   copyMod(id) { this.setState({ clipboard: JSON.parse(JSON.stringify(this.getMod(id))) }); }
   dupMod(id) {
@@ -349,10 +351,25 @@ class App extends Component {
     if (!f) return;
     const r = new FileReader();
     r.onload = () => {
-      const lib = this.cloneLib();
-      const mm = lib.find((x) => x.id === this.state.selId);
-      mm.items[i] = { ...mm.items[i], img: r.result, src: 'photo' };
-      this.setLib(lib);
+      // Compression côté navigateur : une photo de téléphone (5-8 Mo) ferait
+      // échouer l'enregistrement — on la ramène à ≤1600 px en JPEG.
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1600;
+        const sc = Math.min(1, MAX / Math.max(img.width, img.height));
+        const cv = document.createElement('canvas');
+        cv.width = Math.max(1, Math.round(img.width * sc));
+        cv.height = Math.max(1, Math.round(img.height * sc));
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        let data;
+        try { data = cv.toDataURL('image/jpeg', 0.85); } catch { data = r.result; }
+        const lib = this.cloneLib();
+        const mm = lib.find((x) => x.id === this.state.selId);
+        mm.items[i] = { ...mm.items[i], img: data, src: 'photo' };
+        this.setLib(lib);
+      };
+      img.onerror = () => this.showToast('Image illisible — essaie un JPG ou PNG');
+      img.src = r.result;
     };
     r.readAsDataURL(f);
   }
@@ -378,7 +395,9 @@ class App extends Component {
       await api('PUT', '/draft', this.draftBody());
       this.setState({ dirty: false, saved: true });
     } catch (e) {
-      this.showToast(`Échec de l'enregistrement : ${e.message}`);
+      this.showToast(e.status === 401
+        ? 'Session expirée — recharge la page (F5) et reconnecte-toi, puis réessaie'
+        : `Échec de l'enregistrement : ${e.message}`);
     }
   };
 
@@ -435,7 +454,9 @@ class App extends Component {
           : `Déploiement v${out.version} lancé sur ${out.playerCount} écran(s) · ${testMsg}`));
       this.refreshFleet();
     } catch (e) {
-      this.showToast(`Échec de la publication : ${e.message}`);
+      this.showToast(e.status === 401
+        ? 'Session expirée — recharge la page (F5) et reconnecte-toi, puis réessaie'
+        : `Échec de la publication : ${e.message}`);
     } finally {
       this.setState({ deploying: false });
     }
@@ -612,7 +633,7 @@ class App extends Component {
       const cnt = inPlaylistCount[mm.id] || 0;
       return {
         name: mm.name, tagChip: tagChipOf(mm), typeIcon: isLi ? '⧉' : '▤',
-        libMeta: `${isLi ? 'Liaison' : this.activeItems(mm).length + ' produits'}${cnt ? ' · dans playlist ×' + cnt : ''}`,
+        libMeta: `${isLi ? 'Liaison' : this.activeItems(mm).length + ' produits'}${cnt ? ' · dans playlist ×' + cnt : ' · ⚠ hors playlist (＋ pour diffuser)'}`,
         cardStyle: `display:flex;align-items:center;gap:9px;padding:10px 10px;border-radius:11px;cursor:pointer;background:${selc ? '#fff' : 'rgba(255,255,255,0.4)'};border:1px solid ${selc ? '#8D1D2C' : 'rgba(35,34,32,0.08)'};`,
         badgeStyle: `display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:7px;flex:0 0 auto;font-size:12px;${isLi ? 'background:rgba(35,34,32,0.10);color:#8A847C;' : 'background:rgba(141,29,44,0.12);color:#8D1D2C;'}`,
         addBtn: miniBtn + 'background:#8D1D2C;color:#fff;border:none;font-weight:700;',
