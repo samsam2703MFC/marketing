@@ -1079,7 +1079,7 @@ class App extends Component {
       setAllHours: () => this.setSchedBoth('00:00', '23:59'),
       preview: this.renderPreview(),
       dragHint: st.view === 'composer' && st.scope === 'module' && isCat,
-      nowPlaying: st.scope === 'playlist' ? (playM ? `▶ ${playM.name}` : 'Playlist vide') : 'Aperçu du module',
+      nowPlaying: st.scope === 'playlist' ? (playM ? `▶ ${playM.name}` : 'Film vide') : `Aperçu de l'élément`,
       liveLine,
       togglePlay: () => this.setState({ playing: !st.playing }),
       restart: () => this.setState({ t: 0, playing: true }),
@@ -1156,14 +1156,11 @@ class App extends Component {
     }
     const v = this.vals();
 
-    // Aperçu + transport + réglages de diffusion — utilisé par les deux onglets.
+    // Aperçu + transport — l'onglet 1 montre l'élément en construction,
+    // l'onglet 2 montre le film complet.
     const previewBlock = html`
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:12px;">
-        <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8A847C;">Aperçu · 6480 × 3840</h2>
-        <div style="display:inline-flex;background:#E0D9CE;border-radius:999px;padding:3px;">
-          <button onClick=${v.setScopeModule} style=${v.scopeModuleStyle}>Ce module</button>
-          <button onClick=${v.setScopePlaylist} style=${v.scopePlaylistStyle}>Playlist</button>
-        </div>
+        <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8A847C;">${v.isTimelineTab ? `Aperçu du film « ${this.activeFilm().name} » · 6480 × 3840` : `Aperçu de l'élément · 6480 × 3840`}</h2>
       </div>
       ${v.dragHint && html`
         <p style="margin:-4px 0 12px;font-size:11.5px;color:#8A847C;">✥ Glisse l'illustration ou le bandeau sur l'aperçu pour les positionner.</p>
@@ -1183,9 +1180,11 @@ class App extends Component {
           </div>
           <span style="font-variant-numeric:tabular-nums;font-size:12.5px;color:rgba(255,255,255,0.7);flex:0 0 auto;min-width:84px;text-align:right;">${v.timeLabel}</span>
         </div>
-      </div>
+      </div>`;
 
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:20px 22px;margin-top:18px;">
+    // Réglages de diffusion du film — uniquement dans l'onglet Playlist.
+    const diffusionBlock = html`
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:20px 22px;">
         <h2 style="margin:0 0 16px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Diffusion</h2>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
           <label style="font-size:13px;font-weight:500;color:#8A847C;">Durée par ligne</label>
@@ -1197,7 +1196,7 @@ class App extends Component {
           <button onClick=${v.toggleLoop} style=${v.loopTrackStyle}><span style=${v.loopKnobStyle}></span></button>
         </div>
         <div style="display:flex;gap:14px;margin-top:16px;padding-top:14px;border-top:1px solid rgba(35,34,32,0.08);font-size:12.5px;color:#8A847C;">
-          <span>Playlist <strong style="color:#232220;">${v.moduleCount} modules</strong></span>
+          <span>Film <strong style="color:#232220;">${v.moduleCount} modules</strong></span>
           <span style="color:rgba(35,34,32,0.18);">·</span>
           <span>Durée totale <strong style="color:#232220;">${v.playlistTotal}</strong></span>
         </div>
@@ -1690,6 +1689,8 @@ class App extends Component {
 
       <div style="display:grid;grid-template-columns:minmax(520px,1fr) 340px;gap:16px;align-items:start;">
         <div>${previewBlock}</div>
+        <div style="display:flex;flex-direction:column;gap:16px;">
+        ${diffusionBlock}
         <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:20px 22px;">
           <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">3 · Enregistrer & déployer</h3>
           <p style="margin:0 0 14px;font-size:12px;color:#8A847C;line-height:1.55;">Enregistre le film, puis publie-le : tu choisiras les <strong>jours</strong>, la <strong>fenêtre horaire</strong> et les <strong>magasins</strong>. Le lien de visionnage s'affiche juste après le déploiement.</p>
@@ -1699,6 +1700,7 @@ class App extends Component {
             <button onClick=${() => this.copyLink(this.filmUrl({ film: st.activePl, w: 3840, h: 2160 }))} style="margin-top:6px;padding:8px 13px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Copier le lien</button>
             <a href=${this.filmUrl({ film: st.activePl, w: 3840, h: 2160 })} target="_blank" style="margin-left:6px;font-size:12px;font-weight:600;">↗ Ouvrir</a>
           </div>
+        </div>
         </div>
       </div>
 
