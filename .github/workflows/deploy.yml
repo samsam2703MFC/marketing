@@ -37,12 +37,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Préparer la clé SSH
+      - name: Préparer et valider la clé SSH
         run: |
           mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_deploy
+          printf '%s\n' "${{ secrets.SERVER_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
+          if ! ssh-keygen -y -P "" -f ~/.ssh/id_deploy > /dev/null 2>&1; then
+            echo "::error::Secret SERVER_SSH_KEY invalide."
+            echo "La clé privée est illisible : soit elle est protégée par une passphrase,"
+            echo "soit le collage a perdu des lignes. Générer une clé SANS passphrase :"
+            echo "    ssh-keygen -t ed25519 -N \"\" -f signage_deploy"
+            echo "puis coller TOUT le fichier signage_deploy (de -----BEGIN à -----END inclus)"
+            echo "dans le secret, et ajouter signage_deploy.pub dans ~/.ssh/authorized_keys du serveur."
+            exit 1
+          fi
           ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Vérifier l'accès SSH au serveur
+        run: |
+          if ! ssh -i ~/.ssh/id_deploy -o BatchMode=yes -o ConnectTimeout=10 \
+              "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" 'echo "SSH OK — $(hostname)"'; then
+            echo "::error::Connexion SSH refusée (clé valide mais non autorisée ?)."
+            echo "Vérifier que la clé publique correspondante est dans ~/.ssh/authorized_keys"
+            echo "de l'utilisateur SERVER_USER sur le serveur, et que SERVER_USER/SERVER_HOST sont corrects."
+            exit 1
+          fi
 
       - name: Copier le code (rsync — la base data/ du serveur est préservée)
         run: |
