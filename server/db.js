@@ -190,6 +190,15 @@ function migrate(db) {
   );
   CREATE INDEX IF NOT EXISTS sig_sessions_user ON sig_sessions(username);
   `);
+  // Tag de bibliothèque (Produit / Fêtes / Promo / Liaison…) porté par l'élément.
+  const modCols = db.prepare('PRAGMA table_info(sig_modules)').all().map((c) => c.name);
+  if (!modCols.includes('lib_tag')) db.exec(`ALTER TABLE sig_modules ADD COLUMN lib_tag TEXT NOT NULL DEFAULT ''`);
+  // Le film porte sa programmation (jours + fenêtre) et ses magasins cibles.
+  const plCols = db.prepare('PRAGMA table_info(sig_playlists)').all().map((c) => c.name);
+  if (!plCols.includes('sched_days')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN sched_days TEXT NOT NULL DEFAULT '[1,1,1,1,1,1,1]'`);
+  if (!plCols.includes('sched_from')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN sched_from TEXT NOT NULL DEFAULT '00:00'`);
+  if (!plCols.includes('sched_to')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN sched_to TEXT NOT NULL DEFAULT '23:59'`);
+  if (!plCols.includes('stores')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN stores TEXT NOT NULL DEFAULT '[]'`);
 }
 
 // ---------------------------------------------------------------------------
@@ -319,6 +328,7 @@ export function loadModules() {
     type: m.type,
     name: m.name,
     sub: m.sub,
+    libTag: m.lib_tag || (m.type === 'liaison' ? 'liaison' : 'produit'),
     layout: m.layout,
     motion: m.motion,
     motionTitle: m.motion_title || undefined,
@@ -337,7 +347,17 @@ export function loadPlaylists() {
   const db = getDb();
   const pls = db.prepare('SELECT * FROM sig_playlists ORDER BY sort_order, created_at').all();
   const it = db.prepare('SELECT module_id FROM sig_playlist_items WHERE playlist_id = ? ORDER BY position');
-  return pls.map((p) => ({ id: p.id, name: p.name, items: it.all(p.id).map((r) => r.module_id) }));
+  return pls.map((p) => ({
+    id: p.id,
+    name: p.name,
+    items: it.all(p.id).map((r) => r.module_id),
+    schedule: {
+      days: JSON.parse(p.sched_days || '[1,1,1,1,1,1,1]').map(Boolean),
+      from: p.sched_from || '00:00',
+      to: p.sched_to || '23:59',
+    },
+    stores: JSON.parse(p.stores || '[]'),
+  }));
 }
 
 export function activePlaylistId() {
@@ -371,8 +391,8 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
     db.exec('DELETE FROM sig_modules');
     const insMod = db.prepare(`INSERT INTO sig_modules
       (id, type, name, sub, layout, motion, motion_title, motion_list, motion_illo,
-       tag_enabled, tag_label, tag_img, sched_days, sched_from, sched_to, pos, sort_order, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
+       tag_enabled, tag_label, tag_img, sched_days, sched_from, sched_to, pos, sort_order, lib_tag, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
     const insItem = db.prepare(`INSERT INTO sig_module_items
       (module_id, position, name, price, img, src, active) VALUES (?, ?, ?, ?, ?, ?, ?)`);
     modules.forEach((m, i) => {
@@ -385,7 +405,7 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
         tag.enabled ? 1 : 0, String(tag.label || ''), String(tag.img || ''),
         JSON.stringify((sched.days || [1, 1, 1, 1, 1, 1, 1]).map((d) => (d ? 1 : 0))),
         String(sched.from || '00:00'), String(sched.to || '23:59'),
-        JSON.stringify(m.pos || {}), i
+        JSON.stringify(m.pos || {}), i, String(m.libTag || '')
       );
       (m.items || []).forEach((it, j) => insItem.run(
         m.id, j, String(it.name || ''), String(it.price || ''), String(it.img || ''),
@@ -393,10 +413,16 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
       ));
     });
     const validIds = new Set(modules.map((m) => m.id));
-    const insPls = db.prepare('INSERT INTO sig_playlists(id, name, sort_order) VALUES (?, ?, ?)');
+    const insPls = db.prepare('INSERT INTO sig_playlists(id, name, sort_order, sched_days, sched_from, sched_to, stores) VALUES (?, ?, ?, ?, ?, ?, ?)');
     const insIt = db.prepare('INSERT INTO sig_playlist_items(playlist_id, position, module_id) VALUES (?, ?, ?)');
     playlists.forEach((pl, i) => {
-      insPls.run(String(pl.id), String(pl.name || `Film ${i + 1}`), i);
+      const sched = pl.schedule || {};
+      insPls.run(
+        String(pl.id), String(pl.name || `Film ${i + 1}`), i,
+        JSON.stringify((Array.isArray(sched.days) && sched.days.length === 7 ? sched.days : [1, 1, 1, 1, 1, 1, 1]).map((d) => (d ? 1 : 0))),
+        String(sched.from || '00:00'), String(sched.to || '23:59'),
+        JSON.stringify(Array.isArray(pl.stores) ? pl.stores.map(String) : [])
+      );
       (pl.items || []).filter((id) => validIds.has(id)).forEach((id, j) => insIt.run(String(pl.id), j, id));
     });
     const act = playlists.some((p) => p.id === activeId) ? activeId : playlists[0].id;

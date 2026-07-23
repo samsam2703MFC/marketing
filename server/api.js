@@ -106,20 +106,25 @@ function cleanSchedule(s) {
 
 async function publish({ mode, targets, slot, when, activateAt, playlistId, schedule, baseUrl, publicDir }) {
   const db = getDb();
-  const allStores = db.prepare('SELECT id FROM sig_stores').all().map((s) => s.id);
-  const targetIds = (targets && targets.length ? targets : allStores).filter((t) => allStores.includes(t));
-  const qMarks = targetIds.map(() => '?').join(',');
-  const targetedPlayers = targetIds.length
-    ? db.prepare(`SELECT * FROM sig_players WHERE store_id IN (${qMarks})`).all(...targetIds)
-    : [];
-
   const modules = loadModules();
   const playlists = loadPlaylists();
   const film = playlists.find((p) => p.id === playlistId)
     || playlists.find((p) => p.id === activePlaylistId())
     || playlists[0]
-    || { id: 'pl1', name: 'Film principal', items: [] };
+    || { id: 'pl1', name: 'Film principal', items: [], schedule: null, stores: [] };
   const playlist = film.items;
+
+  // Cibles : explicites, sinon les magasins du film, sinon toute la flotte.
+  const allStores = db.prepare('SELECT id FROM sig_stores').all().map((s) => s.id);
+  const filmStores = Array.isArray(film.stores) ? film.stores : [];
+  const wanted = (targets && targets.length) ? targets
+    : (mode !== 'data' && filmStores.length ? filmStores : allStores);
+  const targetIds = wanted.filter((t) => allStores.includes(t));
+  const qMarks = targetIds.map(() => '?').join(',');
+  const targetedPlayers = targetIds.length
+    ? db.prepare(`SELECT * FROM sig_players WHERE store_id IN (${qMarks})`).all(...targetIds)
+    : [];
+
   let version;
   let payload;
 
@@ -138,7 +143,7 @@ async function publish({ mode, targets, slot, when, activateAt, playlistId, sche
     payload = {
       kind: 'playlist', version, generatedAt: nowIso(),
       playlistId: film.id, playlistName: film.name,
-      schedule: cleanSchedule(schedule),
+      schedule: cleanSchedule(schedule || film.schedule),
       secPerLine: parseFloat(getSetting('sec_per_line', '4')),
       loop: getSetting('loop', '1') === '1',
       dataVer: getIntSetting('data_ver', 1),
@@ -288,6 +293,19 @@ function filmJson(storeId, filmId) {
     if (row && row.v) {
       const s = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' AND version <= ? ORDER BY version DESC LIMIT 1`).get(row.v);
       if (s) snap = JSON.parse(s.payload);
+    }
+    // Aucune publication ne correspond à la version assignée à ce magasin
+    // (état initial) : on montre le brouillon du film destiné à ce magasin
+    // (premier film qui le cible ou qui vise toute la flotte), PAS la
+    // publication d'un autre magasin.
+    if (!snap) {
+      const pls = loadPlaylists();
+      const filmFor = pls.find((p) => !(p.stores || []).length || (p.stores || []).includes(storeId)) || pls[0];
+      snap = {
+        ...currentDraftSnapshot(),
+        ...(filmFor ? { playlistId: filmFor.id, playlistName: filmFor.name, playlist: filmFor.items } : {}),
+        draft: true,
+      };
     }
   }
   if (!snap) {

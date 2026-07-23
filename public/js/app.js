@@ -16,6 +16,15 @@ const SLOTS = [
   { label: 'Après-midi', from: '15:00', to: '19:00' },
   { label: 'Toute la journée', from: '00:00', to: '23:59' },
 ];
+// Catégories de bibliothèque — chaque tag a sa couleur.
+const LIB_TAGS = [
+  { id: 'produit', label: 'Produit', color: '#8D1D2C' },
+  { id: 'fetes', label: 'Fêtes', color: '#B8860B' },
+  { id: 'promo', label: 'Promo', color: '#2E6E4E' },
+  { id: 'liaison', label: 'Liaison', color: '#8A847C' },
+];
+const tagOf = (m) => LIB_TAGS.find((t) => t.id === (m.libTag || (m.type === 'liaison' ? 'liaison' : 'produit'))) || LIB_TAGS[0];
+
 const POSF = [
   { k: 'titleY', label: 'Titre · vertical', min: -400, max: 400, step: 10, unit: 'px' },
   { k: 'listX', label: 'Liste · horizontal', min: -800, max: 800, step: 10, unit: 'px' },
@@ -54,10 +63,10 @@ class App extends Component {
     secPerLine: 4, loop: true, playing: true, t: 0,
     dirty: false, saved: true, scope: 'module', clipboard: null, past: [], future: [],
     selId: null, playlist: [],
-    playlists: [], activePl: null, editingFilm: false, editFilmName: '',
+    playlists: [], activePl: null, editingFilm: false, editFilmName: '', libFilter: 'all',
     view: 'composer', composerTab: 'lib', publishing: false, deploying: false, version: 1, dataVer: 1, hbTick: 0, toast: '',
     pubTargets: {}, pubSlot: 'Toute la journée', pubWhen: 'now', activateAt: '', pubMode: 'full',
-    pubDays: [true, true, true, true, true, true, true], pubDone: null,
+    pubDays: [true, true, true, true, true, true, true], pubDone: null, pubFilm: null,
     override: false,
     srvUrl: '', srvIp: '', srvToken: '',
     test: { state: 'idle', rows: [] },
@@ -107,9 +116,9 @@ class App extends Component {
   async loadState() {
     try {
       const st = await api('GET', '/state');
-      const playlists = (Array.isArray(st.playlists) && st.playlists.length)
+      const playlists = ((Array.isArray(st.playlists) && st.playlists.length)
         ? st.playlists
-        : [{ id: 'pl1', name: 'Film principal', items: st.playlist || [] }];
+        : [{ id: 'pl1', name: 'Film principal', items: st.playlist || [] }]).map((p) => this.normFilm(p));
       const activePl = playlists.some((p) => p.id === st.activePlaylistId)
         ? st.activePlaylistId
         : playlists[0].id;
@@ -233,8 +242,46 @@ class App extends Component {
   };
 
   // ------------------------------------------------------ films (playlists)
+  // Un film porte sa composition, sa programmation (jours + fenêtre) et ses
+  // magasins cibles (liste vide = tous les magasins).
+  normFilm(p) {
+    return {
+      ...p,
+      schedule: {
+        days: (p.schedule && Array.isArray(p.schedule.days) && p.schedule.days.length === 7) ? p.schedule.days.map(Boolean) : [true, true, true, true, true, true, true],
+        from: (p.schedule && p.schedule.from) || '00:00',
+        to: (p.schedule && p.schedule.to) || '23:59',
+      },
+      stores: Array.isArray(p.stores) ? p.stores : [],
+    };
+  }
   activeFilm() {
-    return this.state.playlists.find((p) => p.id === this.state.activePl) || this.state.playlists[0] || { id: 'pl1', name: 'Film principal', items: [] };
+    return this.state.playlists.find((p) => p.id === this.state.activePl) || this.state.playlists[0] || this.normFilm({ id: 'pl1', name: 'Film principal', items: [] });
+  }
+  updateFilm(patch) {
+    const playlists = this.state.playlists.map((p) => (p.id === this.state.activePl ? { ...p, ...patch } : p));
+    this.dirty({ playlists });
+  }
+  toggleFilmDay(d) {
+    const f = this.activeFilm();
+    const days = [...f.schedule.days];
+    days[d] = !days[d];
+    this.updateFilm({ schedule: { ...f.schedule, days } });
+  }
+  setFilmWindow(from, to) {
+    const f = this.activeFilm();
+    this.updateFilm({ schedule: { ...f.schedule, from, to } });
+  }
+  toggleFilmStore(id) {
+    const f = this.activeFilm();
+    const stores = f.stores.includes(id) ? f.stores.filter((x) => x !== id) : [...f.stores, id];
+    this.updateFilm({ stores });
+  }
+  clearFilmStores() { this.updateFilm({ stores: [] }); }
+  targetCountFor(filmId) {
+    const f = this.state.playlists.find((p) => p.id === filmId);
+    const ids = (f && f.stores && f.stores.length) ? f.stores : this.state.fleet.map((s) => s.id);
+    return this.state.fleet.filter((s) => ids.includes(s.id)).reduce((n, s) => n + s.players.length, 0);
   }
   // Patch d'état synchronisant le film actif (source de vérité : playlists)
   // et son miroir plat `playlist` utilisé par le reste du composant.
@@ -249,13 +296,14 @@ class App extends Component {
   }
   newFilm() {
     const id = 'pl' + uid();
-    const playlists = [...this.state.playlists, { id, name: 'Nouveau film', items: [] }];
+    const playlists = [...this.state.playlists, this.normFilm({ id, name: 'Nouveau film', items: [] })];
     this.dirty({ playlists, activePl: id, playlist: [], editingFilm: true, editFilmName: 'Nouveau film', t: 0 });
   }
   dupFilm() {
     const src = this.activeFilm();
     const id = 'pl' + uid();
-    const playlists = [...this.state.playlists, { id, name: `${src.name} (copie)`, items: [...src.items] }];
+    const copy = this.normFilm({ ...JSON.parse(JSON.stringify(src)), id, name: `${src.name} (copie)`, items: [...src.items] });
+    const playlists = [...this.state.playlists, copy];
     this.dirty({ playlists, activePl: id, playlist: [...src.items], t: 0 });
   }
   renameFilm(name) {
@@ -284,7 +332,7 @@ class App extends Component {
     this.setState((s) => ({ past: [...s.past, snap].slice(-60), future: [], dirty: true, saved: false, ...patch }));
   }
   _restorePatch(o) {
-    const playlists = (o.playlists && o.playlists.length) ? o.playlists : [{ id: 'pl1', name: 'Film principal', items: o.playlist || [] }];
+    const playlists = ((o.playlists && o.playlists.length) ? o.playlists : [{ id: 'pl1', name: 'Film principal', items: o.playlist || [] }]).map((p) => this.normFilm(p));
     const activePl = playlists.some((p) => p.id === o.activePl) ? o.activePl : playlists[0].id;
     return {
       library: o.library, playlists, activePl,
@@ -328,13 +376,13 @@ class App extends Component {
   addCategory() {
     const id = uid();
     const lib = this.cloneLib();
-    lib.push({ id, type: 'category', name: 'Nouvelle catégorie', layout: 'illo-right', motion: 'm1', tag: newTag(), schedule: newSched(), pos: newPos(), items: [{ name: 'Produit', price: '0,00', img: 'assets/cake.png', src: 'illus', active: true }] });
+    lib.push({ id, type: 'category', name: 'Nouvelle catégorie', libTag: 'produit', layout: 'illo-right', motion: 'm1', tag: newTag(), schedule: newSched(), pos: newPos(), items: [{ name: 'Produit', price: '0,00', img: 'assets/cake.png', src: 'illus', active: true }] });
     this.setLib(lib, { selId: id, ...this.playlistPatch([...this.state.playlist, id]) });
   }
   addLiaison() {
     const id = uid();
     const lib = this.cloneLib();
-    lib.push({ id, type: 'liaison', name: 'Liaison', sub: 'faites maison chaque matin', tag: newTag(), schedule: newSched(), pos: newPos(), items: [] });
+    lib.push({ id, type: 'liaison', name: 'Liaison', sub: 'faites maison chaque matin', libTag: 'liaison', tag: newTag(), schedule: newSched(), pos: newPos(), items: [] });
     this.setLib(lib, { selId: id, ...this.playlistPatch([...this.state.playlist, id]) });
   }
   copyMod(id) { this.setState({ clipboard: JSON.parse(JSON.stringify(this.getMod(id))) }); }
@@ -496,7 +544,7 @@ class App extends Component {
   openPublish() {
     const t = {};
     this.state.fleet.forEach((s) => { t[s.id] = true; });
-    this.setState({ publishing: true, pubTargets: t, pubDone: null });
+    this.setState({ publishing: true, pubTargets: t, pubDone: null, pubFilm: this.state.activePl });
   }
   closePublish() {
     const wasDone = !!this.state.pubDone;
@@ -534,16 +582,21 @@ class App extends Component {
   }
   deploy = async () => {
     const st = this.state;
-    if (this.targetCount() === 0 || st.deploying) return;
+    const count = st.pubMode === 'data'
+      ? st.fleet.reduce((n, s) => n + s.players.length, 0)
+      : this.targetCountFor(st.pubFilm || st.activePl);
+    if (count === 0 || st.deploying) return;
     this.setState({ deploying: true });
     try {
       await api('PUT', '/draft', this.draftBody());
-      const targets = st.fleet.filter((s) => st.pubTargets[s.id]).map((s) => s.id);
+      const filmId = st.pubFilm || st.activePl;
+      const filmObj = st.playlists.find((p) => p.id === filmId) || this.activeFilm();
       const out = await api('POST', '/publish', {
         mode: st.pubMode === 'data' ? 'data' : 'full',
-        playlistId: st.activePl,
-        targets, slot: st.pubSlot, when: st.pubWhen, activateAt: st.activateAt,
-        schedule: this.pubSchedule(),
+        playlistId: filmId,
+        targets: st.pubMode === 'data' ? [] : (filmObj.stores || []),
+        when: st.pubWhen, activateAt: st.activateAt,
+        schedule: filmObj.schedule,
       });
       const testMsg = this.applyTests(out);
       const sched = st.pubWhen === 'scheduled';
@@ -562,7 +615,7 @@ class App extends Component {
             playerCount: out.playerCount,
             testsOk: okN, testsTotal: out.tests.length,
             scheduled: sched,
-            url: this.filmUrl({ film: st.activePl, w: 3840, h: 2160 }),
+            url: this.filmUrl({ film: filmId, w: 3840, h: 2160 }),
           },
         });
       }
@@ -729,6 +782,11 @@ class App extends Component {
     const tagChipOf = (mm) => (mm.tag && mm.tag.enabled
       ? h('span', { style: { flex: '0 0 auto', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#fff', background: RUBY, borderRadius: 999, padding: '2px 7px' } }, 'Promo')
       : null);
+    // Chip de catégorie de bibliothèque (Produit / Fêtes / Promo / Liaison), colorée.
+    const catChipOf = (mm) => {
+      const t = tagOf(mm);
+      return h('span', { style: { flex: '0 0 auto', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: t.color, background: t.color + '1A', border: `1px solid ${t.color}55`, borderRadius: 999, padding: '2px 7px' } }, t.label);
+    };
 
     const playlist = st.playlist.map((id, i) => {
       const mm = this.getMod(id);
@@ -755,7 +813,7 @@ class App extends Component {
       const isLi = mm.type === 'liaison', selc = mm.id === st.selId;
       const cnt = inPlaylistCount[mm.id] || 0;
       return {
-        name: mm.name, tagChip: tagChipOf(mm), typeIcon: isLi ? '⧉' : '▤',
+        name: mm.name, tagChip: tagChipOf(mm), catChip: catChipOf(mm), typeIcon: isLi ? '⧉' : '▤',
         libMeta: `${isLi ? 'Liaison' : this.activeItems(mm).length + ' produits'}${cnt ? ' · dans playlist ×' + cnt : ' · ⚠ hors playlist (＋ pour diffuser)'}`,
         cardStyle: `display:flex;align-items:center;gap:9px;padding:10px 10px;border-radius:11px;cursor:pointer;background:${selc ? '#fff' : 'rgba(255,255,255,0.4)'};border:1px solid ${selc ? '#8D1D2C' : 'rgba(35,34,32,0.08)'};`,
         badgeStyle: `display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:7px;flex:0 0 auto;font-size:12px;${isLi ? 'background:rgba(35,34,32,0.10);color:#8A847C;' : 'background:rgba(141,29,44,0.12);color:#8D1D2C;'}`,
@@ -880,20 +938,71 @@ class App extends Component {
         else if (d.startsWith('idx:')) this.moveToEndTimeline(parseInt(d.slice(4), 10));
       },
     };
-    const libCards = st.library.map((mm) => ({
+    // Rangée 1 : les catégories (tags colorés) — rangée 2 : les éléments de la
+    // catégorie choisie, prêts à glisser sur la ligne du temps.
+    const tagCount = {};
+    st.library.forEach((mm) => { const t = tagOf(mm).id; tagCount[t] = (tagCount[t] || 0) + 1; });
+    const libTagChips = [
+      {
+        id: 'all', label: 'Tous', count: st.library.length, color: '#232220',
+        active: st.libFilter === 'all',
+        pick: () => this.setState({ libFilter: 'all' }),
+      },
+      ...LIB_TAGS.map((t) => ({
+        id: t.id, label: t.label, count: tagCount[t.id] || 0, color: t.color,
+        active: st.libFilter === t.id,
+        pick: () => this.setState({ libFilter: t.id }),
+      })),
+    ].map((c) => ({
+      ...c,
+      style: `display:inline-flex;align-items:center;gap:7px;padding:8px 14px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;transition:all 0.15s;${c.active ? `background:${c.color};color:#fff;border:1px solid ${c.color};` : `background:#fff;color:${c.color};border:1px solid ${c.color}55;`}`,
+      dotStyle: `width:8px;height:8px;border-radius:50%;background:${c.active ? '#fff' : c.color};`,
+    }));
+    const libCards = st.library.filter((mm) => st.libFilter === 'all' || tagOf(mm).id === st.libFilter).map((mm) => ({
       name: mm.name,
       typeIcon: mm.type === 'liaison' ? '⧉' : '▤',
       meta: mm.type === 'liaison' ? 'liaison' : `${this.activeItems(mm).length} produits`,
+      tagLabel: tagOf(mm).label,
+      tagColor: tagOf(mm).color,
       inFilm: (inPlaylistCount[mm.id] || 0) > 0,
       onDragStart: (e) => { e.dataTransfer.setData('text/plain', 'lib:' + mm.id); e.dataTransfer.effectAllowed = 'copy'; },
       add: () => this.appendToTimeline(mm.id),
       edit: () => { this.setComposerTab('lib'); this.selectMod(mm.id); },
     }));
+    const libEmptyMsg = st.library.length && !libCards.length
+      ? `Aucun élément dans la catégorie « ${(LIB_TAGS.find((t) => t.id === st.libFilter) || {}).label || st.libFilter} ».`
+      : '';
     const pubDaysVals = DAYS.map((lab, d) => ({
       label: lab,
       toggle: () => this.togglePubDay(d),
       style: `width:52px;padding:9px 0;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;${st.pubDays[d] ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#8A847C;border:1px solid rgba(35,34,32,0.14);'}`,
     }));
+
+    // ---- programmation & magasins du film (onglet Playlist) ----
+    const filmActive = this.activeFilm();
+    const chipDay = (on) => `width:48px;padding:8px 0;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;${on ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#8A847C;border:1px solid rgba(35,34,32,0.14);'}`;
+    const chipWide = (on) => `padding:8px 13px;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;${on ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#8A847C;border:1px solid rgba(35,34,32,0.14);'}`;
+    const filmDaysVals = DAYS.map((lab, d) => ({
+      label: lab,
+      toggle: () => this.toggleFilmDay(d),
+      style: chipDay(filmActive.schedule.days[d]),
+    }));
+    const filmSlotVals = SLOTS.map((s) => ({
+      label: s.label,
+      pick: () => this.setFilmWindow(s.from, s.to),
+      style: chipWide(filmActive.schedule.from === s.from && filmActive.schedule.to === s.to),
+    }));
+    const filmStoreVals = st.fleet.map((s) => ({
+      label: s.store,
+      toggle: () => this.toggleFilmStore(s.id),
+      style: chipWide(filmActive.stores.includes(s.id)),
+    }));
+    const filmAllStores = {
+      on: filmActive.stores.length === 0,
+      pick: () => this.clearFilmStores(),
+      style: chipWide(filmActive.stores.length === 0),
+    };
+    const filmSchedSummary = `${this.schedSummary(filmActive.schedule)} · ${filmActive.stores.length ? `${filmActive.stores.length} magasin(s)` : 'tous les magasins'}`;
 
     let liveLine = '—';
     if (playM && playM.type === 'category') {
@@ -975,7 +1084,13 @@ class App extends Component {
       pick: () => this.setState({ pubSlot: l }),
       style: `padding:9px 14px;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;${st.pubSlot === l ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#8A847C;border:1px solid rgba(35,34,32,0.14);'}`,
     }));
-    const tgtCount = this.targetCount();
+    const pubF = st.playlists.find((p) => p.id === (st.pubFilm || st.activePl)) || this.activeFilm();
+    const tgtCount = st.pubMode === 'data'
+      ? st.fleet.reduce((n, s) => n + s.players.length, 0)
+      : this.targetCountFor(pubF.id);
+    const pubStoresLabel = (pubF.stores && pubF.stores.length)
+      ? st.fleet.filter((s) => pubF.stores.includes(s.id)).map((s) => s.store).join(', ')
+      : 'tous les magasins';
     const nextV = st.version + 1;
     const whenLabel = st.pubWhen === 'scheduled'
       ? (st.activateAt ? `planifiée le ${st.activateAt.replace('T', ' à ')}` : 'planifiée (choisir une date)')
@@ -1008,7 +1123,8 @@ class App extends Component {
     const subTab = 'padding:8px 18px;font-size:13px;font-weight:600;border:none;border-radius:999px;cursor:pointer;';
     return {
       playlist, library, layoutOptions, motionGroups, items, days, posFields, timeSlots, crumbs,
-      timelineBlocks, timelineTotal, timelineEndDrop, libCards, pubDaysVals,
+      timelineBlocks, timelineTotal, timelineEndDrop, libCards, libTagChips, libEmptyMsg, pubDaysVals,
+      filmDaysVals, filmSlotVals, filmStoreVals, filmAllStores, filmSchedSummary,
       isLibTab: st.composerTab !== 'timeline',
       isTimelineTab: st.composerTab === 'timeline',
       setTabLib: () => this.setComposerTab('lib'),
@@ -1052,7 +1168,7 @@ class App extends Component {
       onActivateAt: (e) => this.setState({ activateAt: e.target.value }),
       publishSummary: st.pubMode === 'data'
         ? `Snapshot prix d${st.dataVer + 1} → ${tgtCount} écran(s). Sync incrémentale légère : seules les données de prix changent, les médias et vidéos en cache ne sont pas re-téléchargés. Les écrans hors ligne l'appliqueront au retour du réseau. Des tests live vérifient le déploiement juste après la publication.`
-        : `Film « ${this.activeFilm().name} » v${nextV} → ${tgtCount} écran(s) · ${st.pubSlot} · activation ${whenLabel}. Bascule atomique : chaque player continue sa version actuelle jusqu'à ce que tous ses médias + templates + snapshots soient en cache et vérifiés. Des tests live vérifient le déploiement juste après la publication.`,
+        : `Film « ${pubF.name} » v${nextV} → ${pubStoresLabel} (${tgtCount} écran(s)) · diffusion ${this.schedSummary(pubF.schedule)} · activation ${whenLabel}. La programmation et les magasins se règlent sur le film (onglet 2 · Playlist). Bascule atomique + tests live au déploiement.`,
       deploy: this.deploy,
       deployLabel: st.deploying ? 'Déploiement + tests live…' : (tgtCount ? (st.pubMode === 'data' ? `Pousser les prix sur ${tgtCount} écran(s)` : `Déployer sur ${tgtCount} écran(s)`) : 'Choisir une cible'),
       deployStyle: `padding:11px 22px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:${tgtCount && !st.deploying ? 'pointer' : 'not-allowed'};${tgtCount ? 'background:#8D1D2C;color:#fff;' : 'background:rgba(35,34,32,0.10);color:#8A847C;'}opacity:${st.deploying ? 0.7 : 1};`,
@@ -1065,6 +1181,15 @@ class App extends Component {
       liaisonSub: m.sub || '',
       onSelName: (e) => this.setSelField('name', e.target.value),
       onLiaisonSub: (e) => this.setSelField('sub', e.target.value),
+      libTagPicker: LIB_TAGS.map((t) => {
+        const on = tagOf(m).id === t.id;
+        return {
+          label: t.label,
+          pick: () => this.setSelField('libTag', t.id),
+          style: `display:inline-flex;align-items:center;gap:7px;padding:7px 13px;font-size:12px;font-weight:600;border-radius:999px;cursor:pointer;${on ? `background:${t.color};color:#fff;border:1px solid ${t.color};` : `background:#fff;color:${t.color};border:1px solid ${t.color}55;`}`,
+          dotStyle: `width:7px;height:7px;border-radius:50%;background:${on ? '#fff' : t.color};`,
+        };
+      }),
       addCategory: () => this.addCategory(),
       addLiaison: () => this.addLiaison(),
       addItem: () => this.addItem(),
@@ -1208,19 +1333,22 @@ class App extends Component {
         </div>
       </div>`;
 
-    // Sélecteur de film — utilisé dans l'onglet Playlist.
+    // Sélecteur de film en badges — utilisé dans l'onglet Playlist.
+    const filmBadge = (p, active, pick) => html`
+      <button onClick=${pick} title=${`${p.name} · ${p.items.length} module(s)`}
+        style="padding:7px 14px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;white-space:nowrap;${active ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.16);'}">
+        ${p.name} <span style="opacity:0.65;font-weight:500;">(${p.items.length})</span>
+      </button>`;
     const filmSelector = html`
-      <div style="display:flex;gap:5px;align-items:center;">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
         ${st.editingFilm
-          ? html`<input autofocus value=${st.editFilmName}
+          ? html`<input value=${st.editFilmName}
+              ref=${(el) => { if (el && document.activeElement !== el && !el._focused) { el._focused = true; el.focus(); el.select(); } }}
               onInput=${(e) => this.setState({ editFilmName: e.target.value })}
               onKeyDown=${(e) => { if (e.key === 'Enter') this.renameFilm(st.editFilmName); if (e.key === 'Escape') this.setState({ editingFilm: false }); }}
               onBlur=${() => this.renameFilm(st.editFilmName)}
-              style="flex:1 1 auto;min-width:180px;padding:7px 9px;font-size:13px;font-weight:600;border:1px solid #8D1D2C;border-radius:8px;background:#fff;" />`
-          : html`<select value=${st.activePl} onChange=${(e) => this.selectFilm(e.target.value)}
-              style="flex:1 1 auto;min-width:180px;padding:7px 9px;font-size:13px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;cursor:pointer;">
-              ${st.playlists.map((p) => html`<option value=${p.id}>${p.name} (${p.items.length})</option>`)}
-            </select>`}
+              style="flex:0 1 auto;min-width:180px;padding:7px 9px;font-size:13px;font-weight:600;border:1px solid #8D1D2C;border-radius:8px;background:#fff;" />`
+          : st.playlists.map((p) => filmBadge(p, p.id === st.activePl, () => this.selectFilm(p.id)))}
         <button onClick=${() => this.setState({ editingFilm: true, editFilmName: this.activeFilm().name })} title="Renommer le film" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;flex:0 0 auto;">✎</button>
         <button onClick=${() => this.newFilm()} title="Nouveau film (vide)" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:#8D1D2C;color:#fff;border:none;cursor:pointer;font-size:14px;font-weight:700;flex:0 0 auto;">＋</button>
         <button onClick=${() => this.dupFilm()} title="Dupliquer le film" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;flex:0 0 auto;">⎘</button>
@@ -1451,6 +1579,7 @@ class App extends Component {
             <div style="flex:1 1 auto;min-width:0;">
               <div style="display:flex;align-items:center;gap:6px;">
                 <span style="font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${ml.name}</span>
+                ${ml.catChip}
                 ${ml.tagChip}
               </div>
               <div style="font-size:11px;color:#8A847C;">${ml.libMeta}</div>
@@ -1482,6 +1611,14 @@ class App extends Component {
             <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8A847C;">Module sélectionné</h2>
           </div>
           <input value=${v.selName} onInput=${v.onSelName} placeholder="Nom du module" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:19px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#FBF8F2;" />
+          <div style="margin-top:14px;">
+            <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:7px;">Catégorie de bibliothèque</label>
+            <div style="display:flex;flex-wrap:wrap;gap:7px;">
+              ${v.libTagPicker.map((t) => html`
+                <button onClick=${t.pick} style=${t.style}><span style=${t.dotStyle}></span>${t.label}</button>
+              `)}
+            </div>
+          </div>
           ${v.isLiaison && html`
             <div style="margin-top:14px;">
               <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:7px;">Sous-titre (accroche)</label>
@@ -1509,30 +1646,6 @@ class App extends Component {
               <input value=${v.tagLabel} onInput=${v.onTagLabel} placeholder="ex. Nouveauté · -20%" style="flex:1 1 auto;min-width:0;padding:10px 12px;font-size:15px;font-weight:600;color:#8D1D2C;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
             </div>
           `}
-        </div>
-
-        <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 24px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-            <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Programmation</h2>
-            <span style="font-size:12px;color:#8A847C;">${v.scheduleSummary}</span>
-          </div>
-          <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px;">
-            ${v.days.map((d) => html`<button onClick=${d.toggle} style=${d.style}>${d.label}</button>`)}
-          </div>
-          <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px;">
-            ${v.timeSlots.map((ts) => html`<button onClick=${ts.pick} style=${ts.style}>${ts.label}</button>`)}
-          </div>
-          <div style="display:flex;align-items:center;gap:12px;">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:13px;color:#8A847C;">De</span>
-              <input type="time" value=${v.fromTime} onInput=${v.onFrom} style="padding:9px 11px;font-size:14px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:13px;color:#8A847C;">à</span>
-              <input type="time" value=${v.toTime} onInput=${v.onTo} style="padding:9px 11px;font-size:14px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
-            </div>
-            <button onClick=${v.setAllHours} style="margin-left:auto;padding:9px 13px;font-size:12.5px;font-weight:500;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.20);border-radius:8px;cursor:pointer;">Toute la journée</button>
-          </div>
         </div>
 
         ${v.isCategory && html`
@@ -1656,19 +1769,28 @@ class App extends Component {
       </div>
 
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 18px;">
-        <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">Bibliothèque — glisse un élément sur la ligne du temps (ou clique ＋)</h3>
+        <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">Bibliothèque — choisis une catégorie, puis glisse un élément sur la ligne du temps (ou clique ＋)</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          ${v.libTagChips.map((t) => html`
+            <button onClick=${t.pick} style=${t.style}><span style=${t.dotStyle}></span>${t.label}<span style="font-weight:400;opacity:0.75;">${t.count}</span></button>
+          `)}
+        </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           ${v.libCards.map((c) => html`
-            <div draggable="true" onDragStart=${c.onDragStart} style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.12);cursor:grab;">
-              <span style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;flex:0 0 auto;font-size:11px;background:rgba(141,29,44,0.12);color:#8D1D2C;">${c.typeIcon}</span>
+            <div draggable="true" onDragStart=${c.onDragStart} style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:#FBF8F2;border:1px solid ${c.tagColor}44;border-left:4px solid ${c.tagColor};cursor:grab;">
+              <span style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;flex:0 0 auto;font-size:11px;background:${c.tagColor}1F;color:${c.tagColor};">${c.typeIcon}</span>
               <div style="min-width:0;">
-                <div style="font-size:12.5px;font-weight:600;white-space:nowrap;">${c.name}</div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <span style="font-size:12.5px;font-weight:600;white-space:nowrap;">${c.name}</span>
+                  <span style="font-size:9px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:${c.tagColor};">${c.tagLabel}</span>
+                </div>
                 <div style="font-size:10px;color:#8A847C;">${c.meta}${c.inFilm ? '' : ' · hors film'}</div>
               </div>
               <button onClick=${c.add} title="Ajouter à la fin du film" style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:#8D1D2C;color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:700;flex:0 0 auto;">＋</button>
               <button onClick=${c.edit} title="Éditer dans la bibliothèque" style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:rgba(255,255,255,0.8);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:11px;flex:0 0 auto;">✎</button>
             </div>
           `)}
+          ${v.libEmptyMsg && html`<div style="font-size:12px;color:#8A847C;padding:8px 4px;">${v.libEmptyMsg}</div>`}
         </div>
       </div>
 
@@ -1691,6 +1813,35 @@ class App extends Component {
           <div style="flex:1 1 64px;min-width:64px;border:1px dashed rgba(35,34,32,0.18);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#B8B2A8;font-size:18px;" title="Dépose ici pour ajouter à la fin">＋</div>
         </div>
         <p style="margin:10px 0 0;font-size:11.5px;color:#8A847C;">Clique un bloc pour caler l'aperçu dessus · glisse pour réordonner · ✕ retire (l'élément reste en bibliothèque) · la largeur d'un bloc reflète sa durée.</p>
+      </div>
+
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 18px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:12px;flex-wrap:wrap;">
+          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Programmation & magasins du film</h3>
+          <span style="font-size:12px;color:#8A847C;">${v.filmSchedSummary}</span>
+        </div>
+        <div style="display:flex;gap:28px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:7px;">Jours de diffusion</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              ${v.filmDaysVals.map((d) => html`<button onClick=${d.toggle} style=${d.style}>${d.label}</button>`)}
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:7px;">Fenêtre horaire</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              ${v.filmSlotVals.map((s) => html`<button onClick=${s.pick} style=${s.style}>${s.label}</button>`)}
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:7px;">Magasins</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              <button onClick=${v.filmAllStores.pick} style=${v.filmAllStores.style}>Tous</button>
+              ${v.filmStoreVals.map((s) => html`<button onClick=${s.toggle} style=${s.style}>${s.label}</button>`)}
+            </div>
+          </div>
+        </div>
+        <p style="margin:12px 0 0;font-size:11.5px;color:#8A847C;">Hors créneau, les écrans affichent l'attente (le lien de partage montre toujours le film). « Tous » = le film part sur toute la flotte à la publication.</p>
       </div>
 
       <div style="display:grid;grid-template-columns:minmax(520px,1fr) 340px;gap:16px;align-items:start;">
@@ -1762,26 +1913,19 @@ class App extends Component {
               </button>
             </div>
           </div>
+          ${st.pubMode !== 'data' && html`
           <div>
-            <h3 style="margin:0 0 10px;font-size:12px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Cibles</h3>
-            <div style="display:flex;flex-direction:column;gap:8px;">
-              ${v.targets.map((t) => html`
-                <button onClick=${t.toggle} style=${t.style}>
-                  <span style="display:flex;flex-direction:column;align-items:flex-start;"><span style="font-size:14px;font-weight:600;">${t.label}</span><span style="font-size:11.5px;color:#8A847C;">${t.sub}</span></span>
-                  <span style=${t.checkStyle}>${t.check}</span>
+            <h3 style="margin:0 0 10px;font-size:12px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Film à publier</h3>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              ${st.playlists.map((p) => html`
+                <button onClick=${() => this.setState({ pubFilm: p.id })} title=${`${p.name} · ${p.items.length} module(s)`}
+                  style="padding:8px 15px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;white-space:nowrap;${p.id === (st.pubFilm || st.activePl) ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.16);'}">
+                  ${p.name} <span style="opacity:0.65;font-weight:500;">(${p.items.length})</span>
                 </button>
               `)}
             </div>
           </div>
-          <div>
-            <h3 style="margin:0 0 10px;font-size:12px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Jours & fenêtre horaire (day-parting)</h3>
-            <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px;">
-              ${v.pubDaysVals.map((d) => html`<button onClick=${d.toggle} style=${d.style}>${d.label}</button>`)}
-            </div>
-            <div style="display:flex;flex-wrap:wrap;gap:7px;">
-              ${v.pubSlots.map((s) => html`<button onClick=${s.pick} style=${s.style}>${s.label}</button>`)}
-            </div>
-          </div>
+          `}
           <div>
             <h3 style="margin:0 0 10px;font-size:12px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Activation</h3>
             <div style="display:inline-flex;background:#EFE9E0;border-radius:8px;padding:3px;margin-bottom:12px;">
