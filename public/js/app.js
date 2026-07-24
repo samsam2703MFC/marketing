@@ -2583,20 +2583,21 @@ class App extends Component {
         <p style="margin:12px 0 0;font-size:11.5px;color:#8A847C;">Hors créneau, les écrans affichent l'attente (le lien de partage montre toujours le film). « Tous » = le film part sur tout le réseau à la publication.</p>
       </div>
 
-      <div style="display:grid;grid-template-columns:minmax(520px,1fr) 340px;gap:16px;align-items:start;">
-        <div>${previewBlock}</div>
-        <div style="display:flex;flex-direction:column;gap:16px;">
+      ${previewBlock}
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;align-items:start;">
         ${diffusionBlock}
         <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:20px 22px;">
           <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">3 · Enregistrer & déployer</h3>
-          <p style="margin:0 0 14px;font-size:12px;color:#8A847C;line-height:1.55;">Enregistre le film, puis publie-le : tu choisiras les <strong>jours</strong>, la <strong>fenêtre horaire</strong> et les <strong>magasins</strong>. Le lien de visionnage s'affiche juste après le déploiement.</p>
-          <button onClick=${v.save} style="width:100%;margin-bottom:8px;${v.saveStyle}">${v.saveLabel}</button>
-          <button onClick=${v.openPublish} style="width:100%;padding:11px;font-size:13.5px;font-weight:600;border-radius:999px;border:none;cursor:pointer;background:#232220;color:#fff;">Publier sur le réseau ↗</button>
-          <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(35,34,32,0.08);font-size:11.5px;color:#8A847C;line-height:1.5;">Lien direct de ce film (55″) :<br/>
-            <button onClick=${() => this.copyLink(this.filmUrl({ film: st.activePl, w: 3840, h: 2160 }))} style="margin-top:6px;padding:8px 13px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Copier le lien</button>
+          <p style="margin:0 0 14px;font-size:12px;color:#8A847C;line-height:1.55;">Enregistre le film puis publie-le — la <strong>programmation</strong> et les <strong>magasins</strong> se règlent ci-dessus, sur le film. Le lien de visionnage s'affiche juste après le déploiement.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button onClick=${v.save} style="flex:1 1 auto;${v.saveStyle}">${v.saveLabel}</button>
+            <button onClick=${v.openPublish} style="flex:1 1 auto;padding:11px 18px;font-size:13.5px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:pointer;background:#8D1D2C;color:#fff;">Publier sur le réseau ↗</button>
+          </div>
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(35,34,32,0.08);font-size:11.5px;color:#8A847C;line-height:1.5;">Lien direct de ce film (55″) :
+            <button onClick=${() => this.copyLink(this.filmUrl({ film: st.activePl, w: 3840, h: 2160 }))} style="margin-left:6px;padding:8px 13px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Copier le lien</button>
             <a href=${this.filmUrl({ film: st.activePl, w: 3840, h: 2160 })} target="_blank" style="margin-left:6px;font-size:12px;font-weight:600;">↗ Ouvrir</a>
           </div>
-        </div>
         </div>
       </div>
 
