@@ -94,7 +94,7 @@ jobs:
             echo "Node ≥ 22 absent → installation via NodeSource…"
             export DEBIAN_FRONTEND=noninteractive
             curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-            apt-get install -y nodejs
+            apt-get install -y nodejs mariadb-client
           fi
           node --version
 

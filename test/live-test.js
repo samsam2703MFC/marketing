@@ -133,6 +133,14 @@ async function main() {
     if (!Array.isArray(l.langs) || !l.langs.some((x) => x.id === 'fr')) throw new Error('langues manquantes (sig_langs)');
     return l.langs.map((x) => x.id).join(' · ');
   });
+  await step('GET /api/v1/pwa-config — connexion base PWA', async () => {
+    const c = await call('GET', '/api/v1/pwa-config');
+    if (typeof c.qProducts !== 'string' || !('hasPassword' in c)) throw new Error('config PWA illisible');
+    if (c.password) throw new Error('le mot de passe ne doit jamais être renvoyé');
+    const t = await call('POST', '/api/v1/pwa-test');
+    if (t.ok !== true && !t.error) throw new Error('pwa-test sans message d\'erreur clair');
+    return c.db ? `base « ${c.db} » configurée · test : ${t.ok ? 'OK' : t.error}` : `non configurée · ${t.error}`;
+  });
   await step('GET / — back office servi', async () => {
     const res = await fetch(BASE + '/');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

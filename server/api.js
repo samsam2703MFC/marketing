@@ -8,6 +8,7 @@ import {
   checkLogin, createSession, sessionUser, destroySession,
 } from './db.js';
 import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
+import { publicPwaConfig, savePwaConfig, testPwa, importPwa } from './pwadb.js';
 import { runConnectionTest, runDeployTests, tcpPing } from './livetest.js';
 
 function sessionToken(req) {
@@ -474,6 +475,21 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       }
       saveCatalog(body);
       return send(200, { ok: true, ...loadCatalog(), savedAt: nowIso() });
+    }
+
+    // ---- connexion directe à la base PWA (product / shop_product / …) ------
+    if (req.method === 'GET' && path === '/pwa-config') return send(200, publicPwaConfig());
+    if (req.method === 'POST' && path === '/pwa-config') {
+      const body = await readBody();
+      return send(200, savePwaConfig(body));
+    }
+    if (req.method === 'POST' && path === '/pwa-test') {
+      try { return send(200, await testPwa()); }
+      catch (e) { return send(200, { ok: false, error: String(e.message || e) }); }
+    }
+    if (req.method === 'POST' && path === '/pwa-import') {
+      try { return send(200, await importPwa()); }
+      catch (e) { return send(200, { ok: false, error: String(e.message || e) }); }
     }
 
     if (req.method === 'PUT' && path === '/draft') {

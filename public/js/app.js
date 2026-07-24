@@ -84,6 +84,7 @@ class App extends Component {
     elementTypes: [], addPicker: false, openSec: 'items',
     catalog: { categories: [], products: [] },
     catDraft: null, catDirty: false, catSel: '', catSaving: false, langs: [], catLang: 'fr',
+    pwaForm: null, pwaBusy: null, pwaResult: null,
   };
 
   // ---------------------------------------------------------------- lifecycle
@@ -132,6 +133,7 @@ class App extends Component {
       const et = await api('GET', '/element-types').catch(() => ({ types: [] }));
       const cat = await api('GET', '/catalog').catch(() => ({ categories: [], products: [] }));
       const lg = await api('GET', '/langs').catch(() => ({ langs: [{ id: 'fr', label: 'Français' }] }));
+      const pwa = await api('GET', '/pwa-config').catch(() => null);
       const playlists = ((Array.isArray(st.playlists) && st.playlists.length)
         ? st.playlists
         : [{ id: 'pl1', name: 'Film principal', items: st.playlist || [] }]).map((p) => this.normFilm(p));
@@ -143,6 +145,13 @@ class App extends Component {
         library: st.modules,
         elementTypes: et.types || [],
         langs: lg.langs || [{ id: 'fr', label: 'Français' }],
+        pwaForm: pwa ? {
+          host: pwa.host, port: pwa.port, db: pwa.db, user: pwa.user,
+          password: '', hasPassword: !!pwa.hasPassword,
+          qCategories: pwa.qCategories, qProducts: pwa.qProducts,
+          qShopPrices: pwa.qShopPrices, qAliases: pwa.qAliases,
+          shopMap: pwa.shopMap || {},
+        } : null,
         catalog: { categories: cat.categories || [], products: cat.products || [] },
         catDraft: null, catDirty: false,
         playlists,
@@ -584,6 +593,44 @@ class App extends Component {
       });
       this.setState({ library: lib });
     } catch { /* la prochaine sauvegarde resynchronisera */ }
+  }
+
+  // ---- connexion directe à la base PWA (product / shop_product / …) --------
+  setPwa(k, v) { this.setState({ pwaForm: { ...(this.state.pwaForm || {}), [k]: v } }); }
+  setPwaShop(storeId, v) {
+    const f = this.state.pwaForm || {};
+    const shopMap = { ...(f.shopMap || {}) };
+    if (String(v).trim()) shopMap[storeId] = String(v).trim(); else delete shopMap[storeId];
+    this.setState({ pwaForm: { ...f, shopMap } });
+  }
+  async pwaAction(kind) {
+    const f = this.state.pwaForm;
+    if (!f || this.state.pwaBusy) return;
+    if (kind === 'import' && !window.confirm(
+      'Importer depuis la base PWA REMPLACE la table produits actuelle (catégories, produits, prix par magasin, alias).\n\nLes éléments liés sont re-liés par nom de catégorie. Continuer ?')) return;
+    this.setState({ pwaBusy: kind, pwaResult: null });
+    try {
+      await api('POST', '/pwa-config', {
+        host: f.host, port: f.port, db: f.db, user: f.user,
+        ...(f.password ? { password: f.password } : {}),
+        qCategories: f.qCategories, qProducts: f.qProducts,
+        qShopPrices: f.qShopPrices, qAliases: f.qAliases,
+        shopMap: f.shopMap || {},
+      });
+      const out = await api('POST', kind === 'test' ? '/pwa-test' : '/pwa-import');
+      this.setState({
+        pwaBusy: null, pwaResult: out,
+        pwaForm: { ...f, password: '', hasPassword: f.hasPassword || !!f.password },
+      });
+      if (kind === 'import' && out.ok) {
+        const cat = await api('GET', '/catalog');
+        this.setState({ catalog: { categories: cat.categories, products: cat.products }, catDraft: null, catDirty: false });
+        await this.reloadLinkedModules();
+        this.showToast(`Catalogue importé : ${out.categories} catégorie(s) · ${out.products} produit(s) ✓`);
+      }
+    } catch (e) {
+      this.setState({ pwaBusy: null, pwaResult: { ok: false, error: String(e.message || e) } });
+    }
   }
   copyMod(id) { this.setState({ clipboard: JSON.parse(JSON.stringify(this.getMod(id))) }); }
   dupMod(id) {
@@ -1443,6 +1490,7 @@ class App extends Component {
     })();
 
     const subTab = 'padding:8px 18px;font-size:13px;font-weight:600;border:none;border-radius:999px;cursor:pointer;';
+    const hdrRound = 'width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;cursor:pointer;flex:0 0 auto;';
     return {
       playlist, library, layoutOptions, motionGroups, items, days, posFields, timeSlots, crumbs,
       timelineBlocks, timelineTotal, timelineEndDrop, libCards, libTagChips, libEmptyMsg, pubDaysVals,
@@ -1460,8 +1508,8 @@ class App extends Component {
       tabTimelineStyle: subTab + (st.composerTab === 'timeline' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       resetPos: () => this.resetPos(),
       undo: () => this.undo(), redo: () => this.redo(),
-      undoStyle: `display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;font-size:16px;${st.past.length ? 'background:#FBF8F2;border:1px solid rgba(35,34,32,0.14);color:#232220;cursor:pointer;' : 'background:rgba(35,34,32,0.03);border:1px solid rgba(35,34,32,0.06);color:#C9C3B8;cursor:not-allowed;'}`,
-      redoStyle: `display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;font-size:16px;${st.future.length ? 'background:#FBF8F2;border:1px solid rgba(35,34,32,0.14);color:#232220;cursor:pointer;' : 'background:rgba(35,34,32,0.03);border:1px solid rgba(35,34,32,0.06);color:#C9C3B8;cursor:not-allowed;'}`,
+      undoStyle: `display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;font-size:15px;background:transparent;border:1px solid ${st.past.length ? 'rgba(35,34,32,0.16)' : 'rgba(35,34,32,0.06)'};color:${st.past.length ? '#5B564E' : '#C9C3B8'};cursor:${st.past.length ? 'pointer' : 'not-allowed'};`,
+      redoStyle: `display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;font-size:15px;background:transparent;border:1px solid ${st.future.length ? 'rgba(35,34,32,0.16)' : 'rgba(35,34,32,0.06)'};color:${st.future.length ? '#5B564E' : '#C9C3B8'};cursor:${st.future.length ? 'pointer' : 'not-allowed'};`,
       isComposerView: st.view === 'composer', isFleetView: st.view === 'fleet', isSettingsView: st.view === 'settings',
       isProductsView: st.view === 'products',
       setViewComposer: () => this.setView('composer'),
@@ -1471,12 +1519,12 @@ class App extends Component {
       tabProductsStyle: stTab + (st.view === 'products' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       tabComposerStyle: stTab + (st.view === 'composer' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       tabFleetStyle: stTab + (st.view === 'fleet' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
-      settingsIconStyle: `display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;font-size:17px;cursor:pointer;flex:0 0 auto;${st.view === 'settings' ? 'background:#8D1D2C;color:#fff;border:none;' : 'background:#EFE9E0;color:#232220;border:1px solid rgba(35,34,32,0.10);'}`,
+      settingsIconStyle: `display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:50%;font-size:17px;cursor:pointer;flex:0 0 auto;${st.view === 'settings' ? 'background:#8D1D2C;color:#fff;border:none;' : 'background:#EFE9E0;color:#232220;border:1px solid rgba(35,34,32,0.10);'}`,
       playlistVersion: st.version,
       pushPrices: this.pushPrices,
       toggleOverride: this.toggleOverride,
-      overrideLabel: st.override ? '⏹ Reprendre' : '⚡ Diffusion flash',
-      overrideStyle: `padding:10px 16px;font-size:13.5px;font-weight:600;border-radius:999px;cursor:pointer;${st.override ? 'background:#8D1D2C;color:#fff;border:none;' : 'background:rgba(35,34,32,0.06);color:#232220;border:1px solid rgba(35,34,32,0.14);'}`,
+      overrideLabel: st.override ? 'Reprendre les playlists' : 'Diffusion flash',
+      overrideStyle: `padding:9px 18px;font-size:13px;font-weight:600;letter-spacing:0.01em;border-radius:999px;cursor:pointer;${st.override ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;box-shadow:0 2px 8px rgba(141,29,44,0.3);' : 'background:transparent;color:#5B564E;border:1px solid rgba(35,34,32,0.18);'}`,
       kpis, fleet,
       hasAlerts: offline > 0 || errors > 0 || stale > 0 || st.override,
       alertText: `${st.override ? '⚡ Diffusion flash active — playlists normales suspendues. ' : ''}${offline > 0 ? offline + ' écran(s) hors ligne — lecture + prix poursuivis depuis le cache local. ' : ''}${stale > 0 ? stale + ' snapshot(s) prix périmé(s) (>1 h) à resynchroniser. ' : ''}${errors > 0 ? errors + ' écran(s) en erreur (stockage/temp) à intervenir.' : ''}`,
@@ -1630,13 +1678,16 @@ class App extends Component {
         dotStyle: `width:9px;height:9px;border-radius:50%;flex:0 0 auto;background:${r.ok ? '#2E7D32' : '#8D1D2C'};`,
       })),
       save: this.save,
-      saveLabel: st.saved ? '✓ Enregistré' : (st.dirty ? 'Enregistrer' : 'Enregistré'),
-      saveStyle: `padding:10px 22px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:pointer;${st.dirty ? 'background:#8D1D2C;color:#fff;' : 'background:rgba(35,34,32,0.08);color:#8A847C;'}`,
-      statusText: st.dirty ? 'Modifs non enregistrées' : 'Enregistré',
-      statusBg: st.dirty ? 'rgba(180,120,20,0.12)' : 'rgba(46,125,50,0.12)',
-      statusDot: st.dirty ? '#B8860B' : '#2E7D32',
-      statusRing: st.dirty ? 'rgba(184,134,11,0.18)' : 'rgba(46,125,50,0.18)',
-      statusFg: st.dirty ? '#8a6508' : '#2E7D32',
+      // Bouton d'état (modale de publication) : cuivre quand modifs en attente.
+      saveLabel: st.dirty ? 'Enregistrer' : 'Enregistré',
+      saveStyle: `padding:9px 20px;font-size:13px;font-weight:600;letter-spacing:0.01em;border-radius:999px;cursor:${st.dirty ? 'pointer' : 'default'};${st.dirty ? 'background:#6E4A2B;color:#fff;border:1px solid #6E4A2B;box-shadow:0 2px 8px rgba(110,74,43,0.25);' : 'background:transparent;color:#8A847C;border:1px solid rgba(35,34,32,0.14);'}`,
+      // Bandeau : icônes rondes + vignettes, palette gris/rubis/abricot/cuivre.
+      saveIconStyle: `${hdrRound}${st.dirty ? 'background:#6E4A2B;color:#fff;border:1px solid #6E4A2B;box-shadow:0 2px 10px rgba(110,74,43,0.35);' : 'background:transparent;color:#8A847C;border:1px solid rgba(35,34,32,0.14);'}`,
+      saveTip: st.dirty ? 'Enregistrer — modifications en attente' : 'Tout est enregistré',
+      pricesIconStyle: `${hdrRound}background:rgba(201,123,74,0.14);color:#A25C2E;border:1px solid rgba(201,123,74,0.5);`,
+      overrideIconStyle: `${hdrRound}${st.override ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;box-shadow:0 2px 10px rgba(141,29,44,0.35);' : 'background:transparent;color:#5B564E;border:1px solid rgba(35,34,32,0.18);'}`,
+      overrideTip: st.override ? 'Diffusion flash ACTIVE — cliquer pour reprendre les playlists' : 'Diffusion flash (suspend les playlists)',
+      publishIconStyle: `width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;cursor:pointer;flex:0 0 auto;background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;box-shadow:0 3px 12px rgba(141,29,44,0.4);`,
     };
   }
 
@@ -1755,36 +1806,27 @@ class App extends Component {
 
   <header style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px 24px;padding:14px 30px;background:#FFFFFF;border-bottom:1px solid rgba(35,34,32,0.10);z-index:5;">
     <div style="display:flex;align-items:center;gap:16px;min-width:0;flex:1 1 auto;">
-      <img src="assets/logo.png" alt="L'Atelier By" style="height:38px;width:auto;flex:0 0 auto;" />
-      <span style="width:1px;height:30px;background:rgba(35,34,32,0.14);flex:0 0 auto;"></span>
-      <div style="display:flex;flex-direction:column;min-width:0;overflow:hidden;">
-        <span style="font-weight:500;font-size:15px;letter-spacing:0.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Régie d'affichage</span>
-        <span style="font-size:11.5px;letter-spacing:0.12em;text-transform:uppercase;color:#8A847C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Signage hybride · cache local</span>
+      <div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0;flex:0 0 auto;">
+        <img src="assets/logo.png" alt="L'Atelier By" style="height:32px;width:auto;" />
+        <span style="font-weight:500;font-size:12.5px;letter-spacing:0.02em;white-space:nowrap;">Régie d'affichage</span>
+        <span style="font-size:9.5px;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;white-space:nowrap;">Signage hybride · cache local</span>
       </div>
-      <div style="display:inline-flex;background:#EFE9E0;border-radius:999px;padding:3px;flex:0 0 auto;margin-left:6px;">
+      <div style="display:inline-flex;background:#EFE9E0;border-radius:999px;padding:3px;flex:0 0 auto;margin-left:10px;">
         <button onClick=${v.setViewComposer} style=${v.tabComposerStyle}>Compositeur</button>
         <button onClick=${v.setViewProducts} style=${v.tabProductsStyle}>Produits</button>
         <button onClick=${v.setViewFleet} style=${v.tabFleetStyle}>Réseau & supervision</button>
       </div>
-      <button onClick=${v.setViewSettings} title="Paramètres · serveur & connexion" style=${v.settingsIconStyle}>⚙</button>
     </div>
-    <div style="display:flex;align-items:center;gap:12px;flex:0 0 auto;flex-wrap:wrap;justify-content:flex-end;">
-      <div style="display:flex;align-items:center;gap:4px;">
-        <button onClick=${v.undo} title="Annuler (⌘Z)" style=${v.undoStyle}>↶</button>
-        <button onClick=${v.redo} title="Rétablir (⌘⇧Z)" style=${v.redoStyle}>↷</button>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;background:rgba(35,34,32,0.05);">
-        <span style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Version</span>
-        <span style="font-size:13px;font-weight:600;color:#232220;">v${v.playlistVersion}</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:9px;padding:7px 15px;border-radius:999px;background:${v.statusBg};">
-        <span style="width:9px;height:9px;border-radius:50%;background:${v.statusDot};box-shadow:0 0 0 4px ${v.statusRing};"></span>
-        <span style="font-size:12.5px;font-weight:500;letter-spacing:0.03em;color:${v.statusFg};">${v.statusText}</span>
-      </div>
-      <button onClick=${v.save} style=${v.saveStyle}>${v.saveLabel}</button>
-      <button onClick=${v.pushPrices} title="Sync incrémentale légère — ne re-télécharge aucun média" style="padding:10px 16px;font-size:13.5px;font-weight:600;border-radius:999px;border:1px solid rgba(141,29,44,0.28);cursor:pointer;background:rgba(141,29,44,0.08);color:#8D1D2C;">⚡ Pousser les prix</button>
-      <button onClick=${v.toggleOverride} style=${v.overrideStyle}>${v.overrideLabel}</button>
-      <button onClick=${v.openPublish} style="padding:10px 22px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:pointer;background:#232220;color:#fff;">Publier sur le réseau ↗</button>
+    <div style="display:flex;align-items:center;gap:9px;flex:0 0 auto;flex-wrap:wrap;justify-content:flex-end;">
+      <button class="hdr-btn" onClick=${v.undo} style=${v.undoStyle}>↶<span class="hdr-tip">Annuler (⌘Z)</span></button>
+      <button class="hdr-btn" onClick=${v.redo} style=${v.redoStyle}>↷<span class="hdr-tip">Rétablir (⌘⇧Z)</span></button>
+      <span style="width:1px;height:26px;background:rgba(35,34,32,0.10);flex:0 0 auto;margin:0 3px;"></span>
+      <button class="hdr-btn" onClick=${v.save} style=${v.saveIconStyle}>✓<span class="hdr-tip">${v.saveTip}</span></button>
+      <button class="hdr-btn" onClick=${v.pushPrices} style=${v.pricesIconStyle}>€<span class="hdr-tip">Pousser les prix — sync légère, sans re-télécharger les médias</span></button>
+      <button class="hdr-btn" onClick=${v.toggleOverride} style=${v.overrideIconStyle}>⚡<span class="hdr-tip">${v.overrideTip}</span></button>
+      <button class="hdr-btn" onClick=${v.openPublish} style=${v.publishIconStyle}>↗<span class="hdr-tip hdr-tip-right">Publier sur le réseau — déploie le film choisi</span></button>
+      <span style="width:1px;height:26px;background:rgba(35,34,32,0.10);flex:0 0 auto;margin:0 3px;"></span>
+      <button class="hdr-btn" onClick=${v.setViewSettings} style=${v.settingsIconStyle}>⚙<span class="hdr-tip hdr-tip-right">Paramètres — serveur, import PWA & liens</span></button>
     </div>
   </header>
 
@@ -1830,6 +1872,55 @@ class App extends Component {
           </div>
         `}
       </div>
+      ${st.pwaForm && html`
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;margin-top:20px;">
+        <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Import catalogue — base PWA</h2>
+        <p style="margin:0 0 16px;font-size:12px;color:#8A847C;line-height:1.5;">Connexion directe à ta base MySQL existante (tables <strong>product</strong> / <strong>shop_product</strong> / <strong>product_category</strong>) : l'import remplit la table produits signage (catégories, produits, prix par magasin, alias de langue). Les requêtes sont ajustables si tes colonnes diffèrent — seul l'ordre des colonnes compte.</p>
+        <div style="display:grid;grid-template-columns:1.2fr 90px 1fr 1fr 1fr;gap:9px;margin-bottom:10px;">
+          <input value=${st.pwaForm.host} onInput=${(e) => this.setPwa('host', e.target.value)} placeholder="Hôte (127.0.0.1)" style="padding:10px 12px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;min-width:0;" />
+          <input value=${st.pwaForm.port} onInput=${(e) => this.setPwa('port', e.target.value)} placeholder="3306" inputmode="numeric" style="padding:10px 12px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;min-width:0;" />
+          <input value=${st.pwaForm.db} onInput=${(e) => this.setPwa('db', e.target.value)} placeholder="Base (ex. pwa)" style="padding:10px 12px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;min-width:0;" />
+          <input value=${st.pwaForm.user} onInput=${(e) => this.setPwa('user', e.target.value)} placeholder="Utilisateur" style="padding:10px 12px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;min-width:0;" />
+          <input type="password" value=${st.pwaForm.password} onInput=${(e) => this.setPwa('password', e.target.value)} placeholder=${st.pwaForm.hasPassword ? '••••• (inchangé)' : 'Mot de passe'} style="padding:10px 12px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;min-width:0;" />
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+          <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">ID boutique PWA par magasin</span>
+          ${st.fleet.map((sf) => html`
+            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#5B564E;background:#FBF8F2;border:1px solid rgba(35,34,32,0.12);border-radius:999px;padding:5px 6px 5px 12px;">
+              ${sf.store}
+              <input value=${(st.pwaForm.shopMap || {})[sf.id] || ''} onInput=${(e) => this.setPwaShop(sf.id, e.target.value)} placeholder="id" style="width:52px;padding:5px 8px;font-size:12px;border:1px solid rgba(35,34,32,0.16);border-radius:999px;background:#fff;text-align:center;" />
+            </label>
+          `)}
+        </div>
+        <details style="margin-bottom:12px;">
+          <summary style="font-size:12px;font-weight:600;color:#8A847C;cursor:pointer;">Requêtes SQL (avancé — l'ordre des colonnes compte)</summary>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
+            <label style="font-size:11.5px;color:#8A847C;">Catégories → <code>id, nom</code></label>
+            <textarea value=${st.pwaForm.qCategories} onInput=${(e) => this.setPwa('qCategories', e.target.value)} rows="1" style="padding:9px 11px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;resize:vertical;"></textarea>
+            <label style="font-size:11.5px;color:#8A847C;">Produits → <code>id, id_catégorie, nom, prix, actif</code></label>
+            <textarea value=${st.pwaForm.qProducts} onInput=${(e) => this.setPwa('qProducts', e.target.value)} rows="1" style="padding:9px 11px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;resize:vertical;"></textarea>
+            <label style="font-size:11.5px;color:#8A847C;">Prix par boutique (shop_product) → <code>id_produit, id_boutique, prix</code></label>
+            <textarea value=${st.pwaForm.qShopPrices} onInput=${(e) => this.setPwa('qShopPrices', e.target.value)} rows="1" style="padding:9px 11px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;resize:vertical;"></textarea>
+            <label style="font-size:11.5px;color:#8A847C;">Alias / langues (optionnel) → <code>id_produit, langue, nom</code></label>
+            <textarea value=${st.pwaForm.qAliases} onInput=${(e) => this.setPwa('qAliases', e.target.value)} rows="1" placeholder="SELECT product_id, lang, name FROM product_lang" style="padding:9px 11px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;resize:vertical;"></textarea>
+          </div>
+        </details>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <button onClick=${() => this.pwaAction('test')} disabled=${!!st.pwaBusy} style="padding:10px 18px;font-size:13px;font-weight:600;border-radius:999px;cursor:${st.pwaBusy ? 'progress' : 'pointer'};background:transparent;color:#5B564E;border:1px solid rgba(35,34,32,0.18);">${st.pwaBusy === 'test' ? 'Test en cours…' : 'Tester la connexion'}</button>
+          <button onClick=${() => this.pwaAction('import')} disabled=${!!st.pwaBusy} style="padding:10px 20px;font-size:13px;font-weight:600;border-radius:999px;cursor:${st.pwaBusy ? 'progress' : 'pointer'};background:#6E4A2B;color:#fff;border:1px solid #6E4A2B;">${st.pwaBusy === 'import' ? 'Import en cours…' : 'Importer le catalogue'}</button>
+          ${st.pwaResult && html`
+            <span style="font-size:12.5px;font-weight:600;color:${st.pwaResult.ok ? '#2E7D32' : '#8D1D2C'};">
+              ${st.pwaResult.ok
+                ? (st.pwaResult.counts
+                  ? `✓ Connexion OK — ${Object.entries(st.pwaResult.counts).map(([k, n]) => `${n} ${k}`).join(' · ')}`
+                  : `✓ Importé : ${st.pwaResult.categories} catégorie(s) · ${st.pwaResult.products} produit(s) · ${st.pwaResult.storePrices} prix/magasin · ${st.pwaResult.aliases} alias · ${st.pwaResult.relinked} élément(s) re-lié(s)`)
+                : `✗ ${st.pwaResult.error}`}
+            </span>
+          `}
+        </div>
+      </div>
+      `}
+
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;margin-top:20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
           <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Liens de diffusion — film</h2>
