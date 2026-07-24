@@ -266,13 +266,16 @@ async function main() {
     await step('PUT /api/v1/draft — aller-retour du brouillon (films multiples)', async () => {
       await call('PUT', '/api/v1/draft', {
         modules: state.modules,
-        playlists: [...basePlaylists, { id: 'pltest', name: 'Film de test', items: state.playlist }],
+        playlists: [...basePlaylists, { id: 'pltest', name: 'Film de test', items: state.playlist, cat: 'promo', tags: ['noel', 'vitrine'] }],
         activePlaylistId: activeId,
         secPerLine: state.secPerLine, loop: state.loop,
       });
       const mid = await call('GET', '/api/v1/state');
       if (mid.modules.length !== state.modules.length) throw new Error('perte de modules après enregistrement');
-      if (!mid.playlists.some((p) => p.id === 'pltest')) throw new Error('film de test perdu à l\'aller-retour');
+      const pt = mid.playlists.find((p) => p.id === 'pltest');
+      if (!pt) throw new Error('film de test perdu à l\'aller-retour');
+      if (pt.cat !== 'promo') throw new Error(`catégorie du film perdue : ${pt.cat}`);
+      if (!Array.isArray(pt.tags) || pt.tags.join(',') !== 'noel,vitrine') throw new Error(`tags du film perdus : ${JSON.stringify(pt.tags)}`);
       const namesBefore = JSON.stringify(state.modules.map((m) => [m.id, m.name, (m.items || []).length]));
       const namesAfter = JSON.stringify(mid.modules.map((m) => [m.id, m.name, (m.items || []).length]));
       if (namesBefore !== namesAfter) throw new Error('brouillon modifié par l\'aller-retour');

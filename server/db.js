@@ -201,6 +201,9 @@ function migrate(db) {
   if (!plCols.includes('sched_from')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN sched_from TEXT NOT NULL DEFAULT '00:00'`);
   if (!plCols.includes('sched_to')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN sched_to TEXT NOT NULL DEFAULT '23:59'`);
   if (!plCols.includes('stores')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN stores TEXT NOT NULL DEFAULT '[]'`);
+  // Le film est rangé dans une catégorie colorée + porte des tags libres.
+  if (!plCols.includes('cat')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN cat TEXT NOT NULL DEFAULT ''`);
+  if (!plCols.includes('tags')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'`);
   // Combo d'écrans du magasin (ex. 3 × 55″ portrait) → taille du film en px.
   const stCols = db.prepare('PRAGMA table_info(sig_stores)').all().map((c) => c.name);
   if (!stCols.includes('screens')) db.exec(`ALTER TABLE sig_stores ADD COLUMN screens INTEGER NOT NULL DEFAULT 1`);
@@ -681,6 +684,8 @@ export function loadPlaylists() {
     id: p.id,
     name: p.name,
     items: it.all(p.id).map((r) => r.module_id),
+    cat: p.cat || '',
+    tags: (() => { try { return JSON.parse(p.tags || '[]'); } catch { return []; } })(),
     schedule: {
       days: JSON.parse(p.sched_days || '[1,1,1,1,1,1,1]').map(Boolean),
       from: p.sched_from || '00:00',
@@ -751,7 +756,7 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
       }
     });
     const validIds = new Set(modules.map((m) => m.id));
-    const insPls = db.prepare('INSERT INTO sig_playlists(id, name, sort_order, sched_days, sched_from, sched_to, stores) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    const insPls = db.prepare('INSERT INTO sig_playlists(id, name, sort_order, sched_days, sched_from, sched_to, stores, cat, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     const insIt = db.prepare('INSERT INTO sig_playlist_items(playlist_id, position, module_id) VALUES (?, ?, ?)');
     playlists.forEach((pl, i) => {
       const sched = pl.schedule || {};
@@ -759,7 +764,9 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
         String(pl.id), String(pl.name || `Film ${i + 1}`), i,
         JSON.stringify((Array.isArray(sched.days) && sched.days.length === 7 ? sched.days : [1, 1, 1, 1, 1, 1, 1]).map((d) => (d ? 1 : 0))),
         String(sched.from || '00:00'), String(sched.to || '23:59'),
-        JSON.stringify(Array.isArray(pl.stores) ? pl.stores.map(String) : [])
+        JSON.stringify(Array.isArray(pl.stores) ? pl.stores.map(String) : []),
+        String(pl.cat || ''),
+        JSON.stringify(Array.isArray(pl.tags) ? pl.tags.map(String).filter(Boolean) : [])
       );
       (pl.items || []).filter((id) => validIds.has(id)).forEach((id, j) => insIt.run(String(pl.id), j, id));
     });

@@ -25,6 +25,16 @@ const LIB_TAGS = [
 ];
 const tagOf = (m) => LIB_TAGS.find((t) => t.id === (m.libTag || (m.type === 'liaison' ? 'liaison' : 'produit'))) || LIB_TAGS[0];
 
+// Catégories de films — chaque catégorie a sa couleur (bibliothèque de films).
+const FILM_CATS = [
+  { id: 'standard', label: 'Standard', color: '#8D1D2C' },
+  { id: 'saison', label: 'Saison', color: '#C97B4A' },
+  { id: 'promo', label: 'Promo', color: '#2E6E4E' },
+  { id: 'evenement', label: 'Événement', color: '#6E4A2B' },
+  { id: 'archive', label: 'Archive', color: '#8A847C' },
+];
+const filmCatOf = (p) => FILM_CATS.find((c) => c.id === (p && p.cat)) || FILM_CATS[0];
+
 // Pastille (i) : bulle d'aide au survol (ou au clic sur écran tactile).
 const infoTip = (text) => html`
   <span class="sig-info" onClick=${(e) => { e.stopPropagation(); e.currentTarget.classList.toggle('open'); }}>
@@ -72,6 +82,7 @@ class App extends Component {
     dirty: false, saved: true, scope: 'module', clipboard: null, past: [], future: [],
     selId: null, playlist: [],
     playlists: [], activePl: null, editingFilm: false, editFilmName: '', libFilter: 'all',
+    filmFilter: 'all', filmTagInput: '',
     editingStore: null, editStoreName: '',
     view: 'composer', composerTab: 'lib', publishing: false, deploying: false, version: 1, dataVer: 1, hbTick: 0, toast: '',
     pubTargets: {}, pubSlot: 'Toute la journée', pubWhen: 'now', activateAt: '', pubMode: 'full',
@@ -276,6 +287,8 @@ class App extends Component {
   normFilm(p) {
     return {
       ...p,
+      cat: p.cat || 'standard',
+      tags: Array.isArray(p.tags) ? p.tags.map(String).filter(Boolean) : [],
       schedule: {
         days: (p.schedule && Array.isArray(p.schedule.days) && p.schedule.days.length === 7) ? p.schedule.days.map(Boolean) : [true, true, true, true, true, true, true],
         from: (p.schedule && p.schedule.from) || '00:00',
@@ -283,6 +296,18 @@ class App extends Component {
       },
       stores: Array.isArray(p.stores) ? p.stores : [],
     };
+  }
+  setFilmCat(cat) { this.updateFilm({ cat }); }
+  addFilmTag(t) {
+    const tag = String(t || '').trim().replace(/,/g, '');
+    if (!tag) return;
+    const f = this.activeFilm();
+    if ((f.tags || []).includes(tag)) return;
+    this.updateFilm({ tags: [...(f.tags || []), tag] });
+  }
+  removeFilmTag(t) {
+    const f = this.activeFilm();
+    this.updateFilm({ tags: (f.tags || []).filter((x) => x !== t) });
   }
   activeFilm() {
     return this.state.playlists.find((p) => p.id === this.state.activePl) || this.state.playlists[0] || this.normFilm({ id: 'pl1', name: 'Film principal', items: [] });
@@ -326,7 +351,7 @@ class App extends Component {
   newFilm() {
     const id = 'pl' + uid();
     const playlists = [...this.state.playlists, this.normFilm({ id, name: 'Nouveau film', items: [] })];
-    this.dirty({ playlists, activePl: id, playlist: [], editingFilm: true, editFilmName: 'Nouveau film', t: 0 });
+    this.dirty({ playlists, activePl: id, playlist: [], editingFilm: true, editFilmName: 'Nouveau film', t: 0, filmFilter: 'all' });
   }
   dupFilm() {
     const src = this.activeFilm();
@@ -1309,6 +1334,21 @@ class App extends Component {
     };
     const filmSchedSummary = `${this.schedSummary(filmActive.schedule)} · ${filmActive.stores.length ? `${filmActive.stores.length} magasin(s)` : 'tous les magasins'}`;
 
+    // Catégorie + tags du film actif (rangement dans la bibliothèque de films).
+    const filmCatVals = FILM_CATS.map((c) => {
+      const on = filmCatOf(filmActive).id === c.id;
+      return {
+        label: c.label,
+        pick: () => this.setFilmCat(c.id),
+        style: `display:inline-flex;align-items:center;gap:7px;padding:7px 13px;font-size:12px;font-weight:600;border-radius:999px;cursor:pointer;${on ? `background:${c.color};color:#fff;border:1px solid ${c.color};` : `background:#fff;color:${c.color};border:1px solid ${c.color}55;`}`,
+        dotStyle: `width:7px;height:7px;border-radius:50%;background:${on ? '#fff' : c.color};`,
+      };
+    });
+    const filmTagVals = (filmActive.tags || []).map((t) => ({
+      label: t,
+      remove: () => this.removeFilmTag(t),
+    }));
+
     let liveLine = '—';
     if (playM && playM.type === 'category') {
       const n = this.activeItems(playM).length;
@@ -1520,6 +1560,10 @@ class App extends Component {
       addProd: () => this.addProd(),
       saveCat: () => this.saveCatalog(),
       filmDaysVals, filmSlotVals, filmStoreVals, filmAllStores, filmSchedSummary,
+      filmCatVals, filmTagVals, filmTagInput: st.filmTagInput,
+      onFilmTagInput: (e) => this.setState({ filmTagInput: e.target.value }),
+      onFilmTagKey: (e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); this.addFilmTag(st.filmTagInput); this.setState({ filmTagInput: '' }); } },
+      addFilmTagNow: () => { this.addFilmTag(st.filmTagInput); this.setState({ filmTagInput: '' }); },
       isLibTab: st.composerTab !== 'timeline',
       isTimelineTab: st.composerTab === 'timeline',
       setTabLib: () => this.setComposerTab('lib'),
@@ -1809,26 +1853,53 @@ class App extends Component {
         </div>
       </div>`;
 
-    // Sélecteur de film en badges — utilisé dans l'onglet Playlist.
-    const filmBadge = (p, active, pick) => html`
-      <button onClick=${pick} title=${`${p.name} · ${p.items.length} module(s)`}
-        style="padding:7px 14px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;white-space:nowrap;${active ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.16);'}">
-        ${p.name} <span style="opacity:0.65;font-weight:500;">(${p.items.length})</span>
-      </button>`;
+    // Bibliothèque de films — badge coloré par catégorie, avec ses tags.
+    const filmBadge = (p, active, pick) => {
+      const c = filmCatOf(p);
+      const tags = (p.tags || []).slice(0, 3);
+      return html`
+        <button onClick=${pick} title=${`${p.name} · ${c.label} · ${p.items.length} module(s)${(p.tags || []).length ? ' · #' + p.tags.join(' #') : ''}`}
+          style="display:inline-flex;align-items:center;gap:7px;padding:7px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;white-space:nowrap;${active ? `background:${c.color};color:#fff;border:1px solid ${c.color};box-shadow:0 2px 8px ${c.color}44;` : `background:#fff;color:#232220;border:1px solid ${c.color}55;border-left:4px solid ${c.color};`}">
+          <span>${p.name}</span>
+          <span style="opacity:0.7;font-weight:500;">${p.items.length}</span>
+          ${tags.map((t) => html`<span style="font-size:9.5px;font-weight:600;padding:1px 6px;border-radius:999px;background:${active ? 'rgba(255,255,255,0.22)' : c.color + '18'};color:${active ? '#fff' : c.color};">#${t}</span>`)}
+        </button>`;
+    };
+    const filmCounts = {};
+    st.playlists.forEach((p) => { const c = filmCatOf(p).id; filmCounts[c] = (filmCounts[c] || 0) + 1; });
+    const filmCatChips = [
+      { id: 'all', label: 'Tous', color: '#232220', count: st.playlists.length },
+      ...FILM_CATS.filter((c) => filmCounts[c.id]).map((c) => ({ ...c, count: filmCounts[c.id] })),
+    ].map((c) => {
+      const on = st.filmFilter === c.id;
+      return html`
+        <button onClick=${() => this.setState({ filmFilter: c.id })}
+          style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:11.5px;font-weight:700;border-radius:999px;cursor:pointer;${on ? `background:${c.color};color:#fff;border:1px solid ${c.color};` : `background:#fff;color:${c.color};border:1px solid ${c.color}55;`}">
+          <span style="width:7px;height:7px;border-radius:50%;background:${on ? '#fff' : c.color};"></span>${c.label}<span style="font-weight:400;opacity:0.75;">${c.count}</span>
+        </button>`;
+    });
+    const shownFilms = st.playlists.filter((p) => st.filmFilter === 'all' || filmCatOf(p).id === st.filmFilter);
     const filmSelector = html`
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-        ${st.editingFilm
-          ? html`<input value=${st.editFilmName}
-              ref=${(el) => { if (el && document.activeElement !== el && !el._focused) { el._focused = true; el.focus(); el.select(); } }}
-              onInput=${(e) => this.setState({ editFilmName: e.target.value })}
-              onKeyDown=${(e) => { if (e.key === 'Enter') this.renameFilm(st.editFilmName); if (e.key === 'Escape') this.setState({ editingFilm: false }); }}
-              onBlur=${() => this.renameFilm(st.editFilmName)}
-              style="flex:0 1 auto;min-width:180px;padding:7px 9px;font-size:13px;font-weight:600;border:1px solid #8D1D2C;border-radius:8px;background:#fff;" />`
-          : st.playlists.map((p) => filmBadge(p, p.id === st.activePl, () => this.selectFilm(p.id)))}
-        <button onClick=${() => this.setState({ editingFilm: true, editFilmName: this.activeFilm().name })} title="Renommer le film" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;flex:0 0 auto;">✎</button>
-        <button onClick=${() => this.newFilm()} title="Nouveau film (vide)" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:#8D1D2C;color:#fff;border:none;cursor:pointer;font-size:14px;font-weight:700;flex:0 0 auto;">＋</button>
-        <button onClick=${() => this.dupFilm()} title="Dupliquer le film" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;flex:0 0 auto;">⎘</button>
-        <button onClick=${() => this.delFilm()} title="Supprimer le film (les modules restent en bibliothèque)" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;color:#8D1D2C;flex:0 0 auto;">🗑</button>
+      <div style="display:flex;flex-direction:column;gap:9px;width:100%;">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <span style="font-size:10px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;margin-right:2px;">Catégories</span>
+          ${filmCatChips}
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          ${st.editingFilm
+            ? html`<input value=${st.editFilmName}
+                ref=${(el) => { if (el && document.activeElement !== el && !el._focused) { el._focused = true; el.focus(); el.select(); } }}
+                onInput=${(e) => this.setState({ editFilmName: e.target.value })}
+                onKeyDown=${(e) => { if (e.key === 'Enter') this.renameFilm(st.editFilmName); if (e.key === 'Escape') this.setState({ editingFilm: false }); }}
+                onBlur=${() => this.renameFilm(st.editFilmName)}
+                style="flex:0 1 auto;min-width:180px;padding:7px 9px;font-size:13px;font-weight:600;border:1px solid #8D1D2C;border-radius:8px;background:#fff;" />`
+            : shownFilms.map((p) => filmBadge(p, p.id === st.activePl, () => this.selectFilm(p.id)))}
+          ${!st.editingFilm && !shownFilms.length ? html`<span style="font-size:12px;color:#8A847C;">Aucun film dans cette catégorie.</span>` : ''}
+          <button onClick=${() => this.setState({ editingFilm: true, editFilmName: this.activeFilm().name })} title="Renommer le film" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;flex:0 0 auto;">✎</button>
+          <button onClick=${() => this.newFilm()} title="Nouveau film (vide)" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:#8D1D2C;color:#fff;border:none;cursor:pointer;font-size:14px;font-weight:700;flex:0 0 auto;">＋</button>
+          <button onClick=${() => this.dupFilm()} title="Dupliquer le film" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;flex:0 0 auto;">⎘</button>
+          <button onClick=${() => this.delFilm()} title="Supprimer le film (les modules restent en bibliothèque)" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;color:#8D1D2C;flex:0 0 auto;">🗑</button>
+        </div>
       </div>`;
 
     return html`
@@ -2501,10 +2572,12 @@ class App extends Component {
   <div style="flex:1 1 auto;overflow:auto;padding:20px 30px 44px;background:#EDE7DE;">
     <div style="max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
 
-      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-        <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Film</h2>
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 18px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Bibliothèque de films — choisis une catégorie, puis un film à éditer</h3>
+          <span style="font-size:12px;color:#8A847C;">film courant : <strong style="color:#232220;">${this.activeFilm().name}</strong> · ${v.timelineTotal} · ${v.moduleCount} module(s)</span>
+        </div>
         ${filmSelector}
-        <span style="font-size:12px;color:#8A847C;">durée totale <strong style="color:#232220;">${v.timelineTotal}</strong> · ${v.moduleCount} module(s)</span>
       </div>
 
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 18px;">
@@ -2552,6 +2625,28 @@ class App extends Component {
           <div style="flex:1 1 64px;min-width:64px;border:1px dashed rgba(35,34,32,0.18);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#B8B2A8;font-size:18px;" title="Dépose ici pour ajouter à la fin">＋</div>
         </div>
         <p style="margin:10px 0 0;font-size:11.5px;color:#8A847C;">Clique un bloc pour caler l'aperçu dessus · glisse pour réordonner · ✕ retire (l'élément reste en bibliothèque) · la largeur d'un bloc reflète sa durée.</p>
+      </div>
+
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 18px;">
+        <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Rangement du film — catégorie & tags</h3>
+        <div style="display:flex;gap:28px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:7px;">Catégorie</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              ${v.filmCatVals.map((c) => html`<button onClick=${c.pick} style=${c.style}><span style=${c.dotStyle}></span>${c.label}</button>`)}
+            </div>
+          </div>
+          <div style="flex:1 1 260px;min-width:240px;">
+            <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:7px;">Tags</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+              ${v.filmTagVals.map((t) => html`
+                <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 6px 5px 11px;font-size:12px;font-weight:600;border-radius:999px;background:#EFE9E0;border:1px solid rgba(35,34,32,0.12);">#${t.label}
+                  <button onClick=${t.remove} title="Retirer le tag" style="display:flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;background:rgba(141,29,44,0.1);border:none;cursor:pointer;font-size:10px;color:#8D1D2C;">✕</button>
+                </span>`)}
+              <input value=${v.filmTagInput} onInput=${v.onFilmTagInput} onKeyDown=${v.onFilmTagKey} placeholder="+ tag (Entrée)" style="flex:0 1 140px;min-width:110px;padding:6px 10px;font-size:12px;border:1px solid rgba(35,34,32,0.16);border-radius:999px;background:#FBF8F2;" />
+            </div>
+          </div>
+        </div>
       </div>
 
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 18px;">
