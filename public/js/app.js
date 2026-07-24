@@ -500,6 +500,7 @@ class App extends Component {
     if (!mm) return null;
     if (mm.type === 'produit') return 'produit';
     if (mm.type === 'film') return 'video';
+    if (mm.type === 'media') return 'media';
     if (mm.type === 'animation') return 'layout';
     if (mm.type === 'category') return 'items';
     return 'tag';
@@ -526,6 +527,7 @@ class App extends Component {
     else if (t.id === 'liaison') { base.name = 'Liaison'; base.sub = 'faites maison chaque matin'; }
     else if (t.id === 'produit') { base.name = 'À la une'; base.dur = 8; }
     else if (t.id === 'film') { base.name = 'Vidéo'; base.dur = 10; base.libTag = 'promo'; }
+    else if (t.id === 'media') { base.name = 'Média ciblé'; base.dur = 12; base.libTag = 'promo'; base.layout = 'cover'; }
     else if (t.id === 'animation') { base.name = 'Nouveauté'; base.sub = 'cette semaine'; base.dur = 6; base.libTag = 'promo'; }
     else { base.name = t.label || 'Élément'; }
     lib.push(base);
@@ -536,6 +538,7 @@ class App extends Component {
   }
   modMeta(mm) {
     if (mm.type === 'liaison') return 'Liaison';
+    if (mm.type === 'media') return 'média ciblé · moment + saison';
     if (mm.type === 'film') return mm.video ? `vidéo · ${mm.dur || 10} s` : 'vidéo à importer';
     if (mm.type === 'animation') return `animation · ${mm.dur || 6} s`;
     if (mm.type === 'produit') return mm.items && mm.items[0] ? `à la une : ${mm.items[0].name}` : 'produit à choisir';
@@ -1390,6 +1393,7 @@ class App extends Component {
     const m = this.sel() || { type: 'category', name: '', tag: newTag(), schedule: newSched(), pos: newPos(), items: [] };
     const isCat = m.type === 'category', isLia = m.type === 'liaison';
     const isProduit = m.type === 'produit', isFilmEl = m.type === 'film', isAnim = m.type === 'animation';
+    const isMedia = m.type === 'media';
     const selType = this.elementTypeOf(m);
     const total = this.total();
     const { m: playM, lt } = this.activeInScope();
@@ -2032,9 +2036,10 @@ class App extends Component {
       deployStyle: `padding:11px 22px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:${tgtCount && !st.deploying ? 'pointer' : 'not-allowed'};${tgtCount ? 'background:#8D1D2C;color:#fff;' : 'background:rgba(35,34,32,0.10);color:#8A847C;'}opacity:${st.deploying ? 0.7 : 1};`,
       hasToast: !!st.toast, toast: st.toast,
       playlistEmpty: st.playlist.length === 0,
-      isCategory: isCat, isLiaison: isLia, isProduit, isFilmEl, isAnim,
+      isCategory: isCat, isLiaison: isLia, isProduit, isFilmEl, isAnim, isMedia,
+      mediaAgencyUrl: new URL('agence', location.href).toString(),
       hasSub: isLia || isAnim || isProduit,
-      hasDur: isProduit || isFilmEl || isAnim,
+      hasDur: isProduit || isFilmEl || isAnim || isMedia,
       selName: m.name,
       selTypeLabel: selType ? selType.label : (isLia ? 'Liaison' : 'Catégorie'),
       selTypeBadge: `display:inline-flex;align-items:center;padding:4px 11px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;${isLia ? 'background:rgba(35,34,32,0.10);color:#8A847C;' : 'background:rgba(141,29,44,0.12);color:#8D1D2C;'}`,
@@ -3100,6 +3105,20 @@ class App extends Component {
               <option value="">— Choisir un produit —</option>
               ${v.productOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
             </select>
+            </div>`}
+          </div>
+        `}
+
+        ${v.isMedia && html`
+          <div style=${secCard}>
+            ${secHead('media', 'Média ciblé — agence', 'moment + saison')}
+            ${secOpen('media') && html`<div style=${secBody}>
+            <div style="display:flex;flex-direction:column;gap:12px;align-items:center;text-align:center;padding:6px 4px;">
+              <div style="width:64px;height:64px;border-radius:16px;background:#1B1B1B;color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;">🎯</div>
+              <p style="margin:0;font-size:13px;line-height:1.6;color:#4A4640;max-width:420px;">Cet élément diffuse <strong>automatiquement</strong> une vidéo ou photo de la <strong>médiathèque agence</strong>, <strong>tirée au sort</strong> parmi celles taguées pour le <strong>moment courant</strong> (matin/midi/soir, selon les fenêtres du planning) et une <strong>saison active</strong>. La pioche change à chaque diffusion — parfait pour surprendre le client tout en restant de saison.</p>
+              <a href=${v.mediaAgencyUrl} target="_blank" style="font-size:13px;font-weight:600;color:#8D1D2C;">↗ Ouvrir l'espace Vidéo — Agence (upload et tags)</a>
+              <p style="margin:0;font-size:11.5px;color:#8A847C;">Règle la <strong>durée</strong> à l'écran ci-dessus, et la <strong>mise en page</strong> (plein écran ou adapté). S'il n'y a aucun média éligible à l'instant, un écran repère « Média ciblé » s'affiche.</p>
+            </div>
             </div>`}
           </div>
         `}

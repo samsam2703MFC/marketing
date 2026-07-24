@@ -423,8 +423,21 @@ export function loadLangs() {
 // Types d'éléments — pilotés par la table sig_element_types (rien en dur côté
 // interface) : le « + Élément » et les mises en page par type en découlent.
 function ensureElementTypes(db) {
+  const insType = db.prepare('INSERT INTO sig_element_types(id, label, icon, descr, layouts, has_items, sort_order, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, 1)');
+  const mediaLayouts = JSON.stringify([
+    { id: 'cover', icon: '◼', label: 'Plein écran (remplir)' },
+    { id: 'contain', icon: '▭', label: 'Adapter (letterbox)' },
+  ]);
+  // Type « média ciblé » : ajouté même sur une base existante (hors seed initial).
+  const ensureMedia = () => {
+    if (!db.prepare('SELECT 1 FROM sig_element_types WHERE id = ?').get('media')) {
+      insType.run('media', 'Média ciblé — agence', '🎯',
+        'Diffuse une vidéo/photo de la médiathèque agence, tirée au sort selon le moment (matin/midi/soir) et la saison active.',
+        mediaLayouts, 0, 5);
+    }
+  };
   const n = db.prepare('SELECT COUNT(*) AS n FROM sig_element_types').get().n;
-  if (n > 0) return;
+  if (n > 0) { ensureMedia(); return; }
   const catLayouts = [
     { id: 'illo-right', icon: '▤', label: 'Texte à gauche · illustration à droite' },
     { id: 'illo-left', icon: '▤', label: 'Texte à droite · illustration à gauche' },
@@ -452,8 +465,8 @@ function ensureElementTypes(db) {
       { id: 'band', icon: '▬', label: 'Fond rubis · texte blanc' },
     ], hasItems: 0, sort: 4 },
   ];
-  const ins = db.prepare('INSERT INTO sig_element_types(id, label, icon, descr, layouts, has_items, sort_order, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, 1)');
-  for (const t of types) ins.run(t.id, t.label, t.icon, t.descr, JSON.stringify(t.layouts), t.hasItems, t.sort);
+  for (const t of types) insType.run(t.id, t.label, t.icon, t.descr, JSON.stringify(t.layouts), t.hasItems, t.sort);
+  ensureMedia();
 }
 
 export function loadElementTypes() {
@@ -684,6 +697,22 @@ export function planWindows() {
 }
 
 export function activeWeek() { return okWeek(getSetting('active_week', 'A')); }
+
+// Moment courant (matin/midi/soir) selon les 3 fenêtres horaires du planning ;
+// hors fenêtres, on retombe par tiers de journée. Sert aux « médias ciblés ».
+export function currentMoment(date = new Date()) {
+  const wins = planWindows();
+  const mins = date.getHours() * 60 + date.getMinutes();
+  const toMin = (h) => { const [a, b] = String(h).split(':').map(Number); return a * 60 + b; };
+  const names = ['matin', 'midi', 'soir'];
+  for (let i = 0; i < wins.length && i < 3; i++) {
+    const a = toMin(wins[i].from); const b = toMin(wins[i].to);
+    const inW = a <= b ? (mins >= a && mins < b) : (mins >= a || mins < b);
+    if (inW) return names[i];
+  }
+  const h = date.getHours();
+  return h < 11 ? 'matin' : (h < 16 ? 'midi' : 'soir');
+}
 
 // Planning hebdomadaire complet : byStore[store][week][day][moment] = [films].
 export function loadPlan() {

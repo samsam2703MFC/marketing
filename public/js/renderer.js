@@ -145,6 +145,27 @@ export function renderModule(h, m, lt, opts) {
     return kids;
   }
 
+  // ---- Média ciblé : vidéo/photo agence tirée au sort (moment + saison) -----
+  if (m.type === 'media') {
+    if (m.mediaKind === 'film' && m.video) {
+      kids.push(h('div', { key: 'mbg', style: { position: 'absolute', inset: 0, background: '#000' } }));
+      kids.push(h('video', { key: 'mvid' + m.id, src: m.video, autoplay: true, muted: true, loop: true, playsinline: true,
+        style: { position: 'absolute', inset: 0, width: W, height: H, objectFit: m.layout === 'contain' ? 'contain' : 'cover' } }));
+    } else if (m.mediaKind === 'photo' && m.mediaUrl) {
+      kids.push(h('div', { key: 'mbg', style: { position: 'absolute', inset: 0, background: m.layout === 'contain' ? '#F5EFE4' : '#000' } }));
+      kids.push(h('img', { key: 'mimg', src: m.mediaUrl, alt: '',
+        style: { position: 'absolute', inset: 0, width: W, height: H, objectFit: m.layout === 'contain' ? 'contain' : 'cover' } }));
+    } else {
+      const n = m.mediaCount == null ? (m.mediaTotal || 0) : m.mediaCount;
+      kids.push(h('div', { key: 'mnone', style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', gap: 60, alignItems: 'center', justifyContent: 'center', background: '#1B1B1B', color: '#fff' } },
+        h('div', { style: { fontSize: 300 } }, '🎯'),
+        h('div', { style: { fontFamily: FUI, fontSize: 92, letterSpacing: '0.1em', textTransform: 'uppercase' } }, 'Média ciblé'),
+        h('div', { style: { fontFamily: FUI, fontSize: 70, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.08em', textAlign: 'center', padding: '0 200px' } }, `${n} média(s) agence éligible(s) · moment + saison`)));
+    }
+    const te = tagEl(); if (te) kids.push(te);
+    return kids;
+  }
+
   // ---- Animation : titre + accroche animés (crème/encre ou rubis/blanc) ----
   if (m.type === 'animation') {
     const dur = moduleDur(m, secPerLine);

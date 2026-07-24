@@ -6,7 +6,7 @@ import {
   getDb, getSetting, setSetting, getIntSetting,
   loadModules, loadPlaylist, loadPlaylists, activePlaylistId, saveDraft, storeFormat, DB_PATH,
   loadElementTypes, loadCatalog, saveCatalog, applyStorePrices, applyStoreLang, loadLangs,
-  loadSeasons, saveSeasons, currentSeasons,
+  loadSeasons, saveSeasons, currentSeasons, currentMoment,
   loadMedia, addMediaRow, getMediaRow, delMediaRow,
   loadPlan, savePlan, planFilmAt, setActiveWeek, duplicateWeek,
   checkLogin, createSession, sessionUser, destroySession,
@@ -48,6 +48,32 @@ function listSurprise() {
         return { name: n, url: 'surprise/' + encodeURIComponent(n), size };
       });
   } catch { return []; }
+}
+
+// Élément « média ciblé » : pioche au hasard un média de la médiathèque agence
+// dont le moment (matin/midi/soir) correspond à l'instant courant et dont la
+// saison est active (ou vide). Le player affiche la vidéo/photo tirée au sort.
+function resolveMediaElements(modules, date) {
+  if (!Array.isArray(modules)) return;
+  let all = null, moment = null, active = null;
+  for (const m of modules) {
+    if (!m || m.type !== 'media') continue;
+    if (all === null) {
+      all = loadMedia();
+      moment = currentMoment(date);
+      active = new Set(currentSeasons(date).map((s) => s.id));
+    }
+    const list = all.filter((mm) => (mm.moment === moment || mm.moment === 'all') && (!mm.seasonId || active.has(mm.seasonId)));
+    m.mediaMoment = moment;
+    m.mediaCount = list.length;
+    m.mediaTotal = all.length;
+    if (list.length) {
+      const pick = list[Math.floor(Math.random() * list.length)];
+      m.mediaKind = pick.kind;
+      m.mediaUrl = 'media/' + encodeURIComponent(pick.filename);
+      if (pick.kind === 'film') m.video = m.mediaUrl; // réutilise le rendu vidéo
+    }
+  }
 }
 
 // Attache la liste des vidéos du dossier aux éléments « surprise » et en pioche
@@ -157,7 +183,7 @@ export function reportJson() {
     },
     secPerLine: parseFloat(getSetting('sec_per_line', '4')),
     loop: getSetting('loop', '1') === '1',
-    modules: (() => { const ms = loadModules(); resolveSurprise(ms); return ms; })(),
+    modules: (() => { const ms = loadModules(); resolveSurprise(ms); resolveMediaElements(ms, new Date()); return ms; })(),
     playlists: loadPlaylists(),
     activePlaylistId: activePlaylistId(),
     plan: loadPlan(),
@@ -451,6 +477,8 @@ function filmJson(storeId, filmId) {
   applyStoreLang(snap.modules, storeId);
   // Vidéo surprise : pioche une vidéo au hasard dans le dossier serveur.
   resolveSurprise(snap.modules);
+  // Média ciblé : pioche un média agence selon le moment courant + la saison.
+  resolveMediaElements(snap.modules, new Date());
   return { status: 200, json: snap };
 }
 

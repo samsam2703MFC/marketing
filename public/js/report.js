@@ -32,6 +32,12 @@ const fmtDate = (iso) => {
 function thumb(m, secPerLine, wPx = 248) {
   const scale = wPx / W;
   const hPx = Math.round(H * scale);
+  if (m.type === 'media') {
+    return h('div', {
+      style: { width: wPx + 'px', height: hPx + 'px', borderRadius: '8px', background: '#1B1B1B', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '6px', color: '#fff', flex: '0 0 auto', textAlign: 'center', padding: '0 10px' } },
+      h('span', { style: { fontSize: '26px' } }, '🎯'),
+      h('span', { style: { fontSize: '11px', opacity: 0.8 } }, `Média ciblé · ${m.mediaCount == null ? (m.mediaTotal || 0) : m.mediaCount} éligible(s)`));
+  }
   if (m.type === 'film') {
     // Vidéo : on n'embarque pas le flux dans le rapport → vignette repère.
     const label = m.surprise ? `Vidéo surprise · ${m.surpriseCount || (m.surpriseVideos || []).length} vidéo(s)` : 'Vidéo';

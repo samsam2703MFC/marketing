@@ -229,6 +229,31 @@ async function main() {
     await call('DELETE', `/api/v1/media/${encodeURIComponent(item.id)}`);
     return `média « 3_lt-clip.mp4 » (soir) · ${agencyIsolated}`;
   });
+  await step('Élément « média ciblé » — pioche selon moment + saison', async () => {
+    const now = new Date();
+    const moment = now.getHours() < 11 ? 'matin' : (now.getHours() < 16 ? 'midi' : 'soir');
+    const other = moment === 'matin' ? 'soir' : 'matin';
+    const dU = (s) => 'data:video/mp4;base64,' + Buffer.from(s).toString('base64');
+    await call('POST', '/api/v1/media', { name: 'mediael-good.mp4', kind: 'film', moment, dataUrl: dU('g') });
+    await call('POST', '/api/v1/media', { name: 'mediael-bad.mp4', kind: 'film', moment: other, dataUrl: dU('b') });
+    const st = await call('GET', '/api/v1/state');
+    const mods = st.modules.concat([{ id: 'mediaLT', type: 'media', name: 'Média ciblé', layout: 'cover', dur: 12, schedule: { days: [1, 1, 1, 1, 1, 1, 1], from: '00:00', to: '23:59' }, items: [] }]);
+    const pls = st.playlists.map((p) => (p.id === st.activePlaylistId ? { ...p, items: [...p.items, 'mediaLT'] } : p));
+    await call('PUT', '/api/v1/draft', { modules: mods, playlists: pls, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+    let ok2 = false, badPicked = false, cnt = null;
+    for (let i = 0; i < 10; i++) {
+      const f = await (await fetch(BASE + `/api/v1/film?film=${encodeURIComponent(st.activePlaylistId)}`)).json();
+      const em = (f.modules || []).find((x) => x.id === 'mediaLT');
+      if (em) { cnt = em.mediaCount; if (em.mediaUrl) ok2 = true; if (/mediael-bad/.test(em.mediaUrl || '')) badPicked = true; }
+    }
+    // restaure le brouillon + purge les médias de test
+    await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+    for (const mm of (await call('GET', '/api/v1/media')).media || []) if (/^\d?_?mediael-/.test(mm.filename)) await call('DELETE', `/api/v1/media/${encodeURIComponent(mm.id)}`);
+    if (!ok2) throw new Error('aucun média pioché');
+    if (badPicked) throw new Error('média du mauvais moment pioché');
+    if (cnt !== 1) throw new Error(`éligibles attendus 1, reçu ${cnt}`);
+    return `moment ${moment} · 1 éligible pioché, mauvais moment exclu`;
+  });
   await step('GET /api/v1/film?film=… — lien direct par film', async () => {
     const base = await (await fetch(BASE + '/api/v1/film')).json();
     const id = base.playlistId || 'pl1';
