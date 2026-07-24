@@ -250,6 +250,40 @@ async function detectShops(cfg, db) {
   return { shops: [], inactive: 0, langFound: '' };
 }
 
+// P\u00e9riodes de l'ann\u00e9e depuis ws_season (best-effort : colonnes auto-d\u00e9tect\u00e9es).
+async function detectSeasons(cfg, db) {
+  for (const t of ['ws_season', 'ws_seasons', 'wc_season', 'season', 'seasons', 'periode', 'periods', 'periodes']) {
+    try {
+      const cols = await tableCols(cfg, db, t);
+      if (!cols.length) continue;
+      const id = (await primaryKey(cfg, db, t)) || pickCol(cols, ['id', 'id_season', 'season_id'], 'optionnel') || cols[0];
+      const name = pickCol(cols, ['name', 'label', 'title', 'nom', 'libelle', 'season', 'periode', 'saison'], 'optionnel', t, 'name');
+      const from = pickCol(cols, ['date_from', 'from', 'start', 'start_date', 'begin', 'debut', 'date_debut', 'date_start'], 'optionnel', t, 'debut');
+      const to = pickCol(cols, ['date_to', 'to', 'end', 'end_date', 'finish', 'fin', 'date_fin', 'date_end'], 'optionnel', t, 'fin');
+      const prod = pickCol(cols, ['product_id', 'id_product', 'product', 'produit'], 'optionnel', t, 'product');
+      if (!from || !to) continue; // sans dates, ce n'est pas une table de p\u00e9riodes
+      const rows = await mysqlRows(cfg, `SELECT ${qid(id)}, ${name ? qid(name) : "''"}, ${qid(from)}, ${qid(to)}, ${prod ? qid(prod) : "''"} FROM ${qid(db)}.${qid(t)}`);
+      const seasons = rows.map(([i, nm, fr, to2, pr], k) => ({
+        id: `ws_${i || k}`,
+        name: String(nm || '').trim() || `Saison ${i || k + 1}`,
+        from: String(fr || '').trim(),
+        to: String(to2 || '').trim(),
+        products: String(pr || '').trim() ? [`pwp${String(pr).trim()}`] : [],
+        color: '#C97B4A', active: true,
+      }));
+      return { table: t, seasons, colsUsed: { id, name, from, to, prod } };
+    } catch { /* table absente / illisible : on essaie la suivante */ }
+  }
+  return { table: '', seasons: [] };
+}
+
+export async function importSeasons() {
+  const cfg = pwaConfig();
+  const db = await detectSchema(cfg);
+  const det = await detectSeasons(cfg, db);
+  return { db, ...det };
+}
+
 const slugify = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 

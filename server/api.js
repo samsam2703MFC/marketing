@@ -6,11 +6,12 @@ import {
   getDb, getSetting, setSetting, getIntSetting,
   loadModules, loadPlaylist, loadPlaylists, activePlaylistId, saveDraft, storeFormat, DB_PATH,
   loadElementTypes, loadCatalog, saveCatalog, applyStorePrices, applyStoreLang, loadLangs,
+  loadSeasons, saveSeasons, currentSeasons,
   loadPlan, savePlan, planFilmAt, setActiveWeek, duplicateWeek,
   checkLogin, createSession, sessionUser, destroySession,
 } from './db.js';
 import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
-import { publicPwaConfig, savePwaConfig, resetPwaConfig, testPwa, importPwa, pwaBaseName } from './pwadb.js';
+import { publicPwaConfig, savePwaConfig, resetPwaConfig, testPwa, importPwa, pwaBaseName, importSeasons } from './pwadb.js';
 import { scheduleMirror, syncMirror, mirrorStatus } from './mirror.js';
 import { runConnectionTest, runDeployTests, tcpPing } from './livetest.js';
 
@@ -625,6 +626,32 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       scheduleMirror();
       return send(200, { ok: true, ...out, savedAt: nowIso() });
     }
+    // ---- périodes de l'année (saisons) : manuel + import ws_season ---------
+    if (req.method === 'GET' && path === '/seasons') {
+      return send(200, { seasons: loadSeasons(), current: currentSeasons().map((s) => s.id) });
+    }
+    if (req.method === 'PUT' && path === '/seasons') {
+      const body = await readBody();
+      const out = saveSeasons(body.seasons || []);
+      scheduleMirror();
+      return send(200, { ok: true, seasons: out, current: currentSeasons().map((s) => s.id) });
+    }
+    if (req.method === 'POST' && path === '/seasons/import') {
+      try {
+        const det = await importSeasons();
+        if (!det.seasons.length) {
+          return send(200, { ok: false, error: det.table ? `table « ${det.table} » sans colonnes de dates exploitables` : 'aucune table ws_season trouvée dans la base' });
+        }
+        // On remplace les périodes importées (préfixe ws_) et on garde les manuelles.
+        const manual = loadSeasons().filter((s) => !String(s.id).startsWith('ws_'));
+        const out = saveSeasons([...manual, ...det.seasons]);
+        scheduleMirror();
+        return send(200, { ok: true, table: det.table, imported: det.seasons.length, seasons: out, current: currentSeasons().map((s) => s.id) });
+      } catch (e) {
+        return send(200, { ok: false, error: String(e.message || e) });
+      }
+    }
+
     if (req.method === 'GET' && path === '/catalog') return send(200, loadCatalog());
     if (req.method === 'PUT' && path === '/catalog') {
       const body = await readBody();

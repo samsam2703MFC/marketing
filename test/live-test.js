@@ -194,6 +194,20 @@ async function main() {
     if (del.videos.some((v) => v.name === name)) throw new Error('suppression échouée');
     return `dossier OK · upload + suppression (${before.videos.length} vidéo(s) au départ)`;
   });
+  await step('PUT /api/v1/seasons — périodes de l\'année + détection', async () => {
+    const before = await call('GET', '/api/v1/seasons');
+    if (!Array.isArray(before.seasons)) throw new Error('liste absente');
+    const out = await call('PUT', '/api/v1/seasons', { seasons: [
+      { id: 'se_all_lt', name: 'Toute l\'année', from: '01/01', to: '31/12', products: [], active: true },
+      { id: 'se_far_lt', name: 'Invalide', from: '15/13', to: '16/13', products: [], active: true },
+    ] });
+    if (!out.ok || out.seasons.length !== 2) throw new Error('enregistrement des périodes');
+    const cur = new Set(out.current || []);
+    if (!cur.has('se_all_lt')) throw new Error('« toute l\'année » devrait être active');
+    if (cur.has('se_far_lt')) throw new Error('période invalide ne doit pas être active');
+    await call('PUT', '/api/v1/seasons', { seasons: before.seasons }); // restauration
+    return `${out.seasons.length} période(s) · ${out.current.length} active(s) aujourd'hui`;
+  });
   await step('GET /api/v1/film?film=… — lien direct par film', async () => {
     const base = await (await fetch(BASE + '/api/v1/film')).json();
     const id = base.playlistId || 'pl1';

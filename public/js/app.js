@@ -103,6 +103,7 @@ class App extends Component {
     planBusy: false, planResult: null,
     planWeek: 'A', planDay: 0, planActiveWeek: 'A', planSaving: false, planSavedAt: 0,
     surpriseVideos: [], surpriseBusy: false,
+    seasons: [], seasonsCurrent: [], seasonsDirty: false, seasonsBusy: false,
     onbOpen: false, onbStore: '', onbTest: {},
     onbDone: (() => { try { return JSON.parse(localStorage.getItem('sigOnbDone') || '[]'); } catch { return []; } })(),
   };
@@ -206,6 +207,7 @@ class App extends Component {
         dirty: false, saved: true,
       });
       this.loadSurprise(); // liste des vidéos « surprise » (dossier serveur)
+      this.loadSeasons();  // périodes de l'année
     } catch (e) {
       if (e.status === 401) this.setState({ loading: false, authRequired: true });
       else this.setState({ loading: false, loadError: String(e.message || e) });
@@ -611,6 +613,46 @@ class App extends Component {
     try { const out = await api('DELETE', '/surprise/' + encodeURIComponent(name)); this.setState({ surpriseVideos: out.videos || [] }); }
     catch (e) { this.showToast(`Erreur : ${e.message}`); }
   }
+
+  // ---- périodes de l'année (saisons) --------------------------------------
+  async loadSeasons() {
+    try { const r = await api('GET', '/seasons'); this.setState({ seasons: r.seasons || [], seasonsCurrent: r.current || [], seasonsDirty: false }); }
+    catch { /* indisponible : liste vide */ }
+  }
+  setSeasons(mut) {
+    const arr = JSON.parse(JSON.stringify(this.state.seasons));
+    mut(arr);
+    this.setState({ seasons: arr, seasonsDirty: true });
+  }
+  addSeason() {
+    this.setSeasons((a) => a.push({ id: 'se' + uid(), name: 'Nouvelle période', from: '', to: '', products: [], color: '#C97B4A', active: true }));
+  }
+  updateSeason(id, patch) { this.setSeasons((a) => { const s = a.find((x) => x.id === id); if (s) Object.assign(s, patch); }); }
+  delSeason(id) { this.setSeasons((a) => { const i = a.findIndex((x) => x.id === id); if (i >= 0) a.splice(i, 1); }); }
+  toggleSeasonProduct(id, pid) {
+    this.setSeasons((a) => { const s = a.find((x) => x.id === id); if (!s) return; const ps = s.products || []; s.products = ps.includes(pid) ? ps.filter((x) => x !== pid) : [...ps, pid]; });
+  }
+  async saveSeasons() {
+    if (this.state.seasonsBusy) return;
+    this.setState({ seasonsBusy: true });
+    try {
+      const r = await api('PUT', '/seasons', { seasons: this.state.seasons });
+      this.setState({ seasons: r.seasons || [], seasonsCurrent: r.current || [], seasonsDirty: false, seasonsBusy: false });
+      this.showToast('Périodes enregistrées ✓');
+    } catch (e) { this.setState({ seasonsBusy: false }); this.showToast(`Erreur : ${e.message}`); }
+  }
+  async importSeasons() {
+    if (this.state.seasonsBusy) return;
+    if (this.state.seasonsDirty && !window.confirm('Des modifications non enregistrées seront perdues. Importer depuis ws_season ?')) return;
+    this.setState({ seasonsBusy: true });
+    try {
+      const r = await api('POST', '/seasons/import');
+      this.setState({ seasonsBusy: false });
+      if (r.ok) { this.setState({ seasons: r.seasons || [], seasonsCurrent: r.current || [], seasonsDirty: false }); this.showToast(`Importé depuis « ${r.table} » : ${r.imported} période(s) ✓`); }
+      else this.showToast(`Import ws_season : ${r.error}`);
+    } catch (e) { this.setState({ seasonsBusy: false }); this.showToast(`Erreur : ${e.message}`); }
+  }
+  openSeasons() { this.setState({ view: 'seasons' }); if (!this.state.seasons.length) this.loadSeasons(); }
 
   // ---- table produits (vue Produits) --------------------------------------
   openProducts() {
@@ -1859,6 +1901,10 @@ class App extends Component {
         arr.push(crumb('Compositeur', () => this.setView('composer'), false));
         arr.push(crumb('Table produits', null, false));
         arr.push(crumb(`${(st.catDraft || st.catalog).categories.length} catégorie(s) · ${(st.catDraft || st.catalog).products.length} produit(s)${st.catDirty ? ' · non enregistrée' : ''}`, null, true));
+      } else if (st.view === 'seasons') {
+        arr.push(crumb('Compositeur', () => this.setView('composer'), false));
+        arr.push(crumb('Périodes de l\'année', null, false));
+        arr.push(crumb(`${(st.seasons || []).length} période(s)${st.seasonsDirty ? ' · non enregistrées' : ''}`, null, true));
       } else if (st.view === 'planning') {
         arr.push(crumb('Compositeur', () => this.setView('composer'), false));
         arr.push(crumb('Planning hebdo', null, false));
@@ -1871,12 +1917,31 @@ class App extends Component {
       return arr;
     })();
 
+    // ---- périodes de l'année (saisons) ----
+    const seasonCurSet = new Set(st.seasonsCurrent || []);
+    const seasonProdOpts = (st.catalog.products || []).map((p) => ({ id: p.id, name: p.name }));
+    const prodName = (pid) => (seasonProdOpts.find((p) => p.id === pid) || {}).name || pid;
+    const seasonRows = (st.seasons || []).map((s) => ({
+      id: s.id, name: s.name, from: s.from, to: s.to, color: s.color,
+      current: seasonCurSet.has(s.id),
+      products: (s.products || []).map((pid) => ({ id: pid, name: prodName(pid), remove: () => this.toggleSeasonProduct(s.id, pid) })),
+      addable: seasonProdOpts.filter((p) => !(s.products || []).includes(p.id)),
+      onName: (e) => this.updateSeason(s.id, { name: e.target.value }),
+      onFrom: (e) => this.updateSeason(s.id, { from: e.target.value }),
+      onTo: (e) => this.updateSeason(s.id, { to: e.target.value }),
+      onAddProduct: (e) => { const pid = e.target.value; e.target.value = ''; if (pid) this.toggleSeasonProduct(s.id, pid); },
+      del: () => this.delSeason(s.id),
+    }));
+
     const subTab = 'padding:8px 18px;font-size:13px;font-weight:600;border:none;border-radius:999px;cursor:pointer;';
     const hdrRound = 'width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;cursor:pointer;flex:0 0 auto;';
     return {
       playlist, library, layoutOptions, motionGroups, items, days, posFields, timeSlots, crumbs,
       timelineBlocks, timelineTotal, timelineEndDrop, libCards, libTagChips, libEmptyMsg, pubDaysVals,
       prodCats, prodRows, storeCols, prodSelCat, langChips, isBaseLang,
+      seasonRows, seasonsDirty: st.seasonsDirty, seasonsBusy: st.seasonsBusy, seasonsCount: (st.seasons || []).length,
+      seasonsCurrentCount: (st.seasonsCurrent || []).length,
+      addSeason: () => this.addSeason(), saveSeasons: () => this.saveSeasons(), importSeasons: () => this.importSeasons(),
       planStoreChips, planCols, planFilmCards, planWeekTabs, planDayTabs, planDupTargets, planStoreLinks,
       planWeek: st.planWeek, planDay: st.planDay, planDayName: DAY_LONG[st.planDay],
       planActiveWeek: st.planActiveWeek, planWeekActive: st.planWeek === st.planActiveWeek,
@@ -1905,13 +1970,16 @@ class App extends Component {
       redoStyle: `display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;font-size:15px;background:transparent;border:1px solid ${st.future.length ? 'rgba(35,34,32,0.16)' : 'rgba(35,34,32,0.06)'};color:${st.future.length ? '#5B564E' : '#C9C3B8'};cursor:${st.future.length ? 'pointer' : 'not-allowed'};`,
       isComposerView: st.view === 'composer', isFleetView: st.view === 'fleet', isSettingsView: st.view === 'settings',
       isProductsView: st.view === 'products', isPlanningView: st.view === 'planning',
+      isSeasonsView: st.view === 'seasons',
       setViewComposer: () => this.setView('composer'),
       setViewFleet: () => this.setView('fleet'),
       setViewSettings: () => this.setView('settings'),
       setViewProducts: () => this.openProducts(),
       setViewPlanning: () => this.setView('planning'),
+      setViewSeasons: () => this.openSeasons(),
       tabProductsStyle: stTab + (st.view === 'products' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       tabPlanningStyle: stTab + (st.view === 'planning' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
+      tabSeasonsStyle: stTab + (st.view === 'seasons' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       tabComposerStyle: stTab + (st.view === 'composer' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       tabFleetStyle: stTab + (st.view === 'fleet' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       settingsIconStyle: `display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:50%;font-size:17px;cursor:pointer;flex:0 0 auto;${st.view === 'settings' ? 'background:#8D1D2C;color:#fff;border:none;' : 'background:#EFE9E0;color:#232220;border:1px solid rgba(35,34,32,0.10);'}`,
@@ -2291,6 +2359,7 @@ class App extends Component {
       <div style="display:inline-flex;background:#EFE9E0;border-radius:999px;padding:3px;flex:0 0 auto;margin-left:10px;">
         <button onClick=${v.setViewComposer} style=${v.tabComposerStyle}>Compositeur</button>
         <button onClick=${v.setViewProducts} style=${v.tabProductsStyle}>Produits</button>
+        <button onClick=${v.setViewSeasons} style=${v.tabSeasonsStyle}>Périodes</button>
         <button onClick=${v.setViewPlanning} style=${v.tabPlanningStyle}>Planning</button>
         <button onClick=${v.setViewFleet} style=${v.tabFleetStyle}>Réseau & supervision</button>
       </div>
@@ -2554,6 +2623,59 @@ class App extends Component {
           ${!v.prodRows.length && html`<div style="font-size:12.5px;color:#8A847C;padding:14px 4px 4px;">Aucun produit dans cette catégorie — « + Ajouter un produit ».</div>`}
           <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Prix par magasin : laisse vide pour utiliser le prix par défaut. Langues : FR = noms de base ; dans une autre langue, le champ nom édite la traduction (vide = nom de base). Chaque magasin affiche automatiquement ses prix ET sa langue (réglée dans Réseau).</p>
         </div>
+      </div>
+    </div>
+  </div>
+  `}
+
+  ${v.isSeasonsView && html`
+  <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;">
+    <div style="max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+        <div>
+          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Périodes de l'année</h2>
+          <p style="margin:0;font-size:12.5px;color:#8A847C;max-width:720px;">Définis les saisons et fêtes (du → au) et les produits liés. Sert à cibler automatiquement les vidéos et animations de saison. Récurrent chaque année (jour/mois). Importable depuis la table <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">ws_season</code> de la base.</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button onClick=${v.importSeasons} disabled=${v.seasonsBusy} style="padding:9px 15px;font-size:12.5px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.35);border-radius:999px;cursor:${v.seasonsBusy ? 'wait' : 'pointer'};">⟳ Importer depuis ws_season</button>
+          <button onClick=${v.saveSeasons} disabled=${!v.seasonsDirty || v.seasonsBusy} style="padding:9px 18px;font-size:13px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.seasonsDirty && !v.seasonsBusy ? 'pointer' : 'not-allowed'};background:${v.seasonsDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.seasonsDirty ? '#fff' : '#8A847C'};">${v.seasonsBusy ? 'Enregistrement…' : (v.seasonsDirty ? 'Enregistrer' : '✓ Enregistré')}</button>
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${v.seasonsCount} période(s) · ${v.seasonsCurrentCount} active(s) aujourd'hui</h3>
+          <button onClick=${v.addSeason} style="padding:8px 14px;font-size:12.5px;font-weight:500;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;cursor:pointer;">+ Ajouter une période</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          ${v.seasonRows.map((s) => html`
+            <div style="border:1px solid rgba(35,34,32,0.1);border-radius:12px;padding:13px 15px;background:${s.current ? 'rgba(46,110,78,0.05)' : '#FBF8F2'};">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span style="width:10px;height:10px;border-radius:50%;background:${s.color};flex:0 0 auto;"></span>
+                <input value=${s.name} onInput=${s.onName} placeholder="Nom (ex. Galette des rois)" style="flex:1 1 200px;min-width:0;padding:9px 11px;font-size:14px;font-weight:600;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
+                <span style="display:flex;align-items:center;gap:5px;">
+                  <input value=${s.from} onInput=${s.onFrom} placeholder="du (JJ/MM)" style="width:110px;padding:9px 10px;font-size:12.5px;text-align:center;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
+                  <span style="color:#8A847C;">→</span>
+                  <input value=${s.to} onInput=${s.onTo} placeholder="au (JJ/MM)" style="width:110px;padding:9px 10px;font-size:12.5px;text-align:center;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
+                </span>
+                ${s.current ? html`<span style="font-size:10.5px;font-weight:700;color:#2E6E4E;background:rgba(46,110,78,0.12);border:1px solid rgba(46,110,78,0.35);border-radius:999px;padding:3px 9px;">● active aujourd'hui</span>` : ''}
+                <button onClick=${s.del} title="Supprimer" style="flex:0 0 auto;width:30px;height:30px;border-radius:8px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:pointer;font-size:13px;color:#8D1D2C;">✕</button>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding-left:20px;">
+                <span style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;">Produits liés :</span>
+                ${s.products.map((p) => html`<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;padding:3px 5px 3px 10px;">${p.name}<button onClick=${p.remove} style="width:16px;height:16px;border-radius:50%;border:none;background:rgba(141,29,44,0.15);color:#8D1D2C;cursor:pointer;font-size:10px;line-height:1;">✕</button></span>`)}
+                ${s.addable.length ? html`
+                  <select onChange=${s.onAddProduct} style="padding:6px 9px;font-size:12px;border:1px solid rgba(35,34,32,0.16);border-radius:999px;background:#fff;cursor:pointer;">
+                    <option value="">+ produit…</option>
+                    ${s.addable.map((o) => html`<option value=${o.id}>${o.name}</option>`)}
+                  </select>
+                ` : ''}
+              </div>
+            </div>
+          `)}
+          ${!v.seasonRows.length && html`<p style="margin:0;font-size:12.5px;color:#8A847C;padding:8px 0;">Aucune période. « + Ajouter une période » ou « ⟳ Importer depuis ws_season ».</p>`}
+        </div>
+        <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Dates : <strong>JJ/MM</strong> (ex. 21/06) ou AAAA-MM-JJ ; l'année est ignorée (la période revient chaque année). Une période à cheval sur le nouvel an (ex. 15/12 → 06/01) est gérée.</p>
       </div>
     </div>
   </div>

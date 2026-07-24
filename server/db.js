@@ -324,6 +324,19 @@ function migrate(db) {
     PRIMARY KEY (product_id, store_id)
   );
 
+  -- Périodes de l'année (saisons) : nom + du → au + produits liés. Sert à
+  -- cibler les vidéos/animations de saison. Peut être importé depuis ws_season.
+  CREATE TABLE IF NOT EXISTS sig_seasons (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL DEFAULT '',
+    date_from  TEXT NOT NULL DEFAULT '',
+    date_to    TEXT NOT NULL DEFAULT '',
+    products   TEXT NOT NULL DEFAULT '[]',
+    color      TEXT NOT NULL DEFAULT '#C97B4A',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    active     INTEGER NOT NULL DEFAULT 1
+  );
+
   -- Planning journalier : un ou plusieurs films par moment, par magasin
   -- (joués l'un après l'autre pendant le créneau).
   CREATE TABLE IF NOT EXISTS sig_dayplans (
@@ -519,6 +532,57 @@ export function saveCatalog({ categories, products }) {
     db.exec('ROLLBACK');
     throw e;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Périodes de l'année (saisons) — nom + du → au + produits liés.
+export function loadSeasons() {
+  return getDb().prepare('SELECT * FROM sig_seasons ORDER BY sort_order, name').all().map((s) => ({
+    id: s.id, name: s.name, from: s.date_from, to: s.date_to,
+    products: (() => { try { return JSON.parse(s.products || '[]'); } catch { return []; } })(),
+    color: s.color || '#C97B4A', active: !!s.active,
+  }));
+}
+
+export function saveSeasons(seasons) {
+  const db = getDb();
+  db.exec('BEGIN');
+  try {
+    db.exec('DELETE FROM sig_seasons');
+    const ins = db.prepare('INSERT INTO sig_seasons(id, name, date_from, date_to, products, color, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    (Array.isArray(seasons) ? seasons : []).forEach((s, i) => {
+      ins.run(String(s.id || 'se' + i), String(s.name || ''), String(s.from || ''), String(s.to || ''),
+        JSON.stringify(Array.isArray(s.products) ? s.products.map(String) : []),
+        String(s.color || '#C97B4A'), i, s.active === false ? 0 : 1);
+    });
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  return loadSeasons();
+}
+
+// Analyse une date de saison en {m, d} (jour de l'année, année ignorée pour la
+// récurrence). Accepte AAAA-MM-JJ, JJ/MM(/AAAA), MM-JJ, JJ.MM…
+function seasonMD(v) {
+  const s = String(v || '').trim();
+  let mm = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);            // 2026-06-21
+  if (mm) return { m: +mm[2], d: +mm[3] };
+  mm = /^(\d{1,2})[/.](\d{1,2})(?:[/.](\d{2,4}))?$/.exec(s);  // 21/06 ou 21/06/2026
+  if (mm) return { m: +mm[2], d: +mm[1] };
+  mm = /^(\d{1,2})-(\d{1,2})$/.exec(s);                       // 06-21 (MM-JJ)
+  if (mm) return { m: +mm[1], d: +mm[2] };
+  return null;
+}
+
+// Saisons actives à une date donnée (récurrence annuelle : on compare mois/jour).
+export function currentSeasons(date = new Date()) {
+  const today = (date.getMonth() + 1) * 100 + date.getDate();
+  return loadSeasons().filter((s) => {
+    if (!s.active) return false;
+    const a = seasonMD(s.from); const b = seasonMD(s.to);
+    if (!a || !b) return false;
+    const from = a.m * 100 + a.d; const to = b.m * 100 + b.d;
+    return from <= to ? (today >= from && today <= to) : (today >= from || today <= to); // à cheval sur l'an
+  });
 }
 
 // Prix par magasin : remplace le prix par défaut des items liés au catalogue.
