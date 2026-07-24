@@ -200,8 +200,9 @@ async function detectShops(cfg, db) {
         id: String(i), slug: String(sl || '').trim(), name: String(nm || '').trim(),
         active: act == null || !(act === '0' || act === '' || /^(false|no|non)$/i.test(String(act))),
       }));
-      // Seules les boutiques actives sont mappées (et créées côté signage).
-      return { shops: all.filter((x) => x.active), inactive: all.length - all.filter((x) => x.active).length };
+      // On renvoie TOUTES les boutiques (actives + inactives) : les actives
+      // sont mappées/créées, les inactives servent à désactiver le magasin.
+      return { shops: all, inactive: all.filter((x) => !x.active).length };
     } catch { /* table absente ou illisible : on essaie la suivante */ }
   }
   return { shops: [], inactive: 0 };
@@ -333,11 +334,25 @@ async function doImport(cfg, queries) {
     if (shops.length) {
       const insStore = db0.prepare(`INSERT OR IGNORE INTO sig_stores(id, name, grp, conn, screens, screen_size, screen_orient, lang)
         VALUES (?, ?, 'Boutiques PWA', 'fibre', 1, 55, 'paysage', 'fr')`);
-      for (const sh of shops) {
+      const setActive = db0.prepare('UPDATE sig_stores SET active = ? WHERE id = ?');
+      const findMatch = (sh) => {
         const key = sh.slug || slugify(sh.name) || `shop${sh.id}`;
-        let match = sigStores.find((x) => x.id === key)
-          || sigStores.find((x) => slugify(x.name) === key)
-          || (key.length >= 3 ? sigStores.find((x) => slugify(x.name).includes(key) || key.includes(slugify(x.name))) : null);
+        return {
+          key,
+          match: sigStores.find((x) => x.id === key)
+            || sigStores.find((x) => slugify(x.name) === key)
+            || (key.length >= 3 ? sigStores.find((x) => slugify(x.name).includes(key) || key.includes(slugify(x.name))) : null),
+        };
+      };
+      // Boutiques inactives : on désactive le magasin correspondant s'il
+      // existe (sans le créer) — il disparaît de la grille produits / planning.
+      for (const sh of shops.filter((s) => !s.active)) {
+        const { match } = findMatch(sh);
+        if (match) setActive.run(0, match.id);
+      }
+      for (const sh of shops.filter((s) => s.active)) {
+        const { key } = findMatch(sh);
+        let { match } = findMatch(sh);
         if (!match) {
           const nm = sh.name || (key.charAt(0).toUpperCase() + key.slice(1));
           insStore.run(key, nm);
@@ -345,6 +360,7 @@ async function doImport(cfg, queries) {
           sigStores.push(match);
           created.push(`${nm} (${key})`);
         }
+        setActive.run(1, match.id); // réactive si elle l'était
         extToStore[sh.id] = match.id;
         extLabel[sh.id] = sh.slug || sh.id;
       }

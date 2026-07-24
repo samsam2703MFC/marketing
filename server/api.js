@@ -58,7 +58,7 @@ export function fleetJson() {
   const db = getDb();
   const stores = db.prepare('SELECT * FROM sig_stores ORDER BY id').all();
   const players = db.prepare('SELECT * FROM sig_players ORDER BY store_id, id').all();
-  const byStore = new Map(stores.map((s) => [s.id, { id: s.id, store: s.name, group: s.grp, conn: s.conn, format: storeFormat(s), lang: s.lang || 'fr', players: [] }]));
+  const byStore = new Map(stores.map((s) => [s.id, { id: s.id, store: s.name, group: s.grp, conn: s.conn, format: storeFormat(s), lang: s.lang || 'fr', active: s.active == null ? true : !!s.active, players: [] }]));
   for (const p of players) {
     const seen = secsSince(p.last_seen);
     const online = seen != null && seen <= ONLINE_WINDOW_S;

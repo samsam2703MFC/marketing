@@ -526,9 +526,12 @@ class App extends Component {
   // ---- table produits (vue Produits) --------------------------------------
   openProducts() {
     const d = this.state.catDraft || JSON.parse(JSON.stringify(this.state.catalog));
+    // Sélectionne de préférence une catégorie active avec des produits actifs.
+    const hasActive = (cid) => d.products.some((p) => p.categoryId === cid && p.active !== false);
+    const visible = d.categories.filter((c) => c.active !== false && hasActive(c.id));
     const sel = d.categories.some((c) => c.id === this.state.catSel)
       ? this.state.catSel
-      : ((d.categories[0] || {}).id || '');
+      : ((visible[0] || d.categories[0] || {}).id || '');
     this.setState({ view: 'products', catDraft: d, catSel: sel });
   }
   setCat(mut) {
@@ -1485,7 +1488,9 @@ class App extends Component {
 
     // ---- vue table produits ----
     const cd = st.catDraft || st.catalog;
-    const storeCols = st.fleet.map((s) => ({ id: s.id, label: s.store }));
+    // Colonnes de prix : seulement les magasins actifs (une boutique PWA
+    // inactive, ex. active=0, ne s'affiche pas).
+    const storeCols = st.fleet.filter((s) => s.active !== false).map((s) => ({ id: s.id, label: s.store }));
     // Langue d'édition : « fr » = noms de base, autres langues = alias.
     const editLang = st.catLang || 'fr';
     const isBaseLang = editLang === 'fr';
@@ -1498,7 +1503,10 @@ class App extends Component {
         style: `display:inline-flex;align-items:center;gap:7px;padding:7px 14px;font-size:12px;font-weight:700;text-transform:uppercase;border-radius:999px;cursor:pointer;${on ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#fff;color:#8D1D2C;border:1px solid rgba(141,29,44,0.3);'}`,
       };
     });
-    const prodCats = cd.categories.map((c) => {
+    // On ne liste que les catégories AVEC au moins un produit actif — plus la
+    // catégorie sélectionnée (pour pouvoir la remplir juste après l'avoir créée).
+    const catHasActive = (cid) => cd.products.some((p) => p.categoryId === cid && p.active !== false);
+    const prodCats = cd.categories.filter((c) => c.active !== false && (catHasActive(c.id) || c.id === st.catSel)).map((c) => {
       const count = cd.products.filter((p) => p.categoryId === c.id).length;
       const on = st.catSel === c.id;
       const usedBy = st.library.filter((mm) => mm.catRef === c.id).length;
@@ -1552,7 +1560,7 @@ class App extends Component {
     }));
 
     // ---- vue planning (magasins × films × moments) ----
-    const planStoreChips = st.fleet.map((s) => {
+    const planStoreChips = st.fleet.filter((s) => s.active !== false).map((s) => {
       const on = st.planStores.includes(s.id);
       const plan = st.planByStore[s.id] || {};
       const nSlots = ['matin', 'midi', 'aprem'].filter((m) => plan[m]).length;

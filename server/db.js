@@ -210,6 +210,7 @@ function migrate(db) {
   if (!stCols.includes('screens')) db.exec(`ALTER TABLE sig_stores ADD COLUMN screens INTEGER NOT NULL DEFAULT 1`);
   if (!stCols.includes('screen_size')) db.exec(`ALTER TABLE sig_stores ADD COLUMN screen_size INTEGER NOT NULL DEFAULT 55`);
   if (!stCols.includes('screen_orient')) db.exec(`ALTER TABLE sig_stores ADD COLUMN screen_orient TEXT NOT NULL DEFAULT 'paysage'`);
+  if (!stCols.includes('active')) db.exec(`ALTER TABLE sig_stores ADD COLUMN active INTEGER NOT NULL DEFAULT 1`);
 
   // Éléments typés : produit, film (vidéo), animation… + liens vers le catalogue.
   const modCols2 = db.prepare('PRAGMA table_info(sig_modules)').all().map((c) => c.name);
