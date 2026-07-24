@@ -603,6 +603,25 @@ class App extends Component {
     if (String(v).trim()) shopMap[storeId] = String(v).trim(); else delete shopMap[storeId];
     this.setState({ pwaForm: { ...f, shopMap } });
   }
+  async pwaReset() {
+    if (this.state.pwaBusy) return;
+    try {
+      const c = await api('POST', '/pwa-reset');
+      this.setState({
+        pwaResult: null,
+        pwaForm: {
+          host: c.host, port: c.port, db: c.db, user: c.user,
+          password: '', hasPassword: !!c.hasPassword,
+          qCategories: c.qCategories, qProducts: c.qProducts,
+          qShopPrices: c.qShopPrices, qAliases: c.qAliases,
+          shopMap: c.shopMap || {},
+        },
+      });
+      this.showToast('Réglages avancés réinitialisés — tout-automatique ✓');
+    } catch (e) {
+      this.showToast(`Erreur : ${e.message}`);
+    }
+  }
   async pwaAction(kind) {
     const f = this.state.pwaForm;
     if (!f || this.state.pwaBusy) return;
@@ -1890,10 +1909,14 @@ class App extends Component {
                 ? `✓ Base « ${st.pwaResult.db} » détectée — ${Object.entries(st.pwaResult.counts).map(([k, n]) => `${n} ${k}`).join(' · ')}`
                 : `✓ Base « ${st.pwaResult.db} » — importé : ${st.pwaResult.categories} catégorie(s) · ${st.pwaResult.products} produit(s) · ${st.pwaResult.storePrices} prix/boutique (${st.pwaResult.shopMap}) · ${st.pwaResult.relinked} élément(s) re-lié(s)`)
               : `✗ ${st.pwaResult.error}`}
+            ${st.pwaResult.note ? html`<span style="display:block;font-weight:400;color:#8a6508;">⚠ ${st.pwaResult.note}</span>` : ''}
           </div>
         `}
         <details>
         <summary style="font-size:12px;font-weight:600;color:#8A847C;cursor:pointer;">Réglages avancés — uniquement si la détection automatique échoue</summary>
+        <div style="margin:10px 0 0;">
+          <button onClick=${() => this.pwaReset()} style="padding:8px 14px;font-size:12px;font-weight:600;border-radius:999px;cursor:pointer;background:transparent;color:#8D1D2C;border:1px solid rgba(141,29,44,0.3);">Réinitialiser les réglages avancés (retour au tout-automatique)</button>
+        </div>
         <div style="display:grid;grid-template-columns:1.2fr 90px 1fr 1fr 1fr;gap:9px;margin:12px 0 10px;">
           <input value=${st.pwaForm.host} onInput=${(e) => this.setPwa('host', e.target.value)} placeholder="Hôte (127.0.0.1)" style="padding:10px 12px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;min-width:0;" />
           <input value=${st.pwaForm.port} onInput=${(e) => this.setPwa('port', e.target.value)} placeholder="3306" inputmode="numeric" style="padding:10px 12px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;min-width:0;" />

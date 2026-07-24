@@ -71,7 +71,10 @@ function mysqlRows(cfg, sql) {
       timeout: 20000, maxBuffer: 32 * 1024 * 1024,
     }, (err, stdout, stderr) => {
       if (err) {
-        err._stderr = (stderr || err.message || '').trim().split('\n')[0];
+        // Le client mysql ré-affiche la requête entre lignes de tirets avant
+        // le message : on remonte la ligne « ERROR … », pas le séparateur.
+        const lines = (stderr || err.message || '').trim().split('\n').map((l) => l.trim()).filter(Boolean);
+        err._stderr = lines.find((l) => /^ERROR/i.test(l)) || lines.find((l) => !/^-+$/.test(l)) || 'erreur mysql';
         return reject(err);
       }
       resolve(String(stdout).split('\n').filter((l) => l.length).map((l) => l.split('\t').map((c) => (c === 'NULL' ? '' : c))));
@@ -180,21 +183,45 @@ export async function autoQueries(cfg) {
   };
 }
 
-// Requêtes effectives : celles de l'utilisateur s'il les a personnalisées
-// (Réglages avancés + base précisée), sinon l'auto-détection.
+// Requêtes effectives : celles de l'utilisateur s'il les a VRAIMENT
+// personnalisées (comparaison insensible aux espaces) ET base précisée,
+// sinon l'auto-détection.
 async function effectiveQueries(cfg) {
-  const customized = cfg.qCategories !== DEFAULTS.qCategories
-    || cfg.qProducts !== DEFAULTS.qProducts
-    || cfg.qShopPrices !== DEFAULTS.qShopPrices;
+  const norm = (x) => String(x || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const customized = norm(cfg.qCategories) !== norm(DEFAULTS.qCategories)
+    || norm(cfg.qProducts) !== norm(DEFAULTS.qProducts)
+    || norm(cfg.qShopPrices) !== norm(DEFAULTS.qShopPrices);
   if (customized && cfg.db) {
     return { db: cfg.db, qCategories: cfg.qCategories, qProducts: cfg.qProducts, qShopPrices: cfg.qShopPrices, auto: false };
   }
   return { ...(await autoQueries(cfg)), auto: true };
 }
 
-export async function testPwa() {
-  const cfg = pwaConfig();
-  const queries = await effectiveQueries(cfg);
+// Filet de sécurité : si les réglages enregistrés échouent (colonne inconnue,
+// mauvaise base…), on retombe automatiquement sur l'auto-détection — d'abord
+// dans la base configurée, puis en redétectant la base elle-même.
+async function withAutoFallback(cfg, fn) {
+  let queries = null;
+  try {
+    queries = await effectiveQueries(cfg);
+    return await fn(queries);
+  } catch (e1) {
+    if (queries && queries.auto && !cfg.db) throw e1; // déjà en auto complet
+    try {
+      const q2 = { ...(await autoQueries(cfg)), auto: true };
+      const out = await fn(q2);
+      out.note = 'réglages avancés en échec — colonnes auto-détectées à la place';
+      return out;
+    } catch {
+      const q3 = { ...(await autoQueries({ ...cfg, db: '' })), auto: true };
+      const out = await fn(q3);
+      out.note = 'réglages avancés en échec — base et colonnes redétectées automatiquement';
+      return out;
+    }
+  }
+}
+
+async function doTest(cfg, queries) {
   const counts = {};
   for (const [key, q] of [['catégories', queries.qCategories], ['produits', queries.qProducts], ['prix/boutique', queries.qShopPrices]]) {
     const rows = await mysqlRows(cfg, `SELECT COUNT(*) FROM (${q.replace(/;\s*$/, '')}) AS t`);
@@ -203,12 +230,26 @@ export async function testPwa() {
   return { ok: true, db: queries.db, auto: queries.auto, counts };
 }
 
+export async function testPwa() {
+  const cfg = pwaConfig();
+  return withAutoFallback(cfg, (queries) => doTest(cfg, queries));
+}
+
+// Remise à zéro des réglages avancés (répare une vieille config cassée).
+export function resetPwaConfig() {
+  setSetting('pwa_import', '{}');
+  return publicPwaConfig();
+}
+
 // Prix PWA (souvent « 12.50 ») → format d'affichage (« 12,50 »).
 const frPrice = (v) => String(v == null ? '' : v).trim().replace('.', ',');
 
 export async function importPwa() {
   const cfg = pwaConfig();
-  const queries = await effectiveQueries(cfg);
+  return withAutoFallback(cfg, (queries) => doImport(cfg, queries));
+}
+
+async function doImport(cfg, queries) {
   const catRows = await mysqlRows(cfg, queries.qCategories);
   const prodRows = await mysqlRows(cfg, queries.qProducts);
   const priceRows = queries.qShopPrices.trim() ? await mysqlRows(cfg, queries.qShopPrices) : [];

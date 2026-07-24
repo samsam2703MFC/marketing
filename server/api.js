@@ -8,7 +8,7 @@ import {
   checkLogin, createSession, sessionUser, destroySession,
 } from './db.js';
 import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
-import { publicPwaConfig, savePwaConfig, testPwa, importPwa } from './pwadb.js';
+import { publicPwaConfig, savePwaConfig, resetPwaConfig, testPwa, importPwa } from './pwadb.js';
 import { runConnectionTest, runDeployTests, tcpPing } from './livetest.js';
 
 function sessionToken(req) {
@@ -483,6 +483,7 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       const body = await readBody();
       return send(200, savePwaConfig(body));
     }
+    if (req.method === 'POST' && path === '/pwa-reset') return send(200, resetPwaConfig());
     if (req.method === 'POST' && path === '/pwa-test') {
       try { return send(200, await testPwa()); }
       catch (e) { return send(200, { ok: false, error: String(e.message || e) }); }
