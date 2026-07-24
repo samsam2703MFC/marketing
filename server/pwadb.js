@@ -335,44 +335,6 @@ async function enrichSeasons(cfg, db, baseTable, seasons, rawIds) {
       }
     }
   } catch { /* pas de table sœur d'images : on garde ce qu'on a */ }
-  // Bibliothèque d'icônes de saison : une table type ws_season (name/slug/img,
-  // souvent SANS dates, donc pas la table importée) sert de banque d'illustrations.
-  // On rapproche chaque période importée d'une icône par nom/slug normalisé
-  // (égalité puis inclusion : « Collection Printemps » ↔ « printemps »).
-  try {
-    if (seasons.some((s) => !s.image)) {
-      for (const lib of ['ws_season', 'ws_seasons', 'wc_season', 'season', 'seasons']) {
-        if (lib === baseTable) continue;
-        const libColsT = await tableColsTyped(cfg, db, lib);
-        if (!libColsT.length) continue;
-        const libCols = libColsT.map((c) => c.name);
-        const imgCol = detectImageCol(libColsT);
-        const nameCol = pickCol(libCols, ['name', 'label', 'title', 'nom', 'libelle', 'designation'], 'optionnel', lib, 'name');
-        const slugCol = pickCol(libCols, ['slug', 'code', 'alias'], 'optionnel');
-        if (!imgCol || (!nameCol && !slugCol)) continue;
-        const sel = [nameCol, slugCol, imgCol].filter(Boolean);
-        const rows = await mysqlRows(cfg, `SELECT ${sel.map(qid).join(', ')} FROM ${qid(db)}.${qid(lib)}`);
-        const byKey = new Map(); // slug/nom normalisé → img
-        for (const r of rows) {
-          let i = 0;
-          const nm = nameCol ? String(r[i++] || '') : '';
-          const sg = slugCol ? String(r[i++] || '') : '';
-          const im = String(r[i] || '').trim();
-          if (!im) continue;
-          for (const k of [slugify(nm), slugify(sg)]) if (k && !byKey.has(k)) byKey.set(k, im);
-        }
-        seasons.forEach((s) => {
-          if (s.image) return;
-          const key = slugify(s.name);
-          if (!key) return;
-          let hit = byKey.get(key);
-          if (!hit) for (const [k, v] of byKey) { if (k && (key.includes(k) || k.includes(key))) { hit = v; break; } }
-          if (hit) s.image = hit;
-        });
-        if (!seasons.some((s) => !s.image)) break;
-      }
-    }
-  } catch { /* pas de bibliothèque d'icônes de saison exploitable */ }
   return seasons;
 }
 
