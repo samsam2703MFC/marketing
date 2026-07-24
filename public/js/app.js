@@ -454,6 +454,33 @@ class App extends Component {
     const playlists = [...this.state.playlists, copy];
     this.dirty({ playlists, activePl: id, playlist: [...src.items], t: 0 });
   }
+  // Film d'exemple prêt à l'emploi : une boucle continue avec des réglages types,
+  // à dupliquer et adapter. Sert de point de départ documenté.
+  newExampleFilm() {
+    const id = 'pl' + uid();
+    const example = this.normFilm({
+      id, name: 'Boucle continue (exemple)', items: [], cat: 'standard', mode: 'continu',
+      continuous: {
+        source: 'saison', perMoment: true, order: 'catalogue',
+        prodDur: 6, clipDur: 12, maxItems: 12,
+        ratios: { liaison: 5, produitSeul: 6, media: 3, animation: 4, surprise: 8 },
+        refresh: 'moment', fallback: 'tout', exceptionFilms: [],
+      },
+    });
+    const playlists = [...this.state.playlists, example];
+    this.dirty({ playlists, activePl: id, playlist: [], t: 0, composerTab: 'timeline', scope: 'playlist', filmFilter: 'all' });
+    this.showToast('Film d’exemple « Boucle continue » créé — adapte-le puis publie 🎬');
+  }
+  // Jours de planning d'un film DONNÉ (utilisé dans l'onglet Planning).
+  toggleAnyFilmPlanDay(filmId, d) {
+    const playlists = this.state.playlists.map((p) => {
+      if (p.id !== filmId) return p;
+      const days = [...(p.planDays || [true, true, true, true, true, true, true])];
+      days[d] = !days[d];
+      return { ...p, planDays: days };
+    });
+    this.dirty({ playlists });
+  }
   renameFilm(name) {
     const n = String(name || '').trim() || this.activeFilm().name;
     const playlists = this.state.playlists.map((p) => (p.id === this.state.activePl ? { ...p, name: n } : p));
@@ -1905,6 +1932,15 @@ class App extends Component {
       return { label: lbl, long: DAY_LONG[d], active: d === st.planDay, count: cellFilled(cell), pick: () => this.setPlanDay(d) };
     });
     const filmById = (id) => st.playlists.find((p) => p.id === id);
+    // Matrice « jours de planning » : quels films proposés quel jour (déplacée
+    // du formulaire du film vers l'onglet Planning, là où elle sert).
+    const planDayMatrix = st.playlists.map((p) => ({
+      id: p.id, name: p.name, mode: p.mode,
+      days: DAY_SHORT.map((lbl, d) => ({
+        label: lbl, on: (p.planDays || [true, true, true, true, true, true, true])[d] !== false,
+        toggle: () => this.toggleAnyFilmPlanDay(p.id, d),
+      })),
+    }));
     const planCols = (st.planWindows.length ? st.planWindows : [
       { id: 'matin', label: 'Matin', from: '06:00', to: '11:00' },
       { id: 'midi', label: 'Midi', from: '11:00', to: '15:00' },
@@ -2074,7 +2110,7 @@ class App extends Component {
       saveProdMoments: () => this.saveProdMoments(),
       mediaOverview, refreshMediaLib: () => this.loadMediaLib(),
       agencyUrl: new URL('agence', location.href).toString(),
-      planStoreChips, planCols, planFilmCards, planWeekTabs, planDayTabs, planDupTargets, planStoreLinks,
+      planStoreChips, planCols, planFilmCards, planWeekTabs, planDayTabs, planDupTargets, planStoreLinks, planDayMatrix,
       planWeek: st.planWeek, planDay: st.planDay, planDayName: DAY_LONG[st.planDay],
       planActiveWeek: st.planActiveWeek, planWeekActive: st.planWeek === st.planActiveWeek,
       planSaving: st.planSaving, planHasStores: st.planStores.length > 0,
@@ -2489,6 +2525,7 @@ class App extends Component {
           ${!st.editingFilm && !shownFilms.length ? html`<span style="font-size:12px;color:#8A847C;">Aucun film dans cette catégorie.</span>` : ''}
           <button onClick=${() => this.setState({ editingFilm: true, editFilmName: this.activeFilm().name })} title="Renommer le film" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;flex:0 0 auto;">✎</button>
           <button onClick=${() => this.newFilm()} title="Nouveau film (vide)" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:#8D1D2C;color:#fff;border:none;cursor:pointer;font-size:14px;font-weight:700;flex:0 0 auto;">＋</button>
+          <button onClick=${() => this.newExampleFilm()} title="Créer un film d'exemple : une boucle continue préréglée, à dupliquer et adapter" style="display:flex;align-items:center;gap:5px;padding:0 11px;height:26px;border-radius:7px;background:rgba(110,74,43,0.1);color:#6E4A2B;border:1px solid rgba(110,74,43,0.3);cursor:pointer;font-size:12px;font-weight:600;flex:0 0 auto;">✨ Exemple continu</button>
           <button onClick=${() => this.dupFilm()} title="Dupliquer le film" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;flex:0 0 auto;">⎘</button>
           <button onClick=${() => this.delFilm()} title="Supprimer le film (les modules restent en bibliothèque)" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;color:#8D1D2C;flex:0 0 auto;">🗑</button>
         </div>
@@ -2503,12 +2540,18 @@ class App extends Component {
         <div style="font-size:11px;opacity:0.82;margin-top:2px;">${sub}</div>
       </button>`;
     const filmModeToggle = html`
-      <div style="display:flex;gap:10px;margin-top:14px;padding-top:14px;border-top:1px dashed rgba(35,34,32,0.12);">
-        ${modeBtn('playlist', '▤ Playlist', 'Séquence montée à la main')}
-        ${modeBtn('continu', '🔄 Continu', 'Boucle composée en direct · saisons · moments · tags')}
+      <div style="margin-top:14px;padding-top:14px;border-top:1px dashed rgba(35,34,32,0.12);">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+          <span style="font-size:10px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">Mode du film</span>
+          ${infoTip('« Playlist » : tu montes la séquence à la main sur la ligne du temps (contrôle total). « Continu » : tu ne montes rien — tu poses des règles (source, moments, ratios…) et la boucle se compose toute seule et s’adapte au fil de la journée, sans republier.')}
+        </div>
+        <div style="display:flex;gap:10px;">
+          ${modeBtn('playlist', '▤ Playlist', 'Séquence montée à la main')}
+          ${modeBtn('continu', '🔄 Continu', 'Boucle composée en direct · saisons · moments · tags')}
+        </div>
       </div>`;
     // Panneau de réglages du mode continu.
-    const cField = (label, node) => html`<label style="display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">${label}${node}</label>`;
+    const cField = (label, node, tip) => html`<label style="display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;"><span style="display:inline-flex;align-items:center;gap:5px;">${label}${tip ? infoTip(tip) : ''}</span>${node}</label>`;
     const cNum = (key, val, min, max) => html`<input type="number" min=${min} max=${max} value=${val} onInput=${(e) => this.updateContinuous({ [key]: e.target.value })} style="width:92px;padding:8px 10px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;" />`;
     const cChoice = (key, opts) => html`<div style="display:flex;gap:6px;flex-wrap:wrap;">${opts.map(([id, lab]) => html`<button onClick=${() => this.updateContinuous({ [key]: id })} style="padding:7px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${cont[key] === id ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${cont[key] === id ? '#8D1D2C' : '#fff'};color:${cont[key] === id ? '#fff' : '#232220'};">${lab}</button>`)}</div>`;
     const cToggle = (key, yes, no) => html`<div style="display:flex;gap:6px;">${[[true, yes], [false, no]].map(([b, lab]) => html`<button onClick=${() => this.updateContinuous({ [key]: b })} style="padding:7px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${!!cont[key] === b ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${!!cont[key] === b ? '#8D1D2C' : '#fff'};color:${!!cont[key] === b ? '#fff' : '#232220'};">${lab}</button>`)}</div>`;
@@ -2531,18 +2574,21 @@ class App extends Component {
         </div>
         <div style="display:flex;flex-direction:column;gap:18px;">
           <div style="display:flex;gap:26px;flex-wrap:wrap;">
-            ${cField('Source des fiches', cChoice('source', [['saison', 'Produits de saison'], ['categories', 'Tout sauf catégories'], ['tout', 'Tout le catalogue']]))}
-            ${cField('Adapter au moment', cToggle('perMoment', 'Oui (matin/midi/soir)', 'Non'))}
-            ${cField('Ordre', cChoice('order', [['catalogue', 'Catalogue'], ['aleatoire', 'Aléatoire']]))}
+            ${cField('Source des fiches', cChoice('source', [['saison', 'Produits de saison'], ['categories', 'Tout sauf catégories'], ['tout', 'Tout le catalogue']]), 'D’où viennent les fiches produit. « Produits de saison » = seulement ceux liés à une période active (onglet Périodes). « Tout sauf catégories » = tout le catalogue sauf les catégories cochées ci-dessous. « Tout le catalogue » = tous les produits actifs.')}
+            ${cField('Adapter au moment', cToggle('perMoment', 'Oui (matin/midi/soir)', 'Non'), 'Si activé, la boucle ne montre que les produits vendus au moment courant (table « Périodes de vente » dans l’onglet Périodes) : viennoiseries le matin, sandwichs le midi, etc.')}
+            ${cField('Ordre', cChoice('order', [['catalogue', 'Catalogue'], ['aleatoire', 'Aléatoire']]), 'Ordre de passage. « Catalogue » = l’ordre du catalogue. « Aléatoire » = mélangé (stable pendant une fenêtre, re-mélangé au changement de moment/saison).')}
           </div>
           ${cont.source === 'categories' ? html`<div><div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:8px;">Catégories exclues (exceptions) — tout le reste passe</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${catChips}</div></div>` : ''}
           <div style="display:flex;gap:20px;flex-wrap:wrap;">
-            ${cField('Durée fiche (s)', cNum('prodDur', cont.prodDur, 2, 60))}
-            ${cField('Durée vidéo (s)', cNum('clipDur', cont.clipDur, 2, 120))}
-            ${cField('Max fiches / boucle', cNum('maxItems', cont.maxItems, 4, 40))}
+            ${cField('Durée fiche (s)', cNum('prodDur', cont.prodDur, 2, 60), 'Combien de secondes une fiche produit reste à l’écran.')}
+            ${cField('Durée vidéo (s)', cNum('clipDur', cont.clipDur, 2, 120), 'Durée d’un clip vidéo/photo ciblé (et de la vidéo surprise).')}
+            ${cField('Max fiches / boucle', cNum('maxItems', cont.maxItems, 4, 40), 'Nombre maximum de fiches produit dans une boucle (borne de sécurité pour éviter une boucle trop longue).')}
           </div>
           <div>
-            <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:9px;">Ratios par type d'élément · 1 : N (0 = jamais)</div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:9px;">
+              <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Ratios par type d'élément · 1 : N (0 = jamais)</span>
+              ${infoTip('Dose le mélange de la boucle. « 1 : N » = un élément de ce type tous les N slots. Ex. Liaison 1:5 = un logo de transition toutes les 5 fiches ; Produit seul 1:6 = une fiche plein écran toutes les 6. 0 = ce type n’apparaît jamais.')}
+            </div>
             <div style="display:flex;flex-direction:column;gap:8px;max-width:360px;">
               ${cRatio('liaison', 'Liaison (logo)')}
               ${cRatio('produitSeul', 'Produit seul')}
@@ -2552,14 +2598,14 @@ class App extends Component {
             </div>
           </div>
           <div style="display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start;">
-            ${cField('Rafraîchissement', cChoice('refresh', [['moment', 'Au moment/saison'], ['minutes', 'Toutes les N min']]))}
-            ${cont.refresh === 'minutes' ? cField('N minutes', cNum('refreshMin', cont.refreshMin, 1, 240)) : ''}
-            ${cField('Si rien en saison', cChoice('fallback', [['tout', 'Tout le catalogue'], ['aucun', 'Rien (attente)']]))}
+            ${cField('Rafraîchissement', cChoice('refresh', [['moment', 'Au moment/saison'], ['minutes', 'Toutes les N min']]), 'Quand la boucle est recomposée. « Au moment/saison » = à chaque changement de créneau (matin→midi) ou de période. « Toutes les N min » = aussi rafraîchie périodiquement.')}
+            ${cont.refresh === 'minutes' ? cField('N minutes', cNum('refreshMin', cont.refreshMin, 1, 240), 'Intervalle de recomposition de la boucle, en minutes.') : ''}
+            ${cField('Si rien en saison', cChoice('fallback', [['tout', 'Tout le catalogue'], ['aucun', 'Rien (attente)']]), 'Repli quand aucun produit n’est éligible (hors saison / rien au bon moment) : jouer tout le catalogue, ou afficher l’écran d’attente.')}
           </div>
           <div>
             ${cField('Playlists d\'exception (jouées EN PLUS à chaque boucle · plusieurs possibles)', html`<div style="display:flex;gap:6px;flex-wrap:wrap;">
               ${excFilms.length ? excChips : html`<span style="font-size:12px;color:#8A847C;">Aucun autre film « playlist » à ajouter.</span>`}
-            </div>`)}
+            </div>`, 'Ces films « playlist » (montés à la main) sont ajoutés à la fin de CHAQUE boucle, en plus du contenu auto. Pratique pour épingler une promo ou un message qui doit toujours passer. Clique un tag pour l’ajouter/retirer.')}
           </div>
         </div>
       </div>`;
@@ -3158,6 +3204,33 @@ class App extends Component {
         </div>
       </div>
       `}
+
+      <!-- Jours de planning des films (déplacé depuis le formulaire du film) · toujours visible -->
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;">
+          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Jours de planning des films</h3>
+          ${infoTip('Quels films sont PROPOSÉS quel jour quand tu remplis le planning ci-dessus (ex. « Crêpes » = mercredi). Purement un filtre d’organisation : ça ne change pas quand un film est diffusé (ça, c’est « Jours de diffusion », réglé sur le film). Un film coché sur tous les jours est proposé tous les jours.')}
+        </div>
+        <p style="margin:0 0 12px;font-size:12px;color:#8A847C;">Coche les jours où chaque film doit apparaître dans le sélecteur du planning. Décoche pour le masquer ce jour-là.</p>
+        <div style="overflow-x:auto;">
+          <table style="border-collapse:collapse;width:100%;min-width:460px;font-size:13px;">
+            <thead><tr>
+              <th style="text-align:left;padding:7px 10px;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;border-bottom:1px solid rgba(35,34,32,0.12);">Film</th>
+              ${v.planDayTabs.map((d) => html`<th style="padding:7px 8px;font-size:11px;text-transform:uppercase;color:#8A847C;border-bottom:1px solid rgba(35,34,32,0.12);text-align:center;width:52px;">${d.label}</th>`)}
+            </tr></thead>
+            <tbody>
+              ${v.planDayMatrix.map((p) => html`
+                <tr>
+                  <td style="padding:6px 10px;border-bottom:1px solid rgba(35,34,32,0.06);white-space:nowrap;">${p.name}${p.mode === 'continu' ? html` <span style="font-size:9.5px;font-weight:700;color:#6E4A2B;background:rgba(110,74,43,0.1);border-radius:999px;padding:1px 6px;">🔄 continu</span>` : ''}</td>
+                  ${p.days.map((d) => html`<td style="padding:4px 8px;border-bottom:1px solid rgba(35,34,32,0.06);text-align:center;">
+                    <button onClick=${d.toggle} title=${d.on ? 'Proposé ce jour — cliquer pour masquer' : 'Masqué ce jour — cliquer pour proposer'} style="width:30px;height:28px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;border:1px solid ${d.on ? 'rgba(46,110,78,0.4)' : 'rgba(35,34,32,0.14)'};background:${d.on ? 'rgba(46,110,78,0.14)' : '#FBF8F2'};color:${d.on ? '#2E6E4E' : '#C9C3B8'};">${d.on ? '✓' : '·'}</button>
+                  </td>`)}
+                </tr>
+              `)}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
   `}
@@ -3702,18 +3775,12 @@ class App extends Component {
         </div>
         <div style="display:flex;gap:28px;flex-wrap:wrap;">
           <div>
-            <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:7px;">Jours de diffusion</div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;">
+              <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Jours de diffusion</span>
+              ${infoTip('Quand le film PASSE réellement à l’écran. Hors de ces jours, l’écran affiche l’attente. À ne pas confondre avec les « Jours de planning » (dans l’onglet Planning), qui ne servent qu’à filtrer les films proposés lors du remplissage du planning hebdo.')}
+            </div>
             <div style="display:flex;flex-wrap:wrap;gap:6px;">
               ${v.filmDaysVals.map((d) => html`<button onClick=${d.toggle} style=${d.style}>${d.label}</button>`)}
-            </div>
-          </div>
-          <div>
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;">
-              <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Jours de planning</span>
-              ${infoTip('Filtre ce film dans le Planning hebdo : il n’apparaît que les jours cochés (ex. « Crêpes » = mercredi). Indépendant des jours de diffusion.')}
-            </div>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;">
-              ${v.filmPlanDaysVals.map((d) => html`<button onClick=${d.toggle} style=${d.style}>${d.label}</button>`)}
             </div>
           </div>
           <div>
