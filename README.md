@@ -26,11 +26,11 @@ npm start            # ou : node server/index.js
 
 Variables : `PORT` (défaut 8080), `HOST`, `SIG_DB` (chemin SQLite, défaut `data/signage.db`),
 `SIG_ADMIN_PASSWORD` (mot de passe du compte `admin`, appliqué à chaque démarrage),
-`BASE_PATH` (chemin public si l'app est montée sous un sous-chemin, ex. `/pwa_consultant/signage`).
+`BASE_PATH` (chemin public si l'app est montée sous un sous-chemin, ex. `/signage`).
 Au premier démarrage la base est créée et **seedée** avec le contenu de la maquette
 (catégorie *Tartes* 8 produits, liaison *Fait maison*, 3 magasins / 5 écrans de démo).
 
-## Déploiement sur http://185.180.206.46/pwa_consultant/signage/
+## Déploiement sur http://185.180.206.46/signage/
 
 Prérequis serveur : Node.js ≥ 22.5 (`node --version`).
 
@@ -47,11 +47,11 @@ curl http://127.0.0.1:8080/api/v1/health        # → {"ok":true,...}
 
 # 3) Reverse proxy sur le site existant (Apache OU Nginx)
 #    → deploy/apache-signage.conf  ou  deploy/nginx-signage.conf
-#    montent l'app sous /pwa_consultant/signage/
+#    montent l'app sous /signage/
 
 # 4) Tests live post-déploiement, depuis n'importe où :
-node test/live-test.js http://185.180.206.46/pwa_consultant/signage --password=VOTREMDP
-node test/live-test.js http://185.180.206.46/pwa_consultant/signage --password=VOTREMDP --mutate
+node test/live-test.js http://185.180.206.46/signage --password=VOTREMDP
+node test/live-test.js http://185.180.206.46/signage --password=VOTREMDP --mutate
 ```
 
 L'application est conçue pour fonctionner sous ce sous-chemin : toutes les URLs du front
@@ -126,7 +126,7 @@ exécute côté serveur : ping TCP de l'hôte, `GET assignment`, `GET dataset pr
 npm test              # serveur jetable (BDD temporaire) + cycle complet — 16 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
-node test/live-test.js http://185.180.206.46/pwa_consultant/signage --password=… --mutate
+node test/live-test.js http://185.180.206.46/signage --password=… --mutate
 ```
 
 Options du runner : `--user=…` `--password=…` (défaut `admin` / `signage`, ou

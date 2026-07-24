@@ -29,7 +29,7 @@ concurrency:
 
 env:
   DEPLOY_PATH: /var/www/signage
-  PUBLIC_URL: http://185.180.206.46/pwa_consultant/signage
+  PUBLIC_URL: http://185.180.206.46/signage
 
 jobs:
   deploy:
@@ -122,22 +122,22 @@ jobs:
             exit 1
           fi
 
-          echo "— Reverse proxy public (/pwa_consultant/signage/)"
-          if curl -fsS http://127.0.0.1/pwa_consultant/signage/api/v1/health >/dev/null 2>&1; then
-            echo "proxy déjà en place ✓"
-          elif command -v apache2ctl >/dev/null 2>&1 && [ -d /etc/apache2/conf-available ]; then
-            echo "Apache détecté → installation d'une conf isolée signage.conf…"
+          echo "— Reverse proxy public (/signage/) — ancien /pwa_consultant/signage/ redirigé"
+          if command -v apache2ctl >/dev/null 2>&1 && [ -d /etc/apache2/conf-available ]; then
+            echo "Apache détecté → (ré)installation de la conf signage.conf sur /signage/…"
             a2enmod proxy proxy_http >/dev/null
             cat > /etc/apache2/conf-available/signage.conf <<'ACONF'
-          RedirectMatch 301 ^/pwa_consultant/signage$ /pwa_consultant/signage/
+          # Nouveau montage : /signage/ (l'ancien /pwa_consultant/signage/ y est redirigé)
+          RedirectMatch 301 ^/pwa_consultant/signage(/.*)?$ /signage$1
+          RedirectMatch 301 ^/signage$ /signage/
           ProxyPreserveHost On
-          ProxyPass        /pwa_consultant/signage/ http://127.0.0.1:8080/
-          ProxyPassReverse /pwa_consultant/signage/ http://127.0.0.1:8080/
+          ProxyPass        /signage/ http://127.0.0.1:8080/
+          ProxyPassReverse /signage/ http://127.0.0.1:8080/
           ACONF
             a2enconf signage >/dev/null
             systemctl reload apache2
             sleep 1
-            curl -fsS http://127.0.0.1/pwa_consultant/signage/api/v1/health >/dev/null 2>&1 && echo "proxy Apache OK ✓" || echo "⚠ proxy Apache configuré mais la santé locale via port 80 ne répond pas encore"
+            curl -fsS http://127.0.0.1/signage/api/v1/health >/dev/null 2>&1 && echo "proxy Apache OK ✓ (/signage/)" || echo "⚠ proxy Apache configuré mais la santé locale via port 80 ne répond pas encore"
           else
             echo "⚠ Apache non détecté — configurer le reverse proxy manuellement (voir deploy/nginx-signage.conf)"
           fi

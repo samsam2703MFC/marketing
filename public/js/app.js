@@ -126,6 +126,12 @@ class App extends Component {
       }
     };
     window.addEventListener('keydown', this._key);
+    // Filet de sécurité : on force l'enregistrement si l'onglet passe en
+    // arrière-plan ou se ferme avec des modifs non sauvées.
+    this._flush = () => { if (this.state.dirty && !this.state.authRequired) this.save({ auto: true }); };
+    this._vis = () => { if (document.visibilityState === 'hidden') this._flush(); };
+    document.addEventListener('visibilitychange', this._vis);
+    window.addEventListener('pagehide', this._flush);
     await this.loadState();
     this.refreshFleet();
   }
@@ -134,6 +140,9 @@ class App extends Component {
     cancelAnimationFrame(this._raf);
     clearInterval(this._hb);
     clearInterval(this._poll);
+    clearTimeout(this._autoSaveT);
+    document.removeEventListener('visibilitychange', this._vis);
+    window.removeEventListener('pagehide', this._flush);
     window.removeEventListener('keydown', this._key);
     window.removeEventListener('mousemove', this._onDragMove);
     window.removeEventListener('mouseup', this._onDragUp);
@@ -389,6 +398,15 @@ class App extends Component {
   dirty(patch) {
     const snap = this.snapshot();
     this.setState((s) => ({ past: [...s.past, snap].slice(-60), future: [], dirty: true, saved: false, ...patch }));
+    this.scheduleAutoSave();
+  }
+  // Auto-enregistrement : le brouillon (éléments + films) est sauvé tout seul
+  // ~1,2 s après la dernière modification — plus besoin de penser à cliquer ✓.
+  scheduleAutoSave() {
+    clearTimeout(this._autoSaveT);
+    this._autoSaveT = setTimeout(() => {
+      if (this.state.dirty && !this.state.authRequired && !this.state.loading) this.save({ auto: true });
+    }, 1200);
   }
   _restorePatch(o) {
     const playlists = ((o.playlists && o.playlists.length) ? o.playlists : [{ id: 'pl1', name: 'Film principal', items: o.playlist || [] }]).map((p) => this.normFilm(p));
@@ -810,14 +828,22 @@ class App extends Component {
       loop: this.state.loop,
     };
   }
-  save = async () => {
+  save = async (opts = {}) => {
+    if (this._saving) { this._saveAgain = true; return; }
+    this._saving = true;
+    clearTimeout(this._autoSaveT);
     try {
       await api('PUT', '/draft', this.draftBody());
       this.setState({ dirty: false, saved: true });
+      if (!opts.auto) this.showToast('Enregistré ✓');
     } catch (e) {
       this.showToast(e.status === 401
         ? 'Session expirée — recharge la page (F5) et reconnecte-toi, puis réessaie'
         : `Échec de l'enregistrement : ${e.message}`);
+    } finally {
+      this._saving = false;
+      // Une modif est survenue pendant l'enregistrement : on repart.
+      if (this._saveAgain) { this._saveAgain = false; this.scheduleAutoSave(); }
     }
   };
 
@@ -1888,8 +1914,8 @@ class App extends Component {
       saveLabel: st.dirty ? 'Enregistrer' : 'Enregistré',
       saveStyle: `padding:9px 20px;font-size:13px;font-weight:600;letter-spacing:0.01em;border-radius:999px;cursor:${st.dirty ? 'pointer' : 'default'};${st.dirty ? 'background:#6E4A2B;color:#fff;border:1px solid #6E4A2B;box-shadow:0 2px 8px rgba(110,74,43,0.25);' : 'background:transparent;color:#8A847C;border:1px solid rgba(35,34,32,0.14);'}`,
       // Bandeau : icônes rondes + vignettes, palette gris/rubis/abricot/cuivre.
-      saveIconStyle: `${hdrRound}${st.dirty ? 'background:#6E4A2B;color:#fff;border:1px solid #6E4A2B;box-shadow:0 2px 10px rgba(110,74,43,0.35);' : 'background:transparent;color:#8A847C;border:1px solid rgba(35,34,32,0.14);'}`,
-      saveTip: st.dirty ? 'Enregistrer — modifications en attente' : 'Tout est enregistré',
+      saveIconStyle: `${hdrRound}${st.dirty ? 'background:#6E4A2B;color:#fff;border:1px solid #6E4A2B;box-shadow:0 2px 10px rgba(110,74,43,0.35);' : 'background:transparent;color:#2E7D32;border:1px solid rgba(46,125,50,0.35);'}`,
+      saveTip: st.dirty ? 'Enregistrement automatique en cours… (clique pour forcer)' : 'Tout est enregistré automatiquement',
       pricesIconStyle: `${hdrRound}background:rgba(201,123,74,0.14);color:#A25C2E;border:1px solid rgba(201,123,74,0.5);`,
       overrideIconStyle: `${hdrRound}${st.override ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;box-shadow:0 2px 10px rgba(141,29,44,0.35);' : 'background:transparent;color:#5B564E;border:1px solid rgba(35,34,32,0.18);'}`,
       overrideTip: st.override ? 'Diffusion flash ACTIVE — cliquer pour reprendre les playlists' : 'Diffusion flash (suspend les playlists)',
@@ -2121,7 +2147,7 @@ class App extends Component {
             ${st.pwaResult.ok
               ? (st.pwaResult.counts
                 ? `✓ Base « ${st.pwaResult.db} » détectée — ${Object.entries(st.pwaResult.counts).map(([k, n]) => `${n} ${k}`).join(' · ')}`
-                : `✓ Base « ${st.pwaResult.db} » — importé : ${st.pwaResult.categories} catégorie(s) · ${st.pwaResult.products} produit(s) · ${st.pwaResult.storePrices} prix/boutique (${st.pwaResult.shopMap}) · ${st.pwaResult.relinked} élément(s) re-lié(s)${st.pwaResult.dupes ? ` · ${st.pwaResult.dupes} ligne(s) en double ignorée(s)` : ''}${st.pwaResult.createdStores ? ` · magasin(s) créé(s) : ${st.pwaResult.createdStores.join(', ')}` : ''}${st.pwaResult.inactiveShops ? ` · ${st.pwaResult.inactiveShops} boutique(s) inactive(s) ignorée(s)` : ''}`)
+                : `✓ Base « ${st.pwaResult.db} » — importé : ${st.pwaResult.categories} catégorie(s) · ${st.pwaResult.products} produit(s) · ${st.pwaResult.storePrices} prix/boutique (${st.pwaResult.shopMap}) · ${st.pwaResult.relinked} élément(s) re-lié(s)${st.pwaResult.dupes ? ` · ${st.pwaResult.dupes} ligne(s) en double ignorée(s)` : ''}${st.pwaResult.createdStores ? ` · magasin(s) créé(s) : ${st.pwaResult.createdStores.join(', ')}` : ''}${st.pwaResult.inactiveShops ? ` · ${st.pwaResult.inactiveShops} boutique(s) inactive(s) ignorée(s)` : ''}${st.pwaResult.langSet ? ` · langue préférée appliquée à ${st.pwaResult.langSet} magasin(s) (${st.pwaResult.langSource})` : (st.pwaResult.langSource ? ` · langue : ${st.pwaResult.langSource}` : '')}`)
               : `✗ ${st.pwaResult.error}`}
             ${st.pwaResult.note ? html`<span style="display:block;font-weight:400;color:#8a6508;">⚠ ${st.pwaResult.note}</span>` : ''}
           </div>

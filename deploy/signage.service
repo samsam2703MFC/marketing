@@ -17,7 +17,7 @@ RestartSec=3
 Environment=HOST=127.0.0.1
 Environment=PORT=8080
 # Chemin public de montage (cookie de session + redirections).
-Environment=BASE_PATH=/pwa_consultant/signage
+Environment=BASE_PATH=/signage
 # Mot de passe du compte « admin » du back office — À CHANGER.
 Environment=SIG_ADMIN_PASSWORD=signage
 # Emplacement de la base SQLite (tables préfixées sig_).

@@ -185,6 +185,36 @@ export async function autoQueries(cfg) {
 
 // Table shops de la PWA (id + slug + nom) : c'est elle qui fait le lien entre
 // les id_shop de shop_product et les magasins signage.
+// Ramène un code langue quelconque (« fr », « FR », « fr_BE », « français »,
+// « dutch »…) vers un de nos identifiants supportés (fr / nl / en / de).
+function normLang(v) {
+  const s = String(v || '').trim().toLowerCase();
+  if (!s) return '';
+  if (/^(nl|nld|dut|vla|flemish|neerlandais|néerlandais)/.test(s) || s.startsWith('nl_')) return 'nl';
+  if (/^(en|eng|ang|anglais|english)/.test(s) || s.startsWith('en_')) return 'en';
+  if (/^(de|deu|ger|all|allemand|deutsch|german)/.test(s) || s.startsWith('de_')) return 'de';
+  if (/^(fr|fra|fre|français|francais|french)/.test(s) || s.startsWith('fr_')) return 'fr';
+  return '';
+}
+
+// Table des langues de la PWA (id → code iso) pour résoudre un language_id.
+async function langMap(cfg, db) {
+  for (const t of ['language', 'lang', 'languages', 'langue', 'langues']) {
+    try {
+      const cols = await tableCols(cfg, db, t);
+      if (!cols.length) continue;
+      const id = (await primaryKey(cfg, db, t)) || pickCol(cols, ['id', 'id_lang', 'language_id'], 'id', t);
+      const code = pickCol(cols, ['iso_code', 'code', 'locale', 'iso', 'slug', 'lang', 'name', 'label'], 'optionnel');
+      if (!code) continue;
+      const rows = await mysqlRows(cfg, `SELECT ${qid(id)}, ${qid(code)} FROM ${qid(db)}.${qid(t)}`);
+      const m = new Map();
+      for (const [i, c] of rows) { const n = normLang(c); if (n) m.set(String(i), n); }
+      if (m.size) return m;
+    } catch { /* table absente : suivante */ }
+  }
+  return null;
+}
+
 async function detectShops(cfg, db) {
   for (const t of ['shops', 'shop']) {
     try {
@@ -195,17 +225,24 @@ async function detectShops(cfg, db) {
       const name = pickCol(cols, ['name', 'label', 'title', 'nom', 'libelle'], 'optionnel');
       const active = pickCol(cols, ['active', 'enabled', 'visible', 'actif', 'status'], 'optionnel');
       if (!slug && !name) continue;
-      const rows = await mysqlRows(cfg, `SELECT ${qid(id)}, ${slug ? qid(slug) : "''"}, ${name ? qid(name) : "''"}, ${active ? qid(active) : "'1'"} FROM ${qid(db)}.${qid(t)}`);
-      const all = rows.map(([i, sl, nm, act]) => ({
+      // Langue préférée du shop : d'abord une colonne code direct
+      // (lang / locale), sinon un id de langue (preferred_language_id…).
+      const langCode = pickCol(cols, ['lang', 'locale', 'langue', 'language', 'default_lang', 'iso_code'], 'optionnel');
+      const langId = langCode ? null
+        : pickCol(cols, ['preferred_language_id', 'language_id', 'id_lang', 'default_language_id', 'lang_id', 'default_lang_id'], 'optionnel');
+      const langSel = langCode ? qid(langCode) : (langId ? qid(langId) : "''");
+      const idMap = langId ? await langMap(cfg, db) : null;
+      const rows = await mysqlRows(cfg, `SELECT ${qid(id)}, ${slug ? qid(slug) : "''"}, ${name ? qid(name) : "''"}, ${active ? qid(active) : "'1'"}, ${langSel} FROM ${qid(db)}.${qid(t)}`);
+      const all = rows.map(([i, sl, nm, act, lg]) => ({
         id: String(i), slug: String(sl || '').trim(), name: String(nm || '').trim(),
         active: act == null || !(act === '0' || act === '' || /^(false|no|non)$/i.test(String(act))),
+        lang: langCode ? normLang(lg) : (idMap ? (idMap.get(String(lg)) || '') : ''),
       }));
-      // On renvoie TOUTES les boutiques (actives + inactives) : les actives
-      // sont mappées/créées, les inactives servent à désactiver le magasin.
-      return { shops: all, inactive: all.filter((x) => !x.active).length };
+      const langFound = langCode ? `colonne « ${langCode} »` : (langId ? `id de langue « ${langId} »${idMap ? '' : ' (table des langues introuvable)'}` : '');
+      return { shops: all, inactive: all.filter((x) => !x.active).length, langFound };
     } catch { /* table absente ou illisible : on essaie la suivante */ }
   }
-  return { shops: [], inactive: 0 };
+  return { shops: [], inactive: 0, langFound: '' };
 }
 
 const slugify = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -325,16 +362,20 @@ async function doImport(cfg, queries) {
   const extLabel = {};
   const created = [];
   let inactiveShops = 0;
+  let langFound = '';
+  let langSet = 0;
   if (Object.keys(cfg.shopMap || {}).length) {
     for (const [storeId, extId] of Object.entries(cfg.shopMap)) { extToStore[String(extId)] = storeId; extLabel[String(extId)] = String(extId); }
   } else {
     const det = await detectShops(cfg, queries.db);
     const shops = det.shops;
     inactiveShops = det.inactive;
+    langFound = det.langFound;
     if (shops.length) {
       const insStore = db0.prepare(`INSERT OR IGNORE INTO sig_stores(id, name, grp, conn, screens, screen_size, screen_orient, lang)
-        VALUES (?, ?, 'Boutiques PWA', 'fibre', 1, 55, 'paysage', 'fr')`);
+        VALUES (?, ?, 'Boutiques PWA', 'fibre', 1, 55, 'paysage', ?)`);
       const setActive = db0.prepare('UPDATE sig_stores SET active = ? WHERE id = ?');
+      const setLang = db0.prepare('UPDATE sig_stores SET lang = ? WHERE id = ?');
       const findMatch = (sh) => {
         const key = sh.slug || slugify(sh.name) || `shop${sh.id}`;
         return {
@@ -355,12 +396,13 @@ async function doImport(cfg, queries) {
         let { match } = findMatch(sh);
         if (!match) {
           const nm = sh.name || (key.charAt(0).toUpperCase() + key.slice(1));
-          insStore.run(key, nm);
+          insStore.run(key, nm, sh.lang || 'fr');
           match = { id: key, name: nm };
           sigStores.push(match);
           created.push(`${nm} (${key})`);
         }
         setActive.run(1, match.id); // réactive si elle l'était
+        if (sh.lang) { setLang.run(sh.lang, match.id); langSet++; } // langue préférée du shop
         extToStore[sh.id] = match.id;
         extLabel[sh.id] = sh.slug || sh.id;
       }
@@ -417,5 +459,6 @@ async function doImport(cfg, queries) {
     ...(dupes ? { dupes } : {}),
     ...(created.length ? { createdStores: created } : {}),
     ...(inactiveShops ? { inactiveShops } : {}),
+    ...(langSet ? { langSet, langSource: langFound } : (langFound ? { langSource: langFound } : {})),
   };
 }
