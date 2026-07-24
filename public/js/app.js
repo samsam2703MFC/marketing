@@ -98,6 +98,8 @@ class App extends Component {
     pwaForm: null, pwaBusy: null, pwaResult: null,
     planWindows: [], planByStore: {}, planStores: [], planSlots: { matin: [], midi: [], aprem: [] },
     planBusy: false, planResult: null,
+    onbOpen: false, onbStore: '', onbTest: {},
+    onbDone: (() => { try { return JSON.parse(localStorage.getItem('sigOnbDone') || '[]'); } catch { return []; } })(),
   };
 
   // ---------------------------------------------------------------- lifecycle
@@ -1130,6 +1132,49 @@ class App extends Component {
       this.showToast(e.status === 401 ? 'Session expirée — recharge la page (F5)' : `Erreur : ${e.message}`);
     }
   }
+
+  // ---- guide de mise en route (onboarding par magasin) --------------------
+  openOnboarding() {
+    const active = this.state.fleet.filter((s) => s.active !== false);
+    const first = this.state.onbStore && active.some((s) => s.id === this.state.onbStore)
+      ? this.state.onbStore : ((active[0] || {}).id || '');
+    this.setState({ onbOpen: true, onbStore: first });
+  }
+  onbMarkDone(id, done) {
+    const set = new Set(this.state.onbDone);
+    if (done) set.add(id); else set.delete(id);
+    const arr = [...set];
+    try { localStorage.setItem('sigOnbDone', JSON.stringify(arr)); } catch { /* stockage indispo */ }
+    this.setState({ onbDone: arr });
+  }
+  async onbTestStore(id) {
+    this.setState({ onbTest: { ...this.state.onbTest, [id]: { state: 'testing' } } });
+    try {
+      const j = await api('GET', `/film?store=${encodeURIComponent(id)}`);
+      const res = {
+        state: 'ok',
+        name: j.playlistName || 'Film',
+        px: j.format ? j.format.px : '—',
+        modules: Array.isArray(j.modules) ? j.modules.length : 0,
+        plan: j.plan ? `${j.plan.moment}${j.plan.films > 1 ? ` · ${j.plan.films} films` : ''}` : '',
+        draft: !!j.draft,
+      };
+      this.setState({ onbTest: { ...this.state.onbTest, [id]: res } });
+    } catch (e) {
+      this.setState({ onbTest: { ...this.state.onbTest, [id]: { state: 'err', error: String(e.message || e) } } });
+    }
+  }
+  // Débit conseillé selon la résolution (surtout pour les films avec vidéo).
+  bandwidthNote(fmt) {
+    const w = (fmt && fmt.w) || 3840;
+    const is4k = w >= 3840;
+    return {
+      is4k,
+      reco: is4k
+        ? 'niveau 4K : ~15–25 Mbps en H.265/HEVC, ~25–50 Mbps en H.264 en lecture vidéo continue'
+        : 'niveau 1080p : ~5–10 Mbps en lecture vidéo continue',
+    };
+  }
   perFilmLinks() {
     // Lien direct par film (format standard 55″) : dernière publication de ce
     // film, ou sa composition enregistrée s'il n'a jamais été publié.
@@ -1920,6 +1965,41 @@ class App extends Component {
       overrideIconStyle: `${hdrRound}${st.override ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;box-shadow:0 2px 10px rgba(141,29,44,0.35);' : 'background:transparent;color:#5B564E;border:1px solid rgba(35,34,32,0.18);'}`,
       overrideTip: st.override ? 'Diffusion flash ACTIVE — cliquer pour reprendre les playlists' : 'Diffusion flash (suspend les playlists)',
       publishIconStyle: `width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;cursor:pointer;flex:0 0 auto;background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;box-shadow:0 3px 12px rgba(141,29,44,0.4);`,
+      onbIconStyle: `${hdrRound}background:rgba(46,110,78,0.12);color:#2E6E4E;border:1px solid rgba(46,110,78,0.4);`,
+      // ---- guide de mise en route ----
+      openOnboarding: () => this.openOnboarding(),
+      onbOpen: st.onbOpen,
+      closeOnb: () => this.setState({ onbOpen: false }),
+      onbStores: st.fleet.filter((s) => s.active !== false).map((s) => ({
+        id: s.id, name: s.store,
+        on: st.onbStore === s.id,
+        done: st.onbDone.includes(s.id),
+        pick: () => this.setState({ onbStore: s.id }),
+      })),
+      onbSel: (() => {
+        const s = st.fleet.find((x) => x.id === st.onbStore);
+        if (!s) return null;
+        const fmt = s.format || { screens: 1, size: 55, orient: 'paysage', label: '1 × 55″ paysage', px: '3840 × 2160 px', w: 3840, h: 2160 };
+        const bw = this.bandwidthNote(fmt);
+        const test = st.onbTest[s.id] || null;
+        return {
+          id: s.id, name: s.store, lang: s.lang || 'fr',
+          fmt, bwReco: bw.reco, is4k: bw.is4k,
+          setScreens: (e) => this.saveStore(s.id, { screens: e.target.value }),
+          setSize: (e) => this.saveStore(s.id, { size: e.target.value }),
+          setOrient: (e) => this.saveStore(s.id, { orient: e.target.value }),
+          setLang: (e) => this.saveStore(s.id, { lang: e.target.value }),
+          langOptions: (st.langs || []).map((l) => ({ id: l.id, label: l.label })),
+          runTest: () => this.onbTestStore(s.id),
+          test,
+          link: this.filmUrl({ store: s.id }),
+          copyLink: () => this.copyLink(this.filmUrl({ store: s.id })),
+          done: st.onbDone.includes(s.id),
+          toggleDone: () => this.onbMarkDone(s.id, !st.onbDone.includes(s.id)),
+        };
+      })(),
+      onbCount: st.fleet.filter((s) => s.active !== false).length,
+      onbDoneCount: st.fleet.filter((s) => s.active !== false && st.onbDone.includes(s.id)).length,
     };
   }
 
@@ -2085,6 +2165,7 @@ class App extends Component {
       <button class="hdr-btn" onClick=${v.toggleOverride} style=${v.overrideIconStyle}>⚡<span class="hdr-tip">${v.overrideTip}</span></button>
       <button class="hdr-btn" onClick=${v.openPublish} style=${v.publishIconStyle}>↗<span class="hdr-tip hdr-tip-right">Publier sur le réseau — déploie le film choisi</span></button>
       <span style="width:1px;height:26px;background:rgba(35,34,32,0.10);flex:0 0 auto;margin:0 3px;"></span>
+      <button class="hdr-btn" onClick=${v.openOnboarding} style=${v.onbIconStyle}>🎓<span class="hdr-tip hdr-tip-right">Mise en route — configurer chaque magasin</span></button>
       <button class="hdr-btn" onClick=${v.setViewSettings} style=${v.settingsIconStyle}>⚙<span class="hdr-tip hdr-tip-right">Paramètres — serveur, import PWA & liens</span></button>
     </div>
   </header>
@@ -2958,6 +3039,90 @@ class App extends Component {
 
     </div>
   </div>
+  `}
+
+  ${v.onbOpen && html`
+    <div onClick=${v.closeOnb} style="position:fixed;inset:0;background:rgba(20,15,12,0.5);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:50;">
+      <div onClick=${(e) => e.stopPropagation()} style="width:900px;max-width:95vw;max-height:90vh;overflow:auto;background:#FBF8F2;border-radius:20px;padding:24px 26px;box-shadow:0 30px 80px rgba(0,0,0,0.35);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <h2 style="margin:0;font-size:19px;font-weight:600;">🎓 Mise en route</h2>
+          <button onClick=${v.closeOnb} style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:9px;background:#EFE9E0;border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:14px;">✕</button>
+        </div>
+        <p style="margin:0 0 16px;font-size:12.5px;color:#8A847C;">Configure chaque magasin pas à pas : écran, langue, test, lien. ${v.onbDoneCount}/${v.onbCount} magasin(s) prêt(s).</p>
+        ${v.onbStores.length ? html`
+        <div style="display:grid;grid-template-columns:220px 1fr;gap:18px;align-items:start;">
+          <div style="display:flex;flex-direction:column;gap:7px;">
+            ${v.onbStores.map((s) => html`
+              <button onClick=${s.pick} style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 13px;border-radius:11px;cursor:pointer;text-align:left;background:${s.on ? '#fff' : 'rgba(255,255,255,0.5)'};border:1px solid ${s.on ? '#8D1D2C' : 'rgba(35,34,32,0.1)'};">
+                <span style="font-size:13.5px;font-weight:600;">${s.name}</span>
+                <span style="font-size:14px;color:${s.done ? '#2E7D32' : '#C9C3B8'};">${s.done ? '✓' : '○'}</span>
+              </button>
+            `)}
+          </div>
+          ${v.onbSel && html`
+          <div style="display:flex;flex-direction:column;gap:14px;">
+
+            <div style="background:#fff;border:1px solid rgba(35,34,32,0.08);border-radius:14px;padding:16px 18px;">
+              <h3 style="margin:0 0 10px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">1 · Écran — ${v.onbSel.name}</h3>
+              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;">
+                <span style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">Combo</span>
+                <select value=${v.onbSel.fmt.screens} onChange=${v.onbSel.setScreens} style="padding:7px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;cursor:pointer;">
+                  ${[1, 2, 3, 4, 5, 6].map((n) => html`<option value=${n}>${n}</option>`)}
+                </select>
+                <span style="font-size:12px;color:#8A847C;">×</span>
+                <select value=${v.onbSel.fmt.size} onChange=${v.onbSel.setSize} style="padding:7px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;cursor:pointer;">
+                  ${[32, 43, 49, 55, 65, 75, 85].map((n) => html`<option value=${n}>${n}″</option>`)}
+                </select>
+                <select value=${v.onbSel.fmt.orient} onChange=${v.onbSel.setOrient} style="padding:7px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;cursor:pointer;">
+                  <option value="paysage">paysage</option>
+                  <option value="portrait">portrait</option>
+                </select>
+                <span style="font-size:12.5px;font-weight:700;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.2);border-radius:999px;padding:5px 12px;">= ${v.onbSel.fmt.px}</span>
+              </div>
+              <div style="margin-top:11px;padding:11px 13px;border-radius:10px;background:${v.onbSel.is4k ? 'rgba(184,134,11,0.08)' : 'rgba(46,110,78,0.07)'};border:1px solid ${v.onbSel.is4k ? 'rgba(184,134,11,0.3)' : 'rgba(46,110,78,0.25)'};">
+                <div style="font-size:12px;font-weight:600;color:${v.onbSel.is4k ? '#8a6508' : '#2E6E4E'};margin-bottom:4px;">📶 Débit conseillé — ${v.onbSel.bwReco}</div>
+                <div style="font-size:11.5px;color:#8A847C;line-height:1.5;">Repère : 4K H.264 ≈ 25–50 Mbps · 4K H.265/HEVC ≈ 15–25 Mbps · 1080p ≈ 5–10 Mbps. Ça compte surtout pour les <strong>films avec vidéo</strong> (élément Film) en lecture continue ; les menus (images) sont mis en cache sur l'écran et ne consomment qu'au premier chargement.</div>
+              </div>
+            </div>
+
+            <div style="background:#fff;border:1px solid rgba(35,34,32,0.08);border-radius:14px;padding:16px 18px;">
+              <h3 style="margin:0 0 10px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">2 · Langue d'affichage</h3>
+              <select value=${v.onbSel.lang} onChange=${v.onbSel.setLang} style="padding:8px 12px;font-size:13px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;cursor:pointer;text-transform:uppercase;">
+                ${v.onbSel.langOptions.map((l) => html`<option value=${l.id}>${l.id} — ${l.label}</option>`)}
+              </select>
+              <span style="font-size:11.5px;color:#8A847C;margin-left:10px;">Les noms de produits s'affichent dans cette langue (alias de la table produits).</span>
+            </div>
+
+            <div style="background:#fff;border:1px solid rgba(35,34,32,0.08);border-radius:14px;padding:16px 18px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
+                <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">3 · Test de l'écran</h3>
+                <button onClick=${v.onbSel.runTest} style="padding:8px 15px;font-size:12.5px;font-weight:600;border-radius:999px;border:1px solid #2E6E4E;background:rgba(46,110,78,0.08);color:#2E6E4E;cursor:pointer;">${v.onbSel.test && v.onbSel.test.state === 'testing' ? 'Test…' : '▶ Tester'}</button>
+              </div>
+              ${v.onbSel.test && v.onbSel.test.state === 'ok' && html`
+                <div style="font-size:12.5px;color:#2E7D32;line-height:1.6;">✓ Lien OK — sert « <strong>${v.onbSel.test.name}</strong> »${v.onbSel.test.plan ? ` (planning : ${v.onbSel.test.plan})` : ''} · ${v.onbSel.test.modules} élément(s) · rendu ${v.onbSel.test.px}${v.onbSel.test.draft ? ' · brouillon (pas encore publié)' : ''}</div>
+              `}
+              ${v.onbSel.test && v.onbSel.test.state === 'err' && html`<div style="font-size:12.5px;color:#8D1D2C;">✗ ${v.onbSel.test.error}</div>`}
+              ${!v.onbSel.test && html`<div style="font-size:12px;color:#8A847C;">Clique « Tester » pour vérifier que le lien du magasin répond et voir ce qu'il diffuse.</div>`}
+            </div>
+
+            <div style="background:#fff;border:1px solid rgba(35,34,32,0.08);border-radius:14px;padding:16px 18px;">
+              <h3 style="margin:0 0 10px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">4 · Lien à mettre sur l'écran</h3>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <input readonly value=${v.onbSel.link} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:8px 11px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#FBF8F2;" />
+                <button onClick=${v.onbSel.copyLink} style="flex:0 0 auto;padding:8px 14px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Copier</button>
+                <a href=${v.onbSel.link} target="_blank" style="flex:0 0 auto;font-size:12px;font-weight:600;color:#8D1D2C;">↗</a>
+              </div>
+              <p style="margin:8px 0 0;font-size:11.5px;color:#8A847C;">Ouvre ce lien en plein écran sur l'écran du magasin (mode kiosque). Il bascule tout seul selon l'heure si tu as fait un Planning.</p>
+            </div>
+
+            <button onClick=${v.onbSel.toggleDone} style="align-self:flex-start;padding:10px 20px;font-size:13px;font-weight:600;border-radius:999px;cursor:pointer;${v.onbSel.done ? 'background:rgba(46,125,50,0.12);color:#2E7D32;border:1px solid rgba(46,125,50,0.4);' : 'background:#232220;color:#fff;border:none;'}">${v.onbSel.done ? '✓ Magasin configuré — annuler' : 'Marquer ce magasin comme configuré'}</button>
+
+          </div>
+          `}
+        </div>
+        ` : html`<p style="margin:0;font-size:13px;color:#8A847C;">Aucun magasin actif. Fais ⚙ Paramètres → ⟳ Rafraîchir pour importer tes magasins, ou branche un écran.</p>`}
+      </div>
+    </div>
   `}
 
   ${v.addPickerOpen && html`
