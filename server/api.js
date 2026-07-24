@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import {
   getDb, getSetting, setSetting, getIntSetting,
   loadModules, loadPlaylist, loadPlaylists, activePlaylistId, saveDraft, storeFormat, DB_PATH,
-  loadElementTypes, loadCatalog, saveCatalog, applyStorePrices,
+  loadElementTypes, loadCatalog, saveCatalog, applyStorePrices, applyStoreLang, loadLangs,
   checkLogin, createSession, sessionUser, destroySession,
 } from './db.js';
 import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
@@ -56,7 +56,7 @@ export function fleetJson() {
   const db = getDb();
   const stores = db.prepare('SELECT * FROM sig_stores ORDER BY id').all();
   const players = db.prepare('SELECT * FROM sig_players ORDER BY store_id, id').all();
-  const byStore = new Map(stores.map((s) => [s.id, { id: s.id, store: s.name, group: s.grp, conn: s.conn, format: storeFormat(s), players: [] }]));
+  const byStore = new Map(stores.map((s) => [s.id, { id: s.id, store: s.name, group: s.grp, conn: s.conn, format: storeFormat(s), lang: s.lang || 'fr', players: [] }]));
   for (const p of players) {
     const seen = secsSince(p.last_seen);
     const online = seen != null && seen <= ONLINE_WINDOW_S;
@@ -249,8 +249,9 @@ function assignment(id, url) {
   if (!p) return { status: 401, json: { error: 'unauthorized' } };
   const snap = getDb().prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' AND version = ?`).get(p.assigned_ver);
   const snapshot = snap ? JSON.parse(snap.payload) : currentDraftSnapshot();
-  // Prix par magasin (table produits) : appliqués selon le magasin du player.
+  // Prix + langue du magasin (table produits) : appliqués selon le player.
   applyStorePrices(snapshot.modules, p.store_id);
+  applyStoreLang(snapshot.modules, p.store_id);
   return {
     status: 200,
     json: {
@@ -336,8 +337,9 @@ function filmJson(storeId, filmId) {
   snap.storeId = storeId || null;
   snap.storeName = storeName;
   snap.format = storeFmt;
-  // Prix par magasin (table produits) : le lien ?store= montre SES prix.
+  // Prix + langue du magasin : le lien ?store= montre SES prix, dans SA langue.
   applyStorePrices(snap.modules, storeId);
+  applyStoreLang(snap.modules, storeId);
   return { status: 200, json: snap };
 }
 
@@ -463,6 +465,7 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
 
     // ---- types d'éléments & table produits (rien en dur : tout en base) ----
     if (req.method === 'GET' && path === '/element-types') return send(200, { types: loadElementTypes() });
+    if (req.method === 'GET' && path === '/langs') return send(200, { langs: loadLangs() });
     if (req.method === 'GET' && path === '/catalog') return send(200, loadCatalog());
     if (req.method === 'PUT' && path === '/catalog') {
       const body = await readBody();
@@ -500,10 +503,12 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
         const screens = Math.min(6, Math.max(1, parseInt(body.screens, 10) || store.screens || 1));
         const size = Math.min(120, Math.max(20, parseInt(body.size, 10) || store.screen_size || 55));
         const orient = body.orient === 'portrait' ? 'portrait' : (body.orient === 'paysage' ? 'paysage' : store.screen_orient || 'paysage');
-        db.prepare('UPDATE sig_stores SET name = ?, screens = ?, screen_size = ?, screen_orient = ? WHERE id = ?')
-          .run(name, screens, size, orient, store.id);
+        const langIds = new Set(loadLangs().map((l) => l.id));
+        const lang = body.lang != null && langIds.has(String(body.lang)) ? String(body.lang) : (store.lang || 'fr');
+        db.prepare('UPDATE sig_stores SET name = ?, screens = ?, screen_size = ?, screen_orient = ?, lang = ? WHERE id = ?')
+          .run(name, screens, size, orient, lang, store.id);
         const updated = db.prepare('SELECT * FROM sig_stores WHERE id = ?').get(store.id);
-        return send(200, { ok: true, id: store.id, name: updated.name, format: storeFormat(updated) });
+        return send(200, { ok: true, id: store.id, name: updated.name, lang: updated.lang, format: storeFormat(updated) });
       }
     }
 

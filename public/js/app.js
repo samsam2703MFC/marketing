@@ -81,9 +81,9 @@ class App extends Component {
     test: { state: 'idle', rows: [] },
     fleet: [],
     library: [],
-    elementTypes: [], addPicker: false,
+    elementTypes: [], addPicker: false, openSec: 'items',
     catalog: { categories: [], products: [] },
-    catDraft: null, catDirty: false, catSel: '', catSaving: false,
+    catDraft: null, catDirty: false, catSel: '', catSaving: false, langs: [], catLang: 'fr',
   };
 
   // ---------------------------------------------------------------- lifecycle
@@ -131,6 +131,7 @@ class App extends Component {
       // Types d'éléments + table produits : tout vient de la base, rien en dur.
       const et = await api('GET', '/element-types').catch(() => ({ types: [] }));
       const cat = await api('GET', '/catalog').catch(() => ({ categories: [], products: [] }));
+      const lg = await api('GET', '/langs').catch(() => ({ langs: [{ id: 'fr', label: 'Français' }] }));
       const playlists = ((Array.isArray(st.playlists) && st.playlists.length)
         ? st.playlists
         : [{ id: 'pl1', name: 'Film principal', items: st.playlist || [] }]).map((p) => this.normFilm(p));
@@ -141,6 +142,7 @@ class App extends Component {
         loading: false, authRequired: false,
         library: st.modules,
         elementTypes: et.types || [],
+        langs: lg.langs || [{ id: 'fr', label: 'Français' }],
         catalog: { categories: cat.categories || [], products: cat.products || [] },
         catDraft: null, catDirty: false,
         playlists,
@@ -388,7 +390,25 @@ class App extends Component {
   setLib(lib, extra) { this.dirty({ library: lib, ...(extra || {}) }); }
 
   // ------------------------------------------------------- modules & playlist
-  selectMod(id) { this.setState({ selId: id, t: 0 }); }
+  selectMod(id) {
+    const mm = this.state.library.find((x) => x.id === id);
+    this.setState({ selId: id, t: 0, openSec: this.defaultSecFor(mm) });
+  }
+  // Volets repliables de l'éditeur : un seul ouvert, centré à l'écran.
+  defaultSecFor(mm) {
+    if (!mm) return null;
+    if (mm.type === 'produit') return 'produit';
+    if (mm.type === 'film') return 'video';
+    if (mm.type === 'animation') return 'layout';
+    if (mm.type === 'category') return 'items';
+    return 'tag';
+  }
+  toggleSec(id, el) {
+    const open = this.state.openSec === id ? null : id;
+    this.setState({ openSec: open });
+    // Auto-focus : le volet qui vient de s'ouvrir se centre dans l'écran.
+    if (open && el) setTimeout(() => { try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch { /* navigateur ancien */ } }, 90);
+  }
   // Un nouveau module rejoint directement la playlist (retirable avec ✕) :
   // sinon il n'apparaîtrait pas dans le film publié et c'est trop facile à rater.
   // « + Élément » : le type est choisi parmi ceux de la table sig_element_types.
@@ -408,7 +428,7 @@ class App extends Component {
     else if (t.id === 'animation') { base.name = 'Nouveauté'; base.sub = 'cette semaine'; base.dur = 6; base.libTag = 'promo'; }
     else { base.name = t.label || 'Élément'; }
     lib.push(base);
-    this.setLib(lib, { selId: id, addPicker: false, composerTab: 'lib', ...this.playlistPatch([...this.state.playlist, id]) });
+    this.setLib(lib, { selId: id, addPicker: false, composerTab: 'lib', openSec: this.defaultSecFor(base), ...this.playlistPatch([...this.state.playlist, id]) });
   }
   elementTypeOf(m) {
     return (this.state.elementTypes || []).find((t) => t.id === (m && m.type)) || null;
@@ -908,10 +928,11 @@ class App extends Component {
         screens: patch.screens != null ? patch.screens : f.screens,
         size: patch.size != null ? patch.size : f.size,
         orient: patch.orient != null ? patch.orient : f.orient,
+        ...(patch.lang != null ? { lang: patch.lang } : {}),
         ...(patch.name != null ? { name: patch.name } : {}),
       });
       await this.refreshFleet();
-      this.showToast(`${out.name} : ${out.format.label} = ${out.format.px} ✓`);
+      this.showToast(`${out.name} : ${out.format.label} = ${out.format.px} · langue ${(out.lang || 'fr').toUpperCase()} ✓`);
     } catch (e) {
       this.showToast(e.status === 401
         ? 'Session expirée — recharge la page (F5) et reconnecte-toi'
@@ -1261,6 +1282,9 @@ class App extends Component {
       onRenameKey: (e) => { if (e.key === 'Enter') this.renameStore(s.id); if (e.key === 'Escape') this.setState({ editingStore: null }); },
       commitRename: () => this.renameStore(s.id),
       fmt: s.format || { screens: 1, size: 55, orient: 'paysage', label: '1 × 55″ paysage', px: '3840 × 2160 px', w: 3840, h: 2160 },
+      lang: s.lang || 'fr',
+      setLang: (e) => this.saveStore(s.id, { lang: e.target.value }),
+      langOptions: (st.langs || []).map((l) => ({ id: l.id, label: l.label })),
       setScreens: (e) => this.saveStore(s.id, { screens: e.target.value }),
       setSize: (e) => this.saveStore(s.id, { size: e.target.value }),
       setOrient: (e) => this.saveStore(s.id, { orient: e.target.value }),
@@ -1297,25 +1321,51 @@ class App extends Component {
     // ---- vue table produits ----
     const cd = st.catDraft || st.catalog;
     const storeCols = st.fleet.map((s) => ({ id: s.id, label: s.store }));
+    // Langue d'édition : « fr » = noms de base, autres langues = alias.
+    const editLang = st.catLang || 'fr';
+    const isBaseLang = editLang === 'fr';
+    const langChips = (st.langs || []).map((l) => {
+      const nStores = st.fleet.filter((f) => (f.lang || 'fr') === l.id).length;
+      const on = editLang === l.id;
+      return {
+        id: l.id, label: l.label, nStores, on,
+        pick: () => this.setState({ catLang: l.id }),
+        style: `display:inline-flex;align-items:center;gap:7px;padding:7px 14px;font-size:12px;font-weight:700;text-transform:uppercase;border-radius:999px;cursor:pointer;${on ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#fff;color:#8D1D2C;border:1px solid rgba(141,29,44,0.3);'}`,
+      };
+    });
     const prodCats = cd.categories.map((c) => {
       const count = cd.products.filter((p) => p.categoryId === c.id).length;
       const on = st.catSel === c.id;
       const usedBy = st.library.filter((mm) => mm.catRef === c.id).length;
       return {
-        id: c.id, name: c.name, count, usedBy, active: c.active !== false, on,
+        id: c.id, count, usedBy, active: c.active !== false, on,
+        name: isBaseLang ? c.name : ((c.aliases || {})[editLang] || ''),
+        namePlaceholder: isBaseLang ? 'Nom de la catégorie' : `${c.name} (${editLang})`,
         cardStyle: `display:flex;align-items:center;gap:9px;padding:11px 12px;border-radius:11px;cursor:pointer;background:${on ? '#fff' : 'rgba(255,255,255,0.5)'};border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.08)'};opacity:${c.active !== false ? 1 : 0.55};`,
         pick: () => this.setState({ catSel: c.id }),
-        onName: (e) => this.setCat((d) => { const x = d.categories.find((y) => y.id === c.id); if (x) x.name = e.target.value; }),
+        onName: (e) => this.setCat((d) => {
+          const x = d.categories.find((y) => y.id === c.id);
+          if (!x) return;
+          if (isBaseLang) x.name = e.target.value;
+          else { x.aliases = x.aliases || {}; if (e.target.value.trim()) x.aliases[editLang] = e.target.value; else delete x.aliases[editLang]; }
+        }),
         toggleActive: (e) => { e.stopPropagation(); this.setCat((d) => { const x = d.categories.find((y) => y.id === c.id); if (x) x.active = !(x.active !== false); }); },
         del: (e) => { e.stopPropagation(); this.delProdCat(c.id); },
       };
     });
     const prodSelCat = cd.categories.find((c) => c.id === st.catSel) || null;
     const prodRows = cd.products.filter((p) => p.categoryId === st.catSel).map((p) => ({
-      id: p.id, name: p.name, price: p.price, img: p.img, active: p.active !== false,
+      id: p.id, price: p.price, img: p.img, active: p.active !== false,
+      name: isBaseLang ? p.name : ((p.aliases || {})[editLang] || ''),
+      namePlaceholder: isBaseLang ? 'Nom du produit' : `${p.name} (${editLang})`,
       isPhoto: p.src === 'photo',
       thumb: h('img', { src: p.img, alt: '', style: { width: 42, height: 42, objectFit: p.src === 'photo' ? 'cover' : 'contain', flex: '0 0 auto', background: '#FBF8F2', borderRadius: 8, padding: 2, boxSizing: 'border-box' } }),
-      onName: (e) => this.setCat((d) => { const x = d.products.find((y) => y.id === p.id); if (x) x.name = e.target.value; }),
+      onName: (e) => this.setCat((d) => {
+        const x = d.products.find((y) => y.id === p.id);
+        if (!x) return;
+        if (isBaseLang) x.name = e.target.value;
+        else { x.aliases = x.aliases || {}; if (e.target.value.trim()) x.aliases[editLang] = e.target.value; else delete x.aliases[editLang]; }
+      }),
       onPrice: (e) => this.setCat((d) => { const x = d.products.find((y) => y.id === p.id); if (x) x.price = e.target.value; }),
       onImg: (e) => this.setCat((d) => { const x = d.products.find((y) => y.id === p.id); if (x) { x.img = e.target.value; x.src = 'illus'; } }),
       onPhoto: (e) => this.onProdPhoto(p.id, e),
@@ -1396,7 +1446,7 @@ class App extends Component {
     return {
       playlist, library, layoutOptions, motionGroups, items, days, posFields, timeSlots, crumbs,
       timelineBlocks, timelineTotal, timelineEndDrop, libCards, libTagChips, libEmptyMsg, pubDaysVals,
-      prodCats, prodRows, storeCols, prodSelCat,
+      prodCats, prodRows, storeCols, prodSelCat, langChips, isBaseLang,
       catDirty: st.catDirty, catSaving: st.catSaving,
       addProdCat: () => this.addProdCat(),
       addProd: () => this.addProd(),
@@ -1489,6 +1539,20 @@ class App extends Component {
       videoPreview: m.video || '',
       onVideoFile: (e) => this.onVideo(e),
       clearVideo: () => this.setSelField('video', ''),
+      // -- résumés des volets repliés --
+      layoutSummary: ((layoutList.find((o) => o.id === m.layout) || {}).label) || m.layout || '',
+      motionSummary: ({ m1: 'Doux', m2: 'Ample', m3: 'Pulsé', none: 'Aucun' })[m.motion || 'm1'] || '',
+      posSummary: (() => {
+        const p0 = m.pos || {};
+        const changed = ['titleY', 'listX', 'listY', 'illoX', 'illoY'].some((k) => p0[k]) || (p0.illoScale && p0.illoScale !== 1);
+        return changed ? 'ajustées' : 'par défaut';
+      })(),
+      itemsSummary: m.catRef
+        ? `⛓ ${(st.catalog.categories.find((c) => c.id === m.catRef) || {}).name || m.catRef} · ${(m.items || []).length} ligne(s)`
+        : `${(m.items || []).length} produit(s)`,
+      tagSummary: (m.tag && m.tag.enabled) ? `activé · ${m.tag.label || 'macaron'}` : 'désactivé',
+      videoSummary: m.video ? `importée · ${m.dur || 10} s` : 'aucune vidéo',
+      produitSummary: (m.items && m.items[0] && m.items[0].name) || 'à choisir',
       // -- motion global (produit / animation) --
       motionSimple: MOTIONS.map((o) => ({
         label: o.label,
@@ -1605,6 +1669,18 @@ class App extends Component {
       </div>`;
     }
     const v = this.vals();
+
+    // Volets repliables de l'éditeur : en-tête cliquable, résumé quand fermé,
+    // un seul volet ouvert à la fois, centré à l'écran à l'ouverture.
+    const secOpen = (id) => st.openSec === id;
+    const secCard = 'background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;overflow:hidden;';
+    const secBody = 'padding:2px 24px 22px;';
+    const secHead = (id, title, summary) => html`
+      <button onClick=${(e) => this.toggleSec(id, e.currentTarget.parentElement)} style="width:100%;box-sizing:border-box;display:flex;align-items:center;gap:11px;padding:17px 24px;background:transparent;border:none;cursor:pointer;text-align:left;">
+        <span style="flex:0 0 auto;display:inline-block;font-size:10px;color:#8D1D2C;transform:rotate(${secOpen(id) ? '90deg' : '0deg'});transition:transform .15s;">▶</span>
+        <span style="flex:0 0 auto;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">${title}</span>
+        ${!secOpen(id) && summary ? html`<span style="flex:1 1 auto;min-width:0;text-align:right;font-size:12px;color:#8A847C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${summary}</span>` : null}
+      </button>`;
 
     // Aperçu + transport — l'onglet 1 montre l'élément en construction,
     // l'onglet 2 montre le film complet.
@@ -1823,6 +1899,12 @@ class App extends Component {
           <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Table produits</h2>
           <p style="margin:0;font-size:12.5px;color:#8A847C;">La source unique des listes de prix : catégories → produits, actif/inactif, prix par défaut et prix par magasin. Les éléments liés (⛓) suivent automatiquement.</p>
         </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Langue d'édition</span>
+          ${v.langChips.map((l) => html`
+            <button onClick=${l.pick} title=${l.label + (l.nStores ? ` · ${l.nStores} magasin(s)` : '')} style=${l.style}>${l.id}${l.nStores ? html`<span style="font-weight:400;opacity:0.75;">${l.nStores}</span>` : ''}</button>
+          `)}
+        </div>
         <button onClick=${v.saveCat} disabled=${!v.catDirty || v.catSaving} style="padding:11px 22px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:${v.catDirty && !v.catSaving ? 'pointer' : 'not-allowed'};background:${v.catDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.catDirty ? '#fff' : '#8A847C'};">${v.catSaving ? 'Enregistrement…' : (v.catDirty ? 'Enregistrer la table' : '✓ Enregistrée')}</button>
       </div>
 
@@ -1834,7 +1916,7 @@ class App extends Component {
           </div>
           ${v.prodCats.map((c) => html`
             <div onClick=${c.pick} style=${c.cardStyle}>
-              <input value=${c.name} onInput=${c.onName} onClick=${(e) => e.stopPropagation()} style="flex:1 1 auto;min-width:0;padding:7px 9px;font-size:13.5px;font-weight:600;border:1px solid ${c.on ? 'rgba(141,29,44,0.3)' : 'transparent'};border-radius:7px;background:${c.on ? '#FBF8F2' : 'transparent'};" />
+              <input value=${c.name} onInput=${c.onName} onClick=${(e) => e.stopPropagation()} placeholder=${c.namePlaceholder} style="flex:1 1 auto;min-width:0;padding:7px 9px;font-size:13.5px;font-weight:600;border:1px solid ${c.on ? 'rgba(141,29,44,0.3)' : 'transparent'};border-radius:7px;background:${c.on ? '#FBF8F2' : 'transparent'};${v.isBaseLang ? '' : 'border-color:rgba(184,134,11,0.5);'}" />
               <span style="flex:0 0 auto;font-size:11px;color:#8A847C;">${c.count}${c.usedBy ? ' · ⛓' + c.usedBy : ''}</span>
               <button onClick=${c.toggleActive} title="Active / inactive" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;flex:0 0 auto;border:1px solid rgba(35,34,32,0.12);cursor:pointer;background:${c.active ? 'rgba(46,110,78,0.12)' : 'rgba(35,34,32,0.06)'};color:${c.active ? '#2E6E4E' : '#8A847C'};font-size:12px;">${c.active ? '✓' : '⃠'}</button>
               <button onClick=${c.del} title="Supprimer la catégorie" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;flex:0 0 auto;border:1px solid rgba(35,34,32,0.12);cursor:pointer;background:rgba(255,255,255,0.7);color:#8D1D2C;font-size:12px;">🗑</button>
@@ -1859,7 +1941,7 @@ class App extends Component {
               <span></span>
               ${v.prodRows.map((p) => html`
                 <div style="display:flex;align-items:center;">${p.thumb}</div>
-                <input value=${p.name} onInput=${p.onName} style="padding:9px 11px;font-size:13.5px;font-weight:500;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:${p.active ? '#FBF8F2' : 'rgba(35,34,32,0.04)'};opacity:${p.active ? 1 : 0.6};min-width:0;" />
+                <input value=${p.name} onInput=${p.onName} placeholder=${p.namePlaceholder} style="padding:9px 11px;font-size:13.5px;font-weight:500;border:1px solid ${v.isBaseLang ? 'rgba(35,34,32,0.14)' : 'rgba(184,134,11,0.55)'};border-radius:8px;background:${p.active ? '#FBF8F2' : 'rgba(35,34,32,0.04)'};opacity:${p.active ? 1 : 0.6};min-width:0;" />
                 <div style="display:flex;align-items:center;gap:5px;min-width:0;">
                   <select value=${p.isPhoto ? '' : p.img} onChange=${p.onImg} style="flex:1 1 auto;min-width:0;padding:8px 6px;font-size:11.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;cursor:pointer;">
                     ${p.isPhoto && html`<option value="">📷 photo</option>`}
@@ -1890,7 +1972,7 @@ class App extends Component {
             </div>
           </div>
           ${!v.prodRows.length && html`<div style="font-size:12.5px;color:#8A847C;padding:14px 4px 4px;">Aucun produit dans cette catégorie — « + Ajouter un produit ».</div>`}
-          <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Prix par magasin : laisse vide pour utiliser le prix par défaut. Les liens ?store= et les écrans de chaque magasin affichent automatiquement leurs prix.</p>
+          <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Prix par magasin : laisse vide pour utiliser le prix par défaut. Langues : FR = noms de base ; dans une autre langue, le champ nom édite la traduction (vide = nom de base). Chaque magasin affiche automatiquement ses prix ET sa langue (réglée dans Réseau).</p>
         </div>
       </div>
     </div>
@@ -1945,6 +2027,9 @@ class App extends Component {
               <select value=${s.fmt.orient} onChange=${s.setOrient} title="Orientation des dalles" style="padding:7px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;cursor:pointer;">
                 <option value="paysage">paysage</option>
                 <option value="portrait">portrait</option>
+              </select>
+              <select value=${s.lang} onChange=${s.setLang} title="Langue d'affichage du magasin (noms de produits via la table produits)" style="padding:7px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;cursor:pointer;text-transform:uppercase;">
+                ${s.langOptions.map((l) => html`<option value=${l.id}>${l.id}</option>`)}
               </select>
               <span style="font-size:12.5px;font-weight:700;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.2);border-radius:999px;padding:5px 12px;">= ${s.fmt.px}</span>
               <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:${s.connColor};"><span style="width:8px;height:8px;border-radius:50%;background:${s.connColor};"></span>${s.connLabel}</div>
@@ -2056,12 +2141,13 @@ class App extends Component {
           `}
         </div>
 
-        <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 24px;">
+        <div style=${secCard}>
+          ${secHead('tag', 'Tag campagne', v.tagSummary)}
+          ${secOpen('tag') && html`<div style=${secBody}>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-            <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Tag campagne</h2>
+            <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">Affiche un macaron (illustration + texte) sur l'écran, pour une campagne commerciale.</p>
             <button onClick=${v.toggleTag} style=${v.tagTrackStyle}><span style=${v.tagKnobStyle}></span></button>
           </div>
-          <p style="margin:0 0 14px;font-size:12px;color:#8A847C;line-height:1.5;">Affiche un macaron (illustration + texte) sur l'écran, pour une campagne commerciale.</p>
           ${v.tagEnabled && html`
             <div style="display:flex;gap:10px;align-items:center;">
               <select value=${v.tagImg} onChange=${v.onTagImg} style="flex:0 0 150px;padding:10px;font-size:13px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;cursor:pointer;">
@@ -2075,11 +2161,13 @@ class App extends Component {
               <input value=${v.tagLabel} onInput=${v.onTagLabel} placeholder="ex. Nouveauté · -20%" style="flex:1 1 auto;min-width:0;padding:10px 12px;font-size:15px;font-weight:600;color:#8D1D2C;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
             </div>
           `}
+          </div>`}
         </div>
 
         ${v.layoutOptions.length > 1 && html`
-          <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 24px;">
-            <h2 style="margin:0 0 14px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Mise en page — ${v.selTypeLabel}</h2>
+          <div style=${secCard}>
+            ${secHead('layout', 'Mise en page', v.layoutSummary)}
+            ${secOpen('layout') && html`<div style=${secBody}>
             <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
               ${v.layoutOptions.map((opt) => html`
                 <button onClick=${opt.pick} style=${opt.style}>
@@ -2088,26 +2176,30 @@ class App extends Component {
                 </button>
               `)}
             </div>
+            </div>`}
           </div>
         `}
 
         ${v.isProduit && html`
-          <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 24px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-              <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Produit à la une</h2>
-              <button onClick=${v.goProducts} style="padding:7px 13px;font-size:12px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.25);border-radius:999px;cursor:pointer;">▦ Ouvrir la table produits</button>
+          <div style=${secCard}>
+            ${secHead('produit', 'Produit à la une', v.produitSummary)}
+            ${secOpen('produit') && html`<div style=${secBody}>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
+              <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">Le produit vient de la table produits — nom et prix (par magasin) suivent automatiquement.</p>
+              <button onClick=${v.goProducts} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.25);border-radius:999px;cursor:pointer;">▦ Ouvrir la table produits</button>
             </div>
-            <p style="margin:0 0 12px;font-size:12px;color:#8A847C;line-height:1.5;">Le produit vient de la table produits — son nom, son prix (et les prix par magasin) suivent automatiquement.</p>
             <select value=${v.curProductRef} onChange=${v.onProductRef} style="width:100%;box-sizing:border-box;padding:11px 12px;font-size:14px;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#FBF8F2;cursor:pointer;">
               <option value="">— Choisir un produit —</option>
               ${v.productOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
             </select>
+            </div>`}
           </div>
         `}
 
         ${v.isFilmEl && html`
-          <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 24px;">
-            <h2 style="margin:0 0 6px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Vidéo</h2>
+          <div style=${secCard}>
+            ${secHead('video', 'Vidéo', v.videoSummary)}
+            ${secOpen('video') && html`<div style=${secBody}>
             <p style="margin:0 0 12px;font-size:12px;color:#8A847C;line-height:1.5;">mp4 ou webm, <strong>8 Mo max</strong> (compresse en 1080p/H.264). Lue en boucle, sans le son, pendant la durée choisie.</p>
             ${v.hasVideo && html`
               <video src=${v.videoPreview} muted autoplay loop playsinline style="width:100%;border-radius:12px;background:#000;margin-bottom:10px;"></video>
@@ -2119,21 +2211,25 @@ class App extends Component {
               </label>
               ${v.hasVideo && html`<button onClick=${v.clearVideo} style="padding:11px 16px;font-size:13px;font-weight:600;color:#8D1D2C;background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:10px;cursor:pointer;">Retirer</button>`}
             </div>
+            </div>`}
           </div>
         `}
 
         ${(v.isProduit || v.isAnim) && html`
-          <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 24px;">
-            <h2 style="margin:0 0 12px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Mouvement</h2>
+          <div style=${secCard}>
+            ${secHead('motion', 'Mouvement', v.motionSummary)}
+            ${secOpen('motion') && html`<div style=${secBody}>
             <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
               ${v.motionSimple.map((o) => html`<button onClick=${o.pick} style=${o.style}>${o.label}</button>`)}
             </div>
+            </div>`}
           </div>
         `}
 
         ${v.isCategory && html`
-          <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 24px;">
-            <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Mouvement dynamique</h2>
+          <div style=${secCard}>
+            ${secHead('motion', 'Mouvement dynamique', v.motionSummary)}
+            ${secOpen('motion') && html`<div style=${secBody}>
             <p style="margin:0 0 16px;font-size:12px;color:#8A847C;line-height:1.5;">Réglable indépendamment par élément.</p>
             <div style="display:flex;flex-direction:column;gap:14px;">
               ${v.motionGroups.map((g) => html`
@@ -2145,16 +2241,18 @@ class App extends Component {
                 </div>
               `)}
             </div>
+            </div>`}
           </div>
         `}
 
         ${(v.isCategory || v.isProduit) && html`
-          <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 24px;">
+          <div style=${secCard}>
+            ${secHead('pos', 'Positions (avancé)', v.posSummary)}
+            ${secOpen('pos') && html`<div style=${secBody}>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-              <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Positions (avancé)</h2>
-              <button onClick=${v.resetPos} style="padding:7px 12px;font-size:12px;font-weight:500;color:#8A847C;background:#FBF8F2;border:1px solid rgba(35,34,32,0.14);border-radius:8px;cursor:pointer;">Réinitialiser</button>
+              <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">Ajuste finement titre, liste et illustration par-dessus la mise en page.</p>
+              <button onClick=${v.resetPos} style="flex:0 0 auto;padding:7px 12px;font-size:12px;font-weight:500;color:#8A847C;background:#FBF8F2;border:1px solid rgba(35,34,32,0.14);border-radius:8px;cursor:pointer;">Réinitialiser</button>
             </div>
-            <p style="margin:0 0 14px;font-size:12px;color:#8A847C;line-height:1.5;">Ajuste finement le titre, la liste et l'illustration par-dessus la mise en page.</p>
             <div style="display:flex;flex-direction:column;gap:12px;">
               ${v.posFields.map((pf) => html`
                 <div>
@@ -2166,13 +2264,15 @@ class App extends Component {
                 </div>
               `)}
             </div>
+            </div>`}
           </div>
         `}
 
         ${v.isCategory && v.isLinked && html`
-          <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 24px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
-              <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Liste de prix — liée à la table produits</h2>
+          <div style=${secCard}>
+            ${secHead('items', 'Liste de prix — table produits', v.itemsSummary)}
+            ${secOpen('items') && html`<div style=${secBody}>
+            <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
               <span style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#2E6E4E;background:rgba(46,110,78,0.1);border:1px solid rgba(46,110,78,0.35);border-radius:999px;padding:3px 10px;">⛓ ${v.linkedCatName}</span>
             </div>
             <p style="margin:0 0 12px;font-size:12px;color:#8A847C;line-height:1.5;">Les lignes viennent de la table produits : noms, prix (et prix par magasin), actifs/inactifs suivent automatiquement. Modifie-les dans la table.</p>
@@ -2191,13 +2291,15 @@ class App extends Component {
               </select>
               <button onClick=${v.doUnlinkCat} title="Copier les lignes dans l'élément et reprendre la main" style="padding:11px 14px;font-size:13px;font-weight:600;color:#8D1D2C;background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:10px;cursor:pointer;">Délier</button>
             </div>
+            </div>`}
           </div>
         `}
 
         ${v.isCategory && !v.isLinked && html`
-          <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 24px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-              <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Produits & tarifs</h2>
+          <div style=${secCard}>
+            ${secHead('items', 'Produits & tarifs', v.itemsSummary)}
+            ${secOpen('items') && html`<div style=${secBody}>
+            <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
               <div style="display:flex;align-items:center;gap:8px;">
                 <select value="" onChange=${v.onLinkCat} title="Les lignes viendront de la table produits" style="padding:8px 10px;font-size:12px;border:1px solid rgba(35,34,32,0.16);border-radius:999px;background:#FBF8F2;cursor:pointer;max-width:230px;">
                   <option value="">⛓ Lier à la table produits…</option>
@@ -2252,6 +2354,7 @@ class App extends Component {
                 </div>
               `)}
             </div>
+            </div>`}
           </div>
         `}
 

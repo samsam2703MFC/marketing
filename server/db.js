@@ -294,7 +294,40 @@ function migrate(db) {
     price      TEXT NOT NULL,
     PRIMARY KEY (product_id, store_id)
   );
+
+  CREATE TABLE IF NOT EXISTS sig_langs (
+    id         TEXT PRIMARY KEY,
+    label      TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    enabled    INTEGER NOT NULL DEFAULT 1
+  );
+
+  CREATE TABLE IF NOT EXISTS sig_aliases (
+    kind   TEXT NOT NULL,
+    ref_id TEXT NOT NULL,
+    lang   TEXT NOT NULL,
+    name   TEXT NOT NULL,
+    PRIMARY KEY (kind, ref_id, lang)
+  );
   `);
+
+  // Langue d'affichage du magasin (les alias produits/catégories la suivent).
+  const stCols2 = db.prepare('PRAGMA table_info(sig_stores)').all().map((c) => c.name);
+  if (!stCols2.includes('lang')) db.exec(`ALTER TABLE sig_stores ADD COLUMN lang TEXT NOT NULL DEFAULT 'fr'`);
+
+  const nLangs = db.prepare('SELECT COUNT(*) AS n FROM sig_langs').get().n;
+  if (nLangs === 0) {
+    const insL = db.prepare('INSERT INTO sig_langs(id, label, sort_order, enabled) VALUES (?, ?, ?, 1)');
+    insL.run('fr', 'Français', 0);
+    insL.run('nl', 'Nederlands', 1);
+    insL.run('en', 'English', 2);
+    insL.run('de', 'Deutsch', 3);
+  }
+}
+
+export function loadLangs() {
+  return getDb().prepare('SELECT * FROM sig_langs WHERE enabled = 1 ORDER BY sort_order').all()
+    .map((l) => ({ id: l.id, label: l.label }));
 }
 
 // ---------------------------------------------------------------------------
@@ -363,8 +396,15 @@ function ensureCatalog(db) {
 
 export function loadCatalog() {
   const db = getDb();
+  // Alias par langue (nom du produit / de la catégorie dans chaque langue).
+  const aliasRows = db.prepare('SELECT * FROM sig_aliases').all();
+  const aliasesOf = (kind, id) => {
+    const out = {};
+    for (const a of aliasRows) if (a.kind === kind && a.ref_id === id) out[a.lang] = a.name;
+    return out;
+  };
   const categories = db.prepare('SELECT * FROM sig_product_categories ORDER BY sort_order').all()
-    .map((c) => ({ id: c.id, name: c.name, active: !!c.active }));
+    .map((c) => ({ id: c.id, name: c.name, active: !!c.active, aliases: aliasesOf('category', c.id) }));
   const priceRows = db.prepare('SELECT * FROM sig_product_prices').all();
   const pricesByProduct = new Map();
   for (const r of priceRows) {
@@ -375,6 +415,7 @@ export function loadCatalog() {
     id: p.id, categoryId: p.category_id, name: p.name, price: p.price,
     img: p.img, src: p.src, active: !!p.active,
     prices: pricesByProduct.get(p.id) || {},
+    aliases: aliasesOf('product', p.id),
   }));
   return { categories, products };
 }
@@ -384,12 +425,22 @@ export function saveCatalog({ categories, products }) {
   db.exec('BEGIN');
   try {
     db.exec('DELETE FROM sig_product_prices');
+    db.exec('DELETE FROM sig_aliases');
     db.exec('DELETE FROM sig_products');
     db.exec('DELETE FROM sig_product_categories');
     const insCat = db.prepare('INSERT INTO sig_product_categories(id, name, sort_order, active) VALUES (?, ?, ?, ?)');
     const insProd = db.prepare('INSERT INTO sig_products(id, category_id, name, price, img, src, active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
     const insPrice = db.prepare('INSERT INTO sig_product_prices(product_id, store_id, price) VALUES (?, ?, ?)');
-    (categories || []).forEach((c, i) => insCat.run(String(c.id), String(c.name || `Catégorie ${i + 1}`), i, c.active === false ? 0 : 1));
+    const insAlias = db.prepare('INSERT INTO sig_aliases(kind, ref_id, lang, name) VALUES (?, ?, ?, ?)');
+    const putAliases = (kind, id, aliases) => {
+      for (const [lang, name] of Object.entries(aliases || {})) {
+        if (String(name).trim()) insAlias.run(kind, String(id), String(lang), String(name).trim());
+      }
+    };
+    (categories || []).forEach((c, i) => {
+      insCat.run(String(c.id), String(c.name || `Catégorie ${i + 1}`), i, c.active === false ? 0 : 1);
+      putAliases('category', c.id, c.aliases);
+    });
     const catIds = new Set((categories || []).map((c) => String(c.id)));
     (products || []).forEach((p, i) => {
       insProd.run(String(p.id), catIds.has(String(p.categoryId)) ? String(p.categoryId) : '', String(p.name || ''),
@@ -398,6 +449,7 @@ export function saveCatalog({ categories, products }) {
       for (const [storeId, price] of Object.entries(p.prices || {})) {
         if (String(price).trim()) insPrice.run(String(p.id), String(storeId), String(price).trim());
       }
+      putAliases('product', p.id, p.aliases);
     });
     db.exec('COMMIT');
   } catch (e) {
@@ -415,6 +467,30 @@ export function applyStorePrices(modules, storeId) {
   for (const m of modules || []) {
     for (const it of m.items || []) {
       if (it.productId && by.has(it.productId)) it.price = by.get(it.productId);
+    }
+  }
+}
+
+// Langue du magasin : les noms des produits liés (et le titre des listes
+// liées) basculent sur l'alias de cette langue quand il existe.
+export function applyStoreLang(modules, storeId) {
+  if (!storeId) return;
+  const db = getDb();
+  const store = db.prepare('SELECT lang FROM sig_stores WHERE id = ?').get(storeId);
+  const lang = store && store.lang;
+  if (!lang || lang === 'fr') return;
+  const rows = db.prepare('SELECT kind, ref_id, name FROM sig_aliases WHERE lang = ?').all(lang);
+  if (!rows.length) return;
+  const prodAlias = new Map(rows.filter((r) => r.kind === 'product').map((r) => [r.ref_id, r.name]));
+  const catAlias = new Map(rows.filter((r) => r.kind === 'category').map((r) => [r.ref_id, r.name]));
+  const catNames = new Map(db.prepare('SELECT id, name FROM sig_product_categories').all().map((c) => [c.id, c.name]));
+  for (const m of modules || []) {
+    for (const it of m.items || []) {
+      if (it.productId && prodAlias.has(it.productId)) it.name = prodAlias.get(it.productId);
+    }
+    // Le titre suit l'alias seulement s'il n'a pas été personnalisé.
+    if (m.catRef && catAlias.has(m.catRef) && m.name === catNames.get(m.catRef)) {
+      m.name = catAlias.get(m.catRef);
     }
   }
 }
