@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import {
   getDb, getSetting, setSetting, getIntSetting,
   loadModules, loadPlaylist, loadPlaylists, activePlaylistId, saveDraft, storeFormat, DB_PATH,
+  loadElementTypes, loadCatalog, saveCatalog, applyStorePrices,
   checkLogin, createSession, sessionUser, destroySession,
 } from './db.js';
 import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
@@ -247,6 +248,9 @@ function assignment(id, url) {
   const p = authPlayer(id, url.searchParams.get('token'));
   if (!p) return { status: 401, json: { error: 'unauthorized' } };
   const snap = getDb().prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' AND version = ?`).get(p.assigned_ver);
+  const snapshot = snap ? JSON.parse(snap.payload) : currentDraftSnapshot();
+  // Prix par magasin (table produits) : appliqués selon le magasin du player.
+  applyStorePrices(snapshot.modules, p.store_id);
   return {
     status: 200,
     json: {
@@ -255,7 +259,7 @@ function assignment(id, url) {
       activateAt: p.activate_at,
       dataVer: getIntSetting('data_ver', 1),
       override: getSetting('override', '0') === '1',
-      snapshot: snap ? JSON.parse(snap.payload) : currentDraftSnapshot(),
+      snapshot,
     },
   };
 }
@@ -332,6 +336,8 @@ function filmJson(storeId, filmId) {
   snap.storeId = storeId || null;
   snap.storeName = storeName;
   snap.format = storeFmt;
+  // Prix par magasin (table produits) : le lien ?store= montre SES prix.
+  applyStorePrices(snap.modules, storeId);
   return { status: 200, json: snap };
 }
 
@@ -454,6 +460,18 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
     if (req.method === 'GET' && path === '/me') return send(200, { ok: true, user });
     if (req.method === 'GET' && path === '/state') return send(200, stateJson());
     if (req.method === 'GET' && path === '/fleet') return send(200, fleetJson());
+
+    // ---- types d'éléments & table produits (rien en dur : tout en base) ----
+    if (req.method === 'GET' && path === '/element-types') return send(200, { types: loadElementTypes() });
+    if (req.method === 'GET' && path === '/catalog') return send(200, loadCatalog());
+    if (req.method === 'PUT' && path === '/catalog') {
+      const body = await readBody();
+      if (!Array.isArray(body.categories) || !Array.isArray(body.products)) {
+        return send(400, { error: 'categories et products requis' });
+      }
+      saveCatalog(body);
+      return send(200, { ok: true, ...loadCatalog(), savedAt: nowIso() });
+    }
 
     if (req.method === 'PUT' && path === '/draft') {
       const body = await readBody();

@@ -58,8 +58,13 @@ export const newSched = () => ({ days: [true, true, true, true, true, true, true
 export const newPos = () => ({ titleY: 0, listX: 0, listY: 0, illoX: 0, illoY: 0, illoScale: 1 });
 
 export const activeItems = (m) => ((m && m.items) ? m.items : []).filter((x) => x.active);
-export const moduleDur = (m, secPerLine) =>
-  (m.type === 'liaison' ? LIAISON_DUR : Math.max(1, activeItems(m).length) * secPerLine);
+export const moduleDur = (m, secPerLine) => {
+  if (m.type === 'liaison') return LIAISON_DUR;
+  if (m.type === 'produit') return m.dur > 0 ? m.dur : 8;
+  if (m.type === 'film') return m.dur > 0 ? m.dur : 10;
+  if (m.type === 'animation') return m.dur > 0 ? m.dur : 6;
+  return Math.max(1, activeItems(m).length) * secPerLine;
+};
 
 export function layoutCfg(L, n) {
   const c = { mode: 'list', listL: 200, illoCX: 4950, illoCY: null, illoSize: ILLO, illoOp: 1, illoBehind: false, illoShown: true, rowTop: ROW_TOP, cols: 1 };
@@ -109,6 +114,82 @@ export function renderModule(h, m, lt, opts) {
     h('img', { src: 'assets/logo.png', alt: '', style: { height: 420, width: 'auto' } }),
     h('div', { style: { fontFamily: FVANK, fontWeight: 400, fontSize: 300, letterSpacing: '0.01em', textTransform: 'uppercase', color: INK, textAlign: 'center', lineHeight: 0.95 } }, (m.name || '').toUpperCase()),
     h('div', { style: { fontFamily: FUI, fontWeight: 500, fontSize: 76, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#8A847C' } }, m.sub || '')));
+    const te = tagEl(); if (te) kids.push(te);
+    return kids;
+  }
+
+  // ---- Film : vidéo importée, plein écran (cover) ou letterbox (contain) ----
+  if (m.type === 'film') {
+    if (m.video) {
+      kids.push(h('div', { key: 'vbg', style: { position: 'absolute', inset: 0, background: '#000' } }));
+      kids.push(h('video', {
+        key: 'vid' + m.id,
+        src: m.video,
+        autoplay: true, muted: true, loop: true, playsinline: true,
+        style: { position: 'absolute', inset: 0, width: W, height: H, objectFit: m.layout === 'contain' ? 'contain' : 'cover' },
+      }));
+    } else {
+      kids.push(h('div', { key: 'novid', style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', gap: 70, alignItems: 'center', justifyContent: 'center' } },
+        h('div', { style: { fontSize: 260, color: '#C9C3B8' } }, '▶'),
+        h('div', { style: { fontFamily: FUI, fontSize: 90, color: '#8A847C', letterSpacing: '0.14em', textTransform: 'uppercase' } }, 'importe une vidéo dans la régie')));
+    }
+    const te = tagEl(); if (te) kids.push(te);
+    return kids;
+  }
+
+  // ---- Animation : titre + accroche animés (crème/encre ou rubis/blanc) ----
+  if (m.type === 'animation') {
+    const dur = moduleDur(m, secPerLine);
+    const band = m.layout === 'band';
+    const mo = MO[m.motion || 'm1'] || MO.m1;
+    const a = Math.min(easeIO(clx(lt / 0.5, 0, 1)), easeIO(clx((dur - lt) / 0.5, 0, 1)));
+    const drift = mo.w * 2 * Math.sin(lt * Math.PI * (mo.fspd || 1) * 0.5);
+    const zoom = 1 + 0.05 * (lt / dur) + (mo.pulse ? 0.015 * Math.sin(lt * Math.PI * 3) : 0);
+    if (band) kids.push(h('div', { key: 'abg', style: { position: 'absolute', inset: 0, background: RUBY } }));
+    kids.push(h('div', {
+      key: 'anim',
+      style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 90, opacity: a, transform: `translateY(${drift}px) scale(${zoom})`, transformOrigin: 'center' },
+    },
+    band ? h('img', { src: 'assets/logo-white.png', alt: '', style: { height: 300, width: 'auto' } }) : null,
+    h('div', { style: { fontFamily: FVANK, fontWeight: 400, fontSize: 380, letterSpacing: `${0.02 + 0.03 * (0.5 + 0.5 * Math.sin(lt * Math.PI * 1.2))}em`, textTransform: 'uppercase', color: band ? '#fff' : INK, textAlign: 'center', lineHeight: 0.95, padding: '0 200px' } }, (m.name || '').toUpperCase()),
+    m.sub ? h('div', { style: { fontFamily: FUI, fontWeight: 500, fontSize: 88, letterSpacing: '0.22em', textTransform: 'uppercase', color: band ? 'rgba(255,255,255,0.75)' : '#8A847C', textAlign: 'center' } }, m.sub) : null,
+    band ? null : h('div', { style: { width: 620, height: 16, background: RUBY, borderRadius: 8 } })));
+    const te = tagEl(); if (te) kids.push(te);
+    return kids;
+  }
+
+  // ---- Produit : un seul produit en très grand (photo, nom, prix) ----------
+  if (m.type === 'produit') {
+    const it = activeItems(m)[0] || (m.items || [])[0];
+    const P0 = m.pos || newPos();
+    const mo = MO[m.motion || 'm1'] || MO.m1;
+    const wob = mo.w * Math.sin(lt * Math.PI * (mo.fspd || 1));
+    if (!it) {
+      kids.push(h('div', { key: 'nopr', style: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FUI, fontSize: 90, color: '#8A847C', letterSpacing: '0.14em', textTransform: 'uppercase' } }, 'choisis un produit dans la régie'));
+      return kids;
+    }
+    const full = m.layout === 'hero-full';
+    const left = m.layout === 'hero-left';
+    if (full) {
+      kids.push(h('div', { key: 'pbg', style: { position: 'absolute', inset: 0, background: '#F5EFE4' } }));
+      kids.push(h('img', { key: 'pimg', src: it.img, alt: '', style: { position: 'absolute', inset: 0, width: W, height: H, objectFit: it.src === 'photo' ? 'cover' : 'contain', opacity: it.src === 'photo' ? 1 : 0.9, transform: `scale(${1 + 0.04 * (lt / moduleDur(m, secPerLine))})`, transformOrigin: 'center' } }));
+      kids.push(h('div', { key: 'pshade', style: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 1400, background: 'linear-gradient(transparent, rgba(20,10,8,0.78))' } }));
+      kids.push(h('div', { key: 'ptxt', style: { position: 'absolute', left: 260, bottom: 220, display: 'flex', flexDirection: 'column', gap: 40 } },
+        h('div', { style: { fontFamily: FVANK, fontWeight: 400, fontSize: 340, letterSpacing: '0.01em', textTransform: 'uppercase', color: '#fff', lineHeight: 0.95 } }, (it.name || m.name || '').toUpperCase()),
+        h('div', { style: { fontFamily: FUI, fontWeight: 300, fontSize: 220, color: '#fff' } }, (it.price || ''), h('span', { style: { fontSize: 110, verticalAlign: 'super' } }, '€'))));
+    } else {
+      const imgCX = left ? 1620 : W - 1620;
+      const txtX = left ? 3400 : 260;
+      const imgSize = Math.round(2600 * (P0.illoScale || 1));
+      kids.push(h('div', { key: 'pimgw', style: { position: 'absolute', left: imgCX - imgSize / 2 + P0.illoX, top: H / 2 - imgSize / 2 + P0.illoY, width: imgSize, height: imgSize, transform: `translateY(${wob}px) rotate(${mo.r * Math.sin(lt * Math.PI * 0.8)}deg)` } },
+        h('img', { src: it.img, alt: '', style: { width: '100%', height: '100%', objectFit: 'contain', borderRadius: it.src === 'photo' ? 60 : 0, boxShadow: it.src === 'photo' ? '0 60px 160px rgba(35,34,32,0.35)' : 'none' } })));
+      kids.push(h('div', { key: 'ptxt', style: { position: 'absolute', left: txtX + P0.listX, top: H / 2 - 560 + P0.titleY, width: 2800, display: 'flex', flexDirection: 'column', gap: 70 } },
+        h('div', { style: { fontFamily: FUI, fontWeight: 500, fontSize: 74, letterSpacing: '0.24em', textTransform: 'uppercase', color: RUBY } }, m.name || 'À la une'),
+        h('div', { style: { fontFamily: FVANK, fontWeight: 400, fontSize: 350, letterSpacing: '0.01em', textTransform: 'uppercase', color: INK, lineHeight: 0.95 } }, (it.name || '').toUpperCase()),
+        h('div', { style: { width: 520, height: 16, background: RUBY, borderRadius: 8 } }),
+        h('div', { style: { fontFamily: FUI, fontWeight: 300, fontSize: 250, color: RUBY } }, (it.price || ''), h('span', { style: { fontSize: 120, verticalAlign: 'super' } }, '€')),
+        m.sub ? h('div', { style: { fontFamily: FUI, fontWeight: 400, fontSize: 66, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#8A847C' } }, m.sub) : null));
+    }
     const te = tagEl(); if (te) kids.push(te);
     return kids;
   }

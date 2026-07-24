@@ -23,6 +23,8 @@ export function getDb() {
   seed(db);
   ensureAdmin(db);
   ensurePlaylists(db);
+  ensureElementTypes(db);
+  ensureCatalog(db);
   // Migration ponctuelle : l'ancien créneau par défaut (08:00–20:00) éteignait
   // les écrans le soir sans que ce soit un choix — passage en 24h/24.
   if (!getSetting('mig_sched_24h')) {
@@ -60,7 +62,7 @@ function migrate(db) {
 
   CREATE TABLE IF NOT EXISTS sig_modules (
     id           TEXT PRIMARY KEY,
-    type         TEXT NOT NULL CHECK (type IN ('category','liaison')),
+    type         TEXT NOT NULL,
     name         TEXT NOT NULL DEFAULT '',
     sub          TEXT NOT NULL DEFAULT '',
     layout       TEXT NOT NULL DEFAULT 'illo-right',
@@ -204,6 +206,217 @@ function migrate(db) {
   if (!stCols.includes('screens')) db.exec(`ALTER TABLE sig_stores ADD COLUMN screens INTEGER NOT NULL DEFAULT 1`);
   if (!stCols.includes('screen_size')) db.exec(`ALTER TABLE sig_stores ADD COLUMN screen_size INTEGER NOT NULL DEFAULT 55`);
   if (!stCols.includes('screen_orient')) db.exec(`ALTER TABLE sig_stores ADD COLUMN screen_orient TEXT NOT NULL DEFAULT 'paysage'`);
+
+  // Éléments typés : produit, film (vidéo), animation… + liens vers le catalogue.
+  const modCols2 = db.prepare('PRAGMA table_info(sig_modules)').all().map((c) => c.name);
+  if (!modCols2.includes('cat_ref')) db.exec(`ALTER TABLE sig_modules ADD COLUMN cat_ref TEXT NOT NULL DEFAULT ''`);
+  if (!modCols2.includes('product_ref')) db.exec(`ALTER TABLE sig_modules ADD COLUMN product_ref TEXT NOT NULL DEFAULT ''`);
+  if (!modCols2.includes('video')) db.exec(`ALTER TABLE sig_modules ADD COLUMN video TEXT NOT NULL DEFAULT ''`);
+  if (!modCols2.includes('dur')) db.exec(`ALTER TABLE sig_modules ADD COLUMN dur REAL NOT NULL DEFAULT 0`);
+
+  // Les anciennes bases limitaient le type par un CHECK (category|liaison) —
+  // les types vivent désormais dans sig_element_types : on reconstruit la
+  // table sans la contrainte (SQLite ne sait pas la retirer autrement).
+  const modDef = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'sig_modules'`).get();
+  if (modDef && /CHECK/i.test(modDef.sql)) {
+    const cols = db.prepare('PRAGMA table_info(sig_modules)').all().map((c) => c.name).join(', ');
+    db.exec(`
+      PRAGMA foreign_keys = OFF;
+      BEGIN;
+      CREATE TABLE sig_modules_new (
+        id           TEXT PRIMARY KEY,
+        type         TEXT NOT NULL,
+        name         TEXT NOT NULL DEFAULT '',
+        sub          TEXT NOT NULL DEFAULT '',
+        layout       TEXT NOT NULL DEFAULT 'illo-right',
+        motion       TEXT NOT NULL DEFAULT 'm1',
+        motion_title TEXT,
+        motion_list  TEXT,
+        motion_illo  TEXT,
+        tag_enabled  INTEGER NOT NULL DEFAULT 0,
+        tag_label    TEXT NOT NULL DEFAULT 'Nouveauté',
+        tag_img      TEXT NOT NULL DEFAULT 'assets/cherry.png',
+        sched_days   TEXT NOT NULL DEFAULT '[1,1,1,1,1,1,1]',
+        sched_from   TEXT NOT NULL DEFAULT '00:00',
+        sched_to     TEXT NOT NULL DEFAULT '23:59',
+        pos          TEXT NOT NULL DEFAULT '{}',
+        sort_order   INTEGER NOT NULL DEFAULT 0,
+        created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at   TEXT NOT NULL DEFAULT (datetime('now')),
+        lib_tag      TEXT NOT NULL DEFAULT '',
+        cat_ref      TEXT NOT NULL DEFAULT '',
+        product_ref  TEXT NOT NULL DEFAULT '',
+        video        TEXT NOT NULL DEFAULT '',
+        dur          REAL NOT NULL DEFAULT 0
+      );
+      INSERT INTO sig_modules_new (${cols}) SELECT ${cols} FROM sig_modules;
+      DROP TABLE sig_modules;
+      ALTER TABLE sig_modules_new RENAME TO sig_modules;
+      COMMIT;
+      PRAGMA foreign_keys = ON;
+    `);
+  }
+
+  db.exec(`
+  CREATE TABLE IF NOT EXISTS sig_element_types (
+    id         TEXT PRIMARY KEY,
+    label      TEXT NOT NULL,
+    icon       TEXT NOT NULL DEFAULT '▤',
+    descr      TEXT NOT NULL DEFAULT '',
+    layouts    TEXT NOT NULL DEFAULT '[]',
+    has_items  INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    enabled    INTEGER NOT NULL DEFAULT 1
+  );
+
+  CREATE TABLE IF NOT EXISTS sig_product_categories (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    active     INTEGER NOT NULL DEFAULT 1
+  );
+
+  CREATE TABLE IF NOT EXISTS sig_products (
+    id          TEXT PRIMARY KEY,
+    category_id TEXT NOT NULL DEFAULT '',
+    name        TEXT NOT NULL,
+    price       TEXT NOT NULL DEFAULT '0,00',
+    img         TEXT NOT NULL DEFAULT 'assets/cake.png',
+    src         TEXT NOT NULL DEFAULT 'illus',
+    active      INTEGER NOT NULL DEFAULT 1,
+    sort_order  INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS sig_products_cat ON sig_products(category_id, sort_order);
+
+  CREATE TABLE IF NOT EXISTS sig_product_prices (
+    product_id TEXT NOT NULL,
+    store_id   TEXT NOT NULL,
+    price      TEXT NOT NULL,
+    PRIMARY KEY (product_id, store_id)
+  );
+  `);
+}
+
+// ---------------------------------------------------------------------------
+// Types d'éléments — pilotés par la table sig_element_types (rien en dur côté
+// interface) : le « + Élément » et les mises en page par type en découlent.
+function ensureElementTypes(db) {
+  const n = db.prepare('SELECT COUNT(*) AS n FROM sig_element_types').get().n;
+  if (n > 0) return;
+  const catLayouts = [
+    { id: 'illo-right', icon: '▤', label: 'Texte à gauche · illustration à droite' },
+    { id: 'illo-left', icon: '▤', label: 'Texte à droite · illustration à gauche' },
+    { id: 'text-only', icon: '☰', label: 'Liste centrée, sans illustration' },
+    { id: 'illo-bg', icon: '◉', label: 'Illustration centrée en fond' },
+    { id: 'two-col', icon: '▦', label: 'Deux colonnes (listes longues)' },
+    { id: 'illo-top', icon: '⬒', label: 'Illustration en haut · liste dessous' },
+  ];
+  const types = [
+    { id: 'category', label: 'Catégorie — liste de prix', icon: '▤', descr: 'Liste de produits avec prix, manuelle ou liée à la table produits.', layouts: catLayouts, hasItems: 1, sort: 0 },
+    { id: 'produit', label: 'Produit — mise en avant', icon: '◆', descr: 'Un seul produit en grand : photo, nom, prix.', layouts: [
+      { id: 'hero-right', icon: '▥', label: 'Texte à gauche · photo à droite' },
+      { id: 'hero-left', icon: '▥', label: 'Photo à gauche · texte à droite' },
+      { id: 'hero-full', icon: '◼', label: 'Photo plein écran · texte dessus' },
+    ], hasItems: 0, sort: 1 },
+    { id: 'liaison', label: 'Liaison', icon: '⧉', descr: 'Écran de transition : logo + accroche.', layouts: [
+      { id: 'center', icon: '▣', label: 'Centré' },
+    ], hasItems: 0, sort: 2 },
+    { id: 'film', label: 'Film — vidéo (upload)', icon: '▶', descr: 'Une vidéo importée (mp4/webm ≤ 8 Mo), jouée dans le film.', layouts: [
+      { id: 'cover', icon: '◼', label: 'Plein écran (remplir)' },
+      { id: 'contain', icon: '▭', label: 'Adapter (letterbox)' },
+    ], hasItems: 0, sort: 3 },
+    { id: 'animation', label: 'Animation — texte animé', icon: '✦', descr: 'Titre + accroche animés, aux couleurs de la marque.', layouts: [
+      { id: 'center', icon: '▣', label: 'Fond crème · texte encre' },
+      { id: 'band', icon: '▬', label: 'Fond rubis · texte blanc' },
+    ], hasItems: 0, sort: 4 },
+  ];
+  const ins = db.prepare('INSERT INTO sig_element_types(id, label, icon, descr, layouts, has_items, sort_order, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, 1)');
+  for (const t of types) ins.run(t.id, t.label, t.icon, t.descr, JSON.stringify(t.layouts), t.hasItems, t.sort);
+}
+
+export function loadElementTypes() {
+  return getDb().prepare('SELECT * FROM sig_element_types WHERE enabled = 1 ORDER BY sort_order').all().map((t) => ({
+    id: t.id, label: t.label, icon: t.icon, descr: t.descr,
+    layouts: JSON.parse(t.layouts || '[]'), hasItems: !!t.has_items,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Catalogue produits — la table centrale (catégories → produits, prix par
+// magasin). Au premier lancement sur une base existante, il est construit à
+// partir des éléments « catégorie » déjà présents.
+function ensureCatalog(db) {
+  const nCat = db.prepare('SELECT COUNT(*) AS n FROM sig_product_categories').get().n;
+  const nProd = db.prepare('SELECT COUNT(*) AS n FROM sig_products').get().n;
+  if (nCat > 0 || nProd > 0) return;
+  const mods = db.prepare(`SELECT * FROM sig_modules WHERE type = 'category' ORDER BY sort_order`).all();
+  const insCat = db.prepare('INSERT INTO sig_product_categories(id, name, sort_order, active) VALUES (?, ?, ?, 1)');
+  const insProd = db.prepare('INSERT INTO sig_products(id, category_id, name, price, img, src, active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+  let pn = 0;
+  mods.forEach((m, i) => {
+    const catId = 'pc_' + m.id;
+    insCat.run(catId, m.name || `Catégorie ${i + 1}`, i);
+    const items = db.prepare('SELECT * FROM sig_module_items WHERE module_id = ? ORDER BY position').all(m.id);
+    items.forEach((it, j) => insProd.run('pr' + (++pn), catId, it.name, it.price, it.img, it.src, it.active ? 1 : 0, j));
+  });
+}
+
+export function loadCatalog() {
+  const db = getDb();
+  const categories = db.prepare('SELECT * FROM sig_product_categories ORDER BY sort_order').all()
+    .map((c) => ({ id: c.id, name: c.name, active: !!c.active }));
+  const priceRows = db.prepare('SELECT * FROM sig_product_prices').all();
+  const pricesByProduct = new Map();
+  for (const r of priceRows) {
+    if (!pricesByProduct.has(r.product_id)) pricesByProduct.set(r.product_id, {});
+    pricesByProduct.get(r.product_id)[r.store_id] = r.price;
+  }
+  const products = db.prepare('SELECT * FROM sig_products ORDER BY category_id, sort_order').all().map((p) => ({
+    id: p.id, categoryId: p.category_id, name: p.name, price: p.price,
+    img: p.img, src: p.src, active: !!p.active,
+    prices: pricesByProduct.get(p.id) || {},
+  }));
+  return { categories, products };
+}
+
+export function saveCatalog({ categories, products }) {
+  const db = getDb();
+  db.exec('BEGIN');
+  try {
+    db.exec('DELETE FROM sig_product_prices');
+    db.exec('DELETE FROM sig_products');
+    db.exec('DELETE FROM sig_product_categories');
+    const insCat = db.prepare('INSERT INTO sig_product_categories(id, name, sort_order, active) VALUES (?, ?, ?, ?)');
+    const insProd = db.prepare('INSERT INTO sig_products(id, category_id, name, price, img, src, active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    const insPrice = db.prepare('INSERT INTO sig_product_prices(product_id, store_id, price) VALUES (?, ?, ?)');
+    (categories || []).forEach((c, i) => insCat.run(String(c.id), String(c.name || `Catégorie ${i + 1}`), i, c.active === false ? 0 : 1));
+    const catIds = new Set((categories || []).map((c) => String(c.id)));
+    (products || []).forEach((p, i) => {
+      insProd.run(String(p.id), catIds.has(String(p.categoryId)) ? String(p.categoryId) : '', String(p.name || ''),
+        String(p.price || '0,00'), String(p.img || 'assets/cake.png'), p.src === 'photo' ? 'photo' : 'illus',
+        p.active === false ? 0 : 1, i);
+      for (const [storeId, price] of Object.entries(p.prices || {})) {
+        if (String(price).trim()) insPrice.run(String(p.id), String(storeId), String(price).trim());
+      }
+    });
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+}
+
+// Prix par magasin : remplace le prix par défaut des items liés au catalogue.
+export function applyStorePrices(modules, storeId) {
+  if (!storeId) return;
+  const rows = getDb().prepare('SELECT product_id, price FROM sig_product_prices WHERE store_id = ?').all(storeId);
+  if (!rows.length) return;
+  const by = new Map(rows.map((r) => [r.product_id, r.price]));
+  for (const m of modules || []) {
+    for (const it of m.items || []) {
+      if (it.productId && by.has(it.productId)) it.price = by.get(it.productId);
+    }
+  }
 }
 
 // Un écran signage standard est une dalle UHD : 3840×2160 en paysage,
@@ -345,24 +558,43 @@ export function loadModules() {
   const db = getDb();
   const mods = db.prepare('SELECT * FROM sig_modules ORDER BY sort_order, created_at').all();
   const itemsStmt = db.prepare('SELECT * FROM sig_module_items WHERE module_id = ? ORDER BY position');
-  return mods.map((m) => ({
-    id: m.id,
-    type: m.type,
-    name: m.name,
-    sub: m.sub,
-    libTag: m.lib_tag || (m.type === 'liaison' ? 'liaison' : 'produit'),
-    layout: m.layout,
-    motion: m.motion,
-    motionTitle: m.motion_title || undefined,
-    motionList: m.motion_list || undefined,
-    motionIllo: m.motion_illo || undefined,
-    tag: { enabled: !!m.tag_enabled, label: m.tag_label, img: m.tag_img },
-    schedule: { days: JSON.parse(m.sched_days).map(Boolean), from: m.sched_from, to: m.sched_to },
-    pos: { titleY: 0, listX: 0, listY: 0, illoX: 0, illoY: 0, illoScale: 1, ...JSON.parse(m.pos || '{}') },
-    items: itemsStmt.all(m.id).map((it) => ({
-      name: it.name, price: it.price, img: it.img, src: it.src, active: !!it.active,
-    })),
-  }));
+  const catProds = db.prepare('SELECT * FROM sig_products WHERE category_id = ? ORDER BY sort_order');
+  const oneProd = db.prepare('SELECT * FROM sig_products WHERE id = ?');
+  const prodItem = (p) => ({ name: p.name, price: p.price, img: p.img, src: p.src, active: !!p.active, productId: p.id });
+  return mods.map((m) => {
+    // Élément lié au catalogue : ses lignes viennent de la table produits
+    // (toujours à jour) — sinon, les items propres à l'élément.
+    let items;
+    if (m.cat_ref) items = catProds.all(m.cat_ref).map(prodItem);
+    else if (m.product_ref) {
+      const p = oneProd.get(m.product_ref);
+      items = p ? [prodItem(p)] : [];
+    } else {
+      items = itemsStmt.all(m.id).map((it) => ({
+        name: it.name, price: it.price, img: it.img, src: it.src, active: !!it.active,
+      }));
+    }
+    return {
+      id: m.id,
+      type: m.type,
+      name: m.name,
+      sub: m.sub,
+      libTag: m.lib_tag || (m.type === 'liaison' ? 'liaison' : 'produit'),
+      layout: m.layout,
+      motion: m.motion,
+      motionTitle: m.motion_title || undefined,
+      motionList: m.motion_list || undefined,
+      motionIllo: m.motion_illo || undefined,
+      catRef: m.cat_ref || '',
+      productRef: m.product_ref || '',
+      video: m.video || '',
+      dur: m.dur || 0,
+      tag: { enabled: !!m.tag_enabled, label: m.tag_label, img: m.tag_img },
+      schedule: { days: JSON.parse(m.sched_days).map(Boolean), from: m.sched_from, to: m.sched_to },
+      pos: { titleY: 0, listX: 0, listY: 0, illoX: 0, illoY: 0, illoScale: 1, ...JSON.parse(m.pos || '{}') },
+      items,
+    };
+  });
 }
 
 export function loadPlaylists() {
@@ -413,26 +645,34 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
     db.exec('DELETE FROM sig_modules');
     const insMod = db.prepare(`INSERT INTO sig_modules
       (id, type, name, sub, layout, motion, motion_title, motion_list, motion_illo,
-       tag_enabled, tag_label, tag_img, sched_days, sched_from, sched_to, pos, sort_order, lib_tag, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
+       tag_enabled, tag_label, tag_img, sched_days, sched_from, sched_to, pos, sort_order, lib_tag,
+       cat_ref, product_ref, video, dur, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
     const insItem = db.prepare(`INSERT INTO sig_module_items
       (module_id, position, name, price, img, src, active) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+    // Les types valides viennent de la table sig_element_types (rien en dur).
+    const validTypes = new Set(db.prepare('SELECT id FROM sig_element_types').all().map((r) => r.id));
     modules.forEach((m, i) => {
       const tag = m.tag || {};
       const sched = m.schedule || {};
       insMod.run(
-        m.id, m.type === 'liaison' ? 'liaison' : 'category', String(m.name || ''), String(m.sub || ''),
+        m.id, validTypes.has(m.type) ? m.type : 'category', String(m.name || ''), String(m.sub || ''),
         String(m.layout || 'illo-right'), String(m.motion || 'm1'),
         m.motionTitle || null, m.motionList || null, m.motionIllo || null,
         tag.enabled ? 1 : 0, String(tag.label || ''), String(tag.img || ''),
         JSON.stringify((sched.days || [1, 1, 1, 1, 1, 1, 1]).map((d) => (d ? 1 : 0))),
         String(sched.from || '00:00'), String(sched.to || '23:59'),
-        JSON.stringify(m.pos || {}), i, String(m.libTag || '')
+        JSON.stringify(m.pos || {}), i, String(m.libTag || ''),
+        String(m.catRef || ''), String(m.productRef || ''), String(m.video || ''),
+        Number.isFinite(parseFloat(m.dur)) ? Math.max(0, Math.min(120, parseFloat(m.dur))) : 0
       );
-      (m.items || []).forEach((it, j) => insItem.run(
-        m.id, j, String(it.name || ''), String(it.price || ''), String(it.img || ''),
-        it.src === 'photo' ? 'photo' : 'illus', it.active ? 1 : 0
-      ));
+      // Un élément lié au catalogue ne stocke pas d'items propres.
+      if (!m.catRef && !m.productRef) {
+        (m.items || []).forEach((it, j) => insItem.run(
+          m.id, j, String(it.name || ''), String(it.price || ''), String(it.img || ''),
+          it.src === 'photo' ? 'photo' : 'illus', it.active ? 1 : 0
+        ));
+      }
     });
     const validIds = new Set(modules.map((m) => m.id));
     const insPls = db.prepare('INSERT INTO sig_playlists(id, name, sort_order, sched_days, sched_from, sched_to, stores) VALUES (?, ?, ?, ?, ?, ?, ?)');

@@ -81,6 +81,9 @@ class App extends Component {
     test: { state: 'idle', rows: [] },
     fleet: [],
     library: [],
+    elementTypes: [], addPicker: false,
+    catalog: { categories: [], products: [] },
+    catDraft: null, catDirty: false, catSel: '', catSaving: false,
   };
 
   // ---------------------------------------------------------------- lifecycle
@@ -125,6 +128,9 @@ class App extends Component {
   async loadState() {
     try {
       const st = await api('GET', '/state');
+      // Types d'éléments + table produits : tout vient de la base, rien en dur.
+      const et = await api('GET', '/element-types').catch(() => ({ types: [] }));
+      const cat = await api('GET', '/catalog').catch(() => ({ categories: [], products: [] }));
       const playlists = ((Array.isArray(st.playlists) && st.playlists.length)
         ? st.playlists
         : [{ id: 'pl1', name: 'Film principal', items: st.playlist || [] }]).map((p) => this.normFilm(p));
@@ -134,6 +140,9 @@ class App extends Component {
       this.setState({
         loading: false, authRequired: false,
         library: st.modules,
+        elementTypes: et.types || [],
+        catalog: { categories: cat.categories || [], products: cat.products || [] },
+        catDraft: null, catDirty: false,
         playlists,
         activePl,
         playlist: [...(playlists.find((p) => p.id === activePl).items)],
@@ -382,17 +391,179 @@ class App extends Component {
   selectMod(id) { this.setState({ selId: id, t: 0 }); }
   // Un nouveau module rejoint directement la playlist (retirable avec ✕) :
   // sinon il n'apparaîtrait pas dans le film publié et c'est trop facile à rater.
-  addCategory() {
+  // « + Élément » : le type est choisi parmi ceux de la table sig_element_types.
+  addElement(t) {
     const id = uid();
     const lib = this.cloneLib();
-    lib.push({ id, type: 'category', name: 'Nouvelle catégorie', libTag: 'produit', layout: 'illo-right', motion: 'm1', tag: newTag(), schedule: newSched(), pos: newPos(), items: [{ name: 'Produit', price: '0,00', img: 'assets/cake.png', src: 'illus', active: true }] });
-    this.setLib(lib, { selId: id, ...this.playlistPatch([...this.state.playlist, id]) });
+    const base = {
+      id, type: t.id, name: '', sub: '', libTag: t.id === 'liaison' ? 'liaison' : 'produit',
+      layout: (t.layouts && t.layouts[0] && t.layouts[0].id) || 'illo-right', motion: 'm1',
+      tag: newTag(), schedule: newSched(), pos: newPos(), items: [],
+      catRef: '', productRef: '', video: '', dur: 0,
+    };
+    if (t.id === 'category') { base.name = 'Nouvelle catégorie'; base.items = [{ name: 'Produit', price: '0,00', img: 'assets/cake.png', src: 'illus', active: true }]; }
+    else if (t.id === 'liaison') { base.name = 'Liaison'; base.sub = 'faites maison chaque matin'; }
+    else if (t.id === 'produit') { base.name = 'À la une'; base.dur = 8; }
+    else if (t.id === 'film') { base.name = 'Vidéo'; base.dur = 10; base.libTag = 'promo'; }
+    else if (t.id === 'animation') { base.name = 'Nouveauté'; base.sub = 'cette semaine'; base.dur = 6; base.libTag = 'promo'; }
+    else { base.name = t.label || 'Élément'; }
+    lib.push(base);
+    this.setLib(lib, { selId: id, addPicker: false, composerTab: 'lib', ...this.playlistPatch([...this.state.playlist, id]) });
   }
-  addLiaison() {
-    const id = uid();
+  elementTypeOf(m) {
+    return (this.state.elementTypes || []).find((t) => t.id === (m && m.type)) || null;
+  }
+  modMeta(mm) {
+    if (mm.type === 'liaison') return 'Liaison';
+    if (mm.type === 'film') return mm.video ? `vidéo · ${mm.dur || 10} s` : 'vidéo à importer';
+    if (mm.type === 'animation') return `animation · ${mm.dur || 6} s`;
+    if (mm.type === 'produit') return mm.items && mm.items[0] ? `à la une : ${mm.items[0].name}` : 'produit à choisir';
+    const n = this.activeItems(mm).length;
+    return `${n} produits${mm.catRef ? ' · ⛓ table produits' : ''}`;
+  }
+
+  // ---- liens élément ↔ table produits -------------------------------------
+  // Lier une « liste de prix » à une catégorie du catalogue : les lignes
+  // viennent alors de la table produits (résolues aussi côté serveur).
+  linkCat(catId) {
+    const cat = this.state.catalog.categories.find((c) => c.id === catId);
+    if (!cat) return;
+    const items = this.state.catalog.products.filter((p) => p.categoryId === catId)
+      .map((p) => ({ name: p.name, price: p.price, img: p.img, src: p.src, active: p.active, productId: p.id }));
     const lib = this.cloneLib();
-    lib.push({ id, type: 'liaison', name: 'Liaison', sub: 'faites maison chaque matin', libTag: 'liaison', tag: newTag(), schedule: newSched(), pos: newPos(), items: [] });
-    this.setLib(lib, { selId: id, ...this.playlistPatch([...this.state.playlist, id]) });
+    const mm = lib.find((x) => x.id === this.state.selId);
+    mm.catRef = catId; mm.productRef = '';
+    if (!mm.name || mm.name === 'Nouvelle catégorie') mm.name = cat.name;
+    mm.items = items;
+    this.setLib(lib);
+  }
+  unlinkCat() {
+    // Les lignes actuelles sont copiées dans l'élément (édition manuelle).
+    const lib = this.cloneLib();
+    const mm = lib.find((x) => x.id === this.state.selId);
+    mm.catRef = '';
+    mm.items = (mm.items || []).map((it) => ({ ...it, productId: undefined }));
+    this.setLib(lib);
+  }
+  setProductRef(pid) {
+    const p = this.state.catalog.products.find((x) => x.id === pid);
+    const lib = this.cloneLib();
+    const mm = lib.find((x) => x.id === this.state.selId);
+    mm.productRef = pid || '';
+    mm.items = p ? [{ name: p.name, price: p.price, img: p.img, src: p.src, active: true, productId: p.id }] : [];
+    this.setLib(lib);
+  }
+
+  // ---- vidéo (type film) ---------------------------------------------------
+  onVideo(e) {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    if (f.size > 8 * 1024 * 1024) { this.showToast('Vidéo trop lourde (max 8 Mo) — compresse-la en 1080p/H.264'); return; }
+    const r = new FileReader();
+    r.onload = () => this.setSelField('video', r.result);
+    r.readAsDataURL(f);
+  }
+
+  // ---- table produits (vue Produits) --------------------------------------
+  openProducts() {
+    const d = this.state.catDraft || JSON.parse(JSON.stringify(this.state.catalog));
+    const sel = d.categories.some((c) => c.id === this.state.catSel)
+      ? this.state.catSel
+      : ((d.categories[0] || {}).id || '');
+    this.setState({ view: 'products', catDraft: d, catSel: sel });
+  }
+  setCat(mut) {
+    const d = JSON.parse(JSON.stringify(this.state.catDraft || this.state.catalog));
+    mut(d);
+    this.setState({ catDraft: d, catDirty: true });
+  }
+  addProdCat() {
+    const id = 'pc' + uid();
+    this.setCat((d) => d.categories.push({ id, name: 'Nouvelle catégorie', active: true }));
+    this.setState({ catSel: id });
+  }
+  delProdCat(catId) {
+    const d = this.state.catDraft || this.state.catalog;
+    const cat = d.categories.find((c) => c.id === catId);
+    if (!cat) return;
+    const n = d.products.filter((p) => p.categoryId === catId).length;
+    const used = this.state.library.filter((m) => m.catRef === catId).map((m) => m.name);
+    const msg = `Supprimer la catégorie « ${cat.name} » et ses ${n} produit(s) ?`
+      + (used.length ? `\n\n⚠ Élément(s) lié(s) qui deviendront vides : ${used.join(', ')}` : '');
+    if (!window.confirm(msg)) return;
+    this.setCat((dd) => {
+      dd.categories = dd.categories.filter((c) => c.id !== catId);
+      dd.products = dd.products.filter((p) => p.categoryId !== catId);
+    });
+    if (this.state.catSel === catId) {
+      const rest = d.categories.filter((c) => c.id !== catId);
+      this.setState({ catSel: (rest[0] || {}).id || '' });
+    }
+  }
+  addProd() {
+    const id = 'pr' + uid();
+    const catId = this.state.catSel;
+    if (!catId) { this.showToast('Crée d’abord une catégorie'); return; }
+    this.setCat((d) => d.products.push({ id, categoryId: catId, name: 'Nouveau produit', price: '0,00', img: 'assets/cake.png', src: 'illus', active: true, prices: {} }));
+  }
+  moveProd(pid, dir) {
+    this.setCat((d) => {
+      const prod = d.products.find((p) => p.id === pid);
+      if (!prod) return;
+      const idxs = d.products.map((p, i) => [p.categoryId, i]).filter(([c]) => c === prod.categoryId).map(([, i]) => i);
+      const pos = idxs.findIndex((i) => d.products[i].id === pid);
+      const j = pos + dir;
+      if (j < 0 || j >= idxs.length) return;
+      const a = idxs[pos], b = idxs[j];
+      const tmp = d.products[a]; d.products[a] = d.products[b]; d.products[b] = tmp;
+    });
+  }
+  delProd(pid) {
+    const d = this.state.catDraft || this.state.catalog;
+    const p = d.products.find((x) => x.id === pid);
+    if (!p) return;
+    if (!window.confirm(`Supprimer le produit « ${p.name} » de la table ?`)) return;
+    this.setCat((dd) => { dd.products = dd.products.filter((x) => x.id !== pid); });
+  }
+  onProdPhoto(pid, e) {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    this.compressPhoto(f, (data) => this.setCat((d) => {
+      const p = d.products.find((x) => x.id === pid);
+      if (p) { p.img = data; p.src = 'photo'; }
+    }));
+  }
+  async saveCatalog() {
+    if (this.state.catSaving) return;
+    const d = this.state.catDraft || this.state.catalog;
+    this.setState({ catSaving: true });
+    try {
+      const out = await api('PUT', '/catalog', { categories: d.categories, products: d.products });
+      this.setState({
+        catalog: { categories: out.categories, products: out.products },
+        catDraft: null, catDirty: false, catSaving: false,
+      });
+      // Les éléments liés au catalogue suivent : on recharge leurs lignes.
+      await this.reloadLinkedModules();
+      this.showToast('Table produits enregistrée ✓');
+    } catch (e) {
+      this.setState({ catSaving: false });
+      this.showToast(e.status === 401 ? 'Session expirée — recharge la page (F5)' : `Erreur : ${e.message}`);
+    }
+  }
+  async reloadLinkedModules() {
+    // Après une modification du catalogue, les éléments liés (catRef/productRef)
+    // sont resservis par le serveur avec leurs lignes à jour.
+    try {
+      const st = await api('GET', '/state');
+      const fresh = new Map(st.modules.map((m) => [m.id, m]));
+      const lib = this.state.library.map((m) => {
+        if (!(m.catRef || m.productRef)) return m;
+        const f = fresh.get(m.id);
+        return f ? { ...m, items: f.items } : m;
+      });
+      this.setState({ library: lib });
+    } catch { /* la prochaine sauvegarde resynchronisera */ }
   }
   copyMod(id) { this.setState({ clipboard: JSON.parse(JSON.stringify(this.getMod(id))) }); }
   dupMod(id) {
@@ -468,14 +639,12 @@ class App extends Component {
   }
   addItem() { const lib = this.cloneLib(); lib.find((x) => x.id === this.state.selId).items.push({ name: 'Nouveau produit', price: '0,00', img: 'assets/cake.png', src: 'illus', active: true }); this.setLib(lib); }
   dupItem(i) { const lib = this.cloneLib(); const mm = lib.find((x) => x.id === this.state.selId); mm.items.splice(i + 1, 0, { ...mm.items[i] }); this.setLib(lib); }
-  onPhoto(i, e) {
-    const f = e.target.files && e.target.files[0];
-    if (!f) return;
+  // Compression côté navigateur : une photo de téléphone (5-8 Mo) ferait
+  // échouer l'enregistrement — on la ramène à ≤2500 px en JPEG, la taille
+  // maximale à laquelle elle est affichée sur le mur d'écrans (6480×3840).
+  compressPhoto(f, cb) {
     const r = new FileReader();
     r.onload = () => {
-      // Compression côté navigateur : une photo de téléphone (5-8 Mo) ferait
-      // échouer l'enregistrement — on la ramène à ≤2500 px en JPEG, la taille
-      // maximale à laquelle elle est affichée sur le mur d'écrans (6480×3840).
       const img = new Image();
       img.onload = () => {
         const MAX = 2500;
@@ -486,15 +655,22 @@ class App extends Component {
         cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
         let data;
         try { data = cv.toDataURL('image/jpeg', 0.85); } catch { data = r.result; }
-        const lib = this.cloneLib();
-        const mm = lib.find((x) => x.id === this.state.selId);
-        mm.items[i] = { ...mm.items[i], img: data, src: 'photo' };
-        this.setLib(lib);
+        cb(data);
       };
       img.onerror = () => this.showToast('Image illisible — essaie un JPG ou PNG');
       img.src = r.result;
     };
     r.readAsDataURL(f);
+  }
+  onPhoto(i, e) {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    this.compressPhoto(f, (data) => {
+      const lib = this.cloneLib();
+      const mm = lib.find((x) => x.id === this.state.selId);
+      mm.items[i] = { ...mm.items[i], img: data, src: 'photo' };
+      this.setLib(lib);
+    });
   }
 
   scrub = (e) => {
@@ -811,6 +987,8 @@ class App extends Component {
     const st = this.state;
     const m = this.sel() || { type: 'category', name: '', tag: newTag(), schedule: newSched(), pos: newPos(), items: [] };
     const isCat = m.type === 'category', isLia = m.type === 'liaison';
+    const isProduit = m.type === 'produit', isFilmEl = m.type === 'film', isAnim = m.type === 'animation';
+    const selType = this.elementTypeOf(m);
     const total = this.total();
     const { m: playM, lt } = this.activeInScope();
     const iconBtn = 'display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:7px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.14);cursor:pointer;font-size:14px;color:#232220;';
@@ -849,8 +1027,9 @@ class App extends Component {
       const isLi = mm.type === 'liaison', selc = mm.id === st.selId;
       const cnt = inPlaylistCount[mm.id] || 0;
       return {
-        name: mm.name, tagChip: tagChipOf(mm), catChip: catChipOf(mm), typeIcon: isLi ? '⧉' : '▤',
-        libMeta: `${isLi ? 'Liaison' : this.activeItems(mm).length + ' produits'}${cnt ? ' · dans playlist ×' + cnt : ' · ⚠ hors playlist (＋ pour diffuser)'}`,
+        name: mm.name, tagChip: tagChipOf(mm), catChip: catChipOf(mm),
+        typeIcon: (this.elementTypeOf(mm) || {}).icon || (isLi ? '⧉' : '▤'),
+        libMeta: `${this.modMeta(mm)}${cnt ? ' · dans playlist ×' + cnt : ' · ⚠ hors playlist (＋ pour diffuser)'}`,
         cardStyle: `display:flex;align-items:center;gap:9px;padding:10px 10px;border-radius:11px;cursor:pointer;background:${selc ? '#fff' : 'rgba(255,255,255,0.4)'};border:1px solid ${selc ? '#8D1D2C' : 'rgba(35,34,32,0.08)'};`,
         badgeStyle: `display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:7px;flex:0 0 auto;font-size:12px;${isLi ? 'background:rgba(35,34,32,0.10);color:#8A847C;' : 'background:rgba(141,29,44,0.12);color:#8D1D2C;'}`,
         addBtn: miniBtn + 'background:#8D1D2C;color:#fff;border:none;font-weight:700;',
@@ -863,10 +1042,12 @@ class App extends Component {
       };
     });
 
-    const layoutOptions = LAYOUTS.map((o) => ({
+    // Mises en page : celles du TYPE de l'élément (table sig_element_types).
+    const layoutList = (selType && selType.layouts && selType.layouts.length) ? selType.layouts : LAYOUTS;
+    const layoutOptions = layoutList.map((o) => ({
       icon: o.icon, label: o.label,
       pick: () => this.setSelField('layout', o.id),
-      style: `text-align:left;padding:13px 13px;border-radius:12px;cursor:pointer;background:${isCat && m.layout === o.id ? 'rgba(141,29,44,0.08)' : '#FBF8F2'};border:1px solid ${isCat && m.layout === o.id ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};color:#232220;`,
+      style: `text-align:left;padding:13px 13px;border-radius:12px;cursor:pointer;background:${m.layout === o.id ? 'rgba(141,29,44,0.08)' : '#FBF8F2'};border:1px solid ${m.layout === o.id ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};color:#232220;`,
     }));
     const MSHORT = { m1: 'Doux', m2: 'Ample', m3: 'Pulsé', none: 'Aucun' };
     const mGroups = [
@@ -886,7 +1067,7 @@ class App extends Component {
       };
     });
 
-    const items = (isCat ? m.items : []).map((t, i) => ({
+    const items = (isCat && !m.catRef ? m.items : []).map((t, i) => ({
       name: t.name, price: t.price, img: t.img, active: t.active,
       isIllus: t.src !== 'photo', isPhoto: t.src === 'photo',
       photoLabel: t.src === 'photo' ? 'Photo importée · changer' : 'Importer une photo',
@@ -947,7 +1128,7 @@ class App extends Component {
       return {
         i, name: mm.name, order: i + 1,
         durLabel: `${(Math.round(dur * 10) / 10).toString().replace('.', ',')} s`,
-        typeIcon: isLi ? '⧉' : '▤',
+        typeIcon: (this.elementTypeOf(mm) || {}).icon || (isLi ? '⧉' : '▤'),
         width: Math.max(104, Math.round(dur * 14)),
         blockStyle: `flex:0 0 auto;display:flex;flex-direction:column;justify-content:space-between;gap:4px;padding:9px 11px;border-radius:10px;cursor:grab;background:${playingHere ? '#8D1D2C' : '#fff'};color:${playingHere ? '#fff' : '#232220'};border:1px solid ${playingHere ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};box-shadow:0 2px 6px rgba(0,0,0,0.05);`,
         jump: () => this.setState({ scope: 'playlist', t: startT, playing: true }),
@@ -996,8 +1177,8 @@ class App extends Component {
     }));
     const libCards = st.library.filter((mm) => st.libFilter === 'all' || tagOf(mm).id === st.libFilter).map((mm) => ({
       name: mm.name,
-      typeIcon: mm.type === 'liaison' ? '⧉' : '▤',
-      meta: mm.type === 'liaison' ? 'liaison' : `${this.activeItems(mm).length} produits`,
+      typeIcon: (this.elementTypeOf(mm) || {}).icon || '▤',
+      meta: this.modMeta(mm),
       tagLabel: tagOf(mm).label,
       tagColor: tagOf(mm).color,
       inFilm: (inPlaylistCount[mm.id] || 0) > 0,
@@ -1113,6 +1294,48 @@ class App extends Component {
       }),
     }));
 
+    // ---- vue table produits ----
+    const cd = st.catDraft || st.catalog;
+    const storeCols = st.fleet.map((s) => ({ id: s.id, label: s.store }));
+    const prodCats = cd.categories.map((c) => {
+      const count = cd.products.filter((p) => p.categoryId === c.id).length;
+      const on = st.catSel === c.id;
+      const usedBy = st.library.filter((mm) => mm.catRef === c.id).length;
+      return {
+        id: c.id, name: c.name, count, usedBy, active: c.active !== false, on,
+        cardStyle: `display:flex;align-items:center;gap:9px;padding:11px 12px;border-radius:11px;cursor:pointer;background:${on ? '#fff' : 'rgba(255,255,255,0.5)'};border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.08)'};opacity:${c.active !== false ? 1 : 0.55};`,
+        pick: () => this.setState({ catSel: c.id }),
+        onName: (e) => this.setCat((d) => { const x = d.categories.find((y) => y.id === c.id); if (x) x.name = e.target.value; }),
+        toggleActive: (e) => { e.stopPropagation(); this.setCat((d) => { const x = d.categories.find((y) => y.id === c.id); if (x) x.active = !(x.active !== false); }); },
+        del: (e) => { e.stopPropagation(); this.delProdCat(c.id); },
+      };
+    });
+    const prodSelCat = cd.categories.find((c) => c.id === st.catSel) || null;
+    const prodRows = cd.products.filter((p) => p.categoryId === st.catSel).map((p) => ({
+      id: p.id, name: p.name, price: p.price, img: p.img, active: p.active !== false,
+      isPhoto: p.src === 'photo',
+      thumb: h('img', { src: p.img, alt: '', style: { width: 42, height: 42, objectFit: p.src === 'photo' ? 'cover' : 'contain', flex: '0 0 auto', background: '#FBF8F2', borderRadius: 8, padding: 2, boxSizing: 'border-box' } }),
+      onName: (e) => this.setCat((d) => { const x = d.products.find((y) => y.id === p.id); if (x) x.name = e.target.value; }),
+      onPrice: (e) => this.setCat((d) => { const x = d.products.find((y) => y.id === p.id); if (x) x.price = e.target.value; }),
+      onImg: (e) => this.setCat((d) => { const x = d.products.find((y) => y.id === p.id); if (x) { x.img = e.target.value; x.src = 'illus'; } }),
+      onPhoto: (e) => this.onProdPhoto(p.id, e),
+      toggleActive: () => this.setCat((d) => { const x = d.products.find((y) => y.id === p.id); if (x) x.active = !(x.active !== false); }),
+      up: () => this.moveProd(p.id, -1),
+      down: () => this.moveProd(p.id, 1),
+      del: () => this.delProd(p.id),
+      storePrices: storeCols.map((sc) => ({
+        storeId: sc.id,
+        value: (p.prices || {})[sc.id] || '',
+        onInput: (e) => this.setCat((d) => {
+          const x = d.products.find((y) => y.id === p.id);
+          if (!x) return;
+          x.prices = x.prices || {};
+          const val = e.target.value;
+          if (val.trim()) x.prices[sc.id] = val; else delete x.prices[sc.id];
+        }),
+      })),
+    }));
+
     const targets = st.fleet.map((s) => {
       const on = !!st.pubTargets[s.id];
       return {
@@ -1157,6 +1380,10 @@ class App extends Component {
         arr.push(crumb('Compositeur', () => this.setView('composer'), false));
         arr.push(crumb('Paramètres', null, false));
         arr.push(crumb('Serveur & connexion', null, true));
+      } else if (st.view === 'products') {
+        arr.push(crumb('Compositeur', () => this.setView('composer'), false));
+        arr.push(crumb('Table produits', null, false));
+        arr.push(crumb(`${(st.catDraft || st.catalog).categories.length} catégorie(s) · ${(st.catDraft || st.catalog).products.length} produit(s)${st.catDirty ? ' · non enregistrée' : ''}`, null, true));
       } else {
         arr.push(crumb('Compositeur', () => this.setView('composer'), false));
         arr.push(crumb(`Film : ${this.activeFilm().name}`, null, false));
@@ -1169,6 +1396,11 @@ class App extends Component {
     return {
       playlist, library, layoutOptions, motionGroups, items, days, posFields, timeSlots, crumbs,
       timelineBlocks, timelineTotal, timelineEndDrop, libCards, libTagChips, libEmptyMsg, pubDaysVals,
+      prodCats, prodRows, storeCols, prodSelCat,
+      catDirty: st.catDirty, catSaving: st.catSaving,
+      addProdCat: () => this.addProdCat(),
+      addProd: () => this.addProd(),
+      saveCat: () => this.saveCatalog(),
       filmDaysVals, filmSlotVals, filmStoreVals, filmAllStores, filmSchedSummary,
       isLibTab: st.composerTab !== 'timeline',
       isTimelineTab: st.composerTab === 'timeline',
@@ -1181,9 +1413,12 @@ class App extends Component {
       undoStyle: `display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;font-size:16px;${st.past.length ? 'background:#FBF8F2;border:1px solid rgba(35,34,32,0.14);color:#232220;cursor:pointer;' : 'background:rgba(35,34,32,0.03);border:1px solid rgba(35,34,32,0.06);color:#C9C3B8;cursor:not-allowed;'}`,
       redoStyle: `display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;font-size:16px;${st.future.length ? 'background:#FBF8F2;border:1px solid rgba(35,34,32,0.14);color:#232220;cursor:pointer;' : 'background:rgba(35,34,32,0.03);border:1px solid rgba(35,34,32,0.06);color:#C9C3B8;cursor:not-allowed;'}`,
       isComposerView: st.view === 'composer', isFleetView: st.view === 'fleet', isSettingsView: st.view === 'settings',
+      isProductsView: st.view === 'products',
       setViewComposer: () => this.setView('composer'),
       setViewFleet: () => this.setView('fleet'),
       setViewSettings: () => this.setView('settings'),
+      setViewProducts: () => this.openProducts(),
+      tabProductsStyle: stTab + (st.view === 'products' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       tabComposerStyle: stTab + (st.view === 'composer' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       tabFleetStyle: stTab + (st.view === 'fleet' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       settingsIconStyle: `display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;font-size:17px;cursor:pointer;flex:0 0 auto;${st.view === 'settings' ? 'background:#8D1D2C;color:#fff;border:none;' : 'background:#EFE9E0;color:#232220;border:1px solid rgba(35,34,32,0.10);'}`,
@@ -1219,13 +1454,47 @@ class App extends Component {
       deployStyle: `padding:11px 22px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:${tgtCount && !st.deploying ? 'pointer' : 'not-allowed'};${tgtCount ? 'background:#8D1D2C;color:#fff;' : 'background:rgba(35,34,32,0.10);color:#8A847C;'}opacity:${st.deploying ? 0.7 : 1};`,
       hasToast: !!st.toast, toast: st.toast,
       playlistEmpty: st.playlist.length === 0,
-      isCategory: isCat, isLiaison: isLia,
+      isCategory: isCat, isLiaison: isLia, isProduit, isFilmEl, isAnim,
+      hasSub: isLia || isAnim || isProduit,
+      hasDur: isProduit || isFilmEl || isAnim,
       selName: m.name,
-      selTypeLabel: isLia ? 'Liaison' : 'Catégorie',
+      selTypeLabel: selType ? selType.label : (isLia ? 'Liaison' : 'Catégorie'),
       selTypeBadge: `display:inline-flex;align-items:center;padding:4px 11px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;${isLia ? 'background:rgba(35,34,32,0.10);color:#8A847C;' : 'background:rgba(141,29,44,0.12);color:#8D1D2C;'}`,
       liaisonSub: m.sub || '',
       onSelName: (e) => this.setSelField('name', e.target.value),
       onLiaisonSub: (e) => this.setSelField('sub', e.target.value),
+      durVal: m.dur || (isFilmEl ? 10 : isProduit ? 8 : 6),
+      onDur: (e) => this.setSelField('dur', parseFloat(e.target.value) || 0),
+      // -- catégorie ↔ table produits --
+      isLinked: !!m.catRef,
+      linkedCatName: (st.catalog.categories.find((c) => c.id === m.catRef) || {}).name || m.catRef,
+      linkedRows: (m.items || []).map((it) => ({ name: it.name, price: it.price, active: it.active !== false })),
+      catOptions: st.catalog.categories.map((c) => ({
+        id: c.id,
+        label: `${c.name} (${st.catalog.products.filter((p) => p.categoryId === c.id).length} produits)${c.active ? '' : ' · inactive'}`,
+      })),
+      curCatRef: m.catRef || '',
+      onLinkCat: (e) => { if (e.target.value) this.linkCat(e.target.value); },
+      doUnlinkCat: () => this.unlinkCat(),
+      goProducts: () => this.openProducts(),
+      // -- produit à la une --
+      productOptions: st.catalog.products.map((p) => ({
+        id: p.id,
+        label: `${p.name} · ${p.price} €${p.active ? '' : ' · inactif'} — ${(st.catalog.categories.find((c) => c.id === p.categoryId) || {}).name || 'sans catégorie'}`,
+      })),
+      curProductRef: m.productRef || '',
+      onProductRef: (e) => this.setProductRef(e.target.value),
+      // -- film (vidéo) --
+      hasVideo: !!m.video,
+      videoPreview: m.video || '',
+      onVideoFile: (e) => this.onVideo(e),
+      clearVideo: () => this.setSelField('video', ''),
+      // -- motion global (produit / animation) --
+      motionSimple: MOTIONS.map((o) => ({
+        label: o.label,
+        pick: () => this.setSelField('motion', o.id),
+        style: `text-align:left;padding:10px 13px;font-size:12.5px;font-weight:500;border-radius:9px;cursor:pointer;background:${(m.motion || 'm1') === o.id ? 'rgba(141,29,44,0.08)' : '#FBF8F2'};border:1px solid ${(m.motion || 'm1') === o.id ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};color:#232220;`,
+      })),
       libTagPicker: LIB_TAGS.map((t) => {
         const on = tagOf(m).id === t.id;
         return {
@@ -1235,8 +1504,13 @@ class App extends Component {
           dotStyle: `width:7px;height:7px;border-radius:50%;background:${on ? '#fff' : t.color};`,
         };
       }),
-      addCategory: () => this.addCategory(),
-      addLiaison: () => this.addLiaison(),
+      openAddPicker: () => this.setState({ addPicker: true }),
+      closeAddPicker: () => this.setState({ addPicker: false }),
+      addPickerOpen: st.addPicker,
+      typeCards: (st.elementTypes || []).map((t) => ({
+        icon: t.icon, label: t.label, descr: t.descr,
+        pick: () => this.addElement(t),
+      })),
       addItem: () => this.addItem(),
       paste: () => this.paste(),
       pasteStyle: `flex:1 1 auto;padding:10px;font-size:12.5px;font-weight:500;border-radius:10px;cursor:${st.clipboard ? 'pointer' : 'not-allowed'};${st.clipboard ? 'color:#232220;background:#EFE9E0;border:1px solid rgba(35,34,32,0.14);' : 'color:#B8B2A8;background:rgba(35,34,32,0.04);border:1px solid rgba(35,34,32,0.08);'}`,
@@ -1413,6 +1687,7 @@ class App extends Component {
       </div>
       <div style="display:inline-flex;background:#EFE9E0;border-radius:999px;padding:3px;flex:0 0 auto;margin-left:6px;">
         <button onClick=${v.setViewComposer} style=${v.tabComposerStyle}>Compositeur</button>
+        <button onClick=${v.setViewProducts} style=${v.tabProductsStyle}>Produits</button>
         <button onClick=${v.setViewFleet} style=${v.tabFleetStyle}>Réseau & supervision</button>
       </div>
       <button onClick=${v.setViewSettings} title="Paramètres · serveur & connexion" style=${v.settingsIconStyle}>⚙</button>
@@ -1540,6 +1815,88 @@ class App extends Component {
   </div>
   `}
 
+  ${v.isProductsView && html`
+  <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;">
+    <div style="max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+        <div>
+          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Table produits</h2>
+          <p style="margin:0;font-size:12.5px;color:#8A847C;">La source unique des listes de prix : catégories → produits, actif/inactif, prix par défaut et prix par magasin. Les éléments liés (⛓) suivent automatiquement.</p>
+        </div>
+        <button onClick=${v.saveCat} disabled=${!v.catDirty || v.catSaving} style="padding:11px 22px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:${v.catDirty && !v.catSaving ? 'pointer' : 'not-allowed'};background:${v.catDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.catDirty ? '#fff' : '#8A847C'};">${v.catSaving ? 'Enregistrement…' : (v.catDirty ? 'Enregistrer la table' : '✓ Enregistrée')}</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:320px 1fr;gap:16px;align-items:start;">
+        <div style="background:#F3EEE6;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:8px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:0 4px;">
+            <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">Catégories</h3>
+            <button onClick=${v.addProdCat} style="padding:6px 12px;font-size:12px;font-weight:600;color:#fff;background:#8D1D2C;border:none;border-radius:999px;cursor:pointer;">＋</button>
+          </div>
+          ${v.prodCats.map((c) => html`
+            <div onClick=${c.pick} style=${c.cardStyle}>
+              <input value=${c.name} onInput=${c.onName} onClick=${(e) => e.stopPropagation()} style="flex:1 1 auto;min-width:0;padding:7px 9px;font-size:13.5px;font-weight:600;border:1px solid ${c.on ? 'rgba(141,29,44,0.3)' : 'transparent'};border-radius:7px;background:${c.on ? '#FBF8F2' : 'transparent'};" />
+              <span style="flex:0 0 auto;font-size:11px;color:#8A847C;">${c.count}${c.usedBy ? ' · ⛓' + c.usedBy : ''}</span>
+              <button onClick=${c.toggleActive} title="Active / inactive" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;flex:0 0 auto;border:1px solid rgba(35,34,32,0.12);cursor:pointer;background:${c.active ? 'rgba(46,110,78,0.12)' : 'rgba(35,34,32,0.06)'};color:${c.active ? '#2E6E4E' : '#8A847C'};font-size:12px;">${c.active ? '✓' : '⃠'}</button>
+              <button onClick=${c.del} title="Supprimer la catégorie" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;flex:0 0 auto;border:1px solid rgba(35,34,32,0.12);cursor:pointer;background:rgba(255,255,255,0.7);color:#8D1D2C;font-size:12px;">🗑</button>
+            </div>
+          `)}
+          ${!v.prodCats.length && html`<div style="font-size:12px;color:#8A847C;padding:8px;">Aucune catégorie — clique ＋ pour commencer.</div>`}
+        </div>
+
+        <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:10px;flex-wrap:wrap;">
+            <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">${v.prodSelCat ? `Produits · ${v.prodSelCat.name}` : 'Produits'}</h3>
+            <button onClick=${v.addProd} style="padding:8px 14px;font-size:12.5px;font-weight:500;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;cursor:pointer;">+ Ajouter un produit</button>
+          </div>
+          <div style="overflow-x:auto;">
+            <div style="display:grid;grid-template-columns:52px minmax(190px,1.4fr) 150px 110px ${v.storeCols.map(() => '110px').join(' ')} 90px 130px;gap:8px;align-items:center;min-width:${700 + v.storeCols.length * 118}px;">
+              <span></span>
+              <span style="font-size:10.5px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">Produit</span>
+              <span style="font-size:10.5px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">Visuel</span>
+              <span style="font-size:10.5px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;text-align:right;">Prix défaut</span>
+              ${v.storeCols.map((sc) => html`<span title=${sc.label} style="font-size:10.5px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:#8A847C;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${sc.label}</span>`)}
+              <span style="font-size:10.5px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;text-align:center;">Actif</span>
+              <span></span>
+              ${v.prodRows.map((p) => html`
+                <div style="display:flex;align-items:center;">${p.thumb}</div>
+                <input value=${p.name} onInput=${p.onName} style="padding:9px 11px;font-size:13.5px;font-weight:500;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:${p.active ? '#FBF8F2' : 'rgba(35,34,32,0.04)'};opacity:${p.active ? 1 : 0.6};min-width:0;" />
+                <div style="display:flex;align-items:center;gap:5px;min-width:0;">
+                  <select value=${p.isPhoto ? '' : p.img} onChange=${p.onImg} style="flex:1 1 auto;min-width:0;padding:8px 6px;font-size:11.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;cursor:pointer;">
+                    ${p.isPhoto && html`<option value="">📷 photo</option>`}
+                    <option value="assets/cookies.png">Cookie</option>
+                    <option value="assets/cake-slice.png">Part gâteau</option>
+                    <option value="assets/cake.png">Gâteau</option>
+                    <option value="assets/cherry.png">Cerise</option>
+                    <option value="assets/apple.png">Pomme</option>
+                    <option value="assets/rhubarb.png">Rhubarbe</option>
+                    <option value="assets/sweet-tart-small.png">Tarte S</option>
+                    <option value="assets/sweet-tart-big.png">Tarte L</option>
+                  </select>
+                  <label title="Importer une photo" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:7px;flex:0 0 auto;border:1px dashed rgba(35,34,32,0.3);background:#FBF8F2;cursor:pointer;font-size:13px;">⬆<input type="file" accept="image/*" onChange=${p.onPhoto} style="display:none;" /></label>
+                </div>
+                <input value=${p.price} onInput=${p.onPrice} inputmode="decimal" style="padding:9px 10px;font-size:13.5px;font-weight:600;text-align:right;color:#8D1D2C;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;min-width:0;" />
+                ${p.storePrices.map((sp) => html`
+                  <input value=${sp.value} onInput=${sp.onInput} placeholder="défaut" inputmode="decimal" style="padding:9px 10px;font-size:13px;text-align:right;color:${sp.value ? '#8D1D2C' : '#B8B2A8'};font-weight:${sp.value ? 600 : 400};border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:${sp.value ? 'rgba(141,29,44,0.05)' : '#FBF8F2'};min-width:0;" />
+                `)}
+                <div style="display:flex;justify-content:center;">
+                  <button onClick=${p.toggleActive} title="Actif / inactif (masqué à l'écran)" style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid rgba(35,34,32,0.12);cursor:pointer;background:${p.active ? 'rgba(46,110,78,0.12)' : 'rgba(141,29,44,0.08)'};color:${p.active ? '#2E6E4E' : '#8D1D2C'};font-size:13px;">${p.active ? '✓' : '⃠'}</button>
+                </div>
+                <div style="display:flex;align-items:center;gap:4px;justify-content:flex-end;">
+                  <button onClick=${p.up} title="Monter" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#FBF8F2;cursor:pointer;font-size:12px;">↑</button>
+                  <button onClick=${p.down} title="Descendre" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#FBF8F2;cursor:pointer;font-size:12px;">↓</button>
+                  <button onClick=${p.del} title="Supprimer" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#FBF8F2;cursor:pointer;font-size:12px;color:#8D1D2C;">✕</button>
+                </div>
+              `)}
+            </div>
+          </div>
+          ${!v.prodRows.length && html`<div style="font-size:12.5px;color:#8A847C;padding:14px 4px 4px;">Aucun produit dans cette catégorie — « + Ajouter un produit ».</div>`}
+          <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Prix par magasin : laisse vide pour utiliser le prix par défaut. Les liens ?store= et les écrans de chaque magasin affichent automatiquement leurs prix.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  `}
+
   ${v.isFleetView && html`
   <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;">
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;max-width:1400px;margin:0 auto 22px;">
@@ -1661,12 +2018,9 @@ class App extends Component {
           </div>
         `)}
       </div>
-      <div style="flex:0 0 auto;padding:12px;border-top:1px solid rgba(35,34,32,0.10);display:flex;flex-direction:column;gap:8px;">
-        <button onClick=${v.addCategory} style="width:100%;padding:11px;font-size:13.5px;font-weight:600;color:#fff;background:#8D1D2C;border:none;border-radius:10px;cursor:pointer;">+ Catégorie</button>
-        <div style="display:flex;gap:8px;">
-          <button onClick=${v.addLiaison} style="flex:1 1 auto;padding:10px;font-size:12.5px;font-weight:500;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.20);border-radius:10px;cursor:pointer;">+ Liaison</button>
-          <button onClick=${v.paste} style=${v.pasteStyle}>Coller</button>
-        </div>
+      <div style="flex:0 0 auto;padding:12px;border-top:1px solid rgba(35,34,32,0.10);display:flex;gap:8px;">
+        <button onClick=${v.openAddPicker} style="flex:1 1 auto;padding:11px;font-size:13.5px;font-weight:600;color:#fff;background:#8D1D2C;border:none;border-radius:10px;cursor:pointer;">＋ Élément</button>
+        <button onClick=${v.paste} style=${v.pasteStyle}>Coller</button>
       </div>
     </aside>
 
@@ -1687,10 +2041,17 @@ class App extends Component {
               `)}
             </div>
           </div>
-          ${v.isLiaison && html`
+          ${v.hasSub && html`
             <div style="margin-top:14px;">
               <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:7px;">Sous-titre (accroche)</label>
               <input value=${v.liaisonSub} onInput=${v.onLiaisonSub} placeholder="ex. faites maison chaque matin" style="width:100%;box-sizing:border-box;padding:11px 13px;font-size:15px;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#FBF8F2;" />
+            </div>
+          `}
+          ${v.hasDur && html`
+            <div style="margin-top:14px;display:flex;align-items:center;gap:10px;">
+              <label style="font-size:12.5px;font-weight:500;color:#8A847C;">Durée à l'écran</label>
+              <input type="number" min="2" max="120" step="1" value=${v.durVal} onInput=${v.onDur} style="width:90px;padding:9px 11px;font-size:14px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;text-align:right;" />
+              <span style="font-size:12.5px;color:#8A847C;">secondes</span>
             </div>
           `}
         </div>
@@ -1716,9 +2077,9 @@ class App extends Component {
           `}
         </div>
 
-        ${v.isCategory && html`
+        ${v.layoutOptions.length > 1 && html`
           <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 24px;">
-            <h2 style="margin:0 0 14px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Mise en page</h2>
+            <h2 style="margin:0 0 14px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Mise en page — ${v.selTypeLabel}</h2>
             <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
               ${v.layoutOptions.map((opt) => html`
                 <button onClick=${opt.pick} style=${opt.style}>
@@ -1728,7 +2089,49 @@ class App extends Component {
               `)}
             </div>
           </div>
+        `}
 
+        ${v.isProduit && html`
+          <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 24px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+              <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Produit à la une</h2>
+              <button onClick=${v.goProducts} style="padding:7px 13px;font-size:12px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.25);border-radius:999px;cursor:pointer;">▦ Ouvrir la table produits</button>
+            </div>
+            <p style="margin:0 0 12px;font-size:12px;color:#8A847C;line-height:1.5;">Le produit vient de la table produits — son nom, son prix (et les prix par magasin) suivent automatiquement.</p>
+            <select value=${v.curProductRef} onChange=${v.onProductRef} style="width:100%;box-sizing:border-box;padding:11px 12px;font-size:14px;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#FBF8F2;cursor:pointer;">
+              <option value="">— Choisir un produit —</option>
+              ${v.productOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
+            </select>
+          </div>
+        `}
+
+        ${v.isFilmEl && html`
+          <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 24px;">
+            <h2 style="margin:0 0 6px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Vidéo</h2>
+            <p style="margin:0 0 12px;font-size:12px;color:#8A847C;line-height:1.5;">mp4 ou webm, <strong>8 Mo max</strong> (compresse en 1080p/H.264). Lue en boucle, sans le son, pendant la durée choisie.</p>
+            ${v.hasVideo && html`
+              <video src=${v.videoPreview} muted autoplay loop playsinline style="width:100%;border-radius:12px;background:#000;margin-bottom:10px;"></video>
+            `}
+            <div style="display:flex;gap:10px;">
+              <label style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 12px;font-size:13px;font-weight:600;color:#8D1D2C;border:1px dashed rgba(141,29,44,0.4);border-radius:10px;background:rgba(141,29,44,0.04);cursor:pointer;">
+                <span style="font-size:16px;">⬆</span><span>${v.hasVideo ? 'Remplacer la vidéo' : 'Importer une vidéo'}</span>
+                <input type="file" accept="video/mp4,video/webm,video/*" onChange=${v.onVideoFile} style="display:none;" />
+              </label>
+              ${v.hasVideo && html`<button onClick=${v.clearVideo} style="padding:11px 16px;font-size:13px;font-weight:600;color:#8D1D2C;background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:10px;cursor:pointer;">Retirer</button>`}
+            </div>
+          </div>
+        `}
+
+        ${(v.isProduit || v.isAnim) && html`
+          <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 24px;">
+            <h2 style="margin:0 0 12px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Mouvement</h2>
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+              ${v.motionSimple.map((o) => html`<button onClick=${o.pick} style=${o.style}>${o.label}</button>`)}
+            </div>
+          </div>
+        `}
+
+        ${v.isCategory && html`
           <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 24px;">
             <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Mouvement dynamique</h2>
             <p style="margin:0 0 16px;font-size:12px;color:#8A847C;line-height:1.5;">Réglable indépendamment par élément.</p>
@@ -1743,7 +2146,9 @@ class App extends Component {
               `)}
             </div>
           </div>
+        `}
 
+        ${(v.isCategory || v.isProduit) && html`
           <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 24px;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
               <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Positions (avancé)</h2>
@@ -1762,11 +2167,44 @@ class App extends Component {
               `)}
             </div>
           </div>
+        `}
 
+        ${v.isCategory && v.isLinked && html`
           <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 24px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
+              <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Liste de prix — liée à la table produits</h2>
+              <span style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#2E6E4E;background:rgba(46,110,78,0.1);border:1px solid rgba(46,110,78,0.35);border-radius:999px;padding:3px 10px;">⛓ ${v.linkedCatName}</span>
+            </div>
+            <p style="margin:0 0 12px;font-size:12px;color:#8A847C;line-height:1.5;">Les lignes viennent de la table produits : noms, prix (et prix par magasin), actifs/inactifs suivent automatiquement. Modifie-les dans la table.</p>
+            <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;">
+              ${v.linkedRows.map((r) => html`
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:9px;background:${r.active ? '#FBF8F2' : 'rgba(35,34,32,0.04)'};opacity:${r.active ? 1 : 0.55};">
+                  <span style="font-size:13.5px;font-weight:500;">${r.name}${r.active ? '' : ' · masqué'}</span>
+                  <span style="font-size:13.5px;font-weight:600;color:#8D1D2C;">${r.price} €</span>
+                </div>
+              `)}
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <button onClick=${v.goProducts} style="flex:1 1 auto;padding:11px 14px;font-size:13px;font-weight:600;color:#fff;background:#8D1D2C;border:none;border-radius:10px;cursor:pointer;">▦ Ouvrir la table produits</button>
+              <select value=${v.curCatRef} onChange=${v.onLinkCat} style="flex:1 1 auto;padding:10px 12px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#FBF8F2;cursor:pointer;">
+                ${v.catOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
+              </select>
+              <button onClick=${v.doUnlinkCat} title="Copier les lignes dans l'élément et reprendre la main" style="padding:11px 14px;font-size:13px;font-weight:600;color:#8D1D2C;background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:10px;cursor:pointer;">Délier</button>
+            </div>
+          </div>
+        `}
+
+        ${v.isCategory && !v.isLinked && html`
+          <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 24px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
               <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Produits & tarifs</h2>
-              <button onClick=${v.addItem} style="padding:8px 14px;font-size:12.5px;font-weight:500;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;cursor:pointer;">+ Ajouter</button>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <select value="" onChange=${v.onLinkCat} title="Les lignes viendront de la table produits" style="padding:8px 10px;font-size:12px;border:1px solid rgba(35,34,32,0.16);border-radius:999px;background:#FBF8F2;cursor:pointer;max-width:230px;">
+                  <option value="">⛓ Lier à la table produits…</option>
+                  ${v.catOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
+                </select>
+                <button onClick=${v.addItem} style="padding:8px 14px;font-size:12.5px;font-weight:500;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;cursor:pointer;">+ Ajouter</button>
+              </div>
             </div>
             <div style="display:flex;flex-direction:column;gap:12px;">
               ${v.items.map((it) => html`
@@ -1932,6 +2370,29 @@ class App extends Component {
 
     </div>
   </div>
+  `}
+
+  ${v.addPickerOpen && html`
+    <div onClick=${v.closeAddPicker} style="position:fixed;inset:0;background:rgba(20,15,12,0.5);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:50;">
+      <div onClick=${(e) => e.stopPropagation()} style="width:620px;max-width:94vw;max-height:88vh;overflow:auto;background:#FBF8F2;border-radius:20px;padding:26px 28px;box-shadow:0 30px 80px rgba(0,0,0,0.35);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <h2 style="margin:0;font-size:19px;font-weight:600;">Nouvel élément</h2>
+          <button onClick=${v.closeAddPicker} style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:9px;background:#EFE9E0;border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:14px;">✕</button>
+        </div>
+        <p style="margin:0 0 16px;font-size:12.5px;color:#8A847C;">Choisis le type — chaque type a ses propres mises en page.</p>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
+          ${v.typeCards.map((t) => html`
+            <button onClick=${t.pick} style="text-align:left;display:flex;gap:13px;align-items:flex-start;padding:15px 16px;border-radius:13px;cursor:pointer;background:#fff;border:1px solid rgba(35,34,32,0.12);">
+              <span style="display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;flex:0 0 auto;font-size:18px;background:rgba(141,29,44,0.1);color:#8D1D2C;">${t.icon}</span>
+              <span style="min-width:0;">
+                <span style="display:block;font-size:14px;font-weight:600;margin-bottom:3px;">${t.label}</span>
+                <span style="display:block;font-size:11.5px;color:#8A847C;line-height:1.45;">${t.descr}</span>
+              </span>
+            </button>
+          `)}
+        </div>
+      </div>
+    </div>
   `}
 
   ${v.publishing && html`

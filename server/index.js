@@ -17,7 +17,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC_DIR = join(ROOT, 'public');
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const HOST = process.env.HOST || '0.0.0.0';
-const MAX_BODY = 15 * 1024 * 1024; // photos importées en dataURL
+const MAX_BODY = 25 * 1024 * 1024; // photos + vidéos importées en dataURL
 
 const rawBase = (process.env.BASE_PATH || '').trim().replace(/^\/+|\/+$/g, '');
 const BASE_PATH = rawBase ? `/${rawBase}` : '';

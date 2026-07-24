@@ -117,6 +117,17 @@ async function main() {
     const n = f.stores.reduce((s, x) => s + x.players.length, 0);
     return `${f.stores.length} magasins · ${n} écrans`;
   });
+  await step('GET /api/v1/element-types — types depuis la table', async () => {
+    const t = await call('GET', '/api/v1/element-types');
+    if (!Array.isArray(t.types) || t.types.length < 5) throw new Error('types manquants (sig_element_types)');
+    for (const x of t.types) if (!Array.isArray(x.layouts) || !x.layouts.length) throw new Error(`type ${x.id} sans mises en page`);
+    return t.types.map((x) => x.id).join(' · ');
+  });
+  await step('GET /api/v1/catalog — table produits', async () => {
+    const c = await call('GET', '/api/v1/catalog');
+    if (!Array.isArray(c.categories) || !Array.isArray(c.products)) throw new Error('catalogue incomplet');
+    return `${c.categories.length} catégorie(s) · ${c.products.length} produit(s)`;
+  });
   await step('GET / — back office servi', async () => {
     const res = await fetch(BASE + '/');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -198,6 +209,28 @@ async function main() {
       // restauration de la configuration d'origine
       await call('POST', `/api/v1/stores/${store.id}`, { screens: before.screens, size: before.size, orient: before.orient });
       return `${store.store} : ${out.format.label} = ${out.format.px}, restauré ${before.label}`;
+    });
+    await step('PUT /api/v1/catalog — produit + prix par magasin', async () => {
+      const before = await call('GET', '/api/v1/catalog');
+      const fleetRes = await call('GET', '/api/v1/fleet');
+      const store = fleetRes.stores[0];
+      if (!store) throw new Error('aucun magasin en base');
+      const cats = before.categories.length ? before.categories : [{ id: 'pcT', name: 'Catégorie test', active: true }];
+      const catId = cats[0].id;
+      const testProd = {
+        id: 'prLIVETEST', categoryId: catId, name: 'Produit test live', price: '9,99',
+        img: 'assets/cake.png', src: 'illus', active: true, prices: { [store.id]: '7,77' },
+      };
+      await call('PUT', '/api/v1/catalog', { categories: cats, products: [...before.products, testProd] });
+      const mid = await call('GET', '/api/v1/catalog');
+      const found = mid.products.find((p) => p.id === 'prLIVETEST');
+      if (!found) throw new Error('produit test absent après enregistrement');
+      if (found.prices[store.id] !== '7,77') throw new Error('prix par magasin perdu');
+      // restauration
+      await call('PUT', '/api/v1/catalog', { categories: before.categories.length ? before.categories : [], products: before.products });
+      const after = await call('GET', '/api/v1/catalog');
+      if (after.products.some((p) => p.id === 'prLIVETEST')) throw new Error('produit test non supprimé');
+      return `aller-retour OK · prix ${store.store} 7,77 → restauré (${after.products.length} produits)`;
     });
     const basePlaylists = (state.playlists && state.playlists.length)
       ? state.playlists
