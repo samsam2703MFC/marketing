@@ -3094,10 +3094,15 @@ class App extends Component {
                 ${s.current ? html`<span style="font-size:10.5px;font-weight:700;color:#2E6E4E;background:rgba(46,110,78,0.12);border:1px solid rgba(46,110,78,0.35);border-radius:999px;padding:3px 9px;">● active aujourd'hui</span>` : ''}
                 <button onClick=${s.del} title="Supprimer" style="flex:0 0 auto;width:30px;height:30px;border-radius:8px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:pointer;font-size:13px;color:#8D1D2C;">✕</button>
               </div>
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding-left:20px;">
-                <span style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;">Illustration :</span>
-                <input value=${s.image} onInput=${s.onImage} placeholder="URL/chemin d'image (auto-rempli depuis ws_season si présent)" spellcheck="false" title="Illustration de la période. Renseignée automatiquement à l'import si ws_season expose une colonne image ; sinon colle ici une URL." style="flex:1 1 260px;min-width:0;padding:7px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
-                ${s.image && !s.imageOk ? html`<span title="Valeur non affichable directement (id ou nom de fichier sans chemin) — indique-moi le format et je résous l'URL." style="font-size:11px;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;padding:2px 9px;">⚠ non affichable</span>` : ''}
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;padding-left:20px;">
+                ${s.imageOk
+                  ? html`<img src=${s.image} alt="Aperçu de l'illustration" loading="lazy" style="width:48px;height:48px;border-radius:9px;object-fit:cover;flex:0 0 auto;border:1px solid rgba(35,34,32,0.15);background:#fff;" />`
+                  : html`<span title=${s.image ? 'Valeur non affichable ici' : 'Aucune illustration'} style="width:48px;height:48px;border-radius:9px;flex:0 0 auto;border:1px dashed rgba(35,34,32,0.22);background:#F5EFE4;display:flex;align-items:center;justify-content:center;font-size:18px;color:#C9C3B8;">🖼</span>`}
+                <div style="display:flex;flex-direction:column;gap:4px;flex:1 1 240px;min-width:0;">
+                  <span style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;">Illustration</span>
+                  <input value=${s.image} onInput=${s.onImage} placeholder="URL/lien direct de l'image (auto-rempli si la table importée a une colonne image)" spellcheck="false" title="Lien direct de l'illustration de la période. Rempli automatiquement à l'import si la table (ex. product_availability_period) expose une colonne image ; sinon colle une URL ici." style="width:100%;box-sizing:border-box;padding:7px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
+                </div>
+                ${s.image && !s.imageOk ? html`<span title="Valeur non affichable directement (id ou nom de fichier sans chemin) — indique-moi le format et je résous l'URL." style="font-size:11px;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;padding:2px 9px;flex:0 0 auto;">⚠ non affichable</span>` : ''}
               </div>
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding-left:20px;">
                 <span style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;">Produits liés :</span>
