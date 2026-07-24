@@ -2075,8 +2075,8 @@ class App extends Component {
     }));
 
     // ---- médiathèque agence (vue admin) ----
-    const MOMENT_LBL = { matin: 'Matin', midi: 'Midi', soir: 'Soir', all: 'Toute la journée' };
-    const mediaByMoment = { matin: 0, midi: 0, soir: 0, all: 0 };
+    const MOMENT_LBL = { matin: 'Matin', midi: 'Midi', aprem: 'Après-midi', all: 'Toute la journée' };
+    const mediaByMoment = { matin: 0, midi: 0, aprem: 0, all: 0 };
     for (const mm of (st.mediaLib || [])) mediaByMoment[mm.moment] = (mediaByMoment[mm.moment] || 0) + 1;
     const mediaOverview = {
       total: (st.mediaLib || []).length,
@@ -2575,7 +2575,7 @@ class App extends Component {
         <div style="display:flex;flex-direction:column;gap:18px;">
           <div style="display:flex;gap:26px;flex-wrap:wrap;">
             ${cField('Source des fiches', cChoice('source', [['saison', 'Produits de saison'], ['categories', 'Tout sauf catégories'], ['tout', 'Tout le catalogue']]), 'D’où viennent les fiches produit. « Produits de saison » = seulement ceux liés à une période active (onglet Périodes). « Tout sauf catégories » = tout le catalogue sauf les catégories cochées ci-dessous. « Tout le catalogue » = tous les produits actifs.')}
-            ${cField('Adapter au moment', cToggle('perMoment', 'Oui (matin/midi/soir)', 'Non'), 'Si activé, la boucle ne montre que les produits vendus au moment courant (table « Périodes de vente » dans l’onglet Périodes) : viennoiseries le matin, sandwichs le midi, etc.')}
+            ${cField('Adapter au moment', cToggle('perMoment', 'Oui (matin/midi/aprem)', 'Non'), 'Si activé, la boucle ne montre que les produits vendus au moment courant (table « Périodes de vente » dans l’onglet Périodes) : viennoiseries le matin, sandwichs le midi, etc.')}
             ${cField('Ordre', cChoice('order', [['catalogue', 'Catalogue'], ['aleatoire', 'Aléatoire']]), 'Ordre de passage. « Catalogue » = l’ordre du catalogue. « Aléatoire » = mélangé (stable pendant une fenêtre, re-mélangé au changement de moment/saison).')}
           </div>
           ${cont.source === 'categories' ? html`<div><div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:8px;">Catégories exclues (exceptions) — tout le reste passe</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${catChips}</div></div>` : ''}
@@ -3033,7 +3033,7 @@ class App extends Component {
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
             <span style="font-size:12px;color:#4A4640;background:#F5EFE4;border-radius:999px;padding:4px 12px;">🎬 ${v.mediaOverview.videos} vidéo(s)</span>
             <span style="font-size:12px;color:#4A4640;background:#F5EFE4;border-radius:999px;padding:4px 12px;">🖼 ${v.mediaOverview.photos} photo(s)</span>
-            <span style="font-size:12px;color:#4A4640;background:#F5EFE4;border-radius:999px;padding:4px 12px;">Matin ${v.mediaOverview.byMoment.matin} · Midi ${v.mediaOverview.byMoment.midi} · Soir ${v.mediaOverview.byMoment.soir} · Journée ${v.mediaOverview.byMoment.all}</span>
+            <span style="font-size:12px;color:#4A4640;background:#F5EFE4;border-radius:999px;padding:4px 12px;">Matin ${v.mediaOverview.byMoment.matin} · Midi ${v.mediaOverview.byMoment.midi} · Après-midi ${v.mediaOverview.byMoment.aprem} · Journée ${v.mediaOverview.byMoment.all}</span>
             <span style="font-size:12px;color:${v.mediaOverview.present === v.mediaOverview.total ? '#2E6E4E' : '#8D1D2C'};background:#F5EFE4;border-radius:999px;padding:4px 12px;">${v.mediaOverview.present}/${v.mediaOverview.total} présent(s) sur le disque</span>
           </div>
           <div style="display:flex;flex-direction:column;gap:6px;">

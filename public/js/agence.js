@@ -15,7 +15,7 @@ async function api(method, path, body) {
   return j;
 }
 const RUBY = '#8D1D2C';
-const MOMENTS = [{ id: 'matin', label: 'Matin' }, { id: 'midi', label: 'Midi' }, { id: 'soir', label: 'Soir' }, { id: 'all', label: 'Toute la journée' }];
+const MOMENTS = [{ id: 'matin', label: 'Matin' }, { id: 'midi', label: 'Midi' }, { id: 'aprem', label: 'Après-midi' }, { id: 'all', label: 'Toute la journée' }];
 const momentLabel = (id) => (MOMENTS.find((m) => m.id === id) || {}).label || id;
 const fmtMo = (b) => `${Math.round((b || 0) / 1024 / 1024 * 10) / 10} Mo`;
 
@@ -118,8 +118,8 @@ class Agence extends Component {
           <h3 style="margin:0 0 8px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${RUBY};">Comment ça marche</h3>
           <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.7;color:#4A4640;">
             <li><strong>Format vidéo :</strong> .mp4 ou .webm, codec H.264 (ou H.265/HEVC), 1080p ou 4K, sans son. <strong>Photo :</strong> .jpg / .png / .webp, idéalement 2000×2000 px.</li>
-            <li><strong>Tags :</strong> choisis le <strong>moment</strong> (matin / midi / soir), le <strong>produit</strong> et la <strong>saison</strong>. Le système diffusera aléatoirement les médias tagués au bon moment et à la bonne période.</li>
-            <li><strong>Nommage :</strong> à l'upload, un préfixe est ajouté automatiquement (<code>1_</code> matin, <code>2_</code> midi, <code>3_</code> soir).</li>
+            <li><strong>Tags :</strong> choisis le <strong>moment</strong> (matin / midi / après-midi), le <strong>produit</strong> et la <strong>saison</strong>. Le système diffusera aléatoirement les médias tagués au bon moment et à la bonne période.</li>
+            <li><strong>Nommage :</strong> à l'upload, un préfixe est ajouté automatiquement (<code>1_</code> matin, <code>2_</code> midi, <code>3_</code> après-midi).</li>
             <li><strong>Gros fichiers (plus de 18 Mo) :</strong> à déposer directement dans le dossier <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">public/media/</code> du serveur par SFTP, puis « Vérifier ».</li>
           </ul>
         </div>

@@ -271,9 +271,9 @@ async function main() {
     });
     await step('Médiathèque agence — upload tagué + accès séparé', async () => {
       const dataUrl = 'data:video/mp4;base64,' + Buffer.from('lt').toString('base64');
-      const up = await call('POST', '/api/v1/media', { name: 'lt-clip.mp4', kind: 'film', moment: 'soir', productId: '', seasonId: '', dataUrl });
+      const up = await call('POST', '/api/v1/media', { name: 'lt-clip.mp4', kind: 'film', moment: 'aprem', productId: '', seasonId: '', dataUrl });
       const item = (up.media || []).find((x) => x.filename === '3_lt-clip.mp4');
-      if (!up.ok || !item || !item.present || item.moment !== 'soir') throw new Error('upload/tag/préfixe média');
+      if (!up.ok || !item || !item.present || item.moment !== 'aprem') throw new Error('upload/tag/préfixe média');
       const ag = await (await fetch(BASE + '/api/v1/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'agence', password: process.env.SIG_AGENCY_PASSWORD || 'agence' }) })).json().catch(() => ({}));
       let agencyIsolated = 'compte agence absent';
       if (ag && ag.token) {
@@ -285,14 +285,14 @@ async function main() {
         agencyIsolated = 'agence cloisonnée (/state 403 · /media OK)';
       }
       await call('DELETE', `/api/v1/media/${encodeURIComponent(item.id)}`);
-      return `« 3_lt-clip.mp4 » (soir) · ${agencyIsolated}`;
+      return `« 3_lt-clip.mp4 » (après-midi) · ${agencyIsolated}`;
     });
     await step('Élément « média ciblé » — pioche selon moment + saison', async () => {
       // moment courant calculé EXACTEMENT comme le serveur (fenêtres par défaut).
       const now = new Date(); const mins = now.getHours() * 60 + now.getMinutes();
       const moment = (mins >= 360 && mins < 660) ? 'matin' : (mins >= 660 && mins < 900) ? 'midi'
-        : (mins >= 900 && mins < 1200) ? 'soir' : (now.getHours() < 11 ? 'matin' : now.getHours() < 16 ? 'midi' : 'soir');
-      const bad = moment === 'matin' ? 'soir' : 'matin';
+        : (mins >= 900 && mins < 1200) ? 'aprem' : (now.getHours() < 11 ? 'matin' : now.getHours() < 16 ? 'midi' : 'aprem');
+      const bad = moment === 'matin' ? 'aprem' : 'matin';
       const dU = (s) => 'data:video/mp4;base64,' + Buffer.from(s).toString('base64');
       await call('POST', '/api/v1/media', { name: 'mediael-good.mp4', kind: 'film', moment, dataUrl: dU('g') });
       await call('POST', '/api/v1/media', { name: 'mediael-bad.mp4', kind: 'film', moment: bad, dataUrl: dU('b') });

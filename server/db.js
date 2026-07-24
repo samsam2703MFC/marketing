@@ -212,6 +212,9 @@ function migrate(db) {
   // composée en direct depuis le catalogue + saisons + moments + tags).
   if (!plCols.includes('mode')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN mode TEXT NOT NULL DEFAULT 'playlist'`);
   if (!plCols.includes('continuous')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN continuous TEXT NOT NULL DEFAULT '{}'`);
+  // Vocabulaire des moments unifié (matin/midi/aprem) : on réaligne les médias
+  // historiquement tagués « soir » sur « aprem » (même créneau). No-op ensuite.
+  try { db.exec(`UPDATE sig_media SET moment = 'aprem' WHERE moment = 'soir'`); } catch { /* table absente */ }
   // Combo d'écrans du magasin (ex. 3 × 55″ portrait) → taille du film en px.
   const stCols = db.prepare('PRAGMA table_info(sig_stores)').all().map((c) => c.name);
   if (!stCols.includes('screens')) db.exec(`ALTER TABLE sig_stores ADD COLUMN screens INTEGER NOT NULL DEFAULT 1`);
@@ -449,7 +452,7 @@ function ensureElementTypes(db) {
   const ensureMedia = () => {
     if (!db.prepare('SELECT 1 FROM sig_element_types WHERE id = ?').get('media')) {
       insType.run('media', 'Média ciblé — agence', '🎯',
-        'Diffuse une vidéo/photo de la médiathèque agence, tirée au sort selon le moment (matin/midi/soir) et la saison active.',
+        'Diffuse une vidéo/photo de la médiathèque agence, tirée au sort selon le moment (matin/midi/après-midi) et la saison active.',
         mediaLayouts, 0, 5);
     }
   };
@@ -650,13 +653,9 @@ export function saveProductMoments(rows) {
   } catch (e) { db.exec('ROLLBACK'); throw e; }
   return loadProductMoments();
 }
-// Moment courant dans le vocabulaire des périodes de VENTE (matin/midi/aprem).
-// currentMoment() renvoie matin/midi/soir (vocabulaire médias) — on aligne le
-// 3ᵉ créneau sur « aprem » (même fenêtre horaire, cf. PLAN_MOMENTS).
-export function currentSaleMoment(date = new Date()) {
-  const m = currentMoment(date);
-  return m === 'soir' ? 'aprem' : m;
-}
+// Alias historique — le vocabulaire est désormais unifié (matin/midi/aprem),
+// donc c'est simplement currentMoment(). Conservé pour compat des appels.
+export function currentSaleMoment(date = new Date()) { return currentMoment(date); }
 // Un produit est-il vendu au moment donné ? Règle : si le produit a au moins
 // une ligne d'inclusion (exception=0), il n'est vendu QU'À ces moments-là ;
 // une ligne exception=1 retire ce moment. Sans aucune ligne → tous les moments.
@@ -741,7 +740,7 @@ export function continuousBucket(cfg, date = new Date()) {
 }
 export function continuousRevision(cfg, date = new Date()) { return String(strHash(continuousBucket(cfg, date))); }
 
-const ANIM_MSG = { matin: 'Bonne journée', midi: 'Bon appétit', soir: 'À emporter' };
+const ANIM_MSG = { matin: 'Bonne journée', midi: 'Bon appétit', aprem: 'À emporter' };
 
 // Compose la boucle du mode continu. ctx.surprise = [urls] (fourni par l'API,
 // db.js ne touche pas au système de fichiers). Modules AUTO-SUFFISANTS : ils
@@ -833,7 +832,7 @@ export function loadMedia() {
 export function addMediaRow(m) {
   getDb().prepare('INSERT INTO sig_media(id, filename, kind, moment, product_id, season_id, size) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run(String(m.id), String(m.filename), m.kind === 'photo' ? 'photo' : 'film',
-      ['matin', 'midi', 'soir'].includes(m.moment) ? m.moment : 'all',
+      ['matin', 'midi', 'aprem'].includes(m.moment) ? m.moment : 'all',
       String(m.productId || ''), String(m.seasonId || ''), parseInt(m.size, 10) || 0);
   return loadMedia();
 }
@@ -909,20 +908,21 @@ export function planWindows() {
 
 export function activeWeek() { return okWeek(getSetting('active_week', 'A')); }
 
-// Moment courant (matin/midi/soir) selon les 3 fenêtres horaires du planning ;
-// hors fenêtres, on retombe par tiers de journée. Sert aux « médias ciblés ».
+// Moment courant (matin/midi/aprem) selon les 3 fenêtres horaires du planning ;
+// hors fenêtres, on retombe par tiers de journée. UN SEUL vocabulaire partout
+// (médias, périodes de vente, planning) : matin / midi / après-midi.
 export function currentMoment(date = new Date()) {
   const wins = planWindows();
   const mins = date.getHours() * 60 + date.getMinutes();
   const toMin = (h) => { const [a, b] = String(h).split(':').map(Number); return a * 60 + b; };
-  const names = ['matin', 'midi', 'soir'];
+  const names = ['matin', 'midi', 'aprem'];
   for (let i = 0; i < wins.length && i < 3; i++) {
     const a = toMin(wins[i].from); const b = toMin(wins[i].to);
     const inW = a <= b ? (mins >= a && mins < b) : (mins >= a || mins < b);
     if (inW) return names[i];
   }
   const h = date.getHours();
-  return h < 11 ? 'matin' : (h < 16 ? 'midi' : 'soir');
+  return h < 11 ? 'matin' : (h < 16 ? 'midi' : 'aprem');
 }
 
 // Planning hebdomadaire complet : byStore[store][week][day][moment] = [films].

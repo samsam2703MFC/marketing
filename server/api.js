@@ -53,7 +53,7 @@ function listSurprise() {
 }
 
 // Élément « média ciblé » : pioche au hasard un média de la médiathèque agence
-// dont le moment (matin/midi/soir) correspond à l'instant courant et dont la
+// dont le moment (matin/midi/aprem) correspond à l'instant courant et dont la
 // saison est active (ou vide). Le player affiche la vidéo/photo tirée au sort.
 function resolveMediaElements(modules, date) {
   if (!Array.isArray(modules)) return;
@@ -111,6 +111,18 @@ function applyContinuous(snap, date) {
   snap.revision = gen.revision;
   snap.continuousMeta = gen.meta;
   return true;
+}
+// Finition d'un snapshot avant diffusion : prix + langue du magasin, puis
+// pioche des vidéos surprise et des médias ciblés. UN SEUL endroit, appelé par
+// la visionneuse ET les écrans, pour qu'ils ne divergent jamais (la boucle
+// continue, elle, est régénérée juste avant par applyContinuous).
+function finishSnapshot(snap, storeId, date = new Date()) {
+  if (!snap || !Array.isArray(snap.modules)) return snap;
+  applyStorePrices(snap.modules, storeId);
+  applyStoreLang(snap.modules, storeId);
+  resolveSurprise(snap.modules);
+  resolveMediaElements(snap.modules, date);
+  return snap;
 }
 // Révision continue du film actuellement assigné à un player (ou null).
 function continuousRevisionForVer(ver) {
@@ -404,9 +416,9 @@ function assignment(id, url) {
   const snapshot = snap ? JSON.parse(snap.payload) : currentDraftSnapshot();
   // Mode continu : boucle régénérée en direct (l'écran s'adapte au moment/saison).
   applyContinuous(snapshot, new Date());
-  // Prix + langue du magasin (table produits) : appliqués selon le player.
-  applyStorePrices(snapshot.modules, p.store_id);
-  applyStoreLang(snapshot.modules, p.store_id);
+  // Même finition que la visionneuse (prix/langue + surprise + média ciblé) :
+  // les écrans ne divergent plus du rendu de la visionneuse.
+  finishSnapshot(snapshot, p.store_id, new Date());
   return {
     status: 200,
     json: {
@@ -526,13 +538,9 @@ function filmJson(storeId, filmId) {
   snap.storeId = storeId || null;
   snap.storeName = storeName;
   snap.format = storeFmt;
-  // Prix + langue du magasin : le lien ?store= montre SES prix, dans SA langue.
-  applyStorePrices(snap.modules, storeId);
-  applyStoreLang(snap.modules, storeId);
-  // Vidéo surprise : pioche une vidéo au hasard dans le dossier serveur.
-  resolveSurprise(snap.modules);
-  // Média ciblé : pioche un média agence selon le moment courant + la saison.
-  resolveMediaElements(snap.modules, new Date());
+  // Prix + langue du magasin, surprise, média ciblé — résolution partagée avec
+  // les écrans (le lien ?store= montre SES prix, dans SA langue).
+  finishSnapshot(snap, storeId, new Date());
   return { status: 200, json: snap };
 }
 
@@ -672,9 +680,9 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       if (!(kind === 'photo' ? IMAGE_EXT.has(ext) : VIDEO_EXT.has(ext))) return send(400, { error: kind === 'photo' ? 'format image non supporté (.jpg, .png, .webp…)' : 'format vidéo non supporté (.mp4, .webm, .mov…)' });
       const buf = Buffer.from(mData[1], 'base64');
       if (buf.length > 18 * 1024 * 1024) return send(413, { error: 'fichier trop lourd pour l’upload (max 18 Mo) — dépose-le dans public/media/ sur le serveur' });
-      const moment = ['matin', 'midi', 'soir'].includes(body.moment) ? body.moment : 'all';
-      // Convention agence : préfixe selon le moment (1_ matin · 2_ midi · 3_ soir).
-      const filename = ({ matin: '1_', midi: '2_', soir: '3_', all: '' })[moment] + rawName;
+      const moment = ['matin', 'midi', 'aprem'].includes(body.moment) ? body.moment : 'all';
+      // Convention agence : préfixe selon le moment (1_ matin · 2_ midi · 3_ après-midi).
+      const filename = ({ matin: '1_', midi: '2_', aprem: '3_', all: '' })[moment] + rawName;
       try { mkdirSync(MEDIA_DIR, { recursive: true }); } catch { /* déjà là */ }
       writeFileSync(join(MEDIA_DIR, filename), buf);
       const media = addMediaRow({ id: 'md' + Date.now().toString(36), filename, kind, moment, productId: body.productId, seasonId: body.seasonId, size: buf.length });
