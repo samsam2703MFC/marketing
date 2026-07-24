@@ -6,6 +6,8 @@ import {
   clx, fmtTime, newTag, newSched, newPos,
   activeItems as rActiveItems, moduleDur as rModuleDur, renderModule, playable,
 } from './renderer.js';
+// Config du mode « continu » : source unique partagée avec le serveur.
+import { continuousDefaults, normContinuous } from './continuous.js';
 
 const PREVIEW_W = 560;
 const SCALE = PREVIEW_W / W;
@@ -347,34 +349,13 @@ class App extends Component {
       planDays: (Array.isArray(p.planDays) && p.planDays.length === 7) ? p.planDays.map(Boolean) : [true, true, true, true, true, true, true],
       stores: Array.isArray(p.stores) ? p.stores : [],
       mode: p.mode === 'continu' ? 'continu' : 'playlist',
-      continuous: this.normContinuous(p.continuous),
-    };
-  }
-  // Config par défaut + normalisation du mode « continu » (miroir de db.js).
-  contDefaults() {
-    return {
-      source: 'saison', categories: [], perMoment: true, order: 'catalogue',
-      prodDur: 6, clipDur: 12, maxItems: 12,
-      ratios: { liaison: 5, produitSeul: 6, media: 3, animation: 0, surprise: 8 },
-      refresh: 'moment', refreshMin: 10, fallback: 'tout', exceptionFilms: [],
-    };
-  }
-  normContinuous(c) {
-    const d = this.contDefaults();
-    c = (c && typeof c === 'object') ? c : {};
-    return {
-      ...d, ...c,
-      ratios: { ...d.ratios, ...(c.ratios || {}) },
-      categories: Array.isArray(c.categories) ? c.categories.map(String) : [],
-      // Compat : ancien champ unique exceptionFilm → tableau exceptionFilms.
-      exceptionFilms: Array.isArray(c.exceptionFilms) ? c.exceptionFilms.map(String).filter(Boolean)
-        : (c.exceptionFilm ? [String(c.exceptionFilm)] : []),
+      continuous: normContinuous(p.continuous),
     };
   }
   setFilmMode(mode) { this.updateFilm({ mode: mode === 'continu' ? 'continu' : 'playlist' }); }
   updateContinuous(patch) {
     const f = this.activeFilm();
-    this.updateFilm({ continuous: this.normContinuous({ ...(f.continuous || {}), ...patch }) });
+    this.updateFilm({ continuous: normContinuous({ ...(f.continuous || {}), ...patch }) });
   }
   updateContRatio(key, val) {
     const f = this.activeFilm();
@@ -406,16 +387,6 @@ class App extends Component {
     days[d] = !days[d];
     this.updateFilm({ schedule: { ...f.schedule, days } });
   }
-  // Jours de planning (dédiés) : filtrent le film dans le planning hebdo.
-  toggleFilmPlanDay(d) {
-    const f = this.activeFilm();
-    const pd = [...(f.planDays || [true, true, true, true, true, true, true])];
-    pd[d] = !pd[d];
-    this.updateFilm({ planDays: pd });
-  }
-  setFilmPlanDays(all) {
-    this.updateFilm({ planDays: all ? [true, true, true, true, true, true, true] : this.activeFilm().planDays });
-  }
   setFilmWindow(from, to) {
     const f = this.activeFilm();
     this.updateFilm({ schedule: { ...f.schedule, from, to } });
@@ -442,10 +413,12 @@ class App extends Component {
     if (!p) return;
     this.setState({ activePl: id, playlist: [...p.items], t: 0, editingFilm: false });
   }
+  // Nouveau film : en mode CONTINU par défaut (le chemin simple — la boucle se
+  // compose toute seule). Bascule en « Playlist » possible d'un clic si besoin.
   newFilm() {
     const id = 'pl' + uid();
-    const playlists = [...this.state.playlists, this.normFilm({ id, name: 'Nouveau film', items: [] })];
-    this.dirty({ playlists, activePl: id, playlist: [], editingFilm: true, editFilmName: 'Nouveau film', t: 0, filmFilter: 'all' });
+    const playlists = [...this.state.playlists, this.normFilm({ id, name: 'Nouveau film', items: [], mode: 'continu' })];
+    this.dirty({ playlists, activePl: id, playlist: [], editingFilm: true, editFilmName: 'Nouveau film', t: 0, filmFilter: 'all', composerTab: 'timeline', scope: 'playlist' });
   }
   dupFilm() {
     const src = this.activeFilm();
@@ -1716,13 +1689,6 @@ class App extends Component {
       toggle: () => this.toggleFilmDay(d),
       style: chipDay(filmActive.schedule.days[d]),
     }));
-    const fPlanDays = filmActive.planDays || [true, true, true, true, true, true, true];
-    const filmPlanDaysVals = DAYS.map((lab, d) => ({
-      label: lab,
-      toggle: () => this.toggleFilmPlanDay(d),
-      style: chipDay(fPlanDays[d]),
-    }));
-    const filmPlanEveryDay = fPlanDays.every(Boolean);
     const filmSlotVals = SLOTS.map((s) => ({
       label: s.label,
       pick: () => this.setFilmWindow(s.from, s.to),
@@ -2121,7 +2087,7 @@ class App extends Component {
       addProdCat: () => this.addProdCat(),
       addProd: () => this.addProd(),
       saveCat: () => this.saveCatalog(),
-      filmDaysVals, filmPlanDaysVals, filmPlanEveryDay, filmSlotVals, filmStoreVals, filmAllStores, filmSchedSummary,
+      filmDaysVals, filmSlotVals, filmStoreVals, filmAllStores, filmSchedSummary,
       filmCatVals, filmTagVals, filmTagInput: st.filmTagInput,
       onFilmTagInput: (e) => this.setState({ filmTagInput: e.target.value }),
       onFilmTagKey: (e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); this.addFilmTag(st.filmTagInput); this.setState({ filmTagInput: '' }); } },
@@ -2533,7 +2499,7 @@ class App extends Component {
 
     // ---- Mode du film : Playlist (manuel) ou Continu (boucle auto) ----------
     const filmMode = this.activeFilm().mode === 'continu' ? 'continu' : 'playlist';
-    const cont = this.normContinuous(this.activeFilm().continuous);
+    const cont = normContinuous(this.activeFilm().continuous);
     const modeBtn = (id, label, sub) => html`
       <button onClick=${() => this.setFilmMode(id)} style="flex:1 1 0;text-align:left;padding:11px 15px;border-radius:12px;cursor:pointer;border:1px solid ${filmMode === id ? '#8D1D2C' : 'rgba(35,34,32,0.14)'};background:${filmMode === id ? '#8D1D2C' : '#FBF8F2'};color:${filmMode === id ? '#fff' : '#232220'};">
         <div style="font-size:13.5px;font-weight:700;">${label}</div>
@@ -3770,7 +3736,10 @@ class App extends Component {
 
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 18px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:12px;flex-wrap:wrap;">
-          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Programmation & magasins du film</h3>
+          <span style="display:inline-flex;align-items:center;gap:6px;">
+            <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Programmation & magasins du film</h3>
+            ${infoTip('Priorité : si un magasin a un PLANNING (onglet Planning) qui couvre l’heure courante, c’est le planning qui décide quel film passe sur cet écran. Sinon, ces réglages-ci s’appliquent (jours + fenêtre horaire + magasins ciblés à la publication). En clair : le planning gagne quand il existe, le film sert de réglage par défaut.')}
+          </span>
           <span style="font-size:12px;color:#8A847C;">${v.filmSchedSummary}</span>
         </div>
         <div style="display:flex;gap:28px;flex-wrap:wrap;">
