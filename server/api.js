@@ -448,15 +448,18 @@ function filmJson(storeId, filmId) {
   if (filmId) {
     const pls = loadPlaylists();
     const film = pls.find((p) => p.id === filmId);
-    if (!film) return { status: 404, json: { error: `film inconnu : ${filmId}` } };
+    // Une publication peut exister pour ce film même s'il a été renommé/supprimé
+    // depuis (snapshot orphelin) : on la sert quand même. On ne renvoie 404 que
+    // si NI film courant NI publication ne correspondent à cet id.
     const rows = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' ORDER BY version DESC LIMIT 200`).all();
     for (const r of rows) {
       const p = JSON.parse(r.payload);
       if ((p.playlistId || 'pl1') === filmId) { snap = p; break; }
     }
+    if (!film && !snap) return { status: 404, json: { error: `film inconnu : ${filmId}` } };
     if (!snap) {
       snap = { ...currentDraftSnapshot(), playlistId: film.id, playlistName: film.name, playlist: film.items, draft: true };
-    } else if (!snap.playlistName) {
+    } else if (!snap.playlistName && film) {
       snap.playlistName = film.name;
     }
   } else if (storeId) {
