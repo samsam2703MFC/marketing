@@ -206,8 +206,12 @@ async function main() {
     const imgTxt = r.imageFound
       ? `IMAGE=[${r.imageCols.map((c) => `${c.column}@${c.table}${c.sample ? `="${c.sample}"` : ''}`).join(', ')}]`
       : 'aucune colonne image détectée';
-    const tables = r.inspected.map((t) => `${t.table}{${(t.types || t.columns || []).join(', ')}}`).join(' ;; ');
-    return `${r.inspected.length} table(s) · ${imgTxt} · ${tables}`.slice(0, 1200);
+    const tables = r.inspected.map((t) => {
+      const cols = (t.types || t.columns || []).join(', ');
+      const ex = (t.sample && t.sample.length) ? ` ex[${t.sample.join(' | ')}]` : '';
+      return `${t.table}{${cols}}${ex}`;
+    }).join(' ;; ');
+    return `${r.inspected.length} table(s) · ${imgTxt} · ${tables}`.slice(0, 1600);
   });
   await step('GET /api/v1/media — médiathèque agence (lecture)', async () => {
     const r = await call('GET', '/api/v1/media');
