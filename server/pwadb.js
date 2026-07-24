@@ -193,12 +193,18 @@ async function detectShops(cfg, db) {
       const id = (await primaryKey(cfg, db, t)) || pickCol(cols, ['id', 'id_shop', 'shop_id'], 'id', t);
       const slug = pickCol(cols, ['slug', 'code', 'alias'], 'optionnel');
       const name = pickCol(cols, ['name', 'label', 'title', 'nom', 'libelle'], 'optionnel');
+      const active = pickCol(cols, ['active', 'enabled', 'visible', 'actif', 'status'], 'optionnel');
       if (!slug && !name) continue;
-      const rows = await mysqlRows(cfg, `SELECT ${qid(id)}, ${slug ? qid(slug) : "''"}, ${name ? qid(name) : "''"} FROM ${qid(db)}.${qid(t)}`);
-      return rows.map(([i, sl, nm]) => ({ id: String(i), slug: String(sl || '').trim(), name: String(nm || '').trim() }));
+      const rows = await mysqlRows(cfg, `SELECT ${qid(id)}, ${slug ? qid(slug) : "''"}, ${name ? qid(name) : "''"}, ${active ? qid(active) : "'1'"} FROM ${qid(db)}.${qid(t)}`);
+      const all = rows.map(([i, sl, nm, act]) => ({
+        id: String(i), slug: String(sl || '').trim(), name: String(nm || '').trim(),
+        active: act == null || !(act === '0' || act === '' || /^(false|no|non)$/i.test(String(act))),
+      }));
+      // Seules les boutiques actives sont mappées (et créées côté signage).
+      return { shops: all.filter((x) => x.active), inactive: all.length - all.filter((x) => x.active).length };
     } catch { /* table absente ou illisible : on essaie la suivante */ }
   }
-  return [];
+  return { shops: [], inactive: 0 };
 }
 
 const slugify = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -317,10 +323,13 @@ async function doImport(cfg, queries) {
   const extToStore = {};
   const extLabel = {};
   const created = [];
+  let inactiveShops = 0;
   if (Object.keys(cfg.shopMap || {}).length) {
     for (const [storeId, extId] of Object.entries(cfg.shopMap)) { extToStore[String(extId)] = storeId; extLabel[String(extId)] = String(extId); }
   } else {
-    const shops = await detectShops(cfg, queries.db);
+    const det = await detectShops(cfg, queries.db);
+    const shops = det.shops;
+    inactiveShops = det.inactive;
     if (shops.length) {
       const insStore = db0.prepare(`INSERT OR IGNORE INTO sig_stores(id, name, grp, conn, screens, screen_size, screen_orient, lang)
         VALUES (?, ?, 'Boutiques PWA', 'fibre', 1, 55, 'paysage', 'fr')`);
@@ -391,5 +400,6 @@ async function doImport(cfg, queries) {
     relinked,
     ...(dupes ? { dupes } : {}),
     ...(created.length ? { createdStores: created } : {}),
+    ...(inactiveShops ? { inactiveShops } : {}),
   };
 }

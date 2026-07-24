@@ -1917,7 +1917,7 @@ class App extends Component {
             ${st.pwaResult.ok
               ? (st.pwaResult.counts
                 ? `✓ Base « ${st.pwaResult.db} » détectée — ${Object.entries(st.pwaResult.counts).map(([k, n]) => `${n} ${k}`).join(' · ')}`
-                : `✓ Base « ${st.pwaResult.db} » — importé : ${st.pwaResult.categories} catégorie(s) · ${st.pwaResult.products} produit(s) · ${st.pwaResult.storePrices} prix/boutique (${st.pwaResult.shopMap}) · ${st.pwaResult.relinked} élément(s) re-lié(s)${st.pwaResult.dupes ? ` · ${st.pwaResult.dupes} ligne(s) en double ignorée(s)` : ''}${st.pwaResult.createdStores ? ` · magasin(s) créé(s) : ${st.pwaResult.createdStores.join(', ')}` : ''}`)
+                : `✓ Base « ${st.pwaResult.db} » — importé : ${st.pwaResult.categories} catégorie(s) · ${st.pwaResult.products} produit(s) · ${st.pwaResult.storePrices} prix/boutique (${st.pwaResult.shopMap}) · ${st.pwaResult.relinked} élément(s) re-lié(s)${st.pwaResult.dupes ? ` · ${st.pwaResult.dupes} ligne(s) en double ignorée(s)` : ''}${st.pwaResult.createdStores ? ` · magasin(s) créé(s) : ${st.pwaResult.createdStores.join(', ')}` : ''}${st.pwaResult.inactiveShops ? ` · ${st.pwaResult.inactiveShops} boutique(s) inactive(s) ignorée(s)` : ''}`)
               : `✗ ${st.pwaResult.error}`}
             ${st.pwaResult.note ? html`<span style="display:block;font-weight:400;color:#8a6508;">⚠ ${st.pwaResult.note}</span>` : ''}
           </div>
