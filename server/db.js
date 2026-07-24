@@ -683,8 +683,8 @@ export function productMomentFilter(date = new Date()) {
 // boucle est composée en direct depuis le catalogue + saisons + moments + tags.
 export function continuousDefaults() {
   return {
-    source: 'saison',        // 'saison' | 'categories' | 'tout'
-    categories: [],          // ids de catégories si source === 'categories'
+    source: 'saison',        // 'saison' | 'categories' (= tout sauf) | 'tout'
+    categories: [],          // ids de catégories EXCLUES si source === 'categories'
     perMoment: true,         // filtrer les produits par période de vente (moment)
     order: 'catalogue',      // 'catalogue' | 'aleatoire'
     prodDur: 6,              // durée d'une fiche produit (s)
@@ -758,8 +758,9 @@ export function buildContinuous(cfg, date = new Date(), ctx = {}) {
   // 1) Pool de produits éligibles : actif + source + moment de vente.
   let pool = products.filter((p) => p.active && momentOk(p.id));
   if (cfg.source === 'categories') {
+    // Les catégories choisies sont des EXCEPTIONS : tout SAUF ces catégories.
     const cats = new Set(cfg.categories);
-    pool = pool.filter((p) => cats.has(p.categoryId));
+    pool = pool.filter((p) => !cats.has(p.categoryId));
   } else if (cfg.source === 'saison') {
     const inSeason = new Set(currentSeasons(date).flatMap((s) => s.products || []));
     const seasonPool = inSeason.size ? pool.filter((p) => inSeason.has(p.id)) : [];

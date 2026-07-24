@@ -2531,11 +2531,11 @@ class App extends Component {
         </div>
         <div style="display:flex;flex-direction:column;gap:18px;">
           <div style="display:flex;gap:26px;flex-wrap:wrap;">
-            ${cField('Source des fiches', cChoice('source', [['saison', 'Produits de saison'], ['categories', 'Catégories choisies'], ['tout', 'Tout le catalogue']]))}
+            ${cField('Source des fiches', cChoice('source', [['saison', 'Produits de saison'], ['categories', 'Tout sauf catégories'], ['tout', 'Tout le catalogue']]))}
             ${cField('Adapter au moment', cToggle('perMoment', 'Oui (matin/midi/soir)', 'Non'))}
             ${cField('Ordre', cChoice('order', [['catalogue', 'Catalogue'], ['aleatoire', 'Aléatoire']]))}
           </div>
-          ${cont.source === 'categories' ? html`<div><div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:8px;">Catégories incluses</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${catChips}</div></div>` : ''}
+          ${cont.source === 'categories' ? html`<div><div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:8px;">Catégories exclues (exceptions) — tout le reste passe</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${catChips}</div></div>` : ''}
           <div style="display:flex;gap:20px;flex-wrap:wrap;">
             ${cField('Durée fiche (s)', cNum('prodDur', cont.prodDur, 2, 60))}
             ${cField('Durée vidéo (s)', cNum('clipDur', cont.clipDur, 2, 120))}
