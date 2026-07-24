@@ -183,6 +183,27 @@ export async function autoQueries(cfg) {
   };
 }
 
+// Table shops de la PWA (id + slug + nom) : c'est elle qui fait le lien entre
+// les id_shop de shop_product et les magasins signage.
+async function detectShops(cfg, db) {
+  for (const t of ['shops', 'shop']) {
+    try {
+      const cols = await tableCols(cfg, db, t);
+      if (!cols.length) continue;
+      const id = (await primaryKey(cfg, db, t)) || pickCol(cols, ['id', 'id_shop', 'shop_id'], 'id', t);
+      const slug = pickCol(cols, ['slug', 'code', 'alias'], 'optionnel');
+      const name = pickCol(cols, ['name', 'label', 'title', 'nom', 'libelle'], 'optionnel');
+      if (!slug && !name) continue;
+      const rows = await mysqlRows(cfg, `SELECT ${qid(id)}, ${slug ? qid(slug) : "''"}, ${name ? qid(name) : "''"} FROM ${qid(db)}.${qid(t)}`);
+      return rows.map(([i, sl, nm]) => ({ id: String(i), slug: String(sl || '').trim(), name: String(nm || '').trim() }));
+    } catch { /* table absente ou illisible : on essaie la suivante */ }
+  }
+  return [];
+}
+
+const slugify = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
 // Requêtes effectives : celles de l'utilisateur s'il les a VRAIMENT
 // personnalisées (comparaison insensible aux espaces) ET base précisée,
 // sinon l'auto-détection.
@@ -286,21 +307,46 @@ async function doImport(cfg, queries) {
     products.push(p);
   }
 
-  // shop_product : prix par boutique PWA → magasin signage. Mapping manuel
-  // (Réglages avancés) s'il existe, sinon automatique : boutiques triées par
-  // id, associées dans l'ordre aux magasins signage.
+  // shop_product : prix par boutique PWA → magasin signage.
+  // 1. mapping manuel (Réglages avancés) s'il existe ;
+  // 2. sinon la table shops (champ slug) : correspondance par slug avec les
+  //    magasins signage, et CRÉATION du magasin s'il n'existe pas encore ;
+  // 3. sinon (pas de table shops) : boutiques triées par id, dans l'ordre.
   const db0 = getDb();
   const sigStores = db0.prepare('SELECT id, name FROM sig_stores ORDER BY id').all();
   const extToStore = {};
+  const extLabel = {};
+  const created = [];
   if (Object.keys(cfg.shopMap || {}).length) {
-    for (const [storeId, extId] of Object.entries(cfg.shopMap)) extToStore[String(extId)] = storeId;
+    for (const [storeId, extId] of Object.entries(cfg.shopMap)) { extToStore[String(extId)] = storeId; extLabel[String(extId)] = String(extId); }
   } else {
-    const shopIds = [...new Set(priceRows.map((r) => String(r[1])))]
-      .sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0));
-    shopIds.forEach((extId, i) => { if (sigStores[i]) extToStore[extId] = sigStores[i].id; });
+    const shops = await detectShops(cfg, queries.db);
+    if (shops.length) {
+      const insStore = db0.prepare(`INSERT OR IGNORE INTO sig_stores(id, name, grp, conn, screens, screen_size, screen_orient, lang)
+        VALUES (?, ?, 'Boutiques PWA', 'fibre', 1, 55, 'paysage', 'fr')`);
+      for (const sh of shops) {
+        const key = sh.slug || slugify(sh.name) || `shop${sh.id}`;
+        let match = sigStores.find((x) => x.id === key)
+          || sigStores.find((x) => slugify(x.name) === key)
+          || (key.length >= 3 ? sigStores.find((x) => slugify(x.name).includes(key) || key.includes(slugify(x.name))) : null);
+        if (!match) {
+          const nm = sh.name || (key.charAt(0).toUpperCase() + key.slice(1));
+          insStore.run(key, nm);
+          match = { id: key, name: nm };
+          sigStores.push(match);
+          created.push(`${nm} (${key})`);
+        }
+        extToStore[sh.id] = match.id;
+        extLabel[sh.id] = sh.slug || sh.id;
+      }
+    } else {
+      const shopIds = [...new Set(priceRows.map((r) => String(r[1])))]
+        .sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0));
+      shopIds.forEach((extId, i) => { if (sigStores[i]) { extToStore[extId] = sigStores[i].id; extLabel[extId] = extId; } });
+    }
   }
   const mapLabel = Object.entries(extToStore)
-    .map(([ext, sid]) => `${ext}→${(sigStores.find((x) => x.id === sid) || {}).name || sid}`)
+    .map(([ext, sid]) => `${extLabel[ext] || ext}→${(sigStores.find((x) => x.id === sid) || {}).name || sid}`)
     .join(' · ');
   let nPrices = 0;
   for (const [prodId, shopId, price] of priceRows) {
@@ -344,5 +390,6 @@ async function doImport(cfg, queries) {
     aliases: nAliases,
     relinked,
     ...(dupes ? { dupes } : {}),
+    ...(created.length ? { createdStores: created } : {}),
   };
 }

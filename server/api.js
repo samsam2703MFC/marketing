@@ -74,7 +74,10 @@ export function fleetJson() {
       token: p.token,
     });
   }
-  const out = [...byStore.values()].filter((s) => s.players.length > 0);
+  // Les magasins sans écran restent visibles (on peut préparer combo, langue
+  // et lien avant de brancher l'écran) — seul le bac interne « st-new » vide
+  // est masqué.
+  const out = [...byStore.values()].filter((s) => s.players.length > 0 || s.id !== 'st-new');
   for (const s of out) {
     const anyOnline = s.players.some((p) => p.state !== 'offline');
     if (!anyOnline) s.conn = 'offline';
