@@ -183,76 +183,20 @@ async function main() {
     if (!/report\.js/.test(html)) throw new Error('report.js non référencé');
     return 'page HTML du rapport OK';
   });
-  await step('POST/DELETE /api/v1/surprise — dossier vidéos surprise', async () => {
-    const before = await call('GET', '/api/v1/surprise');
-    if (!Array.isArray(before.videos)) throw new Error('liste absente');
-    const name = 'test-surprise-livetest.mp4';
-    const dataUrl = 'data:video/mp4;base64,' + Buffer.from('livetest').toString('base64');
-    const up = await call('POST', '/api/v1/surprise', { name, dataUrl });
-    if (!up.ok || !up.videos.some((v) => v.name === name)) throw new Error('upload non listé');
-    const del = await call('DELETE', `/api/v1/surprise/${encodeURIComponent(name)}`);
-    if (del.videos.some((v) => v.name === name)) throw new Error('suppression échouée');
-    return `dossier OK · upload + suppression (${before.videos.length} vidéo(s) au départ)`;
+  await step('GET /api/v1/surprise — dossier vidéos surprise (lecture)', async () => {
+    const r = await call('GET', '/api/v1/surprise');
+    if (!Array.isArray(r.videos)) throw new Error('liste absente');
+    return `${r.videos.length} vidéo(s) dans le dossier`;
   });
-  await step('PUT /api/v1/seasons — périodes de l\'année + détection', async () => {
-    const before = await call('GET', '/api/v1/seasons');
-    if (!Array.isArray(before.seasons)) throw new Error('liste absente');
-    const out = await call('PUT', '/api/v1/seasons', { seasons: [
-      { id: 'se_all_lt', name: 'Toute l\'année', from: '01/01', to: '31/12', products: [], active: true },
-      { id: 'se_far_lt', name: 'Invalide', from: '15/13', to: '16/13', products: [], active: true },
-    ] });
-    if (!out.ok || out.seasons.length !== 2) throw new Error('enregistrement des périodes');
-    const cur = new Set(out.current || []);
-    if (!cur.has('se_all_lt')) throw new Error('« toute l\'année » devrait être active');
-    if (cur.has('se_far_lt')) throw new Error('période invalide ne doit pas être active');
-    await call('PUT', '/api/v1/seasons', { seasons: before.seasons }); // restauration
-    return `${out.seasons.length} période(s) · ${out.current.length} active(s) aujourd'hui`;
+  await step('GET /api/v1/seasons — périodes de l\'année (lecture)', async () => {
+    const r = await call('GET', '/api/v1/seasons');
+    if (!Array.isArray(r.seasons) || !Array.isArray(r.current)) throw new Error('structure des périodes');
+    return `${r.seasons.length} période(s) · ${r.current.length} active(s) aujourd'hui`;
   });
-  await step('Médiathèque agence — upload tagué + accès séparé', async () => {
-    // upload (admin) d'un média tagué → préfixe moment + tags
-    const dataUrl = 'data:video/mp4;base64,' + Buffer.from('lt').toString('base64');
-    const up = await call('POST', '/api/v1/media', { name: 'lt-clip.mp4', kind: 'film', moment: 'soir', productId: '', seasonId: '', dataUrl });
-    const item = (up.media || []).find((x) => x.filename === '3_lt-clip.mp4');
-    if (!up.ok || !item || !item.present || item.moment !== 'soir') throw new Error('upload/tag/préfixe média');
-    // accès agence séparé : connexion agence, /state interdit, /media autorisé
-    const ag = await (await fetch(BASE + '/api/v1/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'agence', password: process.env.SIG_AGENCY_PASSWORD || 'agence' }) })).json().catch(() => ({}));
-    let agencyIsolated = 'non testé (mot de passe agence par défaut absent)';
-    if (ag && ag.token) {
-      const h = { authorization: `Bearer ${ag.token}` };
-      const s = await fetch(BASE + '/api/v1/state', { headers: h });
-      const md = await fetch(BASE + '/api/v1/media', { headers: h });
-      if (s.status !== 403) throw new Error(`agence devrait être bloquée sur /state (reçu ${s.status})`);
-      if (!md.ok) throw new Error('agence devrait lire /media');
-      agencyIsolated = 'agence cloisonnée (/state 403 · /media OK)';
-    }
-    // nettoyage
-    await call('DELETE', `/api/v1/media/${encodeURIComponent(item.id)}`);
-    return `média « 3_lt-clip.mp4 » (soir) · ${agencyIsolated}`;
-  });
-  await step('Élément « média ciblé » — pioche selon moment + saison', async () => {
-    const now = new Date();
-    const moment = now.getHours() < 11 ? 'matin' : (now.getHours() < 16 ? 'midi' : 'soir');
-    const other = moment === 'matin' ? 'soir' : 'matin';
-    const dU = (s) => 'data:video/mp4;base64,' + Buffer.from(s).toString('base64');
-    await call('POST', '/api/v1/media', { name: 'mediael-good.mp4', kind: 'film', moment, dataUrl: dU('g') });
-    await call('POST', '/api/v1/media', { name: 'mediael-bad.mp4', kind: 'film', moment: other, dataUrl: dU('b') });
-    const st = await call('GET', '/api/v1/state');
-    const mods = st.modules.concat([{ id: 'mediaLT', type: 'media', name: 'Média ciblé', layout: 'cover', dur: 12, schedule: { days: [1, 1, 1, 1, 1, 1, 1], from: '00:00', to: '23:59' }, items: [] }]);
-    const pls = st.playlists.map((p) => (p.id === st.activePlaylistId ? { ...p, items: [...p.items, 'mediaLT'] } : p));
-    await call('PUT', '/api/v1/draft', { modules: mods, playlists: pls, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
-    let ok2 = false, badPicked = false, cnt = null;
-    for (let i = 0; i < 10; i++) {
-      const f = await (await fetch(BASE + `/api/v1/film?film=${encodeURIComponent(st.activePlaylistId)}`)).json();
-      const em = (f.modules || []).find((x) => x.id === 'mediaLT');
-      if (em) { cnt = em.mediaCount; if (em.mediaUrl) ok2 = true; if (/mediael-bad/.test(em.mediaUrl || '')) badPicked = true; }
-    }
-    // restaure le brouillon + purge les médias de test
-    await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
-    for (const mm of (await call('GET', '/api/v1/media')).media || []) if (/^\d?_?mediael-/.test(mm.filename)) await call('DELETE', `/api/v1/media/${encodeURIComponent(mm.id)}`);
-    if (!ok2) throw new Error('aucun média pioché');
-    if (badPicked) throw new Error('média du mauvais moment pioché');
-    if (cnt !== 1) throw new Error(`éligibles attendus 1, reçu ${cnt}`);
-    return `moment ${moment} · 1 éligible pioché, mauvais moment exclu`;
+  await step('GET /api/v1/media — médiathèque agence (lecture)', async () => {
+    const r = await call('GET', '/api/v1/media');
+    if (!Array.isArray(r.media)) throw new Error('liste média absente');
+    return `${r.media.length} média(s) · dossier ${r.dir}`;
   });
   await step('GET /api/v1/film?film=… — lien direct par film', async () => {
     const base = await (await fetch(BASE + '/api/v1/film')).json();
@@ -297,6 +241,73 @@ async function main() {
   if (MUTATE) {
     const token = 'plyr_LIVETEST';
     const pid = 'livetest';
+    await step('POST/DELETE /api/v1/surprise — upload + suppression', async () => {
+      const before = await call('GET', '/api/v1/surprise');
+      const name = 'test-surprise-livetest.mp4';
+      const dataUrl = 'data:video/mp4;base64,' + Buffer.from('livetest').toString('base64');
+      const up = await call('POST', '/api/v1/surprise', { name, dataUrl });
+      if (!up.ok || !up.videos.some((v) => v.name === name)) throw new Error('upload non listé');
+      const del = await call('DELETE', `/api/v1/surprise/${encodeURIComponent(name)}`);
+      if (del.videos.some((v) => v.name === name)) throw new Error('suppression échouée');
+      return `upload + suppression (${before.videos.length} au départ)`;
+    });
+    await step('PUT /api/v1/seasons — enregistrement + détection', async () => {
+      const before = await call('GET', '/api/v1/seasons');
+      const out = await call('PUT', '/api/v1/seasons', { seasons: [
+        { id: 'se_all_lt', name: 'Toute l\'année', from: '01/01', to: '31/12', products: [], active: true },
+        { id: 'se_far_lt', name: 'Invalide', from: '15/13', to: '16/13', products: [], active: true },
+      ] });
+      if (!out.ok || out.seasons.length !== 2) throw new Error('enregistrement des périodes');
+      const cur = new Set(out.current || []);
+      if (!cur.has('se_all_lt')) throw new Error('« toute l\'année » devrait être active');
+      if (cur.has('se_far_lt')) throw new Error('période invalide ne doit pas être active');
+      await call('PUT', '/api/v1/seasons', { seasons: before.seasons }); // restauration
+      return `${out.seasons.length} période(s) · ${out.current.length} active(s)`;
+    });
+    await step('Médiathèque agence — upload tagué + accès séparé', async () => {
+      const dataUrl = 'data:video/mp4;base64,' + Buffer.from('lt').toString('base64');
+      const up = await call('POST', '/api/v1/media', { name: 'lt-clip.mp4', kind: 'film', moment: 'soir', productId: '', seasonId: '', dataUrl });
+      const item = (up.media || []).find((x) => x.filename === '3_lt-clip.mp4');
+      if (!up.ok || !item || !item.present || item.moment !== 'soir') throw new Error('upload/tag/préfixe média');
+      const ag = await (await fetch(BASE + '/api/v1/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'agence', password: process.env.SIG_AGENCY_PASSWORD || 'agence' }) })).json().catch(() => ({}));
+      let agencyIsolated = 'compte agence absent';
+      if (ag && ag.token) {
+        const h = { authorization: `Bearer ${ag.token}` };
+        const s = await fetch(BASE + '/api/v1/state', { headers: h });
+        const md = await fetch(BASE + '/api/v1/media', { headers: h });
+        if (s.status !== 403) throw new Error(`agence devrait être bloquée sur /state (reçu ${s.status})`);
+        if (!md.ok) throw new Error('agence devrait lire /media');
+        agencyIsolated = 'agence cloisonnée (/state 403 · /media OK)';
+      }
+      await call('DELETE', `/api/v1/media/${encodeURIComponent(item.id)}`);
+      return `« 3_lt-clip.mp4 » (soir) · ${agencyIsolated}`;
+    });
+    await step('Élément « média ciblé » — pioche selon moment + saison', async () => {
+      // moment courant calculé EXACTEMENT comme le serveur (fenêtres par défaut).
+      const now = new Date(); const mins = now.getHours() * 60 + now.getMinutes();
+      const moment = (mins >= 360 && mins < 660) ? 'matin' : (mins >= 660 && mins < 900) ? 'midi'
+        : (mins >= 900 && mins < 1200) ? 'soir' : (now.getHours() < 11 ? 'matin' : now.getHours() < 16 ? 'midi' : 'soir');
+      const bad = moment === 'matin' ? 'soir' : 'matin';
+      const dU = (s) => 'data:video/mp4;base64,' + Buffer.from(s).toString('base64');
+      await call('POST', '/api/v1/media', { name: 'mediael-good.mp4', kind: 'film', moment, dataUrl: dU('g') });
+      await call('POST', '/api/v1/media', { name: 'mediael-bad.mp4', kind: 'film', moment: bad, dataUrl: dU('b') });
+      const st = await call('GET', '/api/v1/state');
+      const mods = st.modules.concat([{ id: 'mediaLT', type: 'media', name: 'Média ciblé', layout: 'cover', dur: 12, schedule: { days: [1, 1, 1, 1, 1, 1, 1], from: '00:00', to: '23:59' }, items: [] }]);
+      const pls = st.playlists.map((p) => (p.id === st.activePlaylistId ? { ...p, items: [...p.items, 'mediaLT'] } : p));
+      await call('PUT', '/api/v1/draft', { modules: mods, playlists: pls, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      let ok2 = false, badPicked = false, cnt = null;
+      for (let i = 0; i < 10; i++) {
+        const f = await (await fetch(BASE + `/api/v1/film?film=${encodeURIComponent(st.activePlaylistId)}`)).json();
+        const em = (f.modules || []).find((x) => x.id === 'mediaLT');
+        if (em) { cnt = em.mediaCount; if (em.mediaUrl) ok2 = true; if (/mediael-bad/.test(em.mediaUrl || '')) badPicked = true; }
+      }
+      await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      for (const mm of (await call('GET', '/api/v1/media')).media || []) if (/mediael-/.test(mm.filename)) await call('DELETE', `/api/v1/media/${encodeURIComponent(mm.id)}`);
+      if (!ok2) throw new Error('aucun média pioché');
+      if (badPicked) throw new Error('média du mauvais moment pioché');
+      if (cnt !== 1) throw new Error(`éligibles attendus 1, reçu ${cnt}`);
+      return `moment ${moment} · 1 éligible pioché, mauvais moment exclu`;
+    });
     await step('POST heartbeat — auto-enregistrement d\'un player de test', async () => {
       const hb = await call('POST', `/api/v1/players/${pid}/heartbeat`, {
         token, name: 'Écran de test live', state: 'playing', cachePct: 100, media: 'test', playedVer: 0, dataVer: 0,
