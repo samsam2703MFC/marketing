@@ -262,9 +262,21 @@ class App extends Component {
   // ------------------------------------------------------------------ helpers
   getMod(id) { return this.state.library.find((m) => m.id === id); }
   sel() { return this.getMod(this.state.selId) || this.state.library[0]; }
-  activeItems(m) { return rActiveItems(m); }
-  moduleDur(m) { return rModuleDur(m, this.state.secPerLine); }
-  playlistMods() { return this.state.playlist.map((id) => this.getMod(id)).filter(Boolean).filter(playable); }
+  // Un élément lié au catalogue (⛓) tire ses lignes EN DIRECT de la table
+  // produits — noms, prix (y compris par magasin côté serveur) et actif/inactif
+  // suivent instantanément, sans dépendre de l'instantané pris au moment du lien.
+  resolveMod(m) {
+    if (!m || (!m.catRef && !m.productRef)) return m;
+    const prods = this.state.catalog.products || [];
+    const toItem = (p) => ({ name: p.name, price: p.price, img: p.img, src: p.src, active: p.active !== false, productId: p.id });
+    let items;
+    if (m.catRef) items = prods.filter((p) => p.categoryId === m.catRef).map(toItem);
+    else { const p = prods.find((x) => x.id === m.productRef); items = p ? [toItem(p)] : []; }
+    return { ...m, items };
+  }
+  activeItems(m) { return rActiveItems(this.resolveMod(m)); }
+  moduleDur(m) { return rModuleDur(this.resolveMod(m), this.state.secPerLine); }
+  playlistMods() { return this.state.playlist.map((id) => this.getMod(id)).filter(Boolean).filter((m) => playable(this.resolveMod(m))); }
   scopeMods() { return this.state.scope === 'playlist' ? this.playlistMods() : [this.sel()].filter(Boolean); }
   total() {
     const l = this.scopeMods();
@@ -1228,7 +1240,7 @@ class App extends Component {
       onListDown: (e) => this.startDrag('list', e),
     };
     const inner = m
-      ? renderModule(h, m, lt, opts)
+      ? renderModule(h, this.resolveMod(m), lt, opts)
       : h('div', { style: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FUI, fontSize: 120, color: '#B8B2A8' } }, 'Playlist vide');
     const stage = h('div', { style: { position: 'absolute', left: 0, top: 0, width: W, height: H, background: '#F5EFE4', transform: `scale(${SCALE})`, transformOrigin: 'top left' } }, inner);
     return h('div', { style: { position: 'relative', width: PREVIEW_W, height: Math.round(H * SCALE), margin: '0 auto' } }, stage);
@@ -1372,7 +1384,7 @@ class App extends Component {
     const timelineBlocks = st.playlist.map((id, i) => {
       const mm = this.getMod(id);
       if (!mm) return null;
-      const skip = !playable(mm);
+      const skip = !playable(this.resolveMod(mm));
       const dur = skip ? 0 : this.moduleDur(mm);
       const startT = cumT;
       cumT += dur;
@@ -1833,7 +1845,8 @@ class App extends Component {
       // -- catégorie ↔ table produits --
       isLinked: !!m.catRef,
       linkedCatName: (st.catalog.categories.find((c) => c.id === m.catRef) || {}).name || m.catRef,
-      linkedRows: (m.items || []).map((it) => ({ name: it.name, price: it.price, active: it.active !== false })),
+      // Lignes affichées : résolues EN DIRECT depuis la table produits.
+      linkedRows: this.resolveMod(m).items.map((it) => ({ name: it.name, price: it.price, active: it.active !== false })),
       // Seules les catégories actives AVEC au moins un produit actif sont proposées
       // (la catégorie actuellement liée reste listée pour ne pas casser l'affichage).
       catOptions: (() => {
@@ -1873,11 +1886,11 @@ class App extends Component {
         return changed ? 'ajustées' : 'par défaut';
       })(),
       itemsSummary: m.catRef
-        ? `⛓ ${(st.catalog.categories.find((c) => c.id === m.catRef) || {}).name || m.catRef} · ${(m.items || []).length} ligne(s)`
+        ? `⛓ ${(st.catalog.categories.find((c) => c.id === m.catRef) || {}).name || m.catRef} · ${(this.resolveMod(m).items || []).length} ligne(s)`
         : `${(m.items || []).length} produit(s)`,
       tagSummary: (m.tag && m.tag.enabled) ? `activé · ${m.tag.label || 'macaron'}` : 'désactivé',
       videoSummary: m.video ? `importée · ${m.dur || 10} s` : 'aucune vidéo',
-      produitSummary: (m.items && m.items[0] && m.items[0].name) || 'à choisir',
+      produitSummary: ((this.resolveMod(m).items || [])[0] || {}).name || 'à choisir',
       // -- motion global (produit / animation) --
       motionSimple: MOTIONS.map((o) => ({
         label: o.label,
