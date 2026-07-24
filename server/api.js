@@ -790,8 +790,14 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
           return send(200, { ok: false, error: (det.table ? `table « ${det.table} » : colonnes de dates introuvables${colHint}` : `aucune table ws_season trouvée${cand}`), candidates: det.candidates || [], inspected: insp, db: det.db });
         }
         // On remplace les périodes importées (préfixe ws_) et on garde les manuelles.
-        const manual = loadSeasons().filter((s) => !String(s.id).startsWith('ws_'));
-        const out = saveSeasons([...manual, ...det.seasons]);
+        // Robustesse : si l'import ne fournit pas d'illustration pour une période,
+        // on conserve celle déjà enregistrée (saisie en régie ou import précédent)
+        // — un lien d'image ajouté à product_availability_period a la priorité.
+        const existing = loadSeasons();
+        const prevImg = new Map(existing.map((s) => [s.id, s.image || '']));
+        const manual = existing.filter((s) => !String(s.id).startsWith('ws_'));
+        const merged = det.seasons.map((s) => (s.image || !prevImg.get(s.id)) ? s : { ...s, image: prevImg.get(s.id) });
+        const out = saveSeasons([...manual, ...merged]);
         scheduleMirror();
         return send(200, { ok: true, table: det.table, imported: det.seasons.length, colsUsed: det.colsUsed || null, seasons: out, current: currentSeasons().map((s) => s.id) });
       } catch (e) {
