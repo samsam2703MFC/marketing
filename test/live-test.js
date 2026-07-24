@@ -191,7 +191,23 @@ async function main() {
   await step('GET /api/v1/seasons — périodes de l\'année (lecture)', async () => {
     const r = await call('GET', '/api/v1/seasons');
     if (!Array.isArray(r.seasons) || !Array.isArray(r.current)) throw new Error('structure des périodes');
-    return `${r.seasons.length} période(s) · ${r.current.length} active(s) aujourd'hui`;
+    const withImg = r.seasons.filter((s) => s.image).length;
+    return `${r.seasons.length} période(s) · ${r.current.length} active(s)${withImg ? ` · ${withImg} illustration(s)` : ''}`;
+  });
+  // Diagnostic ws_season (lecture seule) : révèle les colonnes réelles de la
+  // table de périodes et signale une éventuelle colonne d'illustration. Contre
+  // la prod (MySQL branché) le détail imprimé montre le schéma réel ; en local
+  // (pas de MySQL) l'étape passe en signalant « non lisible ». Ne fait jamais
+  // échouer le déploiement (l'endpoint renvoie toujours 200 + ok:true/false).
+  await step('POST /api/v1/seasons/inspect — diagnostic ws_season (illustration)', async () => {
+    const r = await call('POST', '/api/v1/seasons/inspect', {});
+    if (typeof r.ok !== 'boolean' || !Array.isArray(r.inspected)) throw new Error('réponse de diagnostic invalide');
+    if (!r.ok) return `base non lisible ici : ${r.error || 'non configurée'}`;
+    const imgTxt = r.imageFound
+      ? `IMAGE=[${r.imageCols.map((c) => `${c.column}@${c.table}${c.sample ? `="${c.sample}"` : ''}`).join(', ')}]`
+      : 'aucune colonne image détectée';
+    const tables = r.inspected.map((t) => `${t.table}{${(t.types || t.columns || []).join(', ')}}`).join(' ;; ');
+    return `${r.inspected.length} table(s) · ${imgTxt} · ${tables}`.slice(0, 1200);
   });
   await step('GET /api/v1/media — médiathèque agence (lecture)', async () => {
     const r = await call('GET', '/api/v1/media');
@@ -259,15 +275,17 @@ async function main() {
     await step('PUT /api/v1/seasons — enregistrement + détection', async () => {
       const before = await call('GET', '/api/v1/seasons');
       const out = await call('PUT', '/api/v1/seasons', { seasons: [
-        { id: 'se_all_lt', name: 'Toute l\'année', from: '01/01', to: '31/12', products: [], active: true },
+        { id: 'se_all_lt', name: 'Toute l\'année', from: '01/01', to: '31/12', products: [], image: 'https://exemple.test/galette.jpg', active: true },
         { id: 'se_far_lt', name: 'Invalide', from: '15/13', to: '16/13', products: [], active: true },
       ] });
       if (!out.ok || out.seasons.length !== 2) throw new Error('enregistrement des périodes');
       const cur = new Set(out.current || []);
       if (!cur.has('se_all_lt')) throw new Error('« toute l\'année » devrait être active');
       if (cur.has('se_far_lt')) throw new Error('période invalide ne doit pas être active');
+      const saved = out.seasons.find((s) => s.id === 'se_all_lt');
+      if (!saved || saved.image !== 'https://exemple.test/galette.jpg') throw new Error('illustration de période non persistée');
       await call('PUT', '/api/v1/seasons', { seasons: before.seasons }); // restauration
-      return `${out.seasons.length} période(s) · ${out.current.length} active(s)`;
+      return `${out.seasons.length} période(s) · ${out.current.length} active(s) · illustration OK`;
     });
     await step('Médiathèque agence — upload tagué + accès séparé', async () => {
       const dataUrl = 'data:video/mp4;base64,' + Buffer.from('lt').toString('base64');

@@ -11,6 +11,14 @@ import { continuousDefaults, normContinuous } from './continuous.js';
 // Générateur de QR code autonome (pour brancher un écran en scannant).
 import { qrSvg } from './vendor/qr.js';
 const qrDataUri = (url) => { try { return 'data:image/svg+xml;utf8,' + encodeURIComponent(qrSvg(String(url), { scale: 5, margin: 3 })); } catch { return ''; } };
+// Une valeur d'illustration est affichable telle quelle si c'est une URL, une
+// donnée inline, un chemin absolu, ou un fichier à extension image. Sinon (id
+// numérique, nom brut…), on n'affiche pas la balise <img> (on montre la valeur).
+const imgRenderable = (v) => {
+  const s = String(v || '').trim();
+  if (!s) return false;
+  return /^(https?:\/\/|data:image\/|\/\/|\/)/i.test(s) || /\.(png|jpe?g|gif|webp|svg|avif|bmp)(\?|#|$)/i.test(s);
+};
 
 const PREVIEW_W = 560;
 const SCALE = PREVIEW_W / W;
@@ -110,7 +118,7 @@ class App extends Component {
     planWeek: 'A', planDay: 0, planActiveWeek: 'A', planSaving: false, planSavedAt: 0,
     surpriseVideos: [], surpriseBusy: false,
     seasons: [], seasonsCurrent: [], seasonsDirty: false, seasonsBusy: false,
-    wsTable: '', wsCandidates: [], wsInspected: [], mediaLib: [],
+    wsTable: '', wsCandidates: [], wsInspected: [], wsDiag: null, mediaLib: [],
     prodMoments: [], prodMomentsCurrent: '', prodMomentsDirty: false, prodMomentsBusy: false,
     pmCollapsed: {},
     contPreview: null, contPreviewBusy: false,
@@ -703,7 +711,7 @@ class App extends Component {
     this.setState({ seasons: arr, seasonsDirty: true });
   }
   addSeason() {
-    this.setSeasons((a) => a.push({ id: 'se' + uid(), name: 'Nouvelle période', from: '', to: '', products: [], color: '#C97B4A', active: true }));
+    this.setSeasons((a) => a.push({ id: 'se' + uid(), name: 'Nouvelle période', from: '', to: '', products: [], color: '#C97B4A', image: '', active: true }));
   }
   updateSeason(id, patch) { this.setSeasons((a) => { const s = a.find((x) => x.id === id); if (s) Object.assign(s, patch); }); }
   delSeason(id) { this.setSeasons((a) => { const i = a.findIndex((x) => x.id === id); if (i >= 0) a.splice(i, 1); }); }
@@ -728,9 +736,23 @@ class App extends Component {
       this.setState({ seasonsBusy: false });
       if (r.ok) {
         this.setState({ seasons: r.seasons || [], seasonsCurrent: r.current || [], seasonsDirty: false, wsCandidates: [], wsInspected: [] });
-        const cu = r.colsUsed ? ` · du=${r.colsUsed.from}, au=${r.colsUsed.to}${r.colsUsed.name ? `, nom=${r.colsUsed.name}` : ''}${r.colsUsed.prod ? `, produit=${r.colsUsed.prod}` : ''}` : '';
-        this.showToast(`Importé depuis « ${r.table} » : ${r.imported} période(s)${cu} ✓`);
+        const withImg = (r.seasons || []).filter((s) => s.image).length;
+        const cu = r.colsUsed ? ` · du=${r.colsUsed.from}, au=${r.colsUsed.to}${r.colsUsed.name ? `, nom=${r.colsUsed.name}` : ''}${r.colsUsed.prod ? `, produit=${r.colsUsed.prod}` : ''}${r.colsUsed.img ? `, image=${r.colsUsed.img}` : ''}` : '';
+        const imgTxt = withImg ? ` · ${withImg} illustration(s)` : '';
+        this.showToast(`Importé depuis « ${r.table} » : ${r.imported} période(s)${imgTxt}${cu} ✓`);
       } else { this.setState({ wsCandidates: r.candidates || [], wsInspected: r.inspected || [] }); this.showToast(`Import : ${r.error}`); }
+    } catch (e) { this.setState({ seasonsBusy: false }); this.showToast(`Erreur : ${e.message}`); }
+  }
+  // Diagnostic (lecture seule) : liste les colonnes réelles de ws_season et
+  // indique si une colonne d'illustration a été détectée (+ un exemple de valeur).
+  async diagSeasons() {
+    if (this.state.seasonsBusy) return;
+    this.setState({ seasonsBusy: true, wsDiag: null });
+    try {
+      const r = await api('POST', '/seasons/inspect', this.state.wsTable ? { table: this.state.wsTable } : {});
+      this.setState({ seasonsBusy: false, wsDiag: r });
+      if (r.imageFound) this.showToast(`Colonne image détectée : ${r.imageCols.map((c) => `${c.column} (${c.table})`).join(', ')} ✓`);
+      else this.showToast(r.ok ? 'Aucune colonne d\'illustration détectée dans ws_season' : `Diagnostic : ${r.error}`);
     } catch (e) { this.setState({ seasonsBusy: false }); this.showToast(`Erreur : ${e.message}`); }
   }
   openSeasons() { this.setState({ view: 'seasons' }); if (!this.state.seasons.length) this.loadSeasons(); this.loadMediaLib(); this.loadProdMoments(); }
@@ -2094,12 +2116,14 @@ class App extends Component {
     const prodName = (pid) => (seasonProdOpts.find((p) => p.id === pid) || {}).name || pid;
     const seasonRows = (st.seasons || []).map((s) => ({
       id: s.id, name: s.name, from: s.from, to: s.to, color: s.color,
+      image: s.image || '', imageOk: imgRenderable(s.image),
       current: seasonCurSet.has(s.id),
       products: (s.products || []).map((pid) => ({ id: pid, name: prodName(pid), remove: () => this.toggleSeasonProduct(s.id, pid) })),
       addable: seasonProdOpts.filter((p) => !(s.products || []).includes(p.id)),
       onName: (e) => this.updateSeason(s.id, { name: e.target.value }),
       onFrom: (e) => this.updateSeason(s.id, { from: e.target.value }),
       onTo: (e) => this.updateSeason(s.id, { to: e.target.value }),
+      onImage: (e) => this.updateSeason(s.id, { image: e.target.value }),
       onAddProduct: (e) => { const pid = e.target.value; e.target.value = ''; if (pid) this.toggleSeasonProduct(s.id, pid); },
       del: () => this.delSeason(s.id),
     }));
@@ -2159,6 +2183,7 @@ class App extends Component {
       seasonRows, seasonsDirty: st.seasonsDirty, seasonsBusy: st.seasonsBusy, seasonsCount: (st.seasons || []).length,
       seasonsCurrentCount: (st.seasonsCurrent || []).length,
       addSeason: () => this.addSeason(), saveSeasons: () => this.saveSeasons(), importSeasons: () => this.importSeasons(),
+      diagSeasons: () => this.diagSeasons(), wsDiag: st.wsDiag,
       wsTable: st.wsTable, onWsTable: (e) => this.setState({ wsTable: e.target.value }),
       wsCandidates: st.wsCandidates || [], useWsCandidate: (t) => this.setState({ wsTable: t }),
       wsInspected: st.wsInspected || [],
@@ -3006,10 +3031,11 @@ class App extends Component {
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
         <div>
           <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Périodes de l'année</h2>
-          <p style="margin:0;font-size:12.5px;color:#8A847C;max-width:760px;">Définis les saisons et fêtes (du → au) et les produits liés. Sert à cibler automatiquement les vidéos et animations de saison. Récurrent chaque année (jour/mois). Importable depuis la table <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">ws_season</code> de la même base MySQL que les produits.</p>
+          <p style="margin:0;font-size:12.5px;color:#8A847C;max-width:760px;">Définis les saisons et fêtes (du → au) et les produits liés. Sert à cibler automatiquement les vidéos et animations de saison. Récurrent chaque année (jour/mois). Importable depuis la table <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">ws_season</code> de la même base MySQL que les produits (nom, dates, produits liés et illustration si la table en expose une). « 🔍 Diagnostic » liste les colonnes réelles sans rien modifier.</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <input value=${v.wsTable} onInput=${v.onWsTable} placeholder="table (déf. ws_season)" spellcheck="false" title="Nom de la table MySQL des périodes, si différent de ws_season" style="width:170px;padding:9px 11px;font-size:12.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:999px;background:#FBF8F2;" />
+          <button onClick=${v.diagSeasons} disabled=${v.seasonsBusy} title="Lecture seule : liste les colonnes réelles de ws_season et détecte une éventuelle colonne d'illustration" style="padding:9px 14px;font-size:12.5px;font-weight:600;color:#4A4640;background:#fff;border:1px solid rgba(35,34,32,0.2);border-radius:999px;cursor:${v.seasonsBusy ? 'wait' : 'pointer'};">🔍 Diagnostic</button>
           <button onClick=${v.importSeasons} disabled=${v.seasonsBusy} style="padding:9px 15px;font-size:12.5px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.35);border-radius:999px;cursor:${v.seasonsBusy ? 'wait' : 'pointer'};">⟳ Importer</button>
           <button onClick=${v.saveSeasons} disabled=${!v.seasonsDirty || v.seasonsBusy} style="padding:9px 18px;font-size:13px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.seasonsDirty && !v.seasonsBusy ? 'pointer' : 'not-allowed'};background:${v.seasonsDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.seasonsDirty ? '#fff' : '#8A847C'};">${v.seasonsBusy ? 'Enregistrement…' : (v.seasonsDirty ? 'Enregistrer' : '✓ Enregistré')}</button>
         </div>
@@ -3032,6 +3058,20 @@ class App extends Component {
           <div style="margin-top:6px;color:#8A847C;">Si les dates sont dans ces colonnes mais non détectées, dis-moi lesquelles (du/au) et je les câble.</div>
         </div>
       ` : ''}
+      ${v.wsDiag ? html`
+        <div style="background:${v.wsDiag.imageFound ? 'rgba(46,110,78,0.06)' : '#FBF8F2'};border:1px solid ${v.wsDiag.imageFound ? 'rgba(46,110,78,0.3)' : 'rgba(35,34,32,0.12)'};border-radius:12px;padding:12px 16px;font-size:12px;color:#4A4640;line-height:1.6;">
+          <div style="font-weight:700;color:${v.wsDiag.imageFound ? '#2E6E4E' : '#8D1D2C'};">
+            ${v.wsDiag.imageFound
+              ? html`🖼 Colonne d'illustration détectée : ${v.wsDiag.imageCols.map((c) => html`<code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">${c.column}</code> dans <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">${c.table}</code>${c.sample ? html` · ex. « ${c.sample} »` : ''} `)}`
+              : (v.wsDiag.ok ? html`🔍 Aucune colonne d'illustration détectée dans les tables de périodes vues.` : html`⚠ ${v.wsDiag.error || 'Base non lisible'}`)}
+          </div>
+          ${(v.wsDiag.inspected || []).map((ins) => html`
+            <div style="margin-top:8px;"><code style="font-weight:700;color:#6E4A2B;">${ins.table}</code> → <span style="font-family:ui-monospace,monospace;">${(ins.types || ins.columns).join(', ')}</span></div>
+            ${ins.sample && ins.sample.length ? html`<div style="margin-top:2px;color:#8A847C;font-family:ui-monospace,monospace;font-size:11px;">ex. : ${ins.sample.join(' | ')}</div>` : ''}
+          `)}
+          <div style="margin-top:8px;color:#8A847C;">${v.wsDiag.imageFound ? html`L'import récupère automatiquement cette colonne. Clique « ⟳ Importer » pour (re)charger les périodes avec leur illustration.` : html`Diagnostic lecture seule — rien n'a été modifié. Si une colonne image existe sous un autre nom, dis-le-moi et je l'ajoute au détecteur.`}</div>
+        </div>
+      ` : ''}
 
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
@@ -3042,7 +3082,9 @@ class App extends Component {
           ${v.seasonRows.map((s) => html`
             <div style="border:1px solid rgba(35,34,32,0.1);border-radius:12px;padding:13px 15px;background:${s.current ? 'rgba(46,110,78,0.05)' : '#FBF8F2'};">
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <span style="width:10px;height:10px;border-radius:50%;background:${s.color};flex:0 0 auto;"></span>
+                ${s.imageOk
+                  ? html`<img src=${s.image} alt="" loading="lazy" title="Illustration de la période" style="width:28px;height:28px;border-radius:7px;object-fit:cover;flex:0 0 auto;border:1px solid rgba(35,34,32,0.15);background:${s.color};" />`
+                  : html`<span style="width:10px;height:10px;border-radius:50%;background:${s.color};flex:0 0 auto;"></span>`}
                 <input value=${s.name} onInput=${s.onName} placeholder="Nom (ex. Galette des rois)" style="flex:1 1 200px;min-width:0;padding:9px 11px;font-size:14px;font-weight:600;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
                 <span style="display:flex;align-items:center;gap:5px;">
                   <input value=${s.from} onInput=${s.onFrom} placeholder="du (JJ/MM)" style="width:110px;padding:9px 10px;font-size:12.5px;text-align:center;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
@@ -3051,6 +3093,11 @@ class App extends Component {
                 </span>
                 ${s.current ? html`<span style="font-size:10.5px;font-weight:700;color:#2E6E4E;background:rgba(46,110,78,0.12);border:1px solid rgba(46,110,78,0.35);border-radius:999px;padding:3px 9px;">● active aujourd'hui</span>` : ''}
                 <button onClick=${s.del} title="Supprimer" style="flex:0 0 auto;width:30px;height:30px;border-radius:8px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:pointer;font-size:13px;color:#8D1D2C;">✕</button>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding-left:20px;">
+                <span style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;">Illustration :</span>
+                <input value=${s.image} onInput=${s.onImage} placeholder="URL/chemin d'image (auto-rempli depuis ws_season si présent)" spellcheck="false" title="Illustration de la période. Renseignée automatiquement à l'import si ws_season expose une colonne image ; sinon colle ici une URL." style="flex:1 1 260px;min-width:0;padding:7px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
+                ${s.image && !s.imageOk ? html`<span title="Valeur non affichable directement (id ou nom de fichier sans chemin) — indique-moi le format et je résous l'URL." style="font-size:11px;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;padding:2px 9px;">⚠ non affichable</span>` : ''}
               </div>
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding-left:20px;">
                 <span style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;">Produits liés :</span>

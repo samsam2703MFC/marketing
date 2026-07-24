@@ -14,7 +14,7 @@ import {
   checkLogin, createSession, sessionUser, destroySession,
 } from './db.js';
 import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
-import { publicPwaConfig, savePwaConfig, resetPwaConfig, testPwa, importPwa, pwaBaseName, importSeasons } from './pwadb.js';
+import { publicPwaConfig, savePwaConfig, resetPwaConfig, testPwa, importPwa, pwaBaseName, importSeasons, inspectSeasons } from './pwadb.js';
 import { scheduleMirror, syncMirror, mirrorStatus } from './mirror.js';
 import { runConnectionTest, runDeployTests, tcpPing } from './livetest.js';
 
@@ -796,6 +796,26 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
         return send(200, { ok: true, table: det.table, imported: det.seasons.length, colsUsed: det.colsUsed || null, seasons: out, current: currentSeasons().map((s) => s.id) });
       } catch (e) {
         return send(200, { ok: false, error: String(e.message || e) });
+      }
+    }
+    // Diagnostic (lecture seule) : liste les colonnes réelles des tables de
+    // périodes candidates et signale la colonne d'illustration détectée.
+    if (req.method === 'POST' && path === '/seasons/inspect') {
+      try {
+        const body = await readBody();
+        const det = await inspectSeasons(body.table);
+        const insp = det.inspected || [];
+        const withImg = insp.filter((t) => t.imageCol);
+        return send(200, {
+          ok: insp.length > 0,
+          db: det.db,
+          inspected: insp,
+          imageFound: withImg.length > 0,
+          imageCols: withImg.map((t) => ({ table: t.table, column: t.imageCol, sample: t.imageSample })),
+          error: insp.length ? '' : `aucune table de périodes lisible (base « ${det.db || '?'} »)`,
+        });
+      } catch (e) {
+        return send(200, { ok: false, error: String(e.message || e), inspected: [] });
       }
     }
 

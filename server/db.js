@@ -224,6 +224,11 @@ function migrate(db) {
   if (!stCols.includes('screen_orient')) db.exec(`ALTER TABLE sig_stores ADD COLUMN screen_orient TEXT NOT NULL DEFAULT 'paysage'`);
   if (!stCols.includes('active')) db.exec(`ALTER TABLE sig_stores ADD COLUMN active INTEGER NOT NULL DEFAULT 1`);
 
+  // Illustration de période (importable depuis ws_season si la table l'expose,
+  // ou saisie à la main) : URL/chemin de l'image affichée dans l'onglet Périodes.
+  const seasonCols = db.prepare('PRAGMA table_info(sig_seasons)').all().map((c) => c.name);
+  if (seasonCols.length && !seasonCols.includes('image')) db.exec(`ALTER TABLE sig_seasons ADD COLUMN image TEXT NOT NULL DEFAULT ''`);
+
   // Planning : passage à plusieurs films par moment (ajout de la colonne
   // position → reconstruction de la table dont la PK interdisait les doublons).
   const dpCols = db.prepare('PRAGMA table_info(sig_dayplans)').all().map((c) => c.name);
@@ -344,6 +349,7 @@ function migrate(db) {
     date_to    TEXT NOT NULL DEFAULT '',
     products   TEXT NOT NULL DEFAULT '[]',
     color      TEXT NOT NULL DEFAULT '#C97B4A',
+    image      TEXT NOT NULL DEFAULT '',
     sort_order INTEGER NOT NULL DEFAULT 0,
     active     INTEGER NOT NULL DEFAULT 1
   );
@@ -588,7 +594,7 @@ export function loadSeasons() {
   return getDb().prepare('SELECT * FROM sig_seasons ORDER BY sort_order, name').all().map((s) => ({
     id: s.id, name: s.name, from: s.date_from, to: s.date_to,
     products: (() => { try { return JSON.parse(s.products || '[]'); } catch { return []; } })(),
-    color: s.color || '#C97B4A', active: !!s.active,
+    color: s.color || '#C97B4A', image: s.image || '', active: !!s.active,
   }));
 }
 
@@ -597,11 +603,11 @@ export function saveSeasons(seasons) {
   db.exec('BEGIN');
   try {
     db.exec('DELETE FROM sig_seasons');
-    const ins = db.prepare('INSERT INTO sig_seasons(id, name, date_from, date_to, products, color, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    const ins = db.prepare('INSERT INTO sig_seasons(id, name, date_from, date_to, products, color, image, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     (Array.isArray(seasons) ? seasons : []).forEach((s, i) => {
       ins.run(String(s.id || 'se' + i), String(s.name || ''), String(s.from || ''), String(s.to || ''),
         JSON.stringify(Array.isArray(s.products) ? s.products.map(String) : []),
-        String(s.color || '#C97B4A'), i, s.active === false ? 0 : 1);
+        String(s.color || '#C97B4A'), String(s.image || ''), i, s.active === false ? 0 : 1);
     });
     db.exec('COMMIT');
   } catch (e) { db.exec('ROLLBACK'); throw e; }

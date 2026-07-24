@@ -313,7 +313,44 @@ async function enrichSeasons(cfg, db, baseTable, seasons, rawIds) {
       }
     }
   } catch { /* pas de table d'alias : on garde le nom de la table de base */ }
+  // Illustration : certaines bases rangent l'image dans une table sœur i18n
+  // (<base>_lang / <base>_name_alias) ou dédiée (<base>_image). Best-effort :
+  // ne remplit que les périodes encore sans image trouvée dans la table de base.
+  try {
+    if (seasons.some((s) => !s.image)) {
+      for (const sib of [`${baseTable}_lang`, `${baseTable}_name_alias`, `${baseTable}_image`, `${baseTable}_images`]) {
+        const sibColsT = await tableColsTyped(cfg, db, sib);
+        if (!sibColsT.length) continue;
+        const sibCols = sibColsT.map((c) => c.name);
+        const imgCol = detectImageCol(sibColsT);
+        if (!imgCol) continue;
+        const periodFk = (await fkColumn(cfg, db, sib, baseTable))
+          || pickCol(sibCols, [`${baseTable}_id`, 'period_id', 'id_period', 'season_id'], 'optionnel', sib, 'period');
+        if (!periodFk) continue;
+        const rows = await mysqlRows(cfg, `SELECT ${qid(periodFk)}, ${qid(imgCol)} FROM ${qid(db)}.${qid(sib)}`);
+        const byPeriod = new Map();
+        for (const [pid, im] of rows) { const v = String(im || '').trim(); if (v && !byPeriod.has(String(pid))) byPeriod.set(String(pid), v); }
+        seasons.forEach((s, k) => { if (!s.image) { const hit = byPeriod.get(String(rawIds[k])); if (hit) s.image = hit; } });
+        if (!seasons.some((s) => !s.image)) break;
+      }
+    }
+  } catch { /* pas de table sœur d'images : on garde ce qu'on a */ }
   return seasons;
+}
+
+// Colonne d'illustration éventuelle d'une table de périodes (best-effort) :
+// noms usuels d'abord, puis toute colonne dont le nom évoque une image — en
+// écartant les colonnes de dimensions / d'id / de texte alternatif.
+function detectImageCol(colsT) {
+  const cols = colsT.map((c) => c.name);
+  const direct = pickCol(cols, ['image', 'img', 'illustration', 'illustration_url', 'picture',
+    'photo', 'cover', 'cover_image', 'visual', 'visuel', 'thumbnail', 'thumb', 'banner',
+    'image_url', 'img_url', 'picture_url', 'photo_url', 'media', 'media_url', 'file',
+    'filename', 'icon', 'logo', 'vignette'], 'optionnel');
+  if (direct) return direct;
+  const guess = colsT.find((c) => /(image|img|photo|illustr|picture|visuel|cover|banner|thumb|icon|logo|vignette)/i.test(c.name)
+    && !/(width|height|size|_id$|^id_|alt|title|desc|position|order|sort)/i.test(c.name));
+  return guess ? guess.name : null;
 }
 
 async function detectSeasons(cfg, db, preferred) {
@@ -337,6 +374,7 @@ async function detectSeasons(cfg, db, preferred) {
       if (!name) name = (colsT.find((c) => /char|text/.test(c.type) && c.name !== from && c.name !== to) || {}).name || null;
       const prod = pickCol(cols, ['product_id', 'id_product', 'product', 'produit'], 'optionnel', t, 'product')
         || (colsT.find((c) => /product|produit/i.test(c.name)) || {}).name || null;
+      const img = detectImageCol(colsT);
       if (!from || !to) {
         // Colonnes de dates introuvables : on garde la table pour le diagnostic,
         // avec les types de colonnes et une ligne d'exemple (pour câbler le mapping).
@@ -345,18 +383,19 @@ async function detectSeasons(cfg, db, preferred) {
         inspected.push({ table: t, columns: cols, types: colsT.map((c) => `${c.name} (${c.type})`), sample });
         continue;
       } // colonnes de dates introuvables — on garde pour le diagnostic. Anciennement de p\u00e9riodes
-      const rows = await mysqlRows(cfg, `SELECT ${qid(id)}, ${name ? qid(name) : "''"}, ${qid(from)}, ${qid(to)}, ${prod ? qid(prod) : "''"} FROM ${qid(db)}.${qid(t)}`);
+      const rows = await mysqlRows(cfg, `SELECT ${qid(id)}, ${name ? qid(name) : "''"}, ${qid(from)}, ${qid(to)}, ${prod ? qid(prod) : "''"}, ${img ? qid(img) : "''"} FROM ${qid(db)}.${qid(t)}`);
       const rawIds = rows.map(([i], k) => ((i != null && String(i).trim()) ? String(i).trim() : String(k)));
-      const seasons = rows.map(([i, nm, fr, to2, pr], k) => ({
+      const seasons = rows.map(([i, nm, fr, to2, pr, im], k) => ({
         id: `ws_${i || k}`,
         name: String(nm || '').trim() || `Saison ${i || k + 1}`,
         from: String(fr || '').trim(),
         to: String(to2 || '').trim(),
         products: String(pr || '').trim() ? [`pwp${String(pr).trim()}`] : [],
+        image: String(im || '').trim(),
         color: '#C97B4A', active: true,
       }));
       await enrichSeasons(cfg, db, t, seasons, rawIds);
-      return { table: t, seasons, colsUsed: { id, name, from, to, prod } };
+      return { table: t, seasons, colsUsed: { id, name, from, to, prod, img } };
     } catch { /* table absente / illisible : on essaie la suivante */ }
   }
   return { table: '', seasons: [], inspected };
@@ -379,6 +418,36 @@ export async function importSeasons(table) {
     } catch { det.candidates = []; }
   }
   return { db, ...det };
+}
+
+// Diagnostic \u00ab colonnes r\u00e9elles \u00bb : pour chaque table de p\u00e9riodes candidate
+// (ou celle impos\u00e9e), liste toutes ses colonnes + types + 1 ligne d'exemple et
+// signale la colonne d'illustration d\u00e9tect\u00e9e. Lecture seule (information_schema
+// + un SELECT \u2026 LIMIT 1) : ne modifie jamais rien. Sert au bouton \u00ab Diagnostic \u00bb
+// de la r\u00e9gie et au test live (le log CI r\u00e9v\u00e8le le sch\u00e9ma r\u00e9el c\u00f4t\u00e9 prod).
+export async function inspectSeasons(table) {
+  const cfg = pwaConfig();
+  const db = await detectSchema(cfg);
+  const candidates = (table && String(table).trim())
+    ? [String(table).trim()]
+    : ['ws_season', 'ws_seasons', 'wc_season', 'product_availability_period', 'season', 'seasons', 'periode', 'periods', 'periodes'];
+  const inspected = [];
+  for (const t of candidates) {
+    try {
+      const colsT = await tableColsTyped(cfg, db, t);
+      if (!colsT.length) continue;
+      const cols = colsT.map((c) => c.name);
+      const imageCol = detectImageCol(colsT);
+      let sample = [];
+      try {
+        const s = await mysqlRows(cfg, `SELECT * FROM ${qid(db)}.${qid(t)} LIMIT 1`);
+        sample = (s[0] || []).map((x) => String(x == null ? '' : x).slice(0, 60));
+      } catch { /* table vide/illisible */ }
+      const imageSample = imageCol ? String(sample[cols.indexOf(imageCol)] || '').slice(0, 160) : '';
+      inspected.push({ table: t, columns: cols, types: colsT.map((c) => `${c.name} (${c.type})`), sample, imageCol, imageSample });
+    } catch { /* table absente : suivante */ }
+  }
+  return { db, inspected };
 }
 
 const slugify = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
