@@ -122,9 +122,26 @@ async function primaryKey(cfg, schema, table) {
   return rows.length ? rows[0][0] : null;
 }
 
-function pickCol(cols, wanted, what, table) {
+// Colonne de liaison via la CLÉ ÉTRANGÈRE déclarée (le lien product →
+// product_category se fait par une colonne de la table product : la contrainte
+// dit exactement laquelle, quel que soit son nom).
+async function fkColumn(cfg, schema, table, referencedTable) {
+  const rows = await mysqlRows(cfg, `
+    SELECT column_name FROM information_schema.key_column_usage
+    WHERE table_schema = '${schema.replace(/'/g, '')}' AND table_name = '${table}'
+      AND referenced_table_name = '${referencedTable.replace(/'/g, '')}'
+    ORDER BY ordinal_position LIMIT 1`);
+  return rows.length ? rows[0][0] : null;
+}
+
+function pickCol(cols, wanted, what, table, contains) {
   const low = new Map(cols.map((c) => [c.toLowerCase(), c]));
   for (const w of wanted) if (low.has(w)) return low.get(w);
+  // Dernier recours : une colonne dont le nom contient le motif (ex. « categ »).
+  if (contains) {
+    const hit = cols.find((c) => c.toLowerCase().includes(contains));
+    if (hit) return hit;
+  }
   if (what === 'optionnel') return null;
   throw new Error(`colonne « ${what} » introuvable dans ${table} (colonnes : ${cols.join(', ')}) — ajuste les requêtes dans Réglages avancés`);
 }
@@ -140,15 +157,20 @@ export async function autoQueries(cfg) {
 
   const prodCols = await tableCols(cfg, db, 'product');
   const prodId = (await primaryKey(cfg, db, 'product')) || pickCol(prodCols, ['id', 'id_product', 'product_id'], 'id', 'product');
-  const prodCat = pickCol(prodCols, ['category_id', 'id_category', 'product_category_id', 'id_product_category', 'cat_id', 'categoryid'], 'catégorie', 'product');
+  // Le lien produit → catégorie est porté par la table product : la clé
+  // étrangère vers product_category le dit exactement, sinon noms usuels.
+  const prodCat = (await fkColumn(cfg, db, 'product', 'product_category'))
+    || pickCol(prodCols, ['category_id', 'id_category', 'product_category_id', 'id_product_category', 'product_category', 'category', 'categorie', 'id_categorie', 'cat_id', 'categoryid', 'fk_category'], 'catégorie', 'product', 'categ');
   const prodName = pickCol(prodCols, ['name', 'label', 'title', 'libelle', 'nom', 'designation', 'alias'], 'nom', 'product');
-  const prodPrice = pickCol(prodCols, ['price', 'prix', 'price_ttc', 'amount', 'price_ht'], 'prix', 'product');
+  const prodPrice = pickCol(prodCols, ['price', 'prix', 'price_ttc', 'amount', 'price_ht', 'tarif'], 'prix', 'product', 'price');
   const prodActive = pickCol(prodCols, ['active', 'enabled', 'visible', 'actif', 'status'], 'optionnel');
 
   const spCols = await tableCols(cfg, db, 'shop_product');
-  const spProd = pickCol(spCols, ['product_id', 'id_product'], 'produit', 'shop_product');
-  const spShop = pickCol(spCols, ['shop_id', 'id_shop', 'store_id'], 'boutique', 'shop_product');
-  const spPrice = pickCol(spCols, ['price', 'prix', 'price_ttc', 'amount', 'price_ht'], 'prix', 'shop_product');
+  const spProd = (await fkColumn(cfg, db, 'shop_product', 'product'))
+    || pickCol(spCols, ['product_id', 'id_product', 'fk_product'], 'produit', 'shop_product', 'product');
+  const spShop = (await fkColumn(cfg, db, 'shop_product', 'shop'))
+    || pickCol(spCols, ['shop_id', 'id_shop', 'store_id', 'id_store', 'boutique_id', 'fk_shop'], 'boutique', 'shop_product', 'shop');
+  const spPrice = pickCol(spCols, ['price', 'prix', 'price_ttc', 'amount', 'price_ht', 'tarif'], 'prix', 'shop_product', 'price');
 
   return {
     db,
