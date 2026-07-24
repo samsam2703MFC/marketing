@@ -111,8 +111,11 @@ class Film extends Component {
       }
       const cur = this.state.snap;
       const newVersion = !cur || cur.version !== snap.version;
-      const changed = newVersion || cur.dataVer !== snap.dataVer || cur.override !== snap.override;
-      if (changed) this.setState({ snap, error: '', ...(newVersion ? { t: 0 } : {}) });
+      // Film continu : la boucle est régénérée en direct ; on l'applique quand la
+      // révision change (changement de moment/saison), en repartant du début.
+      const newRevision = snap.continuous && (!cur || cur.revision !== snap.revision);
+      const changed = newVersion || newRevision || cur.dataVer !== snap.dataVer || cur.override !== snap.override;
+      if (changed) this.setState({ snap, error: '', ...(newVersion || newRevision ? { t: 0 } : {}) });
       else if (first) this.setState({ snap, error: '' });
     } catch (e) {
       if (first) this.setState({ error: String(e.message || e) });

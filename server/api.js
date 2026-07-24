@@ -8,6 +8,8 @@ import {
   loadElementTypes, loadCatalog, saveCatalog, applyStorePrices, applyStoreLang, loadLangs,
   loadSeasons, saveSeasons, currentSeasons, currentMoment,
   loadMedia, addMediaRow, getMediaRow, delMediaRow,
+  loadProductMoments, saveProductMoments, SALE_MOMENTS, currentSaleMoment,
+  buildContinuous, continuousRevision,
   loadPlan, savePlan, planFilmAt, setActiveWeek, duplicateWeek,
   checkLogin, createSession, sessionUser, destroySession,
 } from './db.js';
@@ -88,6 +90,36 @@ function resolveSurprise(modules) {
     m.surpriseCount = vids.length;
     if (vids.length) m.video = vids[Math.floor(Math.random() * vids.length)].url;
   }
+}
+
+// Urls des vidéos surprise — alimente le mode continu (db.js ne fait pas d'I/O).
+function surpriseUrls() { return listSurprise().map((v) => v.url); }
+
+// Si le film servi est en mode « continu », remplace ses modules par une boucle
+// composée en direct (catalogue + saisons + moments + tags). Les modules sont
+// auto-suffisants : ils jouent tels quels sur l'écran comme dans la visionneuse.
+// Renvoie true si une régénération a eu lieu.
+function applyContinuous(snap, date) {
+  if (!snap || !snap.playlistId) return false;
+  const film = loadPlaylists().find((p) => p.id === snap.playlistId);
+  if (!film || film.mode !== 'continu') return false;
+  const gen = buildContinuous(film.continuous, date, { surprise: surpriseUrls() });
+  snap.modules = gen.modules;
+  snap.playlist = gen.playlist;
+  snap.media = gen.media;
+  snap.continuous = true;
+  snap.revision = gen.revision;
+  snap.continuousMeta = gen.meta;
+  return true;
+}
+// Révision continue du film actuellement assigné à un player (ou null).
+function continuousRevisionForVer(ver) {
+  if (!ver) return null;
+  const row = getDb().prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' AND version = ?`).get(ver);
+  const pid = row ? (JSON.parse(row.payload).playlistId || null) : null;
+  if (!pid) return null;
+  const film = loadPlaylists().find((p) => p.id === pid);
+  return (film && film.mode === 'continu') ? continuousRevision(film.continuous, new Date()) : null;
 }
 
 const nowIso = () => new Date().toISOString();
@@ -183,8 +215,23 @@ export function reportJson() {
     },
     secPerLine: parseFloat(getSetting('sec_per_line', '4')),
     loop: getSetting('loop', '1') === '1',
-    modules: (() => { const ms = loadModules(); resolveSurprise(ms); resolveMediaElements(ms, new Date()); return ms; })(),
-    playlists: loadPlaylists(),
+    ...(() => {
+      const modules = loadModules();
+      resolveSurprise(modules); resolveMediaElements(modules, new Date());
+      const playlists = loadPlaylists();
+      // Films continus : on injecte leur boucle générée (aperçu « maintenant »)
+      // dans la liste globale, avec des ids préfixés pour éviter les collisions.
+      const date = new Date();
+      for (const pl of playlists) {
+        if (pl.mode !== 'continu') continue;
+        const gen = buildContinuous(pl.continuous, date, { surprise: surpriseUrls() });
+        const mapped = gen.modules.map((mm) => ({ ...mm, id: `${pl.id}~${mm.id}` }));
+        for (const mm of mapped) modules.push(mm);
+        pl.items = mapped.map((mm) => mm.id);
+        pl.continuousMeta = gen.meta;
+      }
+      return { modules, playlists };
+    })(),
     activePlaylistId: activePlaylistId(),
     plan: loadPlan(),
     stores,
@@ -342,6 +389,8 @@ function heartbeat(id, body, url) {
       assignedVer: playerRow(id).assigned_ver,
       activateAt: playerRow(id).activate_at,
       dataVer: getIntSetting('data_ver', 1),
+      // Film continu : révision courante (change au moment/saison) → resync écran.
+      revision: continuousRevisionForVer(playerRow(id).assigned_ver),
       override: getSetting('override', '0') === '1',
       serverTime: nowIso(),
     },
@@ -353,6 +402,8 @@ function assignment(id, url) {
   if (!p) return { status: 401, json: { error: 'unauthorized' } };
   const snap = getDb().prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' AND version = ?`).get(p.assigned_ver);
   const snapshot = snap ? JSON.parse(snap.payload) : currentDraftSnapshot();
+  // Mode continu : boucle régénérée en direct (l'écran s'adapte au moment/saison).
+  applyContinuous(snapshot, new Date());
   // Prix + langue du magasin (table produits) : appliqués selon le player.
   applyStorePrices(snapshot.modules, p.store_id);
   applyStoreLang(snapshot.modules, p.store_id);
@@ -363,6 +414,7 @@ function assignment(id, url) {
       assignedVer: p.assigned_ver,
       activateAt: p.activate_at,
       dataVer: getIntSetting('data_ver', 1),
+      revision: snapshot.revision || null,
       override: getSetting('override', '0') === '1',
       snapshot,
     },
@@ -454,6 +506,8 @@ function filmJson(storeId, filmId) {
     const snapRow = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' ORDER BY version DESC LIMIT 1`).get();
     snap = snapRow ? JSON.parse(snapRow.payload) : currentDraftSnapshot();
   }
+  // Mode continu : régénère la boucle en direct (avant prix/langue/résolutions).
+  applyContinuous(snap, new Date());
   const dv = getIntSetting('data_ver', 1);
   const dataRow = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'data' AND version = ?`).get(dv);
   if (dataRow) {
@@ -732,6 +786,17 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       } catch (e) {
         return send(200, { ok: false, error: String(e.message || e) });
       }
+    }
+
+    // ---- périodes de vente (produit × moment matin/midi/aprem + exception) --
+    if (req.method === 'GET' && path === '/product-moments') {
+      return send(200, { moments: SALE_MOMENTS, rows: loadProductMoments(), current: currentSaleMoment() });
+    }
+    if (req.method === 'PUT' && path === '/product-moments') {
+      const body = await readBody();
+      const out = saveProductMoments(body.rows || []);
+      scheduleMirror();
+      return send(200, { ok: true, rows: out, current: currentSaleMoment() });
     }
 
     if (req.method === 'GET' && path === '/catalog') return send(200, loadCatalog());

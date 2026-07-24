@@ -208,6 +208,10 @@ function migrate(db) {
   // Jours de planning dédiés (indépendants des jours de diffusion) : filtrent
   // les films proposés quand on remplit un jour du planning hebdo (ex. crêpes = mercredi).
   if (!plCols.includes('plan_days')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN plan_days TEXT NOT NULL DEFAULT '[1,1,1,1,1,1,1]'`);
+  // Mode du film : 'playlist' (séquence montée à la main) ou 'continu' (boucle
+  // composée en direct depuis le catalogue + saisons + moments + tags).
+  if (!plCols.includes('mode')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN mode TEXT NOT NULL DEFAULT 'playlist'`);
+  if (!plCols.includes('continuous')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN continuous TEXT NOT NULL DEFAULT '{}'`);
   // Combo d'écrans du magasin (ex. 3 × 55″ portrait) → taille du film en px.
   const stCols = db.prepare('PRAGMA table_info(sig_stores)').all().map((c) => c.name);
   if (!stCols.includes('screens')) db.exec(`ALTER TABLE sig_stores ADD COLUMN screens INTEGER NOT NULL DEFAULT 1`);
@@ -337,6 +341,17 @@ function migrate(db) {
     color      TEXT NOT NULL DEFAULT '#C97B4A',
     sort_order INTEGER NOT NULL DEFAULT 0,
     active     INTEGER NOT NULL DEFAULT 1
+  );
+
+  -- Table de jointure produit ↔ période de vente (moment de la journée).
+  -- Dit à quels moments un produit est vendu (matin/midi/aprem). « exception »
+  -- = 1 inverse la règle (produit exclu à ce moment). Sert au mode « continu »
+  -- pour ne montrer que les produits pertinents à l'heure courante.
+  CREATE TABLE IF NOT EXISTS sig_product_moments (
+    product_id TEXT NOT NULL,
+    moment     TEXT NOT NULL,
+    exception  INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (product_id, moment)
   );
 
   -- Médiathèque agence : vidéos/photos uploadées par les agences, taguées
@@ -611,6 +626,195 @@ export function currentSeasons(date = new Date()) {
     const from = a.m * 100 + a.d; const to = b.m * 100 + b.d;
     return from <= to ? (today >= from && today <= to) : (today >= from || today <= to); // à cheval sur l'an
   });
+}
+
+// ---------------------------------------------------------------------------
+// Périodes de vente (moments de la journée) par produit — table de jointure.
+// moment ∈ {matin, midi, aprem}. exception = true → produit EXCLU à ce moment.
+export const SALE_MOMENTS = ['matin', 'midi', 'aprem'];
+export function loadProductMoments() {
+  return getDb().prepare('SELECT product_id, moment, exception FROM sig_product_moments ORDER BY product_id, moment').all()
+    .map((r) => ({ productId: r.product_id, moment: r.moment, exception: !!r.exception }));
+}
+export function saveProductMoments(rows) {
+  const db = getDb();
+  db.exec('BEGIN');
+  try {
+    db.exec('DELETE FROM sig_product_moments');
+    const ins = db.prepare('INSERT OR REPLACE INTO sig_product_moments(product_id, moment, exception) VALUES (?, ?, ?)');
+    for (const r of (Array.isArray(rows) ? rows : [])) {
+      if (!r || !r.productId || !SALE_MOMENTS.includes(r.moment)) continue;
+      ins.run(String(r.productId), String(r.moment), r.exception ? 1 : 0);
+    }
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  return loadProductMoments();
+}
+// Moment courant dans le vocabulaire des périodes de VENTE (matin/midi/aprem).
+// currentMoment() renvoie matin/midi/soir (vocabulaire médias) — on aligne le
+// 3ᵉ créneau sur « aprem » (même fenêtre horaire, cf. PLAN_MOMENTS).
+export function currentSaleMoment(date = new Date()) {
+  const m = currentMoment(date);
+  return m === 'soir' ? 'aprem' : m;
+}
+// Un produit est-il vendu au moment donné ? Règle : si le produit a au moins
+// une ligne d'inclusion (exception=0), il n'est vendu QU'À ces moments-là ;
+// une ligne exception=1 retire ce moment. Sans aucune ligne → tous les moments.
+export function productMomentFilter(date = new Date()) {
+  const rows = loadProductMoments();
+  const moment = currentSaleMoment(date);
+  const incl = new Map();   // productId -> Set(moments inclus)
+  const excl = new Map();   // productId -> Set(moments exclus)
+  for (const r of rows) {
+    const bag = r.exception ? excl : incl;
+    if (!bag.has(r.productId)) bag.set(r.productId, new Set());
+    bag.get(r.productId).add(r.moment);
+  }
+  return (productId) => {
+    if (excl.has(productId) && excl.get(productId).has(moment)) return false;
+    const inc = incl.get(productId);
+    if (inc && inc.size) return inc.has(moment);
+    return true; // aucune règle d'inclusion : vendu à tous les moments
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Mode « continu » : le film n'est pas une séquence figée mais une recette. La
+// boucle est composée en direct depuis le catalogue + saisons + moments + tags.
+export function continuousDefaults() {
+  return {
+    source: 'saison',        // 'saison' | 'categories' | 'tout'
+    categories: [],          // ids de catégories si source === 'categories'
+    perMoment: true,         // filtrer les produits par période de vente (moment)
+    order: 'catalogue',      // 'catalogue' | 'aleatoire'
+    prodDur: 6,              // durée d'une fiche produit (s)
+    clipDur: 12,             // durée d'un clip vidéo (s)
+    maxItems: 12,            // nb max de slots dans la boucle
+    // Ratios « 1 : N » par type d'élément (0 = jamais).
+    ratios: { liaison: 5, produitSeul: 6, media: 3, animation: 0, surprise: 8 },
+    refresh: 'moment',       // 'moment' (au changement moment/saison) | 'minutes'
+    refreshMin: 10,          // recomposition toutes les N minutes si refresh==='minutes'
+    fallback: 'tout',        // 'tout' | 'aucun' si rien en saison/moment
+    exceptionFilm: '',       // playlist figée jouée EN PLUS à chaque boucle (exception)
+  };
+}
+export function normContinuous(c) {
+  const d = continuousDefaults();
+  c = (c && typeof c === 'object') ? c : {};
+  const num = (v, fb, lo, hi) => { const n = parseInt(v, 10); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : fb; };
+  const rr = (c.ratios && typeof c.ratios === 'object') ? c.ratios : {};
+  return {
+    source: ['saison', 'categories', 'tout'].includes(c.source) ? c.source : d.source,
+    categories: Array.isArray(c.categories) ? c.categories.map(String) : [],
+    perMoment: c.perMoment !== false,
+    order: c.order === 'aleatoire' ? 'aleatoire' : 'catalogue',
+    prodDur: num(c.prodDur, d.prodDur, 2, 60),
+    clipDur: num(c.clipDur, d.clipDur, 2, 120),
+    maxItems: num(c.maxItems, d.maxItems, 4, 40),
+    ratios: {
+      liaison: num(rr.liaison, d.ratios.liaison, 0, 99),
+      produitSeul: num(rr.produitSeul, d.ratios.produitSeul, 0, 99),
+      media: num(rr.media, d.ratios.media, 0, 99),
+      animation: num(rr.animation, d.ratios.animation, 0, 99),
+      surprise: num(rr.surprise, d.ratios.surprise, 0, 99),
+    },
+    refresh: c.refresh === 'minutes' ? 'minutes' : 'moment',
+    refreshMin: num(c.refreshMin, d.refreshMin, 1, 240),
+    fallback: c.fallback === 'aucun' ? 'aucun' : 'tout',
+    exceptionFilm: c.exceptionFilm ? String(c.exceptionFilm) : '',
+  };
+}
+// PRNG déterministe : la boucle est stable dans une « fenêtre » (bucket) donnée
+// et ne change qu'au changement de moment/saison (ou toutes les N minutes).
+function strHash(s) { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h >>> 0; }
+function mulberry32(a) { return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function shuffleWith(arr, rng) { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
+export function continuousBucket(cfg, date = new Date()) {
+  cfg = normContinuous(cfg);
+  const moment = currentMoment(date);
+  const seasons = currentSeasons(date).map((s) => s.id).sort().join(',');
+  let slot = '';
+  if (cfg.refresh === 'minutes') slot = 'm' + Math.floor((date.getHours() * 60 + date.getMinutes()) / cfg.refreshMin);
+  return `${moment}|${seasons}|${slot}`;
+}
+export function continuousRevision(cfg, date = new Date()) { return String(strHash(continuousBucket(cfg, date))); }
+
+const ANIM_MSG = { matin: 'Bonne journée', midi: 'Bon appétit', soir: 'À emporter' };
+
+// Compose la boucle du mode continu. ctx.surprise = [urls] (fourni par l'API,
+// db.js ne touche pas au système de fichiers). Modules AUTO-SUFFISANTS : ils
+// jouent tels quels sur l'écran comme dans la visionneuse.
+export function buildContinuous(cfg, date = new Date(), ctx = {}) {
+  cfg = normContinuous(cfg);
+  const rng = mulberry32(strHash(continuousBucket(cfg, date)));
+  const { categories, products } = loadCatalog();
+  const catName = new Map(categories.map((c) => [c.id, c.name]));
+  const momentOk = cfg.perMoment ? productMomentFilter(date) : () => true;
+  const moment = currentMoment(date);
+  const activeSeasons = new Set(currentSeasons(date).map((s) => s.id));
+
+  // 1) Pool de produits éligibles : actif + source + moment de vente.
+  let pool = products.filter((p) => p.active && momentOk(p.id));
+  if (cfg.source === 'categories') {
+    const cats = new Set(cfg.categories);
+    pool = pool.filter((p) => cats.has(p.categoryId));
+  } else if (cfg.source === 'saison') {
+    const inSeason = new Set(currentSeasons(date).flatMap((s) => s.products || []));
+    const seasonPool = inSeason.size ? pool.filter((p) => inSeason.has(p.id)) : [];
+    pool = seasonPool.length ? seasonPool : (cfg.fallback === 'aucun' ? [] : pool);
+  }
+  if (cfg.order === 'aleatoire') pool = shuffleWith(pool.slice(), rng);
+  pool = pool.slice(0, cfg.maxItems);
+
+  // 2) Listes par catégorie (l'ossature de la boucle).
+  const byCat = new Map();
+  for (const p of pool) { if (!byCat.has(p.categoryId)) byCat.set(p.categoryId, []); byCat.get(p.categoryId).push(p); }
+  const catLists = [...byCat.entries()].map(([cid, ps]) => ({ name: catName.get(cid) || 'Nos produits', products: ps }));
+
+  // 3) Clips ciblés disponibles (moment + saison) — comme « média ciblé ».
+  const clips = loadMedia().filter((mm) => (!cfg.perMoment || mm.moment === moment || mm.moment === 'all') && (!mm.seasonId || activeSeasons.has(mm.seasonId)));
+  const surprise = Array.isArray(ctx.surprise) ? ctx.surprise : [];
+
+  const item = (p) => ({ name: p.name, price: p.price, img: p.img, src: p.src, active: true, productId: p.id });
+  const clipModule = (c, id) => (c.kind === 'photo'
+    ? { id, type: 'media', layout: 'cover', mediaKind: 'photo', mediaUrl: 'media/' + encodeURIComponent(c.filename), dur: cfg.clipDur, items: [], tag: { enabled: false } }
+    : { id, type: 'film', video: 'media/' + encodeURIComponent(c.filename), dur: cfg.clipDur, items: [], tag: { enabled: false } });
+
+  // 4) Composition : slots avec ratios « 1 : N » par type d'élément.
+  const modules = [];
+  const R = cfg.ratios;
+  const hit = (n, i) => n > 0 && (i % n === 0);
+  const L = Math.max(4, Math.min(cfg.maxItems, (Math.max(catLists.length, pool.length) || 2) * 2));
+  let catI = 0, prodI = 0;
+  for (let i = 1; i <= L; i++) {
+    if (hit(R.liaison, i)) { modules.push({ id: `k-lia-${i}`, type: 'liaison', name: "L'Atelier By", sub: '', items: [], tag: { enabled: false } }); continue; }
+    if (hit(R.media, i) && clips.length) { modules.push(clipModule(clips[Math.floor(rng() * clips.length)], `k-clip-${i}`)); continue; }
+    if (hit(R.produitSeul, i) && pool.length) { const p = pool[prodI++ % pool.length]; modules.push({ id: `k-prod-${i}`, type: 'produit', name: catName.get(p.categoryId) || 'À la une', layout: 'hero-left', motion: 'm1', productRef: p.id, dur: cfg.prodDur, items: [item(p)], tag: { enabled: false } }); continue; }
+    if (hit(R.animation, i)) { modules.push({ id: `k-ani-${i}`, type: 'animation', name: ANIM_MSG[moment] || "L'Atelier By", sub: '', layout: 'band', motion: 'm2', dur: cfg.prodDur, items: [], tag: { enabled: false } }); continue; }
+    if (catLists.length) { const cl = catLists[catI++ % catLists.length]; modules.push({ id: `k-cat-${i}`, type: 'category', name: cl.name, layout: 'illo-right', motion: 'm1', items: cl.products.map(item), tag: { enabled: false } }); }
+    else if (pool.length) { const p = pool[prodI++ % pool.length]; modules.push({ id: `k-prod-${i}`, type: 'produit', name: catName.get(p.categoryId) || 'À la une', layout: 'hero-left', motion: 'm1', productRef: p.id, dur: cfg.prodDur, items: [item(p)], tag: { enabled: false } }); }
+  }
+  // 5) Playlist d'exception : une playlist figée jouée EN PLUS à chaque boucle.
+  if (cfg.exceptionFilm) {
+    const exf = loadPlaylists().find((p) => p.id === cfg.exceptionFilm && p.mode !== 'continu');
+    if (exf && exf.items.length) {
+      const byId = new Map(loadModules().map((mm) => [mm.id, mm]));
+      for (const id of exf.items) { const mm = byId.get(id); if (mm) modules.push({ ...mm, id: `k-exc-${id}` }); }
+    }
+  }
+  // 6) Vidéo surprise en clôture (si ratio > 0 et dossier non vide).
+  if (R.surprise > 0 && surprise.length) modules.push({ id: 'k-surprise', type: 'film', video: surprise[Math.floor(rng() * surprise.length)], dur: cfg.clipDur, items: [], tag: { enabled: false } });
+  // 7) Boucle vide : slide d'attente.
+  if (!modules.length) modules.push({ id: 'k-empty', type: 'liaison', name: "L'Atelier By", sub: 'boucle en préparation', items: [], tag: { enabled: false } });
+
+  const media = modules.flatMap((m) => (m.items || []).map((it) => it.img)).filter((u) => u && !String(u).startsWith('data:'));
+  return {
+    modules,
+    playlist: modules.map((m) => m.id),
+    media,
+    revision: continuousRevision(cfg, date),
+    meta: { moment, seasons: [...activeSeasons], products: pool.length, clips: clips.length, slots: modules.length },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1062,6 +1266,8 @@ export function loadPlaylists() {
     },
     planDays: (() => { try { return JSON.parse(p.plan_days || '[1,1,1,1,1,1,1]').map(Boolean); } catch { return [true, true, true, true, true, true, true]; } })(),
     stores: JSON.parse(p.stores || '[]'),
+    mode: p.mode === 'continu' ? 'continu' : 'playlist',
+    continuous: (() => { try { return { ...continuousDefaults(), ...(JSON.parse(p.continuous || '{}') || {}) }; } catch { return continuousDefaults(); } })(),
   }));
 }
 
@@ -1128,7 +1334,7 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
       }
     });
     const validIds = new Set(modules.map((m) => m.id));
-    const insPls = db.prepare('INSERT INTO sig_playlists(id, name, sort_order, sched_days, sched_from, sched_to, stores, cat, tags, plan_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    const insPls = db.prepare('INSERT INTO sig_playlists(id, name, sort_order, sched_days, sched_from, sched_to, stores, cat, tags, plan_days, mode, continuous) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     const insIt = db.prepare('INSERT INTO sig_playlist_items(playlist_id, position, module_id) VALUES (?, ?, ?)');
     playlists.forEach((pl, i) => {
       const sched = pl.schedule || {};
@@ -1139,7 +1345,9 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
         JSON.stringify(Array.isArray(pl.stores) ? pl.stores.map(String) : []),
         String(pl.cat || ''),
         JSON.stringify(Array.isArray(pl.tags) ? pl.tags.map(String).filter(Boolean) : []),
-        JSON.stringify((Array.isArray(pl.planDays) && pl.planDays.length === 7 ? pl.planDays : [1, 1, 1, 1, 1, 1, 1]).map((d) => (d ? 1 : 0)))
+        JSON.stringify((Array.isArray(pl.planDays) && pl.planDays.length === 7 ? pl.planDays : [1, 1, 1, 1, 1, 1, 1]).map((d) => (d ? 1 : 0))),
+        pl.mode === 'continu' ? 'continu' : 'playlist',
+        JSON.stringify(normContinuous(pl.continuous))
       );
       (pl.items || []).filter((id) => validIds.has(id)).forEach((id, j) => insIt.run(String(pl.id), j, id));
     });

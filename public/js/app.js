@@ -106,6 +106,7 @@ class App extends Component {
     surpriseVideos: [], surpriseBusy: false,
     seasons: [], seasonsCurrent: [], seasonsDirty: false, seasonsBusy: false,
     wsTable: '', wsCandidates: [], wsInspected: [], mediaLib: [],
+    prodMoments: [], prodMomentsCurrent: '', prodMomentsDirty: false, prodMomentsBusy: false,
     onbOpen: false, onbStore: '', onbTest: {},
     onbDone: (() => { try { return JSON.parse(localStorage.getItem('sigOnbDone') || '[]'); } catch { return []; } })(),
   };
@@ -345,7 +346,33 @@ class App extends Component {
       },
       planDays: (Array.isArray(p.planDays) && p.planDays.length === 7) ? p.planDays.map(Boolean) : [true, true, true, true, true, true, true],
       stores: Array.isArray(p.stores) ? p.stores : [],
+      mode: p.mode === 'continu' ? 'continu' : 'playlist',
+      continuous: this.normContinuous(p.continuous),
     };
+  }
+  // Config par défaut + normalisation du mode « continu » (miroir de db.js).
+  contDefaults() {
+    return {
+      source: 'saison', categories: [], perMoment: true, order: 'catalogue',
+      prodDur: 6, clipDur: 12, maxItems: 12,
+      ratios: { liaison: 5, produitSeul: 6, media: 3, animation: 0, surprise: 8 },
+      refresh: 'moment', refreshMin: 10, fallback: 'tout', exceptionFilm: '',
+    };
+  }
+  normContinuous(c) {
+    const d = this.contDefaults();
+    c = (c && typeof c === 'object') ? c : {};
+    return { ...d, ...c, ratios: { ...d.ratios, ...(c.ratios || {}) }, categories: Array.isArray(c.categories) ? c.categories.map(String) : [] };
+  }
+  setFilmMode(mode) { this.updateFilm({ mode: mode === 'continu' ? 'continu' : 'playlist' }); }
+  updateContinuous(patch) {
+    const f = this.activeFilm();
+    this.updateFilm({ continuous: this.normContinuous({ ...(f.continuous || {}), ...patch }) });
+  }
+  updateContRatio(key, val) {
+    const f = this.activeFilm();
+    const n = Math.max(0, Math.min(99, parseInt(val, 10) || 0));
+    this.updateContinuous({ ratios: { ...(f.continuous || {}).ratios, [key]: n } });
   }
   setFilmCat(cat) { this.updateFilm({ cat }); }
   addFilmTag(t) {
@@ -662,7 +689,35 @@ class App extends Component {
       } else { this.setState({ wsCandidates: r.candidates || [], wsInspected: r.inspected || [] }); this.showToast(`Import : ${r.error}`); }
     } catch (e) { this.setState({ seasonsBusy: false }); this.showToast(`Erreur : ${e.message}`); }
   }
-  openSeasons() { this.setState({ view: 'seasons' }); if (!this.state.seasons.length) this.loadSeasons(); this.loadMediaLib(); }
+  openSeasons() { this.setState({ view: 'seasons' }); if (!this.state.seasons.length) this.loadSeasons(); this.loadMediaLib(); this.loadProdMoments(); }
+
+  // ---- périodes de vente : produit × moment (matin/midi/aprem + exception) --
+  async loadProdMoments() {
+    try { const r = await api('GET', '/product-moments'); this.setState({ prodMoments: r.rows || [], prodMomentsCurrent: r.current || '', prodMomentsDirty: false }); }
+    catch { /* indisponible : ignore */ }
+  }
+  // Bascule l'appartenance d'un produit à un moment (clic = inclus → exclu → rien).
+  cycleProdMoment(productId, moment) {
+    const rows = (this.state.prodMoments || []).slice();
+    const i = rows.findIndex((r) => r.productId === productId && r.moment === moment);
+    if (i < 0) rows.push({ productId, moment, exception: false });          // rien → inclus
+    else if (!rows[i].exception) rows[i] = { ...rows[i], exception: true }; // inclus → exclu (exception)
+    else rows.splice(i, 1);                                                 // exclu → rien
+    this.setState({ prodMoments: rows, prodMomentsDirty: true });
+  }
+  prodMomentState(productId, moment) {
+    const r = (this.state.prodMoments || []).find((x) => x.productId === productId && x.moment === moment);
+    return r ? (r.exception ? 'excl' : 'incl') : 'none';
+  }
+  async saveProdMoments() {
+    if (this.state.prodMomentsBusy) return;
+    this.setState({ prodMomentsBusy: true });
+    try {
+      const r = await api('PUT', '/product-moments', { rows: this.state.prodMoments });
+      this.setState({ prodMoments: r.rows || [], prodMomentsCurrent: r.current || '', prodMomentsDirty: false, prodMomentsBusy: false });
+      this.showToast('Périodes de vente enregistrées ✓');
+    } catch (e) { this.setState({ prodMomentsBusy: false }); this.showToast(`Erreur : ${e.message}`); }
+  }
 
   // ---- médiathèque agence (vue admin dans la régie) -----------------------
   async loadMediaLib() {
@@ -1969,6 +2024,12 @@ class App extends Component {
       onAddProduct: (e) => { const pid = e.target.value; e.target.value = ''; if (pid) this.toggleSeasonProduct(s.id, pid); },
       del: () => this.delSeason(s.id),
     }));
+    // Périodes de vente : produit × moment (matin/midi/aprem + exception).
+    const saleMoments = [{ id: 'matin', label: 'Matin' }, { id: 'midi', label: 'Midi' }, { id: 'aprem', label: 'Après-midi' }];
+    const prodMomentRows = (st.catalog.products || []).map((p) => ({
+      id: p.id, name: p.name, active: p.active !== false,
+      cells: saleMoments.map((mo) => ({ moment: mo.id, state: this.prodMomentState(p.id, mo.id), toggle: () => this.cycleProdMoment(p.id, mo.id) })),
+    }));
 
     // ---- médiathèque agence (vue admin) ----
     const MOMENT_LBL = { matin: 'Matin', midi: 'Midi', soir: 'Soir', all: 'Toute la journée' };
@@ -2001,6 +2062,9 @@ class App extends Component {
       wsTable: st.wsTable, onWsTable: (e) => this.setState({ wsTable: e.target.value }),
       wsCandidates: st.wsCandidates || [], useWsCandidate: (t) => this.setState({ wsTable: t }),
       wsInspected: st.wsInspected || [],
+      saleMoments, prodMomentRows, prodMomentsCurrent: st.prodMomentsCurrent,
+      prodMomentsDirty: st.prodMomentsDirty, prodMomentsBusy: st.prodMomentsBusy,
+      saveProdMoments: () => this.saveProdMoments(),
       mediaOverview, refreshMediaLib: () => this.loadMediaLib(),
       agencyUrl: new URL('agence', location.href).toString(),
       planStoreChips, planCols, planFilmCards, planWeekTabs, planDayTabs, planDupTargets, planStoreLinks,
@@ -2423,6 +2487,71 @@ class App extends Component {
         </div>
       </div>`;
 
+    // ---- Mode du film : Playlist (manuel) ou Continu (boucle auto) ----------
+    const filmMode = this.activeFilm().mode === 'continu' ? 'continu' : 'playlist';
+    const cont = this.normContinuous(this.activeFilm().continuous);
+    const modeBtn = (id, label, sub) => html`
+      <button onClick=${() => this.setFilmMode(id)} style="flex:1 1 0;text-align:left;padding:11px 15px;border-radius:12px;cursor:pointer;border:1px solid ${filmMode === id ? '#8D1D2C' : 'rgba(35,34,32,0.14)'};background:${filmMode === id ? '#8D1D2C' : '#FBF8F2'};color:${filmMode === id ? '#fff' : '#232220'};">
+        <div style="font-size:13.5px;font-weight:700;">${label}</div>
+        <div style="font-size:11px;opacity:0.82;margin-top:2px;">${sub}</div>
+      </button>`;
+    const filmModeToggle = html`
+      <div style="display:flex;gap:10px;margin-top:14px;padding-top:14px;border-top:1px dashed rgba(35,34,32,0.12);">
+        ${modeBtn('playlist', '▤ Playlist', 'Séquence montée à la main')}
+        ${modeBtn('continu', '🔄 Continu', 'Boucle composée en direct · saisons · moments · tags')}
+      </div>`;
+    // Panneau de réglages du mode continu.
+    const cField = (label, node) => html`<label style="display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">${label}${node}</label>`;
+    const cNum = (key, val, min, max) => html`<input type="number" min=${min} max=${max} value=${val} onInput=${(e) => this.updateContinuous({ [key]: e.target.value })} style="width:92px;padding:8px 10px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;" />`;
+    const cChoice = (key, opts) => html`<div style="display:flex;gap:6px;flex-wrap:wrap;">${opts.map(([id, lab]) => html`<button onClick=${() => this.updateContinuous({ [key]: id })} style="padding:7px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${cont[key] === id ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${cont[key] === id ? '#8D1D2C' : '#fff'};color:${cont[key] === id ? '#fff' : '#232220'};">${lab}</button>`)}</div>`;
+    const cToggle = (key, yes, no) => html`<div style="display:flex;gap:6px;">${[[true, yes], [false, no]].map(([b, lab]) => html`<button onClick=${() => this.updateContinuous({ [key]: b })} style="padding:7px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${!!cont[key] === b ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${!!cont[key] === b ? '#8D1D2C' : '#fff'};color:${!!cont[key] === b ? '#fff' : '#232220'};">${lab}</button>`)}</div>`;
+    const cRatio = (key, label) => html`<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;"><span style="width:150px;color:#232220;font-weight:600;">${label}</span><span style="color:#8A847C;">1 :</span><input type="number" min="0" max="99" value=${cont.ratios[key]} onInput=${(e) => this.updateContRatio(key, e.target.value)} style="width:66px;padding:7px 9px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;" /></label>`;
+    const catChips = (st.catalog.categories || []).map((c) => {
+      const on = cont.categories.includes(c.id);
+      return html`<button onClick=${() => { const set = new Set(cont.categories); on ? set.delete(c.id) : set.add(c.id); this.updateContinuous({ categories: [...set] }); }} style="padding:6px 12px;font-size:12px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${on ? '#8D1D2C' : '#fff'};color:${on ? '#fff' : '#232220'};">${c.name}</button>`;
+    });
+    const contPanel = html`
+      <div style="background:#FFFFFF;border:1px solid rgba(141,29,44,0.22);border-radius:16px;padding:18px 20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">🔄 Boucle continue — la régie compose « ${this.activeFilm().name} » en direct</h3>
+          <a href=${new URL('film?film=' + this.activeFilm().id, location.href).toString()} target="_blank" style="font-size:12.5px;font-weight:600;color:#6E4A2B;">▶ Aperçu en direct ↗</a>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:18px;">
+          <div style="display:flex;gap:26px;flex-wrap:wrap;">
+            ${cField('Source des fiches', cChoice('source', [['saison', 'Produits de saison'], ['categories', 'Catégories choisies'], ['tout', 'Tout le catalogue']]))}
+            ${cField('Adapter au moment', cToggle('perMoment', 'Oui (matin/midi/soir)', 'Non'))}
+            ${cField('Ordre', cChoice('order', [['catalogue', 'Catalogue'], ['aleatoire', 'Aléatoire']]))}
+          </div>
+          ${cont.source === 'categories' ? html`<div><div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:8px;">Catégories incluses</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${catChips}</div></div>` : ''}
+          <div style="display:flex;gap:20px;flex-wrap:wrap;">
+            ${cField('Durée fiche (s)', cNum('prodDur', cont.prodDur, 2, 60))}
+            ${cField('Durée vidéo (s)', cNum('clipDur', cont.clipDur, 2, 120))}
+            ${cField('Max fiches / boucle', cNum('maxItems', cont.maxItems, 4, 40))}
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:9px;">Ratios par type d'élément · 1 : N (0 = jamais)</div>
+            <div style="display:flex;flex-direction:column;gap:8px;max-width:360px;">
+              ${cRatio('liaison', 'Liaison (logo)')}
+              ${cRatio('produitSeul', 'Produit seul')}
+              ${cRatio('media', 'Vidéo/photo ciblée')}
+              ${cRatio('animation', 'Animation promo')}
+              ${cRatio('surprise', 'Vidéo surprise')}
+            </div>
+          </div>
+          <div style="display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start;">
+            ${cField('Rafraîchissement', cChoice('refresh', [['moment', 'Au moment/saison'], ['minutes', 'Toutes les N min']]))}
+            ${cont.refresh === 'minutes' ? cField('N minutes', cNum('refreshMin', cont.refreshMin, 1, 240)) : ''}
+            ${cField('Si rien en saison', cChoice('fallback', [['tout', 'Tout le catalogue'], ['aucun', 'Rien (attente)']]))}
+          </div>
+          <div>
+            ${cField('Playlist d\'exception (jouée EN PLUS à chaque boucle)', html`<select value=${cont.exceptionFilm} onChange=${(e) => this.updateContinuous({ exceptionFilm: e.target.value })} style="max-width:320px;padding:8px 10px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;">
+              <option value="">— aucune —</option>
+              ${st.playlists.filter((p) => p.mode !== 'continu' && p.id !== this.activeFilm().id).map((p) => html`<option value=${p.id}>${p.name}</option>`)}
+            </select>`)}
+          </div>
+        </div>
+      </div>`;
+
     return html`
 <div style="height:100vh;background:#E7E1D8;color:#232220;display:flex;flex-direction:column;overflow:hidden;">
 
@@ -2802,6 +2931,34 @@ class App extends Component {
           ${!v.seasonRows.length && html`<p style="margin:0;font-size:12.5px;color:#8A847C;padding:8px 0;">Aucune période. « + Ajouter une période » ou « ⟳ Importer depuis ws_season ».</p>`}
         </div>
         <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Dates : <strong>JJ/MM</strong> (ex. 21/06) ou AAAA-MM-JJ ; l'année est ignorée (la période revient chaque année). Une période à cheval sur le nouvel an (ex. 15/12 → 06/01) est gérée.</p>
+      </div>
+
+      <!-- Périodes de vente : produit × moment (matin / midi / après-midi) -->
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
+          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Périodes de vente — produit × moment de la journée</h3>
+          <button onClick=${v.saveProdMoments} disabled=${!v.prodMomentsDirty || v.prodMomentsBusy} style="padding:8px 16px;font-size:12.5px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.prodMomentsDirty && !v.prodMomentsBusy ? 'pointer' : 'not-allowed'};background:${v.prodMomentsDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.prodMomentsDirty ? '#fff' : '#8A847C'};">${v.prodMomentsBusy ? 'Enregistrement…' : (v.prodMomentsDirty ? 'Enregistrer' : '✓ Enregistré')}</button>
+        </div>
+        <p style="margin:0 0 12px;font-size:12px;color:#8A847C;max-width:820px;">Clique une case pour cycler : <strong style="color:#2E6E4E;">vendu</strong> → <strong style="color:#8D1D2C;">exception (exclu)</strong> → vide. Un produit sans aucune case cochée est vendu à tous les moments. En mode continu, la boucle ne montre que les produits vendus au moment courant${v.prodMomentsCurrent ? html` (actuellement : <strong>${v.prodMomentsCurrent}</strong>)` : ''}.</p>
+        <div style="overflow-x:auto;">
+          <table style="border-collapse:collapse;width:100%;min-width:420px;font-size:13px;">
+            <thead><tr>
+              <th style="text-align:left;padding:8px 10px;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;border-bottom:1px solid rgba(35,34,32,0.12);">Produit</th>
+              ${v.saleMoments.map((mo) => html`<th style="padding:8px 10px;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:${v.prodMomentsCurrent === mo.id ? '#8D1D2C' : '#8A847C'};border-bottom:1px solid rgba(35,34,32,0.12);text-align:center;width:120px;">${mo.label}</th>`)}
+            </tr></thead>
+            <tbody>
+              ${v.prodMomentRows.map((p) => html`
+                <tr>
+                  <td style="padding:7px 10px;border-bottom:1px solid rgba(35,34,32,0.06);white-space:nowrap;${p.active ? '' : 'color:#B8B2A8;'}">${p.name}${p.active ? '' : ' · inactif'}</td>
+                  ${p.cells.map((c) => html`<td style="padding:5px 10px;border-bottom:1px solid rgba(35,34,32,0.06);text-align:center;">
+                    <button onClick=${c.toggle} title="Cliquer pour changer" style="width:34px;height:30px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:700;border:1px solid ${c.state === 'incl' ? 'rgba(46,110,78,0.4)' : (c.state === 'excl' ? 'rgba(141,29,44,0.4)' : 'rgba(35,34,32,0.14)')};background:${c.state === 'incl' ? 'rgba(46,110,78,0.14)' : (c.state === 'excl' ? 'rgba(141,29,44,0.12)' : '#FBF8F2')};color:${c.state === 'incl' ? '#2E6E4E' : (c.state === 'excl' ? '#8D1D2C' : '#C9C3B8')};">${c.state === 'incl' ? '✓' : (c.state === 'excl' ? '✕' : '·')}</button>
+                  </td>`)}
+                </tr>
+              `)}
+              ${!v.prodMomentRows.length ? html`<tr><td colspan="4" style="padding:12px 10px;color:#8A847C;font-size:12.5px;">Aucun produit dans le catalogue. Importe le catalogue dans l'onglet Produits.</td></tr>` : ''}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <!-- Médiathèque agence : vue admin (nombre + tags + présence) -->
@@ -3453,8 +3610,10 @@ class App extends Component {
           <span style="font-size:12px;color:#8A847C;">film courant : <strong style="color:#232220;">${this.activeFilm().name}</strong> · ${v.timelineTotal} · ${v.moduleCount} module(s)</span>
         </div>
         ${filmSelector}
+        ${filmModeToggle}
       </div>
 
+      ${filmMode === 'continu' ? contPanel : html`
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 18px;">
         <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">Bibliothèque — choisis une catégorie, puis glisse un élément sur la ligne du temps (ou clique ＋)</h3>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
@@ -3500,7 +3659,7 @@ class App extends Component {
           <div style="flex:1 1 64px;min-width:64px;border:1px dashed rgba(35,34,32,0.18);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#B8B2A8;font-size:18px;" title="Dépose ici pour ajouter à la fin">＋</div>
         </div>
         <p style="margin:10px 0 0;font-size:11.5px;color:#8A847C;">Clique un bloc pour caler l'aperçu dessus · glisse pour réordonner · ✕ retire (l'élément reste en bibliothèque) · la largeur d'un bloc reflète sa durée.</p>
-      </div>
+      </div>`}
 
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 18px;">
         <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Rangement du film — catégorie & tags</h3>

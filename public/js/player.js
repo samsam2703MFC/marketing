@@ -50,6 +50,7 @@ class Player extends Component {
     snapshot: null,          // snapshot en cours de lecture (bascule atomique)
     playedVer: 0,
     dataVer: 0,
+    revision: null,          // film continu : révision de la boucle en cours
     syncing: false,
     cachePct: 100,
     override: false,
@@ -157,6 +158,9 @@ class Player extends Component {
       const activateOk = !hb.activateAt || Date.parse(hb.activateAt) <= Date.now();
       if ((first || hb.assignedVer !== this.state.playedVer) && activateOk && !this.state.syncing) {
         await this.syncTo(hb.assignedVer);
+      } else if (hb.revision && hb.revision !== this.state.revision && !this.state.syncing) {
+        // Film continu : la boucle a changé (moment/saison) → on régénère.
+        await this.syncTo(this.state.playedVer || hb.assignedVer);
       }
       if (hb.dataVer !== this.state.dataVer && this.state.snapshot) {
         await this.syncPrices();
@@ -178,6 +182,7 @@ class Player extends Component {
         snapshot: snap,
         playedVer: a.assignedVer || snap.version || ver,
         dataVer: snap.dataVer || a.dataVer || 0,
+        revision: a.revision || snap.revision || null,
         syncing: false,
         cachePct: 100,
         t: 0,

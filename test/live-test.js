@@ -198,6 +198,11 @@ async function main() {
     if (!Array.isArray(r.media)) throw new Error('liste média absente');
     return `${r.media.length} média(s) · dossier ${r.dir}`;
   });
+  await step('GET /api/v1/product-moments — périodes de vente (lecture)', async () => {
+    const r = await call('GET', '/api/v1/product-moments');
+    if (!Array.isArray(r.moments) || !Array.isArray(r.rows)) throw new Error('structure périodes de vente');
+    return `${r.rows.length} règle(s) · ${r.moments.join('/')} · moment courant ${r.current}`;
+  });
   await step('GET /api/v1/film?film=… — lien direct par film', async () => {
     const base = await (await fetch(BASE + '/api/v1/film')).json();
     const id = base.playlistId || 'pl1';
@@ -307,6 +312,54 @@ async function main() {
       if (badPicked) throw new Error('média du mauvais moment pioché');
       if (cnt !== 1) throw new Error(`éligibles attendus 1, reçu ${cnt}`);
       return `moment ${moment} · 1 éligible pioché, mauvais moment exclu`;
+    });
+    await step('PUT /api/v1/product-moments — produit × moment (aller-retour)', async () => {
+      const cat = await call('GET', '/api/v1/catalog');
+      const p = (cat.products || [])[0];
+      if (!p) return 'catalogue vide (aucun produit)';
+      const before = await call('GET', '/api/v1/product-moments');
+      const out = await call('PUT', '/api/v1/product-moments', { rows: [
+        { productId: p.id, moment: 'matin', exception: false },
+        { productId: p.id, moment: 'midi', exception: true },
+      ] });
+      const inc = (out.rows || []).find((r) => r.productId === p.id && r.moment === 'matin');
+      const exc = (out.rows || []).find((r) => r.productId === p.id && r.moment === 'midi');
+      if (!inc || inc.exception) throw new Error('inclusion (matin) non enregistrée');
+      if (!exc || !exc.exception) throw new Error('exception (midi) non enregistrée');
+      await call('PUT', '/api/v1/product-moments', { rows: before.rows }); // restauration
+      return `${p.name} : matin vendu + midi exclu`;
+    });
+    await step('Film « continu » — boucle générée · moment · exception', async () => {
+      const cat = await call('GET', '/api/v1/catalog');
+      const actives = (cat.products || []).filter((p) => p.active !== false);
+      if (actives.length < 2) return `catalogue insuffisant (${actives.length} produit actif)`;
+      const p0 = actives[0]; const p1 = actives[1];
+      const st = await call('GET', '/api/v1/state');
+      const pmBefore = await call('GET', '/api/v1/product-moments');
+      // moment courant dans le vocabulaire des périodes de vente (matin/midi/aprem).
+      const moment = pmBefore.current;
+      // p0 exclu au moment courant ; p1 laissé par défaut (vendu partout).
+      await call('PUT', '/api/v1/product-moments', { rows: [{ productId: p0.id, moment, exception: true }] });
+      const contFilm = {
+        id: 'pl-contLT', name: 'Boucle continue LT', items: [], mode: 'continu',
+        continuous: { source: 'tout', perMoment: true, order: 'catalogue', maxItems: 20,
+          ratios: { liaison: 0, produitSeul: 0, media: 0, animation: 0, surprise: 0 },
+          exceptionFilm: st.activePlaylistId },
+      };
+      const pls = [...st.playlists, contFilm];
+      await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: pls, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      const f = await (await fetch(BASE + '/api/v1/film?film=pl-contLT')).json();
+      // restauration AVANT les assertions (pour ne rien laisser derrière)
+      await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      await call('PUT', '/api/v1/product-moments', { rows: pmBefore.rows });
+      if (!f.continuous) throw new Error('film non marqué continu');
+      if (!f.revision) throw new Error('révision absente');
+      if (!Array.isArray(f.modules) || !f.modules.length) throw new Error('boucle vide');
+      const itemPids = f.modules.flatMap((m) => (m.items || []).map((it) => it.productId));
+      if (itemPids.includes(p0.id)) throw new Error('produit exclu au moment courant présent dans la boucle');
+      if (!itemPids.includes(p1.id)) throw new Error('produit vendu absent de la boucle');
+      if (!f.modules.some((m) => String(m.id).startsWith('k-exc-'))) throw new Error('playlist d\'exception non injectée');
+      return `${f.modules.length} slot(s) · moment ${moment} · p0 exclu, p1 présent, exception OK`;
     });
     await step('POST heartbeat — auto-enregistrement d\'un player de test', async () => {
       const hb = await call('POST', `/api/v1/players/${pid}/heartbeat`, {
