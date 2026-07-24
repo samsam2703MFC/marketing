@@ -292,7 +292,7 @@ async function main() {
       // MySQL indisponible / pas de base cible : le miroir est best-effort.
       return `non répliqué (${out.error}) — best-effort, la régie fonctionne`;
     });
-    await step('POST /api/v1/plan — planning journalier (magasins × moments)', async () => {
+    await step('POST /api/v1/plan — planning hebdo (semaine × jour × moments)', async () => {
       const fleetRes = await call('GET', '/api/v1/fleet');
       const store = fleetRes.stores[0];
       if (!store) throw new Error('aucun magasin en base');
@@ -301,22 +301,35 @@ async function main() {
       if (!film) throw new Error('aucun film en base');
       const film2 = (stateNow.playlists || [])[1] || film;
       const before = await call('GET', '/api/v1/plan');
-      // matin couvrant toute la journée + DEUX films enchaînés
+      if (!Array.isArray(before.weeks) || before.weeks.length !== 5) throw new Error('semaines A–E absentes');
+      const day = (new Date().getDay() + 6) % 7; // 0 = lundi (comme le serveur)
+      // Semaine A, jour courant, matin couvrant toute la journée + 2 films enchaînés.
       const out = await call('POST', '/api/v1/plan', {
-        stores: [store.id], slots: { matin: [film.id, film2.id] },
+        stores: [store.id], week: 'A', day, slots: { matin: [film.id, film2.id] },
         windows: [{ id: 'matin', from: '00:00', to: '23:59' }, { id: 'midi', from: '11:00', to: '15:00' }, { id: 'aprem', from: '15:00', to: '20:00' }],
       });
-      const saved = out.byStore[store.id] && out.byStore[store.id].matin;
-      if (!out.ok || !Array.isArray(saved) || saved[0] !== film.id) {
-        throw new Error(`plan non enregistré : ${JSON.stringify(saved)}`);
-      }
+      const saved = (((out.byStore[store.id] || {}).A || {})[day] || {}).matin;
+      if (!out.ok || !Array.isArray(saved) || saved[0] !== film.id) throw new Error(`plan non enregistré : ${JSON.stringify(saved)}`);
+      await call('POST', '/api/v1/plan/active', { week: 'A' }); // semaine A diffusée
       const f = await (await fetch(BASE + `/api/v1/film?store=${encodeURIComponent(store.id)}`)).json();
       if (!f.plan || !f.plan.moment) throw new Error('moment du plan absent du film servi');
       const multi = film2.id !== film.id;
       if (multi && f.plan.films !== 2) throw new Error(`films enchaînés attendus : 2, reçu ${f.plan.films}`);
-      // nettoyage : on efface le plan de ce magasin
-      await call('POST', '/api/v1/plan', { stores: [store.id], slots: {}, windows: before.windows });
-      return `${store.store} : ${multi ? '2 films enchaînés' : '« ' + film.name + ' »'} au ${f.plan.moment} (${f.plan.window})`;
+      // nettoyage : on vide ce jour
+      await call('POST', '/api/v1/plan', { stores: [store.id], week: 'A', day, slots: {}, windows: before.windows });
+      return `${store.store} : ${multi ? '2 films enchaînés' : '« ' + film.name + ' »'} · sem. ${f.plan.week} jour ${f.plan.day} au ${f.plan.moment}`;
+    });
+    await step('POST /api/v1/plan/duplicate — copie d\'une semaine', async () => {
+      const store = (await call('GET', '/api/v1/fleet')).stores[0];
+      const film = (await call('GET', '/api/v1/state')).playlists[0];
+      const day = (new Date().getDay() + 6) % 7;
+      await call('POST', '/api/v1/plan', { stores: [store.id], week: 'B', day, slots: { midi: [film.id] } });
+      const out = await call('POST', '/api/v1/plan/duplicate', { stores: [store.id], from: 'B', to: 'C' });
+      const cell = (((out.byStore[store.id] || {}).C || {})[day] || {}).midi || [];
+      if (cell[0] !== film.id) throw new Error(`duplication B→C ratée : ${JSON.stringify(cell)}`);
+      await call('POST', '/api/v1/plan', { stores: [store.id], week: 'B', day, slots: {} });
+      await call('POST', '/api/v1/plan', { stores: [store.id], week: 'C', day, slots: {} });
+      return `semaine B copiée vers C (jour ${day})`;
     });
     await step('POST /api/v1/plan — plafond de 5 films par moment', async () => {
       const MAX = 5;
@@ -324,21 +337,18 @@ async function main() {
       const snap = await call('GET', '/api/v1/state'); // brouillon complet, restauré à la fin
       const modIds = (snap.modules || []).map((m) => m.id);
       if (!store || !modIds.length) throw new Error('pré-requis manquants (magasin / modules)');
+      const day = (new Date().getDay() + 6) % 7;
       // 6 films éphémères (chacun = 1 module) pour dépasser volontairement la limite
       const films6 = Array.from({ length: MAX + 1 }, (_, i) => ({ id: `plcap${i + 1}`, name: `Cap ${i + 1}`, items: [modIds[0]] }));
       await call('PUT', '/api/v1/draft', {
         modules: snap.modules, playlists: films6, activePlaylistId: 'plcap1',
         secPerLine: snap.secPerLine, loop: snap.loop,
       });
-      // on tente d'en programmer 6 dans le même moment → le serveur doit en garder 5
-      const out = await call('POST', '/api/v1/plan', {
-        stores: [store.id], slots: { midi: films6.map((f) => f.id) },
-        windows: [{ id: 'midi', from: '11:00', to: '15:00' }],
-      });
-      const saved = (out.byStore[store.id] || {}).midi || [];
+      const out = await call('POST', '/api/v1/plan', { stores: [store.id], week: 'E', day, slots: { midi: films6.map((f) => f.id) } });
+      const saved = (((out.byStore[store.id] || {}).E || {})[day] || {}).midi || [];
       if (saved.length !== MAX) throw new Error(`plafond attendu ${MAX}, obtenu ${saved.length}`);
-      // nettoyage : efface le plan, puis restaure le brouillon d'origine à l'identique
-      await call('POST', '/api/v1/plan', { stores: [store.id], slots: {} });
+      // nettoyage : efface la cellule, puis restaure le brouillon d'origine
+      await call('POST', '/api/v1/plan', { stores: [store.id], week: 'E', day, slots: {} });
       await call('PUT', '/api/v1/draft', {
         modules: snap.modules, playlists: snap.playlists,
         activePlaylistId: snap.activePlaylistId, secPerLine: snap.secPerLine, loop: snap.loop,

@@ -101,6 +101,7 @@ class App extends Component {
     pwaForm: null, pwaBusy: null, pwaResult: null,
     planWindows: [], planByStore: {}, planStores: [], planSlots: { matin: [], midi: [], aprem: [] },
     planBusy: false, planResult: null,
+    planWeek: 'A', planDay: 0, planActiveWeek: 'A', planSaving: false, planSavedAt: 0,
     surpriseVideos: [], surpriseBusy: false,
     onbOpen: false, onbStore: '', onbTest: {},
     onbDone: (() => { try { return JSON.parse(localStorage.getItem('sigOnbDone') || '[]'); } catch { return []; } })(),
@@ -187,6 +188,7 @@ class App extends Component {
         } : null,
         planWindows: plan.windows || [],
         planByStore: plan.byStore || {},
+        planActiveWeek: plan.activeWeek || 'A',
         catalog: { categories: cat.categories || [], products: cat.products || [] },
         catDraft: null, catDirty: false,
         playlists,
@@ -335,6 +337,7 @@ class App extends Component {
         from: (p.schedule && p.schedule.from) || '00:00',
         to: (p.schedule && p.schedule.to) || '23:59',
       },
+      planDays: (Array.isArray(p.planDays) && p.planDays.length === 7) ? p.planDays.map(Boolean) : [true, true, true, true, true, true, true],
       stores: Array.isArray(p.stores) ? p.stores : [],
     };
   }
@@ -362,6 +365,16 @@ class App extends Component {
     const days = [...f.schedule.days];
     days[d] = !days[d];
     this.updateFilm({ schedule: { ...f.schedule, days } });
+  }
+  // Jours de planning (dédiés) : filtrent le film dans le planning hebdo.
+  toggleFilmPlanDay(d) {
+    const f = this.activeFilm();
+    const pd = [...(f.planDays || [true, true, true, true, true, true, true])];
+    pd[d] = !pd[d];
+    this.updateFilm({ planDays: pd });
+  }
+  setFilmPlanDays(all) {
+    this.updateFilm({ planDays: all ? [true, true, true, true, true, true, true] : this.activeFilm().planDays });
   }
   setFilmWindow(from, to) {
     const f = this.activeFilm();
@@ -1128,66 +1141,73 @@ class App extends Component {
     if (name) this.saveStore(id, { name });
   }
 
-  // ---- planning journalier (magasins × films × moments) -------------------
+  // ---- planning hebdo (magasins × semaine A–E × jour × moments) -----------
+  // Contenu d'une cellule (magasin × semaine × jour) → { matin, midi, aprem }.
+  planCell(store, week, day) {
+    const c = (((this.state.planByStore || {})[store] || {})[week] || {})[day] || {};
+    return { matin: [...(c.matin || [])], midi: [...(c.midi || [])], aprem: [...(c.aprem || [])] };
+  }
+  // Recharge le tampon d'édition depuis le 1er magasin sélectionné.
+  syncPlanSlots() {
+    const s = this.state.planStores[0];
+    const slots = s ? this.planCell(s, this.state.planWeek, this.state.planDay) : { matin: [], midi: [], aprem: [] };
+    this.setState({ planSlots: slots });
+  }
   togglePlanStore(id) {
     const cur = this.state.planStores;
     const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
-    // Un seul magasin sélectionné : on précharge son plan enregistré.
-    let slots = this.state.planSlots;
-    if (next.length === 1) {
-      const saved = this.state.planByStore[next[0]] || {};
-      const arr = (v) => (Array.isArray(v) ? [...v] : (v ? [v] : []));
-      slots = { matin: arr(saved.matin), midi: arr(saved.midi), aprem: arr(saved.aprem) };
-    }
-    this.setState({ planStores: next, planSlots: slots, planResult: null });
+    this.setState({ planStores: next, planResult: null }, () => this.syncPlanSlots());
   }
+  setPlanWeek(w) { this.setState({ planWeek: w, planResult: null }, () => this.syncPlanSlots()); }
+  setPlanDay(d) { this.setState({ planDay: d, planResult: null }, () => this.syncPlanSlots()); }
   addPlanFilm(moment, filmId) {
     const cur = this.state.planSlots[moment] || [];
     if (cur.includes(filmId)) return; // pas de doublon dans un même moment
     if (cur.length >= MAX_PLAN_FILMS) { this.showToast(`${MAX_PLAN_FILMS} films maximum par moment`); return; }
-    this.setState({ planSlots: { ...this.state.planSlots, [moment]: [...cur, filmId] }, planResult: null });
+    if (!this.state.planStores.length) { this.showToast('Sélectionne d’abord un magasin'); return; }
+    this.setState({ planSlots: { ...this.state.planSlots, [moment]: [...cur, filmId] } }, () => this.scheduleSavePlan());
   }
   removePlanFilm(moment, idx) {
     const cur = this.state.planSlots[moment] || [];
-    this.setState({ planSlots: { ...this.state.planSlots, [moment]: cur.filter((_, i) => i !== idx) }, planResult: null });
+    this.setState({ planSlots: { ...this.state.planSlots, [moment]: cur.filter((_, i) => i !== idx) } }, () => this.scheduleSavePlan());
   }
   setPlanWindow(id, field, value) {
-    this.setState({ planWindows: this.state.planWindows.map((w) => (w.id === id ? { ...w, [field]: value } : w)) });
+    this.setState({ planWindows: this.state.planWindows.map((w) => (w.id === id ? { ...w, [field]: value } : w)) }, () => this.scheduleSavePlan());
   }
-  async validatePlan() {
+  // Enregistrement automatique du jour édité (débattu), pour tous les magasins choisis.
+  scheduleSavePlan() {
+    clearTimeout(this._planT);
+    this._planT = setTimeout(() => this.savePlanNow(), 600);
+  }
+  async savePlanNow() {
     const st = this.state;
-    if (st.planBusy) return;
-    if (!st.planStores.length) { this.showToast('Sélectionne au moins un magasin'); return; }
-    const allSlotFilms = [...(st.planSlots.matin || []), ...(st.planSlots.midi || []), ...(st.planSlots.aprem || [])];
-    if (!allSlotFilms.length) { this.showToast('Glisse au moins un film sur un moment'); return; }
-    this.setState({ planBusy: true, planResult: null });
+    if (!st.planStores.length) return;
+    this.setState({ planSaving: true });
     try {
-      // Enregistrer le plan (+ fenêtres), puis publier chaque film distinct sur
-      // les magasins choisis pour que les écrans aient le contenu en cache.
-      const out = await api('POST', '/plan', { stores: st.planStores, slots: st.planSlots, windows: st.planWindows });
-      const filmIds = [...new Set(allSlotFilms)];
-      let deployed = 0;
-      for (const fid of filmIds) {
-        try { await api('POST', '/publish', { mode: 'full', playlistId: fid, targets: st.planStores }); deployed++; }
-        catch { /* on continue : le lien reflète quand même le plan */ }
-      }
-      this.setState({
-        planBusy: false,
-        planByStore: out.byStore || {},
-        planResult: {
-          stores: st.planStores.map((id) => (this.state.fleet.find((f) => f.id === id) || {}).store || id),
-          films: filmIds.length, deployed,
-          links: st.planStores.map((id) => ({
-            store: (this.state.fleet.find((f) => f.id === id) || {}).store || id,
-            url: this.filmUrl({ store: id }),
-          })),
-        },
-      });
-      this.showToast(`Planning validé sur ${st.planStores.length} magasin(s) ✓`);
+      const out = await api('POST', '/plan', { stores: st.planStores, week: st.planWeek, day: st.planDay, slots: st.planSlots, windows: st.planWindows });
+      this.setState({ planByStore: out.byStore || {}, planActiveWeek: out.activeWeek || st.planActiveWeek, planSaving: false, planSavedAt: Date.now() });
     } catch (e) {
-      this.setState({ planBusy: false });
+      this.setState({ planSaving: false });
       this.showToast(e.status === 401 ? 'Session expirée — recharge la page (F5)' : `Erreur : ${e.message}`);
     }
+  }
+  async activatePlanWeek() {
+    try {
+      const out = await api('POST', '/plan/active', { week: this.state.planWeek });
+      this.setState({ planActiveWeek: out.activeWeek, planByStore: out.byStore || this.state.planByStore });
+      this.showToast(`Semaine ${this.state.planWeek} activée — c'est elle qui est diffusée ✓`);
+    } catch (e) { this.showToast(`Erreur : ${e.message}`); }
+  }
+  async duplicatePlanWeek(to) {
+    const st = this.state;
+    if (!st.planStores.length) { this.showToast('Sélectionne au moins un magasin'); return; }
+    if (!to || to === st.planWeek) return;
+    if (!window.confirm(`Copier la semaine ${st.planWeek} vers la semaine ${to} ?\nLe contenu de la semaine ${to} (magasins sélectionnés) sera remplacé.`)) return;
+    try {
+      const out = await api('POST', '/plan/duplicate', { stores: st.planStores, from: st.planWeek, to });
+      this.setState({ planByStore: out.byStore || {} }, () => this.syncPlanSlots());
+      this.showToast(`Semaine ${st.planWeek} copiée vers ${to} ✓`);
+    } catch (e) { this.showToast(`Erreur : ${e.message}`); }
   }
 
   // ---- rapport de diffusion (lien public, partageable) --------------------
@@ -1528,6 +1548,13 @@ class App extends Component {
       toggle: () => this.toggleFilmDay(d),
       style: chipDay(filmActive.schedule.days[d]),
     }));
+    const fPlanDays = filmActive.planDays || [true, true, true, true, true, true, true];
+    const filmPlanDaysVals = DAYS.map((lab, d) => ({
+      label: lab,
+      toggle: () => this.toggleFilmPlanDay(d),
+      style: chipDay(fPlanDays[d]),
+    }));
+    const filmPlanEveryDay = fPlanDays.every(Boolean);
     const filmSlotVals = SLOTS.map((s) => ({
       label: s.label,
       pick: () => this.setFilmWindow(s.from, s.to),
@@ -1710,16 +1737,31 @@ class App extends Component {
     }));
 
     // ---- vue planning (magasins × films × moments) ----
+    const DAY_SHORT = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+    const DAY_LONG = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+    const PWEEKS = ['A', 'B', 'C', 'D', 'E'];
+    const cellFilled = (cell) => ['matin', 'midi', 'aprem'].reduce((n, mm) => n + ((cell && cell[mm] || []).length), 0);
     const planStoreChips = st.fleet.filter((s) => s.active !== false).map((s) => {
       const on = st.planStores.includes(s.id);
-      const plan = st.planByStore[s.id] || {};
-      const nSlots = ['matin', 'midi', 'aprem'].filter((m) => plan[m]).length;
+      const wk = ((st.planByStore[s.id] || {})[st.planWeek]) || {};
+      const nDays = [0, 1, 2, 3, 4, 5, 6].filter((d) => cellFilled(wk[d])).length;
       return {
-        label: s.store, sub: nSlots ? `${nSlots}/3 moment(s) planifié(s)` : 'aucun plan',
+        label: s.store, sub: nDays ? `sem. ${st.planWeek} : ${nDays}/7 jour(s)` : `sem. ${st.planWeek} : vide`,
         toggle: () => this.togglePlanStore(s.id),
         style: `display:flex;flex-direction:column;gap:2px;align-items:flex-start;padding:11px 15px;border-radius:12px;cursor:pointer;text-align:left;background:${on ? 'rgba(141,29,44,0.06)' : '#FBF8F2'};border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};`,
         badge: on ? '✓' : '',
       };
+    });
+    // Onglets semaine A–E (celle diffusée porte un point vert).
+    const planWeekTabs = PWEEKS.map((wk) => ({
+      label: wk, active: wk === st.planWeek, playing: wk === st.planActiveWeek,
+      pick: () => this.setPlanWeek(wk),
+    }));
+    // Onglets jours (avec compteur de films pour le 1er magasin sélectionné).
+    const s0 = st.planStores[0];
+    const planDayTabs = DAY_SHORT.map((lbl, d) => {
+      const cell = s0 ? (((st.planByStore[s0] || {})[st.planWeek] || {})[d] || {}) : {};
+      return { label: lbl, long: DAY_LONG[d], active: d === st.planDay, count: cellFilled(cell), pick: () => this.setPlanDay(d) };
     });
     const filmById = (id) => st.playlists.find((p) => p.id === id);
     const planCols = (st.planWindows.length ? st.planWindows : [
@@ -1734,9 +1776,7 @@ class App extends Component {
         return f ? { name: f.name, count: f.items.length, color: c.color } : { name: '(film supprimé)', count: 0, color: '#8A847C' };
       });
       const full = ids.length >= MAX_PLAN_FILMS;
-      // Alternative fiable au glisser-déposer : un sélecteur « + film » qui
-      // ajoute directement (mêmes règles : pas de doublon, plafond de 5).
-      const addFilms = st.playlists.filter((pl) => !ids.includes(pl.id)).map((pl) => ({ id: pl.id, name: pl.name }));
+      const addFilms = st.playlists.filter((pl) => !ids.includes(pl.id) && (pl.planDays || [1, 1, 1, 1, 1, 1, 1])[st.planDay] !== false).map((pl) => ({ id: pl.id, name: pl.name }));
       return {
         id: w.id, label: w.label, from: w.from, to: w.to,
         count: ids.length, max: MAX_PLAN_FILMS, full,
@@ -1755,18 +1795,21 @@ class App extends Component {
         },
       };
     });
-    const planFilmCards = st.playlists.map((p) => {
+    // Bibliothèque de films filtrée sur les « jours de planning » du jour choisi.
+    const planFilmCards = st.playlists.filter((p) => (p.planDays || [1, 1, 1, 1, 1, 1, 1])[st.planDay] !== false).map((p) => {
       const c = filmCatOf(p);
+      const pd = p.planDays || [true, true, true, true, true, true, true];
+      const specific = !pd.every(Boolean);
       return {
         name: p.name, count: p.items.length, color: c.color, catLabel: c.label,
         tags: (p.tags || []).slice(0, 3),
-        // _dnd gèle les timers (heartbeat/poll) le temps du drag pour ne pas
-        // re-rendre l'arbre et perturber le glisser natif (voir componentDidMount).
+        dayBadge: specific ? DAY_SHORT.filter((_, i) => pd[i]).join('·') : '',
         onDragStart: (e) => { this._dnd = true; e.dataTransfer.setData('text/plain', 'film:' + p.id); e.dataTransfer.effectAllowed = 'copy'; },
         onDragEnd: () => { this._dnd = false; },
       };
     });
-    const planCanValidate = st.planStores.length > 0 && ['matin', 'midi', 'aprem'].some((m) => (st.planSlots[m] || []).length);
+    const planDupTargets = PWEEKS.filter((w) => w !== st.planWeek);
+    const planStoreLinks = st.planStores.map((id) => ({ store: (st.fleet.find((f) => f.id === id) || {}).store || id, url: this.filmUrl({ store: id }) }));
 
     const targets = st.fleet.map((s) => {
       const on = !!st.pubTargets[s.id];
@@ -1818,8 +1861,8 @@ class App extends Component {
         arr.push(crumb(`${(st.catDraft || st.catalog).categories.length} catégorie(s) · ${(st.catDraft || st.catalog).products.length} produit(s)${st.catDirty ? ' · non enregistrée' : ''}`, null, true));
       } else if (st.view === 'planning') {
         arr.push(crumb('Compositeur', () => this.setView('composer'), false));
-        arr.push(crumb('Planning du jour', null, false));
-        arr.push(crumb(`${st.planStores.length} magasin(s) sélectionné(s)`, null, true));
+        arr.push(crumb('Planning hebdo', null, false));
+        arr.push(crumb(`Semaine ${st.planWeek} · ${st.planStores.length} magasin(s)`, null, true));
       } else {
         arr.push(crumb('Compositeur', () => this.setView('composer'), false));
         arr.push(crumb(`Film : ${this.activeFilm().name}`, null, false));
@@ -1834,15 +1877,18 @@ class App extends Component {
       playlist, library, layoutOptions, motionGroups, items, days, posFields, timeSlots, crumbs,
       timelineBlocks, timelineTotal, timelineEndDrop, libCards, libTagChips, libEmptyMsg, pubDaysVals,
       prodCats, prodRows, storeCols, prodSelCat, langChips, isBaseLang,
-      planStoreChips, planCols, planFilmCards, planCanValidate,
-      planBusy: st.planBusy, planResult: st.planResult,
-      validatePlan: () => this.validatePlan(),
+      planStoreChips, planCols, planFilmCards, planWeekTabs, planDayTabs, planDupTargets, planStoreLinks,
+      planWeek: st.planWeek, planDay: st.planDay, planDayName: DAY_LONG[st.planDay],
+      planActiveWeek: st.planActiveWeek, planWeekActive: st.planWeek === st.planActiveWeek,
+      planSaving: st.planSaving, planHasStores: st.planStores.length > 0,
+      activatePlanWeek: () => this.activatePlanWeek(),
+      duplicatePlanWeek: (to) => this.duplicatePlanWeek(to),
       copyLink: (u) => this.copyLink(u),
       catDirty: st.catDirty, catSaving: st.catSaving,
       addProdCat: () => this.addProdCat(),
       addProd: () => this.addProd(),
       saveCat: () => this.saveCatalog(),
-      filmDaysVals, filmSlotVals, filmStoreVals, filmAllStores, filmSchedSummary,
+      filmDaysVals, filmPlanDaysVals, filmPlanEveryDay, filmSlotVals, filmStoreVals, filmAllStores, filmSchedSummary,
       filmCatVals, filmTagVals, filmTagInput: st.filmTagInput,
       onFilmTagInput: (e) => this.setState({ filmTagInput: e.target.value }),
       onFilmTagKey: (e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); this.addFilmTag(st.filmTagInput); this.setState({ filmTagInput: '' }); } },
@@ -2517,8 +2563,8 @@ class App extends Component {
   <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;">
     <div style="max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
       <div>
-        <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Planning du jour</h2>
-        <p style="margin:0;font-size:12.5px;color:#8A847C;">1. choisis les magasins · 2. glisse un ou plusieurs films sur chaque moment de la journée (matin / midi / après-midi — plusieurs films s'enchaînent en boucle) · 3. valide — les écrans basculent automatiquement selon l'heure, et tu obtiens le lien final.</p>
+        <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Planning hebdomadaire</h2>
+        <p style="margin:0;font-size:12.5px;color:#8A847C;">5 modèles de semaine réutilisables (A–E). Choisis les magasins, remplis chaque jour (matin / midi / après-midi), puis <strong>active</strong> la semaine à diffuser. Duplique une semaine pour la retoucher. Tout s'enregistre automatiquement ; les écrans basculent selon le jour et l'heure.</p>
       </div>
 
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
@@ -2535,24 +2581,72 @@ class App extends Component {
         ` : html`<p style="margin:0;font-size:12.5px;color:#8A847C;">Aucun magasin — importe ton catalogue (⚙ Paramètres → Rafraîchir) ou branche un écran.</p>`}
       </div>
 
+      <!-- 2 · Semaine (modèle A–E) + activation + duplication -->
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
-        <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Films — glisse-les sur un moment ci-dessous</h3>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">2 · Semaine (modèle)</h3>
+          <span style="font-size:12px;color:#8A847C;">Diffusée actuellement : <strong style="color:#2E6E4E;">Semaine ${v.planActiveWeek}</strong></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          ${v.planWeekTabs.map((t) => html`
+            <button onClick=${t.pick} title=${t.playing ? 'Semaine actuellement diffusée' : ''} style="display:flex;align-items:center;gap:6px;padding:9px 18px;font-size:14px;font-weight:700;border-radius:10px;cursor:pointer;${t.active ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.14);'}">
+              Sem. ${t.label}${t.playing ? html`<span style="width:7px;height:7px;border-radius:50%;background:${t.active ? '#fff' : '#2E6E4E'};"></span>` : ''}
+            </button>
+          `)}
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <button onClick=${v.activatePlanWeek} disabled=${v.planWeekActive} style="padding:9px 18px;font-size:13px;font-weight:600;border-radius:999px;cursor:${v.planWeekActive ? 'default' : 'pointer'};${v.planWeekActive ? 'background:rgba(46,110,78,0.12);color:#2E6E4E;border:1px solid rgba(46,110,78,0.4);' : 'background:#2E6E4E;color:#fff;border:1px solid #2E6E4E;'}">${v.planWeekActive ? `✓ Semaine ${v.planWeek} diffusée` : `▶ Diffuser la semaine ${v.planWeek}`}</button>
+          <span style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:#8A847C;">
+            Dupliquer la semaine ${v.planWeek} vers
+            <select onChange=${(e) => { const t = e.target.value; e.target.value = ''; if (t) v.duplicatePlanWeek(t); }} style="padding:8px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;cursor:pointer;">
+              <option value="">semaine…</option>
+              ${v.planDupTargets.map((w) => html`<option value=${w}>Semaine ${w}</option>`)}
+            </select>
+          </span>
+        </div>
+      </div>
+
+      ${!v.planHasStores ? html`
+        <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 20px;text-align:center;">
+          <p style="margin:0;font-size:13px;color:#8A847C;">Sélectionne au moins un magasin ci-dessus pour remplir son planning de la semaine ${v.planWeek}.</p>
+        </div>
+      ` : html`
+
+      <!-- 3 · Jour de la semaine -->
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+        <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">3 · Jour de la semaine</h3>
+        <div style="display:flex;gap:7px;flex-wrap:wrap;">
+          ${v.planDayTabs.map((d) => html`
+            <button onClick=${d.pick} style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 16px;border-radius:10px;cursor:pointer;min-width:64px;${d.active ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.14);'}">
+              <span style="font-size:13px;font-weight:700;">${d.label}</span>
+              <span style="font-size:10px;${d.active ? 'color:rgba(255,255,255,0.85);' : 'color:#8A847C;'}">${d.count ? `${d.count} film(s)` : '—'}</span>
+            </button>
+          `)}
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+        <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Films — ${v.planDayName} (glisse-les sur un moment)</h3>
         ${v.planFilmCards.length ? html`
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             ${v.planFilmCards.map((f) => html`
               <div draggable="true" onDragStart=${f.onDragStart} onDragEnd=${f.onDragEnd} style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:#FBF8F2;border:1px solid ${f.color}55;border-left:4px solid ${f.color};cursor:grab;">
                 <span style="font-size:13px;font-weight:600;">${f.name}</span>
                 <span style="font-size:10px;font-weight:600;color:${f.color};">${f.catLabel}</span>
+                ${f.dayBadge ? html`<span title="Jours de planning de ce film" style="font-size:9px;font-weight:700;color:#6E4A2B;background:rgba(110,74,43,0.1);border-radius:999px;padding:1px 6px;">${f.dayBadge}</span>` : ''}
                 <span style="font-size:10px;color:#8A847C;">${f.count} mod.</span>
                 ${f.tags.map((t) => html`<span style="font-size:9px;font-weight:600;color:${f.color};">#${t}</span>`)}
               </div>
             `)}
           </div>
-        ` : html`<p style="margin:0;font-size:12.5px;color:#8A847C;">Aucun film — crée-en dans le Compositeur (onglet 2 · Playlist).</p>`}
+        ` : html`<p style="margin:0;font-size:12.5px;color:#8A847C;">Aucun film disponible pour ${v.planDayName}. Un film n'apparaît que si son « jour de planning » inclut ce jour (réglable dans les propriétés du film, onglet Playlist).</p>`}
       </div>
 
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
-        <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">2 · Moments de la journée</h3>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;">
+          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Semaine ${v.planWeek} · ${v.planDayName} — moments</h3>
+          <span style="font-size:11.5px;color:${v.planSaving ? '#8A847C' : '#2E6E4E'};">${v.planSaving ? 'Enregistrement…' : '✓ Enregistré automatiquement'}</span>
+        </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
           ${v.planCols.map((col) => html`
             <div style="display:flex;flex-direction:column;gap:10px;">
@@ -2594,33 +2688,25 @@ class App extends Component {
             </div>
           `)}
         </div>
-        <p style="margin:12px 0 0;font-size:11.5px;color:#8A847C;">Glisse les films sur un moment, ou ajoute-les avec le menu « ＋ ajouter » (jusqu'à 5 par moment). Hors de tout créneau, l'écran affiche le film assigné habituel. Les fenêtres sont communes à tous les magasins.</p>
+        <p style="margin:12px 0 0;font-size:11.5px;color:#8A847C;">Glisse les films sur un moment, ou ajoute-les avec le menu « ＋ ajouter » (jusqu'à 5 par moment, enchaînés en boucle). Les fenêtres horaires sont communes à tous les magasins et à toutes les semaines.</p>
       </div>
 
+      <!-- Liens des écrans (semaine active diffusée en direct) -->
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">3 · Valider & déployer</h3>
-          <button onClick=${v.validatePlan} disabled=${!v.planCanValidate || v.planBusy}
-            style="padding:11px 24px;font-size:14px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.planCanValidate && !v.planBusy ? 'pointer' : 'not-allowed'};background:${v.planCanValidate ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.planCanValidate ? '#fff' : '#8A847C'};">
-            ${v.planBusy ? 'Déploiement…' : 'Valider le planning ↗'}
-          </button>
-        </div>
-        ${v.planResult && html`
-          <div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(35,34,32,0.08);">
-            <div style="font-size:13px;font-weight:600;color:#2E7D32;margin-bottom:10px;">✓ Planning déployé — ${v.planResult.films} film(s) sur ${v.planResult.stores.length} magasin(s) · liens finaux :</div>
-            <div style="display:flex;flex-direction:column;gap:8px;">
-              ${v.planResult.links.map((l) => html`
-                <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.08);">
-                  <span style="flex:0 0 150px;font-size:13px;font-weight:600;">${l.store}</span>
-                  <input readonly value=${l.url} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:7px 10px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:7px;background:#fff;" />
-                  <button onClick=${() => v.copyLink(l.url)} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Copier</button>
-                  <a href=${l.url} target="_blank" style="flex:0 0 auto;font-size:12px;font-weight:600;color:#8D1D2C;">↗</a>
-                </div>
-              `)}
+        <h3 style="margin:0 0 4px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Liens des écrans</h3>
+        <p style="margin:0 0 12px;font-size:11.5px;color:#8A847C;">Un lien par magasin, à mettre sur l'écran. Il diffuse en direct la <strong>semaine active (${v.planActiveWeek})</strong>, le bon film selon le jour et l'heure.</p>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          ${v.planStoreLinks.map((l) => html`
+            <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.08);">
+              <span style="flex:0 0 150px;font-size:13px;font-weight:600;">${l.store}</span>
+              <input readonly value=${l.url} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:7px 10px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:7px;background:#fff;" />
+              <button onClick=${() => v.copyLink(l.url)} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Copier</button>
+              <a href=${l.url} target="_blank" style="flex:0 0 auto;font-size:12px;font-weight:600;color:#8D1D2C;">↗</a>
             </div>
-          </div>
-        `}
+          `)}
+        </div>
       </div>
+      `}
     </div>
   </div>
   `}
@@ -3138,6 +3224,15 @@ class App extends Component {
             <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:7px;">Jours de diffusion</div>
             <div style="display:flex;flex-wrap:wrap;gap:6px;">
               ${v.filmDaysVals.map((d) => html`<button onClick=${d.toggle} style=${d.style}>${d.label}</button>`)}
+            </div>
+          </div>
+          <div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;">
+              <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Jours de planning</span>
+              ${infoTip('Filtre ce film dans le Planning hebdo : il n’apparaît que les jours cochés (ex. « Crêpes » = mercredi). Indépendant des jours de diffusion.')}
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              ${v.filmPlanDaysVals.map((d) => html`<button onClick=${d.toggle} style=${d.style}>${d.label}</button>`)}
             </div>
           </div>
           <div>

@@ -205,6 +205,9 @@ function migrate(db) {
   // Le film est rangé dans une catégorie colorée + porte des tags libres.
   if (!plCols.includes('cat')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN cat TEXT NOT NULL DEFAULT ''`);
   if (!plCols.includes('tags')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'`);
+  // Jours de planning dédiés (indépendants des jours de diffusion) : filtrent
+  // les films proposés quand on remplit un jour du planning hebdo (ex. crêpes = mercredi).
+  if (!plCols.includes('plan_days')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN plan_days TEXT NOT NULL DEFAULT '[1,1,1,1,1,1,1]'`);
   // Combo d'écrans du magasin (ex. 3 × 55″ portrait) → taille du film en px.
   const stCols = db.prepare('PRAGMA table_info(sig_stores)').all().map((c) => c.name);
   if (!stCols.includes('screens')) db.exec(`ALTER TABLE sig_stores ADD COLUMN screens INTEGER NOT NULL DEFAULT 1`);
@@ -331,6 +334,18 @@ function migrate(db) {
     PRIMARY KEY (store_id, moment, position)
   );
 
+  -- Planning hebdomadaire : 5 modèles de semaine réutilisables (A–E),
+  -- 7 jours × 3 moments, un ou plusieurs films par cellule, par magasin.
+  CREATE TABLE IF NOT EXISTS sig_weekplans (
+    store_id TEXT NOT NULL,
+    week     TEXT NOT NULL,
+    day      INTEGER NOT NULL,
+    moment   TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    film_id  TEXT NOT NULL,
+    PRIMARY KEY (store_id, week, day, moment, position)
+  );
+
   CREATE TABLE IF NOT EXISTS sig_langs (
     id         TEXT PRIMARY KEY,
     label      TEXT NOT NULL,
@@ -359,6 +374,18 @@ function migrate(db) {
     insL.run('en', 'English', 2);
     insL.run('de', 'Deutsch', 3);
   }
+
+  // Planning hebdo : reprise unique de l'ancien planning journalier dans la
+  // semaine A (appliqué aux 7 jours), et semaine active par défaut = A.
+  if (!getSetting('mig_weekplans')) {
+    const old = db.prepare('SELECT store_id, moment, position, film_id FROM sig_dayplans').all();
+    if (old.length) {
+      const insW = db.prepare('INSERT OR IGNORE INTO sig_weekplans(store_id, week, day, moment, position, film_id) VALUES (?, ?, ?, ?, ?, ?)');
+      for (const r of old) for (let d = 0; d < 7; d++) insW.run(r.store_id, 'A', d, r.moment, r.position, r.film_id);
+    }
+    setSetting('mig_weekplans', '1');
+  }
+  if (getSetting('active_week') == null) setSetting('active_week', 'A');
 }
 
 export function loadLangs() {
@@ -543,6 +570,10 @@ const HHMM = (v, fb) => (/^\d{1,2}:\d{2}$/.test(String(v || '')) ? String(v) : f
 
 // Nombre maximum de films par moment de la journée.
 export const MAX_PLAN_FILMS = 5;
+// Modèles de semaine réutilisables (l'un est « actif » = diffusé).
+export const PLAN_WEEKS = ['A', 'B', 'C', 'D', 'E'];
+const okWeek = (w) => (PLAN_WEEKS.includes(String(w)) ? String(w) : 'A');
+const okDay = (d) => { const n = parseInt(d, 10); return n >= 0 && n <= 6 ? n : 0; };
 
 export function planWindows() {
   let saved = {};
@@ -554,24 +585,28 @@ export function planWindows() {
   }));
 }
 
+export function activeWeek() { return okWeek(getSetting('active_week', 'A')); }
+
+// Planning hebdomadaire complet : byStore[store][week][day][moment] = [films].
 export function loadPlan() {
   const db = getDb();
-  const rows = db.prepare('SELECT store_id, moment, film_id FROM sig_dayplans ORDER BY store_id, moment, position').all();
+  const rows = db.prepare('SELECT store_id, week, day, moment, film_id FROM sig_weekplans ORDER BY store_id, week, day, moment, position').all();
   const byStore = {};
   for (const r of rows) {
-    if (!byStore[r.store_id]) byStore[r.store_id] = {};
-    if (!byStore[r.store_id][r.moment]) byStore[r.store_id][r.moment] = [];
-    byStore[r.store_id][r.moment].push(r.film_id);
+    const s = (byStore[r.store_id] ||= {});
+    const w = (s[r.week] ||= {});
+    const d = (w[r.day] ||= {});
+    (d[r.moment] ||= []).push(r.film_id);
   }
-  return { windows: planWindows(), byStore };
+  return { windows: planWindows(), weeks: PLAN_WEEKS, activeWeek: activeWeek(), byStore };
 }
 
 // Normalise un slot : filmId, [filmId, …] ou '' → tableau d'ids.
 const slotFilms = (v) => (Array.isArray(v) ? v : (v ? [v] : [])).map(String).filter(Boolean);
 
-// Écrit le plan (matin/midi/aprem → un ou plusieurs films) pour chaque magasin.
-// slots : { matin: [filmId, …]|filmId|'', midi: …, aprem: … }.
-export function savePlan({ stores, slots, windows }) {
+// Écrit UN jour (les 3 moments) d'un modèle de semaine, pour chaque magasin.
+// { stores, week, day, slots: { matin:[…], midi:[…], aprem:[…] }, windows }.
+export function savePlan({ stores, week, day, slots, windows }) {
   const db = getDb();
   if (Array.isArray(windows) && windows.length) {
     const w = {};
@@ -582,18 +617,20 @@ export function savePlan({ stores, slots, windows }) {
     setSetting('plan_windows', JSON.stringify(w));
   }
   const targets = (Array.isArray(stores) ? stores : []).map(String);
+  const wk = okWeek(week);
+  const dy = okDay(day);
   if (!targets.length) return loadPlan();
   const validFilms = new Set(db.prepare('SELECT id FROM sig_playlists').all().map((p) => p.id));
   db.exec('BEGIN');
   try {
-    const del = db.prepare('DELETE FROM sig_dayplans WHERE store_id = ? AND moment = ?');
-    const ins = db.prepare('INSERT INTO sig_dayplans(store_id, moment, position, film_id) VALUES (?, ?, ?, ?)');
+    const del = db.prepare('DELETE FROM sig_weekplans WHERE store_id = ? AND week = ? AND day = ? AND moment = ?');
+    const ins = db.prepare('INSERT INTO sig_weekplans(store_id, week, day, moment, position, film_id) VALUES (?, ?, ?, ?, ?, ?)');
     for (const sid of targets) {
       for (const m of PLAN_MOMENTS) {
-        del.run(sid, m.id);
+        del.run(sid, wk, dy, m.id);
         // Dédoublonnage + plafond : au plus MAX_PLAN_FILMS films par moment.
         const films = [...new Set(slotFilms(slots && slots[m.id]).filter((fid) => validFilms.has(fid)))].slice(0, MAX_PLAN_FILMS);
-        films.forEach((fid, i) => ins.run(sid, m.id, i, fid));
+        films.forEach((fid, i) => ins.run(sid, wk, dy, m.id, i, fid));
       }
     }
     db.exec('COMMIT');
@@ -604,12 +641,44 @@ export function savePlan({ stores, slots, windows }) {
   return loadPlan();
 }
 
-// Films programmés pour un magasin à un instant donné (selon les fenêtres).
-// Renvoie { films: [ids], moment, label, window } ou null.
+// Choisit la semaine active (globale : le modèle actuellement diffusé).
+export function setActiveWeek(week) {
+  setSetting('active_week', okWeek(week));
+  return loadPlan();
+}
+
+// Copie tout le contenu d'un modèle de semaine vers un autre, pour des magasins.
+export function duplicateWeek({ stores, from, to }) {
+  const db = getDb();
+  const src = okWeek(from);
+  const dst = okWeek(to);
+  const targets = (Array.isArray(stores) ? stores : []).map(String);
+  if (!targets.length || src === dst) return loadPlan();
+  db.exec('BEGIN');
+  try {
+    const del = db.prepare('DELETE FROM sig_weekplans WHERE store_id = ? AND week = ?');
+    const rows = db.prepare('SELECT day, moment, position, film_id FROM sig_weekplans WHERE store_id = ? AND week = ?');
+    const ins = db.prepare('INSERT INTO sig_weekplans(store_id, week, day, moment, position, film_id) VALUES (?, ?, ?, ?, ?, ?)');
+    for (const sid of targets) {
+      del.run(sid, dst);
+      for (const r of rows.all(sid, src)) ins.run(sid, dst, r.day, r.moment, r.position, r.film_id);
+    }
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+  return loadPlan();
+}
+
+// Films programmés pour un magasin à un instant donné : semaine active + jour
+// courant + fenêtre horaire. Renvoie { films, moment, label, window, week, day }.
 export function planFilmAt(storeId, date) {
   if (!storeId) return null;
   const db = getDb();
-  const rows = db.prepare('SELECT moment, film_id FROM sig_dayplans WHERE store_id = ? ORDER BY moment, position').all(storeId);
+  const wk = activeWeek();
+  const day = (date.getDay() + 6) % 7; // 0 = lundi
+  const rows = db.prepare('SELECT moment, film_id FROM sig_weekplans WHERE store_id = ? AND week = ? AND day = ? ORDER BY moment, position').all(storeId, wk, day);
   if (!rows.length) return null;
   const byMoment = new Map();
   for (const r of rows) { if (!byMoment.has(r.moment)) byMoment.set(r.moment, []); byMoment.get(r.moment).push(r.film_id); }
@@ -619,7 +688,7 @@ export function planFilmAt(storeId, date) {
   for (const w of wins) {
     const a = toMin(w.from), b = toMin(w.to);
     const inWin = a <= b ? (mins >= a && mins < b) : (mins >= a || mins < b);
-    if (inWin && byMoment.has(w.id)) return { films: byMoment.get(w.id), moment: w.id, label: w.label, window: `${w.from}–${w.to}` };
+    if (inWin && byMoment.has(w.id)) return { films: byMoment.get(w.id), moment: w.id, label: w.label, window: `${w.from}–${w.to}`, week: wk, day };
   }
   return null;
 }
@@ -856,6 +925,7 @@ export function loadPlaylists() {
       from: p.sched_from || '00:00',
       to: p.sched_to || '23:59',
     },
+    planDays: (() => { try { return JSON.parse(p.plan_days || '[1,1,1,1,1,1,1]').map(Boolean); } catch { return [true, true, true, true, true, true, true]; } })(),
     stores: JSON.parse(p.stores || '[]'),
   }));
 }
@@ -922,7 +992,7 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
       }
     });
     const validIds = new Set(modules.map((m) => m.id));
-    const insPls = db.prepare('INSERT INTO sig_playlists(id, name, sort_order, sched_days, sched_from, sched_to, stores, cat, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    const insPls = db.prepare('INSERT INTO sig_playlists(id, name, sort_order, sched_days, sched_from, sched_to, stores, cat, tags, plan_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     const insIt = db.prepare('INSERT INTO sig_playlist_items(playlist_id, position, module_id) VALUES (?, ?, ?)');
     playlists.forEach((pl, i) => {
       const sched = pl.schedule || {};
@@ -932,7 +1002,8 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
         String(sched.from || '00:00'), String(sched.to || '23:59'),
         JSON.stringify(Array.isArray(pl.stores) ? pl.stores.map(String) : []),
         String(pl.cat || ''),
-        JSON.stringify(Array.isArray(pl.tags) ? pl.tags.map(String).filter(Boolean) : [])
+        JSON.stringify(Array.isArray(pl.tags) ? pl.tags.map(String).filter(Boolean) : []),
+        JSON.stringify((Array.isArray(pl.planDays) && pl.planDays.length === 7 ? pl.planDays : [1, 1, 1, 1, 1, 1, 1]).map((d) => (d ? 1 : 0)))
       );
       (pl.items || []).filter((id) => validIds.has(id)).forEach((id, j) => insIt.run(String(pl.id), j, id));
     });

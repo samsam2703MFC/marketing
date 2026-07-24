@@ -91,19 +91,21 @@ class Report extends Component {
     const filmDur = (f) => filmMods(f).filter(playable).reduce((s, m) => s + moduleDur(m, spl), 0);
     const storeName = (id) => (d.stores.find((s) => s.id === id) || {}).name || id;
 
-    // Où chaque film est-il programmé ? (planning + assignation)
+    // Où chaque film est-il programmé dans la semaine active ? (jours concernés)
+    const activeWeek = (d.plan && d.plan.activeWeek) || 'A';
+    const DAY_LONG = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
     const filmUsage = (fid) => {
-      const out = [];
       const byStore = (d.plan && d.plan.byStore) || {};
-      for (const [sid, moments] of Object.entries(byStore)) {
-        for (const [mid, films] of Object.entries(moments)) {
-          if ((films || []).includes(fid)) {
-            const w = (d.plan.windows || []).find((x) => x.id === mid);
-            out.push(`${w ? w.label : mid} · ${storeName(sid)}`);
+      const set = new Set();
+      for (const [sid, weeks] of Object.entries(byStore)) {
+        const wk = (weeks || {})[activeWeek] || {};
+        for (const [day, moments] of Object.entries(wk)) {
+          for (const films of Object.values(moments || {})) {
+            if ((films || []).includes(fid)) set.add(`${DAY_LONG[day]} · ${storeName(sid)}`);
           }
         }
       }
-      return out;
+      return [...set];
     };
 
     const chip = (txt, color) => html`<span style="font-size:11px;font-weight:700;letter-spacing:0.04em;color:${color};background:${color}18;border:1px solid ${color}55;border-radius:999px;padding:2px 10px;">${txt}</span>`;
@@ -218,23 +220,32 @@ class Report extends Component {
   }
 
   renderPlanning(d, byId) {
-    const spl = d.secPerLine || 4;
     const windows = (d.plan && d.plan.windows) || [];
     const byStore = (d.plan && d.plan.byStore) || {};
+    const activeWeek = (d.plan && d.plan.activeWeek) || 'A';
+    const DAY_LONG = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
     const filmName = (fid) => (d.playlists.find((p) => p.id === fid) || {}).name || '(film supprimé)';
     const filmCat = (fid) => filmCatOf(d.playlists.find((p) => p.id === fid));
-    const planned = d.stores.filter((s) => byStore[s.id] && Object.values(byStore[s.id]).some((a) => (a || []).length));
+    const filled = (cell) => windows.some((w) => ((cell || {})[w.id] || []).length);
 
     const windowsRow = html`
-      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
+        <span style="font-size:12px;font-weight:700;color:#2E6E4E;background:rgba(46,110,78,0.1);border:1px solid rgba(46,110,78,0.35);border-radius:999px;padding:4px 12px;">Semaine diffusée : ${activeWeek}</span>
         ${windows.map((w) => html`<span style="font-size:12px;color:#4A4640;background:#F5EFE4;border-radius:999px;padding:4px 12px;"><strong>${w.label}</strong> ${w.from} → ${w.to}</span>`)}
       </div>`;
+
+    // Seuls les magasins qui ont du contenu dans la semaine active, par jour.
+    const planned = d.stores.map((s) => {
+      const week = (byStore[s.id] || {})[activeWeek] || {};
+      const days = [0, 1, 2, 3, 4, 5, 6].filter((day) => filled(week[day]));
+      return { store: s, week, days };
+    }).filter((x) => x.days.length);
 
     if (!planned.length) {
       return card(html`
         ${windowsRow}
         <p style="margin:6px 0 0;font-size:13px;color:#8A847C;line-height:1.6;">
-          Aucun créneau programmé pour l'instant. Hors planning, chaque écran diffuse le film qui lui est assigné par défaut.
+          Aucun créneau programmé dans la semaine active (${activeWeek}). Hors planning, chaque écran diffuse le film qui lui est assigné par défaut.
           Les fenêtres horaires ci-dessus sont communes à tous les magasins.
         </p>
       `);
@@ -243,27 +254,33 @@ class Report extends Component {
     return card(html`
       ${windowsRow}
       <p style="margin:0 0 14px;font-size:12.5px;color:#8A847C;line-height:1.55;">
-        Pour chaque magasin, voici le film joué à chaque moment de la journée (plusieurs films s'enchaînent en boucle).
-        En dehors de ces créneaux, l'écran reprend son film assigné habituel.
+        Planning de la semaine active (${activeWeek}) : pour chaque magasin et chaque jour, le(s) film(s) joué(s) à chaque moment
+        (plusieurs films s'enchaînent en boucle). Hors créneau, l'écran reprend son film habituel.
       </p>
-      <div style="display:flex;flex-direction:column;gap:14px;">
-        ${planned.map((s) => html`
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        ${planned.map(({ store, week, days }) => html`
           <div>
-            <div style="font-size:14px;font-weight:700;margin-bottom:7px;">${s.name}</div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;">
-              ${windows.map((w) => {
-                const fids = (byStore[s.id] && byStore[s.id][w.id]) || [];
-                return html`
-                  <div style="border:1px solid rgba(35,34,32,0.10);border-radius:11px;padding:11px 13px;background:#FBF8F2;">
-                    <div style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;">${w.label} · ${w.from}–${w.to}</div>
-                    ${fids.length ? html`<div style="display:flex;flex-direction:column;gap:5px;margin-top:7px;">
-                      ${fids.map((fid, i) => html`<div style="display:flex;align-items:center;gap:7px;">
-                        <span style="font-size:10px;font-weight:700;color:${filmCat(fid).color};opacity:0.7;">${i + 1}</span>
-                        <span style="font-size:13px;font-weight:600;color:${filmCat(fid).color};">${filmName(fid)}</span>
-                      </div>`)}
-                    </div>` : html`<div style="font-size:12px;color:#B8B2A8;margin-top:7px;">— rien —</div>`}
-                  </div>`;
-              })}
+            <div style="font-size:14px;font-weight:700;margin-bottom:8px;">${store.name}</div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              ${days.map((day) => html`
+                <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+                  <span style="flex:0 0 92px;font-size:12.5px;font-weight:700;color:#6E4A2B;padding-top:3px;">${DAY_LONG[day]}</span>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;flex:1 1 auto;">
+                    ${windows.map((w) => {
+                      const fids = (week[day] && week[day][w.id]) || [];
+                      if (!fids.length) return '';
+                      return html`
+                        <div style="border:1px solid rgba(35,34,32,0.1);border-radius:10px;padding:8px 11px;background:#FBF8F2;min-width:150px;">
+                          <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#8A847C;">${w.label}</div>
+                          ${fids.map((fid, i) => html`<div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+                            <span style="font-size:9px;font-weight:700;color:${filmCat(fid).color};opacity:0.7;">${i + 1}</span>
+                            <span style="font-size:12.5px;font-weight:600;color:${filmCat(fid).color};">${filmName(fid)}</span>
+                          </div>`)}
+                        </div>`;
+                    })}
+                  </div>
+                </div>
+              `)}
             </div>
           </div>
         `)}

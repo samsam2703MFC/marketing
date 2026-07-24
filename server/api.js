@@ -6,7 +6,7 @@ import {
   getDb, getSetting, setSetting, getIntSetting,
   loadModules, loadPlaylist, loadPlaylists, activePlaylistId, saveDraft, storeFormat, DB_PATH,
   loadElementTypes, loadCatalog, saveCatalog, applyStorePrices, applyStoreLang, loadLangs,
-  loadPlan, savePlan, planFilmAt,
+  loadPlan, savePlan, planFilmAt, setActiveWeek, duplicateWeek,
   checkLogin, createSession, sessionUser, destroySession,
 } from './db.js';
 import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
@@ -393,7 +393,7 @@ function filmJson(storeId, filmId) {
           playlist: snaps.flatMap((s) => s.playlist || []),
         };
       }
-      if (snap) snap.plan = { moment: planned.label, window: planned.window, films: snaps.length };
+      if (snap) snap.plan = { moment: planned.label, window: planned.window, films: snaps.length, week: planned.week, day: planned.day };
     }
     if (!snap) {
       const row = db.prepare('SELECT MAX(assigned_ver) AS v FROM sig_players WHERE store_id = ?').get(storeId);
@@ -603,12 +603,25 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       return send(200, out);
     }
 
-    // ---- planning journalier (magasins × films × moments) ------------------
+    // ---- planning hebdo (magasins × semaine A–E × jour × moments) ----------
     if (req.method === 'GET' && path === '/plan') return send(200, loadPlan());
     if (req.method === 'POST' && path === '/plan') {
       const body = await readBody();
       if (!Array.isArray(body.stores) || !body.stores.length) return send(400, { error: 'stores requis' });
-      const out = savePlan({ stores: body.stores, slots: body.slots || {}, windows: body.windows });
+      const out = savePlan({ stores: body.stores, week: body.week, day: body.day, slots: body.slots || {}, windows: body.windows });
+      scheduleMirror();
+      return send(200, { ok: true, ...out, savedAt: nowIso() });
+    }
+    if (req.method === 'POST' && path === '/plan/active') {
+      const body = await readBody();
+      const out = setActiveWeek(body.week);
+      scheduleMirror();
+      return send(200, { ok: true, ...out, savedAt: nowIso() });
+    }
+    if (req.method === 'POST' && path === '/plan/duplicate') {
+      const body = await readBody();
+      if (!Array.isArray(body.stores) || !body.stores.length) return send(400, { error: 'stores requis' });
+      const out = duplicateWeek({ stores: body.stores, from: body.from, to: body.to });
       scheduleMirror();
       return send(200, { ok: true, ...out, savedAt: nowIso() });
     }
