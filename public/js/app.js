@@ -110,6 +110,10 @@ class App extends Component {
     this._last = performance.now();
     this._raf = requestAnimationFrame(this.tick);
     this._hb = setInterval(() => {
+      // Pendant un glisser-déposer (planning), on suspend tout re-rendu : re-rendre
+      // l'arbre pendant un drag natif HTML5 peut annuler le drag dans certains
+      // navigateurs (la carte en cours de déplacement est re-patchée).
+      if (this._dnd) return;
       this.setState((s) => ({
         hbTick: s.hbTick + 1,
         fleet: s.fleet.map((st) => ({
@@ -118,7 +122,7 @@ class App extends Component {
         })),
       }));
     }, 1000);
-    this._poll = setInterval(() => this.refreshFleet(), 5000);
+    this._poll = setInterval(() => { if (!this._dnd) this.refreshFleet(); }, 5000);
     this._key = (e) => {
       const tag = (e.target && e.target.tagName) || '';
       const typing = /INPUT|TEXTAREA|SELECT/.test(tag);
@@ -300,7 +304,7 @@ class App extends Component {
   tick = (now) => {
     const dt = Math.min(0.05, (now - this._last) / 1000);
     this._last = now;
-    if (this.state.playing && !this.state.loading) {
+    if (this.state.playing && !this.state.loading && !this._dnd) {
       const total = this.total();
       let t = this.state.t + dt;
       if (t >= total) {
@@ -1679,9 +1683,14 @@ class App extends Component {
         return f ? { name: f.name, count: f.items.length, color: c.color } : { name: '(film supprimé)', count: 0, color: '#8A847C' };
       });
       const full = ids.length >= MAX_PLAN_FILMS;
+      // Alternative fiable au glisser-déposer : un sélecteur « + film » qui
+      // ajoute directement (mêmes règles : pas de doublon, plafond de 5).
+      const addFilms = st.playlists.filter((pl) => !ids.includes(pl.id)).map((pl) => ({ id: pl.id, name: pl.name }));
       return {
         id: w.id, label: w.label, from: w.from, to: w.to,
         count: ids.length, max: MAX_PLAN_FILMS, full,
+        addFilms,
+        onAdd: (e) => { const v = e.target.value; e.target.value = ''; if (v) this.addPlanFilm(w.id, v); },
         onFrom: (e) => this.setPlanWindow(w.id, 'from', e.target.value),
         onTo: (e) => this.setPlanWindow(w.id, 'to', e.target.value),
         films: films.map((f, i) => ({ ...f, order: i + 1, remove: () => this.removePlanFilm(w.id, i) })),
@@ -1689,6 +1698,7 @@ class App extends Component {
         onDragLeave: (e) => e.currentTarget.classList.remove('drag-over'),
         onDrop: (e) => {
           e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+          this._dnd = false; // filet : on relâche le gel même si dragend manque
           const d = e.dataTransfer.getData('text/plain');
           if (d.startsWith('film:')) this.addPlanFilm(w.id, d.slice(5));
         },
@@ -1699,7 +1709,10 @@ class App extends Component {
       return {
         name: p.name, count: p.items.length, color: c.color, catLabel: c.label,
         tags: (p.tags || []).slice(0, 3),
-        onDragStart: (e) => { e.dataTransfer.setData('text/plain', 'film:' + p.id); e.dataTransfer.effectAllowed = 'copy'; },
+        // _dnd gèle les timers (heartbeat/poll) le temps du drag pour ne pas
+        // re-rendre l'arbre et perturber le glisser natif (voir componentDidMount).
+        onDragStart: (e) => { this._dnd = true; e.dataTransfer.setData('text/plain', 'film:' + p.id); e.dataTransfer.effectAllowed = 'copy'; },
+        onDragEnd: () => { this._dnd = false; },
       };
     });
     const planCanValidate = st.planStores.length > 0 && ['matin', 'midi', 'aprem'].some((m) => (st.planSlots[m] || []).length);
@@ -2465,7 +2478,7 @@ class App extends Component {
         ${v.planFilmCards.length ? html`
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             ${v.planFilmCards.map((f) => html`
-              <div draggable="true" onDragStart=${f.onDragStart} style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:#FBF8F2;border:1px solid ${f.color}55;border-left:4px solid ${f.color};cursor:grab;">
+              <div draggable="true" onDragStart=${f.onDragStart} onDragEnd=${f.onDragEnd} style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:#FBF8F2;border:1px solid ${f.color}55;border-left:4px solid ${f.color};cursor:grab;">
                 <span style="font-size:13px;font-weight:600;">${f.name}</span>
                 <span style="font-size:10px;font-weight:600;color:${f.color};">${f.catLabel}</span>
                 <span style="font-size:10px;color:#8A847C;">${f.count} mod.</span>
@@ -2508,12 +2521,18 @@ class App extends Component {
                   ? (col.full
                     ? html`<div style="font-size:10.5px;color:#8D1D2C;text-align:center;padding:3px;">${col.max} films max atteint — retires-en un pour changer</div>`
                     : html`<div style="font-size:10.5px;color:#B8B2A8;text-align:center;padding:3px;">＋ glisse un autre film (joué à la suite)</div>`)
-                  : html`<div style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;font-size:12px;color:#B8B2A8;">Glisse un ou plusieurs films ici (5 max)</div>`}
+                  : html`<div style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;font-size:12px;color:#B8B2A8;">Glisse un film ici — ou utilise « ＋ ajouter » ci-dessous (5 max)</div>`}
               </div>
+              ${!col.full && col.addFilms.length ? html`
+                <select onChange=${col.onAdd} title="Ajouter un film sans glisser" style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:12.5px;border:1px solid rgba(141,29,44,0.25);border-radius:9px;background:#FBF8F2;color:#8D1D2C;cursor:pointer;">
+                  <option value="">＋ ajouter un film…</option>
+                  ${col.addFilms.map((o) => html`<option value=${o.id}>${o.name}</option>`)}
+                </select>
+              ` : ''}
             </div>
           `)}
         </div>
-        <p style="margin:12px 0 0;font-size:11.5px;color:#8A847C;">Hors de tout créneau, l'écran affiche le film assigné habituel. Les fenêtres sont communes à tous les magasins.</p>
+        <p style="margin:12px 0 0;font-size:11.5px;color:#8A847C;">Glisse les films sur un moment, ou ajoute-les avec le menu « ＋ ajouter » (jusqu'à 5 par moment). Hors de tout créneau, l'écran affiche le film assigné habituel. Les fenêtres sont communes à tous les magasins.</p>
       </div>
 
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
