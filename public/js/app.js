@@ -2038,6 +2038,14 @@ class App extends Component {
       playlistEmpty: st.playlist.length === 0,
       isCategory: isCat, isLiaison: isLia, isProduit, isFilmEl, isAnim, isMedia,
       mediaAgencyUrl: new URL('agence', location.href).toString(),
+      // filtre filigrane / logo (surtout sur les photos)
+      hasWatermark: isCat || isProduit || isMedia || isAnim,
+      watermark: m.watermark || 'none',
+      watermarkSummary: ({ none: 'aucun', filigrane: 'filigrane', logo: 'logo', nouveau: '« Nouveau »' })[m.watermark || 'none'],
+      watermarkOpts: [
+        { id: 'none', label: 'Aucun' }, { id: 'filigrane', label: 'Filigrane logo' },
+        { id: 'logo', label: 'Logo (coin)' }, { id: 'nouveau', label: 'Ruban « Nouveau »' },
+      ].map((o) => ({ ...o, active: (m.watermark || 'none') === o.id, pick: () => this.setSelField('watermark', o.id) })),
       hasSub: isLia || isAnim || isProduit,
       hasDur: isProduit || isFilmEl || isAnim || isMedia,
       selName: m.name,
@@ -3076,6 +3084,20 @@ class App extends Component {
           `}
           </div>`}
         </div>
+
+        ${v.hasWatermark && html`
+          <div style=${secCard}>
+            ${secHead('watermark', 'Filigrane / filtre photo', v.watermarkSummary)}
+            ${secOpen('watermark') && html`<div style=${secBody}>
+            <p style="margin:0 0 12px;font-size:12px;color:#8A847C;line-height:1.5;">Superpose un filigrane à l'élément — surtout utile sur les photos : logo en filigrane, logo dans un coin, ou ruban « Nouveau ».</p>
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+              ${v.watermarkOpts.map((o) => html`
+                <button onClick=${o.pick} style="padding:11px 12px;font-size:13px;font-weight:600;border-radius:9px;cursor:pointer;${o.active ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.14);'}">${o.label}</button>
+              `)}
+            </div>
+            </div>`}
+          </div>
+        `}
 
         ${v.layoutOptions.length > 1 && html`
           <div style=${secCard}>

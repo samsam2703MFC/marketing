@@ -83,7 +83,33 @@ export function layoutCfg(L, n) {
 
 // Rendu d'un module à l'instant lt (secondes locales au module).
 // opts : { secPerLine, interactive, onIlloDown, onListDown }
+// Filtre « filigrane / logo » optionnel, superposé à l'élément (surtout utile
+// sur les photos). m.watermark : 'filigrane' | 'logo' | 'nouveau'.
+export function watermarkEl(h, m) {
+  const w = m && m.watermark;
+  if (!w || w === 'none') return null;
+  if (w === 'logo') {
+    return h('div', { key: 'wm', style: { position: 'absolute', right: 120, bottom: 110, zIndex: 7, background: 'rgba(255,255,255,0.82)', borderRadius: 28, padding: '26px 40px', boxShadow: '0 16px 44px rgba(35,34,32,0.22)' } },
+      h('img', { src: 'assets/logo.png', alt: '', style: { height: 150, width: 'auto', display: 'block' } }));
+  }
+  if (w === 'nouveau') {
+    return h('div', { key: 'wm', style: { position: 'absolute', top: 300, left: -260, width: 1200, zIndex: 7, transform: 'rotate(-35deg)', background: RUBY, color: '#fff', textAlign: 'center', padding: '40px 0', boxShadow: '0 20px 50px rgba(141,29,44,0.4)', fontFamily: FVANK, fontSize: 150, letterSpacing: '0.06em', textTransform: 'uppercase' } }, 'Nouveau');
+  }
+  // filigrane : grand logo très discret, centré derrière/devant.
+  return h('div', { key: 'wm', style: { position: 'absolute', inset: 0, zIndex: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' } },
+    h('img', { src: 'assets/logo.png', alt: '', style: { width: '58%', height: 'auto', opacity: 0.1 } }));
+}
+
 export function renderModule(h, m, lt, opts) {
+  const kids = renderModuleInner(h, m, lt, opts);
+  if (Array.isArray(kids) && m && m.watermark && m.watermark !== 'none') {
+    const wm = watermarkEl(h, m);
+    if (wm) kids.push(wm);
+  }
+  return kids;
+}
+
+function renderModuleInner(h, m, lt, opts) {
   opts = opts || {};
   const secPerLine = opts.secPerLine || 4;
   const kids = [];
