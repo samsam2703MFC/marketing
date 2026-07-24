@@ -607,7 +607,7 @@ class App extends Component {
     const f = this.state.pwaForm;
     if (!f || this.state.pwaBusy) return;
     if (kind === 'import' && !window.confirm(
-      'Importer depuis la base PWA REMPLACE la table produits actuelle (catégories, produits, prix par magasin, alias).\n\nLes éléments liés sont re-liés par nom de catégorie. Continuer ?')) return;
+      'Rafraîchir depuis la base PWA remplace la table produits (catégories, produits, prix par boutique).\nLes éléments liés sont re-liés par nom de catégorie.\n\nContinuer ?')) return;
     this.setState({ pwaBusy: kind, pwaResult: null });
     try {
       await api('POST', '/pwa-config', {
@@ -1874,9 +1874,27 @@ class App extends Component {
       </div>
       ${st.pwaForm && html`
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;margin-top:20px;">
-        <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Import catalogue — base PWA</h2>
-        <p style="margin:0 0 16px;font-size:12px;color:#8A847C;line-height:1.5;">Connexion directe à ta base MySQL existante (tables <strong>product</strong> / <strong>shop_product</strong> / <strong>product_category</strong>) : l'import remplit la table produits signage (catégories, produits, prix par magasin, alias de langue). Les requêtes sont ajustables si tes colonnes diffèrent — seul l'ordre des colonnes compte.</p>
-        <div style="display:grid;grid-template-columns:1.2fr 90px 1fr 1fr 1fr;gap:9px;margin-bottom:10px;">
+        <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Catalogue PWA — même serveur</h2>
+        <p style="margin:0 0 14px;font-size:12px;color:#8A847C;line-height:1.5;">La régie tourne sur le serveur des bases de données : le bouton détecte tout seul la base qui contient <strong>product_category</strong>, <strong>product</strong> et <strong>shop_product</strong> (connexion locale), lit les colonnes, et rafraîchit la table produits — catégories, produits, prix par boutique mappés sur les magasins dans l'ordre.</p>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+          <button onClick=${() => this.pwaAction('import')} disabled=${!!st.pwaBusy} style="display:inline-flex;align-items:center;gap:9px;padding:12px 24px;font-size:14px;font-weight:600;border-radius:999px;cursor:${st.pwaBusy ? 'progress' : 'pointer'};background:#6E4A2B;color:#fff;border:1px solid #6E4A2B;box-shadow:0 2px 10px rgba(110,74,43,0.3);">
+            <span style="font-size:16px;display:inline-block;${st.pwaBusy === 'import' ? 'animation:none;' : ''}">⟳</span>
+            ${st.pwaBusy === 'import' ? 'Rafraîchissement…' : 'Rafraîchir depuis la base'}
+          </button>
+          <button onClick=${() => this.pwaAction('test')} disabled=${!!st.pwaBusy} style="padding:11px 18px;font-size:13px;font-weight:600;border-radius:999px;cursor:${st.pwaBusy ? 'progress' : 'pointer'};background:transparent;color:#5B564E;border:1px solid rgba(35,34,32,0.18);">${st.pwaBusy === 'test' ? 'Détection…' : 'Tester (sans importer)'}</button>
+        </div>
+        ${st.pwaResult && html`
+          <div style="margin-bottom:12px;font-size:12.5px;font-weight:600;line-height:1.6;color:${st.pwaResult.ok ? '#2E7D32' : '#8D1D2C'};">
+            ${st.pwaResult.ok
+              ? (st.pwaResult.counts
+                ? `✓ Base « ${st.pwaResult.db} » détectée — ${Object.entries(st.pwaResult.counts).map(([k, n]) => `${n} ${k}`).join(' · ')}`
+                : `✓ Base « ${st.pwaResult.db} » — importé : ${st.pwaResult.categories} catégorie(s) · ${st.pwaResult.products} produit(s) · ${st.pwaResult.storePrices} prix/boutique (${st.pwaResult.shopMap}) · ${st.pwaResult.relinked} élément(s) re-lié(s)`)
+              : `✗ ${st.pwaResult.error}`}
+          </div>
+        `}
+        <details>
+        <summary style="font-size:12px;font-weight:600;color:#8A847C;cursor:pointer;">Réglages avancés — uniquement si la détection automatique échoue</summary>
+        <div style="display:grid;grid-template-columns:1.2fr 90px 1fr 1fr 1fr;gap:9px;margin:12px 0 10px;">
           <input value=${st.pwaForm.host} onInput=${(e) => this.setPwa('host', e.target.value)} placeholder="Hôte (127.0.0.1)" style="padding:10px 12px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;min-width:0;" />
           <input value=${st.pwaForm.port} onInput=${(e) => this.setPwa('port', e.target.value)} placeholder="3306" inputmode="numeric" style="padding:10px 12px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;min-width:0;" />
           <input value=${st.pwaForm.db} onInput=${(e) => this.setPwa('db', e.target.value)} placeholder="Base (ex. pwa)" style="padding:10px 12px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;min-width:0;" />
@@ -1892,9 +1910,8 @@ class App extends Component {
             </label>
           `)}
         </div>
-        <details style="margin-bottom:12px;">
-          <summary style="font-size:12px;font-weight:600;color:#8A847C;cursor:pointer;">Requêtes SQL (avancé — l'ordre des colonnes compte)</summary>
-          <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
+        <div style="margin-bottom:4px;">
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px;">
             <label style="font-size:11.5px;color:#8A847C;">Catégories → <code>id, nom</code></label>
             <textarea value=${st.pwaForm.qCategories} onInput=${(e) => this.setPwa('qCategories', e.target.value)} rows="1" style="padding:9px 11px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;resize:vertical;"></textarea>
             <label style="font-size:11.5px;color:#8A847C;">Produits → <code>id, id_catégorie, nom, prix, actif</code></label>
@@ -1904,20 +1921,8 @@ class App extends Component {
             <label style="font-size:11.5px;color:#8A847C;">Alias / langues (optionnel) → <code>id_produit, langue, nom</code></label>
             <textarea value=${st.pwaForm.qAliases} onInput=${(e) => this.setPwa('qAliases', e.target.value)} rows="1" placeholder="SELECT product_id, lang, name FROM product_lang" style="padding:9px 11px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;resize:vertical;"></textarea>
           </div>
-        </details>
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <button onClick=${() => this.pwaAction('test')} disabled=${!!st.pwaBusy} style="padding:10px 18px;font-size:13px;font-weight:600;border-radius:999px;cursor:${st.pwaBusy ? 'progress' : 'pointer'};background:transparent;color:#5B564E;border:1px solid rgba(35,34,32,0.18);">${st.pwaBusy === 'test' ? 'Test en cours…' : 'Tester la connexion'}</button>
-          <button onClick=${() => this.pwaAction('import')} disabled=${!!st.pwaBusy} style="padding:10px 20px;font-size:13px;font-weight:600;border-radius:999px;cursor:${st.pwaBusy ? 'progress' : 'pointer'};background:#6E4A2B;color:#fff;border:1px solid #6E4A2B;">${st.pwaBusy === 'import' ? 'Import en cours…' : 'Importer le catalogue'}</button>
-          ${st.pwaResult && html`
-            <span style="font-size:12.5px;font-weight:600;color:${st.pwaResult.ok ? '#2E7D32' : '#8D1D2C'};">
-              ${st.pwaResult.ok
-                ? (st.pwaResult.counts
-                  ? `✓ Connexion OK — ${Object.entries(st.pwaResult.counts).map(([k, n]) => `${n} ${k}`).join(' · ')}`
-                  : `✓ Importé : ${st.pwaResult.categories} catégorie(s) · ${st.pwaResult.products} produit(s) · ${st.pwaResult.storePrices} prix/magasin · ${st.pwaResult.aliases} alias · ${st.pwaResult.relinked} élément(s) re-lié(s)`)
-                : `✗ ${st.pwaResult.error}`}
-            </span>
-          `}
         </div>
+        </details>
       </div>
       `}
 

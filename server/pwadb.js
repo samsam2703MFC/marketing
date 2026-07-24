@@ -58,10 +58,14 @@ export function publicPwaConfig() {
 
 function mysqlRows(cfg, sql) {
   const run = (bin) => new Promise((resolve, reject) => {
-    const args = [
-      '-h', cfg.host || '127.0.0.1', '-P', String(cfg.port || 3306),
-      '-u', cfg.user, cfg.db, '--batch', '--raw', '-N', '--connect-timeout=8', '-e', sql,
-    ];
+    // Sans utilisateur configuré : connexion par la socket locale (la régie
+    // tourne sur le serveur des bases, en root → auth unix_socket).
+    const args = [];
+    if (cfg.user) {
+      args.push('-h', cfg.host || '127.0.0.1', '-P', String(cfg.port || 3306), '-u', cfg.user);
+    }
+    if (cfg.db) args.push(cfg.db);
+    args.push('--batch', '--raw', '-N', '--connect-timeout=8', '-e', sql);
     execFile(bin, args, {
       env: { ...process.env, MYSQL_PWD: cfg.password || '' },
       timeout: 20000, maxBuffer: 32 * 1024 * 1024,
@@ -84,19 +88,97 @@ function mysqlRows(cfg, sql) {
   });
 }
 
-function checkCfg(cfg) {
-  if (!cfg.db || !cfg.user) throw new Error('configuration incomplète — renseigne base et utilisateur dans Paramètres');
+// ---------------------------------------------------------------------------
+// Mode « un bouton » : tout est détecté automatiquement — la base qui contient
+// product / product_category / shop_product, puis les colonnes utiles.
+const qid = (x) => '`' + String(x).replace(/`/g, '') + '`';
+
+async function detectSchema(cfg) {
+  if (cfg.db) return cfg.db;
+  const rows = await mysqlRows(cfg, `
+    SELECT table_schema FROM information_schema.tables
+    WHERE table_name IN ('product', 'product_category', 'shop_product')
+      AND table_schema NOT IN ('mysql', 'sys', 'information_schema', 'performance_schema')
+    GROUP BY table_schema
+    HAVING COUNT(DISTINCT table_name) = 3
+    ORDER BY table_schema`);
+  if (!rows.length) throw new Error('aucune base avec les 3 tables product / product_category / shop_product — précise-la dans Réglages avancés');
+  return rows[0][0];
+}
+
+async function tableCols(cfg, schema, table) {
+  const rows = await mysqlRows(cfg, `
+    SELECT column_name FROM information_schema.columns
+    WHERE table_schema = '${schema.replace(/'/g, '')}' AND table_name = '${table}'
+    ORDER BY ordinal_position`);
+  return rows.map((r) => r[0]);
+}
+
+async function primaryKey(cfg, schema, table) {
+  const rows = await mysqlRows(cfg, `
+    SELECT column_name FROM information_schema.key_column_usage
+    WHERE table_schema = '${schema.replace(/'/g, '')}' AND table_name = '${table}' AND constraint_name = 'PRIMARY'
+    ORDER BY ordinal_position LIMIT 1`);
+  return rows.length ? rows[0][0] : null;
+}
+
+function pickCol(cols, wanted, what, table) {
+  const low = new Map(cols.map((c) => [c.toLowerCase(), c]));
+  for (const w of wanted) if (low.has(w)) return low.get(w);
+  if (what === 'optionnel') return null;
+  throw new Error(`colonne « ${what} » introuvable dans ${table} (colonnes : ${cols.join(', ')}) — ajuste les requêtes dans Réglages avancés`);
+}
+
+// Détecte base + colonnes et fabrique les 3 requêtes automatiquement.
+export async function autoQueries(cfg) {
+  const db = await detectSchema(cfg);
+  const q = (t) => `${qid(db)}.${qid(t)}`;
+
+  const catCols = await tableCols(cfg, db, 'product_category');
+  const catId = (await primaryKey(cfg, db, 'product_category')) || pickCol(catCols, ['id', 'id_product_category', 'category_id'], 'id', 'product_category');
+  const catName = pickCol(catCols, ['name', 'label', 'title', 'libelle', 'nom', 'designation', 'alias'], 'nom', 'product_category');
+
+  const prodCols = await tableCols(cfg, db, 'product');
+  const prodId = (await primaryKey(cfg, db, 'product')) || pickCol(prodCols, ['id', 'id_product', 'product_id'], 'id', 'product');
+  const prodCat = pickCol(prodCols, ['category_id', 'id_category', 'product_category_id', 'id_product_category', 'cat_id', 'categoryid'], 'catégorie', 'product');
+  const prodName = pickCol(prodCols, ['name', 'label', 'title', 'libelle', 'nom', 'designation', 'alias'], 'nom', 'product');
+  const prodPrice = pickCol(prodCols, ['price', 'prix', 'price_ttc', 'amount', 'price_ht'], 'prix', 'product');
+  const prodActive = pickCol(prodCols, ['active', 'enabled', 'visible', 'actif', 'status'], 'optionnel');
+
+  const spCols = await tableCols(cfg, db, 'shop_product');
+  const spProd = pickCol(spCols, ['product_id', 'id_product'], 'produit', 'shop_product');
+  const spShop = pickCol(spCols, ['shop_id', 'id_shop', 'store_id'], 'boutique', 'shop_product');
+  const spPrice = pickCol(spCols, ['price', 'prix', 'price_ttc', 'amount', 'price_ht'], 'prix', 'shop_product');
+
+  return {
+    db,
+    qCategories: `SELECT ${qid(catId)}, ${qid(catName)} FROM ${q('product_category')}`,
+    qProducts: `SELECT ${qid(prodId)}, ${qid(prodCat)}, ${qid(prodName)}, ${qid(prodPrice)}${prodActive ? `, ${qid(prodActive)}` : ''} FROM ${q('product')}`,
+    qShopPrices: `SELECT ${qid(spProd)}, ${qid(spShop)}, ${qid(spPrice)} FROM ${q('shop_product')}`,
+  };
+}
+
+// Requêtes effectives : celles de l'utilisateur s'il les a personnalisées
+// (Réglages avancés + base précisée), sinon l'auto-détection.
+async function effectiveQueries(cfg) {
+  const customized = cfg.qCategories !== DEFAULTS.qCategories
+    || cfg.qProducts !== DEFAULTS.qProducts
+    || cfg.qShopPrices !== DEFAULTS.qShopPrices;
+  if (customized && cfg.db) {
+    return { db: cfg.db, qCategories: cfg.qCategories, qProducts: cfg.qProducts, qShopPrices: cfg.qShopPrices, auto: false };
+  }
+  return { ...(await autoQueries(cfg)), auto: true };
 }
 
 export async function testPwa() {
   const cfg = pwaConfig();
-  checkCfg(cfg);
+  const queries = await effectiveQueries(cfg);
   const counts = {};
-  for (const [key, q] of [['catégories', cfg.qCategories], ['produits', cfg.qProducts], ['prix/magasin', cfg.qShopPrices]]) {
+  for (const [key, q] of [['catégories', queries.qCategories], ['produits', queries.qProducts], ['prix/boutique', queries.qShopPrices]]) {
     const rows = await mysqlRows(cfg, `SELECT COUNT(*) FROM (${q.replace(/;\s*$/, '')}) AS t`);
     counts[key] = parseInt((rows[0] || ['0'])[0], 10) || 0;
   }
-  return { ok: true, counts };
+  return { ok: true, db: queries.db, auto: queries.auto, counts };
 }
 
 // Prix PWA (souvent « 12.50 ») → format d'affichage (« 12,50 »).
@@ -104,10 +186,10 @@ const frPrice = (v) => String(v == null ? '' : v).trim().replace('.', ',');
 
 export async function importPwa() {
   const cfg = pwaConfig();
-  checkCfg(cfg);
-  const catRows = await mysqlRows(cfg, cfg.qCategories);
-  const prodRows = await mysqlRows(cfg, cfg.qProducts);
-  const priceRows = cfg.qShopPrices.trim() ? await mysqlRows(cfg, cfg.qShopPrices) : [];
+  const queries = await effectiveQueries(cfg);
+  const catRows = await mysqlRows(cfg, queries.qCategories);
+  const prodRows = await mysqlRows(cfg, queries.qProducts);
+  const priceRows = queries.qShopPrices.trim() ? await mysqlRows(cfg, queries.qShopPrices) : [];
   const aliasRows = cfg.qAliases.trim() ? await mysqlRows(cfg, cfg.qAliases) : [];
 
   const categories = catRows.map(([id, name]) => ({ id: `pw${id}`, name: name || `Catégorie ${id}`, active: true, aliases: {} }));
@@ -124,9 +206,22 @@ export async function importPwa() {
   }));
   const byId = new Map(products.map((p) => [p.id, p]));
 
-  // shop_product : prix par boutique PWA → magasin signage via le mapping.
+  // shop_product : prix par boutique PWA → magasin signage. Mapping manuel
+  // (Réglages avancés) s'il existe, sinon automatique : boutiques triées par
+  // id, associées dans l'ordre aux magasins signage.
+  const db0 = getDb();
+  const sigStores = db0.prepare('SELECT id, name FROM sig_stores ORDER BY id').all();
   const extToStore = {};
-  for (const [storeId, extId] of Object.entries(cfg.shopMap || {})) extToStore[String(extId)] = storeId;
+  if (Object.keys(cfg.shopMap || {}).length) {
+    for (const [storeId, extId] of Object.entries(cfg.shopMap)) extToStore[String(extId)] = storeId;
+  } else {
+    const shopIds = [...new Set(priceRows.map((r) => String(r[1])))]
+      .sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0));
+    shopIds.forEach((extId, i) => { if (sigStores[i]) extToStore[extId] = sigStores[i].id; });
+  }
+  const mapLabel = Object.entries(extToStore)
+    .map(([ext, sid]) => `${ext}→${(sigStores.find((x) => x.id === sid) || {}).name || sid}`)
+    .join(' · ');
   let nPrices = 0;
   for (const [prodId, shopId, price] of priceRows) {
     const p = byId.get(`pwp${prodId}`);
@@ -160,6 +255,9 @@ export async function importPwa() {
 
   return {
     ok: true,
+    db: queries.db,
+    auto: queries.auto,
+    shopMap: mapLabel || 'aucune boutique mappée',
     categories: categories.length,
     products: products.length,
     storePrices: nPrices,
