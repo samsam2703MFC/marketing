@@ -695,7 +695,7 @@ export function continuousDefaults() {
     refresh: 'moment',       // 'moment' (au changement moment/saison) | 'minutes'
     refreshMin: 10,          // recomposition toutes les N minutes si refresh==='minutes'
     fallback: 'tout',        // 'tout' | 'aucun' si rien en saison/moment
-    exceptionFilm: '',       // playlist figée jouée EN PLUS à chaque boucle (exception)
+    exceptionFilms: [],      // playlists figées jouées EN PLUS à chaque boucle (plusieurs)
   };
 }
 export function normContinuous(c) {
@@ -721,7 +721,9 @@ export function normContinuous(c) {
     refresh: c.refresh === 'minutes' ? 'minutes' : 'moment',
     refreshMin: num(c.refreshMin, d.refreshMin, 1, 240),
     fallback: c.fallback === 'aucun' ? 'aucun' : 'tout',
-    exceptionFilm: c.exceptionFilm ? String(c.exceptionFilm) : '',
+    // Plusieurs playlists d'exception possibles. Compat : ancien champ unique.
+    exceptionFilms: Array.isArray(c.exceptionFilms) ? c.exceptionFilms.map(String).filter(Boolean)
+      : (c.exceptionFilm ? [String(c.exceptionFilm)] : []),
   };
 }
 // PRNG déterministe : la boucle est stable dans une « fenêtre » (bucket) donnée
@@ -794,12 +796,14 @@ export function buildContinuous(cfg, date = new Date(), ctx = {}) {
     if (catLists.length) { const cl = catLists[catI++ % catLists.length]; modules.push({ id: `k-cat-${i}`, type: 'category', name: cl.name, layout: 'illo-right', motion: 'm1', items: cl.products.map(item), tag: { enabled: false } }); }
     else if (pool.length) { const p = pool[prodI++ % pool.length]; modules.push({ id: `k-prod-${i}`, type: 'produit', name: catName.get(p.categoryId) || 'À la une', layout: 'hero-left', motion: 'm1', productRef: p.id, dur: cfg.prodDur, items: [item(p)], tag: { enabled: false } }); }
   }
-  // 5) Playlist d'exception : une playlist figée jouée EN PLUS à chaque boucle.
-  if (cfg.exceptionFilm) {
-    const exf = loadPlaylists().find((p) => p.id === cfg.exceptionFilm && p.mode !== 'continu');
-    if (exf && exf.items.length) {
-      const byId = new Map(loadModules().map((mm) => [mm.id, mm]));
-      for (const id of exf.items) { const mm = byId.get(id); if (mm) modules.push({ ...mm, id: `k-exc-${id}` }); }
+  // 5) Playlists d'exception : jouées EN PLUS à chaque boucle (plusieurs possibles).
+  if (cfg.exceptionFilms.length) {
+    const pls = loadPlaylists();
+    const byId = new Map(loadModules().map((mm) => [mm.id, mm]));
+    for (const fid of cfg.exceptionFilms) {
+      const exf = pls.find((p) => p.id === fid && p.mode !== 'continu');
+      if (!exf || !exf.items.length) continue;
+      for (const id of exf.items) { const mm = byId.get(id); if (mm) modules.push({ ...mm, id: `k-exc-${fid}-${id}` }); }
     }
   }
   // 6) Vidéo surprise en clôture (si ratio > 0 et dossier non vide).

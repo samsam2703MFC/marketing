@@ -344,7 +344,7 @@ async function main() {
         id: 'pl-contLT', name: 'Boucle continue LT', items: [], mode: 'continu',
         continuous: { source: 'tout', perMoment: true, order: 'catalogue', maxItems: 20,
           ratios: { liaison: 0, produitSeul: 0, media: 0, animation: 0, surprise: 0 },
-          exceptionFilm: st.activePlaylistId },
+          exceptionFilms: [st.activePlaylistId] },
       };
       const pls = [...st.playlists, contFilm];
       await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: pls, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });

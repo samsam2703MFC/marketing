@@ -356,13 +356,20 @@ class App extends Component {
       source: 'saison', categories: [], perMoment: true, order: 'catalogue',
       prodDur: 6, clipDur: 12, maxItems: 12,
       ratios: { liaison: 5, produitSeul: 6, media: 3, animation: 0, surprise: 8 },
-      refresh: 'moment', refreshMin: 10, fallback: 'tout', exceptionFilm: '',
+      refresh: 'moment', refreshMin: 10, fallback: 'tout', exceptionFilms: [],
     };
   }
   normContinuous(c) {
     const d = this.contDefaults();
     c = (c && typeof c === 'object') ? c : {};
-    return { ...d, ...c, ratios: { ...d.ratios, ...(c.ratios || {}) }, categories: Array.isArray(c.categories) ? c.categories.map(String) : [] };
+    return {
+      ...d, ...c,
+      ratios: { ...d.ratios, ...(c.ratios || {}) },
+      categories: Array.isArray(c.categories) ? c.categories.map(String) : [],
+      // Compat : ancien champ unique exceptionFilm → tableau exceptionFilms.
+      exceptionFilms: Array.isArray(c.exceptionFilms) ? c.exceptionFilms.map(String).filter(Boolean)
+        : (c.exceptionFilm ? [String(c.exceptionFilm)] : []),
+    };
   }
   setFilmMode(mode) { this.updateFilm({ mode: mode === 'continu' ? 'continu' : 'playlist' }); }
   updateContinuous(patch) {
@@ -2510,6 +2517,12 @@ class App extends Component {
       const on = cont.categories.includes(c.id);
       return html`<button onClick=${() => { const set = new Set(cont.categories); on ? set.delete(c.id) : set.add(c.id); this.updateContinuous({ categories: [...set] }); }} style="padding:6px 12px;font-size:12px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${on ? '#8D1D2C' : '#fff'};color:${on ? '#fff' : '#232220'};">${c.name}</button>`;
     });
+    // Playlists d'exception : tags multi-sélection (films « playlist » uniquement).
+    const excFilms = st.playlists.filter((p) => p.mode !== 'continu' && p.id !== this.activeFilm().id);
+    const excChips = excFilms.map((p) => {
+      const on = cont.exceptionFilms.includes(p.id);
+      return html`<button onClick=${() => { const set = new Set(cont.exceptionFilms); on ? set.delete(p.id) : set.add(p.id); this.updateContinuous({ exceptionFilms: [...set] }); }} style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:12px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${on ? '#8D1D2C' : '#fff'};color:${on ? '#fff' : '#232220'};">${on ? '✓ ' : '+ '}${p.name}</button>`;
+    });
     const contPanel = html`
       <div style="background:#FFFFFF;border:1px solid rgba(141,29,44,0.22);border-radius:16px;padding:18px 20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
@@ -2544,10 +2557,9 @@ class App extends Component {
             ${cField('Si rien en saison', cChoice('fallback', [['tout', 'Tout le catalogue'], ['aucun', 'Rien (attente)']]))}
           </div>
           <div>
-            ${cField('Playlist d\'exception (jouée EN PLUS à chaque boucle)', html`<select value=${cont.exceptionFilm} onChange=${(e) => this.updateContinuous({ exceptionFilm: e.target.value })} style="max-width:320px;padding:8px 10px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;">
-              <option value="">— aucune —</option>
-              ${st.playlists.filter((p) => p.mode !== 'continu' && p.id !== this.activeFilm().id).map((p) => html`<option value=${p.id}>${p.name}</option>`)}
-            </select>`)}
+            ${cField('Playlists d\'exception (jouées EN PLUS à chaque boucle · plusieurs possibles)', html`<div style="display:flex;gap:6px;flex-wrap:wrap;">
+              ${excFilms.length ? excChips : html`<span style="font-size:12px;color:#8A847C;">Aucun autre film « playlist » à ajouter.</span>`}
+            </div>`)}
           </div>
         </div>
       </div>`;
