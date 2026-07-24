@@ -109,6 +109,11 @@ async function detectSchema(cfg) {
   return rows[0][0];
 }
 
+// Nom de la base MySQL de la PWA (best-effort) — cible par défaut du miroir.
+export async function pwaBaseName() {
+  try { return await detectSchema(pwaConfig()); } catch { return ''; }
+}
+
 async function tableCols(cfg, schema, table) {
   const rows = await mysqlRows(cfg, `
     SELECT column_name FROM information_schema.columns

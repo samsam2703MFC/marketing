@@ -257,6 +257,15 @@ async function main() {
       if (after.products.some((p) => p.id === 'prLIVETEST')) throw new Error('produit test non supprimé');
       return `aller-retour OK · prix ${store.store} 7,77 + alias nl → restauré (${after.products.length} produits)`;
     });
+    await step('POST /api/v1/mirror — miroir MySQL (best-effort)', async () => {
+      const out = await call('POST', '/api/v1/mirror');
+      if (out.ok) {
+        if (!(out.tables > 0)) throw new Error('miroir sans table');
+        return `${out.tables} tables · ${out.rows} lignes → base « ${out.db} »`;
+      }
+      // MySQL indisponible / pas de base cible : le miroir est best-effort.
+      return `non répliqué (${out.error}) — best-effort, la régie fonctionne`;
+    });
     await step('POST /api/v1/plan — planning journalier (magasins × moments)', async () => {
       const fleetRes = await call('GET', '/api/v1/fleet');
       const store = fleetRes.stores[0];

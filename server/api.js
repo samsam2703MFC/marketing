@@ -9,7 +9,8 @@ import {
   checkLogin, createSession, sessionUser, destroySession,
 } from './db.js';
 import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
-import { publicPwaConfig, savePwaConfig, resetPwaConfig, testPwa, importPwa } from './pwadb.js';
+import { publicPwaConfig, savePwaConfig, resetPwaConfig, testPwa, importPwa, pwaBaseName } from './pwadb.js';
+import { scheduleMirror, syncMirror, mirrorStatus } from './mirror.js';
 import { runConnectionTest, runDeployTests, tcpPing } from './livetest.js';
 
 function sessionToken(req) {
@@ -503,12 +504,20 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
     if (req.method === 'GET' && path === '/element-types') return send(200, { types: loadElementTypes() });
     if (req.method === 'GET' && path === '/langs') return send(200, { langs: loadLangs() });
 
+    // ---- miroir MySQL (tables sig_* consultables dans phpMyAdmin) -----------
+    if (req.method === 'GET' && path === '/mirror') return send(200, mirrorStatus());
+    if (req.method === 'POST' && path === '/mirror') {
+      const out = await syncMirror();
+      return send(200, out);
+    }
+
     // ---- planning journalier (magasins × films × moments) ------------------
     if (req.method === 'GET' && path === '/plan') return send(200, loadPlan());
     if (req.method === 'POST' && path === '/plan') {
       const body = await readBody();
       if (!Array.isArray(body.stores) || !body.stores.length) return send(400, { error: 'stores requis' });
       const out = savePlan({ stores: body.stores, slots: body.slots || {}, windows: body.windows });
+      scheduleMirror();
       return send(200, { ok: true, ...out, savedAt: nowIso() });
     }
     if (req.method === 'GET' && path === '/catalog') return send(200, loadCatalog());
@@ -518,6 +527,7 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
         return send(400, { error: 'categories et products requis' });
       }
       saveCatalog(body);
+      scheduleMirror();
       return send(200, { ok: true, ...loadCatalog(), savedAt: nowIso() });
     }
 
@@ -533,14 +543,20 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       catch (e) { return send(200, { ok: false, error: String(e.message || e) }); }
     }
     if (req.method === 'POST' && path === '/pwa-import') {
-      try { return send(200, await importPwa()); }
-      catch (e) { return send(200, { ok: false, error: String(e.message || e) }); }
+      try {
+        // La base MySQL détectée à l'import devient la cible du miroir.
+        if (getDb() && !getSetting('mirror_db', '')) { const b = await pwaBaseName(); if (b) setSetting('mirror_db', b); }
+        const out = await importPwa();
+        scheduleMirror();
+        return send(200, out);
+      } catch (e) { return send(200, { ok: false, error: String(e.message || e) }); }
     }
 
     if (req.method === 'PUT' && path === '/draft') {
       const body = await readBody();
       if (!Array.isArray(body.modules) || body.modules.length === 0) return send(400, { error: 'modules requis' });
       saveDraft(body);
+      scheduleMirror();
       return send(200, { ok: true, savedAt: nowIso() });
     }
 
@@ -569,6 +585,7 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
         db.prepare('UPDATE sig_stores SET name = ?, screens = ?, screen_size = ?, screen_orient = ?, lang = ? WHERE id = ?')
           .run(name, screens, size, orient, lang, store.id);
         const updated = db.prepare('SELECT * FROM sig_stores WHERE id = ?').get(store.id);
+        scheduleMirror();
         return send(200, { ok: true, id: store.id, name: updated.name, lang: updated.lang, format: storeFormat(updated) });
       }
     }
@@ -583,6 +600,7 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
         schedule: body.schedule || null,
         baseUrl: `${ctx.selfBase(req)}/api/v1`, publicDir: ctx.publicDir,
       });
+      scheduleMirror();
       return send(200, out);
     }
 

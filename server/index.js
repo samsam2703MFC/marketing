@@ -139,5 +139,10 @@ if (isMain) {
     console.log(`  API                     : http://localhost:${PORT}${BASE_PATH}/api/v1/health`);
     console.log(`  base SQLite (tables sig_) : ${DB_PATH}`);
     console.log(`  compte back office : admin (mot de passe : SIG_ADMIN_PASSWORD, défaut « signage »)`);
+    // Miroir MySQL (best-effort) : réplique les tables sig_* dans la base PWA
+    // pour consultation dans phpMyAdmin. Sans base cible, reste silencieux.
+    import('./mirror.js').then(({ syncMirror }) => syncMirror().then((r) => {
+      if (r && r.ok) console.log(`  miroir MySQL : ${r.tables} tables · ${r.rows} lignes → base « ${r.db} »`);
+    }).catch(() => {})).catch(() => {});
   });
 }
