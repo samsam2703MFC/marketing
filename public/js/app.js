@@ -96,6 +96,8 @@ class App extends Component {
     catalog: { categories: [], products: [] },
     catDraft: null, catDirty: false, catSel: '', catSaving: false, langs: [], catLang: 'fr',
     pwaForm: null, pwaBusy: null, pwaResult: null,
+    planWindows: [], planByStore: {}, planStores: [], planSlots: { matin: '', midi: '', aprem: '' },
+    planBusy: false, planResult: null,
   };
 
   // ---------------------------------------------------------------- lifecycle
@@ -145,6 +147,7 @@ class App extends Component {
       const cat = await api('GET', '/catalog').catch(() => ({ categories: [], products: [] }));
       const lg = await api('GET', '/langs').catch(() => ({ langs: [{ id: 'fr', label: 'Français' }] }));
       const pwa = await api('GET', '/pwa-config').catch(() => null);
+      const plan = await api('GET', '/plan').catch(() => ({ windows: [], byStore: {} }));
       const playlists = ((Array.isArray(st.playlists) && st.playlists.length)
         ? st.playlists
         : [{ id: 'pl1', name: 'Film principal', items: st.playlist || [] }]).map((p) => this.normFilm(p));
@@ -163,6 +166,8 @@ class App extends Component {
           qShopPrices: pwa.qShopPrices, qAliases: pwa.qAliases,
           shopMap: pwa.shopMap || {},
         } : null,
+        planWindows: plan.windows || [],
+        planByStore: plan.byStore || {},
         catalog: { categories: cat.categories || [], products: cat.products || [] },
         catDraft: null, catDirty: false,
         playlists,
@@ -1035,6 +1040,59 @@ class App extends Component {
     this.setState({ editingStore: null });
     if (name) this.saveStore(id, { name });
   }
+
+  // ---- planning journalier (magasins × films × moments) -------------------
+  togglePlanStore(id) {
+    const cur = this.state.planStores;
+    const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+    // Un seul magasin sélectionné : on précharge son plan enregistré.
+    let slots = this.state.planSlots;
+    if (next.length === 1) {
+      const saved = this.state.planByStore[next[0]] || {};
+      slots = { matin: saved.matin || '', midi: saved.midi || '', aprem: saved.aprem || '' };
+    }
+    this.setState({ planStores: next, planSlots: slots, planResult: null });
+  }
+  setPlanSlot(moment, filmId) {
+    this.setState({ planSlots: { ...this.state.planSlots, [moment]: filmId }, planResult: null });
+  }
+  setPlanWindow(id, field, value) {
+    this.setState({ planWindows: this.state.planWindows.map((w) => (w.id === id ? { ...w, [field]: value } : w)) });
+  }
+  async validatePlan() {
+    const st = this.state;
+    if (st.planBusy) return;
+    if (!st.planStores.length) { this.showToast('Sélectionne au moins un magasin'); return; }
+    if (!st.planSlots.matin && !st.planSlots.midi && !st.planSlots.aprem) { this.showToast('Glisse au moins un film sur un moment'); return; }
+    this.setState({ planBusy: true, planResult: null });
+    try {
+      // Enregistrer le plan (+ fenêtres), puis publier chaque film distinct sur
+      // les magasins choisis pour que les écrans aient le contenu en cache.
+      const out = await api('POST', '/plan', { stores: st.planStores, slots: st.planSlots, windows: st.planWindows });
+      const filmIds = [...new Set([st.planSlots.matin, st.planSlots.midi, st.planSlots.aprem].filter(Boolean))];
+      let deployed = 0;
+      for (const fid of filmIds) {
+        try { await api('POST', '/publish', { mode: 'full', playlistId: fid, targets: st.planStores }); deployed++; }
+        catch { /* on continue : le lien reflète quand même le plan */ }
+      }
+      this.setState({
+        planBusy: false,
+        planByStore: out.byStore || {},
+        planResult: {
+          stores: st.planStores.map((id) => (this.state.fleet.find((f) => f.id === id) || {}).store || id),
+          films: filmIds.length, deployed,
+          links: st.planStores.map((id) => ({
+            store: (this.state.fleet.find((f) => f.id === id) || {}).store || id,
+            url: this.filmUrl({ store: id }),
+          })),
+        },
+      });
+      this.showToast(`Planning validé sur ${st.planStores.length} magasin(s) ✓`);
+    } catch (e) {
+      this.setState({ planBusy: false });
+      this.showToast(e.status === 401 ? 'Session expirée — recharge la page (F5)' : `Erreur : ${e.message}`);
+    }
+  }
   perFilmLinks() {
     // Lien direct par film (format standard 55″) : dernière publication de ce
     // film, ou sa composition enregistrée s'il n'a jamais été publié.
@@ -1493,6 +1551,52 @@ class App extends Component {
       })),
     }));
 
+    // ---- vue planning (magasins × films × moments) ----
+    const planStoreChips = st.fleet.map((s) => {
+      const on = st.planStores.includes(s.id);
+      const plan = st.planByStore[s.id] || {};
+      const nSlots = ['matin', 'midi', 'aprem'].filter((m) => plan[m]).length;
+      return {
+        label: s.store, sub: nSlots ? `${nSlots}/3 moment(s) planifié(s)` : 'aucun plan',
+        toggle: () => this.togglePlanStore(s.id),
+        style: `display:flex;flex-direction:column;gap:2px;align-items:flex-start;padding:11px 15px;border-radius:12px;cursor:pointer;text-align:left;background:${on ? 'rgba(141,29,44,0.06)' : '#FBF8F2'};border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};`,
+        badge: on ? '✓' : '',
+      };
+    });
+    const filmById = (id) => st.playlists.find((p) => p.id === id);
+    const planCols = (st.planWindows.length ? st.planWindows : [
+      { id: 'matin', label: 'Matin', from: '06:00', to: '11:00' },
+      { id: 'midi', label: 'Midi', from: '11:00', to: '15:00' },
+      { id: 'aprem', label: 'Après-midi', from: '15:00', to: '20:00' },
+    ]).map((w) => {
+      const fid = st.planSlots[w.id];
+      const film = fid ? filmById(fid) : null;
+      const c = film ? filmCatOf(film) : null;
+      return {
+        id: w.id, label: w.label, from: w.from, to: w.to,
+        onFrom: (e) => this.setPlanWindow(w.id, 'from', e.target.value),
+        onTo: (e) => this.setPlanWindow(w.id, 'to', e.target.value),
+        film: film ? { name: film.name, count: film.items.length, color: c.color } : null,
+        clear: () => this.setPlanSlot(w.id, ''),
+        onDragOver: (e) => { e.preventDefault(); e.currentTarget.classList.add('drag-over'); },
+        onDragLeave: (e) => e.currentTarget.classList.remove('drag-over'),
+        onDrop: (e) => {
+          e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+          const d = e.dataTransfer.getData('text/plain');
+          if (d.startsWith('film:')) this.setPlanSlot(w.id, d.slice(5));
+        },
+      };
+    });
+    const planFilmCards = st.playlists.map((p) => {
+      const c = filmCatOf(p);
+      return {
+        name: p.name, count: p.items.length, color: c.color, catLabel: c.label,
+        tags: (p.tags || []).slice(0, 3),
+        onDragStart: (e) => { e.dataTransfer.setData('text/plain', 'film:' + p.id); e.dataTransfer.effectAllowed = 'copy'; },
+      };
+    });
+    const planCanValidate = st.planStores.length > 0 && ['matin', 'midi', 'aprem'].some((m) => st.planSlots[m]);
+
     const targets = st.fleet.map((s) => {
       const on = !!st.pubTargets[s.id];
       return {
@@ -1541,6 +1645,10 @@ class App extends Component {
         arr.push(crumb('Compositeur', () => this.setView('composer'), false));
         arr.push(crumb('Table produits', null, false));
         arr.push(crumb(`${(st.catDraft || st.catalog).categories.length} catégorie(s) · ${(st.catDraft || st.catalog).products.length} produit(s)${st.catDirty ? ' · non enregistrée' : ''}`, null, true));
+      } else if (st.view === 'planning') {
+        arr.push(crumb('Compositeur', () => this.setView('composer'), false));
+        arr.push(crumb('Planning du jour', null, false));
+        arr.push(crumb(`${st.planStores.length} magasin(s) sélectionné(s)`, null, true));
       } else {
         arr.push(crumb('Compositeur', () => this.setView('composer'), false));
         arr.push(crumb(`Film : ${this.activeFilm().name}`, null, false));
@@ -1555,6 +1663,10 @@ class App extends Component {
       playlist, library, layoutOptions, motionGroups, items, days, posFields, timeSlots, crumbs,
       timelineBlocks, timelineTotal, timelineEndDrop, libCards, libTagChips, libEmptyMsg, pubDaysVals,
       prodCats, prodRows, storeCols, prodSelCat, langChips, isBaseLang,
+      planStoreChips, planCols, planFilmCards, planCanValidate,
+      planBusy: st.planBusy, planResult: st.planResult,
+      validatePlan: () => this.validatePlan(),
+      copyLink: (u) => this.copyLink(u),
       catDirty: st.catDirty, catSaving: st.catSaving,
       addProdCat: () => this.addProdCat(),
       addProd: () => this.addProd(),
@@ -1575,12 +1687,14 @@ class App extends Component {
       undoStyle: `display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;font-size:15px;background:transparent;border:1px solid ${st.past.length ? 'rgba(35,34,32,0.16)' : 'rgba(35,34,32,0.06)'};color:${st.past.length ? '#5B564E' : '#C9C3B8'};cursor:${st.past.length ? 'pointer' : 'not-allowed'};`,
       redoStyle: `display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;font-size:15px;background:transparent;border:1px solid ${st.future.length ? 'rgba(35,34,32,0.16)' : 'rgba(35,34,32,0.06)'};color:${st.future.length ? '#5B564E' : '#C9C3B8'};cursor:${st.future.length ? 'pointer' : 'not-allowed'};`,
       isComposerView: st.view === 'composer', isFleetView: st.view === 'fleet', isSettingsView: st.view === 'settings',
-      isProductsView: st.view === 'products',
+      isProductsView: st.view === 'products', isPlanningView: st.view === 'planning',
       setViewComposer: () => this.setView('composer'),
       setViewFleet: () => this.setView('fleet'),
       setViewSettings: () => this.setView('settings'),
       setViewProducts: () => this.openProducts(),
+      setViewPlanning: () => this.setView('planning'),
       tabProductsStyle: stTab + (st.view === 'products' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
+      tabPlanningStyle: stTab + (st.view === 'planning' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       tabComposerStyle: stTab + (st.view === 'composer' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       tabFleetStyle: stTab + (st.view === 'fleet' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       settingsIconStyle: `display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:50%;font-size:17px;cursor:pointer;flex:0 0 auto;${st.view === 'settings' ? 'background:#8D1D2C;color:#fff;border:none;' : 'background:#EFE9E0;color:#232220;border:1px solid rgba(35,34,32,0.10);'}`,
@@ -1914,6 +2028,7 @@ class App extends Component {
       <div style="display:inline-flex;background:#EFE9E0;border-radius:999px;padding:3px;flex:0 0 auto;margin-left:10px;">
         <button onClick=${v.setViewComposer} style=${v.tabComposerStyle}>Compositeur</button>
         <button onClick=${v.setViewProducts} style=${v.tabProductsStyle}>Produits</button>
+        <button onClick=${v.setViewPlanning} style=${v.tabPlanningStyle}>Planning</button>
         <button onClick=${v.setViewFleet} style=${v.tabFleetStyle}>Réseau & supervision</button>
       </div>
     </div>
@@ -2174,6 +2289,101 @@ class App extends Component {
           ${!v.prodRows.length && html`<div style="font-size:12.5px;color:#8A847C;padding:14px 4px 4px;">Aucun produit dans cette catégorie — « + Ajouter un produit ».</div>`}
           <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Prix par magasin : laisse vide pour utiliser le prix par défaut. Langues : FR = noms de base ; dans une autre langue, le champ nom édite la traduction (vide = nom de base). Chaque magasin affiche automatiquement ses prix ET sa langue (réglée dans Réseau).</p>
         </div>
+      </div>
+    </div>
+  </div>
+  `}
+
+  ${v.isPlanningView && html`
+  <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;">
+    <div style="max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
+      <div>
+        <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Planning du jour</h2>
+        <p style="margin:0;font-size:12.5px;color:#8A847C;">1. choisis les magasins · 2. glisse un film sur chaque moment de la journée (matin / midi / après-midi) · 3. valide — les écrans basculent automatiquement selon l'heure, et tu obtiens le lien final.</p>
+      </div>
+
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+        <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">1 · Magasins</h3>
+        ${v.planStoreChips.length ? html`
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;">
+            ${v.planStoreChips.map((s) => html`
+              <button onClick=${s.toggle} style=${s.style}>
+                <span style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;">${s.badge ? html`<span style="color:#8D1D2C;">✓</span>` : ''}${s.label}</span>
+                <span style="font-size:11px;color:#8A847C;">${s.sub}</span>
+              </button>
+            `)}
+          </div>
+        ` : html`<p style="margin:0;font-size:12.5px;color:#8A847C;">Aucun magasin — importe ton catalogue (⚙ Paramètres → Rafraîchir) ou branche un écran.</p>`}
+      </div>
+
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+        <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Films — glisse-les sur un moment ci-dessous</h3>
+        ${v.planFilmCards.length ? html`
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            ${v.planFilmCards.map((f) => html`
+              <div draggable="true" onDragStart=${f.onDragStart} style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:#FBF8F2;border:1px solid ${f.color}55;border-left:4px solid ${f.color};cursor:grab;">
+                <span style="font-size:13px;font-weight:600;">${f.name}</span>
+                <span style="font-size:10px;font-weight:600;color:${f.color};">${f.catLabel}</span>
+                <span style="font-size:10px;color:#8A847C;">${f.count} mod.</span>
+                ${f.tags.map((t) => html`<span style="font-size:9px;font-weight:600;color:${f.color};">#${t}</span>`)}
+              </div>
+            `)}
+          </div>
+        ` : html`<p style="margin:0;font-size:12.5px;color:#8A847C;">Aucun film — crée-en dans le Compositeur (onglet 2 · Playlist).</p>`}
+      </div>
+
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+        <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">2 · Moments de la journée</h3>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
+          ${v.planCols.map((col) => html`
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                <span style="font-size:13px;font-weight:700;color:#232220;">${col.label}</span>
+                <span style="display:flex;align-items:center;gap:4px;">
+                  <input value=${col.from} onInput=${col.onFrom} style="width:62px;padding:5px 7px;font-size:12px;text-align:center;border:1px solid rgba(35,34,32,0.16);border-radius:7px;background:#FBF8F2;" />
+                  <span style="color:#8A847C;font-size:12px;">→</span>
+                  <input value=${col.to} onInput=${col.onTo} style="width:62px;padding:5px 7px;font-size:12px;text-align:center;border:1px solid rgba(35,34,32,0.16);border-radius:7px;background:#FBF8F2;" />
+                </span>
+              </div>
+              <div class="pl-item" onDragOver=${col.onDragOver} onDragLeave=${col.onDragLeave} onDrop=${col.onDrop}
+                style="min-height:96px;border-radius:12px;border:2px dashed ${col.film ? col.film.color : 'rgba(35,34,32,0.2)'};background:${col.film ? col.film.color + '10' : '#FBF8F2'};display:flex;align-items:center;justify-content:center;padding:14px;">
+                ${col.film ? html`
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:7px;text-align:center;">
+                    <span style="font-size:15px;font-weight:700;color:${col.film.color};">${col.film.name}</span>
+                    <span style="font-size:11px;color:#8A847C;">${col.film.count} module(s)</span>
+                    <button onClick=${col.clear} style="padding:5px 12px;font-size:11px;font-weight:600;border-radius:999px;border:1px solid ${col.film.color}55;background:#fff;color:${col.film.color};cursor:pointer;">Retirer</button>
+                  </div>
+                ` : html`<span style="font-size:12px;color:#B8B2A8;">Glisse un film ici</span>`}
+              </div>
+            </div>
+          `)}
+        </div>
+        <p style="margin:12px 0 0;font-size:11.5px;color:#8A847C;">Hors de tout créneau, l'écran affiche le film assigné habituel. Les fenêtres sont communes à tous les magasins.</p>
+      </div>
+
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">3 · Valider & déployer</h3>
+          <button onClick=${v.validatePlan} disabled=${!v.planCanValidate || v.planBusy}
+            style="padding:11px 24px;font-size:14px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.planCanValidate && !v.planBusy ? 'pointer' : 'not-allowed'};background:${v.planCanValidate ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.planCanValidate ? '#fff' : '#8A847C'};">
+            ${v.planBusy ? 'Déploiement…' : 'Valider le planning ↗'}
+          </button>
+        </div>
+        ${v.planResult && html`
+          <div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(35,34,32,0.08);">
+            <div style="font-size:13px;font-weight:600;color:#2E7D32;margin-bottom:10px;">✓ Planning déployé — ${v.planResult.films} film(s) sur ${v.planResult.stores.length} magasin(s) · liens finaux :</div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              ${v.planResult.links.map((l) => html`
+                <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.08);">
+                  <span style="flex:0 0 150px;font-size:13px;font-weight:600;">${l.store}</span>
+                  <input readonly value=${l.url} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:7px 10px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:7px;background:#fff;" />
+                  <button onClick=${() => v.copyLink(l.url)} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Copier</button>
+                  <a href=${l.url} target="_blank" style="flex:0 0 auto;font-size:12px;font-weight:600;color:#8D1D2C;">↗</a>
+                </div>
+              `)}
+            </div>
+          </div>
+        `}
       </div>
     </div>
   </div>

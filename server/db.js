@@ -299,6 +299,14 @@ function migrate(db) {
     PRIMARY KEY (product_id, store_id)
   );
 
+  -- Planning journalier : un film par moment de la journée, par magasin.
+  CREATE TABLE IF NOT EXISTS sig_dayplans (
+    store_id TEXT NOT NULL,
+    moment   TEXT NOT NULL,
+    film_id  TEXT NOT NULL,
+    PRIMARY KEY (store_id, moment)
+  );
+
   CREATE TABLE IF NOT EXISTS sig_langs (
     id         TEXT PRIMARY KEY,
     label      TEXT NOT NULL,
@@ -497,6 +505,90 @@ export function applyStoreLang(modules, storeId) {
       m.name = catAlias.get(m.catRef);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Planning journalier — 3 moments (matin / midi / après-midi) avec leurs
+// fenêtres horaires (réglables), un film par moment et par magasin.
+export const PLAN_MOMENTS = [
+  { id: 'matin', label: 'Matin', from: '06:00', to: '11:00' },
+  { id: 'midi', label: 'Midi', from: '11:00', to: '15:00' },
+  { id: 'aprem', label: 'Après-midi', from: '15:00', to: '20:00' },
+];
+const HHMM = (v, fb) => (/^\d{1,2}:\d{2}$/.test(String(v || '')) ? String(v) : fb);
+
+export function planWindows() {
+  let saved = {};
+  try { saved = JSON.parse(getSetting('plan_windows', '{}')) || {}; } catch { saved = {}; }
+  return PLAN_MOMENTS.map((m) => ({
+    id: m.id, label: m.label,
+    from: HHMM(saved[m.id] && saved[m.id].from, m.from),
+    to: HHMM(saved[m.id] && saved[m.id].to, m.to),
+  }));
+}
+
+export function loadPlan() {
+  const db = getDb();
+  const rows = db.prepare('SELECT store_id, moment, film_id FROM sig_dayplans').all();
+  const byStore = {};
+  for (const r of rows) {
+    if (!byStore[r.store_id]) byStore[r.store_id] = {};
+    byStore[r.store_id][r.moment] = r.film_id;
+  }
+  return { windows: planWindows(), byStore };
+}
+
+// Écrit le plan (matin/midi/aprem → filmId) pour chaque magasin ciblé.
+// slots : { matin: filmId|'', midi: …, aprem: … } ; '' efface le moment.
+export function savePlan({ stores, slots, windows }) {
+  const db = getDb();
+  if (Array.isArray(windows) && windows.length) {
+    const w = {};
+    for (const win of windows) {
+      const m = PLAN_MOMENTS.find((x) => x.id === win.id);
+      if (m) w[m.id] = { from: HHMM(win.from, m.from), to: HHMM(win.to, m.to) };
+    }
+    setSetting('plan_windows', JSON.stringify(w));
+  }
+  const targets = (Array.isArray(stores) ? stores : []).map(String);
+  if (!targets.length) return loadPlan();
+  const validFilms = new Set(db.prepare('SELECT id FROM sig_playlists').all().map((p) => p.id));
+  db.exec('BEGIN');
+  try {
+    const del = db.prepare('DELETE FROM sig_dayplans WHERE store_id = ? AND moment = ?');
+    const ins = db.prepare('INSERT INTO sig_dayplans(store_id, moment, film_id) VALUES (?, ?, ?)');
+    for (const sid of targets) {
+      for (const m of PLAN_MOMENTS) {
+        del.run(sid, m.id);
+        const fid = slots && slots[m.id];
+        if (fid && validFilms.has(String(fid))) ins.run(sid, m.id, String(fid));
+      }
+    }
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+  return loadPlan();
+}
+
+// Film programmé pour un magasin à un instant donné (selon les fenêtres).
+// Renvoie { filmId, moment } ou null si aucun plan / hors de tout créneau.
+export function planFilmAt(storeId, date) {
+  if (!storeId) return null;
+  const db = getDb();
+  const rows = db.prepare('SELECT moment, film_id FROM sig_dayplans WHERE store_id = ?').all(storeId);
+  if (!rows.length) return null;
+  const byMoment = new Map(rows.map((r) => [r.moment, r.film_id]));
+  const wins = planWindows();
+  const mins = date.getHours() * 60 + date.getMinutes();
+  const toMin = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
+  for (const w of wins) {
+    const a = toMin(w.from), b = toMin(w.to);
+    const inWin = a <= b ? (mins >= a && mins < b) : (mins >= a || mins < b);
+    if (inWin && byMoment.has(w.id)) return { filmId: byMoment.get(w.id), moment: w.id, label: w.label, window: `${w.from}–${w.to}` };
+  }
+  return null;
 }
 
 // Un écran signage standard est une dalle UHD : 3840×2160 en paysage,

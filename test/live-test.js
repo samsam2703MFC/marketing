@@ -257,6 +257,29 @@ async function main() {
       if (after.products.some((p) => p.id === 'prLIVETEST')) throw new Error('produit test non supprimé');
       return `aller-retour OK · prix ${store.store} 7,77 + alias nl → restauré (${after.products.length} produits)`;
     });
+    await step('POST /api/v1/plan — planning journalier (magasins × moments)', async () => {
+      const fleetRes = await call('GET', '/api/v1/fleet');
+      const store = fleetRes.stores[0];
+      if (!store) throw new Error('aucun magasin en base');
+      const stateNow = await call('GET', '/api/v1/state');
+      const film = (stateNow.playlists || [])[0];
+      if (!film) throw new Error('aucun film en base');
+      const before = await call('GET', '/api/v1/plan');
+      // matin couvrant toute la journée pour vérifier la résolution immédiate
+      const out = await call('POST', '/api/v1/plan', {
+        stores: [store.id], slots: { matin: film.id },
+        windows: [{ id: 'matin', from: '00:00', to: '23:59' }, { id: 'midi', from: '11:00', to: '15:00' }, { id: 'aprem', from: '15:00', to: '20:00' }],
+      });
+      if (!out.ok || !out.byStore[store.id] || out.byStore[store.id].matin !== film.id) {
+        throw new Error('plan non enregistré');
+      }
+      const f = await (await fetch(BASE + `/api/v1/film?store=${encodeURIComponent(store.id)}`)).json();
+      if (f.playlistId !== film.id) throw new Error(`le lien magasin ne suit pas le plan (${f.playlistId} ≠ ${film.id})`);
+      if (!f.plan || !f.plan.moment) throw new Error('moment du plan absent du film servi');
+      // nettoyage : on efface le plan de ce magasin
+      await call('POST', '/api/v1/plan', { stores: [store.id], slots: {}, windows: before.windows });
+      return `${store.store} : « ${film.name} » au ${f.plan.moment} (${f.plan.window})`;
+    });
     await step('POST /api/v1/stores/<id> — langue du magasin', async () => {
       const fleetRes = await call('GET', '/api/v1/fleet');
       const store = fleetRes.stores[0];

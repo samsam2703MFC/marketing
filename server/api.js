@@ -5,6 +5,7 @@ import {
   getDb, getSetting, setSetting, getIntSetting,
   loadModules, loadPlaylist, loadPlaylists, activePlaylistId, saveDraft, storeFormat, DB_PATH,
   loadElementTypes, loadCatalog, saveCatalog, applyStorePrices, applyStoreLang, loadLangs,
+  loadPlan, savePlan, planFilmAt,
   checkLogin, createSession, sessionUser, destroySession,
 } from './db.js';
 import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
@@ -300,10 +301,25 @@ function filmJson(storeId, filmId) {
     if (!store) return { status: 404, json: { error: `magasin inconnu : ${storeId}` } };
     storeName = store.name;
     storeFmt = storeFormat(store);
-    const row = db.prepare('SELECT MAX(assigned_ver) AS v FROM sig_players WHERE store_id = ?').get(storeId);
-    if (row && row.v) {
-      const s = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' AND version <= ? ORDER BY version DESC LIMIT 1`).get(row.v);
-      if (s) snap = JSON.parse(s.payload);
+    // Planning journalier : si le magasin a un plan, le film du moment courant
+    // (matin / midi / après-midi) prime. Sinon, film assigné / brouillon.
+    const planned = planFilmAt(storeId, new Date());
+    if (planned) {
+      const pls = loadPlaylists();
+      const pf = pls.find((p) => p.id === planned.filmId);
+      if (pf) {
+        const rows = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' ORDER BY version DESC LIMIT 200`).all();
+        for (const r of rows) { const p = JSON.parse(r.payload); if ((p.playlistId || 'pl1') === pf.id) { snap = p; break; } }
+        if (!snap) snap = { ...currentDraftSnapshot(), playlistId: pf.id, playlistName: pf.name, playlist: pf.items, draft: true };
+        snap.plan = { moment: planned.label, window: planned.window };
+      }
+    }
+    if (!snap) {
+      const row = db.prepare('SELECT MAX(assigned_ver) AS v FROM sig_players WHERE store_id = ?').get(storeId);
+      if (row && row.v) {
+        const s = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' AND version <= ? ORDER BY version DESC LIMIT 1`).get(row.v);
+        if (s) snap = JSON.parse(s.payload);
+      }
     }
     // Aucune publication ne correspond à la version assignée à ce magasin
     // (état initial) : on montre le brouillon du film destiné à ce magasin
@@ -470,6 +486,15 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
     // ---- types d'éléments & table produits (rien en dur : tout en base) ----
     if (req.method === 'GET' && path === '/element-types') return send(200, { types: loadElementTypes() });
     if (req.method === 'GET' && path === '/langs') return send(200, { langs: loadLangs() });
+
+    // ---- planning journalier (magasins × films × moments) ------------------
+    if (req.method === 'GET' && path === '/plan') return send(200, loadPlan());
+    if (req.method === 'POST' && path === '/plan') {
+      const body = await readBody();
+      if (!Array.isArray(body.stores) || !body.stores.length) return send(400, { error: 'stores requis' });
+      const out = savePlan({ stores: body.stores, slots: body.slots || {}, windows: body.windows });
+      return send(200, { ok: true, ...out, savedAt: nowIso() });
+    }
     if (req.method === 'GET' && path === '/catalog') return send(200, loadCatalog());
     if (req.method === 'PUT' && path === '/catalog') {
       const body = await readBody();
