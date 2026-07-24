@@ -4,7 +4,7 @@ import { html, h, render, Component } from './vendor/preact-htm.js';
 import {
   RUBY, INK, FUI, W, H, LIAISON_DUR, LAYOUTS, MOTIONS,
   clx, fmtTime, newTag, newSched, newPos,
-  activeItems as rActiveItems, moduleDur as rModuleDur, renderModule,
+  activeItems as rActiveItems, moduleDur as rModuleDur, renderModule, playable,
 } from './renderer.js';
 
 const PREVIEW_W = 560;
@@ -237,7 +237,7 @@ class App extends Component {
   sel() { return this.getMod(this.state.selId) || this.state.library[0]; }
   activeItems(m) { return rActiveItems(m); }
   moduleDur(m) { return rModuleDur(m, this.state.secPerLine); }
-  playlistMods() { return this.state.playlist.map((id) => this.getMod(id)).filter(Boolean); }
+  playlistMods() { return this.state.playlist.map((id) => this.getMod(id)).filter(Boolean).filter(playable); }
   scopeMods() { return this.state.scope === 'playlist' ? this.playlistMods() : [this.sel()].filter(Boolean); }
   total() {
     const l = this.scopeMods();
@@ -1207,17 +1207,18 @@ class App extends Component {
     const timelineBlocks = st.playlist.map((id, i) => {
       const mm = this.getMod(id);
       if (!mm) return null;
-      const dur = this.moduleDur(mm);
+      const skip = !playable(mm);
+      const dur = skip ? 0 : this.moduleDur(mm);
       const startT = cumT;
       cumT += dur;
       const isLi = mm.type === 'liaison';
-      const playingHere = st.scope === 'playlist' && st.t >= startT && st.t < startT + dur;
+      const playingHere = !skip && st.scope === 'playlist' && st.t >= startT && st.t < startT + dur;
       return {
         i, name: mm.name, order: i + 1,
-        durLabel: `${(Math.round(dur * 10) / 10).toString().replace('.', ',')} s`,
+        durLabel: skip ? '⚠ vide — sauté' : `${(Math.round(dur * 10) / 10).toString().replace('.', ',')} s`,
         typeIcon: (this.elementTypeOf(mm) || {}).icon || (isLi ? '⧉' : '▤'),
-        width: Math.max(104, Math.round(dur * 14)),
-        blockStyle: `flex:0 0 auto;display:flex;flex-direction:column;justify-content:space-between;gap:4px;padding:9px 11px;border-radius:10px;cursor:grab;background:${playingHere ? '#8D1D2C' : '#fff'};color:${playingHere ? '#fff' : '#232220'};border:1px solid ${playingHere ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};box-shadow:0 2px 6px rgba(0,0,0,0.05);`,
+        width: skip ? 104 : Math.max(104, Math.round(dur * 14)),
+        blockStyle: `flex:0 0 auto;display:flex;flex-direction:column;justify-content:space-between;gap:4px;padding:9px 11px;border-radius:10px;cursor:grab;opacity:${skip ? 0.55 : 1};background:${playingHere ? '#8D1D2C' : '#fff'};color:${playingHere ? '#fff' : '#232220'};border:1px ${skip ? 'dashed rgba(141,29,44,0.5)' : `solid ${playingHere ? '#8D1D2C' : 'rgba(35,34,32,0.12)'}`};box-shadow:0 2px 6px rgba(0,0,0,0.05);`,
         jump: () => this.setState({ scope: 'playlist', t: startT, playing: true }),
         remove: (e) => { e.stopPropagation(); this.removeFromPlaylist(i); },
         onDragStart: (e) => { e.dataTransfer.setData('text/plain', 'idx:' + i); e.dataTransfer.effectAllowed = 'move'; e.currentTarget.classList.add('dragging'); },
@@ -1586,19 +1587,29 @@ class App extends Component {
       isLinked: !!m.catRef,
       linkedCatName: (st.catalog.categories.find((c) => c.id === m.catRef) || {}).name || m.catRef,
       linkedRows: (m.items || []).map((it) => ({ name: it.name, price: it.price, active: it.active !== false })),
-      catOptions: st.catalog.categories.map((c) => ({
-        id: c.id,
-        label: `${c.name} (${st.catalog.products.filter((p) => p.categoryId === c.id).length} produits)${c.active ? '' : ' · inactive'}`,
-      })),
+      // Seules les catégories actives AVEC au moins un produit actif sont proposées
+      // (la catégorie actuellement liée reste listée pour ne pas casser l'affichage).
+      catOptions: (() => {
+        const nAct = (cid) => st.catalog.products.filter((p) => p.categoryId === cid && p.active !== false).length;
+        const ok = st.catalog.categories.filter((c) => c.active !== false && nAct(c.id) > 0);
+        const cur = m.catRef && !ok.some((c) => c.id === m.catRef)
+          ? st.catalog.categories.filter((c) => c.id === m.catRef) : [];
+        return [...ok, ...cur].map((c) => ({
+          id: c.id,
+          label: `${c.name} (${nAct(c.id)} produit(s) actif(s))${c.active === false ? ' · inactive' : ''}${nAct(c.id) === 0 ? ' · vide' : ''}`,
+        }));
+      })(),
       curCatRef: m.catRef || '',
       onLinkCat: (e) => { if (e.target.value) this.linkCat(e.target.value); },
       doUnlinkCat: () => this.unlinkCat(),
       goProducts: () => this.openProducts(),
       // -- produit à la une --
-      productOptions: st.catalog.products.map((p) => ({
-        id: p.id,
-        label: `${p.name} · ${p.price} €${p.active ? '' : ' · inactif'} — ${(st.catalog.categories.find((c) => c.id === p.categoryId) || {}).name || 'sans catégorie'}`,
-      })),
+      productOptions: st.catalog.products
+        .filter((p) => p.active !== false || p.id === m.productRef)
+        .map((p) => ({
+          id: p.id,
+          label: `${p.name} · ${p.price} €${p.active ? '' : ' · inactif'} — ${(st.catalog.categories.find((c) => c.id === p.categoryId) || {}).name || 'sans catégorie'}`,
+        })),
       curProductRef: m.productRef || '',
       onProductRef: (e) => this.setProductRef(e.target.value),
       // -- film (vidéo) --
@@ -1828,7 +1839,6 @@ class App extends Component {
       <div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0;flex:0 0 auto;">
         <img src="assets/logo.png" alt="L'Atelier By" style="height:32px;width:auto;" />
         <span style="font-weight:500;font-size:12.5px;letter-spacing:0.02em;white-space:nowrap;">Régie d'affichage</span>
-        <span style="font-size:9.5px;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;white-space:nowrap;">Signage hybride · cache local</span>
       </div>
       <div style="display:inline-flex;background:#EFE9E0;border-radius:999px;padding:3px;flex:0 0 auto;margin-left:10px;">
         <button onClick=${v.setViewComposer} style=${v.tabComposerStyle}>Compositeur</button>

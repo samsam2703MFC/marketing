@@ -58,6 +58,8 @@ export const newSched = () => ({ days: [true, true, true, true, true, true, true
 export const newPos = () => ({ titleY: 0, listX: 0, listY: 0, illoX: 0, illoY: 0, illoScale: 1 });
 
 export const activeItems = (m) => ((m && m.items) ? m.items : []).filter((x) => x.active);
+// Une liste de prix sans produit actif est sautée à la lecture du film.
+export const playable = (m) => (m && m.type === 'category' ? activeItems(m).length > 0 : true);
 export const moduleDur = (m, secPerLine) => {
   if (m.type === 'liaison') return LIAISON_DUR;
   if (m.type === 'produit') return m.dur > 0 ? m.dur : 8;

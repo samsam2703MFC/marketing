@@ -6,7 +6,7 @@
 // Paramètres d'URL : ?w=3840&h=2160&fit=cover|contain (mémorisés), donc une
 // TV/box peut être pointée directement sur son format.
 import { html, h, render, Component } from './vendor/preact-htm.js';
-import { W, H, FUI, RUBY, renderModule, moduleDur, scheduledNow, clx } from './renderer.js';
+import { W, H, FUI, RUBY, renderModule, moduleDur, scheduledNow, playable, clx } from './renderer.js';
 
 const REFRESH_MS = 30000;
 const apiUrl = (p) => new URL('api/v1' + p, location.href).toString();
@@ -142,7 +142,7 @@ class Film extends Component {
     if (!s || !this.filmOnAir()) return [];
     const byId = new Map(s.modules.map((m) => [m.id, m]));
     const now = new Date();
-    return s.playlist.map((id) => byId.get(id)).filter(Boolean).filter((m) => scheduledNow(m, now));
+    return s.playlist.map((id) => byId.get(id)).filter(Boolean).filter(playable).filter((m) => scheduledNow(m, now));
   }
   playlistMods() {
     const s = this.state.snap;
@@ -150,7 +150,7 @@ class Film extends Component {
     if (this.isScreenMode()) return this.onAirMods();
     // mode partage : tout le film, sans filtre horaire
     const byId = new Map(s.modules.map((m) => [m.id, m]));
-    return s.playlist.map((id) => byId.get(id)).filter(Boolean);
+    return s.playlist.map((id) => byId.get(id)).filter(Boolean).filter(playable);
   }
   offAirNote() {
     if (this.isScreenMode() || !this.state.snap) return '';

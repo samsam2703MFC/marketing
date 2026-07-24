@@ -3,7 +3,7 @@
 // lorsque tous ses médias sont préchargés).
 // URL : /player.html?id=p1&token=plyr_XXXX[&name=Vitrine][&screens=3]
 import { html, h, render, Component } from './vendor/preact-htm.js';
-import { W, H, FUI, RUBY, renderModule, moduleDur, activeItems, scheduledNow, clx } from './renderer.js';
+import { W, H, FUI, RUBY, renderModule, moduleDur, activeItems, scheduledNow, clx , playable } from './renderer.js';
 
 const qs = new URLSearchParams(location.search);
 const PLAYER_ID = qs.get('id') || 'web-' + Math.random().toString(36).slice(2, 8);
@@ -90,7 +90,7 @@ class Player extends Component {
     if (s.schedule && !scheduledNow({ schedule: s.schedule }, new Date())) return [];
     const byId = new Map(s.modules.map((m) => [m.id, m]));
     const now = new Date();
-    return s.playlist.map((id) => byId.get(id)).filter(Boolean).filter((m) => scheduledNow(m, now));
+    return s.playlist.map((id) => byId.get(id)).filter(Boolean).filter(playable).filter((m) => scheduledNow(m, now));
   }
   total() {
     const s = this.state.snapshot;
