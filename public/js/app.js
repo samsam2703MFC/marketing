@@ -105,6 +105,7 @@ class App extends Component {
     planWeek: 'A', planDay: 0, planActiveWeek: 'A', planSaving: false, planSavedAt: 0,
     surpriseVideos: [], surpriseBusy: false,
     seasons: [], seasonsCurrent: [], seasonsDirty: false, seasonsBusy: false,
+    wsTable: '', wsCandidates: [], mediaLib: [],
     onbOpen: false, onbStore: '', onbTest: {},
     onbDone: (() => { try { return JSON.parse(localStorage.getItem('sigOnbDone') || '[]'); } catch { return []; } })(),
   };
@@ -210,6 +211,7 @@ class App extends Component {
       this.loadSurprise(); // liste des vidéos « surprise » (dossier serveur)
       this.loadSeasons();  // périodes de l'année
       this.loadHdStorage(); // réglages stockage/streaming HD
+      this.loadMediaLib(); // médiathèque agence (vue admin)
     } catch (e) {
       if (e.status === 401) this.setState({ loading: false, authRequired: true });
       else this.setState({ loading: false, loadError: String(e.message || e) });
@@ -649,15 +651,26 @@ class App extends Component {
   async importSeasons() {
     if (this.state.seasonsBusy) return;
     if (this.state.seasonsDirty && !window.confirm('Des modifications non enregistrées seront perdues. Importer depuis ws_season ?')) return;
-    this.setState({ seasonsBusy: true });
+    this.setState({ seasonsBusy: true, wsCandidates: [] });
     try {
-      const r = await api('POST', '/seasons/import');
+      const r = await api('POST', '/seasons/import', this.state.wsTable ? { table: this.state.wsTable } : {});
       this.setState({ seasonsBusy: false });
-      if (r.ok) { this.setState({ seasons: r.seasons || [], seasonsCurrent: r.current || [], seasonsDirty: false }); this.showToast(`Importé depuis « ${r.table} » : ${r.imported} période(s) ✓`); }
-      else this.showToast(`Import ws_season : ${r.error}`);
+      if (r.ok) { this.setState({ seasons: r.seasons || [], seasonsCurrent: r.current || [], seasonsDirty: false, wsCandidates: [] }); this.showToast(`Importé depuis « ${r.table} » : ${r.imported} période(s) ✓`); }
+      else { this.setState({ wsCandidates: r.candidates || [] }); this.showToast(`Import : ${r.error}`); }
     } catch (e) { this.setState({ seasonsBusy: false }); this.showToast(`Erreur : ${e.message}`); }
   }
-  openSeasons() { this.setState({ view: 'seasons' }); if (!this.state.seasons.length) this.loadSeasons(); }
+  openSeasons() { this.setState({ view: 'seasons' }); if (!this.state.seasons.length) this.loadSeasons(); this.loadMediaLib(); }
+
+  // ---- médiathèque agence (vue admin dans la régie) -----------------------
+  async loadMediaLib() {
+    try { const r = await api('GET', '/media'); this.setState({ mediaLib: r.media || [] }); }
+    catch { /* réservé admin : ignore si indisponible */ }
+  }
+  async delMediaLib(id, name) {
+    if (!window.confirm(`Supprimer « ${name} » du serveur ?`)) return;
+    try { const r = await api('DELETE', '/media/' + encodeURIComponent(id)); this.setState({ mediaLib: r.media || [] }); }
+    catch (e) { this.showToast(`Erreur : ${e.message}`); }
+  }
 
   // ---- stockage / streaming HD (réglages) ---------------------------------
   async loadHdStorage() {
@@ -1954,6 +1967,25 @@ class App extends Component {
       del: () => this.delSeason(s.id),
     }));
 
+    // ---- médiathèque agence (vue admin) ----
+    const MOMENT_LBL = { matin: 'Matin', midi: 'Midi', soir: 'Soir', all: 'Toute la journée' };
+    const mediaByMoment = { matin: 0, midi: 0, soir: 0, all: 0 };
+    for (const mm of (st.mediaLib || [])) mediaByMoment[mm.moment] = (mediaByMoment[mm.moment] || 0) + 1;
+    const mediaOverview = {
+      total: (st.mediaLib || []).length,
+      photos: (st.mediaLib || []).filter((mm) => mm.kind === 'photo').length,
+      videos: (st.mediaLib || []).filter((mm) => mm.kind === 'film').length,
+      present: (st.mediaLib || []).filter((mm) => mm.present).length,
+      byMoment: mediaByMoment,
+      rows: (st.mediaLib || []).map((mm) => ({
+        id: mm.id, filename: mm.filename, kind: mm.kind, present: mm.present, size: mm.size,
+        moment: MOMENT_LBL[mm.moment] || mm.moment,
+        product: (seasonProdOpts.find((p) => p.id === mm.productId) || {}).name || '',
+        season: ((st.seasons || []).find((s) => s.id === mm.seasonId) || {}).name || '',
+        del: () => this.delMediaLib(mm.id, mm.filename),
+      })),
+    };
+
     const subTab = 'padding:8px 18px;font-size:13px;font-weight:600;border:none;border-radius:999px;cursor:pointer;';
     const hdrRound = 'width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;cursor:pointer;flex:0 0 auto;';
     return {
@@ -1963,6 +1995,10 @@ class App extends Component {
       seasonRows, seasonsDirty: st.seasonsDirty, seasonsBusy: st.seasonsBusy, seasonsCount: (st.seasons || []).length,
       seasonsCurrentCount: (st.seasonsCurrent || []).length,
       addSeason: () => this.addSeason(), saveSeasons: () => this.saveSeasons(), importSeasons: () => this.importSeasons(),
+      wsTable: st.wsTable, onWsTable: (e) => this.setState({ wsTable: e.target.value }),
+      wsCandidates: st.wsCandidates || [], useWsCandidate: (t) => this.setState({ wsTable: t }),
+      mediaOverview, refreshMediaLib: () => this.loadMediaLib(),
+      agencyUrl: new URL('agence', location.href).toString(),
       planStoreChips, planCols, planFilmCards, planWeekTabs, planDayTabs, planDupTargets, planStoreLinks,
       planWeek: st.planWeek, planDay: st.planDay, planDayName: DAY_LONG[st.planDay],
       planActiveWeek: st.planActiveWeek, planWeekActive: st.planWeek === st.planActiveWeek,
@@ -2609,7 +2645,7 @@ class App extends Component {
 
   ${v.isProductsView && html`
   <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;">
-    <div style="max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
+    <div style="margin:0;display:flex;flex-direction:column;gap:16px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
         <div>
           <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Table produits</h2>
@@ -2697,17 +2733,26 @@ class App extends Component {
 
   ${v.isSeasonsView && html`
   <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;">
-    <div style="max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
+    <div style="margin:0;display:flex;flex-direction:column;gap:16px;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
         <div>
           <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Périodes de l'année</h2>
-          <p style="margin:0;font-size:12.5px;color:#8A847C;max-width:720px;">Définis les saisons et fêtes (du → au) et les produits liés. Sert à cibler automatiquement les vidéos et animations de saison. Récurrent chaque année (jour/mois). Importable depuis la table <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">ws_season</code> de la base.</p>
+          <p style="margin:0;font-size:12.5px;color:#8A847C;max-width:760px;">Définis les saisons et fêtes (du → au) et les produits liés. Sert à cibler automatiquement les vidéos et animations de saison. Récurrent chaque année (jour/mois). Importable depuis la table <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">ws_season</code> de la même base MySQL que les produits.</p>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button onClick=${v.importSeasons} disabled=${v.seasonsBusy} style="padding:9px 15px;font-size:12.5px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.35);border-radius:999px;cursor:${v.seasonsBusy ? 'wait' : 'pointer'};">⟳ Importer depuis ws_season</button>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <input value=${v.wsTable} onInput=${v.onWsTable} placeholder="table (déf. ws_season)" spellcheck="false" title="Nom de la table MySQL des périodes, si différent de ws_season" style="width:170px;padding:9px 11px;font-size:12.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:999px;background:#FBF8F2;" />
+          <button onClick=${v.importSeasons} disabled=${v.seasonsBusy} style="padding:9px 15px;font-size:12.5px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.35);border-radius:999px;cursor:${v.seasonsBusy ? 'wait' : 'pointer'};">⟳ Importer</button>
           <button onClick=${v.saveSeasons} disabled=${!v.seasonsDirty || v.seasonsBusy} style="padding:9px 18px;font-size:13px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.seasonsDirty && !v.seasonsBusy ? 'pointer' : 'not-allowed'};background:${v.seasonsDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.seasonsDirty ? '#fff' : '#8A847C'};">${v.seasonsBusy ? 'Enregistrement…' : (v.seasonsDirty ? 'Enregistrer' : '✓ Enregistré')}</button>
         </div>
       </div>
+      ${v.wsCandidates.length ? html`
+        <div style="background:rgba(201,123,74,0.08);border:1px solid rgba(201,123,74,0.3);border-radius:12px;padding:12px 16px;font-size:12.5px;color:#6E4A2B;">
+          Aucune table « ws_season » trouvée. Tables candidates détectées — clique pour la sélectionner puis « Importer » :
+          <span style="display:inline-flex;flex-wrap:wrap;gap:6px;margin-left:6px;">
+            ${v.wsCandidates.map((t) => html`<button onClick=${() => v.useWsCandidate(t)} style="font-family:ui-monospace,monospace;font-size:12px;font-weight:600;color:#6E4A2B;background:#fff;border:1px solid rgba(110,74,43,0.35);border-radius:999px;padding:3px 10px;cursor:pointer;">${t}</button>`)}
+          </span>
+        </div>
+      ` : ''}
 
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
@@ -2743,6 +2788,40 @@ class App extends Component {
           ${!v.seasonRows.length && html`<p style="margin:0;font-size:12.5px;color:#8A847C;padding:8px 0;">Aucune période. « + Ajouter une période » ou « ⟳ Importer depuis ws_season ».</p>`}
         </div>
         <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Dates : <strong>JJ/MM</strong> (ex. 21/06) ou AAAA-MM-JJ ; l'année est ignorée (la période revient chaque année). Une période à cheval sur le nouvel an (ex. 15/12 → 06/01) est gérée.</p>
+      </div>
+
+      <!-- Médiathèque agence : vue admin (nombre + tags + présence) -->
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Médiathèque agence — ${v.mediaOverview.total ? `${v.mediaOverview.total} média(s) sur le serveur` : 'vide'}</h3>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <button onClick=${v.refreshMediaLib} style="padding:7px 13px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">⟳ Rafraîchir</button>
+            <a href=${v.agencyUrl} target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:8px 15px;font-size:12.5px;font-weight:600;color:#fff;background:#6E4A2B;border-radius:999px;">🎬 Ouvrir l'espace Agence ↗</a>
+            <button onClick=${() => v.copyLink(v.agencyUrl)} title="Copier le lien agence" style="padding:8px 13px;font-size:12px;font-weight:600;border-radius:999px;border:1px solid rgba(110,74,43,0.35);background:#fff;color:#6E4A2B;cursor:pointer;">⎘ Lien</button>
+          </div>
+        </div>
+        ${v.mediaOverview.total ? html`
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+            <span style="font-size:12px;color:#4A4640;background:#F5EFE4;border-radius:999px;padding:4px 12px;">🎬 ${v.mediaOverview.videos} vidéo(s)</span>
+            <span style="font-size:12px;color:#4A4640;background:#F5EFE4;border-radius:999px;padding:4px 12px;">🖼 ${v.mediaOverview.photos} photo(s)</span>
+            <span style="font-size:12px;color:#4A4640;background:#F5EFE4;border-radius:999px;padding:4px 12px;">Matin ${v.mediaOverview.byMoment.matin} · Midi ${v.mediaOverview.byMoment.midi} · Soir ${v.mediaOverview.byMoment.soir} · Journée ${v.mediaOverview.byMoment.all}</span>
+            <span style="font-size:12px;color:${v.mediaOverview.present === v.mediaOverview.total ? '#2E6E4E' : '#8D1D2C'};background:#F5EFE4;border-radius:999px;padding:4px 12px;">${v.mediaOverview.present}/${v.mediaOverview.total} présent(s) sur le disque</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            ${v.mediaOverview.rows.map((mm) => html`
+              <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:9px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.08);flex-wrap:wrap;">
+                <span style="font-size:15px;flex:0 0 auto;">${mm.kind === 'photo' ? '🖼' : '🎬'}</span>
+                <span style="flex:1 1 200px;min-width:0;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${mm.filename}</span>
+                <span style="font-size:10.5px;font-weight:700;color:#6E4A2B;background:rgba(110,74,43,0.1);border-radius:999px;padding:2px 9px;">${mm.moment}</span>
+                ${mm.product ? html`<span style="font-size:11px;color:#4A4640;">🏷 ${mm.product}</span>` : ''}
+                ${mm.season ? html`<span style="font-size:11px;color:#6E4A2B;">📅 ${mm.season}</span>` : ''}
+                <span style="font-size:11px;color:#8A847C;">${Math.round((mm.size || 0) / 1024 / 1024 * 10) / 10} Mo</span>
+                <span style="font-size:11px;font-weight:700;color:${mm.present ? '#2E6E4E' : '#8D1D2C'};">${mm.present ? '✓' : '⚠ absent'}</span>
+                <button onClick=${mm.del} title="Supprimer du serveur" style="flex:0 0 auto;width:24px;height:24px;border-radius:50%;background:rgba(141,29,44,0.1);border:none;cursor:pointer;font-size:11px;color:#8D1D2C;">✕</button>
+              </div>
+            `)}
+          </div>
+        ` : html`<p style="margin:0;font-size:12.5px;color:#8A847C;">Aucun média sur le serveur pour l'instant. Les agences en ajoutent via l'espace Agence (ou dépose-les dans <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">public/media/</code> par SFTP).</p>`}
       </div>
     </div>
   </div>

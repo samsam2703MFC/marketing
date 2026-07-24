@@ -251,8 +251,12 @@ async function detectShops(cfg, db) {
 }
 
 // P\u00e9riodes de l'ann\u00e9e depuis ws_season (best-effort : colonnes auto-d\u00e9tect\u00e9es).
-async function detectSeasons(cfg, db) {
-  for (const t of ['ws_season', 'ws_seasons', 'wc_season', 'season', 'seasons', 'periode', 'periods', 'periodes']) {
+// `preferred` : nom de table impos\u00e9 par l'utilisateur (R\u00e9glages avanc\u00e9s).
+async function detectSeasons(cfg, db, preferred) {
+  const candidates = preferred
+    ? [preferred]
+    : ['ws_season', 'ws_seasons', 'wc_season', 'season', 'seasons', 'periode', 'periods', 'periodes'];
+  for (const t of candidates) {
     try {
       const cols = await tableCols(cfg, db, t);
       if (!cols.length) continue;
@@ -277,10 +281,22 @@ async function detectSeasons(cfg, db) {
   return { table: '', seasons: [] };
 }
 
-export async function importSeasons() {
+export async function importSeasons(table) {
   const cfg = pwaConfig();
   const db = await detectSchema(cfg);
-  const det = await detectSeasons(cfg, db);
+  const det = await detectSeasons(cfg, db, table && String(table).trim());
+  // Aide au diagnostic : si rien trouvé, on liste les tables qui « ressemblent »
+  // à des saisons/périodes pour que l'utilisateur pointe la bonne.
+  if (!det.seasons.length) {
+    try {
+      const rows = await mysqlRows(cfg, `
+        SELECT table_name FROM information_schema.tables
+        WHERE table_schema = '${String(db).replace(/'/g, '')}'
+          AND (table_name LIKE '%season%' OR table_name LIKE '%periode%' OR table_name LIKE '%period%' OR table_name LIKE '%saison%')
+        ORDER BY table_name LIMIT 20`);
+      det.candidates = rows.map((r) => r[0]);
+    } catch { det.candidates = []; }
+  }
   return { db, ...det };
 }
 

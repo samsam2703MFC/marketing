@@ -715,9 +715,11 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
     }
     if (req.method === 'POST' && path === '/seasons/import') {
       try {
-        const det = await importSeasons();
+        const body = await readBody();
+        const det = await importSeasons(body.table);
         if (!det.seasons.length) {
-          return send(200, { ok: false, error: det.table ? `table « ${det.table} » sans colonnes de dates exploitables` : 'aucune table ws_season trouvée dans la base' });
+          const cand = (det.candidates && det.candidates.length) ? ` — tables candidates dans « ${det.db} » : ${det.candidates.join(', ')}` : ` (base « ${det.db} »)`;
+          return send(200, { ok: false, error: det.table ? `table « ${det.table} » sans colonnes de dates exploitables` : `aucune table ws_season trouvée${cand}`, candidates: det.candidates || [], db: det.db });
         }
         // On remplace les périodes importées (préfixe ws_) et on garde les manuelles.
         const manual = loadSeasons().filter((s) => !String(s.id).startsWith('ws_'));
