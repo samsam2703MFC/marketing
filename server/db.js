@@ -539,6 +539,9 @@ export const PLAN_MOMENTS = [
 ];
 const HHMM = (v, fb) => (/^\d{1,2}:\d{2}$/.test(String(v || '')) ? String(v) : fb);
 
+// Nombre maximum de films par moment de la journée.
+export const MAX_PLAN_FILMS = 5;
+
 export function planWindows() {
   let saved = {};
   try { saved = JSON.parse(getSetting('plan_windows', '{}')) || {}; } catch { saved = {}; }
@@ -586,7 +589,8 @@ export function savePlan({ stores, slots, windows }) {
     for (const sid of targets) {
       for (const m of PLAN_MOMENTS) {
         del.run(sid, m.id);
-        const films = slotFilms(slots && slots[m.id]).filter((fid) => validFilms.has(fid));
+        // Dédoublonnage + plafond : au plus MAX_PLAN_FILMS films par moment.
+        const films = [...new Set(slotFilms(slots && slots[m.id]).filter((fid) => validFilms.has(fid)))].slice(0, MAX_PLAN_FILMS);
         films.forEach((fid, i) => ins.run(sid, m.id, i, fid));
       }
     }

@@ -43,6 +43,9 @@ const infoTip = (text) => html`
   </span>`;
 const PHOTO_TIP = 'Qualité top : photo carrée d’au moins 2000 × 2000 px, idéal 2500 × 2500 — elle est affichée en très grand sur les écrans. Produit centré, fond clair et uni (ou PNG détouré). Trop grande ? Elle est réduite automatiquement. En dessous de 1500 px, elle risque de paraître floue.';
 
+// Nombre maximum de films par moment de la journée (planning).
+const MAX_PLAN_FILMS = 5;
+
 const POSF = [
   { k: 'titleY', label: 'Titre · vertical', min: -400, max: 400, step: 10, unit: 'px' },
   { k: 'listX', label: 'Liste · horizontal', min: -800, max: 800, step: 10, unit: 'px' },
@@ -1100,6 +1103,7 @@ class App extends Component {
   addPlanFilm(moment, filmId) {
     const cur = this.state.planSlots[moment] || [];
     if (cur.includes(filmId)) return; // pas de doublon dans un même moment
+    if (cur.length >= MAX_PLAN_FILMS) { this.showToast(`${MAX_PLAN_FILMS} films maximum par moment`); return; }
     this.setState({ planSlots: { ...this.state.planSlots, [moment]: [...cur, filmId] }, planResult: null });
   }
   removePlanFilm(moment, idx) {
@@ -1674,12 +1678,14 @@ class App extends Component {
         const c = f ? filmCatOf(f) : null;
         return f ? { name: f.name, count: f.items.length, color: c.color } : { name: '(film supprimé)', count: 0, color: '#8A847C' };
       });
+      const full = ids.length >= MAX_PLAN_FILMS;
       return {
         id: w.id, label: w.label, from: w.from, to: w.to,
+        count: ids.length, max: MAX_PLAN_FILMS, full,
         onFrom: (e) => this.setPlanWindow(w.id, 'from', e.target.value),
         onTo: (e) => this.setPlanWindow(w.id, 'to', e.target.value),
         films: films.map((f, i) => ({ ...f, order: i + 1, remove: () => this.removePlanFilm(w.id, i) })),
-        onDragOver: (e) => { e.preventDefault(); e.currentTarget.classList.add('drag-over'); },
+        onDragOver: (e) => { if (full) return; e.preventDefault(); e.currentTarget.classList.add('drag-over'); },
         onDragLeave: (e) => e.currentTarget.classList.remove('drag-over'),
         onDrop: (e) => {
           e.preventDefault(); e.currentTarget.classList.remove('drag-over');
@@ -2476,7 +2482,10 @@ class App extends Component {
           ${v.planCols.map((col) => html`
             <div style="display:flex;flex-direction:column;gap:10px;">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-                <span style="font-size:13px;font-weight:700;color:#232220;">${col.label}</span>
+                <span style="display:flex;align-items:center;gap:7px;">
+                  <span style="font-size:13px;font-weight:700;color:#232220;">${col.label}</span>
+                  <span title="Films dans ce moment (5 max)" style="font-size:10.5px;font-weight:700;color:${col.full ? '#8D1D2C' : '#8A847C'};background:${col.full ? 'rgba(141,29,44,0.1)' : 'rgba(35,34,32,0.06)'};border-radius:999px;padding:2px 8px;">${col.count}/${col.max}</span>
+                </span>
                 <span style="display:flex;align-items:center;gap:4px;">
                   <input value=${col.from} onInput=${col.onFrom} style="width:62px;padding:5px 7px;font-size:12px;text-align:center;border:1px solid rgba(35,34,32,0.16);border-radius:7px;background:#FBF8F2;" />
                   <span style="color:#8A847C;font-size:12px;">→</span>
@@ -2496,8 +2505,10 @@ class App extends Component {
                   </div>
                 `)}
                 ${col.films.length
-                  ? html`<div style="font-size:10.5px;color:#B8B2A8;text-align:center;padding:3px;">＋ glisse un autre film (joué à la suite)</div>`
-                  : html`<div style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;font-size:12px;color:#B8B2A8;">Glisse un ou plusieurs films ici</div>`}
+                  ? (col.full
+                    ? html`<div style="font-size:10.5px;color:#8D1D2C;text-align:center;padding:3px;">${col.max} films max atteint — retires-en un pour changer</div>`
+                    : html`<div style="font-size:10.5px;color:#B8B2A8;text-align:center;padding:3px;">＋ glisse un autre film (joué à la suite)</div>`)
+                  : html`<div style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;font-size:12px;color:#B8B2A8;">Glisse un ou plusieurs films ici (5 max)</div>`}
               </div>
             </div>
           `)}

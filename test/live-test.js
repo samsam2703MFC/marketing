@@ -292,6 +292,33 @@ async function main() {
       await call('POST', '/api/v1/plan', { stores: [store.id], slots: {}, windows: before.windows });
       return `${store.store} : ${multi ? '2 films enchaînés' : '« ' + film.name + ' »'} au ${f.plan.moment} (${f.plan.window})`;
     });
+    await step('POST /api/v1/plan — plafond de 5 films par moment', async () => {
+      const MAX = 5;
+      const store = (await call('GET', '/api/v1/fleet')).stores[0];
+      const snap = await call('GET', '/api/v1/state'); // brouillon complet, restauré à la fin
+      const modIds = (snap.modules || []).map((m) => m.id);
+      if (!store || !modIds.length) throw new Error('pré-requis manquants (magasin / modules)');
+      // 6 films éphémères (chacun = 1 module) pour dépasser volontairement la limite
+      const films6 = Array.from({ length: MAX + 1 }, (_, i) => ({ id: `plcap${i + 1}`, name: `Cap ${i + 1}`, items: [modIds[0]] }));
+      await call('PUT', '/api/v1/draft', {
+        modules: snap.modules, playlists: films6, activePlaylistId: 'plcap1',
+        secPerLine: snap.secPerLine, loop: snap.loop,
+      });
+      // on tente d'en programmer 6 dans le même moment → le serveur doit en garder 5
+      const out = await call('POST', '/api/v1/plan', {
+        stores: [store.id], slots: { midi: films6.map((f) => f.id) },
+        windows: [{ id: 'midi', from: '11:00', to: '15:00' }],
+      });
+      const saved = (out.byStore[store.id] || {}).midi || [];
+      if (saved.length !== MAX) throw new Error(`plafond attendu ${MAX}, obtenu ${saved.length}`);
+      // nettoyage : efface le plan, puis restaure le brouillon d'origine à l'identique
+      await call('POST', '/api/v1/plan', { stores: [store.id], slots: {} });
+      await call('PUT', '/api/v1/draft', {
+        modules: snap.modules, playlists: snap.playlists,
+        activePlaylistId: snap.activePlaylistId, secPerLine: snap.secPerLine, loop: snap.loop,
+      });
+      return `${MAX + 1} films soumis → ${saved.length} conservés (plafond ${MAX})`;
+    });
     await step('POST /api/v1/stores/<id> — langue du magasin', async () => {
       const fleetRes = await call('GET', '/api/v1/fleet');
       const store = fleetRes.stores[0];
