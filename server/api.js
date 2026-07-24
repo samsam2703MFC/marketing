@@ -1,6 +1,7 @@
 // API REST du CMS signage — /api/v1/*
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readdirSync, mkdirSync, writeFileSync, statSync, unlinkSync } from 'node:fs';
+import { join, dirname, extname, basename } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   getDb, getSetting, setSetting, getIntSetting,
   loadModules, loadPlaylist, loadPlaylists, activePlaylistId, saveDraft, storeFormat, DB_PATH,
@@ -21,6 +22,39 @@ function sessionToken(req) {
 }
 
 const ONLINE_WINDOW_S = 30; // heartbeat attendu toutes les ~5 s
+
+// ---- vidéo « surprise » : dossier serveur de vidéos, piochées au hasard -----
+const API_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const SURPRISE_DIR = join(API_ROOT, 'public', 'surprise');
+const VIDEO_EXT = new Set(['.mp4', '.webm', '.mov', '.m4v', '.ogv', '.ogg']);
+
+function listSurprise() {
+  try {
+    if (!existsSync(SURPRISE_DIR)) return [];
+    return readdirSync(SURPRISE_DIR)
+      .filter((n) => VIDEO_EXT.has(extname(n).toLowerCase()))
+      .sort()
+      .map((n) => {
+        let size = 0;
+        try { size = statSync(join(SURPRISE_DIR, n)).size; } catch { /* ignore */ }
+        return { name: n, url: 'surprise/' + encodeURIComponent(n), size };
+      });
+  } catch { return []; }
+}
+
+// Attache la liste des vidéos du dossier aux éléments « surprise » et en pioche
+// une au hasard (le player joue m.video ; la pioche change à chaque requête).
+function resolveSurprise(modules) {
+  if (!Array.isArray(modules)) return;
+  let vids = null;
+  for (const m of modules) {
+    if (!m || !m.surprise) continue;
+    if (!vids) vids = listSurprise();
+    m.surpriseVideos = vids.map((v) => v.url);
+    m.surpriseCount = vids.length;
+    if (vids.length) m.video = vids[Math.floor(Math.random() * vids.length)].url;
+  }
+}
 
 const nowIso = () => new Date().toISOString();
 const secsSince = (iso) => (iso ? Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 1000)) : null);
@@ -115,7 +149,7 @@ export function reportJson() {
     },
     secPerLine: parseFloat(getSetting('sec_per_line', '4')),
     loop: getSetting('loop', '1') === '1',
-    modules: loadModules(),
+    modules: (() => { const ms = loadModules(); resolveSurprise(ms); return ms; })(),
     playlists: loadPlaylists(),
     activePlaylistId: activePlaylistId(),
     plan: loadPlan(),
@@ -407,6 +441,8 @@ function filmJson(storeId, filmId) {
   // Prix + langue du magasin : le lien ?store= montre SES prix, dans SA langue.
   applyStorePrices(snap.modules, storeId);
   applyStoreLang(snap.modules, storeId);
+  // Vidéo surprise : pioche une vidéo au hasard dans le dossier serveur.
+  resolveSurprise(snap.modules);
   return { status: 200, json: snap };
 }
 
@@ -536,6 +572,29 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
     // ---- types d'éléments & table produits (rien en dur : tout en base) ----
     if (req.method === 'GET' && path === '/element-types') return send(200, { types: loadElementTypes() });
     if (req.method === 'GET' && path === '/langs') return send(200, { langs: loadLangs() });
+
+    // ---- vidéos « surprise » (dossier serveur, piochées au hasard) ---------
+    if (req.method === 'GET' && path === '/surprise') {
+      return send(200, { dir: 'public/surprise', videos: listSurprise() });
+    }
+    if (req.method === 'POST' && path === '/surprise') {
+      const body = await readBody();
+      const name = String(body.name || '').replace(/[^\w.\- ]+/g, '_').slice(0, 120);
+      const mData = /^data:[\w/+.-]+;base64,(.+)$/s.exec(String(body.dataUrl || ''));
+      if (!name || !mData) return send(400, { error: 'nom ou vidéo manquant' });
+      if (!VIDEO_EXT.has(extname(name).toLowerCase())) return send(400, { error: 'format vidéo non supporté (.mp4, .webm, .mov…)' });
+      const buf = Buffer.from(mData[1], 'base64');
+      if (buf.length > 18 * 1024 * 1024) return send(413, { error: 'vidéo trop lourde pour l’upload (max 18 Mo) — dépose-la directement dans public/surprise/ sur le serveur' });
+      try { mkdirSync(SURPRISE_DIR, { recursive: true }); } catch { /* déjà là */ }
+      writeFileSync(join(SURPRISE_DIR, name), buf);
+      return send(200, { ok: true, videos: listSurprise() });
+    }
+    if (req.method === 'DELETE' && (mm = m(/^\/surprise\/(.+)$/))) {
+      const name = basename(decodeURIComponent(mm[1]));
+      const f = join(SURPRISE_DIR, name);
+      if (f.startsWith(SURPRISE_DIR) && existsSync(f)) { try { unlinkSync(f); } catch { /* déjà supprimé */ } }
+      return send(200, { ok: true, videos: listSurprise() });
+    }
 
     // ---- miroir MySQL (tables sig_* consultables dans phpMyAdmin) -----------
     if (req.method === 'GET' && path === '/mirror') return send(200, mirrorStatus());

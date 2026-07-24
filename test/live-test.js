@@ -183,6 +183,17 @@ async function main() {
     if (!/report\.js/.test(html)) throw new Error('report.js non référencé');
     return 'page HTML du rapport OK';
   });
+  await step('POST/DELETE /api/v1/surprise — dossier vidéos surprise', async () => {
+    const before = await call('GET', '/api/v1/surprise');
+    if (!Array.isArray(before.videos)) throw new Error('liste absente');
+    const name = 'test-surprise-livetest.mp4';
+    const dataUrl = 'data:video/mp4;base64,' + Buffer.from('livetest').toString('base64');
+    const up = await call('POST', '/api/v1/surprise', { name, dataUrl });
+    if (!up.ok || !up.videos.some((v) => v.name === name)) throw new Error('upload non listé');
+    const del = await call('DELETE', `/api/v1/surprise/${encodeURIComponent(name)}`);
+    if (del.videos.some((v) => v.name === name)) throw new Error('suppression échouée');
+    return `dossier OK · upload + suppression (${before.videos.length} vidéo(s) au départ)`;
+  });
   await step('GET /api/v1/film?film=… — lien direct par film', async () => {
     const base = await (await fetch(BASE + '/api/v1/film')).json();
     const id = base.playlistId || 'pl1';

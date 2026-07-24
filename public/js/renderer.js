@@ -130,6 +130,12 @@ export function renderModule(h, m, lt, opts) {
         autoplay: true, muted: true, loop: true, playsinline: true,
         style: { position: 'absolute', inset: 0, width: W, height: H, objectFit: m.layout === 'contain' ? 'contain' : 'cover' },
       }));
+    } else if (m.surprise) {
+      const n = m.surpriseCount || (m.surpriseVideos || []).length;
+      kids.push(h('div', { key: 'surp', style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', gap: 60, alignItems: 'center', justifyContent: 'center', background: '#141414', color: '#fff' } },
+        h('div', { style: { fontSize: 300 } }, '🎲'),
+        h('div', { style: { fontFamily: FUI, fontSize: 96, letterSpacing: '0.12em', textTransform: 'uppercase' } }, 'Vidéo surprise'),
+        h('div', { style: { fontFamily: FUI, fontSize: 74, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.1em' } }, `${n} vidéo(s) · piochée au hasard`)));
     } else {
       kids.push(h('div', { key: 'novid', style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', gap: 70, alignItems: 'center', justifyContent: 'center' } },
         h('div', { style: { fontSize: 260, color: '#C9C3B8' } }, '▶'),

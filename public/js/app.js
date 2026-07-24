@@ -101,6 +101,7 @@ class App extends Component {
     pwaForm: null, pwaBusy: null, pwaResult: null,
     planWindows: [], planByStore: {}, planStores: [], planSlots: { matin: [], midi: [], aprem: [] },
     planBusy: false, planResult: null,
+    surpriseVideos: [], surpriseBusy: false,
     onbOpen: false, onbStore: '', onbTest: {},
     onbDone: (() => { try { return JSON.parse(localStorage.getItem('sigOnbDone') || '[]'); } catch { return []; } })(),
   };
@@ -202,6 +203,7 @@ class App extends Component {
         selId: st.modules.length ? st.modules[0].id : null,
         dirty: false, saved: true,
       });
+      this.loadSurprise(); // liste des vidéos « surprise » (dossier serveur)
     } catch (e) {
       if (e.status === 401) this.setState({ loading: false, authRequired: true });
       else this.setState({ loading: false, loadError: String(e.message || e) });
@@ -273,6 +275,10 @@ class App extends Component {
   // produits — noms, prix (y compris par magasin côté serveur) et actif/inactif
   // suivent instantanément, sans dépendre de l'instantané pris au moment du lien.
   resolveMod(m) {
+    // Élément « surprise » : on annote le nombre de vidéos du dossier pour l'aperçu.
+    if (m && m.surprise && !m.catRef && !m.productRef) {
+      return { ...m, surpriseCount: (this.state.surpriseVideos || []).length };
+    }
     if (!m || (!m.catRef && !m.productRef)) return m;
     const prods = this.state.catalog.products || [];
     const toItem = (p) => ({ name: p.name, price: p.price, img: p.img, src: p.src, active: p.active !== false, productId: p.id });
@@ -560,6 +566,37 @@ class App extends Component {
     const r = new FileReader();
     r.onload = () => this.setSelField('video', r.result);
     r.readAsDataURL(f);
+  }
+
+  // ---- vidéo « surprise » : pioche au hasard dans un dossier serveur --------
+  toggleSurprise() {
+    const on = !this.sel().surprise;
+    this.setSelField('surprise', on);
+    if (on) { this.setSelField('video', ''); this.loadSurprise(); }
+  }
+  async loadSurprise() {
+    try { const r = await api('GET', '/surprise'); this.setState({ surpriseVideos: r.videos || [] }); }
+    catch { /* dossier indisponible : liste vide */ }
+  }
+  async uploadSurprise(files) {
+    const list = [...(files || [])];
+    if (!list.length || this.state.surpriseBusy) return;
+    this.setState({ surpriseBusy: true });
+    try {
+      for (const f of list) {
+        if (f.size > 18 * 1024 * 1024) { this.showToast(`${f.name} : trop lourd (max 18 Mo par l'upload) — dépose-le dans public/surprise/ sur le serveur`); continue; }
+        const dataUrl = await new Promise((res, rej) => { const rd = new FileReader(); rd.onload = () => res(rd.result); rd.onerror = rej; rd.readAsDataURL(f); });
+        const out = await api('POST', '/surprise', { name: f.name, dataUrl });
+        this.setState({ surpriseVideos: out.videos || [] });
+      }
+      this.showToast('Vidéo(s) surprise ajoutée(s) ✓');
+    } catch (e) { this.showToast(`Erreur : ${e.message}`); }
+    finally { this.setState({ surpriseBusy: false }); }
+  }
+  async deleteSurprise(name) {
+    if (!window.confirm(`Supprimer « ${name} » du dossier surprise ?`)) return;
+    try { const out = await api('DELETE', '/surprise/' + encodeURIComponent(name)); this.setState({ surpriseVideos: out.videos || [] }); }
+    catch (e) { this.showToast(`Erreur : ${e.message}`); }
   }
 
   // ---- table produits (vue Produits) --------------------------------------
@@ -1910,6 +1947,14 @@ class App extends Component {
       videoPreview: m.video || '',
       onVideoFile: (e) => this.onVideo(e),
       clearVideo: () => this.setSelField('video', ''),
+      // -- film en mode « surprise » (dossier serveur, piochée au hasard) --
+      isSurprise: !!m.surprise,
+      toggleSurprise: () => this.toggleSurprise(),
+      surpriseList: st.surpriseVideos || [],
+      surpriseBusy: st.surpriseBusy,
+      onSurpriseFiles: (e) => { this.uploadSurprise(e.target.files); e.target.value = ''; },
+      refreshSurprise: () => this.loadSurprise(),
+      delSurprise: (name) => this.deleteSurprise(name),
       // -- résumés des volets repliés --
       layoutSummary: ((layoutList.find((o) => o.id === m.layout) || {}).label) || m.layout || '',
       motionSummary: ({ m1: 'Doux', m2: 'Ample', m3: 'Pulsé', none: 'Aucun' })[m.motion || 'm1'] || '',
@@ -1922,7 +1967,7 @@ class App extends Component {
         ? `⛓ ${(st.catalog.categories.find((c) => c.id === m.catRef) || {}).name || m.catRef} · ${(this.resolveMod(m).items || []).length} ligne(s)`
         : `${(m.items || []).length} produit(s)`,
       tagSummary: (m.tag && m.tag.enabled) ? `activé · ${m.tag.label || 'macaron'}` : 'désactivé',
-      videoSummary: m.video ? `importée · ${m.dur || 10} s` : 'aucune vidéo',
+      videoSummary: m.surprise ? `surprise · ${(st.surpriseVideos || []).length} vidéo(s)` : (m.video ? `importée · ${m.dur || 10} s` : 'aucune vidéo'),
       produitSummary: ((this.resolveMod(m).items || [])[0] || {}).name || 'à choisir',
       // -- motion global (produit / animation) --
       motionSimple: MOTIONS.map((o) => ({
@@ -2801,17 +2846,50 @@ class App extends Component {
           <div style=${secCard}>
             ${secHead('video', 'Vidéo', v.videoSummary)}
             ${secOpen('video') && html`<div style=${secBody}>
-            <p style="margin:0 0 12px;font-size:12px;color:#8A847C;line-height:1.5;">mp4 ou webm, <strong>8 Mo max</strong> (compresse en 1080p/H.264). Lue en boucle, sans le son, pendant la durée choisie.</p>
-            ${v.hasVideo && html`
-              <video src=${v.videoPreview} muted autoplay loop playsinline style="width:100%;border-radius:12px;background:#000;margin-bottom:10px;"></video>
-            `}
-            <div style="display:flex;gap:10px;">
-              <label style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 12px;font-size:13px;font-weight:600;color:#8D1D2C;border:1px dashed rgba(141,29,44,0.4);border-radius:10px;background:rgba(141,29,44,0.04);cursor:pointer;">
-                <span style="font-size:16px;">⬆</span><span>${v.hasVideo ? 'Remplacer la vidéo' : 'Importer une vidéo'}</span>
-                <input type="file" accept="video/mp4,video/webm,video/*" onChange=${v.onVideoFile} style="display:none;" />
-              </label>
-              ${v.hasVideo && html`<button onClick=${v.clearVideo} style="padding:11px 16px;font-size:13px;font-weight:600;color:#8D1D2C;background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:10px;cursor:pointer;">Retirer</button>`}
+            <!-- bascule : vidéo unique / vidéo surprise (dossier serveur) -->
+            <div style="display:inline-flex;background:#EFE9E0;border-radius:9px;padding:3px;margin-bottom:14px;">
+              <button onClick=${() => { if (v.isSurprise) v.toggleSurprise(); }} style="padding:7px 14px;font-size:12.5px;font-weight:600;border:none;border-radius:7px;cursor:pointer;${!v.isSurprise ? 'background:#fff;color:#232220;box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'}">Vidéo unique</button>
+              <button onClick=${() => { if (!v.isSurprise) v.toggleSurprise(); }} style="padding:7px 14px;font-size:12.5px;font-weight:600;border:none;border-radius:7px;cursor:pointer;${v.isSurprise ? 'background:#fff;color:#6E4A2B;box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'}">🎲 Vidéo surprise</button>
             </div>
+
+            ${!v.isSurprise && html`
+              <p style="margin:0 0 12px;font-size:12px;color:#8A847C;line-height:1.5;">mp4 ou webm, <strong>8 Mo max</strong> (compresse en 1080p/H.264). Lue en boucle, sans le son, pendant la durée choisie.</p>
+              ${v.hasVideo && html`
+                <video src=${v.videoPreview} muted autoplay loop playsinline style="width:100%;border-radius:12px;background:#000;margin-bottom:10px;"></video>
+              `}
+              <div style="display:flex;gap:10px;">
+                <label style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 12px;font-size:13px;font-weight:600;color:#8D1D2C;border:1px dashed rgba(141,29,44,0.4);border-radius:10px;background:rgba(141,29,44,0.04);cursor:pointer;">
+                  <span style="font-size:16px;">⬆</span><span>${v.hasVideo ? 'Remplacer la vidéo' : 'Importer une vidéo'}</span>
+                  <input type="file" accept="video/mp4,video/webm,video/*" onChange=${v.onVideoFile} style="display:none;" />
+                </label>
+                ${v.hasVideo && html`<button onClick=${v.clearVideo} style="padding:11px 16px;font-size:13px;font-weight:600;color:#8D1D2C;background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:10px;cursor:pointer;">Retirer</button>`}
+              </div>
+            `}
+
+            ${v.isSurprise && html`
+              <p style="margin:0 0 12px;font-size:12px;color:#8A847C;line-height:1.5;">Le player pioche <strong>une vidéo au hasard</strong> dans le dossier serveur <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">public/surprise/</code> à chaque diffusion — pour surprendre le client. Ajoute des vidéos ici (≤ 18 Mo) ou dépose-les directement dans le dossier par SFTP (gros fichiers).</p>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">
+                <span style="font-size:12.5px;font-weight:600;color:#6E4A2B;">🎲 ${v.surpriseList.length} vidéo(s) dans le dossier</span>
+                <button onClick=${v.refreshSurprise} style="padding:6px 12px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">⟳ Rafraîchir</button>
+              </div>
+              ${v.surpriseList.length ? html`
+                <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;">
+                  ${v.surpriseList.map((vid) => html`
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 11px;border-radius:9px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.1);">
+                      <span style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🎬 ${vid.name}</span>
+                      <span style="display:flex;align-items:center;gap:9px;flex:0 0 auto;">
+                        <span style="font-size:11px;color:#8A847C;">${Math.round((vid.size || 0) / 1024 / 1024 * 10) / 10} Mo</span>
+                        <button onClick=${() => v.delSurprise(vid.name)} title="Supprimer du dossier" style="width:22px;height:22px;border-radius:50%;background:rgba(141,29,44,0.1);border:none;cursor:pointer;font-size:11px;color:#8D1D2C;">✕</button>
+                      </span>
+                    </div>
+                  `)}
+                </div>
+              ` : html`<p style="margin:0 0 12px;font-size:12px;color:#B8B2A8;">Dossier vide — ajoute au moins une vidéo.</p>`}
+              <label style="display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 12px;font-size:13px;font-weight:600;color:#6E4A2B;border:1px dashed rgba(110,74,43,0.45);border-radius:10px;background:rgba(110,74,43,0.05);cursor:${v.surpriseBusy ? 'wait' : 'pointer'};">
+                <span style="font-size:16px;">⬆</span><span>${v.surpriseBusy ? 'Envoi…' : 'Ajouter des vidéos au dossier'}</span>
+                <input type="file" accept="video/mp4,video/webm,video/*" multiple onChange=${v.onSurpriseFiles} style="display:none;" />
+              </label>
+            `}
             </div>`}
           </div>
         `}

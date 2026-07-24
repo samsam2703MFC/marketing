@@ -237,6 +237,8 @@ function migrate(db) {
   if (!modCols2.includes('product_ref')) db.exec(`ALTER TABLE sig_modules ADD COLUMN product_ref TEXT NOT NULL DEFAULT ''`);
   if (!modCols2.includes('video')) db.exec(`ALTER TABLE sig_modules ADD COLUMN video TEXT NOT NULL DEFAULT ''`);
   if (!modCols2.includes('dur')) db.exec(`ALTER TABLE sig_modules ADD COLUMN dur REAL NOT NULL DEFAULT 0`);
+  // Élément film en mode « surprise » : pioche une vidéo au hasard dans le dossier serveur.
+  if (!modCols2.includes('surprise')) db.exec(`ALTER TABLE sig_modules ADD COLUMN surprise INTEGER NOT NULL DEFAULT 0`);
 
   // Les anciennes bases limitaient le type par un CHECK (category|liaison) —
   // les types vivent désormais dans sig_element_types : on reconstruit la
@@ -829,6 +831,7 @@ export function loadModules() {
       catRef: m.cat_ref || '',
       productRef: m.product_ref || '',
       video: m.video || '',
+      surprise: !!m.surprise,
       dur: m.dur || 0,
       tag: { enabled: !!m.tag_enabled, label: m.tag_label, img: m.tag_img },
       schedule: { days: JSON.parse(m.sched_days).map(Boolean), from: m.sched_from, to: m.sched_to },
@@ -889,8 +892,8 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
     const insMod = db.prepare(`INSERT INTO sig_modules
       (id, type, name, sub, layout, motion, motion_title, motion_list, motion_illo,
        tag_enabled, tag_label, tag_img, sched_days, sched_from, sched_to, pos, sort_order, lib_tag,
-       cat_ref, product_ref, video, dur, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
+       cat_ref, product_ref, video, surprise, dur, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
     const insItem = db.prepare(`INSERT INTO sig_module_items
       (module_id, position, name, price, img, src, active) VALUES (?, ?, ?, ?, ?, ?, ?)`);
     // Les types valides viennent de la table sig_element_types (rien en dur).
@@ -907,6 +910,7 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
         String(sched.from || '00:00'), String(sched.to || '23:59'),
         JSON.stringify(m.pos || {}), i, String(m.libTag || ''),
         String(m.catRef || ''), String(m.productRef || ''), String(m.video || ''),
+        m.surprise ? 1 : 0,
         Number.isFinite(parseFloat(m.dur)) ? Math.max(0, Math.min(120, parseFloat(m.dur))) : 0
       );
       // Un élément lié au catalogue ne stocke pas d'items propres.

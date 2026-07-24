@@ -34,15 +34,16 @@ function thumb(m, secPerLine, wPx = 248) {
   const hPx = Math.round(H * scale);
   if (m.type === 'film') {
     // Vidéo : on n'embarque pas le flux dans le rapport → vignette repère.
+    const label = m.surprise ? `Vidéo surprise · ${m.surpriseCount || (m.surpriseVideos || []).length} vidéo(s)` : 'Vidéo';
     return h('div', {
       style: {
         width: wPx + 'px', height: hPx + 'px', borderRadius: '8px', background: '#141414',
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '6px',
-        color: '#fff', flex: '0 0 auto',
+        color: '#fff', flex: '0 0 auto', textAlign: 'center', padding: '0 10px',
       },
     },
-    h('span', { style: { fontSize: '26px' } }, m.surpriseDir ? '🎲' : '🎬'),
-    h('span', { style: { fontSize: '11px', opacity: 0.8 } }, m.surpriseDir ? 'Vidéo surprise' : 'Vidéo'));
+    h('span', { style: { fontSize: '26px' } }, m.surprise ? '🎲' : '🎬'),
+    h('span', { style: { fontSize: '11px', opacity: 0.8 } }, label));
   }
   // Frame « posé » : entrée terminée, contenu lisible.
   const lt = Math.min(1.1, moduleDur(m, secPerLine) * 0.45);
