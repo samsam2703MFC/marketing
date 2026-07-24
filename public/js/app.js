@@ -89,7 +89,7 @@ class App extends Component {
     playlists: [], activePl: null, editingFilm: false, editFilmName: '', libFilter: 'all',
     filmFilter: 'all', filmTagInput: '',
     editingStore: null, editStoreName: '',
-    view: 'composer', composerTab: 'lib', publishing: false, deploying: false, version: 1, dataVer: 1, hbTick: 0, toast: '',
+    view: 'home', composerTab: 'lib', publishing: false, deploying: false, version: 1, dataVer: 1, hbTick: 0, toast: '',
     pubTargets: {}, pubSlot: 'Toute la journée', pubWhen: 'now', activateAt: '', pubMode: 'full',
     pubDays: [true, true, true, true, true, true, true], pubDone: null, pubFilm: null,
     override: false,
@@ -217,6 +217,8 @@ class App extends Component {
       this.loadSeasons();  // périodes de l'année
       this.loadHdStorage(); // réglages stockage/streaming HD
       this.loadMediaLib(); // médiathèque agence (vue admin)
+      this.loadProdMoments(); // périodes de vente + moment courant (Accueil)
+      this.refreshFleet();  // écrans (Accueil : « prêt à diffuser »)
       if (this.activeFilm().mode === 'continu') this.loadContPreview(); // aperçu réel de la boucle
     } catch (e) {
       if (e.status === 401) this.setState({ loading: false, authRequired: true });
@@ -747,6 +749,29 @@ class App extends Component {
   prodMomentState(productId, moment) {
     const r = (this.state.prodMoments || []).find((x) => x.productId === productId && x.moment === moment);
     return r ? (r.exception ? 'excl' : 'incl') : 'none';
+  }
+  // ---- Accueil « prêt à diffuser » ---------------------------------------
+  openHome() { this.setState({ view: 'home' }); this.loadProdMoments(); this.refreshFleet(); }
+  startFirstFilm() { this.newExampleFilm(); this.setState({ view: 'composer' }); }
+  // État de préparation : ce qui est prêt / ce qu'il reste à faire.
+  homeReadiness() {
+    const st = this.state;
+    const products = st.catalog.products || [];
+    const catalogOk = products.length > 0;
+    const filmsReady = (st.playlists || []).filter((p) => p.mode === 'continu' || (p.items || []).length > 0);
+    const players = (st.fleet || []).flatMap((s) => s.players || []);
+    const onlineN = players.filter((p) => p.state && p.state !== 'offline').length;
+    const dataBits = [];
+    if ((st.seasons || []).length) dataBits.push('saisons');
+    if ((st.prodMoments || []).length) dataBits.push('périodes de vente');
+    if ((st.mediaLib || []).length) dataBits.push('médias');
+    const steps = [
+      { key: 'catalog', ok: catalogOk, label: 'Catalogue importé', hint: catalogOk ? `${products.length} produit(s) · ${(st.catalog.categories || []).length} catégorie(s)` : 'aucun produit — connecte ta base', cta: { label: catalogOk ? 'Voir les produits' : 'Importer le catalogue', go: () => (catalogOk ? this.openProducts() : this.setView('settings')) } },
+      { key: 'film', ok: filmsReady.length > 0, label: 'Au moins un film prêt', hint: filmsReady.length ? `${filmsReady.length} film(s)` : 'aucun film avec du contenu', cta: { label: filmsReady.length ? 'Ouvrir le compositeur' : '✨ Créer mon premier film', go: () => (filmsReady.length ? this.setView('composer') : this.startFirstFilm()) } },
+      { key: 'screen', ok: players.length > 0, label: 'Écran connecté', hint: players.length ? `${onlineN}/${players.length} en ligne` : 'aucun écran branché', cta: { label: 'Brancher un écran', go: () => this.openOnboarding() } },
+      { key: 'data', ok: dataBits.length > 0, soft: true, label: 'Données du mode continu', hint: dataBits.length ? dataBits.join(' · ') : 'saisons · périodes de vente · médias (optionnel mais recommandé)', cta: { label: 'Remplir les périodes', go: () => this.openSeasons() } },
+    ];
+    return { steps, count: steps.filter((s) => s.ok).length, total: steps.length, moment: st.prodMomentsCurrent, week: st.planActiveWeek, online: onlineN, screens: players.length, film: this.activeFilm() };
   }
   // Pli/dépli des catégories dans la table produit × moment.
   togglePmCat(catId) { const c = { ...this.state.pmCollapsed }; c[catId] = !c[catId]; this.setState({ pmCollapsed: c }); }
@@ -2170,7 +2195,9 @@ class App extends Component {
       redoStyle: `display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;font-size:15px;background:transparent;border:1px solid ${st.future.length ? 'rgba(35,34,32,0.16)' : 'rgba(35,34,32,0.06)'};color:${st.future.length ? '#5B564E' : '#C9C3B8'};cursor:${st.future.length ? 'pointer' : 'not-allowed'};`,
       isComposerView: st.view === 'composer', isFleetView: st.view === 'fleet', isSettingsView: st.view === 'settings',
       isProductsView: st.view === 'products', isPlanningView: st.view === 'planning',
-      isSeasonsView: st.view === 'seasons',
+      isSeasonsView: st.view === 'seasons', isHomeView: st.view === 'home',
+      setViewHome: () => this.openHome(),
+      tabHomeStyle: stTab + (st.view === 'home' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       setViewComposer: () => this.setView('composer'),
       setViewFleet: () => this.setView('fleet'),
       setViewSettings: () => this.setView('settings'),
@@ -2480,6 +2507,11 @@ class App extends Component {
           </span>
         ` : ''}
       </div>
+      ${v.isTimelineTab && this.activeFilm().mode === 'continu' && v.contPreviewMeta && v.contPreviewMeta.products === 0 ? html`
+        <div style="margin:-4px 0 12px;padding:11px 14px;border-radius:10px;background:rgba(201,123,74,0.1);border:1px solid rgba(201,123,74,0.35);font-size:12.5px;color:#8A5A2B;line-height:1.5;">
+          ⚠ <strong>Aucun produit éligible</strong> au moment courant${v.contPreviewMeta.moment ? ` (${{ matin: 'matin', midi: 'midi', aprem: 'après-midi' }[v.contPreviewMeta.moment] || v.contPreviewMeta.moment})` : ''} — la boucle serait quasi vide à l'écran. Vérifie la <strong>source</strong> et les <strong>périodes de vente / saisons</strong> (onglet Périodes), ou mets « Si rien en saison » sur <strong>Tout le catalogue</strong>.
+        </div>
+      ` : ''}
       ${v.dragHint && html`
         <p style="margin:-4px 0 12px;font-size:11.5px;color:#8A847C;">✥ Glisse l'illustration ou le bandeau sur l'aperçu pour les positionner.</p>
       `}
@@ -2649,6 +2681,8 @@ class App extends Component {
         </div>
       </div>`;
 
+    const home = this.homeReadiness();
+    const MOMENT_FULL = { matin: 'Matin', midi: 'Midi', aprem: 'Après-midi' };
     return html`
 <div style="height:100vh;background:#E7E1D8;color:#232220;display:flex;flex-direction:column;overflow:hidden;">
 
@@ -2659,6 +2693,7 @@ class App extends Component {
         <span style="font-weight:500;font-size:12.5px;letter-spacing:0.02em;white-space:nowrap;">Régie d'affichage</span>
       </div>
       <div style="display:inline-flex;background:#EFE9E0;border-radius:999px;padding:3px;flex:0 0 auto;margin-left:10px;">
+        <button onClick=${v.setViewHome} style=${v.tabHomeStyle}>Accueil</button>
         <button onClick=${v.setViewComposer} style=${v.tabComposerStyle}>Compositeur</button>
         <button onClick=${v.setViewProducts} style=${v.tabProductsStyle}>Produits</button>
         <button onClick=${v.setViewSeasons} style=${v.tabSeasonsStyle}>Périodes</button>
@@ -3369,6 +3404,66 @@ class App extends Component {
           </div>
         </div>
       `)}
+    </div>
+  </div>
+  `}
+
+  ${v.isHomeView && html`
+  <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;">
+    <div style="max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:18px;">
+      <div>
+        <h1 style="margin:0 0 4px;font-size:22px;font-weight:600;color:#232220;">Bienvenue dans la régie 👋</h1>
+        <p style="margin:0;font-size:13.5px;color:#8A847C;">Voici où tu en es et ce qu'il te reste pour diffuser. ${home.count === home.total ? 'Tout est prêt 🎉' : `${home.count}/${home.total} étapes prêtes.`}</p>
+      </div>
+
+      <!-- Ce qui passe maintenant -->
+      <div style="background:linear-gradient(135deg,#2A2622,#3A332C);border-radius:18px;padding:20px 24px;color:#fff;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin-bottom:6px;">Ce qui passe maintenant</div>
+          <div style="font-size:18px;font-weight:600;">${home.film ? home.film.name : 'Aucun film'} ${home.film && home.film.mode === 'continu' ? html`<span style="font-size:11px;font-weight:600;color:#F0D9B5;background:rgba(240,217,181,0.15);border-radius:999px;padding:2px 9px;margin-left:4px;">🔄 continu</span>` : ''}</div>
+          <div style="font-size:12.5px;color:rgba(255,255,255,0.6);margin-top:4px;">Moment : <strong style="color:#fff;">${MOMENT_FULL[home.moment] || '—'}</strong> · Semaine active : <strong style="color:#fff;">${home.week}</strong> · Écrans : <strong style="color:#fff;">${home.online}/${home.screens}</strong> en ligne</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <a href=${new URL('film', location.href).toString()} target="_blank" style="padding:10px 16px;font-size:13px;font-weight:600;color:#232220;background:#fff;border-radius:999px;">▶ Voir la diffusion ↗</a>
+        </div>
+      </div>
+
+      <!-- Prêt à diffuser ? -->
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:20px 22px;">
+        <h3 style="margin:0 0 14px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Prêt à diffuser ?</h3>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          ${home.steps.map((s) => html`
+            <div style="display:flex;align-items:center;gap:14px;padding:13px 15px;border-radius:12px;background:${s.ok ? 'rgba(46,110,78,0.06)' : (s.soft ? '#FBF8F2' : 'rgba(201,123,74,0.07)')};border:1px solid ${s.ok ? 'rgba(46,110,78,0.25)' : (s.soft ? 'rgba(35,34,32,0.1)' : 'rgba(201,123,74,0.3)')};">
+              <span style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;font-size:15px;font-weight:700;background:${s.ok ? 'rgba(46,110,78,0.15)' : 'rgba(35,34,32,0.06)'};color:${s.ok ? '#2E6E4E' : '#B8B2A8'};">${s.ok ? '✓' : (s.soft ? '○' : '!')}</span>
+              <div style="flex:1 1 auto;min-width:0;">
+                <div style="font-size:14px;font-weight:600;color:#232220;">${s.label}${s.soft && !s.ok ? html` <span style="font-size:11px;font-weight:500;color:#8A847C;">· optionnel</span>` : ''}</div>
+                <div style="font-size:12px;color:#8A847C;">${s.hint}</div>
+              </div>
+              ${!s.ok && s.cta ? html`<button onClick=${s.cta.go} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:600;color:#fff;background:#8D1D2C;border:none;border-radius:999px;cursor:pointer;">${s.cta.label}</button>`
+                : (s.cta ? html`<button onClick=${s.cta.go} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.08);border:1px solid rgba(110,74,43,0.25);border-radius:999px;cursor:pointer;">${s.cta.label}</button>` : '')}
+            </div>
+          `)}
+        </div>
+      </div>
+
+      <!-- Actions rapides -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;">
+        <button onClick=${() => this.startFirstFilm()} style="text-align:left;padding:18px 20px;border-radius:16px;background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);cursor:pointer;">
+          <div style="font-size:22px;margin-bottom:6px;">✨</div>
+          <div style="font-size:14px;font-weight:700;color:#232220;">Créer un film continu</div>
+          <div style="font-size:12px;color:#8A847C;margin-top:3px;">Une boucle prête, à adapter en quelques clics.</div>
+        </button>
+        <button onClick=${() => this.openOnboarding()} style="text-align:left;padding:18px 20px;border-radius:16px;background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);cursor:pointer;">
+          <div style="font-size:22px;margin-bottom:6px;">📺</div>
+          <div style="font-size:14px;font-weight:700;color:#232220;">Brancher un écran</div>
+          <div style="font-size:12px;color:#8A847C;margin-top:3px;">Configure et connecte tes magasins pas à pas.</div>
+        </button>
+        <button onClick=${() => this.openSeasons()} style="text-align:left;padding:18px 20px;border-radius:16px;background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);cursor:pointer;">
+          <div style="font-size:22px;margin-bottom:6px;">🗓️</div>
+          <div style="font-size:14px;font-weight:700;color:#232220;">Périodes & données</div>
+          <div style="font-size:12px;color:#8A847C;margin-top:3px;">Saisons, produit × moment, médias agence.</div>
+        </button>
+      </div>
     </div>
   </div>
   `}
