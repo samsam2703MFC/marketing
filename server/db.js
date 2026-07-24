@@ -337,6 +337,19 @@ function migrate(db) {
     active     INTEGER NOT NULL DEFAULT 1
   );
 
+  -- Médiathèque agence : vidéos/photos uploadées par les agences, taguées
+  -- (moment de la journée · produit · saison) pour une diffusion ciblée.
+  CREATE TABLE IF NOT EXISTS sig_media (
+    id         TEXT PRIMARY KEY,
+    filename   TEXT NOT NULL,
+    kind       TEXT NOT NULL DEFAULT 'film',
+    moment     TEXT NOT NULL DEFAULT 'all',
+    product_id TEXT NOT NULL DEFAULT '',
+    season_id  TEXT NOT NULL DEFAULT '',
+    size       INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   -- Planning journalier : un ou plusieurs films par moment, par magasin
   -- (joués l'un après l'autre pendant le créneau).
   CREATE TABLE IF NOT EXISTS sig_dayplans (
@@ -585,6 +598,27 @@ export function currentSeasons(date = new Date()) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Médiathèque agence — métadonnées (le fichier vit dans public/media/).
+export function loadMedia() {
+  return getDb().prepare('SELECT * FROM sig_media ORDER BY created_at DESC').all().map((r) => ({
+    id: r.id, filename: r.filename, kind: r.kind, moment: r.moment,
+    productId: r.product_id, seasonId: r.season_id, size: r.size, createdAt: r.created_at,
+  }));
+}
+export function addMediaRow(m) {
+  getDb().prepare('INSERT INTO sig_media(id, filename, kind, moment, product_id, season_id, size) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(String(m.id), String(m.filename), m.kind === 'photo' ? 'photo' : 'film',
+      ['matin', 'midi', 'soir'].includes(m.moment) ? m.moment : 'all',
+      String(m.productId || ''), String(m.seasonId || ''), parseInt(m.size, 10) || 0);
+  return loadMedia();
+}
+export function getMediaRow(id) {
+  const r = getDb().prepare('SELECT * FROM sig_media WHERE id = ?').get(String(id));
+  return r ? { id: r.id, filename: r.filename, kind: r.kind } : null;
+}
+export function delMediaRow(id) { getDb().prepare('DELETE FROM sig_media WHERE id = ?').run(String(id)); }
+
 // Prix par magasin : remplace le prix par défaut des items liés au catalogue.
 export function applyStorePrices(modules, storeId) {
   if (!storeId) return;
@@ -779,15 +813,20 @@ export function storeFormat(s) {
 // Mot de passe : SIG_ADMIN_PASSWORD (env) — défaut « signage ». Si la variable
 // est définie au démarrage, le mot de passe du compte admin est aligné dessus.
 function ensureAdmin(db) {
-  const row = db.prepare('SELECT pass_salt, pass_hash FROM sig_users WHERE username = ?').get('admin');
-  const envPw = process.env.SIG_ADMIN_PASSWORD;
+  ensureUser(db, 'admin', process.env.SIG_ADMIN_PASSWORD, 'signage');
+  // Compte « agence » (upload de vidéos/photos uniquement). Mot de passe :
+  // SIG_AGENCY_PASSWORD (env), défaut « agence ».
+  ensureUser(db, 'agence', process.env.SIG_AGENCY_PASSWORD, 'agence');
+}
+function ensureUser(db, username, envPw, fallback) {
+  const row = db.prepare('SELECT pass_salt, pass_hash FROM sig_users WHERE username = ?').get(username);
   if (!row) {
-    const { salt, hash } = hashPassword(envPw || 'signage');
-    db.prepare('INSERT INTO sig_users(username, pass_salt, pass_hash) VALUES (?, ?, ?)').run('admin', salt, hash);
+    const { salt, hash } = hashPassword(envPw || fallback);
+    db.prepare('INSERT INTO sig_users(username, pass_salt, pass_hash) VALUES (?, ?, ?)').run(username, salt, hash);
   } else if (envPw && !verifyPassword(envPw, row.pass_salt, row.pass_hash)) {
     const { salt, hash } = hashPassword(envPw);
-    db.prepare(`UPDATE sig_users SET pass_salt = ?, pass_hash = ?, updated_at = datetime('now') WHERE username = 'admin'`).run(salt, hash);
-    db.prepare(`DELETE FROM sig_sessions WHERE username = 'admin'`).run();
+    db.prepare(`UPDATE sig_users SET pass_salt = ?, pass_hash = ?, updated_at = datetime('now') WHERE username = ?`).run(salt, hash, username);
+    db.prepare(`DELETE FROM sig_sessions WHERE username = ?`).run(username);
   }
 }
 

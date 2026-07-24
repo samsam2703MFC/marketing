@@ -208,6 +208,27 @@ async function main() {
     await call('PUT', '/api/v1/seasons', { seasons: before.seasons }); // restauration
     return `${out.seasons.length} période(s) · ${out.current.length} active(s) aujourd'hui`;
   });
+  await step('Médiathèque agence — upload tagué + accès séparé', async () => {
+    // upload (admin) d'un média tagué → préfixe moment + tags
+    const dataUrl = 'data:video/mp4;base64,' + Buffer.from('lt').toString('base64');
+    const up = await call('POST', '/api/v1/media', { name: 'lt-clip.mp4', kind: 'film', moment: 'soir', productId: '', seasonId: '', dataUrl });
+    const item = (up.media || []).find((x) => x.filename === '3_lt-clip.mp4');
+    if (!up.ok || !item || !item.present || item.moment !== 'soir') throw new Error('upload/tag/préfixe média');
+    // accès agence séparé : connexion agence, /state interdit, /media autorisé
+    const ag = await (await fetch(BASE + '/api/v1/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'agence', password: process.env.SIG_AGENCY_PASSWORD || 'agence' }) })).json().catch(() => ({}));
+    let agencyIsolated = 'non testé (mot de passe agence par défaut absent)';
+    if (ag && ag.token) {
+      const h = { authorization: `Bearer ${ag.token}` };
+      const s = await fetch(BASE + '/api/v1/state', { headers: h });
+      const md = await fetch(BASE + '/api/v1/media', { headers: h });
+      if (s.status !== 403) throw new Error(`agence devrait être bloquée sur /state (reçu ${s.status})`);
+      if (!md.ok) throw new Error('agence devrait lire /media');
+      agencyIsolated = 'agence cloisonnée (/state 403 · /media OK)';
+    }
+    // nettoyage
+    await call('DELETE', `/api/v1/media/${encodeURIComponent(item.id)}`);
+    return `média « 3_lt-clip.mp4 » (soir) · ${agencyIsolated}`;
+  });
   await step('GET /api/v1/film?film=… — lien direct par film', async () => {
     const base = await (await fetch(BASE + '/api/v1/film')).json();
     const id = base.playlistId || 'pl1';

@@ -7,6 +7,7 @@ import {
   loadModules, loadPlaylist, loadPlaylists, activePlaylistId, saveDraft, storeFormat, DB_PATH,
   loadElementTypes, loadCatalog, saveCatalog, applyStorePrices, applyStoreLang, loadLangs,
   loadSeasons, saveSeasons, currentSeasons,
+  loadMedia, addMediaRow, getMediaRow, delMediaRow,
   loadPlan, savePlan, planFilmAt, setActiveWeek, duplicateWeek,
   checkLogin, createSession, sessionUser, destroySession,
 } from './db.js';
@@ -27,7 +28,13 @@ const ONLINE_WINDOW_S = 30; // heartbeat attendu toutes les ~5 s
 // ---- vidéo « surprise » : dossier serveur de vidéos, piochées au hasard -----
 const API_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SURPRISE_DIR = join(API_ROOT, 'public', 'surprise');
+const MEDIA_DIR = join(API_ROOT, 'public', 'media');
 const VIDEO_EXT = new Set(['.mp4', '.webm', '.mov', '.m4v', '.ogv', '.ogg']);
+const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
+
+function mediaList() {
+  return loadMedia().map((m) => ({ ...m, url: 'media/' + encodeURIComponent(m.filename), present: existsSync(join(MEDIA_DIR, m.filename)) }));
+}
 
 function listSurprise() {
   try {
@@ -565,8 +572,50 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
     // ---- tout le reste exige une session back office ------------------------
     const user = sessionUser(sessionToken(req));
     if (!user) return send(401, { error: 'Authentification requise' });
+    const role = user === 'agence' ? 'agence' : 'admin';
 
-    if (req.method === 'GET' && path === '/me') return send(200, { ok: true, user });
+    if (req.method === 'GET' && path === '/me') return send(200, { ok: true, user, role });
+
+    // ---- médiathèque agence (upload vidéos/photos taguées) -----------------
+    // Accessible admin ET agence ; l'agence n'a accès QU'À ça (+ catalogue &
+    // périodes en lecture, pour remplir les tags du formulaire).
+    if (req.method === 'GET' && path === '/media') return send(200, { dir: 'public/media', media: mediaList() });
+    if (req.method === 'POST' && path === '/media') {
+      const body = await readBody();
+      const kind = body.kind === 'photo' ? 'photo' : 'film';
+      const rawName = String(body.name || '').replace(/[^\w.\- ]+/g, '_').slice(0, 120);
+      const mData = /^data:[\w/+.-]+;base64,(.+)$/s.exec(String(body.dataUrl || ''));
+      if (!rawName || !mData) return send(400, { error: 'nom ou fichier manquant' });
+      const ext = extname(rawName).toLowerCase();
+      if (!(kind === 'photo' ? IMAGE_EXT.has(ext) : VIDEO_EXT.has(ext))) return send(400, { error: kind === 'photo' ? 'format image non supporté (.jpg, .png, .webp…)' : 'format vidéo non supporté (.mp4, .webm, .mov…)' });
+      const buf = Buffer.from(mData[1], 'base64');
+      if (buf.length > 18 * 1024 * 1024) return send(413, { error: 'fichier trop lourd pour l’upload (max 18 Mo) — dépose-le dans public/media/ sur le serveur' });
+      const moment = ['matin', 'midi', 'soir'].includes(body.moment) ? body.moment : 'all';
+      // Convention agence : préfixe selon le moment (1_ matin · 2_ midi · 3_ soir).
+      const filename = ({ matin: '1_', midi: '2_', soir: '3_', all: '' })[moment] + rawName;
+      try { mkdirSync(MEDIA_DIR, { recursive: true }); } catch { /* déjà là */ }
+      writeFileSync(join(MEDIA_DIR, filename), buf);
+      const media = addMediaRow({ id: 'md' + Date.now().toString(36), filename, kind, moment, productId: body.productId, seasonId: body.seasonId, size: buf.length });
+      scheduleMirror();
+      return send(200, { ok: true, media: media.map((x) => ({ ...x, url: 'media/' + encodeURIComponent(x.filename), present: existsSync(join(MEDIA_DIR, x.filename)) })) });
+    }
+    if (req.method === 'DELETE' && (mm = m(/^\/media\/(.+)$/))) {
+      const row = getMediaRow(decodeURIComponent(mm[1]));
+      if (row) {
+        const f = join(MEDIA_DIR, row.filename);
+        if (f.startsWith(MEDIA_DIR) && existsSync(f)) { try { unlinkSync(f); } catch { /* déjà supprimé */ } }
+        delMediaRow(row.id);
+      }
+      scheduleMirror();
+      return send(200, { ok: true, media: mediaList() });
+    }
+
+    // L'agence n'accède qu'à sa médiathèque (+ catalogue & périodes en lecture).
+    if (role === 'agence') {
+      const okAgency = req.method === 'GET' && (path === '/catalog' || path === '/seasons');
+      if (!okAgency) return send(403, { error: 'Accès agence : réservé à la médiathèque vidéo' });
+    }
+
     if (req.method === 'GET' && path === '/state') return send(200, stateJson());
     if (req.method === 'GET' && path === '/fleet') return send(200, fleetJson());
 
@@ -697,7 +746,15 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       if (body.srvUrl != null) setSetting('srv_url', String(body.srvUrl));
       if (body.srvIp != null) setSetting('srv_ip', String(body.srvIp));
       if (body.srvToken != null) setSetting('srv_token', String(body.srvToken));
+      // Stockage / streaming HD (adresse + identifiants) — documenté, utilisable
+      // pour héberger les vidéos HD hors du serveur local.
+      if (body.hdUrl != null) setSetting('hd_url', String(body.hdUrl));
+      if (body.hdUser != null) setSetting('hd_user', String(body.hdUser));
+      if (body.hdPass != null && String(body.hdPass) !== '') setSetting('hd_pass', String(body.hdPass));
       return send(200, { ok: true });
+    }
+    if (req.method === 'GET' && path === '/hd-storage') {
+      return send(200, { hdUrl: getSetting('hd_url', ''), hdUser: getSetting('hd_user', ''), hasHdPass: !!getSetting('hd_pass', '') });
     }
 
     // Configuration d'un magasin : nom + combo d'écrans (ex. 3 × 55″ portrait).

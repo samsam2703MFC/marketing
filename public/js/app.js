@@ -92,6 +92,7 @@ class App extends Component {
     pubDays: [true, true, true, true, true, true, true], pubDone: null, pubFilm: null,
     override: false,
     srvUrl: '', srvIp: '', srvToken: '',
+    hdUrl: '', hdUser: '', hdPass: '', hasHdPass: false, hdSaving: false,
     test: { state: 'idle', rows: [] },
     fleet: [],
     library: [],
@@ -208,6 +209,7 @@ class App extends Component {
       });
       this.loadSurprise(); // liste des vidéos « surprise » (dossier serveur)
       this.loadSeasons();  // périodes de l'année
+      this.loadHdStorage(); // réglages stockage/streaming HD
     } catch (e) {
       if (e.status === 401) this.setState({ loading: false, authRequired: true });
       else this.setState({ loading: false, loadError: String(e.message || e) });
@@ -653,6 +655,21 @@ class App extends Component {
     } catch (e) { this.setState({ seasonsBusy: false }); this.showToast(`Erreur : ${e.message}`); }
   }
   openSeasons() { this.setState({ view: 'seasons' }); if (!this.state.seasons.length) this.loadSeasons(); }
+
+  // ---- stockage / streaming HD (réglages) ---------------------------------
+  async loadHdStorage() {
+    try { const r = await api('GET', '/hd-storage'); this.setState({ hdUrl: r.hdUrl || '', hdUser: r.hdUser || '', hasHdPass: !!r.hasHdPass }); }
+    catch { /* indisponible */ }
+  }
+  async saveHdStorage() {
+    if (this.state.hdSaving) return;
+    this.setState({ hdSaving: true });
+    try {
+      await api('POST', '/settings', { hdUrl: this.state.hdUrl, hdUser: this.state.hdUser, ...(this.state.hdPass ? { hdPass: this.state.hdPass } : {}) });
+      this.setState({ hdSaving: false, hasHdPass: this.state.hasHdPass || !!this.state.hdPass, hdPass: '' });
+      this.showToast('Stockage HD enregistré ✓');
+    } catch (e) { this.setState({ hdSaving: false }); this.showToast(`Erreur : ${e.message}`); }
+  }
 
   // ---- table produits (vue Produits) --------------------------------------
   openProducts() {
@@ -2144,6 +2161,12 @@ class App extends Component {
       moduleCount: st.playlist.length,
       playlistTotal: fmtTime(this.playlistMods().reduce((s, mm) => s + this.moduleDur(mm), 0)),
       srvUrl: st.srvUrl, srvIp: st.srvIp, srvToken: st.srvToken,
+      hdUrl: st.hdUrl, hdUser: st.hdUser, hdPass: st.hdPass, hasHdPass: st.hasHdPass, hdSaving: st.hdSaving,
+      onHdUrl: (e) => this.setState({ hdUrl: e.target.value }),
+      onHdUser: (e) => this.setState({ hdUser: e.target.value }),
+      onHdPass: (e) => this.setState({ hdPass: e.target.value }),
+      saveHd: () => this.saveHdStorage(),
+      agencyUrl: new URL('agence', location.href).toString(),
       onSrvUrl: (e) => { this.setState({ srvUrl: e.target.value, test: { state: 'idle', rows: [] } }); this.saveSrv(); },
       onSrvIp: (e) => { this.setState({ srvIp: e.target.value, test: { state: 'idle', rows: [] } }); this.saveSrv(); },
       onSrvToken: (e) => { this.setState({ srvToken: e.target.value, test: { state: 'idle', rows: [] } }); this.saveSrv(); },
@@ -2421,6 +2444,37 @@ class App extends Component {
           </div>
         `}
       </div>
+
+      <!-- Stockage / streaming HD -->
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;margin-top:20px;">
+        <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Stockage / streaming HD</h2>
+        <p style="margin:0 0 14px;font-size:12px;color:#8A847C;line-height:1.5;">Adresse et identifiants d'un stockage HD externe (pour héberger les grosses vidéos hors du serveur local). Optionnel : par défaut les vidéos vivent dans le dossier <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">public/media/</code> du serveur.</p>
+        <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:6px;">Adresse du stockage HD</label>
+        <input value=${v.hdUrl} onInput=${v.onHdUrl} placeholder="https://hd-storage.exemple.com/ ou ftp://…" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:14px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;margin-bottom:14px;" />
+        <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+          <div style="flex:1 1 200px;min-width:0;">
+            <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:6px;">Identifiant</label>
+            <input value=${v.hdUser} onInput=${v.onHdUser} placeholder="utilisateur" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:14px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;" />
+          </div>
+          <div style="flex:1 1 200px;min-width:0;">
+            <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:6px;">Mot de passe / clé</label>
+            <input type="password" value=${v.hdPass} onInput=${v.onHdPass} placeholder=${v.hasHdPass ? '•••••••• (enregistré)' : 'mot de passe'} style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:14px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;" />
+          </div>
+        </div>
+        <button onClick=${v.saveHd} disabled=${v.hdSaving} style="padding:11px 22px;font-size:13.5px;font-weight:600;color:#fff;background:#8D1D2C;border:none;border-radius:999px;cursor:${v.hdSaving ? 'wait' : 'pointer'};">${v.hdSaving ? 'Enregistrement…' : 'Enregistrer le stockage HD'}</button>
+      </div>
+
+      <!-- Espace Vidéo — Agence -->
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;margin-top:20px;">
+        <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Espace Vidéo — Agence</h2>
+        <p style="margin:0 0 14px;font-size:12px;color:#8A847C;line-height:1.5;">Un accès séparé (mot de passe dédié — variable <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">SIG_AGENCY_PASSWORD</code>, défaut « agence ») où les agences uploadent des vidéos/photos taguées (moment · produit · saison) et vérifient leur présence sur le serveur. Elles n'accèdent qu'à cette page. Partage-leur ce lien :</p>
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.08);">
+          <input readonly value=${v.agencyUrl} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:8px 10px;font-size:12.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:7px;background:#fff;" />
+          <button onClick=${() => v.copyLink(v.agencyUrl)} style="flex:0 0 auto;padding:8px 14px;font-size:12.5px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Copier</button>
+          <a href=${v.agencyUrl} target="_blank" style="flex:0 0 auto;font-size:12.5px;font-weight:600;color:#8D1D2C;">↗ Ouvrir</a>
+        </div>
+      </div>
+
       ${st.pwaForm && html`
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;margin-top:20px;">
         <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Catalogue PWA — même serveur</h2>
