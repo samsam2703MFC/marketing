@@ -428,10 +428,10 @@ export function saveCatalog({ categories, products }) {
     db.exec('DELETE FROM sig_aliases');
     db.exec('DELETE FROM sig_products');
     db.exec('DELETE FROM sig_product_categories');
-    const insCat = db.prepare('INSERT INTO sig_product_categories(id, name, sort_order, active) VALUES (?, ?, ?, ?)');
-    const insProd = db.prepare('INSERT INTO sig_products(id, category_id, name, price, img, src, active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-    const insPrice = db.prepare('INSERT INTO sig_product_prices(product_id, store_id, price) VALUES (?, ?, ?)');
-    const insAlias = db.prepare('INSERT INTO sig_aliases(kind, ref_id, lang, name) VALUES (?, ?, ?, ?)');
+    const insCat = db.prepare('INSERT OR REPLACE INTO sig_product_categories(id, name, sort_order, active) VALUES (?, ?, ?, ?)');
+    const insProd = db.prepare('INSERT OR REPLACE INTO sig_products(id, category_id, name, price, img, src, active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    const insPrice = db.prepare('INSERT OR REPLACE INTO sig_product_prices(product_id, store_id, price) VALUES (?, ?, ?)');
+    const insAlias = db.prepare('INSERT OR REPLACE INTO sig_aliases(kind, ref_id, lang, name) VALUES (?, ?, ?, ?)');
     const putAliases = (kind, id, aliases) => {
       for (const [lang, name] of Object.entries(aliases || {})) {
         if (String(name).trim()) insAlias.run(kind, String(id), String(lang), String(name).trim());

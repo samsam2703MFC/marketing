@@ -255,19 +255,36 @@ async function doImport(cfg, queries) {
   const priceRows = queries.qShopPrices.trim() ? await mysqlRows(cfg, queries.qShopPrices) : [];
   const aliasRows = cfg.qAliases.trim() ? await mysqlRows(cfg, cfg.qAliases) : [];
 
-  const categories = catRows.map(([id, name]) => ({ id: `pw${id}`, name: name || `Catégorie ${id}`, active: true, aliases: {} }));
+  // Certaines bases ont plusieurs lignes par produit ou par catégorie (une
+  // par langue, par boutique…) : on garde la première de chaque id.
+  let dupes = 0;
+  const categories = [];
+  const seenCat = new Set();
+  for (const [id, name] of catRows) {
+    const cid = `pw${id}`;
+    if (seenCat.has(cid)) { dupes++; continue; }
+    seenCat.add(cid);
+    categories.push({ id: cid, name: name || `Catégorie ${id}`, active: true, aliases: {} });
+  }
   const catIds = new Set(categories.map((c) => c.id));
 
-  const products = prodRows.map(([id, catId, name, price, active]) => ({
-    id: `pwp${id}`,
-    categoryId: catIds.has(`pw${catId}`) ? `pw${catId}` : '',
-    name: name || `Produit ${id}`,
-    price: frPrice(price) || '0,00',
-    img: 'assets/cake.png', src: 'illus',
-    active: active == null || !(active === '0' || active === '' || /^(false|no|non)$/i.test(active)),
-    prices: {}, aliases: {},
-  }));
-  const byId = new Map(products.map((p) => [p.id, p]));
+  const products = [];
+  const byId = new Map();
+  for (const [id, catId, name, price, active] of prodRows) {
+    const pid = `pwp${id}`;
+    if (byId.has(pid)) { dupes++; continue; }
+    const p = {
+      id: pid,
+      categoryId: catIds.has(`pw${catId}`) ? `pw${catId}` : '',
+      name: name || `Produit ${id}`,
+      price: frPrice(price) || '0,00',
+      img: 'assets/cake.png', src: 'illus',
+      active: active == null || !(active === '0' || active === '' || /^(false|no|non)$/i.test(active)),
+      prices: {}, aliases: {},
+    };
+    byId.set(pid, p);
+    products.push(p);
+  }
 
   // shop_product : prix par boutique PWA → magasin signage. Mapping manuel
   // (Réglages avancés) s'il existe, sinon automatique : boutiques triées par
@@ -326,5 +343,6 @@ async function doImport(cfg, queries) {
     storePrices: nPrices,
     aliases: nAliases,
     relinked,
+    ...(dupes ? { dupes } : {}),
   };
 }
