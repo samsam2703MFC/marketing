@@ -109,6 +109,8 @@ class App extends Component {
     seasons: [], seasonsCurrent: [], seasonsDirty: false, seasonsBusy: false,
     wsTable: '', wsCandidates: [], wsInspected: [], mediaLib: [],
     prodMoments: [], prodMomentsCurrent: '', prodMomentsDirty: false, prodMomentsBusy: false,
+    pmCollapsed: {},
+    contPreview: null, contPreviewBusy: false,
     onbOpen: false, onbStore: '', onbTest: {},
     onbDone: (() => { try { return JSON.parse(localStorage.getItem('sigOnbDone') || '[]'); } catch { return []; } })(),
   };
@@ -215,6 +217,7 @@ class App extends Component {
       this.loadSeasons();  // périodes de l'année
       this.loadHdStorage(); // réglages stockage/streaming HD
       this.loadMediaLib(); // médiathèque agence (vue admin)
+      if (this.activeFilm().mode === 'continu') this.loadContPreview(); // aperçu réel de la boucle
     } catch (e) {
       if (e.status === 401) this.setState({ loading: false, authRequired: true });
       else this.setState({ loading: false, loadError: String(e.message || e) });
@@ -300,7 +303,16 @@ class App extends Component {
   }
   activeItems(m) { return rActiveItems(this.resolveMod(m)); }
   moduleDur(m) { return rModuleDur(this.resolveMod(m), this.state.secPerLine); }
-  playlistMods() { return this.state.playlist.map((id) => this.getMod(id)).filter(Boolean).filter((m) => playable(this.resolveMod(m))); }
+  playlistMods() {
+    // Film continu : la boucle est composée par le SERVEUR (buildContinuous).
+    // L'aperçu affiche cette boucle réelle (récupérée via /film?film=…), pas
+    // les modules manuels (vides pour un film continu).
+    if (this.activeFilm().mode === 'continu') {
+      const cp = this.state.contPreview;
+      return (cp && cp.filmId === this.state.activePl ? cp.modules : []).filter((m) => playable(m));
+    }
+    return this.state.playlist.map((id) => this.getMod(id)).filter(Boolean).filter((m) => playable(this.resolveMod(m)));
+  }
   scopeMods() { return this.state.scope === 'playlist' ? this.playlistMods() : [this.sel()].filter(Boolean); }
   total() {
     const l = this.scopeMods();
@@ -352,7 +364,26 @@ class App extends Component {
       continuous: normContinuous(p.continuous),
     };
   }
-  setFilmMode(mode) { this.updateFilm({ mode: mode === 'continu' ? 'continu' : 'playlist' }); }
+  setFilmMode(mode) { this.updateFilm({ mode: mode === 'continu' ? 'continu' : 'playlist' }); if (mode === 'continu') setTimeout(() => this.loadContPreview(), 50); }
+  // Aperçu fidèle d'un film continu : on récupère du SERVEUR la boucle réellement
+  // composée (buildContinuous), reflétant les réglages ENREGISTRÉS. À rafraîchir
+  // après un enregistrement (auto-save) ou à la demande.
+  async loadContPreview() {
+    const f = this.activeFilm();
+    if (!f || f.mode !== 'continu') { if (this.state.contPreview) this.setState({ contPreview: null }); return; }
+    const id = f.id;
+    this.setState({ contPreviewBusy: true });
+    try {
+      const url = new URL('api/v1/film', location.href);
+      url.searchParams.set('film', id);
+      const r = await fetch(url, { cache: 'no-store' });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const snap = await r.json();
+      const byId = new Map((snap.modules || []).map((m) => [m.id, m]));
+      const modules = (snap.playlist || []).map((mid) => byId.get(mid)).filter(Boolean);
+      this.setState({ contPreview: { filmId: id, modules, meta: snap.continuousMeta || null }, contPreviewBusy: false, t: 0 });
+    } catch { this.setState({ contPreviewBusy: false }); }
+  }
   updateContinuous(patch) {
     const f = this.activeFilm();
     this.updateFilm({ continuous: normContinuous({ ...(f.continuous || {}), ...patch }) });
@@ -411,7 +442,8 @@ class App extends Component {
   selectFilm(id) {
     const p = this.state.playlists.find((x) => x.id === id);
     if (!p) return;
-    this.setState({ activePl: id, playlist: [...p.items], t: 0, editingFilm: false });
+    this.setState({ activePl: id, playlist: [...p.items], t: 0, editingFilm: false, contPreview: null });
+    if (p.mode === 'continu') setTimeout(() => this.loadContPreview(), 50);
   }
   // Nouveau film : en mode CONTINU par défaut (le chemin simple — la boucle se
   // compose toute seule). Bascule en « Playlist » possible d'un clic si besoin.
@@ -715,6 +747,13 @@ class App extends Component {
   prodMomentState(productId, moment) {
     const r = (this.state.prodMoments || []).find((x) => x.productId === productId && x.moment === moment);
     return r ? (r.exception ? 'excl' : 'incl') : 'none';
+  }
+  // Pli/dépli des catégories dans la table produit × moment.
+  togglePmCat(catId) { const c = { ...this.state.pmCollapsed }; c[catId] = !c[catId]; this.setState({ pmCollapsed: c }); }
+  setAllPmCollapsed(collapsed) {
+    const c = {};
+    if (collapsed) for (const p of (this.state.catalog.products || [])) c[p.categoryId || '_none'] = true;
+    this.setState({ pmCollapsed: c });
   }
   async saveProdMoments() {
     if (this.state.prodMomentsBusy) return;
@@ -1047,6 +1086,9 @@ class App extends Component {
       await api('PUT', '/draft', this.draftBody());
       this.setState({ dirty: false, saved: true });
       if (!opts.auto) this.showToast('Enregistré ✓');
+      // L'aperçu d'un film continu reflète les réglages ENREGISTRÉS : on le
+      // rafraîchit dès que l'enregistrement est passé côté serveur.
+      if (this.activeFilm().mode === 'continu') this.loadContPreview();
     } catch (e) {
       this.showToast(e.status === 401
         ? 'Session expirée — recharge la page (F5) et reconnecte-toi, puis réessaie'
@@ -2033,12 +2075,33 @@ class App extends Component {
       onAddProduct: (e) => { const pid = e.target.value; e.target.value = ''; if (pid) this.toggleSeasonProduct(s.id, pid); },
       del: () => this.delSeason(s.id),
     }));
-    // Périodes de vente : produit × moment (matin/midi/aprem + exception).
+    // Périodes de vente : produit × moment (matin/midi/aprem + exception),
+    // regroupé par catégorie (repliable).
     const saleMoments = [{ id: 'matin', label: 'Matin' }, { id: 'midi', label: 'Midi' }, { id: 'aprem', label: 'Après-midi' }];
-    const prodMomentRows = (st.catalog.products || []).map((p) => ({
+    const pmProdRow = (p) => ({
       id: p.id, name: p.name, active: p.active !== false,
       cells: saleMoments.map((mo) => ({ moment: mo.id, state: this.prodMomentState(p.id, mo.id), toggle: () => this.cycleProdMoment(p.id, mo.id) })),
-    }));
+    });
+    const pmByCat = new Map();
+    for (const p of (st.catalog.products || [])) {
+      const gk = p.categoryId || '_none';
+      if (!pmByCat.has(gk)) pmByCat.set(gk, []);
+      pmByCat.get(gk).push(pmProdRow(p));
+    }
+    const pmCatName = new Map((st.catalog.categories || []).map((c) => [c.id, c.name]));
+    const pmCatOf = (gk, products) => ({
+      id: gk, name: gk === '_none' ? 'Sans catégorie' : (pmCatName.get(gk) || gk),
+      count: products.length, collapsed: !!st.pmCollapsed[gk],
+      toggle: () => this.togglePmCat(gk), products,
+    });
+    const prodMomentCats = [];
+    const pmSeen = new Set();
+    for (const c of (st.catalog.categories || [])) {
+      const products = pmByCat.get(c.id);
+      if (products && products.length) { prodMomentCats.push(pmCatOf(c.id, products)); pmSeen.add(c.id); }
+    }
+    for (const [gk, products] of pmByCat) if (!pmSeen.has(gk)) prodMomentCats.push(pmCatOf(gk, products));
+    const pmAllCollapsed = prodMomentCats.length > 0 && prodMomentCats.every((c) => c.collapsed);
 
     // ---- médiathèque agence (vue admin) ----
     const MOMENT_LBL = { matin: 'Matin', midi: 'Midi', aprem: 'Après-midi', all: 'Toute la journée' };
@@ -2071,10 +2134,13 @@ class App extends Component {
       wsTable: st.wsTable, onWsTable: (e) => this.setState({ wsTable: e.target.value }),
       wsCandidates: st.wsCandidates || [], useWsCandidate: (t) => this.setState({ wsTable: t }),
       wsInspected: st.wsInspected || [],
-      saleMoments, prodMomentRows, prodMomentsCurrent: st.prodMomentsCurrent,
+      saleMoments, prodMomentCats, prodMomentsCurrent: st.prodMomentsCurrent,
       prodMomentsDirty: st.prodMomentsDirty, prodMomentsBusy: st.prodMomentsBusy,
       saveProdMoments: () => this.saveProdMoments(),
+      pmAllCollapsed, collapseAllPm: () => this.setAllPmCollapsed(true), expandAllPm: () => this.setAllPmCollapsed(false),
       mediaOverview, refreshMediaLib: () => this.loadMediaLib(),
+      contPreviewBusy: st.contPreviewBusy,
+      contPreviewMeta: (st.contPreview && st.contPreview.filmId === st.activePl) ? st.contPreview.meta : null,
       agencyUrl: new URL('agence', location.href).toString(),
       planStoreChips, planCols, planFilmCards, planWeekTabs, planDayTabs, planDupTargets, planStoreLinks, planDayMatrix,
       planWeek: st.planWeek, planDay: st.planDay, planDayName: DAY_LONG[st.planDay],
@@ -2404,8 +2470,15 @@ class App extends Component {
     // Aperçu + transport — l'onglet 1 montre l'élément en construction,
     // l'onglet 2 montre le film complet.
     const previewBlock = html`
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:12px;flex-wrap:wrap;">
         <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8A847C;">${v.isTimelineTab ? `Aperçu du film « ${this.activeFilm().name} » · 6480 × 3840` : `Aperçu de l'élément · 6480 × 3840`}</h2>
+        ${v.isTimelineTab && this.activeFilm().mode === 'continu' ? html`
+          <span style="display:inline-flex;align-items:center;gap:8px;">
+            <span style="font-size:11px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border-radius:999px;padding:3px 10px;">🔄 boucle générée${v.contPreviewMeta ? ` · ${v.contPreviewMeta.slots} slot(s)` : ''}</span>
+            ${infoTip('Aperçu FIDÈLE : c’est la boucle réellement composée par le serveur (produits de saison, moment, ratios…), telle qu’elle passera à l’écran. Elle reflète les réglages ENREGISTRÉS — après une modif, elle se rafraîchit à l’enregistrement (auto ~1 s) ou via ⟳.')}
+            <button onClick=${() => this.loadContPreview()} disabled=${v.contPreviewBusy} title="Recomposer l’aperçu maintenant" style="padding:5px 11px;font-size:11.5px;font-weight:600;color:#6E4A2B;background:#fff;border:1px solid rgba(110,74,43,0.35);border-radius:999px;cursor:${v.contPreviewBusy ? 'wait' : 'pointer'};">⟳ Actualiser</button>
+          </span>
+        ` : ''}
       </div>
       ${v.dragHint && html`
         <p style="margin:-4px 0 12px;font-size:11.5px;color:#8A847C;">✥ Glisse l'illustration ou le bandeau sur l'aperçu pour les positionner.</p>
@@ -2961,9 +3034,12 @@ class App extends Component {
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
           <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Périodes de vente — produit × moment de la journée</h3>
-          <button onClick=${v.saveProdMoments} disabled=${!v.prodMomentsDirty || v.prodMomentsBusy} style="padding:8px 16px;font-size:12.5px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.prodMomentsDirty && !v.prodMomentsBusy ? 'pointer' : 'not-allowed'};background:${v.prodMomentsDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.prodMomentsDirty ? '#fff' : '#8A847C'};">${v.prodMomentsBusy ? 'Enregistrement…' : (v.prodMomentsDirty ? 'Enregistrer' : '✓ Enregistré')}</button>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <button onClick=${v.pmAllCollapsed ? v.expandAllPm : v.collapseAllPm} style="padding:7px 13px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">${v.pmAllCollapsed ? '▷ Tout déplier' : '▽ Tout plier'}</button>
+            <button onClick=${v.saveProdMoments} disabled=${!v.prodMomentsDirty || v.prodMomentsBusy} style="padding:8px 16px;font-size:12.5px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.prodMomentsDirty && !v.prodMomentsBusy ? 'pointer' : 'not-allowed'};background:${v.prodMomentsDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.prodMomentsDirty ? '#fff' : '#8A847C'};">${v.prodMomentsBusy ? 'Enregistrement…' : (v.prodMomentsDirty ? 'Enregistrer' : '✓ Enregistré')}</button>
+          </div>
         </div>
-        <p style="margin:0 0 12px;font-size:12px;color:#8A847C;max-width:820px;">Clique une case pour cycler : <strong style="color:#2E6E4E;">vendu</strong> → <strong style="color:#8D1D2C;">exception (exclu)</strong> → vide. Un produit sans aucune case cochée est vendu à tous les moments. En mode continu, la boucle ne montre que les produits vendus au moment courant${v.prodMomentsCurrent ? html` (actuellement : <strong>${v.prodMomentsCurrent}</strong>)` : ''}.</p>
+        <p style="margin:0 0 12px;font-size:12px;color:#8A847C;max-width:820px;">Clique une case pour cycler : <strong style="color:#2E6E4E;">vendu</strong> → <strong style="color:#8D1D2C;">exception (exclu)</strong> → vide. Un produit sans aucune case cochée est vendu à tous les moments. En mode continu, la boucle ne montre que les produits vendus au moment courant${v.prodMomentsCurrent ? html` (actuellement : <strong>${v.prodMomentsCurrent}</strong>)` : ''}. Les produits sont regroupés par catégorie (clique une catégorie pour la plier/déplier).</p>
         <div style="overflow-x:auto;">
           <table style="border-collapse:collapse;width:100%;min-width:420px;font-size:13px;">
             <thead><tr>
@@ -2971,15 +3047,26 @@ class App extends Component {
               ${v.saleMoments.map((mo) => html`<th style="padding:8px 10px;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:${v.prodMomentsCurrent === mo.id ? '#8D1D2C' : '#8A847C'};border-bottom:1px solid rgba(35,34,32,0.12);text-align:center;width:120px;">${mo.label}</th>`)}
             </tr></thead>
             <tbody>
-              ${v.prodMomentRows.map((p) => html`
+              ${v.prodMomentCats.map((cat) => html`
                 <tr>
-                  <td style="padding:7px 10px;border-bottom:1px solid rgba(35,34,32,0.06);white-space:nowrap;${p.active ? '' : 'color:#B8B2A8;'}">${p.name}${p.active ? '' : ' · inactif'}</td>
-                  ${p.cells.map((c) => html`<td style="padding:5px 10px;border-bottom:1px solid rgba(35,34,32,0.06);text-align:center;">
-                    <button onClick=${c.toggle} title="Cliquer pour changer" style="width:34px;height:30px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:700;border:1px solid ${c.state === 'incl' ? 'rgba(46,110,78,0.4)' : (c.state === 'excl' ? 'rgba(141,29,44,0.4)' : 'rgba(35,34,32,0.14)')};background:${c.state === 'incl' ? 'rgba(46,110,78,0.14)' : (c.state === 'excl' ? 'rgba(141,29,44,0.12)' : '#FBF8F2')};color:${c.state === 'incl' ? '#2E6E4E' : (c.state === 'excl' ? '#8D1D2C' : '#C9C3B8')};">${c.state === 'incl' ? '✓' : (c.state === 'excl' ? '✕' : '·')}</button>
-                  </td>`)}
+                  <td colspan="4" style="padding:0;">
+                    <button onClick=${cat.toggle} style="width:100%;box-sizing:border-box;display:flex;align-items:center;gap:9px;padding:9px 10px;background:#F5EFE4;border:none;border-top:1px solid rgba(35,34,32,0.08);border-bottom:1px solid rgba(35,34,32,0.08);cursor:pointer;text-align:left;">
+                      <span style="flex:0 0 auto;font-size:10px;color:#8D1D2C;display:inline-block;transform:rotate(${cat.collapsed ? '0' : '90'}deg);">▶</span>
+                      <span style="flex:1 1 auto;font-size:12.5px;font-weight:700;color:#6E4A2B;">${cat.name}</span>
+                      <span style="flex:0 0 auto;font-size:11px;color:#8A847C;">${cat.count} produit(s)</span>
+                    </button>
+                  </td>
                 </tr>
+                ${cat.collapsed ? '' : cat.products.map((p) => html`
+                  <tr>
+                    <td style="padding:7px 10px 7px 26px;border-bottom:1px solid rgba(35,34,32,0.06);white-space:nowrap;${p.active ? '' : 'color:#B8B2A8;'}">${p.name}${p.active ? '' : ' · inactif'}</td>
+                    ${p.cells.map((c) => html`<td style="padding:5px 10px;border-bottom:1px solid rgba(35,34,32,0.06);text-align:center;">
+                      <button onClick=${c.toggle} title="Cliquer pour changer" style="width:34px;height:30px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:700;border:1px solid ${c.state === 'incl' ? 'rgba(46,110,78,0.4)' : (c.state === 'excl' ? 'rgba(141,29,44,0.4)' : 'rgba(35,34,32,0.14)')};background:${c.state === 'incl' ? 'rgba(46,110,78,0.14)' : (c.state === 'excl' ? 'rgba(141,29,44,0.12)' : '#FBF8F2')};color:${c.state === 'incl' ? '#2E6E4E' : (c.state === 'excl' ? '#8D1D2C' : '#C9C3B8')};">${c.state === 'incl' ? '✓' : (c.state === 'excl' ? '✕' : '·')}</button>
+                    </td>`)}
+                  </tr>
+                `)}
               `)}
-              ${!v.prodMomentRows.length ? html`<tr><td colspan="4" style="padding:12px 10px;color:#8A847C;font-size:12.5px;">Aucun produit dans le catalogue. Importe le catalogue dans l'onglet Produits.</td></tr>` : ''}
+              ${!v.prodMomentCats.length ? html`<tr><td colspan="4" style="padding:12px 10px;color:#8A847C;font-size:12.5px;">Aucun produit dans le catalogue. Importe le catalogue dans l'onglet Produits.</td></tr>` : ''}
             </tbody>
           </table>
         </div>
