@@ -94,6 +94,36 @@ export function fleetJson() {
 }
 
 // ---------------------------------------------------------------------------
+// Rapport public (lecture seule) : tout ce qui va être diffusé — bibliothèque
+// de films, playlists (avec leurs éléments), planning et écrans — pour un lien
+// partageable, sans connexion (comme /film).
+export function reportJson() {
+  const db = getDb();
+  const stores = db.prepare('SELECT * FROM sig_stores ORDER BY id').all()
+    .filter((s) => s.id !== 'st-new')
+    .map((s) => ({
+      id: s.id, name: s.name, group: s.grp,
+      format: storeFormat(s), lang: s.lang || 'fr',
+      active: s.active == null ? true : !!s.active,
+    }));
+  return {
+    meta: {
+      brand: "L'Atelier By",
+      generatedAt: nowIso(),
+      version: getIntSetting('version', 1),
+      dataVer: getIntSetting('data_ver', 1),
+    },
+    secPerLine: parseFloat(getSetting('sec_per_line', '4')),
+    loop: getSetting('loop', '1') === '1',
+    modules: loadModules(),
+    playlists: loadPlaylists(),
+    activePlaylistId: activePlaylistId(),
+    plan: loadPlan(),
+    stores,
+  };
+}
+
+// ---------------------------------------------------------------------------
 function collectMedia(modules) {
   const media = new Set();
   for (const m of modules) {
@@ -468,6 +498,9 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       const out = filmJson(url.searchParams.get('store') || null, url.searchParams.get('film') || null);
       return send(out.status, out.json);
     }
+
+    // ---- rapport public (lecture seule) : bibliothèque, planning, écrans ----
+    if (req.method === 'GET' && path === '/report') return send(200, reportJson());
 
     // ---- endpoints players (auth par token de player) -----------------------
     if (req.method === 'GET' && (mm = m(/^\/players\/([\w-]+)\/assignment$/))) {

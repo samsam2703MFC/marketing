@@ -1153,6 +1153,20 @@ class App extends Component {
     }
   }
 
+  // ---- rapport de diffusion (lien public, partageable) --------------------
+  openReport() {
+    const link = new URL('report', location.href).toString();
+    try { window.open(link, '_blank', 'noopener'); } catch { /* popup bloqué */ }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(link).then(
+        () => this.showToast('Rapport ouvert — lien copié ✓'),
+        () => this.showToast('Rapport ouvert dans un nouvel onglet'),
+      );
+    } else {
+      this.showToast('Rapport ouvert dans un nouvel onglet');
+    }
+  }
+
   // ---- guide de mise en route (onboarding par magasin) --------------------
   openOnboarding() {
     const active = this.state.fleet.filter((s) => s.active !== false);
@@ -1998,6 +2012,8 @@ class App extends Component {
       overrideTip: st.override ? 'Diffusion flash ACTIVE — cliquer pour reprendre les playlists' : 'Diffusion flash (suspend les playlists)',
       publishIconStyle: `width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;cursor:pointer;flex:0 0 auto;background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;box-shadow:0 3px 12px rgba(141,29,44,0.4);`,
       onbIconStyle: `${hdrRound}background:rgba(46,110,78,0.12);color:#2E6E4E;border:1px solid rgba(46,110,78,0.4);`,
+      reportIconStyle: `${hdrRound}background:rgba(110,74,43,0.12);color:#6E4A2B;border:1px solid rgba(110,74,43,0.4);`,
+      openReport: () => this.openReport(),
       // ---- guide de mise en route ----
       openOnboarding: () => this.openOnboarding(),
       onbOpen: st.onbOpen,
@@ -2197,6 +2213,7 @@ class App extends Component {
       <button class="hdr-btn" onClick=${v.toggleOverride} style=${v.overrideIconStyle}>⚡<span class="hdr-tip">${v.overrideTip}</span></button>
       <button class="hdr-btn" onClick=${v.openPublish} style=${v.publishIconStyle}>↗<span class="hdr-tip hdr-tip-right">Publier sur le réseau — déploie le film choisi</span></button>
       <span style="width:1px;height:26px;background:rgba(35,34,32,0.10);flex:0 0 auto;margin:0 3px;"></span>
+      <button class="hdr-btn" onClick=${v.openReport} style=${v.reportIconStyle}>📄<span class="hdr-tip hdr-tip-right">Rapport de diffusion — lien partageable (bibliothèque, planning, écrans)</span></button>
       <button class="hdr-btn" onClick=${v.openOnboarding} style=${v.onbIconStyle}>🎓<span class="hdr-tip hdr-tip-right">Mise en route — configurer chaque magasin</span></button>
       <button class="hdr-btn" onClick=${v.setViewSettings} style=${v.settingsIconStyle}>⚙<span class="hdr-tip hdr-tip-right">Paramètres — serveur, import PWA & liens</span></button>
     </div>

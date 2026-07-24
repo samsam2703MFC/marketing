@@ -168,6 +168,21 @@ async function main() {
     if (!Array.isArray(f.playlist)) throw new Error('playlist absente');
     return `v${f.version} · d${f.dataVer} · ${f.playlist.length} module(s) au programme`;
   });
+  await step('GET /api/v1/report — rapport public (sans connexion)', async () => {
+    const res = await fetch(BASE + '/api/v1/report');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const r = await res.json();
+    if (!r.meta || !Array.isArray(r.modules) || !Array.isArray(r.playlists)) throw new Error('structure du rapport incomplète');
+    if (!Array.isArray(r.stores) || !r.plan || !Array.isArray(r.plan.windows)) throw new Error('planning/écrans absents du rapport');
+    return `${r.playlists.length} film(s) · ${r.modules.length} élément(s) · ${r.stores.length} écran(s) · ${r.plan.windows.length} moment(s)`;
+  });
+  await step('GET /report — page du rapport servie', async () => {
+    const res = await fetch(BASE + '/report');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+    if (!/report\.js/.test(html)) throw new Error('report.js non référencé');
+    return 'page HTML du rapport OK';
+  });
   await step('GET /api/v1/film?film=… — lien direct par film', async () => {
     const base = await (await fetch(BASE + '/api/v1/film')).json();
     const id = base.playlistId || 'pl1';
