@@ -73,8 +73,10 @@ async function main() {
     const root = join(dirname(fileURLToPath(import.meta.url)), '..');
     const port = 8123 + Math.floor(Math.random() * 500);
     BASE = `http://127.0.0.1:${port}`;
+    // Le serveur jetable démarre avec le seed de démonstration (SIG_DEMO=1)
+    // pour disposer de modules / magasins / players à tester.
     child = spawn(process.execPath, [join(root, 'server', 'index.js')], {
-      env: { ...process.env, PORT: String(port), SIG_DB: join(dir, 'test.db') },
+      env: { ...process.env, PORT: String(port), SIG_DB: join(dir, 'test.db'), SIG_DEMO: '1' },
       stdio: 'ignore',
     });
     console.log(`▶ Serveur jetable : ${BASE} (BDD ${join(dir, 'test.db')})`);
@@ -107,9 +109,10 @@ async function main() {
   }
   await step('GET /api/v1/state — brouillon complet', async () => {
     state = await call('GET', '/api/v1/state');
-    if (!Array.isArray(state.modules) || !state.modules.length) throw new Error('aucun module');
+    if (!Array.isArray(state.modules)) throw new Error('modules absents');
     if (!Array.isArray(state.playlist)) throw new Error('playlist absente');
-    return `${state.modules.length} modules · playlist ×${state.playlist.length}`;
+    // Un serveur de production vierge (démo retirée) n'a pas encore de module.
+    return state.modules.length ? `${state.modules.length} modules · playlist ×${state.playlist.length}` : 'serveur vierge (aucun module)';
   });
   await step('GET /api/v1/fleet — réseau & magasins', async () => {
     const f = await call('GET', '/api/v1/fleet');
@@ -161,7 +164,7 @@ async function main() {
     const res = await fetch(BASE + '/api/v1/film');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const f = await res.json();
-    if (!Array.isArray(f.modules) || !f.modules.length) throw new Error('film vide');
+    if (!Array.isArray(f.modules)) throw new Error('modules absents');
     if (!Array.isArray(f.playlist)) throw new Error('playlist absente');
     return `v${f.version} · d${f.dataVer} · ${f.playlist.length} module(s) au programme`;
   });
@@ -179,7 +182,13 @@ async function main() {
   await step('GET /api/v1/film?store=… — lien direct par magasin', async () => {
     const fleetRes = await call('GET', '/api/v1/fleet');
     const store = fleetRes.stores[0];
-    if (!store) throw new Error('aucun magasin en base');
+    // Serveur de production vierge : aucun magasin tant que l'import PWA
+    // n'a pas eu lieu — on vérifie juste le 404 sur un id inconnu.
+    if (!store) {
+      const bad0 = await fetch(BASE + '/api/v1/film?store=inexistant');
+      if (bad0.status !== 404) throw new Error(`magasin inconnu : HTTP ${bad0.status} au lieu de 404`);
+      return 'serveur vierge (aucun magasin) · 404 OK';
+    }
     const res = await fetch(BASE + `/api/v1/film?store=${encodeURIComponent(store.id)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const f = await res.json();
@@ -191,6 +200,7 @@ async function main() {
   });
   await step('POST /api/v1/test — test de connexion live (auto-ciblé)', async () => {
     const anyToken = await firstToken();
+    if (!anyToken) return 'serveur vierge (aucun player)';
     const out = await call('POST', '/api/v1/test', { url: `${BASE}/api/v1`, ip: new URL(BASE).hostname, token: anyToken });
     const ok = out.rows.filter((r) => r.ok).length;
     if (!out.ok) throw new Error(`${ok}/${out.rows.length} vérifications OK`);
@@ -342,8 +352,7 @@ async function main() {
 async function firstToken() {
   const f = await call('GET', '/api/v1/fleet');
   const p = f.stores.flatMap((s) => s.players)[0];
-  if (!p) throw new Error('aucun player en base');
-  return p.token;
+  return p ? p.token : null;
 }
 
 main().catch((e) => {

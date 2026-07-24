@@ -21,6 +21,7 @@ export function getDb() {
   db.exec('PRAGMA foreign_keys = ON;');
   migrate(db);
   seed(db);
+  clearDemoSeed(db);
   ensureAdmin(db);
   ensurePlaylists(db);
   ensureElementTypes(db);
@@ -573,8 +574,22 @@ export function getIntSetting(key, fallback = 0) {
 }
 
 // ---------------------------------------------------------------------------
-// Seed — contenu par défaut identique à la maquette (Tartes + liaison), réseau démo.
+// Réglages par défaut d'une base neuve (toujours posés, même sans démo).
+function ensureDefaults() {
+  if (getSetting('version') != null) return;
+  const defaults = {
+    version: '1', data_ver: '1', sec_per_line: '4', loop: '1', override: '0',
+    srv_url: '', srv_ip: '127.0.0.1', srv_token: '',
+  };
+  for (const [k, v] of Object.entries(defaults)) setSetting(k, v);
+}
+
+// Seed de DÉMONSTRATION (Tartes + liaison + réseau fictif) : uniquement quand
+// SIG_DEMO=1 (tests, découverte). En production la base démarre vide et se
+// remplit par l'import PWA — aucun « Magasin Centre-Ville » factice.
 function seed(db) {
+  ensureDefaults();
+  if (process.env.SIG_DEMO !== '1') return;
   const count = db.prepare('SELECT COUNT(*) AS n FROM sig_modules').get().n;
   if (count > 0) return;
 
@@ -618,17 +633,41 @@ function seed(db) {
   insPlayer.run('p4', 'st3', 'Vitrine — 55″', 'Android · TV-Box Pro', 1, 'Paysage', 'plyr_7E2D91AC', 6, 6, 21, 100, 'Tartes · Rhubarbe (cache local)', '20 Go libres', '—', now);
   insPlayer.run('p5', 'st3', 'Comptoir — 43″', 'Android · MediaBox 4K', 0, 'Paysage', 'plyr_C4019BB7', 6, 7, 22, 38, '—', '0,4 Go libres', '58°C', now);
 
-  const defaults = {
-    version: '7',
-    data_ver: '23',
-    sec_per_line: '4',
-    loop: '1',
-    override: '0',
-    srv_url: '',
-    srv_ip: '127.0.0.1',
-    srv_token: 'plyr_9F3A2C7E',
-  };
-  for (const [k, v] of Object.entries(defaults)) setSetting(k, v);
+  for (const [k, v] of Object.entries({ version: '7', data_ver: '23', srv_token: 'plyr_9F3A2C7E' })) setSetting(k, v);
+}
+
+// Nettoyage unique des données de démonstration d'une base existante
+// (« retire le mock up ») : on retire EXACTEMENT les lignes du seed d'origine
+// par leur id — les magasins importés (slug), produits (pwp…) et films créés
+// sont épargnés. Ne s'exécute pas en mode démo (tests).
+function clearDemoSeed(db) {
+  if (process.env.SIG_DEMO === '1') return;
+  if (getSetting('mig_clear_demo')) return;
+  const demoStores = ['st1', 'st2', 'st3'];
+  const demoPlayers = ['p1', 'p2', 'p3', 'p4', 'p5'];
+  const demoModules = ['c1', 'l1'];
+  const q = (arr) => arr.map(() => '?').join(',');
+  db.exec('BEGIN');
+  try {
+    db.prepare(`DELETE FROM sig_players WHERE id IN (${q(demoPlayers)})`).run(...demoPlayers);
+    db.prepare(`DELETE FROM sig_stores WHERE id IN (${q(demoStores)})`).run(...demoStores);
+    // Catalogue démo issu de la catégorie c1 (ids pc_c1 / pr1…).
+    db.prepare(`DELETE FROM sig_product_prices WHERE product_id IN (SELECT id FROM sig_products WHERE category_id = 'pc_c1')`).run();
+    db.prepare(`DELETE FROM sig_products WHERE category_id = 'pc_c1'`).run();
+    db.prepare(`DELETE FROM sig_product_categories WHERE id = 'pc_c1'`).run();
+    // Modules démo + leurs références (items, playlist plate, films).
+    db.prepare(`DELETE FROM sig_module_items WHERE module_id IN (${q(demoModules)})`).run(...demoModules);
+    db.prepare(`DELETE FROM sig_playlist_items WHERE module_id IN (${q(demoModules)})`).run(...demoModules);
+    db.prepare(`DELETE FROM sig_playlist WHERE module_id IN (${q(demoModules)})`).run(...demoModules);
+    db.prepare(`DELETE FROM sig_modules WHERE id IN (${q(demoModules)})`).run(...demoModules);
+    // Le srv_token pointait sur un player démo : on le neutralise s'il l'était.
+    if (getSetting('srv_token') === 'plyr_9F3A2C7E') setSetting('srv_token', '');
+    setSetting('mig_clear_demo', '1');
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
 }
 
 // ---------------------------------------------------------------------------
