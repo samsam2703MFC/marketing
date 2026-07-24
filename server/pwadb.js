@@ -252,21 +252,101 @@ async function detectShops(cfg, db) {
 
 // P\u00e9riodes de l'ann\u00e9e depuis ws_season (best-effort : colonnes auto-d\u00e9tect\u00e9es).
 // `preferred` : nom de table impos\u00e9 par l'utilisateur (R\u00e9glages avanc\u00e9s).
+async function tableColsTyped(cfg, schema, table) {
+  const rows = await mysqlRows(cfg, `
+    SELECT column_name, data_type FROM information_schema.columns
+    WHERE table_schema = '${String(schema).replace(/'/g, '')}' AND table_name = '${String(table).replace(/'/g, '')}'
+    ORDER BY ordinal_position`);
+  return rows.map((r) => ({ name: r[0], type: String(r[1] || '').toLowerCase() }));
+}
+
+// Enrichissement best-effort pour le motif « table de base + <table>_connection
+// + <table>_name_alias » (schéma type PrestaShop : les dates sont dans la table
+// de base, les produits liés dans une table de liaison, les libellés i18n dans
+// une table d'alias). Chaque étape est isolée : si une table sœur manque, on
+// garde simplement ce qu'on a déjà détecté dans la table de base.
+async function enrichSeasons(cfg, db, baseTable, seasons, rawIds) {
+  // Produits : table de liaison <base>_connection (via les clés étrangères).
+  try {
+    const connTable = `${baseTable}_connection`;
+    const connCols = await tableCols(cfg, db, connTable);
+    if (connCols.length) {
+      const periodFk = (await fkColumn(cfg, db, connTable, baseTable))
+        || pickCol(connCols, [`${baseTable}_id`, 'period_id', 'id_period', 'season_id'], 'optionnel', connTable, 'period');
+      const prodFk = (await fkColumn(cfg, db, connTable, 'product'))
+        || pickCol(connCols, ['product_id', 'id_product'], 'optionnel', connTable, 'product');
+      if (periodFk && prodFk) {
+        const rows = await mysqlRows(cfg, `SELECT ${qid(periodFk)}, ${qid(prodFk)} FROM ${qid(db)}.${qid(connTable)}`);
+        const byPeriod = new Map();
+        for (const [pid, prod] of rows) {
+          const key = String(pid);
+          if (!byPeriod.has(key)) byPeriod.set(key, []);
+          if (String(prod).trim()) byPeriod.get(key).push(`pwp${String(prod).trim()}`);
+        }
+        seasons.forEach((s, k) => { const list = byPeriod.get(String(rawIds[k])); if (list && list.length) s.products = list; });
+      }
+    }
+  } catch { /* pas de table de liaison : on garde les produits de la table de base */ }
+  // Libellés : table i18n <base>_name_alias (une ligne par langue → on préfère le fr).
+  try {
+    const aliasTable = `${baseTable}_name_alias`;
+    const aliasColsT = await tableColsTyped(cfg, db, aliasTable);
+    const aliasCols = aliasColsT.map((c) => c.name);
+    if (aliasCols.length) {
+      const periodFk = (await fkColumn(cfg, db, aliasTable, baseTable))
+        || pickCol(aliasCols, [`${baseTable}_id`, 'period_id', 'id_period', 'season_id'], 'optionnel', aliasTable, 'period');
+      const locale = pickCol(aliasCols, ['locale', 'lang', 'language', 'lang_code', 'id_lang', 'langue'], 'optionnel');
+      const label = pickCol(aliasCols, ['name', 'title', 'label', 'nom', 'libelle', 'designation'], 'optionnel')
+        || (aliasColsT.find((c) => /char|text/.test(c.type) && c.name !== periodFk && c.name !== locale) || {}).name || null;
+      if (periodFk && label) {
+        const rows = await mysqlRows(cfg, `SELECT ${qid(periodFk)}, ${qid(label)}${locale ? `, ${qid(locale)}` : ''} FROM ${qid(db)}.${qid(aliasTable)}`);
+        const byPeriod = new Map();
+        for (const r of rows) {
+          const key = String(r[0]); const val = String(r[1] || '').trim();
+          if (!val) continue;
+          const loc = locale ? String(r[2] || '').toLowerCase() : '';
+          const cur = byPeriod.get(key);
+          // On garde la 1re valeur rencontrée, mais une langue française l'emporte.
+          if (!cur || (/fr/.test(loc) && !/fr/.test(cur.loc))) byPeriod.set(key, { val, loc });
+        }
+        seasons.forEach((s, k) => { const hit = byPeriod.get(String(rawIds[k])); if (hit) s.name = hit.val; });
+      }
+    }
+  } catch { /* pas de table d'alias : on garde le nom de la table de base */ }
+  return seasons;
+}
+
 async function detectSeasons(cfg, db, preferred) {
   const candidates = preferred
     ? [preferred]
-    : ['ws_season', 'ws_seasons', 'wc_season', 'season', 'seasons', 'periode', 'periods', 'periodes'];
+    : ['ws_season', 'ws_seasons', 'wc_season', 'product_availability_period', 'season', 'seasons', 'periode', 'periods', 'periodes'];
+  const inspected = [];
   for (const t of candidates) {
     try {
-      const cols = await tableCols(cfg, db, t);
+      const colsT = await tableColsTyped(cfg, db, t);
+      const cols = colsT.map((c) => c.name);
       if (!cols.length) continue;
-      const id = (await primaryKey(cfg, db, t)) || pickCol(cols, ['id', 'id_season', 'season_id'], 'optionnel') || cols[0];
-      const name = pickCol(cols, ['name', 'label', 'title', 'nom', 'libelle', 'season', 'periode', 'saison'], 'optionnel', t, 'name');
-      const from = pickCol(cols, ['date_from', 'from', 'start', 'start_date', 'begin', 'debut', 'date_debut', 'date_start'], 'optionnel', t, 'debut');
-      const to = pickCol(cols, ['date_to', 'to', 'end', 'end_date', 'finish', 'fin', 'date_fin', 'date_end'], 'optionnel', t, 'fin');
-      const prod = pickCol(cols, ['product_id', 'id_product', 'product', 'produit'], 'optionnel', t, 'product');
-      if (!from || !to) continue; // sans dates, ce n'est pas une table de p\u00e9riodes
+      const id = (await primaryKey(cfg, db, t)) || pickCol(cols, ['id', 'id_season', 'season_id', 'id_period', 'period_id'], 'optionnel') || cols[0];
+      let name = pickCol(cols, ['name', 'label', 'title', 'nom', 'libelle', 'season', 'periode', 'saison'], 'optionnel', t, 'name');
+      let from = pickCol(cols, ['date_from', 'from', 'start', 'start_date', 'begin', 'debut', 'date_debut', 'date_start', 'available_from', 'from_date'], 'optionnel', t, 'debut');
+      let to = pickCol(cols, ['date_to', 'to', 'end', 'end_date', 'finish', 'fin', 'date_fin', 'date_end', 'available_to', 'to_date'], 'optionnel', t, 'fin');
+      if (!from || !to) {
+        const dateCols = colsT.filter((c) => /date|time/.test(c.type)).map((c) => c.name);
+        if (dateCols.length >= 2) { from = from || dateCols[0]; to = to || dateCols[1]; }
+      }
+      if (!name) name = (colsT.find((c) => /char|text/.test(c.type) && c.name !== from && c.name !== to) || {}).name || null;
+      const prod = pickCol(cols, ['product_id', 'id_product', 'product', 'produit'], 'optionnel', t, 'product')
+        || (colsT.find((c) => /product|produit/i.test(c.name)) || {}).name || null;
+      if (!from || !to) {
+        // Colonnes de dates introuvables : on garde la table pour le diagnostic,
+        // avec les types de colonnes et une ligne d'exemple (pour câbler le mapping).
+        let sample = [];
+        try { const s = await mysqlRows(cfg, `SELECT * FROM ${qid(db)}.${qid(t)} LIMIT 1`); sample = (s[0] || []).map((x) => String(x).slice(0, 40)); } catch { /* table vide/illisible */ }
+        inspected.push({ table: t, columns: cols, types: colsT.map((c) => `${c.name} (${c.type})`), sample });
+        continue;
+      } // colonnes de dates introuvables — on garde pour le diagnostic. Anciennement de p\u00e9riodes
       const rows = await mysqlRows(cfg, `SELECT ${qid(id)}, ${name ? qid(name) : "''"}, ${qid(from)}, ${qid(to)}, ${prod ? qid(prod) : "''"} FROM ${qid(db)}.${qid(t)}`);
+      const rawIds = rows.map(([i], k) => ((i != null && String(i).trim()) ? String(i).trim() : String(k)));
       const seasons = rows.map(([i, nm, fr, to2, pr], k) => ({
         id: `ws_${i || k}`,
         name: String(nm || '').trim() || `Saison ${i || k + 1}`,
@@ -275,10 +355,11 @@ async function detectSeasons(cfg, db, preferred) {
         products: String(pr || '').trim() ? [`pwp${String(pr).trim()}`] : [],
         color: '#C97B4A', active: true,
       }));
+      await enrichSeasons(cfg, db, t, seasons, rawIds);
       return { table: t, seasons, colsUsed: { id, name, from, to, prod } };
     } catch { /* table absente / illisible : on essaie la suivante */ }
   }
-  return { table: '', seasons: [] };
+  return { table: '', seasons: [], inspected };
 }
 
 export async function importSeasons(table) {

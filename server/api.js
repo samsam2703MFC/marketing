@@ -718,14 +718,17 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
         const body = await readBody();
         const det = await importSeasons(body.table);
         if (!det.seasons.length) {
+          const insp = det.inspected || [];
           const cand = (det.candidates && det.candidates.length) ? ` — tables candidates dans « ${det.db} » : ${det.candidates.join(', ')}` : ` (base « ${det.db} »)`;
-          return send(200, { ok: false, error: det.table ? `table « ${det.table} » sans colonnes de dates exploitables` : `aucune table ws_season trouvée${cand}`, candidates: det.candidates || [], db: det.db });
+          const last = insp.length ? insp[insp.length - 1] : null;
+          const colHint = last ? ` · colonnes de « ${last.table} » : ${(last.types || last.columns).join(', ')}` : '';
+          return send(200, { ok: false, error: (det.table ? `table « ${det.table} » : colonnes de dates introuvables${colHint}` : `aucune table ws_season trouvée${cand}`), candidates: det.candidates || [], inspected: insp, db: det.db });
         }
         // On remplace les périodes importées (préfixe ws_) et on garde les manuelles.
         const manual = loadSeasons().filter((s) => !String(s.id).startsWith('ws_'));
         const out = saveSeasons([...manual, ...det.seasons]);
         scheduleMirror();
-        return send(200, { ok: true, table: det.table, imported: det.seasons.length, seasons: out, current: currentSeasons().map((s) => s.id) });
+        return send(200, { ok: true, table: det.table, imported: det.seasons.length, colsUsed: det.colsUsed || null, seasons: out, current: currentSeasons().map((s) => s.id) });
       } catch (e) {
         return send(200, { ok: false, error: String(e.message || e) });
       }

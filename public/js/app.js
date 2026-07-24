@@ -105,7 +105,7 @@ class App extends Component {
     planWeek: 'A', planDay: 0, planActiveWeek: 'A', planSaving: false, planSavedAt: 0,
     surpriseVideos: [], surpriseBusy: false,
     seasons: [], seasonsCurrent: [], seasonsDirty: false, seasonsBusy: false,
-    wsTable: '', wsCandidates: [], mediaLib: [],
+    wsTable: '', wsCandidates: [], wsInspected: [], mediaLib: [],
     onbOpen: false, onbStore: '', onbTest: {},
     onbDone: (() => { try { return JSON.parse(localStorage.getItem('sigOnbDone') || '[]'); } catch { return []; } })(),
   };
@@ -651,12 +651,15 @@ class App extends Component {
   async importSeasons() {
     if (this.state.seasonsBusy) return;
     if (this.state.seasonsDirty && !window.confirm('Des modifications non enregistrées seront perdues. Importer depuis ws_season ?')) return;
-    this.setState({ seasonsBusy: true, wsCandidates: [] });
+    this.setState({ seasonsBusy: true, wsCandidates: [], wsInspected: [] });
     try {
       const r = await api('POST', '/seasons/import', this.state.wsTable ? { table: this.state.wsTable } : {});
       this.setState({ seasonsBusy: false });
-      if (r.ok) { this.setState({ seasons: r.seasons || [], seasonsCurrent: r.current || [], seasonsDirty: false, wsCandidates: [] }); this.showToast(`Importé depuis « ${r.table} » : ${r.imported} période(s) ✓`); }
-      else { this.setState({ wsCandidates: r.candidates || [] }); this.showToast(`Import : ${r.error}`); }
+      if (r.ok) {
+        this.setState({ seasons: r.seasons || [], seasonsCurrent: r.current || [], seasonsDirty: false, wsCandidates: [], wsInspected: [] });
+        const cu = r.colsUsed ? ` · du=${r.colsUsed.from}, au=${r.colsUsed.to}${r.colsUsed.name ? `, nom=${r.colsUsed.name}` : ''}${r.colsUsed.prod ? `, produit=${r.colsUsed.prod}` : ''}` : '';
+        this.showToast(`Importé depuis « ${r.table} » : ${r.imported} période(s)${cu} ✓`);
+      } else { this.setState({ wsCandidates: r.candidates || [], wsInspected: r.inspected || [] }); this.showToast(`Import : ${r.error}`); }
     } catch (e) { this.setState({ seasonsBusy: false }); this.showToast(`Erreur : ${e.message}`); }
   }
   openSeasons() { this.setState({ view: 'seasons' }); if (!this.state.seasons.length) this.loadSeasons(); this.loadMediaLib(); }
@@ -1997,6 +2000,7 @@ class App extends Component {
       addSeason: () => this.addSeason(), saveSeasons: () => this.saveSeasons(), importSeasons: () => this.importSeasons(),
       wsTable: st.wsTable, onWsTable: (e) => this.setState({ wsTable: e.target.value }),
       wsCandidates: st.wsCandidates || [], useWsCandidate: (t) => this.setState({ wsTable: t }),
+      wsInspected: st.wsInspected || [],
       mediaOverview, refreshMediaLib: () => this.loadMediaLib(),
       agencyUrl: new URL('agence', location.href).toString(),
       planStoreChips, planCols, planFilmCards, planWeekTabs, planDayTabs, planDupTargets, planStoreLinks,
@@ -2747,10 +2751,20 @@ class App extends Component {
       </div>
       ${v.wsCandidates.length ? html`
         <div style="background:rgba(201,123,74,0.08);border:1px solid rgba(201,123,74,0.3);border-radius:12px;padding:12px 16px;font-size:12.5px;color:#6E4A2B;">
-          Aucune table « ws_season » trouvée. Tables candidates détectées — clique pour la sélectionner puis « Importer » :
+          Aucune table de périodes exploitée. Tables candidates — clique l'une d'elles (elle remplit le champ) puis « Importer » :
           <span style="display:inline-flex;flex-wrap:wrap;gap:6px;margin-left:6px;">
             ${v.wsCandidates.map((t) => html`<button onClick=${() => v.useWsCandidate(t)} style="font-family:ui-monospace,monospace;font-size:12px;font-weight:600;color:#6E4A2B;background:#fff;border:1px solid rgba(110,74,43,0.35);border-radius:999px;padding:3px 10px;cursor:pointer;">${t}</button>`)}
           </span>
+        </div>
+      ` : ''}
+      ${v.wsInspected.length ? html`
+        <div style="background:#FBF8F2;border:1px solid rgba(35,34,32,0.12);border-radius:12px;padding:12px 16px;font-size:12px;color:#4A4640;line-height:1.6;">
+          <strong>Colonnes vues</strong> (il faut 2 colonnes de dates du → au + un nom) :
+          ${v.wsInspected.map((ins) => html`
+            <div style="margin-top:6px;"><code style="font-weight:700;color:#6E4A2B;">${ins.table}</code> → <span style="font-family:ui-monospace,monospace;">${(ins.types || ins.columns).join(', ')}</span></div>
+            ${ins.sample && ins.sample.length ? html`<div style="margin-top:2px;color:#8A847C;font-family:ui-monospace,monospace;font-size:11px;">ex. : ${ins.sample.join(' | ')}</div>` : ''}
+          `)}
+          <div style="margin-top:6px;color:#8A847C;">Si les dates sont dans ces colonnes mais non détectées, dis-moi lesquelles (du/au) et je les câble.</div>
         </div>
       ` : ''}
 
