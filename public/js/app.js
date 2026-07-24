@@ -8,6 +8,9 @@ import {
 } from './renderer.js';
 // Config du mode « continu » : source unique partagée avec le serveur.
 import { continuousDefaults, normContinuous } from './continuous.js';
+// Générateur de QR code autonome (pour brancher un écran en scannant).
+import { qrSvg } from './vendor/qr.js';
+const qrDataUri = (url) => { try { return 'data:image/svg+xml;utf8,' + encodeURIComponent(qrSvg(String(url), { scale: 5, margin: 3 })); } catch { return ''; } };
 
 const PREVIEW_W = 560;
 const SCALE = PREVIEW_W / W;
@@ -2403,6 +2406,7 @@ class App extends Component {
       })),
       save: this.save,
       // Bouton d'état (modale de publication) : cuivre quand modifs en attente.
+      saved: st.saved, dirty: st.dirty,
       saveLabel: st.dirty ? 'Enregistrer' : 'Enregistré',
       saveStyle: `padding:9px 20px;font-size:13px;font-weight:600;letter-spacing:0.01em;border-radius:999px;cursor:${st.dirty ? 'pointer' : 'default'};${st.dirty ? 'background:#6E4A2B;color:#fff;border:1px solid #6E4A2B;box-shadow:0 2px 8px rgba(110,74,43,0.25);' : 'background:transparent;color:#8A847C;border:1px solid rgba(35,34,32,0.14);'}`,
       // Bandeau : icônes rondes + vignettes, palette gris/rubis/abricot/cuivre.
@@ -3956,11 +3960,12 @@ class App extends Component {
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;align-items:start;">
         ${diffusionBlock}
         <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:20px 22px;">
-          <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">3 · Enregistrer & déployer</h3>
-          <p style="margin:0 0 14px;font-size:12px;color:#8A847C;line-height:1.55;">Enregistre le film puis publie-le — la <strong>programmation</strong> et les <strong>magasins</strong> se règlent ci-dessus, sur le film. Le lien de visionnage s'affiche juste après le déploiement.</p>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button onClick=${v.save} style="flex:1 1 auto;${v.saveStyle}">${v.saveLabel}</button>
-            <button onClick=${v.openPublish} style="flex:1 1 auto;padding:11px 18px;font-size:13.5px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:pointer;background:#8D1D2C;color:#fff;">Publier sur le réseau ↗</button>
+          <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">3 · Diffuser</h3>
+          <p style="margin:0 0 14px;font-size:12px;color:#8A847C;line-height:1.55;">Un seul geste : <strong>Diffuser</strong>. La <strong>programmation</strong> et les <strong>magasins</strong> se règlent ci-dessus, sur le film ; le lien de visionnage s'affiche juste après.</p>
+          <button onClick=${v.openPublish} style="width:100%;box-sizing:border-box;padding:14px 18px;font-size:15px;font-weight:700;border-radius:999px;border:none;cursor:pointer;background:#8D1D2C;color:#fff;">🚀 Diffuser sur le réseau ↗</button>
+          <div style="margin-top:9px;display:flex;align-items:center;gap:8px;font-size:11.5px;color:#8A847C;">
+            <span>${v.saved ? '✓ Enregistré automatiquement' : (v.dirty ? '✎ Modifications en cours…' : 'Enregistré automatiquement')}</span>
+            <button onClick=${v.save} style="padding:4px 10px;font-size:11px;font-weight:600;border-radius:999px;border:1px solid rgba(35,34,32,0.16);background:#fff;color:#5B564E;cursor:pointer;">Enregistrer maintenant</button>
           </div>
           <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(35,34,32,0.08);font-size:11.5px;color:#8A847C;line-height:1.5;">Lien direct de ce film (55″) :
             <button onClick=${() => this.copyLink(this.filmUrl({ film: st.activePl, w: 3840, h: 2160 }))} style="margin-left:6px;padding:8px 13px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Copier le lien</button>
@@ -4039,12 +4044,20 @@ class App extends Component {
 
             <div style="background:#fff;border:1px solid rgba(35,34,32,0.08);border-radius:14px;padding:16px 18px;">
               <h3 style="margin:0 0 10px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">4 · Lien à mettre sur l'écran</h3>
-              <div style="display:flex;align-items:center;gap:8px;">
-                <input readonly value=${v.onbSel.link} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:8px 11px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#FBF8F2;" />
-                <button onClick=${v.onbSel.copyLink} style="flex:0 0 auto;padding:8px 14px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Copier</button>
-                <a href=${v.onbSel.link} target="_blank" style="flex:0 0 auto;font-size:12px;font-weight:600;color:#8D1D2C;">↗</a>
+              <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+                <div style="flex:0 0 auto;text-align:center;">
+                  <img src=${qrDataUri(v.onbSel.link)} alt="QR du lien écran" style="width:140px;height:140px;display:block;border:1px solid rgba(35,34,32,0.1);border-radius:10px;background:#fff;" />
+                  <div style="font-size:10.5px;color:#8A847C;margin-top:5px;">📱 Scanne pour ouvrir sur l'écran</div>
+                </div>
+                <div style="flex:1 1 260px;min-width:220px;">
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <input readonly value=${v.onbSel.link} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:8px 11px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#FBF8F2;" />
+                    <button onClick=${v.onbSel.copyLink} style="flex:0 0 auto;padding:8px 14px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Copier</button>
+                    <a href=${v.onbSel.link} target="_blank" style="flex:0 0 auto;font-size:12px;font-weight:600;color:#8D1D2C;">↗</a>
+                  </div>
+                  <p style="margin:8px 0 0;font-size:11.5px;color:#8A847C;">Ouvre ce lien en plein écran sur l'écran du magasin (mode kiosque), ou scanne le QR depuis la box/TV. Il bascule tout seul selon l'heure si tu as fait un Planning.</p>
+                </div>
               </div>
-              <p style="margin:8px 0 0;font-size:11.5px;color:#8A847C;">Ouvre ce lien en plein écran sur l'écran du magasin (mode kiosque). Il bascule tout seul selon l'heure si tu as fait un Planning.</p>
             </div>
 
             <button onClick=${v.onbSel.toggleDone} style="align-self:flex-start;padding:10px 20px;font-size:13px;font-weight:600;border-radius:999px;cursor:pointer;${v.onbSel.done ? 'background:rgba(46,125,50,0.12);color:#2E7D32;border:1px solid rgba(46,125,50,0.4);' : 'background:#232220;color:#fff;border:none;'}">${v.onbSel.done ? '✓ Magasin configuré — annuler' : 'Marquer ce magasin comme configuré'}</button>
