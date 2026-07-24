@@ -2065,7 +2065,7 @@ class App extends Component {
               <span style="font-size:10.5px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">Produit</span>
               <span style="font-size:10.5px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">Visuel</span>
               <span style="font-size:10.5px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;text-align:right;">Prix défaut</span>
-              ${v.storeCols.map((sc) => html`<span title=${sc.label} style="font-size:10.5px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:#8A847C;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${sc.label}</span>`)}
+              ${v.storeCols.map((sc) => html`<span title=${sc.label} style="font-size:8.5px;font-weight:600;letter-spacing:0.02em;text-transform:uppercase;color:#8A847C;text-align:right;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;">${sc.label}</span>`)}
               <span style="font-size:10.5px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;text-align:center;">Actif</span>
               <span></span>
               ${v.prodRows.map((p) => html`
