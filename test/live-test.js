@@ -264,21 +264,24 @@ async function main() {
       const stateNow = await call('GET', '/api/v1/state');
       const film = (stateNow.playlists || [])[0];
       if (!film) throw new Error('aucun film en base');
+      const film2 = (stateNow.playlists || [])[1] || film;
       const before = await call('GET', '/api/v1/plan');
-      // matin couvrant toute la journée pour vérifier la résolution immédiate
+      // matin couvrant toute la journée + DEUX films enchaînés
       const out = await call('POST', '/api/v1/plan', {
-        stores: [store.id], slots: { matin: film.id },
+        stores: [store.id], slots: { matin: [film.id, film2.id] },
         windows: [{ id: 'matin', from: '00:00', to: '23:59' }, { id: 'midi', from: '11:00', to: '15:00' }, { id: 'aprem', from: '15:00', to: '20:00' }],
       });
-      if (!out.ok || !out.byStore[store.id] || out.byStore[store.id].matin !== film.id) {
-        throw new Error('plan non enregistré');
+      const saved = out.byStore[store.id] && out.byStore[store.id].matin;
+      if (!out.ok || !Array.isArray(saved) || saved[0] !== film.id) {
+        throw new Error(`plan non enregistré : ${JSON.stringify(saved)}`);
       }
       const f = await (await fetch(BASE + `/api/v1/film?store=${encodeURIComponent(store.id)}`)).json();
-      if (f.playlistId !== film.id) throw new Error(`le lien magasin ne suit pas le plan (${f.playlistId} ≠ ${film.id})`);
       if (!f.plan || !f.plan.moment) throw new Error('moment du plan absent du film servi');
+      const multi = film2.id !== film.id;
+      if (multi && f.plan.films !== 2) throw new Error(`films enchaînés attendus : 2, reçu ${f.plan.films}`);
       // nettoyage : on efface le plan de ce magasin
       await call('POST', '/api/v1/plan', { stores: [store.id], slots: {}, windows: before.windows });
-      return `${store.store} : « ${film.name} » au ${f.plan.moment} (${f.plan.window})`;
+      return `${store.store} : ${multi ? '2 films enchaînés' : '« ' + film.name + ' »'} au ${f.plan.moment} (${f.plan.window})`;
     });
     await step('POST /api/v1/stores/<id> — langue du magasin', async () => {
       const fleetRes = await call('GET', '/api/v1/fleet');

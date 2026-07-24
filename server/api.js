@@ -301,18 +301,34 @@ function filmJson(storeId, filmId) {
     if (!store) return { status: 404, json: { error: `magasin inconnu : ${storeId}` } };
     storeName = store.name;
     storeFmt = storeFormat(store);
-    // Planning journalier : si le magasin a un plan, le film du moment courant
-    // (matin / midi / après-midi) prime. Sinon, film assigné / brouillon.
+    // Planning journalier : si le magasin a un plan, le(s) film(s) du moment
+    // courant priment. Plusieurs films → joués l'un après l'autre (concaténés).
     const planned = planFilmAt(storeId, new Date());
-    if (planned) {
+    if (planned && planned.films.length) {
       const pls = loadPlaylists();
-      const pf = pls.find((p) => p.id === planned.filmId);
-      if (pf) {
+      const snapOf = (fid) => {
+        const pf = pls.find((p) => p.id === fid);
+        if (!pf) return null;
         const rows = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' ORDER BY version DESC LIMIT 200`).all();
-        for (const r of rows) { const p = JSON.parse(r.payload); if ((p.playlistId || 'pl1') === pf.id) { snap = p; break; } }
-        if (!snap) snap = { ...currentDraftSnapshot(), playlistId: pf.id, playlistName: pf.name, playlist: pf.items, draft: true };
-        snap.plan = { moment: planned.label, window: planned.window };
+        for (const r of rows) { const p = JSON.parse(r.payload); if ((p.playlistId || 'pl1') === pf.id) return p; }
+        return { ...currentDraftSnapshot(), playlistId: pf.id, playlistName: pf.name, playlist: pf.items, draft: true };
+      };
+      const snaps = planned.films.map(snapOf).filter(Boolean);
+      if (snaps.length === 1) {
+        snap = snaps[0];
+      } else if (snaps.length > 1) {
+        // Concaténation : modules dédupliqués, playlist = enchaînement des films.
+        const modules = [];
+        const seen = new Set();
+        for (const s of snaps) for (const m of s.modules || []) if (!seen.has(m.id)) { seen.add(m.id); modules.push(m); }
+        snap = {
+          ...snaps[0],
+          playlistName: planned.films.map((fid) => (pls.find((p) => p.id === fid) || {}).name).filter(Boolean).join(' + '),
+          modules,
+          playlist: snaps.flatMap((s) => s.playlist || []),
+        };
       }
+      if (snap) snap.plan = { moment: planned.label, window: planned.window, films: snaps.length };
     }
     if (!snap) {
       const row = db.prepare('SELECT MAX(assigned_ver) AS v FROM sig_players WHERE store_id = ?').get(storeId);

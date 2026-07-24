@@ -212,6 +212,25 @@ function migrate(db) {
   if (!stCols.includes('screen_orient')) db.exec(`ALTER TABLE sig_stores ADD COLUMN screen_orient TEXT NOT NULL DEFAULT 'paysage'`);
   if (!stCols.includes('active')) db.exec(`ALTER TABLE sig_stores ADD COLUMN active INTEGER NOT NULL DEFAULT 1`);
 
+  // Planning : passage à plusieurs films par moment (ajout de la colonne
+  // position → reconstruction de la table dont la PK interdisait les doublons).
+  const dpCols = db.prepare('PRAGMA table_info(sig_dayplans)').all().map((c) => c.name);
+  if (dpCols.length && !dpCols.includes('position')) {
+    db.exec(`
+      BEGIN;
+      CREATE TABLE sig_dayplans_new (
+        store_id TEXT NOT NULL, moment TEXT NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0, film_id TEXT NOT NULL,
+        PRIMARY KEY (store_id, moment, position)
+      );
+      INSERT INTO sig_dayplans_new (store_id, moment, position, film_id)
+        SELECT store_id, moment, 0, film_id FROM sig_dayplans;
+      DROP TABLE sig_dayplans;
+      ALTER TABLE sig_dayplans_new RENAME TO sig_dayplans;
+      COMMIT;
+    `);
+  }
+
   // Éléments typés : produit, film (vidéo), animation… + liens vers le catalogue.
   const modCols2 = db.prepare('PRAGMA table_info(sig_modules)').all().map((c) => c.name);
   if (!modCols2.includes('cat_ref')) db.exec(`ALTER TABLE sig_modules ADD COLUMN cat_ref TEXT NOT NULL DEFAULT ''`);
@@ -300,12 +319,14 @@ function migrate(db) {
     PRIMARY KEY (product_id, store_id)
   );
 
-  -- Planning journalier : un film par moment de la journée, par magasin.
+  -- Planning journalier : un ou plusieurs films par moment, par magasin
+  -- (joués l'un après l'autre pendant le créneau).
   CREATE TABLE IF NOT EXISTS sig_dayplans (
     store_id TEXT NOT NULL,
     moment   TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
     film_id  TEXT NOT NULL,
-    PRIMARY KEY (store_id, moment)
+    PRIMARY KEY (store_id, moment, position)
   );
 
   CREATE TABLE IF NOT EXISTS sig_langs (
@@ -530,17 +551,21 @@ export function planWindows() {
 
 export function loadPlan() {
   const db = getDb();
-  const rows = db.prepare('SELECT store_id, moment, film_id FROM sig_dayplans').all();
+  const rows = db.prepare('SELECT store_id, moment, film_id FROM sig_dayplans ORDER BY store_id, moment, position').all();
   const byStore = {};
   for (const r of rows) {
     if (!byStore[r.store_id]) byStore[r.store_id] = {};
-    byStore[r.store_id][r.moment] = r.film_id;
+    if (!byStore[r.store_id][r.moment]) byStore[r.store_id][r.moment] = [];
+    byStore[r.store_id][r.moment].push(r.film_id);
   }
   return { windows: planWindows(), byStore };
 }
 
-// Écrit le plan (matin/midi/aprem → filmId) pour chaque magasin ciblé.
-// slots : { matin: filmId|'', midi: …, aprem: … } ; '' efface le moment.
+// Normalise un slot : filmId, [filmId, …] ou '' → tableau d'ids.
+const slotFilms = (v) => (Array.isArray(v) ? v : (v ? [v] : [])).map(String).filter(Boolean);
+
+// Écrit le plan (matin/midi/aprem → un ou plusieurs films) pour chaque magasin.
+// slots : { matin: [filmId, …]|filmId|'', midi: …, aprem: … }.
 export function savePlan({ stores, slots, windows }) {
   const db = getDb();
   if (Array.isArray(windows) && windows.length) {
@@ -557,12 +582,12 @@ export function savePlan({ stores, slots, windows }) {
   db.exec('BEGIN');
   try {
     const del = db.prepare('DELETE FROM sig_dayplans WHERE store_id = ? AND moment = ?');
-    const ins = db.prepare('INSERT INTO sig_dayplans(store_id, moment, film_id) VALUES (?, ?, ?)');
+    const ins = db.prepare('INSERT INTO sig_dayplans(store_id, moment, position, film_id) VALUES (?, ?, ?, ?)');
     for (const sid of targets) {
       for (const m of PLAN_MOMENTS) {
         del.run(sid, m.id);
-        const fid = slots && slots[m.id];
-        if (fid && validFilms.has(String(fid))) ins.run(sid, m.id, String(fid));
+        const films = slotFilms(slots && slots[m.id]).filter((fid) => validFilms.has(fid));
+        films.forEach((fid, i) => ins.run(sid, m.id, i, fid));
       }
     }
     db.exec('COMMIT');
@@ -573,21 +598,22 @@ export function savePlan({ stores, slots, windows }) {
   return loadPlan();
 }
 
-// Film programmé pour un magasin à un instant donné (selon les fenêtres).
-// Renvoie { filmId, moment } ou null si aucun plan / hors de tout créneau.
+// Films programmés pour un magasin à un instant donné (selon les fenêtres).
+// Renvoie { films: [ids], moment, label, window } ou null.
 export function planFilmAt(storeId, date) {
   if (!storeId) return null;
   const db = getDb();
-  const rows = db.prepare('SELECT moment, film_id FROM sig_dayplans WHERE store_id = ?').all(storeId);
+  const rows = db.prepare('SELECT moment, film_id FROM sig_dayplans WHERE store_id = ? ORDER BY moment, position').all(storeId);
   if (!rows.length) return null;
-  const byMoment = new Map(rows.map((r) => [r.moment, r.film_id]));
+  const byMoment = new Map();
+  for (const r of rows) { if (!byMoment.has(r.moment)) byMoment.set(r.moment, []); byMoment.get(r.moment).push(r.film_id); }
   const wins = planWindows();
   const mins = date.getHours() * 60 + date.getMinutes();
   const toMin = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
   for (const w of wins) {
     const a = toMin(w.from), b = toMin(w.to);
     const inWin = a <= b ? (mins >= a && mins < b) : (mins >= a || mins < b);
-    if (inWin && byMoment.has(w.id)) return { filmId: byMoment.get(w.id), moment: w.id, label: w.label, window: `${w.from}–${w.to}` };
+    if (inWin && byMoment.has(w.id)) return { films: byMoment.get(w.id), moment: w.id, label: w.label, window: `${w.from}–${w.to}` };
   }
   return null;
 }

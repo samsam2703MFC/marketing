@@ -96,7 +96,7 @@ class App extends Component {
     catalog: { categories: [], products: [] },
     catDraft: null, catDirty: false, catSel: '', catSaving: false, langs: [], catLang: 'fr',
     pwaForm: null, pwaBusy: null, pwaResult: null,
-    planWindows: [], planByStore: {}, planStores: [], planSlots: { matin: '', midi: '', aprem: '' },
+    planWindows: [], planByStore: {}, planStores: [], planSlots: { matin: [], midi: [], aprem: [] },
     planBusy: false, planResult: null,
   };
 
@@ -1052,12 +1052,19 @@ class App extends Component {
     let slots = this.state.planSlots;
     if (next.length === 1) {
       const saved = this.state.planByStore[next[0]] || {};
-      slots = { matin: saved.matin || '', midi: saved.midi || '', aprem: saved.aprem || '' };
+      const arr = (v) => (Array.isArray(v) ? [...v] : (v ? [v] : []));
+      slots = { matin: arr(saved.matin), midi: arr(saved.midi), aprem: arr(saved.aprem) };
     }
     this.setState({ planStores: next, planSlots: slots, planResult: null });
   }
-  setPlanSlot(moment, filmId) {
-    this.setState({ planSlots: { ...this.state.planSlots, [moment]: filmId }, planResult: null });
+  addPlanFilm(moment, filmId) {
+    const cur = this.state.planSlots[moment] || [];
+    if (cur.includes(filmId)) return; // pas de doublon dans un même moment
+    this.setState({ planSlots: { ...this.state.planSlots, [moment]: [...cur, filmId] }, planResult: null });
+  }
+  removePlanFilm(moment, idx) {
+    const cur = this.state.planSlots[moment] || [];
+    this.setState({ planSlots: { ...this.state.planSlots, [moment]: cur.filter((_, i) => i !== idx) }, planResult: null });
   }
   setPlanWindow(id, field, value) {
     this.setState({ planWindows: this.state.planWindows.map((w) => (w.id === id ? { ...w, [field]: value } : w)) });
@@ -1066,13 +1073,14 @@ class App extends Component {
     const st = this.state;
     if (st.planBusy) return;
     if (!st.planStores.length) { this.showToast('Sélectionne au moins un magasin'); return; }
-    if (!st.planSlots.matin && !st.planSlots.midi && !st.planSlots.aprem) { this.showToast('Glisse au moins un film sur un moment'); return; }
+    const allSlotFilms = [...(st.planSlots.matin || []), ...(st.planSlots.midi || []), ...(st.planSlots.aprem || [])];
+    if (!allSlotFilms.length) { this.showToast('Glisse au moins un film sur un moment'); return; }
     this.setState({ planBusy: true, planResult: null });
     try {
       // Enregistrer le plan (+ fenêtres), puis publier chaque film distinct sur
       // les magasins choisis pour que les écrans aient le contenu en cache.
       const out = await api('POST', '/plan', { stores: st.planStores, slots: st.planSlots, windows: st.planWindows });
-      const filmIds = [...new Set([st.planSlots.matin, st.planSlots.midi, st.planSlots.aprem].filter(Boolean))];
+      const filmIds = [...new Set(allSlotFilms)];
       let deployed = 0;
       for (const fid of filmIds) {
         try { await api('POST', '/publish', { mode: 'full', playlistId: fid, targets: st.planStores }); deployed++; }
@@ -1577,21 +1585,23 @@ class App extends Component {
       { id: 'midi', label: 'Midi', from: '11:00', to: '15:00' },
       { id: 'aprem', label: 'Après-midi', from: '15:00', to: '20:00' },
     ]).map((w) => {
-      const fid = st.planSlots[w.id];
-      const film = fid ? filmById(fid) : null;
-      const c = film ? filmCatOf(film) : null;
+      const ids = st.planSlots[w.id] || [];
+      const films = ids.map((fid) => {
+        const f = filmById(fid);
+        const c = f ? filmCatOf(f) : null;
+        return f ? { name: f.name, count: f.items.length, color: c.color } : { name: '(film supprimé)', count: 0, color: '#8A847C' };
+      });
       return {
         id: w.id, label: w.label, from: w.from, to: w.to,
         onFrom: (e) => this.setPlanWindow(w.id, 'from', e.target.value),
         onTo: (e) => this.setPlanWindow(w.id, 'to', e.target.value),
-        film: film ? { name: film.name, count: film.items.length, color: c.color } : null,
-        clear: () => this.setPlanSlot(w.id, ''),
+        films: films.map((f, i) => ({ ...f, order: i + 1, remove: () => this.removePlanFilm(w.id, i) })),
         onDragOver: (e) => { e.preventDefault(); e.currentTarget.classList.add('drag-over'); },
         onDragLeave: (e) => e.currentTarget.classList.remove('drag-over'),
         onDrop: (e) => {
           e.preventDefault(); e.currentTarget.classList.remove('drag-over');
           const d = e.dataTransfer.getData('text/plain');
-          if (d.startsWith('film:')) this.setPlanSlot(w.id, d.slice(5));
+          if (d.startsWith('film:')) this.addPlanFilm(w.id, d.slice(5));
         },
       };
     });
@@ -1603,7 +1613,7 @@ class App extends Component {
         onDragStart: (e) => { e.dataTransfer.setData('text/plain', 'film:' + p.id); e.dataTransfer.effectAllowed = 'copy'; },
       };
     });
-    const planCanValidate = st.planStores.length > 0 && ['matin', 'midi', 'aprem'].some((m) => st.planSlots[m]);
+    const planCanValidate = st.planStores.length > 0 && ['matin', 'midi', 'aprem'].some((m) => (st.planSlots[m] || []).length);
 
     const targets = st.fleet.map((s) => {
       const on = !!st.pubTargets[s.id];
@@ -2307,7 +2317,7 @@ class App extends Component {
     <div style="max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
       <div>
         <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Planning du jour</h2>
-        <p style="margin:0;font-size:12.5px;color:#8A847C;">1. choisis les magasins · 2. glisse un film sur chaque moment de la journée (matin / midi / après-midi) · 3. valide — les écrans basculent automatiquement selon l'heure, et tu obtiens le lien final.</p>
+        <p style="margin:0;font-size:12.5px;color:#8A847C;">1. choisis les magasins · 2. glisse un ou plusieurs films sur chaque moment de la journée (matin / midi / après-midi — plusieurs films s'enchaînent en boucle) · 3. valide — les écrans basculent automatiquement selon l'heure, et tu obtiens le lien final.</p>
       </div>
 
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
@@ -2354,14 +2364,20 @@ class App extends Component {
                 </span>
               </div>
               <div class="pl-item" onDragOver=${col.onDragOver} onDragLeave=${col.onDragLeave} onDrop=${col.onDrop}
-                style="min-height:96px;border-radius:12px;border:2px dashed ${col.film ? col.film.color : 'rgba(35,34,32,0.2)'};background:${col.film ? col.film.color + '10' : '#FBF8F2'};display:flex;align-items:center;justify-content:center;padding:14px;">
-                ${col.film ? html`
-                  <div style="display:flex;flex-direction:column;align-items:center;gap:7px;text-align:center;">
-                    <span style="font-size:15px;font-weight:700;color:${col.film.color};">${col.film.name}</span>
-                    <span style="font-size:11px;color:#8A847C;">${col.film.count} module(s)</span>
-                    <button onClick=${col.clear} style="padding:5px 12px;font-size:11px;font-weight:600;border-radius:999px;border:1px solid ${col.film.color}55;background:#fff;color:${col.film.color};cursor:pointer;">Retirer</button>
+                style="min-height:96px;border-radius:12px;border:2px dashed ${col.films.length ? 'rgba(35,34,32,0.14)' : 'rgba(35,34,32,0.2)'};background:${col.films.length ? '#fff' : '#FBF8F2'};display:flex;flex-direction:column;gap:7px;padding:12px;">
+                ${col.films.map((f) => html`
+                  <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:9px;background:${f.color}10;border-left:4px solid ${f.color};">
+                    <span style="font-size:10px;font-weight:700;color:${f.color};opacity:0.75;">${f.order}</span>
+                    <div style="flex:1 1 auto;min-width:0;">
+                      <div style="font-size:13px;font-weight:600;color:${f.color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${f.name}</div>
+                      <div style="font-size:10px;color:#8A847C;">${f.count} module(s)</div>
+                    </div>
+                    <button onClick=${f.remove} title="Retirer" style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:rgba(141,29,44,0.1);border:none;cursor:pointer;font-size:11px;color:#8D1D2C;">✕</button>
                   </div>
-                ` : html`<span style="font-size:12px;color:#B8B2A8;">Glisse un film ici</span>`}
+                `)}
+                ${col.films.length
+                  ? html`<div style="font-size:10.5px;color:#B8B2A8;text-align:center;padding:3px;">＋ glisse un autre film (joué à la suite)</div>`
+                  : html`<div style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;font-size:12px;color:#B8B2A8;">Glisse un ou plusieurs films ici</div>`}
               </div>
             </div>
           `)}
