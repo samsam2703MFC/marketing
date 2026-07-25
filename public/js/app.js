@@ -134,7 +134,7 @@ class App extends Component {
       // Pendant un glisser-déposer (planning), on suspend tout re-rendu : re-rendre
       // l'arbre pendant un drag natif HTML5 peut annuler le drag dans certains
       // navigateurs (la carte en cours de déplacement est re-patchée).
-      if (this._dnd) return;
+      if (this._dnd || this._editingField()) return;
       this.setState((s) => ({
         hbTick: s.hbTick + 1,
         fleet: s.fleet.map((st) => ({
@@ -143,7 +143,13 @@ class App extends Component {
         })),
       }));
     }, 1000);
-    this._poll = setInterval(() => { if (!this._dnd) this.refreshFleet(); }, 5000);
+    // Rafraîchissement des écrans, SAUF pendant une saisie : rafraîchir re-rend
+    // la vue et réinitialiserait un champ contrôlé en cours d'édition (nom de
+    // zone, coordonnées du magasin…). On saute le tick tant qu'un champ a le focus.
+    this._poll = setInterval(() => {
+      if (this._dnd || this._editingField()) return;
+      this.refreshFleet();
+    }, 5000);
     this._key = (e) => {
       const tag = (e.target && e.target.tagName) || '';
       const typing = /INPUT|TEXTAREA|SELECT/.test(tag);
@@ -343,6 +349,13 @@ class App extends Component {
     return { m: list[0], lt: 0 };
   }
 
+  // Vrai si l'utilisateur saisit dans un champ : on suspend alors les re-rendus
+  // périodiques (aperçu, compteurs, rafraîchissement réseau) qui, sur un champ
+  // contrôlé, écraseraient le texte en cours de frappe (nom de zone, coordonnées…).
+  _editingField() {
+    const a = document.activeElement;
+    return !!(a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT'));
+  }
   tick = (now) => {
     const dt = Math.min(0.05, (now - this._last) / 1000);
     this._last = now;
@@ -3486,9 +3499,9 @@ class App extends Component {
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 22px;border-bottom:1px solid rgba(35,34,32,0.06);background:#fff;">
             <span style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">Coordonnées</span>
             ${infoTip('Alimentent les champs dynamiques des gabarits, résolus PAR MAGASIN à la diffusion : {{adresse}}, {{horaires}}, {{tel}} et {{magasin}} (le nom). Un seul gabarit affiche ainsi les bonnes infos selon le point de vente. Enregistré en quittant le champ.')}
-            <input value=${s.address} onChange=${s.setAddress} placeholder="Adresse — {{adresse}}" title="Adresse du magasin — jeton {{adresse}}" style="flex:2 1 220px;min-width:0;padding:7px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
-            <input value=${s.hours} onChange=${s.setHours} placeholder="Horaires — {{horaires}}" title="Horaires d'ouverture — jeton {{horaires}}" style="flex:1 1 160px;min-width:0;padding:7px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
-            <input value=${s.phone} onChange=${s.setPhone} placeholder="Téléphone — {{tel}}" title="Téléphone — jeton {{tel}}" style="flex:1 1 140px;min-width:0;padding:7px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
+            <input key=${'ad-' + s.id} defaultValue=${s.address} onChange=${s.setAddress} placeholder="Adresse — {{adresse}}" title="Adresse du magasin — jeton {{adresse}}" style="flex:2 1 220px;min-width:0;padding:7px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
+            <input key=${'hr-' + s.id} defaultValue=${s.hours} onChange=${s.setHours} placeholder="Horaires — {{horaires}}" title="Horaires d'ouverture — jeton {{horaires}}" style="flex:1 1 160px;min-width:0;padding:7px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
+            <input key=${'ph-' + s.id} defaultValue=${s.phone} onChange=${s.setPhone} placeholder="Téléphone — {{tel}}" title="Téléphone — jeton {{tel}}" style="flex:1 1 140px;min-width:0;padding:7px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
           </div>
           <div style="padding:12px 22px;border-bottom:1px solid rgba(35,34,32,0.06);background:#FBF8F2;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;${s.groups.length ? 'margin-bottom:10px;' : ''}">
@@ -3500,8 +3513,8 @@ class App extends Component {
             </div>
             <div style="display:flex;flex-direction:column;gap:8px;">
               ${s.groups.map((g) => html`
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff;border:1px solid rgba(35,34,32,0.1);border-radius:10px;padding:8px 11px;">
-                  <input value=${g.name} onChange=${g.onName} placeholder="Nom de la zone" style="flex:1 1 140px;min-width:0;padding:6px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.14);border-radius:7px;background:#FBF8F2;" />
+                <div key=${g.id} style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff;border:1px solid rgba(35,34,32,0.1);border-radius:10px;padding:8px 11px;">
+                  <input key=${'gn-' + g.id} defaultValue=${g.name} onChange=${g.onName} placeholder="Nom de la zone" style="flex:1 1 140px;min-width:0;padding:6px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.14);border-radius:7px;background:#FBF8F2;" />
                   <span style="display:flex;align-items:center;gap:4px;">
                     <select value=${g.fmt.screens} onChange=${g.onScreens} title="Nombre d'écrans de la zone" style="padding:6px 7px;font-size:12px;border:1px solid rgba(35,34,32,0.16);border-radius:7px;background:#fff;cursor:pointer;">${[1, 2, 3, 4, 5, 6].map((n) => html`<option value=${n}>${n}</option>`)}</select>
                     <span style="font-size:11px;color:#8A847C;">×</span>
