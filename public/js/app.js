@@ -59,6 +59,9 @@ const PHOTO_TIP = 'Qualité top : photo carrée d’au moins 2000 × 2000 px, id
 // Nombre maximum de films par moment de la journée (planning).
 const MAX_PLAN_FILMS = 5;
 
+// Assistant de diffusion (fil d'Ariane) : étapes de bout en bout.
+const WIZ_STEPS = ['Type', 'Contenu', 'Écrans', 'Aperçu', 'Diffusion'];
+
 const POSF = [
   { k: 'titleY', label: 'Titre · vertical', min: -400, max: 400, step: 10, unit: 'px' },
   { k: 'listX', label: 'Liste · horizontal', min: -800, max: 800, step: 10, unit: 'px' },
@@ -103,6 +106,7 @@ class App extends Component {
     view: 'home', composerTab: 'lib', publishing: false, deploying: false, version: 1, dataVer: 1, hbTick: 0, toast: '',
     pubTargets: {}, pubSlot: 'Toute la journée', pubWhen: 'now', activateAt: '', pubMode: 'full',
     pubDays: [true, true, true, true, true, true, true], pubDone: null, pubFilm: null,
+    wizard: false, wizStep: 0, wizDone: null, wizPublishing: false, wizNonce: 1,
     override: false,
     srvUrl: '', srvIp: '', srvToken: '',
     hdUrl: '', hdUser: '', hdPass: '', hasHdPass: false, hdSaving: false,
@@ -359,7 +363,7 @@ class App extends Component {
   tick = (now) => {
     const dt = Math.min(0.05, (now - this._last) / 1000);
     this._last = now;
-    if (this.state.playing && !this.state.loading && !this._dnd) {
+    if (this.state.playing && !this.state.loading && !this._dnd && !this.state.wizard) {
       const total = this.total();
       let t = this.state.t + dt;
       if (t >= total) {
@@ -791,6 +795,58 @@ class App extends Component {
   // ---- Accueil « prêt à diffuser » ---------------------------------------
   openHome() { this.setState({ view: 'home' }); this.loadProdMoments(); this.refreshFleet(); }
   startFirstFilm() { this.newExampleFilm(); this.setState({ view: 'composer' }); }
+
+  // ---- assistant de diffusion (fil d'Ariane) ------------------------------
+  // Crée un film neuf et guide de bout en bout : Type → Contenu → Écrans →
+  // Aperçu → Diffusion (publication réelle + rapport).
+  openWizard() {
+    const id = 'pl' + uid();
+    const playlists = [...this.state.playlists, this.normFilm({ id, name: 'Nouveau film', items: [], mode: 'continu', stores: [] })];
+    this.dirty({ playlists, activePl: id, playlist: [], t: 0, scope: 'playlist' });
+    this.setState({ wizard: true, wizStep: 0, wizDone: null, wizNonce: 1 });
+    this.refreshFleet();
+  }
+  closeWizard() { this.setState({ wizard: false, wizDone: null }); }
+  wizGo(n) {
+    const step = Math.max(0, Math.min(WIZ_STEPS.length - 1, n));
+    // En entrant dans l'aperçu, on enregistre le brouillon pour que /film?film= soit à jour.
+    if (step === 3) { api('PUT', '/draft', this.draftBody()).catch(() => {}); this.setState({ wizStep: 3, wizNonce: this.state.wizNonce + 1 }); return; }
+    this.setState({ wizStep: step });
+  }
+  wizName(name) {
+    const n = String(name || '').trim() || 'Nouveau film';
+    const playlists = this.state.playlists.map((p) => (p.id === this.state.activePl ? { ...p, name: n } : p));
+    this.dirty({ playlists });
+  }
+  wizExample() {
+    this.updateContinuous({ source: 'saison', perMoment: true, order: 'catalogue', maxItems: 12,
+      ratios: { liaison: 5, produitSeul: 6, media: 3, animation: 4, surprise: 8 }, fallback: 'tout' });
+    this.showToast('Réglages d’exemple appliqués ✓');
+  }
+  wizToggleItem(mid) {
+    const f = this.activeFilm();
+    const items = (f.items || []).includes(mid) ? f.items.filter((x) => x !== mid) : [...(f.items || []), mid];
+    const playlists = this.state.playlists.map((p) => (p.id === f.id ? { ...p, items } : p));
+    this.dirty({ playlists, playlist: items });
+  }
+  async wizPublish() {
+    if (this.state.wizPublishing) return;
+    const film = this.activeFilm();
+    this.setState({ wizPublishing: true });
+    try {
+      await api('PUT', '/draft', this.draftBody());
+      const out = await api('POST', '/publish', { mode: 'full', playlistId: film.id, targets: film.stores || [], when: 'now', schedule: film.schedule });
+      const okN = out.tests.filter((t) => t.ok).length;
+      this.setState({
+        version: out.version, dirty: false, saved: true, wizPublishing: false,
+        wizDone: { version: out.version, name: out.film ? out.film.name : film.name, playerCount: out.playerCount, testsOk: okN, testsTotal: out.tests.length, url: this.filmUrl({ film: film.id, w: 3840, h: 2160 }) },
+      });
+      this.refreshFleet();
+    } catch (e) {
+      this.setState({ wizPublishing: false });
+      this.showToast(e.status === 401 ? 'Session expirée — recharge la page (F5) et réessaie' : `Échec de la diffusion : ${e.message}`);
+    }
+  }
   // État de préparation : ce qui est prêt / ce qu'il reste à faire.
   homeReadiness() {
     const st = this.state;
@@ -2799,6 +2855,7 @@ class App extends Component {
       <button class="hdr-btn" onClick=${v.toggleOverride} style=${v.overrideIconStyle}>⚡<span class="hdr-tip">${v.overrideTip}</span></button>
       <button class="hdr-btn" onClick=${v.openPublish} style=${v.publishIconStyle}>↗<span class="hdr-tip hdr-tip-right">Publier sur le réseau — déploie le film choisi</span></button>
       <span style="width:1px;height:26px;background:rgba(35,34,32,0.10);flex:0 0 auto;margin:0 3px;"></span>
+      <button class="hdr-btn" onClick=${() => this.openWizard()} style="position:relative;display:flex;align-items:center;gap:5px;height:32px;padding:0 13px;border-radius:9px;background:#8D1D2C;color:#fff;border:none;cursor:pointer;font-size:12.5px;font-weight:700;flex:0 0 auto;">🎬 Diffuser<span class="hdr-tip hdr-tip-right">Assistant de diffusion — créer un film et le publier de bout en bout (avec le rapport)</span></button>
       <button class="hdr-btn" onClick=${v.openReport} style=${v.reportIconStyle}>📄<span class="hdr-tip hdr-tip-right">Rapport de diffusion — lien partageable (bibliothèque, planning, écrans)</span></button>
       <button class="hdr-btn" onClick=${v.openOnboarding} style=${v.onbIconStyle}>🎓<span class="hdr-tip hdr-tip-right">Mise en route — configurer chaque magasin</span></button>
       <button class="hdr-btn" onClick=${v.setViewSettings} style=${v.settingsIconStyle}>⚙<span class="hdr-tip hdr-tip-right">Paramètres — serveur, import PWA & liens</span></button>
@@ -3605,6 +3662,16 @@ class App extends Component {
         </div>
       </div>
 
+      <!-- Assistant de diffusion : le parcours guidé de bout en bout -->
+      <button onClick=${() => this.openWizard()} style="width:100%;box-sizing:border-box;text-align:left;display:flex;align-items:center;gap:16px;padding:20px 24px;border-radius:18px;background:linear-gradient(135deg,#8D1D2C,#6E4A2B);border:none;cursor:pointer;box-shadow:0 12px 30px rgba(141,29,44,0.22);">
+        <div style="font-size:32px;flex:0 0 auto;">🎬</div>
+        <div style="flex:1 1 auto;min-width:0;">
+          <div style="font-size:16px;font-weight:700;color:#fff;">Assistant de diffusion</div>
+          <div style="font-size:12.5px;color:rgba(255,255,255,0.82);margin-top:3px;line-height:1.45;">Créer un film (continu ou playlist) → contenu → écrans → aperçu → diffuser, avec le rapport. De bout en bout, guidé.</div>
+        </div>
+        <div style="font-size:22px;color:rgba(255,255,255,0.85);flex:0 0 auto;">→</div>
+      </button>
+
       <!-- Actions rapides -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;">
         <button onClick=${() => this.startFirstFilm()} style="text-align:left;padding:18px 20px;border-radius:16px;background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);cursor:pointer;">
@@ -4253,6 +4320,148 @@ class App extends Component {
       </div>
     </div>
   `}
+
+  ${st.wizard && (() => {
+    const wf = this.activeFilm();
+    const wc = wf.continuous || {};
+    const stores = st.fleet || [];
+    const targeted = wf.stores || [];
+    const inTarget = (id) => !targeted.length || targeted.includes(id);
+    const nScreens = stores.filter((s) => inTarget(s.id)).reduce((n, s) => n + (s.players || []).length, 0);
+    const done = st.wizDone;
+    const purl = this.filmUrl({ film: wf.id });
+    const previewSrc = purl + (purl.includes('?') ? '&' : '?') + '_=' + st.wizNonce;
+    const h2 = 'margin:0 0 6px;font-size:20px;font-weight:700;color:#232220;';
+    const sub = 'margin:0 0 20px;font-size:13.5px;color:#8A847C;';
+    const card = (on) => `flex:1 1 240px;text-align:left;padding:18px 20px;border-radius:14px;cursor:pointer;background:${on ? 'rgba(141,29,44,0.06)' : '#fff'};border:1.5px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};`;
+    const pill = (on) => `padding:9px 15px;font-size:13px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${on ? '#8D1D2C' : '#fff'};color:${on ? '#fff' : '#232220'};`;
+    let body;
+    if (st.wizStep === 0) {
+      body = html`
+        <h2 style=${h2}>Quel type de film ?</h2>
+        <p style=${sub}>Le <strong>Continu</strong> se compose et se met à jour tout seul — recommandé. La <strong>Playlist</strong> est une séquence figée d'éléments que tu choisis.</p>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:24px;">
+          <button onClick=${() => this.setFilmMode('continu')} style=${card(wf.mode === 'continu')}>
+            <div style="font-size:16px;font-weight:700;color:#232220;">🔄 Continu ${wf.mode === 'continu' ? html`<span style="color:#2E6E4E;">✓</span>` : ''}</div>
+            <div style="margin-top:5px;font-size:12.5px;color:#8A847C;line-height:1.5;">Boucle générée automatiquement depuis le catalogue, les saisons et les moments. S'adapte seule.</div>
+          </button>
+          <button onClick=${() => this.setFilmMode('playlist')} style=${card(wf.mode === 'playlist')}>
+            <div style="font-size:16px;font-weight:700;color:#232220;">▤ Playlist ${wf.mode === 'playlist' ? html`<span style="color:#2E6E4E;">✓</span>` : ''}</div>
+            <div style="margin-top:5px;font-size:12.5px;color:#8A847C;line-height:1.5;">Séquence figée : tu choisis les éléments et leur ordre.</div>
+          </button>
+        </div>
+        <label style="display:block;font-size:12.5px;font-weight:600;color:#8A847C;margin-bottom:6px;">Nom du film</label>
+        <input key=${'wn-' + wf.id} defaultValue=${wf.name} onChange=${(e) => this.wizName(e.target.value)} placeholder="ex. Boucle boutique" style="width:100%;max-width:420px;box-sizing:border-box;padding:11px 13px;font-size:15px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#fff;" />`;
+    } else if (st.wizStep === 1 && wf.mode === 'continu') {
+      body = html`
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+          <h2 style=${h2}>Contenu de la boucle</h2>
+          <button onClick=${() => this.wizExample()} style="padding:8px 14px;font-size:12.5px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">✨ Réglages d'exemple</button>
+        </div>
+        <p style=${sub}>Les essentiels ci-dessous suffisent. Réglages fins (ratios, exceptions, durées) dans le Compositeur.</p>
+        <div style="display:flex;flex-direction:column;gap:18px;max-width:640px;">
+          <div>
+            <div style="font-size:12.5px;font-weight:600;color:#8A847C;margin-bottom:7px;">D'où viennent les fiches</div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap;">
+              ${[['saison', 'Produits de saison'], ['tout', 'Tout le catalogue'], ['categories', 'Tout sauf catégories']].map(([id, lab]) => html`<button onClick=${() => this.updateContinuous({ source: id })} style=${pill(wc.source === id)}>${lab}</button>`)}
+            </div>
+          </div>
+          <div>
+            <div style="font-size:12.5px;font-weight:600;color:#8A847C;margin-bottom:7px;">Adapter au moment de la journée</div>
+            <div style="display:flex;gap:7px;">
+              <button onClick=${() => this.updateContinuous({ perMoment: true })} style=${pill(wc.perMoment !== false)}>Oui (matin/midi/aprem)</button>
+              <button onClick=${() => this.updateContinuous({ perMoment: false })} style=${pill(wc.perMoment === false)}>Non</button>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="font-size:12.5px;font-weight:600;color:#8A847C;">Nombre max de fiches</div>
+            <input type="number" min="4" max="40" defaultValue=${wc.maxItems || 12} key=${'wm-' + wf.id} onChange=${(e) => this.updateContinuous({ maxItems: parseInt(e.target.value, 10) || 12 })} style="width:80px;padding:8px 10px;font-size:14px;font-weight:600;text-align:right;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#fff;" />
+          </div>
+          <button onClick=${() => { this.setState({ wizard: false }); this.setView('composer'); }} style="align-self:flex-start;padding:8px 14px;font-size:12.5px;font-weight:600;color:#8D1D2C;background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:999px;cursor:pointer;">⚙ Réglages avancés dans le Compositeur ↗</button>
+        </div>`;
+    } else if (st.wizStep === 1) {
+      body = html`
+        <h2 style=${h2}>Éléments de la playlist</h2>
+        <p style=${sub}>Coche les éléments de la bibliothèque à inclure dans le film.</p>
+        ${(st.library || []).length ? html`
+          <div style="display:flex;flex-direction:column;gap:8px;max-width:640px;">
+            ${(st.library || []).map((mm) => { const on = (wf.items || []).includes(mm.id); return html`
+              <button onClick=${() => this.wizToggleItem(mm.id)} style="display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:11px;text-align:left;cursor:pointer;background:${on ? 'rgba(46,110,78,0.06)' : '#fff'};border:1px solid ${on ? 'rgba(46,110,78,0.4)' : 'rgba(35,34,32,0.12)'};">
+                <span style="width:22px;height:22px;flex:0 0 auto;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;background:${on ? '#2E6E4E' : 'rgba(35,34,32,0.08)'};color:${on ? '#fff' : '#8A847C'};">${on ? '✓' : ''}</span>
+                <span style="font-size:14px;font-weight:600;color:#232220;">${mm.name || 'Élément'}</span>
+                <span style="font-size:11.5px;color:#8A847C;">${mm.type || ''}</span>
+              </button>`; })}
+          </div>
+        ` : html`<div style="padding:16px;border-radius:12px;background:rgba(201,123,74,0.1);border:1px solid rgba(201,123,74,0.35);font-size:13px;color:#8A5A2B;">Aucun élément dans la bibliothèque. Crée-en dans le <button onClick=${() => { this.setState({ wizard: false }); this.setView('composer'); }} style="border:none;background:none;color:#8D1D2C;font-weight:700;cursor:pointer;text-decoration:underline;padding:0;">Compositeur</button>, puis reviens.</div>`}`;
+    } else if (st.wizStep === 2) {
+      body = html`
+        <h2 style=${h2}>Sur quels écrans ?</h2>
+        <p style=${sub}>Coche les magasins ciblés. <strong>Aucun coché = tous les magasins.</strong></p>
+        <div style="display:flex;flex-direction:column;gap:8px;max-width:640px;">
+          ${stores.map((s) => { const on = targeted.includes(s.id); return html`
+            <button onClick=${() => this.toggleFilmStore(s.id)} style="display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:11px;text-align:left;cursor:pointer;background:${on ? 'rgba(141,29,44,0.06)' : '#fff'};border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};">
+              <span style="width:22px;height:22px;flex:0 0 auto;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;background:${on ? '#8D1D2C' : 'rgba(35,34,32,0.08)'};color:${on ? '#fff' : '#8A847C'};">${on ? '✓' : ''}</span>
+              <span style="flex:1 1 auto;font-size:14px;font-weight:600;color:#232220;">${s.store}</span>
+              <span style="font-size:11.5px;color:#8A847C;">${(s.players || []).length} écran(s)${s.format ? ` · ${s.format.label}` : ''}</span>
+            </button>`; })}
+          ${!stores.length ? html`<div style="font-size:13px;color:#8A847C;">Aucun magasin. Branche un écran d'abord.</div>` : ''}
+        </div>
+        <div style="margin-top:14px;font-size:13px;font-weight:600;color:#8D1D2C;">${targeted.length ? `${targeted.length} magasin(s)` : 'Tous les magasins'} · ${nScreens} écran(s) ciblé(s)</div>`;
+    } else if (st.wizStep === 3) {
+      body = html`
+        <h2 style=${h2}>Aperçu du film</h2>
+        <p style=${sub}>Aperçu réel de « ${wf.name} » tel qu'il passera à l'écran (boucle générée par le serveur). Enregistré automatiquement en arrivant ici.</p>
+        <div style="border-radius:14px;overflow:hidden;border:1px solid rgba(35,34,32,0.12);background:#232220;box-shadow:0 20px 50px rgba(0,0,0,0.14);">
+          <iframe key=${'wprev-' + st.wizNonce} src=${previewSrc} title="Aperçu du film" style="display:block;width:100%;height:58vh;border:none;background:#232220;"></iframe>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+          <a href=${previewSrc} target="_blank" style="font-size:12.5px;font-weight:600;color:#8D1D2C;">↗ Ouvrir en plein écran</a>
+          <button onClick=${() => this.wizGo(3)} style="padding:4px 11px;font-size:12px;font-weight:600;color:#6E4A2B;background:#fff;border:1px solid rgba(110,74,43,0.35);border-radius:999px;cursor:pointer;">⟳ Rafraîchir</button>
+        </div>`;
+    } else {
+      body = done ? html`
+        <div style="text-align:center;max-width:560px;margin:10px auto;">
+          <div style="font-size:44px;">🎉</div>
+          <h2 style="margin:8px 0 6px;font-size:22px;font-weight:700;color:#2E6E4E;">Film diffusé sur le réseau</h2>
+          <p style=${sub}>« ${done.name} » · version v${done.version} · <strong>${done.playerCount} écran(s)</strong> · tests live <strong>${done.testsOk}/${done.testsTotal}</strong> OK.</p>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:8px;">
+            <button onClick=${() => this.openReport()} style="padding:12px 20px;font-size:14px;font-weight:700;color:#fff;background:#8D1D2C;border:none;border-radius:12px;cursor:pointer;">📊 Ouvrir le rapport de diffusion</button>
+            <a href=${done.url} target="_blank" style="display:inline-flex;align-items:center;padding:12px 18px;font-size:13.5px;font-weight:600;color:#8D1D2C;background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:12px;">▶ Voir le film</a>
+            <button onClick=${() => this.closeWizard()} style="padding:12px 18px;font-size:13.5px;font-weight:600;color:#4A4640;background:#fff;border:1px solid rgba(35,34,32,0.16);border-radius:12px;cursor:pointer;">Terminer</button>
+          </div>
+        </div>`
+        : html`
+        <h2 style=${h2}>Prêt à diffuser</h2>
+        <p style=${sub}>Vérifie le récapitulatif, puis lance la diffusion réelle sur les écrans ciblés.</p>
+        <div style="max-width:560px;display:flex;flex-direction:column;gap:10px;">
+          <div style="display:flex;justify-content:space-between;padding:12px 15px;border-radius:11px;background:#fff;border:1px solid rgba(35,34,32,0.1);"><span style="color:#8A847C;">Film</span><strong>${wf.name} · ${wf.mode === 'continu' ? '🔄 Continu' : '▤ Playlist'}</strong></div>
+          <div style="display:flex;justify-content:space-between;padding:12px 15px;border-radius:11px;background:#fff;border:1px solid rgba(35,34,32,0.1);"><span style="color:#8A847C;">Écrans</span><strong>${targeted.length ? `${targeted.length} magasin(s)` : 'Tous les magasins'} · ${nScreens} écran(s)</strong></div>
+          <button onClick=${() => this.wizPublish()} disabled=${st.wizPublishing} style="margin-top:6px;padding:15px 22px;font-size:16px;font-weight:700;color:#fff;background:${st.wizPublishing ? '#B8B2A8' : '#8D1D2C'};border:none;border-radius:13px;cursor:${st.wizPublishing ? 'wait' : 'pointer'};">${st.wizPublishing ? 'Diffusion + tests live…' : '🚀 Diffuser sur le réseau'}</button>
+          <p style="margin:2px 0 0;font-size:11.5px;color:#8A847C;">La publication est versionnée et testée automatiquement ; le rapport s'ouvre juste après.</p>
+        </div>`;
+    }
+    return html`
+      <div style="position:fixed;inset:0;background:#F2ECE2;z-index:40;display:flex;flex-direction:column;">
+        <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:15px 26px;background:#fff;border-bottom:1px solid rgba(35,34,32,0.1);">
+          <div style="font-size:15px;font-weight:700;color:#232220;">🎬 Assistant de diffusion</div>
+          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+            ${WIZ_STEPS.map((label, i) => html`
+              ${i ? html`<span style="color:#C9C3B8;">→</span>` : ''}
+              <button onClick=${() => (i < st.wizStep || done ? this.wizGo(i) : null)} style="display:flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;border:1px solid ${i === st.wizStep ? '#8D1D2C' : 'rgba(35,34,32,0.14)'};background:${i === st.wizStep ? '#8D1D2C' : (i < st.wizStep ? 'rgba(46,110,78,0.1)' : '#fff')};color:${i === st.wizStep ? '#fff' : (i < st.wizStep ? '#2E6E4E' : '#8A847C')};cursor:${i < st.wizStep ? 'pointer' : 'default'};font-size:12px;font-weight:600;">
+                <span>${i < st.wizStep ? '✓' : (i + 1)}</span>${label}
+              </button>`)}
+          </div>
+          <button onClick=${() => this.closeWizard()} style="padding:7px 13px;font-size:12.5px;font-weight:600;color:#8A847C;background:#fff;border:1px solid rgba(35,34,32,0.16);border-radius:999px;cursor:pointer;">✕ Fermer</button>
+        </div>
+        <div style="flex:1 1 auto;overflow:auto;padding:28px 26px;">
+          <div style="max-width:940px;margin:0 auto;">${body}</div>
+        </div>
+        <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 26px;background:#fff;border-top:1px solid rgba(35,34,32,0.1);">
+          <button onClick=${() => this.wizGo(st.wizStep - 1)} disabled=${st.wizStep === 0 || !!done} style="padding:11px 18px;font-size:13.5px;font-weight:600;border-radius:10px;cursor:${st.wizStep === 0 || done ? 'not-allowed' : 'pointer'};border:1px solid rgba(35,34,32,0.16);background:#fff;color:${st.wizStep === 0 || done ? '#C9C3B8' : '#4A4640'};">← Retour</button>
+          ${st.wizStep < 4 ? html`<button onClick=${() => this.wizGo(st.wizStep + 1)} style="padding:11px 22px;font-size:13.5px;font-weight:700;border-radius:10px;cursor:pointer;border:none;background:#8D1D2C;color:#fff;">${st.wizStep === 3 ? 'Diffusion →' : 'Suivant →'}</button>` : html`<span></span>`}
+        </div>
+      </div>`;
+  })()}
 
   ${v.publishing && html`
     <div onClick=${v.closePublish} style="position:fixed;inset:0;background:rgba(35,34,32,0.55);z-index:20;display:flex;align-items:center;justify-content:center;padding:30px;">
