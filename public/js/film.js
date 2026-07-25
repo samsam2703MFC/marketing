@@ -12,11 +12,14 @@ const REFRESH_MS = 30000;
 const apiUrl = (p) => new URL('api/v1' + p, location.href).toString();
 // Lien par magasin : /film?store=st1 → version actuellement assignée à ce magasin.
 // Lien par film : /film?film=pl1 → dernière publication de ce film.
+// Lien par groupe d'écrans : /film?group=g1 → boucle catégories de cette zone.
 const STORE = new URLSearchParams(location.search).get('store') || '';
 const FILM = new URLSearchParams(location.search).get('film') || '';
+const GROUP = new URLSearchParams(location.search).get('group') || '';
 const filmApi = () => {
   const q = new URLSearchParams();
-  if (FILM) q.set('film', FILM);
+  if (GROUP) q.set('group', GROUP);          // le groupe prime (comme côté serveur)
+  else if (FILM) q.set('film', FILM);
   else if (STORE) q.set('store', STORE);
   const s = q.toString();
   return apiUrl(`/film${s ? `?${s}` : ''}`);
