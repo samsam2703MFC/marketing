@@ -9,7 +9,8 @@ import {
   loadSeasons, saveSeasons, currentSeasons, currentMoment,
   loadMedia, addMediaRow, getMediaRow, delMediaRow,
   loadProductMoments, saveProductMoments, SALE_MOMENTS, currentSaleMoment,
-  buildContinuous, continuousRevision,
+  buildContinuous, continuousRevision, normContinuous,
+  loadScreenGroups, screenGroupById, saveScreenGroup, deleteScreenGroup, setPlayerGroup,
   loadPlan, savePlan, planFilmAt, setActiveWeek, duplicateWeek,
   checkLogin, createSession, sessionUser, destroySession,
 } from './db.js';
@@ -112,6 +113,22 @@ function applyContinuous(snap, date) {
   snap.continuousMeta = gen.meta;
   return true;
 }
+// Groupe d'écrans à filtre de catégories : remplace le contenu du snapshot par
+// une boucle continue des catégories du groupe, TOUTE LA JOURNÉE (ni moment ni
+// saison). Renvoie true si le contenu a été remplacé (groupe avec catégories) ;
+// false si le groupe n'a pas de filtre (→ garder le film du magasin).
+function applyGroupContent(snap, group, date) {
+  let cats = [];
+  try { cats = JSON.parse(group.cats || '[]'); } catch { cats = []; }
+  if (!cats.length) return false;
+  const cfg = normContinuous({ source: 'tout', perMoment: false, order: 'catalogue', catsInclude: cats,
+    ratios: { liaison: 0, produitSeul: 1, media: 0, animation: 0, surprise: 0 }, maxItems: 40, fallback: 'tout' });
+  const gen = buildContinuous(cfg, date, { surprise: surpriseUrls() });
+  snap.modules = gen.modules; snap.playlist = gen.playlist; snap.media = gen.media;
+  snap.continuous = true; snap.revision = gen.revision; snap.continuousMeta = gen.meta;
+  snap.playlistName = group.name; snap.zoneCats = cats;
+  return true;
+}
 // Finition d'un snapshot avant diffusion : prix + langue du magasin, puis
 // pioche des vidéos surprise et des médias ciblés. UN SEUL endroit, appelé par
 // la visionneuse ET les écrans, pour qu'ils ne divergent jamais (la boucle
@@ -172,7 +189,7 @@ export function fleetJson() {
   const db = getDb();
   const stores = db.prepare('SELECT * FROM sig_stores ORDER BY id').all();
   const players = db.prepare('SELECT * FROM sig_players ORDER BY store_id, id').all();
-  const byStore = new Map(stores.map((s) => [s.id, { id: s.id, store: s.name, group: s.grp, conn: s.conn, format: storeFormat(s), lang: s.lang || 'fr', address: s.address || '', hours: s.hours || '', phone: s.phone || '', active: s.active == null ? true : !!s.active, players: [] }]));
+  const byStore = new Map(stores.map((s) => [s.id, { id: s.id, store: s.name, group: s.grp, conn: s.conn, format: storeFormat(s), lang: s.lang || 'fr', address: s.address || '', hours: s.hours || '', phone: s.phone || '', groups: loadScreenGroups(s.id), active: s.active == null ? true : !!s.active, players: [] }]));
   for (const p of players) {
     const seen = secsSince(p.last_seen);
     const online = seen != null && seen <= ONLINE_WINDOW_S;
@@ -186,7 +203,7 @@ export function fleetJson() {
       dataAge: secsSince(p.data_at) ?? 999999,
       syncAgo: seen ?? 999999,
       cache: p.cache_pct, media: p.media, disk: p.disk, temp: p.temp,
-      token: p.token,
+      token: p.token, groupId: p.group_id || '',
     });
   }
   // Les magasins sans écran restent visibles (on peut préparer combo, langue
@@ -413,18 +430,26 @@ function heartbeat(id, body, url) {
 function assignment(id, url) {
   const p = authPlayer(id, url.searchParams.get('token'));
   if (!p) return { status: 401, json: { error: 'unauthorized' } };
+  const date = new Date();
   const snap = getDb().prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' AND version = ?`).get(p.assigned_ver);
   const snapshot = snap ? JSON.parse(snap.payload) : currentDraftSnapshot();
-  // Mode continu : boucle régénérée en direct (l'écran s'adapte au moment/saison).
-  applyContinuous(snapshot, new Date());
-  // Même finition que la visionneuse (prix/langue + surprise + média ciblé) :
+  // Groupe d'écrans : un player rattaché à un groupe prend SON contenu et SON
+  // format. Groupe avec catégories → boucle continue de ces catégories TOUTE LA
+  // JOURNÉE (ni moment ni saison). Groupe sans catégorie → film du magasin.
+  const group = p.group_id ? screenGroupById(p.group_id) : null;
+  // Groupe avec catégories → sa boucle ; sinon (pas de groupe, ou groupe sans
+  // filtre) → film du magasin (boucle continue régénérée en direct).
+  if (!(group && applyGroupContent(snapshot, group, date))) applyContinuous(snapshot, date);
+  if (group) { snapshot.groupId = group.id; snapshot.groupName = group.name; snapshot.format = storeFormat(group); }
+  // Même finition que la visionneuse (prix/langue + jetons + surprise + média) :
   // les écrans ne divergent plus du rendu de la visionneuse.
-  finishSnapshot(snapshot, p.store_id, new Date());
+  finishSnapshot(snapshot, p.store_id, date);
   return {
     status: 200,
     json: {
       playerId: p.id,
       assignedVer: p.assigned_ver,
+      groupId: group ? group.id : null,
       activateAt: p.activate_at,
       dataVer: getIntSetting('data_ver', 1),
       revision: snapshot.revision || null,
@@ -441,11 +466,20 @@ function assignment(id, url) {
 // Avec ?film=<id> : la dernière publication de CE film (lien par film) ;
 // s'il n'a jamais été publié, sa composition enregistrée est servie en
 // prévisualisation (draft: true).
-function filmJson(storeId, filmId) {
+function filmJson(storeId, filmId, groupId) {
   const db = getDb();
   let snap = null;
   let storeName = null;
   let storeFmt = null;
+  // Aperçu d'un groupe d'écrans : base = film du magasin du groupe, puis on
+  // remplace par la boucle catégories du groupe (voir plus bas). Le groupe prime.
+  let group = null;
+  if (groupId) {
+    group = screenGroupById(groupId);
+    if (!group) return { status: 404, json: { error: `groupe inconnu : ${groupId}` } };
+    storeId = group.store_id;
+    filmId = null;
+  }
   if (filmId) {
     const pls = loadPlaylists();
     const film = pls.find((p) => p.id === filmId);
@@ -524,6 +558,13 @@ function filmJson(storeId, filmId) {
   }
   // Mode continu : régénère la boucle en direct (avant prix/langue/résolutions).
   applyContinuous(snap, new Date());
+  // Aperçu d'un groupe d'écrans : sa boucle catégories (toute la journée) et son
+  // format remplacent le film du magasin.
+  if (group) {
+    applyGroupContent(snap, group, new Date());
+    storeFmt = storeFormat(group);
+    snap.groupId = group.id; snap.groupName = group.name; snap.playlistName = group.name;
+  }
   const dv = getIntSetting('data_ver', 1);
   const dataRow = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'data' AND version = ?`).get(dv);
   if (dataRow) {
@@ -633,7 +674,7 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
 
     // ---- film public (visionneuse plein écran, lecture seule) ---------------
     if (req.method === 'GET' && path === '/film') {
-      const out = filmJson(url.searchParams.get('store') || null, url.searchParams.get('film') || null);
+      const out = filmJson(url.searchParams.get('store') || null, url.searchParams.get('film') || null, url.searchParams.get('group') || null);
       return send(out.status, out.json);
     }
 
@@ -915,6 +956,40 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
         const updated = db.prepare('SELECT * FROM sig_stores WHERE id = ?').get(store.id);
         scheduleMirror();
         return send(200, { ok: true, id: store.id, name: updated.name, lang: updated.lang, address: updated.address, hours: updated.hours, phone: updated.phone, format: storeFormat(updated) });
+      }
+    }
+
+    // Groupes d'écrans d'un magasin (zones à filtre de catégories).
+    {
+      const mGrpNew = path.match(/^\/stores\/([A-Za-z0-9_-]+)\/groups$/);
+      if (req.method === 'POST' && mGrpNew) {
+        const store = getDb().prepare('SELECT id FROM sig_stores WHERE id = ?').get(mGrpNew[1]);
+        if (!store) return send(404, { error: `magasin inconnu : ${mGrpNew[1]}` });
+        const body = await readBody();
+        const out = saveScreenGroup(store.id, body);
+        scheduleMirror();
+        return send(200, { ok: true, group: out, groups: loadScreenGroups(store.id) });
+      }
+      const mGrpId = path.match(/^\/groups\/([A-Za-z0-9_-]+)$/);
+      if (mGrpId) {
+        const g = screenGroupById(mGrpId[1]);
+        if (!g) return send(404, { error: `groupe inconnu : ${mGrpId[1]}` });
+        if (req.method === 'POST') {
+          const out = saveScreenGroup(g.store_id, { ...(await readBody()), id: g.id });
+          scheduleMirror();
+          return send(200, { ok: true, group: out, groups: loadScreenGroups(g.store_id) });
+        }
+        if (req.method === 'DELETE') {
+          deleteScreenGroup(g.id);
+          scheduleMirror();
+          return send(200, { ok: true, groups: loadScreenGroups(g.store_id) });
+        }
+      }
+      const mPg = path.match(/^\/players\/([\w-]+)\/group$/);
+      if (req.method === 'POST' && mPg) {
+        const ok = setPlayerGroup(mPg[1], (await readBody()).groupId || '');
+        if (!ok) return send(400, { error: 'rattachement impossible (magasins différents)' });
+        return send(200, { ok: true });
       }
     }
 

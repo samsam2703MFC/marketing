@@ -146,6 +146,24 @@ function migrate(db) {
   );
   CREATE UNIQUE INDEX IF NOT EXISTS sig_players_token ON sig_players(token);
 
+  -- Groupes d'écrans d'un magasin (grands points de vente) : chaque groupe a son
+  -- combo de dalles (taille/orientation propre) et un filtre de catégories. Un
+  -- groupe avec des catégories diffuse une boucle continue de ces catégories
+  -- TOUTE LA JOURNÉE (sans moment ni saison) ; sans catégorie il suit le film du
+  -- magasin. Les players rattachés à un groupe (sig_players.group_id) prennent
+  -- son contenu et son format ; un player sans groupe suit le magasin (défaut).
+  CREATE TABLE IF NOT EXISTS sig_screen_groups (
+    id            TEXT PRIMARY KEY,
+    store_id      TEXT NOT NULL REFERENCES sig_stores(id) ON DELETE CASCADE,
+    name          TEXT NOT NULL DEFAULT 'Zone',
+    screens       INTEGER NOT NULL DEFAULT 1,
+    screen_size   INTEGER NOT NULL DEFAULT 55,
+    screen_orient TEXT NOT NULL DEFAULT 'portrait',
+    cats          TEXT NOT NULL DEFAULT '[]',
+    sort_order    INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS sig_screen_groups_store ON sig_screen_groups(store_id, sort_order);
+
   CREATE TABLE IF NOT EXISTS sig_snapshots (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     kind       TEXT NOT NULL CHECK (kind IN ('playlist','data')),
@@ -232,6 +250,9 @@ function migrate(db) {
   // en régie (toggle manuel, ou futur signal de stock ERP).
   const prodCols0 = db.prepare('PRAGMA table_info(sig_products)').all().map((c) => c.name);
   if (prodCols0.length && !prodCols0.includes('unavailable')) db.exec(`ALTER TABLE sig_products ADD COLUMN unavailable INTEGER NOT NULL DEFAULT 0`);
+  // Rattachement d'un player à un groupe d'écrans (vide = niveau magasin, défaut).
+  const plColsG = db.prepare('PRAGMA table_info(sig_players)').all().map((c) => c.name);
+  if (plColsG.length && !plColsG.includes('group_id')) db.exec(`ALTER TABLE sig_players ADD COLUMN group_id TEXT NOT NULL DEFAULT ''`);
 
   // Illustration de période (importable depuis ws_season si la table l'expose,
   // ou saisie à la main) : URL/chemin de l'image affichée dans l'onglet Périodes.
@@ -738,6 +759,13 @@ export function buildContinuous(cfg, date = new Date(), ctx = {}) {
     const seasonPool = inSeason.size ? pool.filter((p) => inSeason.has(p.id)) : [];
     pool = seasonPool.length ? seasonPool : (cfg.fallback === 'aucun' ? [] : pool);
   }
+  // Liste blanche de catégories (zones/groupes d'écrans) : ne garder que ces
+  // catégories. S'applique après la source (ex. « tout » + catsInclude = ces
+  // catégories, toute la journée).
+  if (Array.isArray(cfg.catsInclude) && cfg.catsInclude.length) {
+    const inc = new Set(cfg.catsInclude.map(String));
+    pool = pool.filter((p) => inc.has(p.categoryId));
+  }
   if (cfg.order === 'aleatoire') pool = shuffleWith(pool.slice(), rng);
   pool = pool.slice(0, cfg.maxItems);
 
@@ -1060,6 +1088,54 @@ export function storeFormat(s) {
     label: `${n} × ${size}″ ${portrait ? 'portrait' : 'paysage'}`,
     px: `${w1 * n} × ${h1} px`,
   };
+}
+
+// --- Groupes d'écrans (zones à filtre de catégories) -----------------------
+// Un groupe partage les champs de format d'un magasin (screens/screen_size/
+// screen_orient) → storeFormat s'applique directement.
+export function loadScreenGroups(storeId) {
+  const rows = getDb().prepare('SELECT * FROM sig_screen_groups WHERE store_id = ? ORDER BY sort_order, name').all(storeId);
+  return rows.map((g) => ({
+    id: g.id, storeId: g.store_id, name: g.name,
+    screens: g.screens, size: g.screen_size, orient: g.screen_orient,
+    cats: (() => { try { return JSON.parse(g.cats || '[]'); } catch { return []; } })(),
+    format: storeFormat(g),
+  }));
+}
+export function screenGroupById(id) {
+  return getDb().prepare('SELECT * FROM sig_screen_groups WHERE id = ?').get(id) || null;
+}
+export function saveScreenGroup(storeId, patch) {
+  const db = getDb();
+  const cur = patch.id ? db.prepare('SELECT * FROM sig_screen_groups WHERE id = ?').get(patch.id) : null;
+  const id = (cur && cur.id) || String(patch.id || ('grp' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36)));
+  const name = (String(patch.name != null ? patch.name : (cur ? cur.name : 'Zone')).trim() || 'Zone').slice(0, 80);
+  const screens = Math.min(6, Math.max(1, parseInt(patch.screens != null ? patch.screens : (cur ? cur.screens : 1), 10) || 1));
+  const size = Math.min(120, Math.max(20, parseInt(patch.size != null ? patch.size : (cur ? cur.screen_size : 55), 10) || 55));
+  const orient = (patch.orient === 'portrait' || patch.orient === 'paysage') ? patch.orient : (cur ? cur.screen_orient : 'portrait');
+  const curCats = cur ? (() => { try { return JSON.parse(cur.cats || '[]'); } catch { return []; } })() : [];
+  const cats = JSON.stringify(Array.isArray(patch.cats) ? patch.cats.map(String) : curCats);
+  const sort = cur ? cur.sort_order : (db.prepare('SELECT COUNT(*) AS n FROM sig_screen_groups WHERE store_id = ?').get(storeId).n);
+  db.prepare('INSERT OR REPLACE INTO sig_screen_groups(id, store_id, name, screens, screen_size, screen_orient, cats, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, storeId, name, screens, size, orient, cats, sort);
+  return loadScreenGroups(storeId).find((x) => x.id === id) || null;
+}
+export function deleteScreenGroup(id) {
+  const db = getDb();
+  db.prepare("UPDATE sig_players SET group_id = '' WHERE group_id = ?").run(id); // détacher les écrans
+  db.prepare('DELETE FROM sig_screen_groups WHERE id = ?').run(id);
+}
+export function setPlayerGroup(playerId, groupId) {
+  const db = getDb();
+  const gid = String(groupId || '');
+  // on ne rattache qu'à un groupe du MÊME magasin que le player (cohérence)
+  if (gid) {
+    const p = db.prepare('SELECT store_id FROM sig_players WHERE id = ?').get(playerId);
+    const g = db.prepare('SELECT store_id FROM sig_screen_groups WHERE id = ?').get(gid);
+    if (!p || !g || p.store_id !== g.store_id) return false;
+  }
+  db.prepare('UPDATE sig_players SET group_id = ? WHERE id = ?').run(gid, playerId);
+  return true;
 }
 
 // ---------------------------------------------------------------------------

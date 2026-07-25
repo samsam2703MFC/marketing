@@ -427,6 +427,44 @@ async function main() {
       if (!/\{\{\s*xyz\s*\}\}/.test(m.sub)) throw new Error('un jeton inconnu doit rester littéral');
       return `« ${m.name} » · sous-titre résolu, jeton inconnu conservé`;
     });
+    await step('Groupe d\'écrans — zone catégories (toute la journée) + rattachement', async () => {
+      const fleetRes = await call('GET', '/api/v1/fleet');
+      const store = fleetRes.stores[0];
+      if (!store) throw new Error('aucun magasin');
+      const cat = await call('GET', '/api/v1/catalog');
+      const c0 = (cat.categories || [])[0];
+      if (!c0) return 'aucune catégorie au catalogue';
+      const catOf = new Map(cat.products.map((p) => [p.id, p.categoryId]));
+      // 1) créer une zone (combo portrait propre) avec cette catégorie
+      const created = await call('POST', `/api/v1/stores/${store.id}/groups`, { name: 'Zone LT', screens: 1, size: 55, orient: 'portrait', cats: [c0.id] });
+      if (!created.ok || !created.group || !created.group.id) throw new Error('création de zone échouée');
+      const gid = created.group.id;
+      try {
+        if (created.group.format.w !== 2160 || created.group.format.h !== 3840) throw new Error(`format zone inattendu : ${created.group.format.px}`);
+        // 2) aperçu ?group= : la boucle ne contient QUE cette catégorie
+        const prev = await (await fetch(BASE + `/api/v1/film?group=${encodeURIComponent(gid)}`)).json();
+        const pids = (prev.modules || []).flatMap((m) => (m.items || []).map((it) => it.productId));
+        if (!pids.length || !pids.every((pid) => catOf.get(pid) === c0.id)) throw new Error('aperçu zone : produit hors catégorie');
+        if (!prev.format || prev.format.w !== 2160) throw new Error('aperçu zone : format du groupe non appliqué');
+        // 3) rattacher un écran → son assignment sert la boucle catégories au format du groupe
+        const player = (store.players || [])[0];
+        let assignTxt = 'pas d\'écran à rattacher';
+        if (player) {
+          await call('POST', `/api/v1/players/${player.id}/group`, { groupId: gid });
+          const a = await call('GET', `/api/v1/players/${player.id}/assignment?token=${player.token}`);
+          await call('POST', `/api/v1/players/${player.id}/group`, { groupId: '' }); // détacher AVANT assertions
+          if (a.groupId !== gid) throw new Error('assignment ne reflète pas la zone');
+          const apids = (a.snapshot.modules || []).flatMap((m) => (m.items || []).map((it) => it.productId));
+          if (apids.length && !apids.every((pid) => catOf.get(pid) === c0.id)) throw new Error('produit hors catégorie dans la zone assignée');
+          if (!a.snapshot.format || a.snapshot.format.w !== 2160) throw new Error('format du groupe non appliqué à l\'écran');
+          assignTxt = `écran « ${player.name} » → zone (${apids.length} slot(s), ${a.snapshot.format.px})`;
+        }
+        return `zone « ${c0.name} » ${created.group.format.px} · aperçu ${pids.length} produit(s) en catégorie · ${assignTxt}`;
+      } finally {
+        // 4) nettoyage : suppression de la zone (détache aussi les écrans)
+        await call('DELETE', `/api/v1/groups/${gid}`);
+      }
+    });
     await step('POST heartbeat — auto-enregistrement d\'un player de test', async () => {
       const hb = await call('POST', `/api/v1/players/${pid}/heartbeat`, {
         token, name: 'Écran de test live', state: 'playing', cachePct: 100, media: 'test', playedVer: 0, dataVer: 0,

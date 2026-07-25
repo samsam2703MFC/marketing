@@ -132,6 +132,23 @@ Un seul gabarit s'adapte à chaque point de vente, **résolu par magasin à la d
   `sig_products.unavailable`) : le produit est **retiré des boucles en mode Continu** (le reste
   du catalogue continue) et signalé en régie. Prévu pour brancher un futur signal de stock ERP.
 
+### Groupes d'écrans (grands magasins)
+Un magasin peut piloter plusieurs **zones d'affichage indépendantes**, gérées dans **Réseau** :
+
+- Chaque **groupe** (`sig_screen_groups`) a son propre **combo d'écrans** (taille/orientation)
+  et un **filtre de catégories**. Un groupe avec des catégories diffuse une **boucle continue de
+  ces catégories TOUTE LA JOURNÉE** (sans moment ni saison) ; sans catégorie il suit le film du
+  magasin.
+- Un **écran** (`sig_players.group_id`) rattaché à un groupe prend **son contenu et son format**
+  (menu par écran, dans la fiche magasin) ; un écran sans groupe suit le film du magasin (défaut,
+  rétro-compatible).
+- Contenu résolu à l'assignation du player, avec les prix, la langue et les jetons du magasin
+  (comme la visionneuse). Aperçu d'une zone : `GET /api/v1/film?group=<id>`.
+- Le rendu utilise le canevas 6480 × 3840 mis à l'échelle de l'écran (limite existante de l'app) :
+  une zone dont le combo est proportionnel au mur (ex. 3 × portrait) remplit nativement ; un
+  simple écran portrait est mis à l'échelle. API : `POST /stores/{id}/groups`, `POST /groups/{id}`,
+  `DELETE /groups/{id}`, `POST /players/{id}/group`.
+
 ### Paramètres
 URL du CMS, IP / hôte player, token — persistés en base. **« Tester la connexion (live) »**
 exécute côté serveur : ping TCP de l'hôte, `GET assignment`, `GET dataset prix`,
@@ -140,7 +157,7 @@ exécute côté serveur : ping TCP de l'hôte, `GET assignment`, `GET dataset pr
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + cycle complet — 46 tests
+npm test              # serveur jetable (BDD temporaire) + cycle complet — 47 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
 node test/live-test.js http://185.180.206.46/signage --password=… --mutate
@@ -159,6 +176,8 @@ publics        : GET /api/v1/health · fichiers statiques
 session admin  : POST /api/v1/login · /logout · GET /me
                  GET /state · PUT /draft · GET /fleet · POST /publish
                  POST /stores/{id} (combo écrans · langue · coordonnées)
+                 POST /stores/{id}/groups · POST/DELETE /groups/{id}
+                 POST /players/{id}/group (rattacher un écran à une zone)
                  GET /catalog · PUT /catalog (produits · prix · rupture)
                  POST /push-prices · POST /override · POST /test
                  GET /publications · POST /settings · GET /ping-host

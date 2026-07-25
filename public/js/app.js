@@ -1316,9 +1316,10 @@ class App extends Component {
     }
   };
 
-  filmUrl({ w, h: hh, fit, store, film } = {}) {
+  filmUrl({ w, h: hh, fit, store, film, group } = {}) {
     const u = new URL('film', location.href);
-    if (film) u.searchParams.set('film', film);
+    if (group) u.searchParams.set('group', group);
+    else if (film) u.searchParams.set('film', film);
     else if (store) u.searchParams.set('store', store);
     if (w) {
       u.searchParams.set('w', w);
@@ -1374,6 +1375,25 @@ class App extends Component {
     const name = this.state.editStoreName.trim();
     this.setState({ editingStore: null });
     if (name) this.saveStore(id, { name });
+  }
+
+  // ---- groupes d'écrans (zones à filtre de catégories) --------------------
+  async addGroup(storeId) {
+    try { await api('POST', `/stores/${storeId}/groups`, { name: 'Nouvelle zone', screens: 1, size: 55, orient: 'portrait', cats: [] }); await this.refreshFleet(); this.showToast('Zone d\'écrans ajoutée ✓'); }
+    catch (e) { this.showToast(`Erreur : ${e.message}`); }
+  }
+  async saveGroup(id, patch) {
+    try { await api('POST', `/groups/${id}`, patch); await this.refreshFleet(); }
+    catch (e) { this.showToast(`Erreur : ${e.message}`); }
+  }
+  async delGroup(id) {
+    if (!window.confirm('Supprimer cette zone ? Les écrans rattachés repassent au film du magasin.')) return;
+    try { await api('DELETE', `/groups/${id}`); await this.refreshFleet(); this.showToast('Zone supprimée ✓'); }
+    catch (e) { this.showToast(`Erreur : ${e.message}`); }
+  }
+  async setPlayerGroup(playerId, groupId) {
+    try { await api('POST', `/players/${playerId}/group`, { groupId }); await this.refreshFleet(); this.showToast(groupId ? 'Écran rattaché à la zone ✓' : 'Écran remis au film du magasin ✓'); }
+    catch (e) { this.showToast(`Erreur : ${e.message}`); }
   }
 
   // ---- planning hebdo (magasins × semaine A–E × jour × moments) -----------
@@ -1846,6 +1866,8 @@ class App extends Component {
       { label: 'Prix le + ancien', value: ageShort(oldest), sub: stale ? `${stale} écran(s) périmés` : 'à jour', color: stale ? '#8D1D2C' : '#232220' },
       { label: 'Playlist · données', value: `v${st.version}`, sub: `prix d${st.dataVer}`, color: '#232220' },
     ];
+    const grpCats = (st.catalog.categories || []).map((c) => ({ id: c.id, name: c.name }));
+    const grpCatName = new Map(grpCats.map((c) => [c.id, c.name]));
     const fleet = st.fleet.map((s) => ({
       store: s.store, group: s.group,
       filmUrl: this.filmUrl({ store: s.id }),
@@ -1866,6 +1888,20 @@ class App extends Component {
       setAddress: (e) => this.saveStore(s.id, { address: e.target.value }),
       setHours: (e) => this.saveStore(s.id, { hours: e.target.value }),
       setPhone: (e) => this.saveStore(s.id, { phone: e.target.value }),
+      groups: (s.groups || []).map((g) => ({
+        id: g.id, name: g.name, fmt: g.format || { screens: 1, size: 55, orient: 'portrait', label: '1 × 55″ portrait', px: '2160 × 3840 px' },
+        catChips: (g.cats || []).map((cid) => ({ id: cid, name: grpCatName.get(cid) || cid, remove: () => this.saveGroup(g.id, { cats: (g.cats || []).filter((x) => x !== cid) }) })),
+        addableCats: grpCats.filter((c) => !(g.cats || []).includes(c.id)),
+        onName: (e) => this.saveGroup(g.id, { name: e.target.value }),
+        onScreens: (e) => this.saveGroup(g.id, { screens: e.target.value }),
+        onSize: (e) => this.saveGroup(g.id, { size: e.target.value }),
+        onOrient: (e) => this.saveGroup(g.id, { orient: e.target.value }),
+        onAddCat: (e) => { const cid = e.target.value; e.target.value = ''; if (cid) this.saveGroup(g.id, { cats: [...(g.cats || []), cid] }); },
+        previewUrl: this.filmUrl({ group: g.id }),
+        copyPreview: () => this.copyLink(this.filmUrl({ group: g.id })),
+        del: () => this.delGroup(g.id),
+      })),
+      addGroup: () => this.addGroup(s.id),
       connColor: s.conn === 'offline' ? '#8D1D2C' : s.conn === '4G' ? '#B8860B' : '#2E7D32',
       connLabel: s.conn === 'offline' ? 'Magasin injoignable' : s.conn === '4G' ? 'Connectivité 4G' : 'Fibre',
       players: s.players.map((p) => {
@@ -1892,6 +1928,9 @@ class App extends Component {
           media: p.media,
           sync: p.state === 'offline' ? `hors ligne ${fmtAgo(p.syncAgo)}` : fmtAgo(p.syncAgo),
           health: p.state === 'offline' ? `heartbeats en file · ${p.disk}` : `${p.disk} · ${p.temp}`,
+          groupId: p.groupId || '',
+          setGroup: (e) => this.setPlayerGroup(p.id, e.target.value),
+          groupOptions: (s.groups || []).map((g) => ({ id: g.id, name: g.name })),
         };
       }),
     }));
@@ -3451,6 +3490,37 @@ class App extends Component {
             <input value=${s.hours} onChange=${s.setHours} placeholder="Horaires — {{horaires}}" title="Horaires d'ouverture — jeton {{horaires}}" style="flex:1 1 160px;min-width:0;padding:7px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
             <input value=${s.phone} onChange=${s.setPhone} placeholder="Téléphone — {{tel}}" title="Téléphone — jeton {{tel}}" style="flex:1 1 140px;min-width:0;padding:7px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
           </div>
+          <div style="padding:12px 22px;border-bottom:1px solid rgba(35,34,32,0.06);background:#FBF8F2;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;${s.groups.length ? 'margin-bottom:10px;' : ''}">
+              <div style="display:flex;align-items:center;gap:7px;">
+                <span style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">Groupes d'écrans</span>
+                ${infoTip('Grands magasins : plusieurs écrans/zones, chacun avec SON combo d’écrans et SON filtre de catégories. Une zone diffuse en boucle SES catégories TOUTE LA JOURNÉE (sans moment ni saison). Rattache un écran à une zone dans sa ligne (menu « Film du magasin / zone ») ; un écran sans zone suit le film du magasin. Aucune catégorie cochée = la zone suit le film du magasin (utile pour un simple sous-écran à part).')}
+              </div>
+              <button onClick=${s.addGroup} style="padding:6px 12px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">+ Ajouter une zone</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              ${s.groups.map((g) => html`
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff;border:1px solid rgba(35,34,32,0.1);border-radius:10px;padding:8px 11px;">
+                  <input value=${g.name} onChange=${g.onName} placeholder="Nom de la zone" style="flex:1 1 140px;min-width:0;padding:6px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.14);border-radius:7px;background:#FBF8F2;" />
+                  <span style="display:flex;align-items:center;gap:4px;">
+                    <select value=${g.fmt.screens} onChange=${g.onScreens} title="Nombre d'écrans de la zone" style="padding:6px 7px;font-size:12px;border:1px solid rgba(35,34,32,0.16);border-radius:7px;background:#fff;cursor:pointer;">${[1, 2, 3, 4, 5, 6].map((n) => html`<option value=${n}>${n}</option>`)}</select>
+                    <span style="font-size:11px;color:#8A847C;">×</span>
+                    <select value=${g.fmt.size} onChange=${g.onSize} title="Diagonale d'une dalle" style="padding:6px 7px;font-size:12px;border:1px solid rgba(35,34,32,0.16);border-radius:7px;background:#fff;cursor:pointer;">${[32, 43, 49, 55, 65, 75, 85].map((n) => html`<option value=${n}>${n}″</option>`)}</select>
+                    <select value=${g.fmt.orient} onChange=${g.onOrient} title="Orientation" style="padding:6px 7px;font-size:12px;border:1px solid rgba(35,34,32,0.16);border-radius:7px;background:#fff;cursor:pointer;"><option value="portrait">portrait</option><option value="paysage">paysage</option></select>
+                    <span style="font-size:11px;font-weight:700;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.2);border-radius:999px;padding:3px 8px;">${g.fmt.px}</span>
+                  </span>
+                  <span style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;flex:1 1 200px;">
+                    <span style="font-size:10.5px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#8A847C;">Catégories :</span>
+                    ${g.catChips.map((c) => html`<span style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.28);border-radius:999px;padding:2px 5px 2px 9px;">${c.name}<button onClick=${c.remove} style="width:15px;height:15px;border-radius:50%;border:none;background:rgba(110,74,43,0.18);color:#6E4A2B;cursor:pointer;font-size:9px;line-height:1;">✕</button></span>`)}
+                    ${g.catChips.length ? '' : html`<span style="font-size:11px;color:#B8860B;">aucune = suit le film du magasin</span>`}
+                    ${g.addableCats.length ? html`<select onChange=${g.onAddCat} style="padding:4px 7px;font-size:11.5px;border:1px solid rgba(35,34,32,0.16);border-radius:999px;background:#fff;cursor:pointer;"><option value="">+ catégorie…</option>${g.addableCats.map((c) => html`<option value=${c.id}>${c.name}</option>`)}</select>` : ''}
+                  </span>
+                  <a href=${g.previewUrl} target="_blank" title="Aperçu de la zone (boucle catégories)" style="font-size:11.5px;font-weight:600;color:#8D1D2C;flex:0 0 auto;">↗ Aperçu</a>
+                  <button onClick=${g.del} title="Supprimer la zone" style="flex:0 0 auto;width:28px;height:28px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:pointer;font-size:12px;color:#8D1D2C;">✕</button>
+                </div>
+              `)}
+            </div>
+          </div>
           <div style="display:flex;flex-direction:column;">
             ${s.players.map((p) => html`
               <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 1.2fr 1fr;gap:16px;align-items:center;padding:15px 22px;border-top:1px solid rgba(35,34,32,0.05);">
@@ -3459,6 +3529,10 @@ class App extends Component {
                   <div style="min-width:0;">
                     <div style="display:flex;align-items:center;gap:7px;"><a href=${p.playerUrl} target="_blank" title="Ouvrir ce player dans un onglet (test live)" style="font-size:14px;font-weight:600;color:#232220;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name} <span style="color:#B8B2A8;font-weight:400;">↗</span></a><span style=${p.kioskStyle}>${p.kioskLabel}</span></div>
                     <div style="font-size:11.5px;color:#8A847C;">${p.hw} · ${p.orient}</div>
+                    ${p.groupOptions.length ? html`<select value=${p.groupId} onChange=${p.setGroup} title="Zone d'écrans de ce magasin, ou film du magasin" style="margin-top:5px;max-width:190px;padding:4px 7px;font-size:11px;font-weight:600;border:1px solid ${p.groupId ? 'rgba(110,74,43,0.4)' : 'rgba(35,34,32,0.16)'};border-radius:7px;background:${p.groupId ? 'rgba(110,74,43,0.08)' : '#FBF8F2'};color:${p.groupId ? '#6E4A2B' : '#4A4640'};cursor:pointer;">
+                      <option value="">🏬 Film du magasin</option>
+                      ${p.groupOptions.map((g) => html`<option value=${g.id}>▦ ${g.name}</option>`)}
+                    </select>` : ''}
                   </div>
                 </div>
                 <div><span style=${p.statusPillStyle}>${p.statusLabel}</span></div>

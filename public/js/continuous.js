@@ -9,6 +9,8 @@ export function continuousDefaults() {
   return {
     source: 'saison',        // 'saison' | 'categories' (= tout sauf) | 'tout'
     categories: [],          // ids de catégories EXCLUES si source === 'categories'
+    catsInclude: [],         // liste BLANCHE de catégories (zones/groupes d'écrans) : ne garder que celles-ci
+
     perMoment: true,         // filtrer les produits par période de vente (moment)
     order: 'catalogue',      // 'catalogue' | 'aleatoire'
     prodDur: 6,              // durée d'une fiche produit (s)
@@ -31,6 +33,7 @@ export function normContinuous(c) {
   return {
     source: ['saison', 'categories', 'tout'].includes(c.source) ? c.source : d.source,
     categories: Array.isArray(c.categories) ? c.categories.map(String) : [],
+    catsInclude: Array.isArray(c.catsInclude) ? c.catsInclude.map(String).filter(Boolean) : [],
     perMoment: c.perMoment !== false,
     order: c.order === 'aleatoire' ? 'aleatoire' : 'catalogue',
     prodDur: num(c.prodDur, d.prodDur, 2, 60),
