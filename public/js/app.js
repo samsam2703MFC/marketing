@@ -805,6 +805,8 @@ class App extends Component {
     this.dirty({ playlists, activePl: id, playlist: [], t: 0, scope: 'playlist' });
     this.setState({ wizard: true, wizStep: 0, wizDone: null, wizNonce: 1 });
     this.refreshFleet();
+    this.loadMediaLib();   // médias agence dispo (pour l'indicateur des ratios)
+    this.loadSurprise();   // vidéos surprise dispo
   }
   closeWizard() { this.setState({ wizard: false, wizDone: null }); }
   wizGo(n) {
@@ -4324,6 +4326,19 @@ class App extends Component {
   ${st.wizard && (() => {
     const wf = this.activeFilm();
     const wc = wf.continuous || {};
+    // Éléments réellement disponibles pour chaque type de ratio (bibliothèque /
+    // catalogue / médiathèque agence / vidéos surprise). Liaison & animation sont
+    // GÉNÉRÉS (toujours dispo) ; produit, média et surprise dépendent du contenu.
+    const availProd = ((st.catalog && st.catalog.products) || []).filter((p) => p.active !== false && !p.unavailable).length;
+    const availMedia = (st.mediaLib || []).length;
+    const availSurprise = (st.surpriseVideos || []).length;
+    const ratioRows = [
+      { key: 'liaison', label: 'Liaison (logo)', gen: true },
+      { key: 'produitSeul', label: 'Produit seul', avail: availProd, unit: 'produit(s)' },
+      { key: 'media', label: 'Vidéo/photo ciblée', avail: availMedia, unit: 'média(s) agence' },
+      { key: 'animation', label: 'Animation promo', gen: true },
+      { key: 'surprise', label: 'Vidéo surprise', avail: availSurprise, unit: 'vidéo(s)' },
+    ];
     const stores = st.fleet || [];
     const targeted = wf.stores || [];
     const inTarget = (id) => !targeted.length || targeted.includes(id);
@@ -4376,6 +4391,25 @@ class App extends Component {
           <div style="display:flex;align-items:center;gap:10px;">
             <div style="font-size:12.5px;font-weight:600;color:#8A847C;">Nombre max de fiches</div>
             <input type="number" min="4" max="40" defaultValue=${wc.maxItems || 12} key=${'wm-' + wf.id} onChange=${(e) => this.updateContinuous({ maxItems: parseInt(e.target.value, 10) || 12 })} style="width:80px;padding:8px 10px;font-size:14px;font-weight:600;text-align:right;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#fff;" />
+          </div>
+          <div>
+            <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px;">
+              <span style="font-size:12.5px;font-weight:600;color:#8A847C;">Ratios par type d'élément · 1 : N (0 = jamais)</span>
+              ${infoTip('Dose le mélange de la boucle. « 1 : N » = un élément de ce type tous les N slots. Ex. Liaison 1:5 = un logo de transition toutes les 5 fiches ; Produit seul 1:6 = une fiche plein écran toutes les 6. 0 = ce type n’apparaît jamais. Le nombre d’éléments DISPONIBLES est indiqué à droite : un type sans élément (0) n’aura aucun effet même avec un ratio.')}
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              ${ratioRows.map((r) => html`
+                <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;flex-wrap:wrap;">
+                  <span style="width:170px;color:#232220;font-weight:600;">${r.label}</span>
+                  <span style="color:#8A847C;">1 :</span>
+                  <input type="number" min="0" max="99" value=${(wc.ratios || {})[r.key] != null ? wc.ratios[r.key] : 0} onInput=${(e) => this.updateContRatio(r.key, e.target.value)} style="width:66px;padding:7px 9px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;" />
+                  ${r.gen
+                    ? html`<span style="font-size:11.5px;color:#8A847C;">généré · toujours dispo</span>`
+                    : (r.avail > 0
+                      ? html`<span style="font-size:11.5px;font-weight:600;color:#2E6E4E;">${r.avail} ${r.unit} dispo</span>`
+                      : html`<span style="font-size:11.5px;font-weight:600;color:#B8860B;">aucun ${r.unit} — sans effet</span>`)}
+                </label>`)}
+            </div>
           </div>
           <button onClick=${() => { this.setState({ wizard: false }); this.setView('composer'); }} style="align-self:flex-start;padding:8px 14px;font-size:12.5px;font-weight:600;color:#8D1D2C;background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:999px;cursor:pointer;">⚙ Réglages avancés dans le Compositeur ↗</button>
         </div>`;
