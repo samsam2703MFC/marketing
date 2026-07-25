@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import {
   getDb, getSetting, setSetting, getIntSetting,
   loadModules, loadPlaylist, loadPlaylists, activePlaylistId, saveDraft, storeFormat, DB_PATH,
-  loadElementTypes, loadCatalog, saveCatalog, applyStorePrices, applyStoreLang, loadLangs,
+  loadElementTypes, loadCatalog, saveCatalog, applyStorePrices, applyStoreLang, applyStoreTokens, loadLangs,
   loadSeasons, saveSeasons, currentSeasons, currentMoment,
   loadMedia, addMediaRow, getMediaRow, delMediaRow,
   loadProductMoments, saveProductMoments, SALE_MOMENTS, currentSaleMoment,
@@ -120,6 +120,7 @@ function finishSnapshot(snap, storeId, date = new Date()) {
   if (!snap || !Array.isArray(snap.modules)) return snap;
   applyStorePrices(snap.modules, storeId);
   applyStoreLang(snap.modules, storeId);
+  applyStoreTokens(snap.modules, storeId, date);
   resolveSurprise(snap.modules);
   resolveMediaElements(snap.modules, date);
   return snap;
@@ -171,7 +172,7 @@ export function fleetJson() {
   const db = getDb();
   const stores = db.prepare('SELECT * FROM sig_stores ORDER BY id').all();
   const players = db.prepare('SELECT * FROM sig_players ORDER BY store_id, id').all();
-  const byStore = new Map(stores.map((s) => [s.id, { id: s.id, store: s.name, group: s.grp, conn: s.conn, format: storeFormat(s), lang: s.lang || 'fr', active: s.active == null ? true : !!s.active, players: [] }]));
+  const byStore = new Map(stores.map((s) => [s.id, { id: s.id, store: s.name, group: s.grp, conn: s.conn, format: storeFormat(s), lang: s.lang || 'fr', address: s.address || '', hours: s.hours || '', phone: s.phone || '', active: s.active == null ? true : !!s.active, players: [] }]));
   for (const p of players) {
     const seen = secsSince(p.last_seen);
     const online = seen != null && seen <= ONLINE_WINDOW_S;
@@ -906,11 +907,14 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
         const orient = body.orient === 'portrait' ? 'portrait' : (body.orient === 'paysage' ? 'paysage' : store.screen_orient || 'paysage');
         const langIds = new Set(loadLangs().map((l) => l.id));
         const lang = body.lang != null && langIds.has(String(body.lang)) ? String(body.lang) : (store.lang || 'fr');
-        db.prepare('UPDATE sig_stores SET name = ?, screens = ?, screen_size = ?, screen_orient = ?, lang = ? WHERE id = ?')
-          .run(name, screens, size, orient, lang, store.id);
+        const address = body.address != null ? String(body.address).slice(0, 200) : (store.address || '');
+        const hours = body.hours != null ? String(body.hours).slice(0, 200) : (store.hours || '');
+        const phone = body.phone != null ? String(body.phone).slice(0, 40) : (store.phone || '');
+        db.prepare('UPDATE sig_stores SET name = ?, screens = ?, screen_size = ?, screen_orient = ?, lang = ?, address = ?, hours = ?, phone = ? WHERE id = ?')
+          .run(name, screens, size, orient, lang, address, hours, phone, store.id);
         const updated = db.prepare('SELECT * FROM sig_stores WHERE id = ?').get(store.id);
         scheduleMirror();
-        return send(200, { ok: true, id: store.id, name: updated.name, lang: updated.lang, format: storeFormat(updated) });
+        return send(200, { ok: true, id: store.id, name: updated.name, lang: updated.lang, address: updated.address, hours: updated.hours, phone: updated.phone, format: storeFormat(updated) });
       }
     }
 

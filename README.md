@@ -115,6 +115,23 @@ KPIs, alertes, état par magasin / écran depuis les vrais heartbeats : en ligne
 hors ligne (lecture depuis le cache local), version jouée vs assignée (« en retard »),
 fraîcheur des prix (périmé > 1 h), cache, disque, dernier contact.
 
+### Contenu dynamique par magasin
+Un seul gabarit s'adapte à chaque point de vente, **résolu par magasin à la diffusion**
+(côté serveur, dans `finishSnapshot` — même passe que les prix et la langue) :
+
+- **Jetons de texte** — dans le **titre** ou le **sous-titre** d'un élément, écrire un jeton
+  entre doubles accolades ; il est remplacé selon le magasin et le contexte :
+  `{{magasin}}` (nom), `{{adresse}}`, `{{horaires}}`, `{{tel}}` (coordonnées saisies dans
+  **Réseau**), `{{date}}` (date du jour), `{{saison}}` (période active du jour), `{{moment}}`
+  (matin / midi / après-midi). Ex. « Bienvenue à {{magasin}} ». Le lien `?store=<id>` — et chaque
+  écran — affiche les valeurs **résolues** ; l'aperçu générique laisse le jeton visible ; un jeton
+  inconnu reste littéral (pour repérer une faute de frappe).
+- **Coordonnées du magasin** — `sig_stores.address / hours / phone`, éditées en régie dans
+  **Réseau** (`POST /api/v1/stores/{id}`), alimentent les jetons ci-dessus.
+- **Rupture / indisponibilité** — bouton **⦸** par produit (onglet **Produits**,
+  `sig_products.unavailable`) : le produit est **retiré des boucles en mode Continu** (le reste
+  du catalogue continue) et signalé en régie. Prévu pour brancher un futur signal de stock ERP.
+
 ### Paramètres
 URL du CMS, IP / hôte player, token — persistés en base. **« Tester la connexion (live) »**
 exécute côté serveur : ping TCP de l'hôte, `GET assignment`, `GET dataset prix`,
@@ -123,7 +140,7 @@ exécute côté serveur : ping TCP de l'hôte, `GET assignment`, `GET dataset pr
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + cycle complet — 16 tests
+npm test              # serveur jetable (BDD temporaire) + cycle complet — 46 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
 node test/live-test.js http://185.180.206.46/signage --password=… --mutate
@@ -141,6 +158,8 @@ livraison de l'assignation au player, remontée de version par heartbeat.
 publics        : GET /api/v1/health · fichiers statiques
 session admin  : POST /api/v1/login · /logout · GET /me
                  GET /state · PUT /draft · GET /fleet · POST /publish
+                 POST /stores/{id} (combo écrans · langue · coordonnées)
+                 GET /catalog · PUT /catalog (produits · prix · rupture)
                  POST /push-prices · POST /override · POST /test
                  GET /publications · POST /settings · GET /ping-host
 token player   : GET  /api/v1/players/{id}/assignment?token=…

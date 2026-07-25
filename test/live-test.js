@@ -383,6 +383,50 @@ async function main() {
       if (!f.modules.some((m) => String(m.id).startsWith('k-exc-'))) throw new Error('playlist d\'exception non injectée');
       return `${f.modules.length} slot(s) · moment ${moment} · p0 exclu, p1 présent, exception OK`;
     });
+    await step('Rupture produit — exclu de la boucle continue', async () => {
+      const cat = await call('GET', '/api/v1/catalog');
+      const actives = (cat.products || []).filter((p) => p.active !== false && !p.unavailable);
+      if (actives.length < 2) return `catalogue insuffisant (${actives.length} produit dispo)`;
+      const target = actives[0];
+      const st = await call('GET', '/api/v1/state');
+      const prods = cat.products.map((p) => (p.id === target.id ? { ...p, unavailable: true } : p));
+      await call('PUT', '/api/v1/catalog', { categories: cat.categories, products: prods });
+      const contFilm = { id: 'pl-ruptLT', name: 'Rupture LT', items: [], mode: 'continu',
+        continuous: { source: 'tout', perMoment: false, order: 'catalogue', maxItems: 40,
+          ratios: { liaison: 0, produitSeul: 0, media: 0, animation: 0, surprise: 0 } } };
+      await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: [...st.playlists, contFilm], activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      const f = await (await fetch(BASE + '/api/v1/film?film=pl-ruptLT')).json();
+      // restauration AVANT les assertions
+      await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      await call('PUT', '/api/v1/catalog', { categories: cat.categories, products: cat.products });
+      const pids = (f.modules || []).flatMap((m) => (m.items || []).map((it) => it.productId));
+      if (pids.includes(target.id)) throw new Error(`produit en rupture (${target.name}) présent dans la boucle`);
+      return `${target.name} en rupture → exclu · ${f.modules ? f.modules.length : 0} slot(s)`;
+    });
+    await step('Jetons dynamiques — {{magasin}}/{{adresse}} résolus par magasin', async () => {
+      const fleetRes = await call('GET', '/api/v1/fleet');
+      const store = fleetRes.stores[0];
+      if (!store) throw new Error('aucun magasin en base');
+      const st = await call('GET', '/api/v1/state');
+      const coord0 = { address: store.address || '' };
+      const tokMod = { id: 'mTOKLT', type: 'liaison', name: 'Bienvenue à {{magasin}}', sub: '{{adresse}} · {{moment}} · {{xyz}}', dur: 6, items: [] };
+      await call('POST', `/api/v1/stores/${store.id}`, { address: 'TESTADDR-Corbais' });
+      await call('PUT', '/api/v1/draft', {
+        modules: [...st.modules, tokMod],
+        playlists: [...st.playlists, { id: 'pl-tokLT', name: 'Film jetons LT', items: [] }],
+        activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop,
+      });
+      const f = await (await fetch(BASE + `/api/v1/film?film=pl-tokLT&store=${encodeURIComponent(store.id)}`)).json();
+      // restauration AVANT les assertions (brouillon + coordonnées d'origine)
+      await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      await call('POST', `/api/v1/stores/${store.id}`, coord0);
+      const m = (f.modules || []).find((x) => x.id === 'mTOKLT');
+      if (!m) throw new Error('module à jetons absent du film');
+      if (m.name !== `Bienvenue à ${store.store}`) throw new Error(`{{magasin}} non injecté : ${m.name}`);
+      if (!String(m.sub).startsWith('TESTADDR-Corbais')) throw new Error(`{{adresse}} non injectée : ${m.sub}`);
+      if (!/\{\{\s*xyz\s*\}\}/.test(m.sub)) throw new Error('un jeton inconnu doit rester littéral');
+      return `« ${m.name} » · sous-titre résolu, jeton inconnu conservé`;
+    });
     await step('POST heartbeat — auto-enregistrement d\'un player de test', async () => {
       const hb = await call('POST', `/api/v1/players/${pid}/heartbeat`, {
         token, name: 'Écran de test live', state: 'playing', cachePct: 100, media: 'test', playedVer: 0, dataVer: 0,
@@ -401,9 +445,15 @@ async function main() {
       }
       const film = await (await fetch(BASE + `/api/v1/film?store=${encodeURIComponent(store.id)}`)).json();
       if (!film.format || film.format.w !== 6480) throw new Error('le lien magasin ne reflète pas le combo');
-      // restauration de la configuration d'origine
-      await call('POST', `/api/v1/stores/${store.id}`, { screens: before.screens, size: before.size, orient: before.orient });
-      return `${store.store} : ${out.format.label} = ${out.format.px}, restauré ${before.label}`;
+      // Coordonnées du magasin (alimentent les jetons {{adresse}}/{{horaires}}/{{tel}}).
+      const coord0 = { address: store.address || '', hours: store.hours || '', phone: store.phone || '' };
+      await call('POST', `/api/v1/stores/${store.id}`, { address: 'TESTADDR-live', hours: '7h-19h', phone: '010 00 00 00' });
+      const fl2 = await call('GET', '/api/v1/fleet');
+      const s2 = fl2.stores.find((s) => s.id === store.id);
+      if (!s2 || s2.address !== 'TESTADDR-live' || s2.hours !== '7h-19h' || s2.phone !== '010 00 00 00') throw new Error('coordonnées du magasin non persistées');
+      // restauration de la configuration d'origine (écrans + coordonnées)
+      await call('POST', `/api/v1/stores/${store.id}`, { screens: before.screens, size: before.size, orient: before.orient, ...coord0 });
+      return `${store.store} : ${out.format.label} = ${out.format.px} + coordonnées OK, restauré ${before.label}`;
     });
     await step('PUT /api/v1/catalog — produit + prix par magasin', async () => {
       const before = await call('GET', '/api/v1/catalog');
@@ -414,7 +464,7 @@ async function main() {
       const catId = cats[0].id;
       const testProd = {
         id: 'prLIVETEST', categoryId: catId, name: 'Produit test live', price: '9,99',
-        img: 'assets/cake.png', src: 'illus', active: true, prices: { [store.id]: '7,77' },
+        img: 'assets/cake.png', src: 'illus', active: true, unavailable: true, prices: { [store.id]: '7,77' },
         aliases: { nl: 'Levend testproduct' },
       };
       await call('PUT', '/api/v1/catalog', { categories: cats, products: [...before.products, testProd] });
@@ -423,6 +473,7 @@ async function main() {
       if (!found) throw new Error('produit test absent après enregistrement');
       if (found.prices[store.id] !== '7,77') throw new Error('prix par magasin perdu');
       if ((found.aliases || {}).nl !== 'Levend testproduct') throw new Error('alias de langue perdu (sig_aliases)');
+      if (found.unavailable !== true) throw new Error('état « rupture » (unavailable) non persisté');
       // restauration
       await call('PUT', '/api/v1/catalog', { categories: before.categories.length ? before.categories : [], products: before.products });
       const after = await call('GET', '/api/v1/catalog');

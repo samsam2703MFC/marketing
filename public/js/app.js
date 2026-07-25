@@ -1358,6 +1358,9 @@ class App extends Component {
         orient: patch.orient != null ? patch.orient : f.orient,
         ...(patch.lang != null ? { lang: patch.lang } : {}),
         ...(patch.name != null ? { name: patch.name } : {}),
+        ...(patch.address != null ? { address: patch.address } : {}),
+        ...(patch.hours != null ? { hours: patch.hours } : {}),
+        ...(patch.phone != null ? { phone: patch.phone } : {}),
       });
       await this.refreshFleet();
       this.showToast(`${out.name} : ${out.format.label} = ${out.format.px} · langue ${(out.lang || 'fr').toUpperCase()} ✓`);
@@ -1859,6 +1862,10 @@ class App extends Component {
       setScreens: (e) => this.saveStore(s.id, { screens: e.target.value }),
       setSize: (e) => this.saveStore(s.id, { size: e.target.value }),
       setOrient: (e) => this.saveStore(s.id, { orient: e.target.value }),
+      address: s.address || '', hours: s.hours || '', phone: s.phone || '',
+      setAddress: (e) => this.saveStore(s.id, { address: e.target.value }),
+      setHours: (e) => this.saveStore(s.id, { hours: e.target.value }),
+      setPhone: (e) => this.saveStore(s.id, { phone: e.target.value }),
       connColor: s.conn === 'offline' ? '#8D1D2C' : s.conn === '4G' ? '#B8860B' : '#2E7D32',
       connLabel: s.conn === 'offline' ? 'Magasin injoignable' : s.conn === '4G' ? 'Connectivité 4G' : 'Fibre',
       players: s.players.map((p) => {
@@ -1931,7 +1938,7 @@ class App extends Component {
     });
     const prodSelCat = cd.categories.find((c) => c.id === st.catSel) || null;
     const prodRows = cd.products.filter((p) => p.categoryId === st.catSel).map((p) => ({
-      id: p.id, price: p.price, img: p.img, active: p.active !== false,
+      id: p.id, price: p.price, img: p.img, active: p.active !== false, unavailable: !!p.unavailable,
       name: isBaseLang ? p.name : ((p.aliases || {})[editLang] || ''),
       namePlaceholder: isBaseLang ? 'Nom du produit' : `${p.name} (${editLang})`,
       isPhoto: p.src === 'photo',
@@ -1946,6 +1953,7 @@ class App extends Component {
       onImg: (e) => this.setCat((d) => { const x = d.products.find((y) => y.id === p.id); if (x) { x.img = e.target.value; x.src = 'illus'; } }),
       onPhoto: (e) => this.onProdPhoto(p.id, e),
       toggleActive: () => this.setCat((d) => { const x = d.products.find((y) => y.id === p.id); if (x) x.active = !(x.active !== false); }),
+      toggleUnavailable: () => this.setCat((d) => { const x = d.products.find((y) => y.id === p.id); if (x) x.unavailable = !x.unavailable; }),
       up: () => this.moveProd(p.id, -1),
       down: () => this.moveProd(p.id, 1),
       del: () => this.delProd(p.id),
@@ -2983,7 +2991,7 @@ class App extends Component {
               <span style="font-size:10.5px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">Visuel</span>
               <span style="font-size:10.5px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;text-align:right;">Prix défaut</span>
               ${v.storeCols.map((sc) => html`<span title=${sc.label} style="font-size:8.5px;font-weight:600;letter-spacing:0.02em;text-transform:uppercase;color:#8A847C;text-align:right;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;">${sc.label}</span>`)}
-              <span style="font-size:10.5px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;text-align:center;">Actif</span>
+              <span style="font-size:10.5px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;text-align:center;" title="✓ Actif = présent au catalogue · ⦸ Rupture = temporairement indisponible, masqué des boucles continues">État</span>
               <span></span>
               ${v.prodRows.map((p) => html`
                 <div style="display:flex;align-items:center;">${p.thumb}</div>
@@ -3006,8 +3014,9 @@ class App extends Component {
                 ${p.storePrices.map((sp) => html`
                   <input value=${sp.value} onInput=${sp.onInput} placeholder="défaut" inputmode="decimal" style="padding:9px 10px;font-size:13px;text-align:right;color:${sp.value ? '#8D1D2C' : '#B8B2A8'};font-weight:${sp.value ? 600 : 400};border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:${sp.value ? 'rgba(141,29,44,0.05)' : '#FBF8F2'};min-width:0;" />
                 `)}
-                <div style="display:flex;justify-content:center;">
-                  <button onClick=${p.toggleActive} title="Actif / inactif (masqué à l'écran)" style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid rgba(35,34,32,0.12);cursor:pointer;background:${p.active ? 'rgba(46,110,78,0.12)' : 'rgba(141,29,44,0.08)'};color:${p.active ? '#2E6E4E' : '#8D1D2C'};font-size:13px;">${p.active ? '✓' : '⃠'}</button>
+                <div style="display:flex;justify-content:center;gap:5px;">
+                  <button onClick=${p.toggleActive} title="Actif / inactif (masqué partout à l'écran)" style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid rgba(35,34,32,0.12);cursor:pointer;background:${p.active ? 'rgba(46,110,78,0.12)' : 'rgba(141,29,44,0.08)'};color:${p.active ? '#2E6E4E' : '#8D1D2C'};font-size:13px;">${p.active ? '✓' : '⃠'}</button>
+                  <button onClick=${p.toggleUnavailable} title="En rupture / indisponible — masqué des boucles continues (mode Continu) et signalé. Réactive quand le produit revient." style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;cursor:pointer;border:1px solid ${p.unavailable ? 'rgba(141,29,44,0.4)' : 'rgba(35,34,32,0.12)'};background:${p.unavailable ? 'rgba(141,29,44,0.14)' : '#FBF8F2'};color:${p.unavailable ? '#8D1D2C' : '#C9C3B8'};font-size:14px;">⦸</button>
                 </div>
                 <div style="display:flex;align-items:center;gap:4px;justify-content:flex-end;">
                   <button onClick=${p.up} title="Monter" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#FBF8F2;cursor:pointer;font-size:12px;">↑</button>
@@ -3018,7 +3027,7 @@ class App extends Component {
             </div>
           </div>
           ${!v.prodRows.length && html`<div style="font-size:12.5px;color:#8A847C;padding:14px 4px 4px;">Aucun produit dans cette catégorie — « + Ajouter un produit ».</div>`}
-          <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Prix par magasin : laisse vide pour utiliser le prix par défaut. Langues : FR = noms de base ; dans une autre langue, le champ nom édite la traduction (vide = nom de base). Chaque magasin affiche automatiquement ses prix ET sa langue (réglée dans Réseau).</p>
+          <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Prix par magasin : laisse vide pour utiliser le prix par défaut. Langues : FR = noms de base ; dans une autre langue, le champ nom édite la traduction (vide = nom de base). Chaque magasin affiche automatiquement ses prix ET sa langue (réglée dans Réseau). État : ✓ actif · <strong style="color:#8D1D2C;">⦸ rupture</strong> = temporairement indisponible, retiré des boucles en mode Continu (le reste du catalogue continue).</p>
         </div>
       </div>
     </div>
@@ -3435,6 +3444,13 @@ class App extends Component {
               <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:${s.connColor};"><span style="width:8px;height:8px;border-radius:50%;background:${s.connColor};"></span>${s.connLabel}</div>
             </div>
           </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 22px;border-bottom:1px solid rgba(35,34,32,0.06);background:#fff;">
+            <span style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">Coordonnées</span>
+            ${infoTip('Alimentent les champs dynamiques des gabarits, résolus PAR MAGASIN à la diffusion : {{adresse}}, {{horaires}}, {{tel}} et {{magasin}} (le nom). Un seul gabarit affiche ainsi les bonnes infos selon le point de vente. Enregistré en quittant le champ.')}
+            <input value=${s.address} onChange=${s.setAddress} placeholder="Adresse — {{adresse}}" title="Adresse du magasin — jeton {{adresse}}" style="flex:2 1 220px;min-width:0;padding:7px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
+            <input value=${s.hours} onChange=${s.setHours} placeholder="Horaires — {{horaires}}" title="Horaires d'ouverture — jeton {{horaires}}" style="flex:1 1 160px;min-width:0;padding:7px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
+            <input value=${s.phone} onChange=${s.setPhone} placeholder="Téléphone — {{tel}}" title="Téléphone — jeton {{tel}}" style="flex:1 1 140px;min-width:0;padding:7px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
+          </div>
           <div style="display:flex;flex-direction:column;">
             ${s.players.map((p) => html`
               <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 1.2fr 1fr;gap:16px;align-items:center;padding:15px 22px;border-top:1px solid rgba(35,34,32,0.05);">
@@ -3578,6 +3594,12 @@ class App extends Component {
             <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8A847C;">Module sélectionné</h2>
           </div>
           <input value=${v.selName} onInput=${v.onSelName} placeholder="Nom du module" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:19px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#FBF8F2;" />
+          <div style="margin-top:8px;display:flex;align-items:center;gap:7px;font-size:11.5px;color:#8A847C;flex-wrap:wrap;">
+            ${infoTip('Champs dynamiques : dans le titre ou le sous-titre, écris un jeton entre doubles accolades — il est remplacé PAR MAGASIN à la diffusion (un seul gabarit, les bonnes valeurs partout). Jetons : {{magasin}} (nom), {{adresse}}, {{horaires}}, {{tel}} (coordonnées saisies dans l’onglet Réseau) · {{date}} (date du jour) · {{saison}} (période active) · {{moment}} (matin/midi/après-midi). Ex. « Bienvenue à {{magasin}} ». Dans l’aperçu générique le jeton reste visible ; via le lien d’un magasin il est résolu.')}
+            <span>Jetons dynamiques :</span>
+            ${['{{magasin}}', '{{adresse}}', '{{date}}', '{{saison}}'].map((t) => html`<code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">${t}</code>`)}
+            <span>…</span>
+          </div>
           <div style="margin-top:14px;">
             <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:7px;">Catégorie de bibliothèque</label>
             <div style="display:flex;flex-wrap:wrap;gap:7px;">

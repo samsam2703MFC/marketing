@@ -223,6 +223,15 @@ function migrate(db) {
   if (!stCols.includes('screen_size')) db.exec(`ALTER TABLE sig_stores ADD COLUMN screen_size INTEGER NOT NULL DEFAULT 55`);
   if (!stCols.includes('screen_orient')) db.exec(`ALTER TABLE sig_stores ADD COLUMN screen_orient TEXT NOT NULL DEFAULT 'paysage'`);
   if (!stCols.includes('active')) db.exec(`ALTER TABLE sig_stores ADD COLUMN active INTEGER NOT NULL DEFAULT 1`);
+  // Coordonnées du magasin : alimentent les champs dynamiques {{adresse}},
+  // {{horaires}}, {{tel}} des gabarits, résolus par magasin à la diffusion.
+  if (!stCols.includes('address')) db.exec(`ALTER TABLE sig_stores ADD COLUMN address TEXT NOT NULL DEFAULT ''`);
+  if (!stCols.includes('hours')) db.exec(`ALTER TABLE sig_stores ADD COLUMN hours TEXT NOT NULL DEFAULT ''`);
+  if (!stCols.includes('phone')) db.exec(`ALTER TABLE sig_stores ADD COLUMN phone TEXT NOT NULL DEFAULT ''`);
+  // Produit en rupture / indisponible : masqué des boucles continues et signalé
+  // en régie (toggle manuel, ou futur signal de stock ERP).
+  const prodCols0 = db.prepare('PRAGMA table_info(sig_products)').all().map((c) => c.name);
+  if (prodCols0.length && !prodCols0.includes('unavailable')) db.exec(`ALTER TABLE sig_products ADD COLUMN unavailable INTEGER NOT NULL DEFAULT 0`);
 
   // Illustration de période (importable depuis ws_season si la table l'expose,
   // ou saisie à la main) : URL/chemin de l'image affichée dans l'onglet Périodes.
@@ -329,6 +338,7 @@ function migrate(db) {
     img         TEXT NOT NULL DEFAULT 'assets/cake.png',
     src         TEXT NOT NULL DEFAULT 'illus',
     active      INTEGER NOT NULL DEFAULT 1,
+    unavailable INTEGER NOT NULL DEFAULT 0,
     sort_order  INTEGER NOT NULL DEFAULT 0
   );
   CREATE INDEX IF NOT EXISTS sig_products_cat ON sig_products(category_id, sort_order);
@@ -543,7 +553,7 @@ export function loadCatalog() {
   }
   const products = db.prepare('SELECT * FROM sig_products ORDER BY category_id, sort_order').all().map((p) => ({
     id: p.id, categoryId: p.category_id, name: p.name, price: p.price,
-    img: p.img, src: p.src, active: !!p.active,
+    img: p.img, src: p.src, active: !!p.active, unavailable: !!p.unavailable,
     prices: pricesByProduct.get(p.id) || {},
     aliases: aliasesOf('product', p.id),
   }));
@@ -559,7 +569,7 @@ export function saveCatalog({ categories, products }) {
     db.exec('DELETE FROM sig_products');
     db.exec('DELETE FROM sig_product_categories');
     const insCat = db.prepare('INSERT OR REPLACE INTO sig_product_categories(id, name, sort_order, active) VALUES (?, ?, ?, ?)');
-    const insProd = db.prepare('INSERT OR REPLACE INTO sig_products(id, category_id, name, price, img, src, active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    const insProd = db.prepare('INSERT OR REPLACE INTO sig_products(id, category_id, name, price, img, src, active, unavailable, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     const insPrice = db.prepare('INSERT OR REPLACE INTO sig_product_prices(product_id, store_id, price) VALUES (?, ?, ?)');
     const insAlias = db.prepare('INSERT OR REPLACE INTO sig_aliases(kind, ref_id, lang, name) VALUES (?, ?, ?, ?)');
     const putAliases = (kind, id, aliases) => {
@@ -575,7 +585,7 @@ export function saveCatalog({ categories, products }) {
     (products || []).forEach((p, i) => {
       insProd.run(String(p.id), catIds.has(String(p.categoryId)) ? String(p.categoryId) : '', String(p.name || ''),
         String(p.price || '0,00'), String(p.img || 'assets/cake.png'), p.src === 'photo' ? 'photo' : 'illus',
-        p.active === false ? 0 : 1, i);
+        p.active === false ? 0 : 1, p.unavailable ? 1 : 0, i);
       for (const [storeId, price] of Object.entries(p.prices || {})) {
         if (String(price).trim()) insPrice.run(String(p.id), String(storeId), String(price).trim());
       }
@@ -717,8 +727,8 @@ export function buildContinuous(cfg, date = new Date(), ctx = {}) {
   const moment = currentMoment(date);
   const activeSeasons = new Set(currentSeasons(date).map((s) => s.id));
 
-  // 1) Pool de produits éligibles : actif + source + moment de vente.
-  let pool = products.filter((p) => p.active && momentOk(p.id));
+  // 1) Pool de produits éligibles : actif + pas en rupture + source + moment de vente.
+  let pool = products.filter((p) => p.active && !p.unavailable && momentOk(p.id));
   if (cfg.source === 'categories') {
     // Les catégories choisies sont des EXCEPTIONS : tout SAUF ces catégories.
     const cats = new Set(cfg.categories);
@@ -839,6 +849,47 @@ export function applyStoreLang(modules, storeId) {
     if (m.catRef && catAlias.has(m.catRef) && m.name === catNames.get(m.catRef)) {
       m.name = catAlias.get(m.catRef);
     }
+  }
+}
+
+// Champs dynamiques : remplace les jetons {{…}} des textes d'éléments (titre et
+// sous-titre) par les valeurs du magasin (nom/adresse/horaires/tél) et du
+// contexte (date/saison/moment). Résolu PAR MAGASIN à la diffusion : un seul
+// gabarit affiche les bonnes valeurs selon le point de vente. Sans magasin
+// (aperçu générique) les jetons magasin deviennent vides ; un jeton inconnu est
+// laissé tel quel pour que l'auteur repère sa faute de frappe.
+export const STORE_TOKENS = [
+  { key: 'magasin', label: 'Nom du magasin' },
+  { key: 'adresse', label: 'Adresse' },
+  { key: 'horaires', label: 'Horaires' },
+  { key: 'tel', label: 'Téléphone' },
+  { key: 'date', label: 'Date du jour (ex. vendredi 25 juillet)' },
+  { key: 'saison', label: 'Période(s) active(s) du jour' },
+  { key: 'moment', label: 'Moment (matin / midi / après-midi)' },
+];
+export function applyStoreTokens(modules, storeId, date = new Date()) {
+  const db = getDb();
+  const store = storeId ? db.prepare('SELECT name, address, hours, phone FROM sig_stores WHERE id = ?').get(storeId) : null;
+  const seasonNames = currentSeasons(date).map((s) => s.name).filter(Boolean).join(', ');
+  const momentLabel = { matin: 'matin', midi: 'midi', aprem: 'après-midi' }[currentMoment(date)] || '';
+  let dateLabel = '';
+  try { dateLabel = date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }); } catch { dateLabel = ''; }
+  const map = {
+    magasin: store ? (store.name || '') : '', adresse: store ? (store.address || '') : '',
+    horaires: store ? (store.hours || '') : '', tel: store ? (store.phone || '') : '',
+    telephone: store ? (store.phone || '') : '', date: dateLabel, saison: seasonNames, moment: momentLabel,
+  };
+  // Alias pointés : {{magasin.nom}}, {{magasin.adresse}}…
+  map['magasin.nom'] = map.magasin; map['magasin.adresse'] = map.adresse;
+  map['magasin.horaires'] = map.horaires; map['magasin.tel'] = map.tel;
+  const norm = (k) => String(k).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const sub = (txt) => String(txt).replace(/\{\{([^{}]+)\}\}/g, (m0, raw) => {
+    const k = norm(raw);
+    return Object.prototype.hasOwnProperty.call(map, k) ? map[k] : m0;
+  });
+  for (const m of modules || []) {
+    if (typeof m.name === 'string' && m.name.indexOf('{{') !== -1) m.name = sub(m.name);
+    if (typeof m.sub === 'string' && m.sub.indexOf('{{') !== -1) m.sub = sub(m.sub);
   }
 }
 
