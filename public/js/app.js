@@ -808,7 +808,12 @@ class App extends Component {
     this.loadMediaLib();   // médias agence dispo (pour l'indicateur des ratios)
     this.loadSurprise();   // vidéos surprise dispo
   }
-  closeWizard() { this.setState({ wizard: false, wizDone: null }); }
+  closeWizard() {
+    // Filet : on force l'enregistrement du brouillon (tous les paramètres du
+    // film) avant de fermer, au cas où l'auto-save (1,2 s) n'aurait pas eu lieu.
+    if (this.state.dirty) this.save({ auto: true });
+    this.setState({ wizard: false, wizDone: null });
+  }
   wizGo(n) {
     const step = Math.max(0, Math.min(WIZ_STEPS.length - 1, n));
     // En entrant dans l'aperçu, on enregistre le brouillon pour que /film?film= soit à jour.
@@ -4393,6 +4398,15 @@ class App extends Component {
             <input type="number" min="4" max="40" defaultValue=${wc.maxItems || 12} key=${'wm-' + wf.id} onChange=${(e) => this.updateContinuous({ maxItems: parseInt(e.target.value, 10) || 12 })} style="width:80px;padding:8px 10px;font-size:14px;font-weight:600;text-align:right;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#fff;" />
           </div>
           <div>
+            <div style="display:flex;align-items:center;gap:7px;margin-bottom:7px;">
+              <span style="font-size:12.5px;font-weight:600;color:#8A847C;">Vitesse d'affichage</span>
+              ${infoTip('Durée d’affichage de chaque fiche produit (et, proportionnellement, des vidéos). Choix rapide : Lent laisse le temps de lire, Rapide enchaîne. Réglable finement dans le Compositeur.')}
+            </div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap;">
+              ${[['Lent', 9, 16], ['Normal', 6, 12], ['Dynamique', 4, 8], ['Rapide', 3, 6]].map(([lab, pd, cd]) => html`<button onClick=${() => this.updateContinuous({ prodDur: pd, clipDur: cd })} style=${pill((wc.prodDur || 6) === pd)}>${lab} <span style="opacity:0.72;font-weight:400;">· ${pd}s</span></button>`)}
+            </div>
+          </div>
+          <div>
             <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px;">
               <span style="font-size:12.5px;font-weight:600;color:#8A847C;">Ratios par type d'élément · 1 : N (0 = jamais)</span>
               ${infoTip('Dose le mélange de la boucle. « 1 : N » = un élément de ce type tous les N slots. Ex. Liaison 1:5 = un logo de transition toutes les 5 fiches ; Produit seul 1:6 = une fiche plein écran toutes les 6. 0 = ce type n’apparaît jamais. Le nombre d’éléments DISPONIBLES est indiqué à droite : un type sans élément (0) n’aura aucun effet même avec un ratio.')}
@@ -4430,14 +4444,21 @@ class App extends Component {
     } else if (st.wizStep === 2) {
       body = html`
         <h2 style=${h2}>Sur quels écrans ?</h2>
-        <p style=${sub}>Coche les magasins ciblés. <strong>Aucun coché = tous les magasins.</strong></p>
-        <div style="display:flex;flex-direction:column;gap:8px;max-width:640px;">
+        <p style=${sub}>Coche les magasins ciblés (<strong>aucun coché = tous les magasins</strong>). Une <strong>zone (groupe d'écrans)</strong> avec un filtre de catégories garde SON contenu propre ; les autres écrans du magasin reçoivent ce film.</p>
+        <div style="display:flex;flex-direction:column;gap:8px;max-width:660px;">
           ${stores.map((s) => { const on = targeted.includes(s.id); return html`
-            <button onClick=${() => this.toggleFilmStore(s.id)} style="display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:11px;text-align:left;cursor:pointer;background:${on ? 'rgba(141,29,44,0.06)' : '#fff'};border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};">
-              <span style="width:22px;height:22px;flex:0 0 auto;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;background:${on ? '#8D1D2C' : 'rgba(35,34,32,0.08)'};color:${on ? '#fff' : '#8A847C'};">${on ? '✓' : ''}</span>
-              <span style="flex:1 1 auto;font-size:14px;font-weight:600;color:#232220;">${s.store}</span>
-              <span style="font-size:11.5px;color:#8A847C;">${(s.players || []).length} écran(s)${s.format ? ` · ${s.format.label}` : ''}</span>
-            </button>`; })}
+            <div>
+              <button onClick=${() => this.toggleFilmStore(s.id)} style="width:100%;box-sizing:border-box;display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:11px;text-align:left;cursor:pointer;background:${on ? 'rgba(141,29,44,0.06)' : '#fff'};border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};">
+                <span style="width:22px;height:22px;flex:0 0 auto;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;background:${on ? '#8D1D2C' : 'rgba(35,34,32,0.08)'};color:${on ? '#fff' : '#8A847C'};">${on ? '✓' : ''}</span>
+                <span style="flex:1 1 auto;font-size:14px;font-weight:600;color:#232220;">${s.store}</span>
+                <span style="font-size:11.5px;color:#8A847C;">${(s.players || []).length} écran(s)${s.format ? ` · ${s.format.label}` : ''}</span>
+              </button>
+              ${(s.groups || []).length ? html`
+                <div style="padding:5px 0 2px 34px;display:flex;flex-direction:column;gap:2px;">
+                  ${s.groups.map((g) => { const filt = (g.cats || []).length; return html`<div style="font-size:11.5px;color:#8A847C;">▦ <strong style="color:#6E4A2B;">${g.name}</strong> · ${filt ? html`<span style="color:#6E4A2B;">${filt} catégorie(s) — garde son contenu</span>` : 'suit ce film'}${g.format ? ` · ${g.format.label}` : ''}</div>`; })}
+                </div>
+              ` : ''}
+            </div>`; })}
           ${!stores.length ? html`<div style="font-size:13px;color:#8A847C;">Aucun magasin. Branche un écran d'abord.</div>` : ''}
         </div>
         <div style="margin-top:14px;font-size:13px;font-weight:600;color:#8D1D2C;">${targeted.length ? `${targeted.length} magasin(s)` : 'Tous les magasins'} · ${nScreens} écran(s) ciblé(s)</div>`;
