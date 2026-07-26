@@ -65,6 +65,7 @@ export const moduleDur = (m, secPerLine) => {
   if (m.type === 'produit') return m.dur > 0 ? m.dur : 8;
   if (m.type === 'film') return m.dur > 0 ? m.dur : 10;
   if (m.type === 'animation') return m.dur > 0 ? m.dur : 6;
+  if (m.type === 'promotion') return m.dur > 0 ? m.dur : 7;
   return Math.max(1, activeItems(m).length) * secPerLine;
 };
 
@@ -209,6 +210,59 @@ function renderModuleInner(h, m, lt, opts) {
     h('div', { style: { fontFamily: FVANK, fontWeight: 400, fontSize: 380, letterSpacing: `${0.02 + 0.03 * (0.5 + 0.5 * Math.sin(lt * Math.PI * 1.2))}em`, textTransform: 'uppercase', color: band ? '#fff' : INK, textAlign: 'center', lineHeight: 0.95, padding: '0 200px' } }, (m.name || '').toUpperCase()),
     m.sub ? h('div', { style: { fontFamily: FUI, fontWeight: 500, fontSize: 88, letterSpacing: '0.22em', textTransform: 'uppercase', color: band ? 'rgba(255,255,255,0.75)' : '#8A847C', textAlign: 'center' } }, m.sub) : null,
     band ? null : h('div', { style: { width: 620, height: 16, background: RUBY, borderRadius: 8 } })));
+    const te = tagEl(); if (te) kids.push(te);
+    return kids;
+  }
+
+  // ---- Promotion : offre commerciale (badge du sous-type + accroche) --------
+  // Le sous-type (happy hour, flash, bundle…) vient de la base (sig_promo_types)
+  // et est résolu en amont dans m.promo { name, icon, color }. Sur les mises en
+  // page « hero », la photo du produit lié (productRef) accompagne l'offre.
+  if (m.type === 'promotion') {
+    const dur = moduleDur(m, secPerLine);
+    const pt = m.promo || { name: 'Offre', icon: '🏷️', color: '#C0392B' };
+    const col = pt.color || '#C0392B';
+    const a = Math.min(easeIO(clx(lt / 0.5, 0, 1)), easeIO(clx((dur - lt) / 0.5, 0, 1)));
+    const it = activeItems(m)[0] || (m.items || [])[0];
+    const hero = (m.layout === 'hero-right' || m.layout === 'hero-left') && it;
+    const band = m.layout === 'band';
+    // Puce du sous-type : icône + libellé, aux couleurs de la promo.
+    const badge = (dark) => h('div', {
+      key: 'pbadge',
+      style: { display: 'inline-flex', alignItems: 'center', gap: 34, alignSelf: hero ? 'flex-start' : 'center',
+        background: dark ? 'rgba(255,255,255,0.16)' : col, color: '#fff', borderRadius: 999, padding: '30px 62px 30px 48px',
+        fontFamily: FUI, fontWeight: 500, fontSize: 92, letterSpacing: '0.12em', textTransform: 'uppercase',
+        boxShadow: dark ? 'none' : '0 20px 50px rgba(35,34,32,0.22)' },
+    }, h('span', { style: { fontSize: 110, lineHeight: 1 } }, pt.icon || '🏷️'), h('span', null, pt.name || 'Offre'));
+    // Bloc « offre » : accroche (m.name) + détail (m.sub), + prix si produit lié.
+    const offer = (onLight) => h('div', {
+      key: 'poffer',
+      style: { display: 'flex', flexDirection: 'column', gap: 60, alignItems: hero ? 'flex-start' : 'center', textAlign: hero ? 'left' : 'center', maxWidth: hero ? 2700 : 5200 },
+    },
+    badge(!onLight),
+    h('div', { style: { fontFamily: FVANK, fontWeight: 400, fontSize: hero ? 300 : 360, letterSpacing: '0.01em', textTransform: 'uppercase', color: onLight ? INK : '#fff', lineHeight: 0.95 } }, (m.name || 'Offre spéciale').toUpperCase()),
+    h('div', { style: { width: 560, height: 16, background: col, borderRadius: 8 } }),
+    m.sub ? h('div', { style: { fontFamily: FUI, fontWeight: 400, fontSize: hero ? 96 : 108, letterSpacing: '0.06em', color: onLight ? '#6E675E' : 'rgba(255,255,255,0.86)', lineHeight: 1.15 } }, m.sub) : null,
+    it && it.price ? h('div', { style: { fontFamily: FUI, fontWeight: 300, fontSize: 220, color: onLight ? col : '#fff' } }, it.price, h('span', { style: { fontSize: 110, verticalAlign: 'super' } }, '€')) : null);
+
+    if (hero) {
+      const left = m.layout === 'hero-left';
+      const P0 = m.pos || newPos();
+      const mo = MO[m.motion || 'm1'] || MO.m1;
+      const wob = mo.w * Math.sin(lt * Math.PI * (mo.fspd || 1));
+      const imgCX = left ? 1620 : W - 1620;
+      const txtX = left ? 3400 : 260;
+      const imgSize = Math.round(2500 * (P0.illoScale || 1));
+      kids.push(h('div', { key: 'pbg', style: { position: 'absolute', inset: 0, background: '#F5EFE4', opacity: a } }));
+      kids.push(h('div', { key: 'pimgw', style: { position: 'absolute', left: imgCX - imgSize / 2 + P0.illoX, top: H / 2 - imgSize / 2 + P0.illoY, width: imgSize, height: imgSize, opacity: a, transform: `translateY(${wob}px) rotate(${mo.r * Math.sin(lt * Math.PI * 0.8)}deg)` } },
+        h('img', { src: it.img, alt: '', style: { width: '100%', height: '100%', objectFit: 'contain', borderRadius: it.src === 'photo' ? 60 : 0, boxShadow: it.src === 'photo' ? '0 60px 160px rgba(35,34,32,0.35)' : 'none' } })));
+      kids.push(h('div', { key: 'ptxt', style: { position: 'absolute', left: txtX + P0.listX, top: H / 2 - 700 + P0.titleY, width: 2820, opacity: a } }, offer(true)));
+    } else {
+      const zoom = 1 + 0.04 * (lt / dur);
+      if (!band) kids.push(h('div', { key: 'pbg', style: { position: 'absolute', inset: 0, background: '#F5EFE4' } }));
+      else kids.push(h('div', { key: 'pbg', style: { position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${col}, ${mixHex(col, '#000000', 0.28)})` } }));
+      kids.push(h('div', { key: 'pwrap', style: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 260px', opacity: a, transform: `scale(${zoom})`, transformOrigin: 'center' } }, offer(!band)));
+    }
     const te = tagEl(); if (te) kids.push(te);
     return kids;
   }

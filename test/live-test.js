@@ -124,7 +124,14 @@ async function main() {
     const t = await call('GET', '/api/v1/element-types');
     if (!Array.isArray(t.types) || t.types.length < 5) throw new Error('types manquants (sig_element_types)');
     for (const x of t.types) if (!Array.isArray(x.layouts) || !x.layouts.length) throw new Error(`type ${x.id} sans mises en page`);
+    if (!t.types.some((x) => x.id === 'promotion')) throw new Error('type « promotion » manquant');
     return t.types.map((x) => x.id).join(' · ');
+  });
+  await step('GET /api/v1/promo-types — sous-types de promotion (dynamiques)', async () => {
+    const p = await call('GET', '/api/v1/promo-types');
+    if (!Array.isArray(p.promoTypes) || p.promoTypes.length < 3) throw new Error('sous-types de promotion manquants (sig_promo_types)');
+    for (const x of p.promoTypes) if (!x.id || !x.name || !x.icon) throw new Error(`sous-type ${x.id} incomplet`);
+    return p.promoTypes.map((x) => `${x.icon} ${x.name}`).join(' · ');
   });
   await step('GET /api/v1/catalog — table produits', async () => {
     const c = await call('GET', '/api/v1/catalog');
@@ -463,6 +470,37 @@ async function main() {
       } finally {
         // 4) nettoyage : suppression de la zone (détache aussi les écrans)
         await call('DELETE', `/api/v1/groups/${gid}`);
+      }
+    });
+    await step('Promotion — sous-type dynamique + badge résolu dans le film', async () => {
+      const before = await call('GET', '/api/v1/promo-types');
+      const st = await call('GET', '/api/v1/state');
+      // 1) Ajouter un sous-type de promotion (aller-retour PUT /promo-types)
+      const extra = { id: 'ptLTTEST', name: 'Test LT', icon: '🧪', color: '#123456', descr: 'sous-type de test', active: true };
+      const saved = await call('PUT', '/api/v1/promo-types', { promoTypes: [...before.promoTypes, extra] });
+      try {
+        const got = (saved.promoTypes || []).find((t) => t.id === 'ptLTTEST');
+        if (!got || got.name !== 'Test LT' || got.color !== '#123456') throw new Error('sous-type de promotion non persisté');
+        // 2) Élément « promotion » référençant ce sous-type
+        const promoMod = { id: 'mPROMOLT', type: 'promotion', name: 'Happy hour -20%', sub: '16h → 18h', promoType: 'ptLTTEST', layout: 'band', dur: 7, items: [] };
+        await call('PUT', '/api/v1/draft', {
+          modules: [...st.modules, promoMod],
+          playlists: [...st.playlists, { id: 'pl-promoLT', name: 'Film promo LT', items: ['mPROMOLT'] }],
+          activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop,
+        });
+        // 3) Le film résout le badge (icône · couleur · libellé) sur le module
+        const f = await (await fetch(BASE + '/api/v1/film?film=pl-promoLT')).json();
+        const m = (f.modules || []).find((x) => x.id === 'mPROMOLT');
+        if (!m) throw new Error('élément promotion absent du film');
+        if (m.promoType !== 'ptLTTEST') throw new Error('promoType non persisté sur le module');
+        if (!m.promo || m.promo.name !== 'Test LT' || m.promo.icon !== '🧪' || m.promo.color !== '#123456') {
+          throw new Error(`badge de promotion non résolu : ${JSON.stringify(m.promo)}`);
+        }
+        return `« ${m.name} » · badge ${m.promo.icon} ${m.promo.name} (${m.promo.color})`;
+      } finally {
+        // restauration : brouillon + sous-types d'origine
+        await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+        await call('PUT', '/api/v1/promo-types', { promoTypes: before.promoTypes });
       }
     });
     await step('POST heartbeat — auto-enregistrement d\'un player de test', async () => {

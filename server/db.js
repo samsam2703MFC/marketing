@@ -27,6 +27,7 @@ export function getDb() {
   ensureAdmin(db);
   ensurePlaylists(db);
   ensureElementTypes(db);
+  ensurePromoTypes(db);
   ensureCatalog(db);
   // Migration ponctuelle : l'ancien créneau par défaut (08:00–20:00) éteignait
   // les écrans le soir sans que ce soit un choix — passage en 24h/24.
@@ -288,6 +289,8 @@ function migrate(db) {
   if (!modCols2.includes('surprise')) db.exec(`ALTER TABLE sig_modules ADD COLUMN surprise INTEGER NOT NULL DEFAULT 0`);
   // Filtre « filigrane / logo » superposé (surtout sur les photos) : none|filigrane|logo|nouveau.
   if (!modCols2.includes('watermark')) db.exec(`ALTER TABLE sig_modules ADD COLUMN watermark TEXT NOT NULL DEFAULT 'none'`);
+  // Élément « promotion » : sous-type d'offre (référence sig_promo_types, dynamique).
+  if (!modCols2.includes('promo_type')) db.exec(`ALTER TABLE sig_modules ADD COLUMN promo_type TEXT NOT NULL DEFAULT ''`);
 
   // Les anciennes bases limitaient le type par un CHECK (category|liaison) —
   // les types vivent désormais dans sig_element_types : on reconstruit la
@@ -322,7 +325,10 @@ function migrate(db) {
         cat_ref      TEXT NOT NULL DEFAULT '',
         product_ref  TEXT NOT NULL DEFAULT '',
         video        TEXT NOT NULL DEFAULT '',
-        dur          REAL NOT NULL DEFAULT 0
+        dur          REAL NOT NULL DEFAULT 0,
+        surprise     INTEGER NOT NULL DEFAULT 0,
+        watermark    TEXT NOT NULL DEFAULT 'none',
+        promo_type   TEXT NOT NULL DEFAULT ''
       );
       INSERT INTO sig_modules_new (${cols}) SELECT ${cols} FROM sig_modules;
       DROP TABLE sig_modules;
@@ -381,6 +387,20 @@ function migrate(db) {
     products   TEXT NOT NULL DEFAULT '[]',
     color      TEXT NOT NULL DEFAULT '#C97B4A',
     image      TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    active     INTEGER NOT NULL DEFAULT 1
+  );
+
+  -- Sous-types de promotion (dynamiques, pilotés par la base — rien en dur côté
+  -- interface). Happy hour, vente flash, bundle… Gérable en régie et importable
+  -- depuis l'ERP (menu « Promotions ») ensuite. Un élément « promotion » pointe
+  -- vers l'un de ces sous-types via sig_modules.promo_type.
+  CREATE TABLE IF NOT EXISTS sig_promo_types (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL DEFAULT '',
+    icon       TEXT NOT NULL DEFAULT '🏷️',
+    color      TEXT NOT NULL DEFAULT '#C0392B',
+    descr      TEXT NOT NULL DEFAULT '',
     sort_order INTEGER NOT NULL DEFAULT 0,
     active     INTEGER NOT NULL DEFAULT 1
   );
@@ -487,6 +507,12 @@ function ensureElementTypes(db) {
     { id: 'cover', icon: '◼', label: 'Plein écran (remplir)' },
     { id: 'contain', icon: '▭', label: 'Adapter (letterbox)' },
   ]);
+  const promoLayouts = JSON.stringify([
+    { id: 'band', icon: '▬', label: 'Bandeau — badge + offre' },
+    { id: 'center', icon: '▣', label: 'Centré — badge + offre' },
+    { id: 'hero-right', icon: '▥', label: 'Offre à gauche · photo produit à droite' },
+    { id: 'hero-left', icon: '▥', label: 'Photo produit à gauche · offre à droite' },
+  ]);
   // Type « média ciblé » : ajouté même sur une base existante (hors seed initial).
   const ensureMedia = () => {
     if (!db.prepare('SELECT 1 FROM sig_element_types WHERE id = ?').get('media')) {
@@ -495,8 +521,17 @@ function ensureElementTypes(db) {
         mediaLayouts, 0, 5);
     }
   };
+  // Type « promotion » : ajouté même sur une base existante (hors seed initial).
+  // Le sous-type (happy hour, flash, bundle…) vient de la table sig_promo_types.
+  const ensurePromotion = () => {
+    if (!db.prepare('SELECT 1 FROM sig_element_types WHERE id = ?').get('promotion')) {
+      insType.run('promotion', 'Promotion — offre', '🏷️',
+        'Met en avant une offre commerciale (happy hour, vente flash, bundle, achetez X obtenez Y, remise planifiée, bon d\'achat…). Le sous-type est piloté par la base (menu Promotions).',
+        promoLayouts, 0, 6);
+    }
+  };
   const n = db.prepare('SELECT COUNT(*) AS n FROM sig_element_types').get().n;
-  if (n > 0) { ensureMedia(); return; }
+  if (n > 0) { ensureMedia(); ensurePromotion(); return; }
   const catLayouts = [
     { id: 'illo-right', icon: '▤', label: 'Texte à gauche · illustration à droite' },
     { id: 'illo-left', icon: '▤', label: 'Texte à droite · illustration à gauche' },
@@ -526,6 +561,68 @@ function ensureElementTypes(db) {
   ];
   for (const t of types) insType.run(t.id, t.label, t.icon, t.descr, JSON.stringify(t.layouts), t.hasItems, t.sort);
   ensureMedia();
+  ensurePromotion();
+}
+
+// ---------------------------------------------------------------------------
+// Sous-types de promotion — table dynamique (rien en dur côté interface). Au
+// premier lancement, elle est amorcée avec les cas courants (happy hour, vente
+// flash, bundle, achetez X obtenez Y, remise planifiée, bon d'achat) ; la régie
+// peut ensuite les modifier, et l'ERP (menu « Promotions ») les alimenter.
+function ensurePromoTypes(db) {
+  const n = db.prepare('SELECT COUNT(*) AS n FROM sig_promo_types').get().n;
+  if (n > 0) return;
+  const ins = db.prepare('INSERT INTO sig_promo_types(id, name, icon, color, descr, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, 1)');
+  const seed = [
+    ['happy-hour', 'Happy hour', '🕒', '#8E44AD', 'Réduction sur un créneau horaire précis (ex. 16h–18h).'],
+    ['flash', 'Vente flash', '⚡', '#E67E22', 'Offre à durée très limitée, forte remise.'],
+    ['bundle', 'Bundle de produits', '🎁', '#16A085', 'Lot de produits vendus ensemble à prix avantageux.'],
+    ['bxgy', 'Achetez X, obtenez Y', '➕', '#2980B9', 'Ex. 2 achetés = 1 offert.'],
+    ['scheduled', 'Remise planifiée', '📅', '#C0392B', 'Remise sur une période datée (du … au …).'],
+    ['voucher', "Bon d'achat", '🎟️', '#D35400', "Bon ou coupon à valoir sur un prochain achat."],
+  ];
+  seed.forEach((s, i) => ins.run(s[0], s[1], s[2], s[3], s[4], i));
+}
+
+export function loadPromoTypes() {
+  return getDb().prepare('SELECT * FROM sig_promo_types ORDER BY sort_order, name').all().map((t) => ({
+    id: t.id, name: t.name, icon: t.icon, color: t.color, descr: t.descr,
+    active: !!t.active,
+  }));
+}
+
+export function promoTypeById(id) {
+  if (!id) return null;
+  const t = getDb().prepare('SELECT * FROM sig_promo_types WHERE id = ?').get(id);
+  return t ? { id: t.id, name: t.name, icon: t.icon, color: t.color, descr: t.descr, active: !!t.active } : null;
+}
+
+// Remplace l'ensemble des sous-types de promotion (édition en régie). Les
+// éléments « promotion » qui pointaient vers un sous-type supprimé gardent leur
+// identifiant (résolu en repli neutre à l'affichage) — aucune donnée perdue.
+export function savePromoTypes(list) {
+  const db = getDb();
+  const rows = (Array.isArray(list) ? list : [])
+    .map((t) => ({
+      id: String(t.id || '').trim(),
+      name: String(t.name || '').trim(),
+      icon: String(t.icon || '🏷️').trim() || '🏷️',
+      color: /^#[0-9a-fA-F]{3,8}$/.test(String(t.color || '')) ? t.color : '#C0392B',
+      descr: String(t.descr || '').trim(),
+      active: t.active === false ? 0 : 1,
+    }))
+    .filter((t) => t.id && t.name);
+  db.exec('BEGIN');
+  try {
+    db.exec('DELETE FROM sig_promo_types');
+    const ins = db.prepare('INSERT OR REPLACE INTO sig_promo_types(id, name, icon, color, descr, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    rows.forEach((t, i) => ins.run(t.id, t.name, t.icon, t.color, t.descr, i, t.active));
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+  return loadPromoTypes();
 }
 
 export function loadElementTypes() {
@@ -1306,6 +1403,8 @@ export function loadModules() {
   const catProds = db.prepare('SELECT * FROM sig_products WHERE category_id = ? ORDER BY sort_order');
   const oneProd = db.prepare('SELECT * FROM sig_products WHERE id = ?');
   const prodItem = (p) => ({ name: p.name, price: p.price, img: p.img, src: p.src, active: !!p.active, productId: p.id });
+  // Sous-types de promotion résolus une fois (badge : icône · couleur · libellé).
+  const promoTypes = new Map(db.prepare('SELECT * FROM sig_promo_types').all().map((t) => [t.id, t]));
   return mods.map((m) => {
     // Élément lié au catalogue : ses lignes viennent de la table produits
     // (toujours à jour) — sinon, les items propres à l'élément.
@@ -1336,6 +1435,15 @@ export function loadModules() {
       surprise: !!m.surprise,
       watermark: m.watermark || 'none',
       dur: m.dur || 0,
+      promoType: m.promo_type || '',
+      // Badge résolu pour l'affichage (icône · couleur · libellé du sous-type).
+      promo: (() => {
+        if (m.type !== 'promotion') return undefined;
+        const t = promoTypes.get(m.promo_type);
+        return t
+          ? { type: t.id, name: t.name, icon: t.icon, color: t.color }
+          : { type: m.promo_type || '', name: 'Offre', icon: '🏷️', color: '#C0392B' };
+      })(),
       tag: { enabled: !!m.tag_enabled, label: m.tag_label, img: m.tag_img },
       schedule: { days: JSON.parse(m.sched_days).map(Boolean), from: m.sched_from, to: m.sched_to },
       pos: { titleY: 0, listX: 0, listY: 0, illoX: 0, illoY: 0, illoScale: 1, ...JSON.parse(m.pos || '{}') },
@@ -1398,8 +1506,8 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
     const insMod = db.prepare(`INSERT INTO sig_modules
       (id, type, name, sub, layout, motion, motion_title, motion_list, motion_illo,
        tag_enabled, tag_label, tag_img, sched_days, sched_from, sched_to, pos, sort_order, lib_tag,
-       cat_ref, product_ref, video, surprise, watermark, dur, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
+       cat_ref, product_ref, video, surprise, watermark, dur, promo_type, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
     const insItem = db.prepare(`INSERT INTO sig_module_items
       (module_id, position, name, price, img, src, active) VALUES (?, ?, ?, ?, ?, ?, ?)`);
     // Les types valides viennent de la table sig_element_types (rien en dur).
@@ -1418,7 +1526,8 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
         String(m.catRef || ''), String(m.productRef || ''), String(m.video || ''),
         m.surprise ? 1 : 0,
         ['filigrane', 'logo', 'nouveau'].includes(m.watermark) ? m.watermark : 'none',
-        Number.isFinite(parseFloat(m.dur)) ? Math.max(0, Math.min(120, parseFloat(m.dur))) : 0
+        Number.isFinite(parseFloat(m.dur)) ? Math.max(0, Math.min(120, parseFloat(m.dur))) : 0,
+        String(m.promoType || '')
       );
       // Un élément lié au catalogue ne stocke pas d'items propres.
       if (!m.catRef && !m.productRef) {

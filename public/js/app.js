@@ -114,6 +114,7 @@ class App extends Component {
     fleet: [],
     library: [],
     elementTypes: [], addPicker: false, openSec: 'items',
+    promoTypes: [], promoDraft: null, promoDirty: false, promoBusy: false, promoSavedAt: 0,
     catalog: { categories: [], products: [] },
     catDraft: null, catDirty: false, catSel: '', catSaving: false, langs: [], catLang: 'fr',
     pwaForm: null, pwaBusy: null, pwaResult: null,
@@ -195,6 +196,8 @@ class App extends Component {
       const et = await api('GET', '/element-types').catch(() => ({ types: [] }));
       const cat = await api('GET', '/catalog').catch(() => ({ categories: [], products: [] }));
       const lg = await api('GET', '/langs').catch(() => ({ langs: [{ id: 'fr', label: 'Français' }] }));
+      // Sous-types de promotion (happy hour, flash, bundle…) : dynamiques, en base.
+      const pt = await api('GET', '/promo-types').catch(() => ({ promoTypes: [] }));
       const pwa = await api('GET', '/pwa-config').catch(() => null);
       const plan = await api('GET', '/plan').catch(() => ({ windows: [], byStore: {} }));
       const playlists = ((Array.isArray(st.playlists) && st.playlists.length)
@@ -208,6 +211,7 @@ class App extends Component {
         library: st.modules,
         elementTypes: et.types || [],
         langs: lg.langs || [{ id: 'fr', label: 'Français' }],
+        promoTypes: pt.promoTypes || [],
         pwaForm: pwa ? {
           host: pwa.host, port: pwa.port, db: pwa.db, user: pwa.user,
           password: '', hasPassword: !!pwa.hasPassword,
@@ -311,18 +315,29 @@ class App extends Component {
   // Un élément lié au catalogue (⛓) tire ses lignes EN DIRECT de la table
   // produits — noms, prix (y compris par magasin côté serveur) et actif/inactif
   // suivent instantanément, sans dépendre de l'instantané pris au moment du lien.
+  // Badge de promotion résolu pour l'aperçu (icône · couleur · libellé du
+  // sous-type), depuis la liste dynamique sig_promo_types.
+  promoBadge(m) {
+    if (!m || m.type !== 'promotion') return undefined;
+    const t = (this.state.promoTypes || []).find((x) => x.id === m.promoType);
+    return t
+      ? { type: t.id, name: t.name, icon: t.icon, color: t.color }
+      : { type: m.promoType || '', name: 'Offre', icon: '🏷️', color: '#C0392B' };
+  }
   resolveMod(m) {
+    // Élément « promotion » : annote le badge du sous-type pour l'aperçu.
+    const promo = this.promoBadge(m);
     // Élément « surprise » : on annote le nombre de vidéos du dossier pour l'aperçu.
     if (m && m.surprise && !m.catRef && !m.productRef) {
-      return { ...m, surpriseCount: (this.state.surpriseVideos || []).length };
+      return { ...m, promo, surpriseCount: (this.state.surpriseVideos || []).length };
     }
-    if (!m || (!m.catRef && !m.productRef)) return m;
+    if (!m || (!m.catRef && !m.productRef)) return promo ? { ...m, promo } : m;
     const prods = this.state.catalog.products || [];
     const toItem = (p) => ({ name: p.name, price: p.price, img: p.img, src: p.src, active: p.active !== false, productId: p.id });
     let items;
     if (m.catRef) items = prods.filter((p) => p.categoryId === m.catRef).map(toItem);
     else { const p = prods.find((x) => x.id === m.productRef); items = p ? [toItem(p)] : []; }
-    return { ...m, items };
+    return { ...m, items, promo };
   }
   activeItems(m) { return rActiveItems(this.resolveMod(m)); }
   moduleDur(m) { return rModuleDur(this.resolveMod(m), this.state.secPerLine); }
@@ -773,6 +788,44 @@ class App extends Component {
     } catch (e) { this.setState({ seasonsBusy: false }); this.showToast(`Erreur : ${e.message}`); }
   }
   openSeasons() { this.setState({ view: 'seasons' }); if (!this.state.seasons.length) this.loadSeasons(); this.loadMediaLib(); this.loadProdMoments(); }
+
+  // ---- promotions : sous-types dynamiques (happy hour, flash, bundle…) ------
+  async loadPromoTypes() {
+    try { const r = await api('GET', '/promo-types'); this.setState({ promoTypes: r.promoTypes || [] }); }
+    catch { /* indisponible : garde l'état courant */ }
+  }
+  openPromotions() {
+    const draft = JSON.parse(JSON.stringify(this.state.promoTypes || []));
+    this.setState({ view: 'promotions', promoDraft: draft, promoDirty: false });
+  }
+  setPromoDraft(mut) {
+    const arr = JSON.parse(JSON.stringify(this.state.promoDraft || this.state.promoTypes || []));
+    mut(arr);
+    this.setState({ promoDraft: arr, promoDirty: true });
+  }
+  addPromoType() {
+    this.setPromoDraft((a) => a.push({ id: 'pt' + uid(), name: 'Nouvelle promotion', icon: '🏷️', color: '#C0392B', descr: '', active: true }));
+  }
+  updatePromoType(id, patch) { this.setPromoDraft((a) => { const t = a.find((x) => x.id === id); if (t) Object.assign(t, patch); }); }
+  delPromoType(id) { this.setPromoDraft((a) => { const i = a.findIndex((x) => x.id === id); if (i >= 0) a.splice(i, 1); }); }
+  movePromoType(id, dir) {
+    this.setPromoDraft((a) => {
+      const i = a.findIndex((x) => x.id === id); const j = i + dir;
+      if (i < 0 || j < 0 || j >= a.length) return;
+      const [row] = a.splice(i, 1); a.splice(j, 0, row);
+    });
+  }
+  async savePromoTypesDraft() {
+    if (this.state.promoBusy) return;
+    const list = this.state.promoDraft || [];
+    if (list.some((t) => !String(t.name || '').trim())) { this.showToast('Chaque promotion a besoin d\'un nom'); return; }
+    this.setState({ promoBusy: true });
+    try {
+      const r = await api('PUT', '/promo-types', { promoTypes: list });
+      this.setState({ promoBusy: false, promoTypes: r.promoTypes || [], promoDraft: JSON.parse(JSON.stringify(r.promoTypes || [])), promoDirty: false, promoSavedAt: Date.now() });
+      this.showToast('Promotions enregistrées ✓');
+    } catch (e) { this.setState({ promoBusy: false }); this.showToast(`Erreur : ${e.message}`); }
+  }
 
   // ---- périodes de vente : produit × moment (matin/midi/aprem + exception) --
   async loadProdMoments() {
@@ -1663,6 +1716,7 @@ class App extends Component {
     const isCat = m.type === 'category', isLia = m.type === 'liaison';
     const isProduit = m.type === 'produit', isFilmEl = m.type === 'film', isAnim = m.type === 'animation';
     const isMedia = m.type === 'media';
+    const isPromo = m.type === 'promotion';
     const selType = this.elementTypeOf(m);
     const total = this.total();
     const { m: playM, lt } = this.activeInScope();
@@ -2221,6 +2275,10 @@ class App extends Component {
         arr.push(crumb('Compositeur', () => this.setView('composer'), false));
         arr.push(crumb('Périodes de l\'année', null, false));
         arr.push(crumb(`${(st.seasons || []).length} période(s)${st.seasonsDirty ? ' · non enregistrées' : ''}`, null, true));
+      } else if (st.view === 'promotions') {
+        arr.push(crumb('Compositeur', () => this.setView('composer'), false));
+        arr.push(crumb('Promotions', null, false));
+        arr.push(crumb(`${(st.promoDraft || st.promoTypes || []).length} type(s)${st.promoDirty ? ' · non enregistrés' : ''}`, null, true));
       } else if (st.view === 'planning') {
         arr.push(crumb('Compositeur', () => this.setView('composer'), false));
         arr.push(crumb('Planning hebdo', null, false));
@@ -2310,6 +2368,27 @@ class App extends Component {
       wsTable: st.wsTable, onWsTable: (e) => this.setState({ wsTable: e.target.value }),
       wsCandidates: st.wsCandidates || [], useWsCandidate: (t) => this.setState({ wsTable: t }),
       wsInspected: st.wsInspected || [],
+      // -- promotions (sous-types dynamiques) --
+      promoDirty: st.promoDirty, promoBusy: st.promoBusy,
+      promoCount: (st.promoDraft || st.promoTypes || []).length,
+      addPromoType: () => this.addPromoType(), savePromoTypes: () => this.savePromoTypesDraft(),
+      promoRows: (st.promoDraft || st.promoTypes || []).map((t, i, arr) => {
+        // Nombre d'éléments « promotion » de la bibliothèque qui utilisent ce sous-type.
+        const used = (st.library || []).filter((m) => m.type === 'promotion' && m.promoType === t.id).length;
+        return {
+          id: t.id, name: t.name, icon: t.icon || '🏷️', color: t.color || '#C0392B',
+          descr: t.descr || '', active: t.active !== false, used,
+          isFirst: i === 0, isLast: i === arr.length - 1,
+          onName: (e) => this.updatePromoType(t.id, { name: e.target.value }),
+          onIcon: (e) => this.updatePromoType(t.id, { icon: e.target.value }),
+          onColor: (e) => this.updatePromoType(t.id, { color: e.target.value }),
+          onDescr: (e) => this.updatePromoType(t.id, { descr: e.target.value }),
+          toggleActive: () => this.updatePromoType(t.id, { active: t.active === false }),
+          up: () => this.movePromoType(t.id, -1),
+          down: () => this.movePromoType(t.id, 1),
+          del: () => { if (used === 0 || window.confirm(`${used} élément(s) utilisent « ${t.name} ». Supprimer quand même ce sous-type ?`)) this.delPromoType(t.id); },
+        };
+      }),
       saleMoments, prodMomentCats, prodMomentsCurrent: st.prodMomentsCurrent,
       prodMomentsDirty: st.prodMomentsDirty, prodMomentsBusy: st.prodMomentsBusy,
       saveProdMoments: () => this.saveProdMoments(),
@@ -2347,6 +2426,9 @@ class App extends Component {
       isComposerView: st.view === 'composer', isFleetView: st.view === 'fleet', isSettingsView: st.view === 'settings',
       isProductsView: st.view === 'products', isPlanningView: st.view === 'planning',
       isSeasonsView: st.view === 'seasons', isHomeView: st.view === 'home',
+      isPromotionsView: st.view === 'promotions',
+      setViewPromotions: () => this.openPromotions(),
+      tabPromotionsStyle: stTab + (st.view === 'promotions' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       setViewHome: () => this.openHome(),
       tabHomeStyle: stTab + (st.view === 'home' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       setViewComposer: () => this.setView('composer'),
@@ -2393,8 +2475,22 @@ class App extends Component {
       deployStyle: `padding:11px 22px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:${tgtCount && !st.deploying ? 'pointer' : 'not-allowed'};${tgtCount ? 'background:#8D1D2C;color:#fff;' : 'background:rgba(35,34,32,0.10);color:#8A847C;'}opacity:${st.deploying ? 0.7 : 1};`,
       hasToast: !!st.toast, toast: st.toast,
       playlistEmpty: st.playlist.length === 0,
-      isCategory: isCat, isLiaison: isLia, isProduit, isFilmEl, isAnim, isMedia,
+      isCategory: isCat, isLiaison: isLia, isProduit, isFilmEl, isAnim, isMedia, isPromo,
       mediaAgencyUrl: new URL('agence', location.href).toString(),
+      // -- promotion : sous-type dynamique + produit lié (mises en page hero) --
+      promoName: isPromo ? this.promoBadge(m).name : '',
+      promoIcon: isPromo ? this.promoBadge(m).icon : '🏷️',
+      promoColor: isPromo ? this.promoBadge(m).color : '#C0392B',
+      promoTypeOptions: (st.promoTypes || []).filter((t) => t.active !== false || t.id === m.promoType).map((t) => ({
+        id: t.id, label: `${t.icon || '🏷️'} ${t.name}`,
+        active: (m.promoType || '') === t.id,
+        pick: () => this.setSelField('promoType', t.id),
+      })),
+      curPromoType: m.promoType || '',
+      hasPromoTypes: (st.promoTypes || []).some((t) => t.active !== false),
+      promoUsesProduct: isPromo && (m.layout === 'hero-right' || m.layout === 'hero-left'),
+      goPromoTypes: () => this.openPromotions(),
+      promoSummary: isPromo ? (this.promoBadge(m).name + (m.name ? ` · ${m.name}` : '')) : '',
       // filtre filigrane / logo (surtout sur les photos)
       hasWatermark: isCat || isProduit || isMedia || isAnim,
       watermark: m.watermark || 'none',
@@ -2403,8 +2499,8 @@ class App extends Component {
         { id: 'none', label: 'Aucun' }, { id: 'filigrane', label: 'Filigrane logo' },
         { id: 'logo', label: 'Logo (coin)' }, { id: 'nouveau', label: 'Ruban « Nouveau »' },
       ].map((o) => ({ ...o, active: (m.watermark || 'none') === o.id, pick: () => this.setSelField('watermark', o.id) })),
-      hasSub: isLia || isAnim || isProduit,
-      hasDur: isProduit || isFilmEl || isAnim || isMedia,
+      hasSub: isLia || isAnim || isProduit || isPromo,
+      hasDur: isProduit || isFilmEl || isAnim || isMedia || isPromo,
       selName: m.name,
       selTypeLabel: selType ? selType.label : (isLia ? 'Liaison' : 'Catégorie'),
       selTypeBadge: `display:inline-flex;align-items:center;padding:4px 11px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;${isLia ? 'background:rgba(35,34,32,0.10);color:#8A847C;' : 'background:rgba(141,29,44,0.12);color:#8D1D2C;'}`,
@@ -2848,6 +2944,7 @@ class App extends Component {
         <button onClick=${v.setViewHome} style=${v.tabHomeStyle}>Accueil</button>
         <button onClick=${v.setViewComposer} style=${v.tabComposerStyle}>Compositeur</button>
         <button onClick=${v.setViewProducts} style=${v.tabProductsStyle}>Produits</button>
+        <button onClick=${v.setViewPromotions} style=${v.tabPromotionsStyle}>Promotions</button>
         <button onClick=${v.setViewSeasons} style=${v.tabSeasonsStyle}>Périodes</button>
         <button onClick=${v.setViewPlanning} style=${v.tabPlanningStyle}>Planning</button>
         <button onClick=${v.setViewFleet} style=${v.tabFleetStyle}>Réseau & supervision</button>
@@ -3320,6 +3417,53 @@ class App extends Component {
             `)}
           </div>
         ` : html`<p style="margin:0;font-size:12.5px;color:#8A847C;">Aucun média sur le serveur pour l'instant. Les agences en ajoutent via l'espace Agence (ou dépose-les dans <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">public/media/</code> par SFTP).</p>`}
+      </div>
+    </div>
+  </div>
+  `}
+
+  ${v.isPromotionsView && html`
+  <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;">
+    <div style="margin:0;display:flex;flex-direction:column;gap:16px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+        <div>
+          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Promotions</h2>
+          <p style="margin:0;font-size:12.5px;color:#8A847C;max-width:820px;">Les <strong>sous-types de promotion</strong> (happy hour, vente flash, bundle, achetez X obtenez Y, remise planifiée, bon d'achat…) sont <strong>gérés ici</strong>, pas codés en dur. Chaque type porte une icône, une couleur et un libellé qui composent le <strong>badge</strong> affiché à l'écran. Pour diffuser une offre, ajoute un élément <strong>« Promotion — offre » 🏷️</strong> dans le Compositeur et choisis son sous-type. Ces types pourront être <strong>alimentés depuis l'ERP</strong> (menu Promotions) dans un second temps.</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <button onClick=${v.addPromoType} style="padding:9px 15px;font-size:12.5px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;cursor:pointer;">+ Ajouter une promotion</button>
+          <button onClick=${v.savePromoTypes} disabled=${!v.promoDirty || v.promoBusy} style="padding:9px 18px;font-size:13px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.promoDirty && !v.promoBusy ? 'pointer' : 'not-allowed'};background:${v.promoDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.promoDirty ? '#fff' : '#8A847C'};">${v.promoBusy ? 'Enregistrement…' : (v.promoDirty ? 'Enregistrer' : '✓ Enregistré')}</button>
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${v.promoCount} sous-type(s) de promotion</h3>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          ${v.promoRows.map((t) => html`
+            <div style="border:1px solid rgba(35,34,32,0.1);border-radius:12px;padding:13px 15px;background:${t.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};opacity:${t.active ? 1 : 0.72};">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span style="display:inline-flex;align-items:center;gap:7px;padding:5px 13px 5px 11px;border-radius:999px;font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:#fff;background:${t.color};flex:0 0 auto;"><span style="font-size:15px;line-height:1;">${t.icon}</span>${t.name || 'Sans nom'}</span>
+                <input value=${t.icon} onInput=${t.onIcon} maxlength="4" title="Icône (emoji)" style="width:56px;text-align:center;padding:9px 6px;font-size:16px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
+                <input value=${t.name} onInput=${t.onName} placeholder="Nom (ex. Happy hour)" style="flex:1 1 180px;min-width:0;padding:9px 11px;font-size:14px;font-weight:600;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#8A847C;">Couleur <input type="color" value=${t.color} onInput=${t.onColor} title="Couleur du badge" style="width:34px;height:30px;padding:0;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;" /></label>
+                <button onClick=${t.toggleActive} title=${t.active ? 'Actif — proposé dans le Compositeur' : 'Inactif — masqué du choix'} style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid rgba(35,34,32,0.12);cursor:pointer;background:${t.active ? 'rgba(46,110,78,0.12)' : 'rgba(141,29,44,0.08)'};color:${t.active ? '#2E6E4E' : '#8D1D2C'};font-size:13px;">${t.active ? '✓' : '⃠'}</button>
+                <span style="display:flex;align-items:center;gap:4px;flex:0 0 auto;">
+                  <button onClick=${t.up} disabled=${t.isFirst} title="Monter" style="width:30px;height:30px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:${t.isFirst ? 'not-allowed' : 'pointer'};font-size:12px;opacity:${t.isFirst ? 0.4 : 1};">↑</button>
+                  <button onClick=${t.down} disabled=${t.isLast} title="Descendre" style="width:30px;height:30px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:${t.isLast ? 'not-allowed' : 'pointer'};font-size:12px;opacity:${t.isLast ? 0.4 : 1};">↓</button>
+                  <button onClick=${t.del} title="Supprimer ce sous-type" style="width:30px;height:30px;border-radius:8px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:pointer;font-size:13px;color:#8D1D2C;">✕</button>
+                </span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;padding-left:2px;">
+                <input value=${t.descr} onInput=${t.onDescr} placeholder="Description courte (ex. Réduction sur un créneau horaire)" style="flex:1 1 320px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;color:#4A4640;" />
+                <span style="font-size:11px;color:${t.used ? '#6E4A2B' : '#B8B2A8'};">${t.used ? `${t.used} élément(s) l'utilisent` : 'non utilisé'}</span>
+              </div>
+            </div>
+          `)}
+          ${!v.promoRows.length && html`<p style="margin:0;font-size:12.5px;color:#8A847C;padding:8px 0;">Aucun sous-type de promotion. « + Ajouter une promotion » pour en créer un.</p>`}
+        </div>
+        <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Supprimer un sous-type ne casse pas les éléments qui l'utilisaient : ils retombent sur un badge neutre « Offre » jusqu'à ce que tu leur en réassignes un. L'ordre ci-dessus est celui proposé dans le Compositeur.</p>
       </div>
     </div>
   </div>
@@ -3862,6 +4006,51 @@ class App extends Component {
               <p style="margin:0;font-size:13px;line-height:1.6;color:#4A4640;max-width:420px;">Cet élément diffuse <strong>automatiquement</strong> une vidéo ou photo de la <strong>médiathèque agence</strong>, <strong>tirée au sort</strong> parmi celles taguées pour le <strong>moment courant</strong> (matin/midi/soir, selon les fenêtres du planning) et une <strong>saison active</strong>. La pioche change à chaque diffusion — parfait pour surprendre le client tout en restant de saison.</p>
               <a href=${v.mediaAgencyUrl} target="_blank" style="font-size:13px;font-weight:600;color:#8D1D2C;">↗ Ouvrir l'espace Vidéo — Agence (upload et tags)</a>
               <p style="margin:0;font-size:11.5px;color:#8A847C;">Règle la <strong>durée</strong> à l'écran ci-dessus, et la <strong>mise en page</strong> (plein écran ou adapté). S'il n'y a aucun média éligible à l'instant, un écran repère « Média ciblé » s'affiche.</p>
+            </div>
+            </div>`}
+          </div>
+        `}
+
+        ${v.isPromo && html`
+          <div style=${secCard}>
+            ${secHead('promo', 'Type de promotion', v.promoSummary)}
+            ${secOpen('promo') && html`<div style=${secBody}>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
+              <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">Le sous-type vient de la base (happy hour, vente flash, bundle…) — modifiable dans <strong>Promotions</strong>. Renseigne l'accroche dans « Nom du module » et le détail dans « Sous-titre ».</p>
+              <button onClick=${v.goPromoTypes} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.25);border-radius:999px;cursor:pointer;">🏷️ Gérer les promotions</button>
+            </div>
+            ${v.hasPromoTypes ? html`
+              <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+                ${v.promoTypeOptions.map((o) => html`
+                  <button onClick=${o.pick} style="text-align:left;padding:11px 12px;font-size:13px;font-weight:600;border-radius:9px;cursor:pointer;${o.active ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.14);'}">${o.label}</button>
+                `)}
+              </div>
+              <div style="margin-top:12px;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.10);">
+                <span style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#fff;background:${v.promoColor};"><span style="font-size:15px;">${v.promoIcon}</span>${v.promoName}</span>
+                <span style="font-size:11.5px;color:#8A847C;">badge affiché à l'écran</span>
+              </div>
+            ` : html`
+              <div style="padding:12px 14px;border-radius:10px;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.2);font-size:12.5px;color:#8D1D2C;line-height:1.5;">Aucun sous-type de promotion actif. <button onClick=${v.goPromoTypes} style="background:none;border:none;padding:0;color:#8D1D2C;font-weight:700;text-decoration:underline;cursor:pointer;font-size:12.5px;">Créer un type de promotion →</button></div>
+            `}
+            ${v.promoUsesProduct && html`
+              <div style="margin-top:14px;">
+                <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:7px;">Produit mis en avant (photo + prix)</label>
+                <select value=${v.curProductRef} onChange=${v.onProductRef} style="width:100%;box-sizing:border-box;padding:11px 12px;font-size:14px;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#FBF8F2;cursor:pointer;">
+                  <option value="">— Aucun produit —</option>
+                  ${v.productOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
+                </select>
+              </div>
+            `}
+            </div>`}
+          </div>
+        `}
+
+        ${v.isPromo && html`
+          <div style=${secCard}>
+            ${secHead('motion', 'Mouvement', v.motionSummary)}
+            ${secOpen('motion') && html`<div style=${secBody}>
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+              ${v.motionSimple.map((o) => html`<button onClick=${o.pick} style=${o.style}>${o.label}</button>`)}
             </div>
             </div>`}
           </div>

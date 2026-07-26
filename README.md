@@ -149,6 +149,23 @@ Un magasin peut piloter plusieurs **zones d'affichage indépendantes**, gérées
   simple écran portrait est mis à l'échelle. API : `POST /stores/{id}/groups`, `POST /groups/{id}`,
   `DELETE /groups/{id}`, `POST /players/{id}/group`.
 
+### Promotions (offres commerciales)
+Une **promotion** est un **type d'élément** à part entière (`sig_element_types` → `promotion`),
+au même niveau que produit, liaison, animation… Dans le Compositeur : **＋ Élément →
+« Promotion — offre » 🏷️**. On y saisit l'accroche (titre), le détail (sous-titre) et on choisit
+un **sous-type**.
+
+- Les **sous-types** (`sig_promo_types`) sont **dynamiques, pilotés par la base** — rien en dur :
+  amorcés avec *happy hour, vente flash, bundle de produits, achetez X obtenez Y, remise planifiée,
+  bon d'achat*, puis **gérables en régie** dans l'onglet **Promotions** (icône, couleur, libellé,
+  ordre, actif/inactif). Chaque sous-type compose le **badge** affiché à l'écran.
+- À l'affichage, le module résout son badge (`m.promo = { name, icon, color }`) via
+  `loadModules()` — côté serveur ET dans l'aperçu régie. Mises en page : **bandeau** (fond aux
+  couleurs de l'offre), **centré**, ou **hero** (photo du produit lié + prix).
+- Supprimer un sous-type ne casse pas les éléments qui l'utilisaient : ils retombent sur un badge
+  neutre « Offre » jusqu'à réassignation. Ces sous-types pourront être **alimentés depuis l'ERP**
+  (menu Promotions) dans un second temps. API : `GET /promo-types`, `PUT /promo-types`.
+
 ### Paramètres
 URL du CMS, IP / hôte player, token — persistés en base. **« Tester la connexion (live) »**
 exécute côté serveur : ping TCP de l'hôte, `GET assignment`, `GET dataset prix`,
@@ -157,7 +174,7 @@ exécute côté serveur : ping TCP de l'hôte, `GET assignment`, `GET dataset pr
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + cycle complet — 47 tests
+npm test              # serveur jetable (BDD temporaire) + cycle complet — 49 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
 node test/live-test.js http://185.180.206.46/signage --password=… --mutate
@@ -179,6 +196,7 @@ session admin  : POST /api/v1/login · /logout · GET /me
                  POST /stores/{id}/groups · POST/DELETE /groups/{id}
                  POST /players/{id}/group (rattacher un écran à une zone)
                  GET /catalog · PUT /catalog (produits · prix · rupture)
+                 GET /promo-types · PUT /promo-types (sous-types de promotion)
                  POST /push-prices · POST /override · POST /test
                  GET /publications · POST /settings · GET /ping-host
 token player   : GET  /api/v1/players/{id}/assignment?token=…

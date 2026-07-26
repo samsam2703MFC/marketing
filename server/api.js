@@ -6,6 +6,7 @@ import {
   getDb, getSetting, setSetting, getIntSetting,
   loadModules, loadPlaylist, loadPlaylists, activePlaylistId, saveDraft, storeFormat, DB_PATH,
   loadElementTypes, loadCatalog, saveCatalog, applyStorePrices, applyStoreLang, applyStoreTokens, loadLangs,
+  loadPromoTypes, savePromoTypes,
   loadSeasons, saveSeasons, currentSeasons, currentMoment,
   loadMedia, addMediaRow, getMediaRow, delMediaRow,
   loadProductMoments, saveProductMoments, SALE_MOMENTS, currentSaleMoment,
@@ -757,6 +758,17 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
     // ---- types d'éléments & table produits (rien en dur : tout en base) ----
     if (req.method === 'GET' && path === '/element-types') return send(200, { types: loadElementTypes() });
     if (req.method === 'GET' && path === '/langs') return send(200, { langs: loadLangs() });
+
+    // ---- sous-types de promotion (dynamiques : happy hour, flash, bundle…) --
+    // Alimentent l'élément « promotion ». Gérables en régie, importables ERP.
+    if (req.method === 'GET' && path === '/promo-types') return send(200, { promoTypes: loadPromoTypes() });
+    if (req.method === 'PUT' && path === '/promo-types') {
+      const body = await readBody();
+      if (!Array.isArray(body.promoTypes)) return send(400, { error: 'promoTypes requis' });
+      const promoTypes = savePromoTypes(body.promoTypes);
+      scheduleMirror();
+      return send(200, { ok: true, promoTypes, savedAt: nowIso() });
+    }
 
     // ---- vidéos « surprise » (dossier serveur, piochées au hasard) ---------
     if (req.method === 'GET' && path === '/surprise') {
