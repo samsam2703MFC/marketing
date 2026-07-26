@@ -6,7 +6,7 @@ import {
   getDb, getSetting, setSetting, getIntSetting,
   loadModules, loadPlaylist, loadPlaylists, activePlaylistId, saveDraft, storeFormat, DB_PATH,
   loadElementTypes, loadCatalog, saveCatalog, applyStorePrices, applyStoreLang, applyStoreTokens, loadLangs,
-  loadPromoTypes, savePromoTypes,
+  loadPromoTypes, savePromoTypes, loadCampaigns, saveCampaigns,
   loadSeasons, saveSeasons, currentSeasons, currentMoment,
   loadMedia, addMediaRow, getMediaRow, delMediaRow,
   loadProductMoments, saveProductMoments, SALE_MOMENTS, currentSaleMoment,
@@ -768,6 +768,17 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       const promoTypes = savePromoTypes(body.promoTypes);
       scheduleMirror();
       return send(200, { ok: true, promoTypes, savedAt: nowIso() });
+    }
+
+    // ---- campagnes marketing (liste d'entités déposables comme item) --------
+    // Gérables en régie, importables depuis l'ERP ensuite.
+    if (req.method === 'GET' && path === '/campaigns') return send(200, { campaigns: loadCampaigns() });
+    if (req.method === 'PUT' && path === '/campaigns') {
+      const body = await readBody();
+      if (!Array.isArray(body.campaigns)) return send(400, { error: 'campaigns requis' });
+      const campaigns = saveCampaigns(body.campaigns);
+      scheduleMirror();
+      return send(200, { ok: true, campaigns, savedAt: nowIso() });
     }
 
     // ---- vidéos « surprise » (dossier serveur, piochées au hasard) ---------

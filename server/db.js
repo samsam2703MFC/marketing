@@ -291,6 +291,8 @@ function migrate(db) {
   if (!modCols2.includes('watermark')) db.exec(`ALTER TABLE sig_modules ADD COLUMN watermark TEXT NOT NULL DEFAULT 'none'`);
   // Élément « promotion » : sous-type d'offre (référence sig_promo_types, dynamique).
   if (!modCols2.includes('promo_type')) db.exec(`ALTER TABLE sig_modules ADD COLUMN promo_type TEXT NOT NULL DEFAULT ''`);
+  // Élément « campagne » : référence une campagne marketing (sig_campaigns).
+  if (!modCols2.includes('campaign_ref')) db.exec(`ALTER TABLE sig_modules ADD COLUMN campaign_ref TEXT NOT NULL DEFAULT ''`);
 
   // Les anciennes bases limitaient le type par un CHECK (category|liaison) —
   // les types vivent désormais dans sig_element_types : on reconstruit la
@@ -328,7 +330,8 @@ function migrate(db) {
         dur          REAL NOT NULL DEFAULT 0,
         surprise     INTEGER NOT NULL DEFAULT 0,
         watermark    TEXT NOT NULL DEFAULT 'none',
-        promo_type   TEXT NOT NULL DEFAULT ''
+        promo_type   TEXT NOT NULL DEFAULT '',
+        campaign_ref TEXT NOT NULL DEFAULT ''
       );
       INSERT INTO sig_modules_new (${cols}) SELECT ${cols} FROM sig_modules;
       DROP TABLE sig_modules;
@@ -403,6 +406,26 @@ function migrate(db) {
     descr      TEXT NOT NULL DEFAULT '',
     sort_order INTEGER NOT NULL DEFAULT 0,
     active     INTEGER NOT NULL DEFAULT 1
+  );
+
+  -- Campagnes marketing : entités listées (nom, portée produit/gamme, visuel,
+  -- accroche, période). Gérable en régie et importable depuis l'ERP ensuite.
+  -- L'utilisateur n'a qu'à les DÉPOSER comme item : un élément « campagne »
+  -- pointe vers l'une d'elles via sig_modules.campaign_ref, et son contenu
+  -- (nom, visuel, produit lié, dates) est résolu à l'affichage.
+  CREATE TABLE IF NOT EXISTS sig_campaigns (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL DEFAULT '',
+    scope       TEXT NOT NULL DEFAULT 'produit',
+    product_ref TEXT NOT NULL DEFAULT '',
+    theme       TEXT NOT NULL DEFAULT '',
+    image       TEXT NOT NULL DEFAULT '',
+    message     TEXT NOT NULL DEFAULT '',
+    date_from   TEXT NOT NULL DEFAULT '',
+    date_to     TEXT NOT NULL DEFAULT '',
+    color       TEXT NOT NULL DEFAULT '#8D1D2C',
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    active      INTEGER NOT NULL DEFAULT 1
   );
 
   -- Table de jointure produit ↔ période de vente (moment de la journée).
@@ -513,6 +536,12 @@ function ensureElementTypes(db) {
     { id: 'hero-right', icon: '▥', label: 'Offre à gauche · photo produit à droite' },
     { id: 'hero-left', icon: '▥', label: 'Photo produit à gauche · offre à droite' },
   ]);
+  const campaignLayouts = JSON.stringify([
+    { id: 'cover', icon: '◼', label: 'Visuel plein écran + accroche' },
+    { id: 'center', icon: '▣', label: 'Centré — nom + accroche' },
+    { id: 'hero-right', icon: '▥', label: 'Texte à gauche · visuel/produit à droite' },
+    { id: 'hero-left', icon: '▥', label: 'Visuel/produit à gauche · texte à droite' },
+  ]);
   // Type « média ciblé » : ajouté même sur une base existante (hors seed initial).
   const ensureMedia = () => {
     if (!db.prepare('SELECT 1 FROM sig_element_types WHERE id = ?').get('media')) {
@@ -530,8 +559,18 @@ function ensureElementTypes(db) {
         promoLayouts, 0, 6);
     }
   };
+  // Type « campagne marketing » : ajouté même sur une base existante. Le contenu
+  // vient d'une campagne listée dans la table sig_campaigns (menu Campagnes) —
+  // il suffit de choisir la campagne à diffuser.
+  const ensureCampaign = () => {
+    if (!db.prepare('SELECT 1 FROM sig_element_types WHERE id = ?').get('campagne')) {
+      insType.run('campagne', 'Campagne marketing', '📣',
+        'Diffuse une campagne marketing (produit ou gamme thématique) choisie dans la liste des campagnes (menu Campagnes). Visuel, accroche, produit lié et période sont portés par la campagne.',
+        campaignLayouts, 0, 7);
+    }
+  };
   const n = db.prepare('SELECT COUNT(*) AS n FROM sig_element_types').get().n;
-  if (n > 0) { ensureMedia(); ensurePromotion(); return; }
+  if (n > 0) { ensureMedia(); ensurePromotion(); ensureCampaign(); return; }
   const catLayouts = [
     { id: 'illo-right', icon: '▤', label: 'Texte à gauche · illustration à droite' },
     { id: 'illo-left', icon: '▤', label: 'Texte à droite · illustration à gauche' },
@@ -562,6 +601,7 @@ function ensureElementTypes(db) {
   for (const t of types) insType.run(t.id, t.label, t.icon, t.descr, JSON.stringify(t.layouts), t.hasItems, t.sort);
   ensureMedia();
   ensurePromotion();
+  ensureCampaign();
 }
 
 // ---------------------------------------------------------------------------
@@ -623,6 +663,66 @@ export function savePromoTypes(list) {
     throw e;
   }
   return loadPromoTypes();
+}
+
+// ---------------------------------------------------------------------------
+// Campagnes marketing — liste d'entités gérée en régie (et importable de l'ERP
+// ensuite). L'utilisateur les DÉPOSE simplement comme item (élément « campagne »
+// qui pointe vers l'une d'elles). Portée : produit (photo/prix depuis le
+// catalogue) ou gamme thématique (libellé de thème). En démo, deux exemples.
+const CAMPAIGN_SCOPES = new Set(['produit', 'gamme']);
+function campaignRow(c) {
+  return {
+    id: c.id, name: c.name, scope: CAMPAIGN_SCOPES.has(c.scope) ? c.scope : 'produit',
+    productRef: c.product_ref || '', theme: c.theme || '', image: c.image || '',
+    message: c.message || '', dateFrom: c.date_from || '', dateTo: c.date_to || '',
+    color: c.color || '#8D1D2C', active: !!c.active,
+  };
+}
+
+export function loadCampaigns() {
+  return getDb().prepare('SELECT * FROM sig_campaigns ORDER BY sort_order, name').all().map(campaignRow);
+}
+
+export function campaignById(id) {
+  if (!id) return null;
+  const c = getDb().prepare('SELECT * FROM sig_campaigns WHERE id = ?').get(id);
+  return c ? campaignRow(c) : null;
+}
+
+// Remplace l'ensemble des campagnes (édition en régie). Les éléments qui
+// pointaient vers une campagne supprimée gardent leur identifiant (résolu en
+// repli neutre à l'affichage) — aucune donnée perdue.
+export function saveCampaigns(list) {
+  const db = getDb();
+  const rows = (Array.isArray(list) ? list : [])
+    .map((c) => ({
+      id: String(c.id || '').trim(),
+      name: String(c.name || '').trim(),
+      scope: CAMPAIGN_SCOPES.has(c.scope) ? c.scope : 'produit',
+      productRef: String(c.productRef || '').trim(),
+      theme: String(c.theme || '').trim().slice(0, 120),
+      image: String(c.image || '').trim().slice(0, 2000),
+      message: String(c.message || '').trim().slice(0, 240),
+      dateFrom: String(c.dateFrom || '').trim().slice(0, 20),
+      dateTo: String(c.dateTo || '').trim().slice(0, 20),
+      color: /^#[0-9a-fA-F]{3,8}$/.test(String(c.color || '')) ? c.color : '#8D1D2C',
+      active: c.active === false ? 0 : 1,
+    }))
+    .filter((c) => c.id && c.name);
+  db.exec('BEGIN');
+  try {
+    db.exec('DELETE FROM sig_campaigns');
+    const ins = db.prepare(`INSERT OR REPLACE INTO sig_campaigns
+      (id, name, scope, product_ref, theme, image, message, date_from, date_to, color, sort_order, active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    rows.forEach((c, i) => ins.run(c.id, c.name, c.scope, c.productRef, c.theme, c.image, c.message, c.dateFrom, c.dateTo, c.color, i, c.active));
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+  return loadCampaigns();
 }
 
 export function loadElementTypes() {
@@ -1357,6 +1457,13 @@ function seed(db) {
   insPlayer.run('p4', 'st3', 'Vitrine — 55″', 'Android · TV-Box Pro', 1, 'Paysage', 'plyr_7E2D91AC', 6, 6, 21, 100, 'Tartes · Rhubarbe (cache local)', '20 Go libres', '—', now);
   insPlayer.run('p5', 'st3', 'Comptoir — 43″', 'Android · MediaBox 4K', 0, 'Paysage', 'plyr_C4019BB7', 6, 7, 22, 38, '—', '0,4 Go libres', '58°C', now);
 
+  // Deux campagnes marketing d'exemple (démo) : une gamme thématique, un produit.
+  const insCamp = db.prepare(`INSERT INTO sig_campaigns
+    (id, name, scope, product_ref, theme, image, message, date_from, date_to, color, sort_order, active)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`);
+  insCamp.run('cmp1', 'Rentrée gourmande', 'gamme', '', 'Viennoiseries', '', 'La rentrée en douceur', '01/09', '30/09', '#C97B4A', 0);
+  insCamp.run('cmp2', 'Notre signature', 'produit', 'pr1', '', '', 'Le Brookie fait maison', '', '', '#8D1D2C', 1);
+
   for (const [k, v] of Object.entries({ version: '7', data_ver: '23', srv_token: 'plyr_9F3A2C7E' })) setSetting(k, v);
 }
 
@@ -1384,6 +1491,8 @@ function clearDemoSeed(db) {
     db.prepare(`DELETE FROM sig_playlist_items WHERE module_id IN (${q(demoModules)})`).run(...demoModules);
     db.prepare(`DELETE FROM sig_playlist WHERE module_id IN (${q(demoModules)})`).run(...demoModules);
     db.prepare(`DELETE FROM sig_modules WHERE id IN (${q(demoModules)})`).run(...demoModules);
+    // Campagnes marketing de démonstration.
+    db.prepare(`DELETE FROM sig_campaigns WHERE id IN ('cmp1', 'cmp2')`).run();
     // Le srv_token pointait sur un player démo : on le neutralise s'il l'était.
     if (getSetting('srv_token') === 'plyr_9F3A2C7E') setSetting('srv_token', '');
     setSetting('mig_clear_demo', '1');
@@ -1405,11 +1514,19 @@ export function loadModules() {
   const prodItem = (p) => ({ name: p.name, price: p.price, img: p.img, src: p.src, active: !!p.active, productId: p.id });
   // Sous-types de promotion résolus une fois (badge : icône · couleur · libellé).
   const promoTypes = new Map(db.prepare('SELECT * FROM sig_promo_types').all().map((t) => [t.id, t]));
+  // Campagnes marketing résolues une fois (contenu déposé comme item).
+  const campaigns = new Map(db.prepare('SELECT * FROM sig_campaigns').all().map((c) => [c.id, campaignRow(c)]));
   return mods.map((m) => {
+    // Campagne : contenu porté par la campagne référencée (produit lié éventuel).
+    const campaign = m.type === 'campagne' ? (campaigns.get(m.campaign_ref) || null) : null;
     // Élément lié au catalogue : ses lignes viennent de la table produits
     // (toujours à jour) — sinon, les items propres à l'élément.
     let items;
-    if (m.cat_ref) items = catProds.all(m.cat_ref).map(prodItem);
+    if (campaign) {
+      // Une campagne « produit » tire la photo/le prix du produit lié.
+      const p = campaign.productRef ? oneProd.get(campaign.productRef) : null;
+      items = p ? [prodItem(p)] : [];
+    } else if (m.cat_ref) items = catProds.all(m.cat_ref).map(prodItem);
     else if (m.product_ref) {
       const p = oneProd.get(m.product_ref);
       items = p ? [prodItem(p)] : [];
@@ -1444,6 +1561,11 @@ export function loadModules() {
           ? { type: t.id, name: t.name, icon: t.icon, color: t.color }
           : { type: m.promo_type || '', name: 'Offre', icon: '🏷️', color: '#C0392B' };
       })(),
+      campaignRef: m.campaign_ref || '',
+      // Campagne résolue pour l'affichage (nom · portée · visuel · thème · dates).
+      campaign: m.type === 'campagne'
+        ? (campaign || { id: m.campaign_ref || '', name: 'Campagne', scope: 'produit', productRef: '', theme: '', image: '', message: '', dateFrom: '', dateTo: '', color: '#8D1D2C', active: true })
+        : undefined,
       tag: { enabled: !!m.tag_enabled, label: m.tag_label, img: m.tag_img },
       schedule: { days: JSON.parse(m.sched_days).map(Boolean), from: m.sched_from, to: m.sched_to },
       pos: { titleY: 0, listX: 0, listY: 0, illoX: 0, illoY: 0, illoScale: 1, ...JSON.parse(m.pos || '{}') },
@@ -1506,8 +1628,8 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
     const insMod = db.prepare(`INSERT INTO sig_modules
       (id, type, name, sub, layout, motion, motion_title, motion_list, motion_illo,
        tag_enabled, tag_label, tag_img, sched_days, sched_from, sched_to, pos, sort_order, lib_tag,
-       cat_ref, product_ref, video, surprise, watermark, dur, promo_type, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
+       cat_ref, product_ref, video, surprise, watermark, dur, promo_type, campaign_ref, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
     const insItem = db.prepare(`INSERT INTO sig_module_items
       (module_id, position, name, price, img, src, active) VALUES (?, ?, ?, ?, ?, ?, ?)`);
     // Les types valides viennent de la table sig_element_types (rien en dur).
@@ -1527,10 +1649,10 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
         m.surprise ? 1 : 0,
         ['filigrane', 'logo', 'nouveau'].includes(m.watermark) ? m.watermark : 'none',
         Number.isFinite(parseFloat(m.dur)) ? Math.max(0, Math.min(120, parseFloat(m.dur))) : 0,
-        String(m.promoType || '')
+        String(m.promoType || ''), String(m.campaignRef || '')
       );
-      // Un élément lié au catalogue ne stocke pas d'items propres.
-      if (!m.catRef && !m.productRef) {
+      // Un élément lié au catalogue (ou une campagne) ne stocke pas d'items propres.
+      if (!m.catRef && !m.productRef && m.type !== 'campagne') {
         (m.items || []).forEach((it, j) => insItem.run(
           m.id, j, String(it.name || ''), String(it.price || ''), String(it.img || ''),
           it.src === 'photo' ? 'photo' : 'illus', it.active ? 1 : 0

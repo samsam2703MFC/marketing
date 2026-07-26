@@ -125,6 +125,7 @@ async function main() {
     if (!Array.isArray(t.types) || t.types.length < 5) throw new Error('types manquants (sig_element_types)');
     for (const x of t.types) if (!Array.isArray(x.layouts) || !x.layouts.length) throw new Error(`type ${x.id} sans mises en page`);
     if (!t.types.some((x) => x.id === 'promotion')) throw new Error('type « promotion » manquant');
+    if (!t.types.some((x) => x.id === 'campagne')) throw new Error('type « campagne » manquant');
     return t.types.map((x) => x.id).join(' · ');
   });
   await step('GET /api/v1/promo-types — sous-types de promotion (dynamiques)', async () => {
@@ -132,6 +133,12 @@ async function main() {
     if (!Array.isArray(p.promoTypes) || p.promoTypes.length < 3) throw new Error('sous-types de promotion manquants (sig_promo_types)');
     for (const x of p.promoTypes) if (!x.id || !x.name || !x.icon) throw new Error(`sous-type ${x.id} incomplet`);
     return p.promoTypes.map((x) => `${x.icon} ${x.name}`).join(' · ');
+  });
+  await step('GET /api/v1/campaigns — campagnes marketing (liste)', async () => {
+    const c = await call('GET', '/api/v1/campaigns');
+    if (!Array.isArray(c.campaigns)) throw new Error('campagnes illisibles (sig_campaigns)');
+    for (const x of c.campaigns) if (!x.id || !x.name || !x.scope) throw new Error(`campagne ${x.id} incomplète`);
+    return c.campaigns.length ? c.campaigns.map((x) => `${x.name} (${x.scope})`).join(' · ') : 'liste vide (prod démarre vide)';
   });
   await step('GET /api/v1/catalog — table produits', async () => {
     const c = await call('GET', '/api/v1/catalog');
@@ -501,6 +508,41 @@ async function main() {
         // restauration : brouillon + sous-types d'origine
         await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
         await call('PUT', '/api/v1/promo-types', { promoTypes: before.promoTypes });
+      }
+    });
+    await step('Campagne — entité listée + contenu résolu dans le film', async () => {
+      const before = await call('GET', '/api/v1/campaigns');
+      const cat = await call('GET', '/api/v1/catalog');
+      const prod = (cat.products || [])[0];
+      const st = await call('GET', '/api/v1/state');
+      // 1) Ajouter une campagne « produit » (aller-retour PUT /campaigns)
+      const extra = { id: 'cmpLTTEST', name: 'Campagne LT', scope: 'produit', productRef: prod ? prod.id : '', theme: '', image: '', message: 'Offre du moment', dateFrom: '01/01', dateTo: '31/01', color: '#0A7E3D', active: true };
+      const saved = await call('PUT', '/api/v1/campaigns', { campaigns: [...before.campaigns, extra] });
+      try {
+        const got = (saved.campaigns || []).find((c) => c.id === 'cmpLTTEST');
+        if (!got || got.name !== 'Campagne LT' || got.color !== '#0A7E3D' || got.message !== 'Offre du moment') throw new Error('campagne non persistée');
+        // 2) Élément « campagne » qui pointe vers cette campagne
+        const campMod = { id: 'mCAMPLT', type: 'campagne', name: 'Campagne', campaignRef: 'cmpLTTEST', layout: 'cover', dur: 8, items: [] };
+        await call('PUT', '/api/v1/draft', {
+          modules: [...st.modules, campMod],
+          playlists: [...st.playlists, { id: 'pl-campLT', name: 'Film campagne LT', items: ['mCAMPLT'] }],
+          activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop,
+        });
+        // 3) Le film résout le contenu de la campagne sur le module (+ produit lié)
+        const f = await (await fetch(BASE + '/api/v1/film?film=pl-campLT')).json();
+        const m = (f.modules || []).find((x) => x.id === 'mCAMPLT');
+        if (!m) throw new Error('élément campagne absent du film');
+        if (m.campaignRef !== 'cmpLTTEST') throw new Error('campaignRef non persisté sur le module');
+        if (!m.campaign || m.campaign.name !== 'Campagne LT' || m.campaign.message !== 'Offre du moment') {
+          throw new Error(`campagne non résolue : ${JSON.stringify(m.campaign)}`);
+        }
+        // portée produit → la photo/le prix viennent du produit lié (items[0])
+        if (prod && (!m.items || !m.items[0] || m.items[0].productId !== prod.id)) throw new Error('produit lié de la campagne non résolu en item');
+        return `« ${m.campaign.name} » (${m.campaign.scope}) · ${m.items && m.items[0] ? m.items[0].name : 'sans produit'}`;
+      } finally {
+        // restauration : brouillon + campagnes d'origine
+        await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+        await call('PUT', '/api/v1/campaigns', { campaigns: before.campaigns });
       }
     });
     await step('POST heartbeat — auto-enregistrement d\'un player de test', async () => {

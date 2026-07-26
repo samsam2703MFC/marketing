@@ -115,6 +115,7 @@ class App extends Component {
     library: [],
     elementTypes: [], addPicker: false, openSec: 'items',
     promoTypes: [], promoDraft: null, promoDirty: false, promoBusy: false, promoSavedAt: 0,
+    campaigns: [], campaignDraft: null, campaignDirty: false, campaignBusy: false, campaignSavedAt: 0,
     catalog: { categories: [], products: [] },
     catDraft: null, catDirty: false, catSel: '', catSaving: false, langs: [], catLang: 'fr',
     pwaForm: null, pwaBusy: null, pwaResult: null,
@@ -198,6 +199,8 @@ class App extends Component {
       const lg = await api('GET', '/langs').catch(() => ({ langs: [{ id: 'fr', label: 'Français' }] }));
       // Sous-types de promotion (happy hour, flash, bundle…) : dynamiques, en base.
       const pt = await api('GET', '/promo-types').catch(() => ({ promoTypes: [] }));
+      // Campagnes marketing : liste d'entités à déposer comme item.
+      const cmp = await api('GET', '/campaigns').catch(() => ({ campaigns: [] }));
       const pwa = await api('GET', '/pwa-config').catch(() => null);
       const plan = await api('GET', '/plan').catch(() => ({ windows: [], byStore: {} }));
       const playlists = ((Array.isArray(st.playlists) && st.playlists.length)
@@ -212,6 +215,7 @@ class App extends Component {
         elementTypes: et.types || [],
         langs: lg.langs || [{ id: 'fr', label: 'Français' }],
         promoTypes: pt.promoTypes || [],
+        campaigns: cmp.campaigns || [],
         pwaForm: pwa ? {
           host: pwa.host, port: pwa.port, db: pwa.db, user: pwa.user,
           password: '', hasPassword: !!pwa.hasPassword,
@@ -324,9 +328,23 @@ class App extends Component {
       ? { type: t.id, name: t.name, icon: t.icon, color: t.color }
       : { type: m.promoType || '', name: 'Offre', icon: '🏷️', color: '#C0392B' };
   }
+  // Campagne résolue pour l'aperçu, depuis la liste sig_campaigns.
+  campaignInfo(m) {
+    if (!m || m.type !== 'campagne') return undefined;
+    const c = (this.state.campaigns || []).find((x) => x.id === m.campaignRef);
+    return c || { id: m.campaignRef || '', name: 'Campagne', scope: 'produit', productRef: '', theme: '', image: '', message: '', dateFrom: '', dateTo: '', color: '#8D1D2C', active: true };
+  }
   resolveMod(m) {
     // Élément « promotion » : annote le badge du sous-type pour l'aperçu.
     const promo = this.promoBadge(m);
+    // Élément « campagne » : contenu porté par la campagne (produit lié éventuel).
+    const campaign = this.campaignInfo(m);
+    if (campaign) {
+      const prods = this.state.catalog.products || [];
+      const toItem = (p) => ({ name: p.name, price: p.price, img: p.img, src: p.src, active: p.active !== false, productId: p.id });
+      const p = campaign.productRef ? prods.find((x) => x.id === campaign.productRef) : null;
+      return { ...m, campaign, items: p ? [toItem(p)] : [] };
+    }
     // Élément « surprise » : on annote le nombre de vidéos du dossier pour l'aperçu.
     if (m && m.surprise && !m.catRef && !m.productRef) {
       return { ...m, promo, surpriseCount: (this.state.surpriseVideos || []).length };
@@ -825,6 +843,44 @@ class App extends Component {
       this.setState({ promoBusy: false, promoTypes: r.promoTypes || [], promoDraft: JSON.parse(JSON.stringify(r.promoTypes || [])), promoDirty: false, promoSavedAt: Date.now() });
       this.showToast('Promotions enregistrées ✓');
     } catch (e) { this.setState({ promoBusy: false }); this.showToast(`Erreur : ${e.message}`); }
+  }
+
+  // ---- campagnes marketing : liste d'entités à déposer comme item -----------
+  async loadCampaignsList() {
+    try { const r = await api('GET', '/campaigns'); this.setState({ campaigns: r.campaigns || [] }); }
+    catch { /* indisponible : garde l'état courant */ }
+  }
+  openCampaigns() {
+    const draft = JSON.parse(JSON.stringify(this.state.campaigns || []));
+    this.setState({ view: 'campaigns', campaignDraft: draft, campaignDirty: false });
+  }
+  setCampaignDraft(mut) {
+    const arr = JSON.parse(JSON.stringify(this.state.campaignDraft || this.state.campaigns || []));
+    mut(arr);
+    this.setState({ campaignDraft: arr, campaignDirty: true });
+  }
+  addCampaign() {
+    this.setCampaignDraft((a) => a.push({ id: 'cmp' + uid(), name: 'Nouvelle campagne', scope: 'produit', productRef: '', theme: '', image: '', message: '', dateFrom: '', dateTo: '', color: '#8D1D2C', active: true }));
+  }
+  updateCampaign(id, patch) { this.setCampaignDraft((a) => { const c = a.find((x) => x.id === id); if (c) Object.assign(c, patch); }); }
+  delCampaign(id) { this.setCampaignDraft((a) => { const i = a.findIndex((x) => x.id === id); if (i >= 0) a.splice(i, 1); }); }
+  moveCampaign(id, dir) {
+    this.setCampaignDraft((a) => {
+      const i = a.findIndex((x) => x.id === id); const j = i + dir;
+      if (i < 0 || j < 0 || j >= a.length) return;
+      const [row] = a.splice(i, 1); a.splice(j, 0, row);
+    });
+  }
+  async saveCampaignsDraft() {
+    if (this.state.campaignBusy) return;
+    const list = this.state.campaignDraft || [];
+    if (list.some((c) => !String(c.name || '').trim())) { this.showToast('Chaque campagne a besoin d\'un nom'); return; }
+    this.setState({ campaignBusy: true });
+    try {
+      const r = await api('PUT', '/campaigns', { campaigns: list });
+      this.setState({ campaignBusy: false, campaigns: r.campaigns || [], campaignDraft: JSON.parse(JSON.stringify(r.campaigns || [])), campaignDirty: false, campaignSavedAt: Date.now() });
+      this.showToast('Campagnes enregistrées ✓');
+    } catch (e) { this.setState({ campaignBusy: false }); this.showToast(`Erreur : ${e.message}`); }
   }
 
   // ---- périodes de vente : produit × moment (matin/midi/aprem + exception) --
@@ -1717,6 +1773,7 @@ class App extends Component {
     const isProduit = m.type === 'produit', isFilmEl = m.type === 'film', isAnim = m.type === 'animation';
     const isMedia = m.type === 'media';
     const isPromo = m.type === 'promotion';
+    const isCampaign = m.type === 'campagne';
     const selType = this.elementTypeOf(m);
     const total = this.total();
     const { m: playM, lt } = this.activeInScope();
@@ -2279,6 +2336,10 @@ class App extends Component {
         arr.push(crumb('Compositeur', () => this.setView('composer'), false));
         arr.push(crumb('Promotions', null, false));
         arr.push(crumb(`${(st.promoDraft || st.promoTypes || []).length} type(s)${st.promoDirty ? ' · non enregistrés' : ''}`, null, true));
+      } else if (st.view === 'campaigns') {
+        arr.push(crumb('Compositeur', () => this.setView('composer'), false));
+        arr.push(crumb('Campagnes', null, false));
+        arr.push(crumb(`${(st.campaignDraft || st.campaigns || []).length} campagne(s)${st.campaignDirty ? ' · non enregistrées' : ''}`, null, true));
       } else if (st.view === 'planning') {
         arr.push(crumb('Compositeur', () => this.setView('composer'), false));
         arr.push(crumb('Planning hebdo', null, false));
@@ -2389,6 +2450,36 @@ class App extends Component {
           del: () => { if (used === 0 || window.confirm(`${used} élément(s) utilisent « ${t.name} ». Supprimer quand même ce sous-type ?`)) this.delPromoType(t.id); },
         };
       }),
+      // -- campagnes marketing (liste d'entités) --
+      campaignDirty: st.campaignDirty, campaignBusy: st.campaignBusy,
+      campaignCount: (st.campaignDraft || st.campaigns || []).length,
+      addCampaign: () => this.addCampaign(), saveCampaigns: () => this.saveCampaignsDraft(),
+      campaignProductOptions: (st.catalog.products || []).map((p) => ({ id: p.id, label: `${p.name} · ${p.price} €${p.active === false ? ' · inactif' : ''}` })),
+      campaignRows: (st.campaignDraft || st.campaigns || []).map((c, i, arr) => {
+        // Nombre d'éléments « campagne » de la bibliothèque qui utilisent cette campagne.
+        const used = (st.library || []).filter((m) => m.type === 'campagne' && m.campaignRef === c.id).length;
+        return {
+          id: c.id, name: c.name, scope: c.scope || 'produit', productRef: c.productRef || '',
+          theme: c.theme || '', image: c.image || '', message: c.message || '',
+          dateFrom: c.dateFrom || '', dateTo: c.dateTo || '', color: c.color || '#8D1D2C',
+          active: c.active !== false, used, isFirst: i === 0, isLast: i === arr.length - 1,
+          isGamme: (c.scope || 'produit') === 'gamme',
+          imageOk: imgRenderable(c.image || ''),
+          onName: (e) => this.updateCampaign(c.id, { name: e.target.value }),
+          onScope: (e) => this.updateCampaign(c.id, { scope: e.target.value }),
+          onProductRef: (e) => this.updateCampaign(c.id, { productRef: e.target.value }),
+          onTheme: (e) => this.updateCampaign(c.id, { theme: e.target.value }),
+          onImage: (e) => this.updateCampaign(c.id, { image: e.target.value }),
+          onMessage: (e) => this.updateCampaign(c.id, { message: e.target.value }),
+          onFrom: (e) => this.updateCampaign(c.id, { dateFrom: e.target.value }),
+          onTo: (e) => this.updateCampaign(c.id, { dateTo: e.target.value }),
+          onColor: (e) => this.updateCampaign(c.id, { color: e.target.value }),
+          toggleActive: () => this.updateCampaign(c.id, { active: c.active === false }),
+          up: () => this.moveCampaign(c.id, -1),
+          down: () => this.moveCampaign(c.id, 1),
+          del: () => { if (used === 0 || window.confirm(`${used} élément(s) utilisent « ${c.name} ». Supprimer quand même cette campagne ?`)) this.delCampaign(c.id); },
+        };
+      }),
       saleMoments, prodMomentCats, prodMomentsCurrent: st.prodMomentsCurrent,
       prodMomentsDirty: st.prodMomentsDirty, prodMomentsBusy: st.prodMomentsBusy,
       saveProdMoments: () => this.saveProdMoments(),
@@ -2429,6 +2520,9 @@ class App extends Component {
       isPromotionsView: st.view === 'promotions',
       setViewPromotions: () => this.openPromotions(),
       tabPromotionsStyle: stTab + (st.view === 'promotions' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
+      isCampaignsView: st.view === 'campaigns',
+      setViewCampaigns: () => this.openCampaigns(),
+      tabCampaignsStyle: stTab + (st.view === 'campaigns' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       setViewHome: () => this.openHome(),
       tabHomeStyle: stTab + (st.view === 'home' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       setViewComposer: () => this.setView('composer'),
@@ -2475,8 +2569,19 @@ class App extends Component {
       deployStyle: `padding:11px 22px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:${tgtCount && !st.deploying ? 'pointer' : 'not-allowed'};${tgtCount ? 'background:#8D1D2C;color:#fff;' : 'background:rgba(35,34,32,0.10);color:#8A847C;'}opacity:${st.deploying ? 0.7 : 1};`,
       hasToast: !!st.toast, toast: st.toast,
       playlistEmpty: st.playlist.length === 0,
-      isCategory: isCat, isLiaison: isLia, isProduit, isFilmEl, isAnim, isMedia, isPromo,
+      isCategory: isCat, isLiaison: isLia, isProduit, isFilmEl, isAnim, isMedia, isPromo, isCampaign,
       mediaAgencyUrl: new URL('agence', location.href).toString(),
+      // -- campagne marketing : on choisit une campagne dans la liste --
+      campaignInfo: isCampaign ? this.campaignInfo(m) : null,
+      campaignOptions: (st.campaigns || []).filter((c) => c.active !== false || c.id === m.campaignRef).map((c) => ({
+        id: c.id, label: `${c.scope === 'gamme' ? '🗂' : '📣'} ${c.name}${c.scope === 'gamme' && c.theme ? ` — ${c.theme}` : ''}`,
+        active: (m.campaignRef || '') === c.id,
+        pick: () => this.setSelField('campaignRef', c.id),
+      })),
+      curCampaignRef: m.campaignRef || '',
+      hasCampaigns: (st.campaigns || []).some((c) => c.active !== false),
+      goCampaigns: () => this.openCampaigns(),
+      campaignSummary: isCampaign ? ((this.campaignInfo(m).name) || 'à choisir') : '',
       // -- promotion : sous-type dynamique + produit lié (mises en page hero) --
       promoName: isPromo ? this.promoBadge(m).name : '',
       promoIcon: isPromo ? this.promoBadge(m).icon : '🏷️',
@@ -2500,7 +2605,7 @@ class App extends Component {
         { id: 'logo', label: 'Logo (coin)' }, { id: 'nouveau', label: 'Ruban « Nouveau »' },
       ].map((o) => ({ ...o, active: (m.watermark || 'none') === o.id, pick: () => this.setSelField('watermark', o.id) })),
       hasSub: isLia || isAnim || isProduit || isPromo,
-      hasDur: isProduit || isFilmEl || isAnim || isMedia || isPromo,
+      hasDur: isProduit || isFilmEl || isAnim || isMedia || isPromo || isCampaign,
       selName: m.name,
       selTypeLabel: selType ? selType.label : (isLia ? 'Liaison' : 'Catégorie'),
       selTypeBadge: `display:inline-flex;align-items:center;padding:4px 11px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;${isLia ? 'background:rgba(35,34,32,0.10);color:#8A847C;' : 'background:rgba(141,29,44,0.12);color:#8D1D2C;'}`,
@@ -2945,6 +3050,7 @@ class App extends Component {
         <button onClick=${v.setViewComposer} style=${v.tabComposerStyle}>Compositeur</button>
         <button onClick=${v.setViewProducts} style=${v.tabProductsStyle}>Produits</button>
         <button onClick=${v.setViewPromotions} style=${v.tabPromotionsStyle}>Promotions</button>
+        <button onClick=${v.setViewCampaigns} style=${v.tabCampaignsStyle}>Campagnes</button>
         <button onClick=${v.setViewSeasons} style=${v.tabSeasonsStyle}>Périodes</button>
         <button onClick=${v.setViewPlanning} style=${v.tabPlanningStyle}>Planning</button>
         <button onClick=${v.setViewFleet} style=${v.tabFleetStyle}>Réseau & supervision</button>
@@ -3464,6 +3570,72 @@ class App extends Component {
           ${!v.promoRows.length && html`<p style="margin:0;font-size:12.5px;color:#8A847C;padding:8px 0;">Aucun sous-type de promotion. « + Ajouter une promotion » pour en créer un.</p>`}
         </div>
         <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Supprimer un sous-type ne casse pas les éléments qui l'utilisaient : ils retombent sur un badge neutre « Offre » jusqu'à ce que tu leur en réassignes un. L'ordre ci-dessus est celui proposé dans le Compositeur.</p>
+      </div>
+    </div>
+  </div>
+  `}
+
+  ${v.isCampaignsView && html`
+  <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;">
+    <div style="margin:0;display:flex;flex-direction:column;gap:16px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+        <div>
+          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Campagnes marketing</h2>
+          <p style="margin:0;font-size:12.5px;color:#8A847C;max-width:840px;">La <strong>liste des campagnes</strong> à diffuser (portée <strong>produit</strong> ou <strong>gamme thématique</strong>). Tu n'as ensuite qu'à en <strong>déposer une comme item</strong> dans un film : ajoute un élément <strong>« Campagne marketing » 📣</strong> dans le Compositeur et choisis la campagne. Chaque campagne porte un nom, un visuel, une accroche, un produit lié (pour la portée produit) et une période. Cette liste pourra être <strong>alimentée depuis l'ERP</strong> dans un second temps.</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <button onClick=${v.addCampaign} style="padding:9px 15px;font-size:12.5px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;cursor:pointer;">+ Ajouter une campagne</button>
+          <button onClick=${v.saveCampaigns} disabled=${!v.campaignDirty || v.campaignBusy} style="padding:9px 18px;font-size:13px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.campaignDirty && !v.campaignBusy ? 'pointer' : 'not-allowed'};background:${v.campaignDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.campaignDirty ? '#fff' : '#8A847C'};">${v.campaignBusy ? 'Enregistrement…' : (v.campaignDirty ? 'Enregistrer' : '✓ Enregistré')}</button>
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${v.campaignCount} campagne(s)</h3>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          ${v.campaignRows.map((c) => html`
+            <div style="border:1px solid rgba(35,34,32,0.1);border-radius:12px;padding:13px 15px;background:${c.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};opacity:${c.active ? 1 : 0.72};">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                ${c.imageOk
+                  ? html`<img src=${c.image} alt="" loading="lazy" style="width:34px;height:34px;border-radius:8px;object-fit:cover;flex:0 0 auto;border:1px solid rgba(35,34,32,0.15);" />`
+                  : html`<span style="width:34px;height:34px;border-radius:8px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:17px;color:#fff;background:${c.color};">${c.isGamme ? '🗂' : '📣'}</span>`}
+                <input value=${c.name} onInput=${c.onName} placeholder="Nom de la campagne (ex. Rentrée gourmande)" style="flex:1 1 220px;min-width:0;padding:9px 11px;font-size:14px;font-weight:600;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
+                <select value=${c.scope} onChange=${c.onScope} title="Portée de la campagne" style="flex:0 0 auto;padding:9px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;">
+                  <option value="produit">📣 Produit</option>
+                  <option value="gamme">🗂 Gamme thématique</option>
+                </select>
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#8A847C;">Couleur <input type="color" value=${c.color} onInput=${c.onColor} title="Couleur d'accent" style="width:34px;height:30px;padding:0;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;" /></label>
+                <button onClick=${c.toggleActive} title=${c.active ? 'Active — proposée dans le Compositeur' : 'Inactive — masquée du choix'} style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid rgba(35,34,32,0.12);cursor:pointer;background:${c.active ? 'rgba(46,110,78,0.12)' : 'rgba(141,29,44,0.08)'};color:${c.active ? '#2E6E4E' : '#8D1D2C'};font-size:13px;">${c.active ? '✓' : '⃠'}</button>
+                <span style="display:flex;align-items:center;gap:4px;flex:0 0 auto;">
+                  <button onClick=${c.up} disabled=${c.isFirst} title="Monter" style="width:30px;height:30px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:${c.isFirst ? 'not-allowed' : 'pointer'};font-size:12px;opacity:${c.isFirst ? 0.4 : 1};">↑</button>
+                  <button onClick=${c.down} disabled=${c.isLast} title="Descendre" style="width:30px;height:30px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:${c.isLast ? 'not-allowed' : 'pointer'};font-size:12px;opacity:${c.isLast ? 0.4 : 1};">↓</button>
+                  <button onClick=${c.del} title="Supprimer cette campagne" style="width:30px;height:30px;border-radius:8px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:pointer;font-size:13px;color:#8D1D2C;">✕</button>
+                </span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;">
+                ${c.isGamme
+                  ? html`<input value=${c.theme} onInput=${c.onTheme} placeholder="Thème / gamme (ex. Viennoiseries)" style="flex:1 1 180px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;" />`
+                  : html`<select value=${c.productRef} onChange=${c.onProductRef} style="flex:1 1 180px;min-width:0;padding:8px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;cursor:pointer;">
+                      <option value="">— Produit lié (photo/prix) —</option>
+                      ${v.campaignProductOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
+                    </select>`}
+                <input value=${c.message} onInput=${c.onMessage} placeholder="Accroche (ex. La rentrée en douceur)" style="flex:1 1 200px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;" />
+                <span style="display:flex;align-items:center;gap:4px;flex:0 0 auto;">
+                  <input value=${c.dateFrom} onInput=${c.onFrom} placeholder="du (JJ/MM)" style="width:96px;padding:8px 9px;font-size:12px;text-align:center;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;" />
+                  <span style="color:#8A847C;">→</span>
+                  <input value=${c.dateTo} onInput=${c.onTo} placeholder="au (JJ/MM)" style="width:96px;padding:8px 9px;font-size:12px;text-align:center;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;" />
+                </span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;">
+                <input value=${c.image} onInput=${c.onImage} placeholder="URL du visuel (optionnel — sinon la photo du produit lié est utilisée)" spellcheck="false" style="flex:1 1 320px;min-width:0;padding:7px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;" />
+                <span style="font-size:11px;color:${c.used ? '#6E4A2B' : '#B8B2A8'};">${c.used ? `${c.used} élément(s) l'utilisent` : 'non utilisée'}</span>
+              </div>
+            </div>
+          `)}
+          ${!v.campaignRows.length && html`<p style="margin:0;font-size:12.5px;color:#8A847C;padding:8px 0;">Aucune campagne. « + Ajouter une campagne » pour en créer une (ou importe-les depuis l'ERP plus tard).</p>`}
+        </div>
+        <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Portée <strong>produit</strong> = la campagne affiche la photo et le prix du produit lié. Portée <strong>gamme thématique</strong> = un thème libre (ex. « Viennoiseries »). Supprimer une campagne ne casse pas les éléments qui la diffusaient : ils affichent un repère neutre jusqu'à réassignation.</p>
       </div>
     </div>
   </div>
@@ -4046,6 +4218,48 @@ class App extends Component {
         `}
 
         ${v.isPromo && html`
+          <div style=${secCard}>
+            ${secHead('motion', 'Mouvement', v.motionSummary)}
+            ${secOpen('motion') && html`<div style=${secBody}>
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+              ${v.motionSimple.map((o) => html`<button onClick=${o.pick} style=${o.style}>${o.label}</button>`)}
+            </div>
+            </div>`}
+          </div>
+        `}
+
+        ${v.isCampaign && html`
+          <div style=${secCard}>
+            ${secHead('campaign', 'Campagne à diffuser', v.campaignSummary)}
+            ${secOpen('campaign') && html`<div style=${secBody}>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
+              <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">Choisis une <strong>campagne</strong> dans la liste — son nom, son visuel, son produit lié et sa période s'affichent automatiquement. La liste se gère (ou s'importe) dans <strong>Campagnes</strong>.</p>
+              <button onClick=${v.goCampaigns} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.25);border-radius:999px;cursor:pointer;">📣 Gérer les campagnes</button>
+            </div>
+            ${v.hasCampaigns ? html`
+              <select value=${v.curCampaignRef} onChange=${(e) => this.setSelField('campaignRef', e.target.value)} style="width:100%;box-sizing:border-box;padding:11px 12px;font-size:14px;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#FBF8F2;cursor:pointer;">
+                <option value="">— Choisir une campagne —</option>
+                ${v.campaignOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
+              </select>
+              ${v.campaignInfo && v.curCampaignRef && html`
+                <div style="margin-top:12px;display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.10);">
+                  ${v.campaignInfo.image
+                    ? html`<img src=${v.campaignInfo.image} alt="" loading="lazy" style="width:52px;height:52px;border-radius:9px;object-fit:cover;flex:0 0 auto;border:1px solid rgba(35,34,32,0.15);" />`
+                    : html`<span style="width:52px;height:52px;border-radius:9px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;background:${v.campaignInfo.color || '#8D1D2C'};">${v.campaignInfo.scope === 'gamme' ? '🗂' : '📣'}</span>`}
+                  <div style="flex:1 1 auto;min-width:0;">
+                    <div style="font-size:14px;font-weight:700;color:#232220;">${v.campaignInfo.name}</div>
+                    <div style="font-size:11.5px;color:#8A847C;">${v.campaignInfo.scope === 'gamme' ? `Gamme · ${v.campaignInfo.theme || '—'}` : 'Produit'}${v.campaignInfo.message ? ` · ${v.campaignInfo.message}` : ''}${v.campaignInfo.dateFrom ? ` · du ${v.campaignInfo.dateFrom}${v.campaignInfo.dateTo ? ` au ${v.campaignInfo.dateTo}` : ''}` : ''}</div>
+                  </div>
+                </div>
+              `}
+            ` : html`
+              <div style="padding:12px 14px;border-radius:10px;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.2);font-size:12.5px;color:#8D1D2C;line-height:1.5;">Aucune campagne dans la liste. <button onClick=${v.goCampaigns} style="background:none;border:none;padding:0;color:#8D1D2C;font-weight:700;text-decoration:underline;cursor:pointer;font-size:12.5px;">Créer une campagne →</button></div>
+            `}
+            </div>`}
+          </div>
+        `}
+
+        ${v.isCampaign && html`
           <div style=${secCard}>
             ${secHead('motion', 'Mouvement', v.motionSummary)}
             ${secOpen('motion') && html`<div style=${secBody}>

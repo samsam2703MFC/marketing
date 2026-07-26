@@ -66,6 +66,7 @@ export const moduleDur = (m, secPerLine) => {
   if (m.type === 'film') return m.dur > 0 ? m.dur : 10;
   if (m.type === 'animation') return m.dur > 0 ? m.dur : 6;
   if (m.type === 'promotion') return m.dur > 0 ? m.dur : 7;
+  if (m.type === 'campagne') return m.dur > 0 ? m.dur : 8;
   return Math.max(1, activeItems(m).length) * secPerLine;
 };
 
@@ -262,6 +263,70 @@ function renderModuleInner(h, m, lt, opts) {
       if (!band) kids.push(h('div', { key: 'pbg', style: { position: 'absolute', inset: 0, background: '#F5EFE4' } }));
       else kids.push(h('div', { key: 'pbg', style: { position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${col}, ${mixHex(col, '#000000', 0.28)})` } }));
       kids.push(h('div', { key: 'pwrap', style: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 260px', opacity: a, transform: `scale(${zoom})`, transformOrigin: 'center' } }, offer(!band)));
+    }
+    const te = tagEl(); if (te) kids.push(te);
+    return kids;
+  }
+
+  // ---- Campagne marketing : contenu porté par la campagne choisie ----------
+  // c = m.campaign { name, scope, productRef, theme, image, message, dateFrom,
+  // dateTo, color }. Portée « produit » → photo/prix du produit lié (items[0]) ;
+  // « gamme » → libellé du thème. Un visuel (image) prime sur la photo produit.
+  if (m.type === 'campagne') {
+    const dur = moduleDur(m, secPerLine);
+    const c = m.campaign || { name: m.name || 'Campagne', scope: 'produit', theme: '', image: '', message: '', dateFrom: '', dateTo: '', color: '#8D1D2C' };
+    const col = c.color || '#8D1D2C';
+    const a = Math.min(easeIO(clx(lt / 0.5, 0, 1)), easeIO(clx((dur - lt) / 0.5, 0, 1)));
+    const it = activeItems(m)[0] || (m.items || [])[0];
+    const img = c.image || '';                 // visuel de campagne (URL)
+    const visual = img || (it ? it.img : '');   // à défaut, la photo du produit lié
+    const dateLabel = c.dateFrom && c.dateTo ? `Du ${c.dateFrom} au ${c.dateTo}` : (c.dateFrom || '');
+    const scopeLabel = c.scope === 'gamme' ? (c.theme || 'Gamme') : (it ? it.name : (c.theme || ''));
+    const cover = m.layout === 'cover';
+    const hero = (m.layout === 'hero-right' || m.layout === 'hero-left');
+    // Puce « portée » : gamme (thème) ou produit.
+    const chip = (dark) => h('div', { key: 'cchip', style: { display: 'inline-flex', alignItems: 'center', gap: 24, alignSelf: (cover || hero) ? 'flex-start' : 'center', background: dark ? 'rgba(255,255,255,0.18)' : col, color: '#fff', borderRadius: 999, padding: '26px 52px', fontFamily: FUI, fontWeight: 500, fontSize: 78, letterSpacing: '0.12em', textTransform: 'uppercase' } },
+      h('span', { style: { fontSize: 88, lineHeight: 1 } }, c.scope === 'gamme' ? '🗂' : '📣'),
+      h('span', null, scopeLabel || 'Campagne'));
+    // Bloc texte : nom + message + portée + dates.
+    const textBlock = (onDark) => h('div', { key: 'ctxt', style: { display: 'flex', flexDirection: 'column', gap: 54, alignItems: (cover || hero) ? 'flex-start' : 'center', textAlign: (cover || hero) ? 'left' : 'center', maxWidth: hero ? 2820 : (cover ? 4200 : 5200) } },
+      scopeLabel ? chip(onDark) : null,
+      h('div', { style: { fontFamily: FVANK, fontWeight: 400, fontSize: hero ? 300 : 360, letterSpacing: '0.01em', textTransform: 'uppercase', color: onDark ? '#fff' : INK, lineHeight: 0.95 } }, (c.name || 'Campagne').toUpperCase()),
+      h('div', { style: { width: 560, height: 16, background: onDark ? '#fff' : col, borderRadius: 8, opacity: onDark ? 0.9 : 1 } }),
+      c.message ? h('div', { style: { fontFamily: FUI, fontWeight: 400, fontSize: hero ? 92 : 104, letterSpacing: '0.05em', color: onDark ? 'rgba(255,255,255,0.88)' : '#6E675E', lineHeight: 1.15 } }, c.message) : null,
+      it && it.price ? h('div', { style: { fontFamily: FUI, fontWeight: 300, fontSize: 210, color: onDark ? '#fff' : col } }, it.price, h('span', { style: { fontSize: 104, verticalAlign: 'super' } }, '€')) : null,
+      dateLabel ? h('div', { style: { fontFamily: FUI, fontWeight: 600, fontSize: 62, letterSpacing: '0.1em', textTransform: 'uppercase', color: onDark ? 'rgba(255,255,255,0.7)' : '#8A847C' } }, dateLabel) : null);
+
+    if (cover) {
+      // Visuel plein écran + dégradé + texte en bas à gauche (sur fond sombre).
+      if (visual) {
+        kids.push(h('div', { key: 'cbg', style: { position: 'absolute', inset: 0, background: '#1a1207' } }));
+        kids.push(h('img', { key: 'cimg', src: visual, alt: '', style: { position: 'absolute', inset: 0, width: W, height: H, objectFit: 'cover', opacity: a, transform: `scale(${1 + 0.04 * (lt / dur)})`, transformOrigin: 'center' } }));
+        kids.push(h('div', { key: 'cshade', style: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 1900, background: `linear-gradient(transparent, rgba(20,12,7,0.82))` } }));
+      } else {
+        kids.push(h('div', { key: 'cbg', style: { position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${col}, ${mixHex(col, '#000000', 0.3)})` } }));
+      }
+      kids.push(h('div', { key: 'cwrap', style: { position: 'absolute', left: 260, right: 260, bottom: 260, opacity: a } }, textBlock(true)));
+    } else if (hero) {
+      const left = m.layout === 'hero-left';
+      const P0 = m.pos || newPos();
+      const mo = MO[m.motion || 'm1'] || MO.m1;
+      const wob = mo.w * Math.sin(lt * Math.PI * (mo.fspd || 1));
+      const imgCX = left ? 1620 : W - 1620;
+      const txtX = left ? 3400 : 260;
+      const imgSize = Math.round(2500 * (P0.illoScale || 1));
+      kids.push(h('div', { key: 'cbg', style: { position: 'absolute', inset: 0, background: '#F5EFE4', opacity: a } }));
+      if (visual) {
+        const isPhoto = !img && it && it.src === 'photo';
+        kids.push(h('div', { key: 'cimgw', style: { position: 'absolute', left: imgCX - imgSize / 2 + P0.illoX, top: H / 2 - imgSize / 2 + P0.illoY, width: imgSize, height: imgSize, opacity: a, transform: `translateY(${wob}px)` } },
+          h('img', { src: visual, alt: '', style: { width: '100%', height: '100%', objectFit: (img || isPhoto) ? 'cover' : 'contain', borderRadius: (img || isPhoto) ? 60 : 0, boxShadow: (img || isPhoto) ? '0 60px 160px rgba(35,34,32,0.35)' : 'none' } })));
+      }
+      kids.push(h('div', { key: 'ctxtw', style: { position: 'absolute', left: txtX + P0.listX, top: H / 2 - 760 + P0.titleY, width: 2860, opacity: a } }, textBlock(false)));
+    } else {
+      // Centré : fond crème, texte centré.
+      const zoom = 1 + 0.035 * (lt / dur);
+      kids.push(h('div', { key: 'cbg', style: { position: 'absolute', inset: 0, background: '#F5EFE4' } }));
+      kids.push(h('div', { key: 'cwrap', style: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 300px', opacity: a, transform: `scale(${zoom})`, transformOrigin: 'center' } }, textBlock(false)));
     }
     const te = tagEl(); if (te) kids.push(te);
     return kids;

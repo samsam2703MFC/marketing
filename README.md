@@ -166,6 +166,21 @@ un **sous-type**.
   neutre « Offre » jusqu'à réassignation. Ces sous-types pourront être **alimentés depuis l'ERP**
   (menu Promotions) dans un second temps. API : `GET /promo-types`, `PUT /promo-types`.
 
+### Campagnes marketing
+Une **campagne** est aussi un **type d'élément** (`sig_element_types` → `campagne`), mais son
+contenu vient d'une **liste d'entités** — on n'a qu'à en **déposer une comme item**.
+
+- Les campagnes (`sig_campaigns`) se gèrent dans l'onglet **Campagnes** : nom, **portée**
+  (*produit* → photo + prix du produit lié du catalogue, ou *gamme thématique* → libellé de thème),
+  **visuel** (URL, sinon la photo du produit), **accroche**, **période** (du → au), couleur,
+  actif/inactif, ordre. Liste **importable depuis l'ERP** ensuite.
+- Dans le Compositeur : **＋ Élément → « Campagne marketing » 📣**, puis on **choisit la campagne**
+  dans un menu. `loadModules` résout `m.campaign` (nom, portée, visuel, thème, dates) et, pour une
+  campagne *produit*, l'`items[0]` depuis le produit lié — côté serveur ET dans l'aperçu régie.
+- Mises en page : **visuel plein écran + accroche**, **centré**, ou **hero** (visuel/produit à
+  gauche/droite + texte). Supprimer une campagne ne casse pas les éléments qui la diffusaient.
+  API : `GET /campaigns`, `PUT /campaigns`.
+
 ### Paramètres
 URL du CMS, IP / hôte player, token — persistés en base. **« Tester la connexion (live) »**
 exécute côté serveur : ping TCP de l'hôte, `GET assignment`, `GET dataset prix`,
@@ -174,7 +189,7 @@ exécute côté serveur : ping TCP de l'hôte, `GET assignment`, `GET dataset pr
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + cycle complet — 49 tests
+npm test              # serveur jetable (BDD temporaire) + cycle complet — 51 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
 node test/live-test.js http://185.180.206.46/signage --password=… --mutate
@@ -197,6 +212,7 @@ session admin  : POST /api/v1/login · /logout · GET /me
                  POST /players/{id}/group (rattacher un écran à une zone)
                  GET /catalog · PUT /catalog (produits · prix · rupture)
                  GET /promo-types · PUT /promo-types (sous-types de promotion)
+                 GET /campaigns · PUT /campaigns (campagnes marketing)
                  POST /push-prices · POST /override · POST /test
                  GET /publications · POST /settings · GET /ping-host
 token player   : GET  /api/v1/players/{id}/assignment?token=…
