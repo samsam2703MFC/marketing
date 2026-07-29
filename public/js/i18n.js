@@ -167,7 +167,19 @@ export const I18N = {
   // -- info-bulle enregistrement --
   'save.dirty': { fr: 'Enregistrer (⌘S)', en: 'Save (⌘S)', it: 'Salva (⌘S)' },
   'save.clean': { fr: 'Tout est enregistré', en: 'Everything is saved', it: 'Tutto è salvato' },
+
+  // -- assistant de diffusion (étapes) --
+  'wiz.step.type': { fr: 'Type', en: 'Type', it: 'Tipo' },
+  'wiz.step.content': { fr: 'Contenu', en: 'Content', it: 'Contenuto' },
+  'wiz.step.screens': { fr: 'Écrans', en: 'Screens', it: 'Schermi' },
+  'wiz.step.preview': { fr: 'Aperçu', en: 'Preview', it: 'Anteprima' },
+  'wiz.step.broadcast': { fr: 'Diffusion', en: 'Broadcast', it: 'Trasmissione' },
+  'wiz.title': { fr: '🎬 Assistant de diffusion', en: '🎬 Broadcast wizard', it: '🎬 Assistente di trasmissione' },
+  'wiz.close': { fr: '✕ Fermer', en: '✕ Close', it: '✕ Chiudi' },
 };
+
+// Étapes de l'assistant, dans l'ordre (clés vers I18N).
+export const WIZ_STEP_KEYS = ['wiz.step.type', 'wiz.step.content', 'wiz.step.screens', 'wiz.step.preview', 'wiz.step.broadcast'];
 
 // Renvoie la traduction d'une clé pour la langue donnée, avec repli sur le
 // français puis sur la clé brute. `vars` remplace les jetons {x}.

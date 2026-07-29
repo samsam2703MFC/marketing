@@ -9,7 +9,7 @@ import {
 // Config du mode « continu » : source unique partagée avec le serveur.
 import { continuousDefaults, normContinuous } from './continuous.js';
 // Internationalisation de l'interface (FR / EN / IT), choix par navigateur.
-import { UI_LANGS, UI_LANG_IDS, tr } from './i18n.js';
+import { UI_LANGS, UI_LANG_IDS, tr, WIZ_STEP_KEYS } from './i18n.js';
 // Générateur de QR code autonome (pour brancher un écran en scannant).
 import { qrSvg } from './vendor/qr.js';
 const qrDataUri = (url) => { try { return 'data:image/svg+xml;utf8,' + encodeURIComponent(qrSvg(String(url), { scale: 5, margin: 3 })); } catch { return ''; } };
@@ -67,7 +67,6 @@ const PHOTO_TIP = 'Qualité top : photo carrée d’au moins 2000 × 2000 px, id
 const MAX_PLAN_FILMS = 5;
 
 // Assistant de diffusion (fil d'Ariane) : étapes de bout en bout.
-const WIZ_STEPS = ['Type', 'Contenu', 'Écrans', 'Aperçu', 'Diffusion'];
 
 const POSF = [
   { k: 'titleY', label: 'Titre · vertical', min: -400, max: 400, step: 10, unit: 'px' },
@@ -932,7 +931,7 @@ class App extends Component {
     this.setState({ wizard: false, wizDone: null });
   }
   wizGo(n) {
-    const step = Math.max(0, Math.min(WIZ_STEPS.length - 1, n));
+    const step = Math.max(0, Math.min(WIZ_STEP_KEYS.length - 1, n));
     // En entrant dans l'aperçu, on enregistre le brouillon pour que /film?film= soit à jour.
     if (step === 3) { api('PUT', '/draft', this.draftBody()).catch(() => {}); this.setState({ wizStep: 3, wizNonce: this.state.wizNonce + 1 }); return; }
     this.setState({ wizStep: step });
@@ -4063,7 +4062,7 @@ class App extends Component {
 
     <aside style="background:#F3EEE6;border-right:1px solid rgba(35,34,32,0.10);display:flex;flex-direction:column;min-height:0;overflow:auto;">
       <div style="flex:0 0 auto;padding:18px 18px 10px;">
-        <h2 style="margin:0 0 3px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Bibliothèque</h2>
+        <h2 style="margin:0 0 3px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">${v.t('composer.library')}</h2>
         <p style="margin:0;font-size:11.5px;color:#8A847C;line-height:1.4;">Tous les éléments · clique pour éditer · ＋ ajoute au film affiché dans l'onglet Playlist</p>
       </div>
       <div style="flex:1 1 auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:7px;">
@@ -4088,8 +4087,8 @@ class App extends Component {
         `)}
       </div>
       <div style="flex:0 0 auto;padding:12px;border-top:1px solid rgba(35,34,32,0.10);display:flex;gap:8px;">
-        <button onClick=${v.openAddPicker} style="flex:1 1 auto;padding:11px;font-size:13.5px;font-weight:600;color:#fff;background:#8D1D2C;border:none;border-radius:10px;cursor:pointer;">＋ Élément</button>
-        <button onClick=${v.paste} style=${v.pasteStyle}>Coller</button>
+        <button onClick=${v.openAddPicker} style="flex:1 1 auto;padding:11px;font-size:13.5px;font-weight:600;color:#fff;background:#8D1D2C;border:none;border-radius:10px;cursor:pointer;">${v.t('composer.addElement')}</button>
+        <button onClick=${v.paste} style=${v.pasteStyle}>${v.t('composer.paste')}</button>
       </div>
     </aside>
 
@@ -4099,7 +4098,7 @@ class App extends Component {
         <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 24px;">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
             <span style=${v.selTypeBadge}>${v.selTypeLabel}</span>
-            <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8A847C;">Module sélectionné</h2>
+            <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8A847C;">${v.t('composer.selectedModule')}</h2>
           </div>
           <input value=${v.selName} onInput=${v.onSelName} placeholder="Nom du module" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:19px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#FBF8F2;" />
           <div style="margin-top:8px;display:flex;align-items:center;gap:7px;font-size:11.5px;color:#8A847C;flex-wrap:wrap;">
@@ -4932,15 +4931,15 @@ class App extends Component {
     return html`
       <div style="position:fixed;inset:0;background:#F2ECE2;z-index:40;display:flex;flex-direction:column;">
         <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:15px 26px;background:#fff;border-bottom:1px solid rgba(35,34,32,0.1);">
-          <div style="font-size:15px;font-weight:700;color:#232220;">🎬 Assistant de diffusion</div>
+          <div style="font-size:15px;font-weight:700;color:#232220;">${v.t('wiz.title')}</div>
           <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
-            ${WIZ_STEPS.map((label, i) => html`
+            ${WIZ_STEP_KEYS.map((key, i) => html`
               ${i ? html`<span style="color:#C9C3B8;">→</span>` : ''}
               <button onClick=${() => (i < st.wizStep || done ? this.wizGo(i) : null)} style="display:flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;border:1px solid ${i === st.wizStep ? '#8D1D2C' : 'rgba(35,34,32,0.14)'};background:${i === st.wizStep ? '#8D1D2C' : (i < st.wizStep ? 'rgba(46,110,78,0.1)' : '#fff')};color:${i === st.wizStep ? '#fff' : (i < st.wizStep ? '#2E6E4E' : '#8A847C')};cursor:${i < st.wizStep ? 'pointer' : 'default'};font-size:12px;font-weight:600;">
-                <span>${i < st.wizStep ? '✓' : (i + 1)}</span>${label}
+                <span>${i < st.wizStep ? '✓' : (i + 1)}</span>${v.t(key)}
               </button>`)}
           </div>
-          <button onClick=${() => this.closeWizard()} style="padding:7px 13px;font-size:12.5px;font-weight:600;color:#8A847C;background:#fff;border:1px solid rgba(35,34,32,0.16);border-radius:999px;cursor:pointer;">✕ Fermer</button>
+          <button onClick=${() => this.closeWizard()} style="padding:7px 13px;font-size:12.5px;font-weight:600;color:#8A847C;background:#fff;border:1px solid rgba(35,34,32,0.16);border-radius:999px;cursor:pointer;">${v.t('wiz.close')}</button>
         </div>
         <div style="flex:1 1 auto;overflow:auto;padding:28px 26px;">
           <div style="max-width:940px;margin:0 auto;">${body}</div>
