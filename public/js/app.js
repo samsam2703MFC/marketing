@@ -829,7 +829,7 @@ class App extends Component {
     this.setState({ promoDraft: arr, promoDirty: true });
   }
   addPromoType() {
-    this.setPromoDraft((a) => a.push({ id: 'pt' + uid(), name: 'Nouvelle promotion', icon: '🏷️', color: '#C0392B', descr: '', active: true }));
+    this.setPromoDraft((a) => a.push({ id: 'pt' + uid(), name: this.t('promo.newName'), icon: '🏷️', color: '#C0392B', descr: '', active: true }));
   }
   updatePromoType(id, patch) { this.setPromoDraft((a) => { const t = a.find((x) => x.id === id); if (t) Object.assign(t, patch); }); }
   delPromoType(id) { this.setPromoDraft((a) => { const i = a.findIndex((x) => x.id === id); if (i >= 0) a.splice(i, 1); }); }
@@ -867,7 +867,7 @@ class App extends Component {
     this.setState({ campaignDraft: arr, campaignDirty: true });
   }
   addCampaign() {
-    this.setCampaignDraft((a) => a.push({ id: 'cmp' + uid(), name: 'Nouvelle campagne', scope: 'produit', productRef: '', theme: '', image: '', message: '', dateFrom: '', dateTo: '', color: '#8D1D2C', active: true }));
+    this.setCampaignDraft((a) => a.push({ id: 'cmp' + uid(), name: this.t('campaign.newName'), scope: 'produit', productRef: '', theme: '', image: '', message: '', dateFrom: '', dateTo: '', color: '#8D1D2C', active: true }));
   }
   updateCampaign(id, patch) { this.setCampaignDraft((a) => { const c = a.find((x) => x.id === id); if (c) Object.assign(c, patch); }); }
   delCampaign(id) { this.setCampaignDraft((a) => { const i = a.findIndex((x) => x.id === id); if (i >= 0) a.splice(i, 1); }); }
@@ -3583,7 +3583,7 @@ class App extends Component {
                 <span style="display:inline-flex;align-items:center;gap:7px;padding:5px 13px 5px 11px;border-radius:999px;font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:#fff;background:${t.color};flex:0 0 auto;"><span style="font-size:15px;line-height:1;">${t.icon}</span>${t.name || 'Sans nom'}</span>
                 <input value=${t.icon} onInput=${t.onIcon} maxlength="4" title="Icône (emoji)" style="width:56px;text-align:center;padding:9px 6px;font-size:16px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
                 <input value=${t.name} onInput=${t.onName} placeholder="Nom (ex. Happy hour)" style="flex:1 1 180px;min-width:0;padding:9px 11px;font-size:14px;font-weight:600;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
-                <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#8A847C;">Couleur <input type="color" value=${t.color} onInput=${t.onColor} title="Couleur du badge" style="width:34px;height:30px;padding:0;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;" /></label>
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#8A847C;">${v.t('common.color')} <input type="color" value=${t.color} onInput=${t.onColor} title="Couleur du badge" style="width:34px;height:30px;padding:0;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;" /></label>
                 <button onClick=${t.toggleActive} title=${t.active ? 'Actif — proposé dans le Compositeur' : 'Inactif — masqué du choix'} style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid rgba(35,34,32,0.12);cursor:pointer;background:${t.active ? 'rgba(46,110,78,0.12)' : 'rgba(141,29,44,0.08)'};color:${t.active ? '#2E6E4E' : '#8D1D2C'};font-size:13px;">${t.active ? '✓' : '⃠'}</button>
                 <span style="display:flex;align-items:center;gap:4px;flex:0 0 auto;">
                   <button onClick=${t.up} disabled=${t.isFirst} title="Monter" style="width:30px;height:30px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:${t.isFirst ? 'not-allowed' : 'pointer'};font-size:12px;opacity:${t.isFirst ? 0.4 : 1};">↑</button>
@@ -3593,7 +3593,7 @@ class App extends Component {
               </div>
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;padding-left:2px;">
                 <input value=${t.descr} onInput=${t.onDescr} placeholder="Description courte (ex. Réduction sur un créneau horaire)" style="flex:1 1 320px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;color:#4A4640;" />
-                <span style="font-size:11px;color:${t.used ? '#6E4A2B' : '#B8B2A8'};">${t.used ? `${t.used} élément(s) l'utilisent` : 'non utilisé'}</span>
+                <span style="font-size:11px;color:${t.used ? '#6E4A2B' : '#B8B2A8'};">${t.used ? v.t('common.usedBy', { n: t.used }) : v.t('common.unused')}</span>
               </div>
             </div>
           `)}
@@ -3635,7 +3635,7 @@ class App extends Component {
                   <option value="produit">📣 Produit</option>
                   <option value="gamme">🗂 Gamme thématique</option>
                 </select>
-                <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#8A847C;">Couleur <input type="color" value=${c.color} onInput=${c.onColor} title="Couleur d'accent" style="width:34px;height:30px;padding:0;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;" /></label>
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#8A847C;">${v.t('common.color')} <input type="color" value=${c.color} onInput=${c.onColor} title="Couleur d'accent" style="width:34px;height:30px;padding:0;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;" /></label>
                 <button onClick=${c.toggleActive} title=${c.active ? 'Active — proposée dans le Compositeur' : 'Inactive — masquée du choix'} style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid rgba(35,34,32,0.12);cursor:pointer;background:${c.active ? 'rgba(46,110,78,0.12)' : 'rgba(141,29,44,0.08)'};color:${c.active ? '#2E6E4E' : '#8D1D2C'};font-size:13px;">${c.active ? '✓' : '⃠'}</button>
                 <span style="display:flex;align-items:center;gap:4px;flex:0 0 auto;">
                   <button onClick=${c.up} disabled=${c.isFirst} title="Monter" style="width:30px;height:30px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:${c.isFirst ? 'not-allowed' : 'pointer'};font-size:12px;opacity:${c.isFirst ? 0.4 : 1};">↑</button>
@@ -3659,7 +3659,7 @@ class App extends Component {
               </div>
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;">
                 <input value=${c.image} onInput=${c.onImage} placeholder="URL du visuel (optionnel — sinon la photo du produit lié est utilisée)" spellcheck="false" style="flex:1 1 320px;min-width:0;padding:7px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;" />
-                <span style="font-size:11px;color:${c.used ? '#6E4A2B' : '#B8B2A8'};">${c.used ? `${c.used} élément(s) l'utilisent` : 'non utilisée'}</span>
+                <span style="font-size:11px;color:${c.used ? '#6E4A2B' : '#B8B2A8'};">${c.used ? v.t('common.usedBy', { n: c.used }) : v.t('common.unused')}</span>
               </div>
             </div>
           `)}

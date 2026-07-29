@@ -66,6 +66,11 @@ export const I18N = {
   'common.active': { fr: 'actif', en: 'active', it: 'attivo' },
   'common.inactive': { fr: 'inactif', en: 'inactive', it: 'inattivo' },
   'common.unsaved': { fr: 'non enregistrée', en: 'unsaved', it: 'non salvato' },
+  'common.color': { fr: 'Couleur', en: 'Color', it: 'Colore' },
+  'common.unused': { fr: 'non utilisé', en: 'unused', it: 'non usato' },
+  'common.usedBy': { fr: "{n} élément(s) l'utilisent", en: 'used by {n} element(s)', it: 'usato da {n} elemento/i' },
+  'promo.newName': { fr: 'Nouvelle promotion', en: 'New promotion', it: 'Nuova promozione' },
+  'campaign.newName': { fr: 'Nouvelle campagne', en: 'New campaign', it: 'Nuova campagna' },
 
   // -- Accueil (tableau de bord) --
   'home.welcome': { fr: 'Bienvenue dans la régie 👋', en: 'Welcome to the console 👋', it: 'Benvenuto nella console 👋' },
