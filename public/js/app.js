@@ -8,9 +8,16 @@ import {
 } from './renderer.js';
 // Config du mode « continu » : source unique partagée avec le serveur.
 import { continuousDefaults, normContinuous } from './continuous.js';
+// Internationalisation de l'interface (FR / EN / IT), choix par navigateur.
+import { UI_LANGS, UI_LANG_IDS, tr } from './i18n.js';
 // Générateur de QR code autonome (pour brancher un écran en scannant).
 import { qrSvg } from './vendor/qr.js';
 const qrDataUri = (url) => { try { return 'data:image/svg+xml;utf8,' + encodeURIComponent(qrSvg(String(url), { scale: 5, margin: 3 })); } catch { return ''; } };
+// Langue de l'interface : lue depuis localStorage (repli sur le français).
+const readUiLang = () => {
+  try { const v = localStorage.getItem('sig_ui_lang'); if (v && UI_LANG_IDS.includes(v)) return v; } catch { /* pas de localStorage */ }
+  return 'fr';
+};
 // Une valeur d'illustration est affichable telle quelle si c'est une URL, une
 // donnée inline, un chemin absolu, ou un fichier à extension image. Sinon (id
 // numérique, nom brut…), on n'affiche pas la balise <img> (on montre la valeur).
@@ -96,6 +103,7 @@ async function api(method, path, body) {
 class App extends Component {
   state = {
     loading: true, loadError: '',
+    uiLang: readUiLang(),
     authRequired: false, loginUser: 'admin', loginPass: '', loginError: '', loggingIn: false,
     secPerLine: 4, loop: true, playing: true, t: 0,
     dirty: false, saved: true, scope: 'module', clipboard: null, past: [], future: [],
@@ -975,11 +983,12 @@ class App extends Component {
     if ((st.seasons || []).length) dataBits.push('saisons');
     if ((st.prodMoments || []).length) dataBits.push('périodes de vente');
     if ((st.mediaLib || []).length) dataBits.push('médias');
+    const T = (k, vars) => this.t(k, vars);
     const steps = [
-      { key: 'catalog', ok: catalogOk, label: 'Catalogue importé', hint: catalogOk ? `${products.length} produit(s) · ${(st.catalog.categories || []).length} catégorie(s)` : 'aucun produit — connecte ta base', cta: { label: catalogOk ? 'Voir les produits' : 'Importer le catalogue', go: () => (catalogOk ? this.openProducts() : this.setView('settings')) } },
-      { key: 'film', ok: filmsReady.length > 0, label: 'Au moins un film prêt', hint: filmsReady.length ? `${filmsReady.length} film(s)` : 'aucun film avec du contenu', cta: { label: filmsReady.length ? 'Ouvrir le compositeur' : '✨ Créer mon premier film', go: () => (filmsReady.length ? this.setView('composer') : this.startFirstFilm()) } },
-      { key: 'screen', ok: players.length > 0, label: 'Écran connecté', hint: players.length ? `${onlineN}/${players.length} en ligne` : 'aucun écran branché', cta: { label: 'Brancher un écran', go: () => this.openOnboarding() } },
-      { key: 'data', ok: dataBits.length > 0, soft: true, label: 'Données du mode continu', hint: dataBits.length ? dataBits.join(' · ') : 'saisons · périodes de vente · médias (optionnel mais recommandé)', cta: { label: 'Remplir les périodes', go: () => this.openSeasons() } },
+      { key: 'catalog', ok: catalogOk, label: T('home.stepCatalog'), hint: catalogOk ? `${products.length} produit(s) · ${(st.catalog.categories || []).length} catégorie(s)` : 'aucun produit — connecte ta base', cta: { label: catalogOk ? 'Voir les produits' : 'Importer le catalogue', go: () => (catalogOk ? this.openProducts() : this.setView('settings')) } },
+      { key: 'film', ok: filmsReady.length > 0, label: T('home.stepFilm'), hint: filmsReady.length ? `${filmsReady.length} film(s)` : 'aucun film avec du contenu', cta: { label: filmsReady.length ? 'Ouvrir le compositeur' : '✨ Créer mon premier film', go: () => (filmsReady.length ? this.setView('composer') : this.startFirstFilm()) } },
+      { key: 'screen', ok: players.length > 0, label: T('home.stepScreen'), hint: players.length ? `${onlineN}/${players.length} en ligne` : 'aucun écran branché', cta: { label: 'Brancher un écran', go: () => this.openOnboarding() } },
+      { key: 'data', ok: dataBits.length > 0, soft: true, label: T('home.stepData'), hint: dataBits.length ? dataBits.join(' · ') : 'saisons · périodes de vente · médias (optionnel mais recommandé)', cta: { label: 'Remplir les périodes', go: () => this.openSeasons() } },
     ];
     return { steps, count: steps.filter((s) => s.ok).length, total: steps.length, moment: st.prodMomentsCurrent, week: st.planActiveWeek, online: onlineN, screens: players.length, film: this.activeFilm() };
   }
@@ -1336,6 +1345,15 @@ class App extends Component {
   };
 
   setView(v) { this.setState({ view: v }); if (v === 'fleet') this.refreshFleet(); }
+  // Traduction d'une clé pour la langue d'interface courante (+ interpolation).
+  t(key, vars) { return tr(this.state.uiLang, key, vars); }
+  // Change la langue de l'interface et la mémorise pour ce navigateur.
+  setUiLang(lang) {
+    if (!UI_LANG_IDS.includes(lang) || lang === this.state.uiLang) return;
+    try { localStorage.setItem('sig_ui_lang', lang); } catch { /* pas de localStorage */ }
+    try { document.documentElement.setAttribute('lang', lang); } catch { /* hors DOM */ }
+    this.setState({ uiLang: lang });
+  }
   setComposerTab(t) {
     this.setState({ composerTab: t, scope: t === 'timeline' ? 'playlist' : 'module', t: 0 });
   }
@@ -2316,38 +2334,40 @@ class App extends Component {
         sepStyle: `font-size:13px;color:#C9C3B8;margin:0 4px;${arr.length === 0 ? 'display:none;' : ''}`,
         style: `background:none;border:none;padding:2px 4px;font-size:12.5px;cursor:${go ? 'pointer' : 'default'};${cur ? 'color:#232220;font-weight:600;' : 'color:#8A847C;'}`,
       });
+      const T = (k, vars) => this.t(k, vars);
+      const unsaved = (dirty) => (dirty ? ' · ' + T('common.unsaved') : '');
       if (st.view === 'fleet') {
-        arr.push(crumb('Compositeur', () => this.setView('composer'), false));
-        arr.push(crumb('Réseau & supervision', () => this.setView('fleet'), false));
-        arr.push(crumb(`${online + offline} écrans · ${st.fleet.length} magasins`, null, true));
+        arr.push(crumb(T('nav.composer'), () => this.setView('composer'), false));
+        arr.push(crumb(T('nav.fleet'), () => this.setView('fleet'), false));
+        arr.push(crumb(T('crumb.screensStores', { s: online + offline, m: st.fleet.length }), null, true));
       } else if (st.view === 'settings') {
-        arr.push(crumb('Compositeur', () => this.setView('composer'), false));
-        arr.push(crumb('Paramètres', null, false));
-        arr.push(crumb('Serveur & connexion', null, true));
+        arr.push(crumb(T('nav.composer'), () => this.setView('composer'), false));
+        arr.push(crumb(T('settings.title'), null, false));
+        arr.push(crumb(T('settings.serverConn'), null, true));
       } else if (st.view === 'products') {
-        arr.push(crumb('Compositeur', () => this.setView('composer'), false));
-        arr.push(crumb('Table produits', null, false));
-        arr.push(crumb(`${(st.catDraft || st.catalog).categories.length} catégorie(s) · ${(st.catDraft || st.catalog).products.length} produit(s)${st.catDirty ? ' · non enregistrée' : ''}`, null, true));
+        arr.push(crumb(T('nav.composer'), () => this.setView('composer'), false));
+        arr.push(crumb(T('products.tableCrumb'), null, false));
+        arr.push(crumb(T('crumb.catsProducts', { c: (st.catDraft || st.catalog).categories.length, p: (st.catDraft || st.catalog).products.length }) + unsaved(st.catDirty), null, true));
       } else if (st.view === 'seasons') {
-        arr.push(crumb('Compositeur', () => this.setView('composer'), false));
-        arr.push(crumb('Périodes de l\'année', null, false));
-        arr.push(crumb(`${(st.seasons || []).length} période(s)${st.seasonsDirty ? ' · non enregistrées' : ''}`, null, true));
+        arr.push(crumb(T('nav.composer'), () => this.setView('composer'), false));
+        arr.push(crumb(T('seasons.title'), null, false));
+        arr.push(crumb(T('crumb.periods', { n: (st.seasons || []).length }) + unsaved(st.seasonsDirty), null, true));
       } else if (st.view === 'promotions') {
-        arr.push(crumb('Compositeur', () => this.setView('composer'), false));
-        arr.push(crumb('Promotions', null, false));
-        arr.push(crumb(`${(st.promoDraft || st.promoTypes || []).length} type(s)${st.promoDirty ? ' · non enregistrés' : ''}`, null, true));
+        arr.push(crumb(T('nav.composer'), () => this.setView('composer'), false));
+        arr.push(crumb(T('nav.promotions'), null, false));
+        arr.push(crumb(T('crumb.promoTypes', { n: (st.promoDraft || st.promoTypes || []).length }) + unsaved(st.promoDirty), null, true));
       } else if (st.view === 'campaigns') {
-        arr.push(crumb('Compositeur', () => this.setView('composer'), false));
-        arr.push(crumb('Campagnes', null, false));
-        arr.push(crumb(`${(st.campaignDraft || st.campaigns || []).length} campagne(s)${st.campaignDirty ? ' · non enregistrées' : ''}`, null, true));
+        arr.push(crumb(T('nav.composer'), () => this.setView('composer'), false));
+        arr.push(crumb(T('nav.campaigns'), null, false));
+        arr.push(crumb(T('crumb.campaigns', { n: (st.campaignDraft || st.campaigns || []).length }) + unsaved(st.campaignDirty), null, true));
       } else if (st.view === 'planning') {
-        arr.push(crumb('Compositeur', () => this.setView('composer'), false));
-        arr.push(crumb('Planning hebdo', null, false));
-        arr.push(crumb(`Semaine ${st.planWeek} · ${st.planStores.length} magasin(s)`, null, true));
+        arr.push(crumb(T('nav.composer'), () => this.setView('composer'), false));
+        arr.push(crumb(T('planning.weekCrumb'), null, false));
+        arr.push(crumb(T('crumb.weekStores', { w: st.planWeek, m: st.planStores.length }), null, true));
       } else {
-        arr.push(crumb('Compositeur', () => this.setView('composer'), false));
-        arr.push(crumb(`Film : ${this.activeFilm().name}`, null, false));
-        arr.push(crumb(`${m.name}${isLia ? ' (liaison)' : ''}`, null, true));
+        arr.push(crumb(T('nav.composer'), () => this.setView('composer'), false));
+        arr.push(crumb(T('crumb.film', { name: this.activeFilm().name }), null, false));
+        arr.push(crumb(`${m.name}${isLia ? T('crumb.liaison') : ''}`, null, true));
       }
       return arr;
     })();
@@ -2419,6 +2439,10 @@ class App extends Component {
     const subTab = 'padding:8px 18px;font-size:13px;font-weight:600;border:none;border-radius:999px;cursor:pointer;';
     const hdrRound = 'width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;cursor:pointer;flex:0 0 auto;';
     return {
+      // Traduction de l'interface + sélecteur de langue (FR / EN / IT).
+      t: (k, vars) => this.t(k, vars),
+      uiLang: st.uiLang,
+      uiLangs: UI_LANGS.map((l) => ({ ...l, active: l.id === st.uiLang, pick: () => this.setUiLang(l.id) })),
       playlist, library, layoutOptions, motionGroups, items, days, posFields, timeSlots, crumbs,
       timelineBlocks, timelineTotal, timelineEndDrop, libCards, libTagChips, libEmptyMsg, pubDaysVals,
       prodCats, prodRows, storeCols, prodSelCat, langChips, isBaseLang,
@@ -2540,7 +2564,7 @@ class App extends Component {
       playlistVersion: st.version,
       pushPrices: this.pushPrices,
       toggleOverride: this.toggleOverride,
-      overrideLabel: st.override ? 'Reprendre les playlists' : 'Diffusion flash',
+      overrideLabel: st.override ? this.t('override.resume') : this.t('override.flash'),
       overrideStyle: `padding:9px 18px;font-size:13px;font-weight:600;letter-spacing:0.01em;border-radius:999px;cursor:pointer;${st.override ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;box-shadow:0 2px 8px rgba(141,29,44,0.3);' : 'background:transparent;color:#5B564E;border:1px solid rgba(35,34,32,0.18);'}`,
       kpis, fleet,
       hasAlerts: offline > 0 || errors > 0 || stale > 0 || st.override,
@@ -2763,7 +2787,7 @@ class App extends Component {
       saveTip: st.dirty ? 'Enregistrement automatique en cours… (clique pour forcer)' : 'Tout est enregistré automatiquement',
       pricesIconStyle: `${hdrRound}background:rgba(201,123,74,0.14);color:#A25C2E;border:1px solid rgba(201,123,74,0.5);`,
       overrideIconStyle: `${hdrRound}${st.override ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;box-shadow:0 2px 10px rgba(141,29,44,0.35);' : 'background:transparent;color:#5B564E;border:1px solid rgba(35,34,32,0.18);'}`,
-      overrideTip: st.override ? 'Diffusion flash ACTIVE — cliquer pour reprendre les playlists' : 'Diffusion flash (suspend les playlists)',
+      overrideTip: st.override ? this.t('override.tipOn') : this.t('override.tipOff'),
       publishIconStyle: `width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;cursor:pointer;flex:0 0 auto;background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;box-shadow:0 3px 12px rgba(141,29,44,0.4);`,
       onbIconStyle: `${hdrRound}background:rgba(46,110,78,0.12);color:#2E6E4E;border:1px solid rgba(46,110,78,0.4);`,
       reportIconStyle: `${hdrRound}background:rgba(110,74,43,0.12);color:#6E4A2B;border:1px solid rgba(110,74,43,0.4);`,
@@ -2809,28 +2833,31 @@ class App extends Component {
   render() {
     const st = this.state;
     if (st.loading) {
-      return html`<div style="height:100vh;display:flex;align-items:center;justify-content:center;color:#8A847C;font-size:15px;">Chargement de la régie…</div>`;
+      return html`<div style="height:100vh;display:flex;align-items:center;justify-content:center;color:#8A847C;font-size:15px;">${this.t('app.loading')}</div>`;
     }
     if (st.authRequired) {
       return html`<div style="height:100vh;display:flex;align-items:center;justify-content:center;background:#E7E1D8;padding:24px;">
         <form onSubmit=${this.doLogin} style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:20px;padding:36px 38px;width:360px;max-width:100%;box-shadow:0 30px 80px rgba(0,0,0,0.10);display:flex;flex-direction:column;gap:13px;">
           <img src="assets/logo.png" alt="L'Atelier By" style="height:44px;width:auto;align-self:center;margin-bottom:4px;" />
-          <div style="text-align:center;font-weight:600;font-size:16px;">Régie d'affichage</div>
-          <div style="text-align:center;font-size:12px;color:#8A847C;margin-bottom:6px;">Connexion requise pour piloter le réseau</div>
-          <label style="font-size:12.5px;font-weight:500;color:#8A847C;">Utilisateur</label>
+          <div style="text-align:center;font-weight:600;font-size:16px;">${this.t('login.title')}</div>
+          <div style="text-align:center;font-size:12px;color:#8A847C;margin-bottom:6px;">${this.t('login.subtitle')}</div>
+          <div style="display:flex;justify-content:center;gap:5px;margin-bottom:4px;">
+            ${UI_LANGS.map((l) => html`<button type="button" title=${l.label} onClick=${() => this.setUiLang(l.id)} style="padding:4px 11px;font-size:11px;font-weight:700;border:none;border-radius:999px;cursor:pointer;${l.id === st.uiLang ? 'background:#8D1D2C;color:#fff;' : 'background:#EFE9E0;color:#8A847C;'}">${l.short}</button>`)}
+          </div>
+          <label style="font-size:12.5px;font-weight:500;color:#8A847C;">${this.t('login.user')}</label>
           <input value=${st.loginUser} onInput=${(e) => this.setState({ loginUser: e.target.value })} autocomplete="username" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:14px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;" />
-          <label style="font-size:12.5px;font-weight:500;color:#8A847C;">Mot de passe</label>
+          <label style="font-size:12.5px;font-weight:500;color:#8A847C;">${this.t('login.password')}</label>
           <input type="password" value=${st.loginPass} onInput=${(e) => this.setState({ loginPass: e.target.value })} autocomplete="current-password" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:14px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;" />
           ${st.loginError && html`<div style="font-size:12.5px;color:#8D1D2C;">${st.loginError}</div>`}
-          <button type="submit" style="margin-top:6px;padding:12px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:pointer;background:#232220;color:#fff;opacity:${st.loggingIn ? 0.7 : 1};">${st.loggingIn ? 'Connexion…' : 'Se connecter'}</button>
-          <a href="film" target="_blank" style="margin-top:10px;text-align:center;font-size:13px;font-weight:500;color:#8D1D2C;padding:10px;border:1px solid rgba(141,29,44,0.25);border-radius:999px;background:rgba(141,29,44,0.06);">▶ Visualiser le film (sans connexion)</a>
+          <button type="submit" style="margin-top:6px;padding:12px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:pointer;background:#232220;color:#fff;opacity:${st.loggingIn ? 0.7 : 1};">${st.loggingIn ? this.t('login.signingIn') : this.t('login.signIn')}</button>
+          <a href="film" target="_blank" style="margin-top:10px;text-align:center;font-size:13px;font-weight:500;color:#8D1D2C;padding:10px;border:1px solid rgba(141,29,44,0.25);border-radius:999px;background:rgba(141,29,44,0.06);">${this.t('login.viewFilm')}</a>
         </form>
       </div>`;
     }
     if (st.loadError) {
       return html`<div style="height:100vh;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;color:#8D1D2C;font-size:15px;">
-        <div>Impossible de joindre le CMS : ${st.loadError}</div>
-        <button onClick=${() => { this.setState({ loading: true, loadError: '' }); this.loadState(); }} style="padding:10px 22px;border-radius:999px;border:none;background:#232220;color:#fff;cursor:pointer;">Réessayer</button>
+        <div>${this.t('app.cmsUnreachable', { err: st.loadError })}</div>
+        <button onClick=${() => { this.setState({ loading: true, loadError: '' }); this.loadState(); }} style="padding:10px 22px;border-radius:999px;border:none;background:#232220;color:#fff;cursor:pointer;">${this.t('app.retry')}</button>
       </div>`;
     }
     const v = this.vals();
@@ -3035,7 +3062,7 @@ class App extends Component {
       </div>`;
 
     const home = this.homeReadiness();
-    const MOMENT_FULL = { matin: 'Matin', midi: 'Midi', aprem: 'Après-midi' };
+    const MOMENT_FULL = { matin: this.t('moment.matin'), midi: this.t('moment.midi'), aprem: this.t('moment.aprem') };
     return html`
 <div style="height:100vh;background:#E7E1D8;color:#232220;display:flex;flex-direction:column;overflow:hidden;">
 
@@ -3043,32 +3070,36 @@ class App extends Component {
     <div style="display:flex;align-items:center;gap:16px;min-width:0;flex:1 1 auto;">
       <div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0;flex:0 0 auto;">
         <img src="assets/logo.png" alt="L'Atelier By" style="height:32px;width:auto;" />
-        <span style="font-weight:500;font-size:12.5px;letter-spacing:0.02em;white-space:nowrap;">Régie d'affichage</span>
+        <span style="font-weight:500;font-size:12.5px;letter-spacing:0.02em;white-space:nowrap;">${v.t('header.console')}</span>
       </div>
       <div style="display:inline-flex;background:#EFE9E0;border-radius:999px;padding:3px;flex:0 0 auto;margin-left:10px;">
-        <button onClick=${v.setViewHome} style=${v.tabHomeStyle}>Accueil</button>
-        <button onClick=${v.setViewComposer} style=${v.tabComposerStyle}>Compositeur</button>
-        <button onClick=${v.setViewProducts} style=${v.tabProductsStyle}>Produits</button>
-        <button onClick=${v.setViewPromotions} style=${v.tabPromotionsStyle}>Promotions</button>
-        <button onClick=${v.setViewCampaigns} style=${v.tabCampaignsStyle}>Campagnes</button>
-        <button onClick=${v.setViewSeasons} style=${v.tabSeasonsStyle}>Périodes</button>
-        <button onClick=${v.setViewPlanning} style=${v.tabPlanningStyle}>Planning</button>
-        <button onClick=${v.setViewFleet} style=${v.tabFleetStyle}>Réseau & supervision</button>
+        <button onClick=${v.setViewHome} style=${v.tabHomeStyle}>${v.t('nav.home')}</button>
+        <button onClick=${v.setViewComposer} style=${v.tabComposerStyle}>${v.t('nav.composer')}</button>
+        <button onClick=${v.setViewProducts} style=${v.tabProductsStyle}>${v.t('nav.products')}</button>
+        <button onClick=${v.setViewPromotions} style=${v.tabPromotionsStyle}>${v.t('nav.promotions')}</button>
+        <button onClick=${v.setViewCampaigns} style=${v.tabCampaignsStyle}>${v.t('nav.campaigns')}</button>
+        <button onClick=${v.setViewSeasons} style=${v.tabSeasonsStyle}>${v.t('nav.seasons')}</button>
+        <button onClick=${v.setViewPlanning} style=${v.tabPlanningStyle}>${v.t('nav.planning')}</button>
+        <button onClick=${v.setViewFleet} style=${v.tabFleetStyle}>${v.t('nav.fleet')}</button>
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:9px;flex:0 0 auto;flex-wrap:wrap;justify-content:flex-end;">
-      <button class="hdr-btn" onClick=${v.undo} style=${v.undoStyle}>↶<span class="hdr-tip">Annuler (⌘Z)</span></button>
-      <button class="hdr-btn" onClick=${v.redo} style=${v.redoStyle}>↷<span class="hdr-tip">Rétablir (⌘⇧Z)</span></button>
+      <button class="hdr-btn" onClick=${v.undo} style=${v.undoStyle}>↶<span class="hdr-tip">${v.t('hdr.undo')}</span></button>
+      <button class="hdr-btn" onClick=${v.redo} style=${v.redoStyle}>↷<span class="hdr-tip">${v.t('hdr.redo')}</span></button>
       <span style="width:1px;height:26px;background:rgba(35,34,32,0.10);flex:0 0 auto;margin:0 3px;"></span>
       <button class="hdr-btn" onClick=${v.save} style=${v.saveIconStyle}>✓<span class="hdr-tip">${v.saveTip}</span></button>
-      <button class="hdr-btn" onClick=${v.pushPrices} style=${v.pricesIconStyle}>€<span class="hdr-tip">Pousser les prix — sync légère, sans re-télécharger les médias</span></button>
+      <button class="hdr-btn" onClick=${v.pushPrices} style=${v.pricesIconStyle}>€<span class="hdr-tip">${v.t('hdr.pushPrices')}</span></button>
       <button class="hdr-btn" onClick=${v.toggleOverride} style=${v.overrideIconStyle}>⚡<span class="hdr-tip">${v.overrideTip}</span></button>
-      <button class="hdr-btn" onClick=${v.openPublish} style=${v.publishIconStyle}>↗<span class="hdr-tip hdr-tip-right">Publier sur le réseau — déploie le film choisi</span></button>
+      <button class="hdr-btn" onClick=${v.openPublish} style=${v.publishIconStyle}>↗<span class="hdr-tip hdr-tip-right">${v.t('hdr.publish')}</span></button>
       <span style="width:1px;height:26px;background:rgba(35,34,32,0.10);flex:0 0 auto;margin:0 3px;"></span>
-      <button class="hdr-btn" onClick=${() => this.openWizard()} style="position:relative;display:flex;align-items:center;gap:5px;height:32px;padding:0 13px;border-radius:9px;background:#8D1D2C;color:#fff;border:none;cursor:pointer;font-size:12.5px;font-weight:700;flex:0 0 auto;">🎬 Diffuser<span class="hdr-tip hdr-tip-right">Assistant de diffusion — créer un film et le publier de bout en bout (avec le rapport)</span></button>
-      <button class="hdr-btn" onClick=${v.openReport} style=${v.reportIconStyle}>📄<span class="hdr-tip hdr-tip-right">Rapport de diffusion — lien partageable (bibliothèque, planning, écrans)</span></button>
-      <button class="hdr-btn" onClick=${v.openOnboarding} style=${v.onbIconStyle}>🎓<span class="hdr-tip hdr-tip-right">Mise en route — configurer chaque magasin</span></button>
-      <button class="hdr-btn" onClick=${v.setViewSettings} style=${v.settingsIconStyle}>⚙<span class="hdr-tip hdr-tip-right">Paramètres — serveur, import PWA & liens</span></button>
+      <button class="hdr-btn" onClick=${() => this.openWizard()} style="position:relative;display:flex;align-items:center;gap:5px;height:32px;padding:0 13px;border-radius:9px;background:#8D1D2C;color:#fff;border:none;cursor:pointer;font-size:12.5px;font-weight:700;flex:0 0 auto;">${v.t('hdr.broadcast')}<span class="hdr-tip hdr-tip-right">${v.t('hdr.broadcastTip')}</span></button>
+      <button class="hdr-btn" onClick=${v.openReport} style=${v.reportIconStyle}>📄<span class="hdr-tip hdr-tip-right">${v.t('hdr.report')}</span></button>
+      <button class="hdr-btn" onClick=${v.openOnboarding} style=${v.onbIconStyle}>🎓<span class="hdr-tip hdr-tip-right">${v.t('hdr.onboarding')}</span></button>
+      <button class="hdr-btn" onClick=${v.setViewSettings} style=${v.settingsIconStyle}>⚙<span class="hdr-tip hdr-tip-right">${v.t('hdr.settings')}</span></button>
+      <span style="width:1px;height:26px;background:rgba(35,34,32,0.10);flex:0 0 auto;margin:0 3px;"></span>
+      <div title=${v.t('nav.uiLang')} style="display:inline-flex;background:#EFE9E0;border-radius:999px;padding:3px;flex:0 0 auto;">
+        ${v.uiLangs.map((l) => html`<button onClick=${l.pick} title=${l.label} style="padding:5px 10px;font-size:11.5px;font-weight:700;letter-spacing:0.04em;border:none;border-radius:999px;cursor:pointer;${l.active ? 'background:#8D1D2C;color:#fff;' : 'background:transparent;color:#8A847C;'}">${l.short}</button>`)}
+      </div>
     </div>
   </header>
 
@@ -3077,17 +3108,17 @@ class App extends Component {
       <span style=${c.sepStyle}>›</span>
       <button onClick=${c.go} style=${c.style}>${c.label}</button>
     `)}
-    <a href="film" target="_blank" title="Ouvrir la visionneuse publique du film (dernière playlist publiée)" style="margin-left:auto;font-size:12.5px;font-weight:600;color:#8D1D2C;padding:4px 12px;border:1px solid rgba(141,29,44,0.25);border-radius:999px;background:rgba(141,29,44,0.06);">▶ Voir le film</a>
+    <a href="film" target="_blank" title="Ouvrir la visionneuse publique du film (dernière playlist publiée)" style="margin-left:auto;font-size:12.5px;font-weight:600;color:#8D1D2C;padding:4px 12px;border:1px solid rgba(141,29,44,0.25);border-radius:999px;background:rgba(141,29,44,0.06);">${v.t('nav.seeFilm')}</a>
   </nav>
 
   ${v.isSettingsView && html`
   <div style="flex:1 1 auto;overflow:auto;padding:34px 32px 48px;">
     <div style="max-width:640px;margin:0 auto;">
-      <h1 style="margin:0 0 6px;font-size:24px;font-weight:600;">Paramètres</h1>
-      <p style="margin:0 0 26px;font-size:13.5px;color:#8A847C;">Point d'accès au CMS et test de connexion live d'un player. Les tests s'exécutent aussi automatiquement à chaque déploiement.</p>
+      <h1 style="margin:0 0 6px;font-size:24px;font-weight:600;">${v.t('settings.title')}</h1>
+      <p style="margin:0 0 26px;font-size:13.5px;color:#8A847C;">${v.t('settings.subtitle')}</p>
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
-          <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Serveur & connexion</h2>
+          <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">${v.t('settings.serverConn')}</h2>
           <span style=${v.srvPingStyle}>${v.srvPing}</span>
         </div>
         <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:6px;">URL du CMS (API base)</label>
@@ -3269,8 +3300,8 @@ class App extends Component {
     <div style="margin:0;display:flex;flex-direction:column;gap:16px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
         <div>
-          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Table produits</h2>
-          <p style="margin:0;font-size:12.5px;color:#8A847C;">La source unique des listes de prix : catégories → produits, actif/inactif, prix par défaut et prix par magasin. Les éléments liés (⛓) suivent automatiquement.</p>
+          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">${v.t('products.title')}</h2>
+          <p style="margin:0;font-size:12.5px;color:#8A847C;">${v.t('products.subtitle')}</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Langue d'édition</span>
@@ -3358,14 +3389,14 @@ class App extends Component {
     <div style="margin:0;display:flex;flex-direction:column;gap:16px;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
         <div>
-          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Périodes de l'année</h2>
-          <p style="margin:0;font-size:12.5px;color:#8A847C;max-width:760px;">Définis les saisons et fêtes (du → au) et les produits liés. Sert à cibler automatiquement les vidéos et animations de saison. Récurrent chaque année (jour/mois). Importable depuis la table <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">ws_season</code> de la même base MySQL que les produits (nom, dates, produits liés et illustration si la table en expose une). « 🔍 Diagnostic » liste les colonnes réelles sans rien modifier.</p>
+          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">${v.t('seasons.title')}</h2>
+          <p style="margin:0;font-size:12.5px;color:#8A847C;max-width:760px;">${v.t('seasons.subtitle')} <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">ws_season</code></p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <input value=${v.wsTable} onInput=${v.onWsTable} placeholder="table (déf. ws_season)" spellcheck="false" title="Nom de la table MySQL des périodes, si différent de ws_season" style="width:170px;padding:9px 11px;font-size:12.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:999px;background:#FBF8F2;" />
-          <button onClick=${v.diagSeasons} disabled=${v.seasonsBusy} title="Lecture seule : liste les colonnes réelles de ws_season et détecte une éventuelle colonne d'illustration" style="padding:9px 14px;font-size:12.5px;font-weight:600;color:#4A4640;background:#fff;border:1px solid rgba(35,34,32,0.2);border-radius:999px;cursor:${v.seasonsBusy ? 'wait' : 'pointer'};">🔍 Diagnostic</button>
-          <button onClick=${v.importSeasons} disabled=${v.seasonsBusy} style="padding:9px 15px;font-size:12.5px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.35);border-radius:999px;cursor:${v.seasonsBusy ? 'wait' : 'pointer'};">⟳ Importer</button>
-          <button onClick=${v.saveSeasons} disabled=${!v.seasonsDirty || v.seasonsBusy} style="padding:9px 18px;font-size:13px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.seasonsDirty && !v.seasonsBusy ? 'pointer' : 'not-allowed'};background:${v.seasonsDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.seasonsDirty ? '#fff' : '#8A847C'};">${v.seasonsBusy ? 'Enregistrement…' : (v.seasonsDirty ? 'Enregistrer' : '✓ Enregistré')}</button>
+          <button onClick=${v.diagSeasons} disabled=${v.seasonsBusy} title="Lecture seule : liste les colonnes réelles de ws_season et détecte une éventuelle colonne d'illustration" style="padding:9px 14px;font-size:12.5px;font-weight:600;color:#4A4640;background:#fff;border:1px solid rgba(35,34,32,0.2);border-radius:999px;cursor:${v.seasonsBusy ? 'wait' : 'pointer'};">${v.t('seasons.diagnostic')}</button>
+          <button onClick=${v.importSeasons} disabled=${v.seasonsBusy} style="padding:9px 15px;font-size:12.5px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.35);border-radius:999px;cursor:${v.seasonsBusy ? 'wait' : 'pointer'};">${v.t('seasons.import')}</button>
+          <button onClick=${v.saveSeasons} disabled=${!v.seasonsDirty || v.seasonsBusy} style="padding:9px 18px;font-size:13px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.seasonsDirty && !v.seasonsBusy ? 'pointer' : 'not-allowed'};background:${v.seasonsDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.seasonsDirty ? '#fff' : '#8A847C'};">${v.seasonsBusy ? v.t('common.saving') : (v.seasonsDirty ? v.t('common.save') : v.t('common.saved'))}</button>
         </div>
       </div>
       ${v.wsCandidates.length ? html`
@@ -3533,18 +3564,18 @@ class App extends Component {
     <div style="margin:0;display:flex;flex-direction:column;gap:16px;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
         <div>
-          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Promotions</h2>
-          <p style="margin:0;font-size:12.5px;color:#8A847C;max-width:820px;">Les <strong>sous-types de promotion</strong> (happy hour, vente flash, bundle, achetez X obtenez Y, remise planifiée, bon d'achat…) sont <strong>gérés ici</strong>, pas codés en dur. Chaque type porte une icône, une couleur et un libellé qui composent le <strong>badge</strong> affiché à l'écran. Pour diffuser une offre, ajoute un élément <strong>« Promotion — offre » 🏷️</strong> dans le Compositeur et choisis son sous-type. Ces types pourront être <strong>alimentés depuis l'ERP</strong> (menu Promotions) dans un second temps.</p>
+          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">${v.t('promo.title')}</h2>
+          <p style="margin:0;font-size:12.5px;color:#8A847C;max-width:820px;">${v.t('promo.subtitle')}</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <button onClick=${v.addPromoType} style="padding:9px 15px;font-size:12.5px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;cursor:pointer;">+ Ajouter une promotion</button>
-          <button onClick=${v.savePromoTypes} disabled=${!v.promoDirty || v.promoBusy} style="padding:9px 18px;font-size:13px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.promoDirty && !v.promoBusy ? 'pointer' : 'not-allowed'};background:${v.promoDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.promoDirty ? '#fff' : '#8A847C'};">${v.promoBusy ? 'Enregistrement…' : (v.promoDirty ? 'Enregistrer' : '✓ Enregistré')}</button>
+          <button onClick=${v.addPromoType} style="padding:9px 15px;font-size:12.5px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;cursor:pointer;">${v.t('promo.addType')}</button>
+          <button onClick=${v.savePromoTypes} disabled=${!v.promoDirty || v.promoBusy} style="padding:9px 18px;font-size:13px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.promoDirty && !v.promoBusy ? 'pointer' : 'not-allowed'};background:${v.promoDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.promoDirty ? '#fff' : '#8A847C'};">${v.promoBusy ? v.t('common.saving') : (v.promoDirty ? v.t('common.save') : v.t('common.saved'))}</button>
         </div>
       </div>
 
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${v.promoCount} sous-type(s) de promotion</h3>
+          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${v.t('promo.count', { n: v.promoCount })}</h3>
         </div>
         <div style="display:flex;flex-direction:column;gap:10px;">
           ${v.promoRows.map((t) => html`
@@ -3580,18 +3611,18 @@ class App extends Component {
     <div style="margin:0;display:flex;flex-direction:column;gap:16px;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
         <div>
-          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Campagnes marketing</h2>
-          <p style="margin:0;font-size:12.5px;color:#8A847C;max-width:840px;">La <strong>liste des campagnes</strong> à diffuser (portée <strong>produit</strong> ou <strong>gamme thématique</strong>). Tu n'as ensuite qu'à en <strong>déposer une comme item</strong> dans un film : ajoute un élément <strong>« Campagne marketing » 📣</strong> dans le Compositeur et choisis la campagne. Chaque campagne porte un nom, un visuel, une accroche, un produit lié (pour la portée produit) et une période. Cette liste pourra être <strong>alimentée depuis l'ERP</strong> dans un second temps.</p>
+          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">${v.t('campaign.title')}</h2>
+          <p style="margin:0;font-size:12.5px;color:#8A847C;max-width:840px;">${v.t('campaign.subtitle')}</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <button onClick=${v.addCampaign} style="padding:9px 15px;font-size:12.5px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;cursor:pointer;">+ Ajouter une campagne</button>
-          <button onClick=${v.saveCampaigns} disabled=${!v.campaignDirty || v.campaignBusy} style="padding:9px 18px;font-size:13px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.campaignDirty && !v.campaignBusy ? 'pointer' : 'not-allowed'};background:${v.campaignDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.campaignDirty ? '#fff' : '#8A847C'};">${v.campaignBusy ? 'Enregistrement…' : (v.campaignDirty ? 'Enregistrer' : '✓ Enregistré')}</button>
+          <button onClick=${v.addCampaign} style="padding:9px 15px;font-size:12.5px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;cursor:pointer;">${v.t('campaign.add')}</button>
+          <button onClick=${v.saveCampaigns} disabled=${!v.campaignDirty || v.campaignBusy} style="padding:9px 18px;font-size:13px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.campaignDirty && !v.campaignBusy ? 'pointer' : 'not-allowed'};background:${v.campaignDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.campaignDirty ? '#fff' : '#8A847C'};">${v.campaignBusy ? v.t('common.saving') : (v.campaignDirty ? v.t('common.save') : v.t('common.saved'))}</button>
         </div>
       </div>
 
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${v.campaignCount} campagne(s)</h3>
+          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${v.t('campaign.count', { n: v.campaignCount })}</h3>
         </div>
         <div style="display:flex;flex-direction:column;gap:10px;">
           ${v.campaignRows.map((c) => html`
@@ -3645,8 +3676,8 @@ class App extends Component {
   <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;">
     <div style="max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
       <div>
-        <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">Planning hebdomadaire</h2>
-        <p style="margin:0;font-size:12.5px;color:#8A847C;">5 modèles de semaine réutilisables (A–E). Choisis les magasins, remplis chaque jour (matin / midi / après-midi), puis <strong>active</strong> la semaine à diffuser. Duplique une semaine pour la retoucher. Tout s'enregistre automatiquement ; les écrans basculent selon le jour et l'heure.</p>
+        <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">${v.t('planning.title')}</h2>
+        <p style="margin:0;font-size:12.5px;color:#8A847C;">${v.t('planning.subtitle')}</p>
       </div>
 
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
@@ -3951,16 +3982,16 @@ class App extends Component {
   <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;">
     <div style="max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:18px;">
       <div>
-        <h1 style="margin:0 0 4px;font-size:22px;font-weight:600;color:#232220;">Bienvenue dans la régie 👋</h1>
-        <p style="margin:0;font-size:13.5px;color:#8A847C;">Voici où tu en es et ce qu'il te reste pour diffuser. ${home.count === home.total ? 'Tout est prêt 🎉' : `${home.count}/${home.total} étapes prêtes.`}</p>
+        <h1 style="margin:0 0 4px;font-size:22px;font-weight:600;color:#232220;">${v.t('home.welcome')}</h1>
+        <p style="margin:0;font-size:13.5px;color:#8A847C;">${v.t('home.intro')} ${home.count === home.total ? v.t('home.allReady') : v.t('home.stepsReady', { n: home.count, total: home.total })}</p>
       </div>
 
       <!-- Ce qui passe maintenant -->
       <div style="background:linear-gradient(135deg,#2A2622,#3A332C);border-radius:18px;padding:20px 24px;color:#fff;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
         <div>
-          <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin-bottom:6px;">Ce qui passe maintenant</div>
-          <div style="font-size:18px;font-weight:600;">${home.film ? home.film.name : 'Aucun film'} ${home.film && home.film.mode === 'continu' ? html`<span style="font-size:11px;font-weight:600;color:#F0D9B5;background:rgba(240,217,181,0.15);border-radius:999px;padding:2px 9px;margin-left:4px;">🔄 continu</span>` : ''}</div>
-          <div style="font-size:12.5px;color:rgba(255,255,255,0.6);margin-top:4px;">Moment : <strong style="color:#fff;">${MOMENT_FULL[home.moment] || '—'}</strong> · Semaine active : <strong style="color:#fff;">${home.week}</strong> · Écrans : <strong style="color:#fff;">${home.online}/${home.screens}</strong> en ligne</div>
+          <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin-bottom:6px;">${v.t('home.nowPlaying')}</div>
+          <div style="font-size:18px;font-weight:600;">${home.film ? home.film.name : v.t('home.noFilm')} ${home.film && home.film.mode === 'continu' ? html`<span style="font-size:11px;font-weight:600;color:#F0D9B5;background:rgba(240,217,181,0.15);border-radius:999px;padding:2px 9px;margin-left:4px;">🔄 continu</span>` : ''}</div>
+          <div style="font-size:12.5px;color:rgba(255,255,255,0.6);margin-top:4px;">${v.t('home.moment')} : <strong style="color:#fff;">${MOMENT_FULL[home.moment] || '—'}</strong> · ${v.t('home.activeWeek')} : <strong style="color:#fff;">${home.week}</strong> · ${v.t('home.screens')} : <strong style="color:#fff;">${home.online}/${home.screens}</strong> ${v.t('home.online')}</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <a href=${new URL('film', location.href).toString()} target="_blank" style="padding:10px 16px;font-size:13px;font-weight:600;color:#232220;background:#fff;border-radius:999px;">▶ Voir la diffusion ↗</a>
@@ -3969,7 +4000,7 @@ class App extends Component {
 
       <!-- Prêt à diffuser ? -->
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:20px 22px;">
-        <h3 style="margin:0 0 14px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Prêt à diffuser ?</h3>
+        <h3 style="margin:0 0 14px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${v.t('home.readyChecklist')}</h3>
         <div style="display:flex;flex-direction:column;gap:10px;">
           ${home.steps.map((s) => html`
             <div style="display:flex;align-items:center;gap:14px;padding:13px 15px;border-radius:12px;background:${s.ok ? 'rgba(46,110,78,0.06)' : (s.soft ? '#FBF8F2' : 'rgba(201,123,74,0.07)')};border:1px solid ${s.ok ? 'rgba(46,110,78,0.25)' : (s.soft ? 'rgba(35,34,32,0.1)' : 'rgba(201,123,74,0.3)')};">

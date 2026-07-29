@@ -71,6 +71,16 @@ reverse proxy expose l'application.
 
 ## Fonctionnement
 
+### Langue de l'interface (FR / EN / IT)
+Un **sélecteur de langue** en en-tête (et sur l'écran de connexion) bascule toute la régie
+entre **français, anglais et italien**. Le choix est **mémorisé par navigateur**
+(`localStorage: sig_ui_lang`) — c'est une préférence d'affichage de l'outil, indépendante des
+données. Les libellés vivent dans `public/js/i18n.js` (dictionnaire `{ clé: { fr, en, it } }`,
+repli sur le français) ; `App.t('clé')` les résout à la volée selon la langue courante.
+
+> À ne pas confondre avec la **langue diffusée à l'écran** par magasin (`sig_stores.lang`, réglée
+> dans Réseau), qui traduit le *contenu* (noms de produits…) affiché au client, pas l'interface.
+
 ### Compositeur — flow en 3 étapes
 **1 · Bibliothèque (construire)** : création des éléments. **2 · Playlist (ligne du temps)** :
 glisser-déposer les éléments de la bibliothèque sur la timeline du film (blocs proportionnels
