@@ -1579,9 +1579,9 @@ class App extends Component {
     if (name) this.saveStore(id, { name });
   }
 
-  // ---- groupes d'écrans (zones à filtre de catégories) --------------------
+  // ---- secteurs d'écrans (zones : position + nombre d'écrans propres) ------
   async addGroup(storeId) {
-    try { await api('POST', `/stores/${storeId}/groups`, { name: 'Nouvelle zone', screens: 1, size: 55, orient: 'portrait', cats: [] }); await this.refreshFleet(); this.showToast('Zone d\'écrans ajoutée ✓'); }
+    try { await api('POST', `/stores/${storeId}/groups`, { name: this.t('sector.newName'), screens: 1, size: 55, orient: 'portrait', cats: [] }); await this.refreshFleet(); this.showToast(this.t('sector.added')); }
     catch (e) { this.showToast(`Erreur : ${e.message}`); }
   }
   async saveGroup(id, patch) {
@@ -1589,8 +1589,8 @@ class App extends Component {
     catch (e) { this.showToast(`Erreur : ${e.message}`); }
   }
   async delGroup(id) {
-    if (!window.confirm('Supprimer cette zone ? Les écrans rattachés repassent au film du magasin.')) return;
-    try { await api('DELETE', `/groups/${id}`); await this.refreshFleet(); this.showToast('Zone supprimée ✓'); }
+    if (!window.confirm(this.t('sector.delConfirm'))) return;
+    try { await api('DELETE', `/groups/${id}`); await this.refreshFleet(); this.showToast(this.t('sector.deleted')); }
     catch (e) { this.showToast(`Erreur : ${e.message}`); }
   }
   async setPlayerGroup(playerId, groupId) {
@@ -2100,6 +2100,8 @@ class App extends Component {
         onScreens: (e) => this.saveGroup(g.id, { screens: e.target.value }),
         onSize: (e) => this.saveGroup(g.id, { size: e.target.value }),
         onOrient: (e) => this.saveGroup(g.id, { orient: e.target.value }),
+        // Position des écrans du secteur : choix direct portrait / paysage.
+        setOrient: (orient) => { if (orient !== (g.format || {}).orient) this.saveGroup(g.id, { orient }); },
         onAddCat: (e) => { const cid = e.target.value; e.target.value = ''; if (cid) this.saveGroup(g.id, { cats: [...(g.cats || []), cid] }); },
         previewUrl: this.filmUrl({ group: g.id }),
         copyPreview: () => this.copyLink(this.filmUrl({ group: g.id })),
@@ -3916,30 +3918,42 @@ class App extends Component {
           <div style="padding:12px 22px;border-bottom:1px solid rgba(35,34,32,0.06);background:#FBF8F2;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;${s.groups.length ? 'margin-bottom:10px;' : ''}">
               <div style="display:flex;align-items:center;gap:7px;">
-                <span style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">Groupes d'écrans</span>
-                ${infoTip('Grands magasins : plusieurs écrans/zones, chacun avec SON combo d’écrans et SON filtre de catégories. Une zone diffuse en boucle SES catégories TOUTE LA JOURNÉE (sans moment ni saison). Rattache un écran à une zone dans sa ligne (menu « Film du magasin / zone ») ; un écran sans zone suit le film du magasin. Aucune catégorie cochée = la zone suit le film du magasin (utile pour un simple sous-écran à part).')}
+                <span style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">${v.t('sector.plural')}</span>
+                ${infoTip(v.t('sector.help'))}
               </div>
-              <button onClick=${s.addGroup} style="padding:6px 12px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">+ Ajouter une zone</button>
+              <button onClick=${s.addGroup} style="padding:6px 12px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">${v.t('sector.add')}</button>
             </div>
             <div style="display:flex;flex-direction:column;gap:8px;">
               ${s.groups.map((g) => html`
-                <div key=${g.id} style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff;border:1px solid rgba(35,34,32,0.1);border-radius:10px;padding:8px 11px;">
-                  <input key=${'gn-' + g.id} defaultValue=${g.name} onChange=${g.onName} placeholder="Nom de la zone" style="flex:1 1 140px;min-width:0;padding:6px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.14);border-radius:7px;background:#FBF8F2;" />
-                  <span style="display:flex;align-items:center;gap:4px;">
-                    <select value=${g.fmt.screens} onChange=${g.onScreens} title="Nombre d'écrans de la zone" style="padding:6px 7px;font-size:12px;border:1px solid rgba(35,34,32,0.16);border-radius:7px;background:#fff;cursor:pointer;">${[1, 2, 3, 4, 5, 6].map((n) => html`<option value=${n}>${n}</option>`)}</select>
-                    <span style="font-size:11px;color:#8A847C;">×</span>
-                    <select value=${g.fmt.size} onChange=${g.onSize} title="Diagonale d'une dalle" style="padding:6px 7px;font-size:12px;border:1px solid rgba(35,34,32,0.16);border-radius:7px;background:#fff;cursor:pointer;">${[32, 43, 49, 55, 65, 75, 85].map((n) => html`<option value=${n}>${n}″</option>`)}</select>
-                    <select value=${g.fmt.orient} onChange=${g.onOrient} title="Orientation" style="padding:6px 7px;font-size:12px;border:1px solid rgba(35,34,32,0.16);border-radius:7px;background:#fff;cursor:pointer;"><option value="portrait">portrait</option><option value="paysage">paysage</option></select>
-                    <span style="font-size:11px;font-weight:700;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.2);border-radius:999px;padding:3px 8px;">${g.fmt.px}</span>
-                  </span>
-                  <span style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;flex:1 1 200px;">
-                    <span style="font-size:10.5px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#8A847C;">Catégories :</span>
+                <div key=${g.id} class="sig-sector-row" style="display:flex;flex-direction:column;gap:9px;background:#fff;border:1px solid rgba(35,34,32,0.1);border-radius:10px;padding:10px 12px;">
+                  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                    <input key=${'gn-' + g.id} defaultValue=${g.name} onChange=${g.onName} placeholder=${v.t('sector.namePlaceholder')} style="flex:1 1 160px;min-width:0;padding:6px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.14);border-radius:7px;background:#FBF8F2;" />
+                    <!-- Config d'écrans PROPRE au secteur : nombre · taille · position -->
+                    <span style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;background:#FBF8F2;border:1px solid rgba(35,34,32,0.10);border-radius:9px;padding:5px 9px;">
+                      <span style="font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;">${v.t('sector.screens')}</span>
+                      <select value=${g.fmt.screens} onChange=${g.onScreens} title=${v.t('sector.screenCount')} style="padding:5px 7px;font-size:12px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:7px;background:#fff;cursor:pointer;">${[1, 2, 3, 4, 5, 6].map((n) => html`<option value=${n}>${n}</option>`)}</select>
+                      <span style="font-size:11px;color:#8A847C;">×</span>
+                      <select value=${g.fmt.size} onChange=${g.onSize} title=${v.t('sector.screenSize')} style="padding:5px 7px;font-size:12px;border:1px solid rgba(35,34,32,0.16);border-radius:7px;background:#fff;cursor:pointer;">${[32, 43, 49, 55, 65, 75, 85].map((n) => html`<option value=${n}>${n}″</option>`)}</select>
+                      <!-- Position : portrait / paysage, choix explicite en 2 boutons -->
+                      <span title=${v.t('sector.orient')} style="display:inline-flex;background:#EFE9E0;border-radius:7px;padding:2px;">
+                        ${[['portrait', v.t('sector.portrait'), 8, 13], ['paysage', v.t('sector.landscape'), 15, 9]].map(([id, label, iw, ih]) => html`
+                          <button onClick=${() => g.setOrient(id)} title=${label} style="display:flex;align-items:center;gap:5px;padding:4px 9px;font-size:11.5px;font-weight:600;border:none;border-radius:6px;cursor:pointer;${g.fmt.orient === id ? 'background:#8D1D2C;color:#fff;' : 'background:transparent;color:#8A847C;'}"><span style="display:inline-block;width:${iw}px;height:${ih}px;border-radius:2px;border:1.5px solid currentColor;"></span>${label}</button>`)}
+                      </span>
+                      <!-- Aperçu visuel de l'agencement (n dalles à l'échelle) -->
+                      <span title=${g.fmt.label} style="display:inline-flex;align-items:flex-end;gap:2px;height:26px;">
+                        ${Array.from({ length: g.fmt.screens }, (_, i) => html`<span key=${i} style="display:inline-block;width:${g.fmt.orient === 'portrait' ? 13 : 24}px;height:${g.fmt.orient === 'portrait' ? 24 : 13}px;border-radius:2px;background:rgba(141,29,44,0.16);border:1px solid rgba(141,29,44,0.45);"></span>`)}
+                      </span>
+                      <span class="sig-sector-px" style="font-size:11px;font-weight:700;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.2);border-radius:999px;padding:3px 8px;">${g.fmt.px}</span>
+                    </span>
+                    <a href=${g.previewUrl} target="_blank" title="Aperçu du secteur (boucle catégories)" style="font-size:11.5px;font-weight:600;color:#8D1D2C;flex:0 0 auto;">${v.t('sector.preview')}</a>
+                    <button onClick=${g.del} title=${v.t('sector.delete')} style="flex:0 0 auto;width:28px;height:28px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:pointer;font-size:12px;color:#8D1D2C;">✕</button>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                    <span style="font-size:10.5px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#8A847C;">${v.t('sector.categories')}</span>
                     ${g.catChips.map((c) => html`<span style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.28);border-radius:999px;padding:2px 5px 2px 9px;">${c.name}<button onClick=${c.remove} style="width:15px;height:15px;border-radius:50%;border:none;background:rgba(110,74,43,0.18);color:#6E4A2B;cursor:pointer;font-size:9px;line-height:1;">✕</button></span>`)}
-                    ${g.catChips.length ? '' : html`<span style="font-size:11px;color:#B8860B;">aucune = suit le film du magasin</span>`}
-                    ${g.addableCats.length ? html`<select onChange=${g.onAddCat} style="padding:4px 7px;font-size:11.5px;border:1px solid rgba(35,34,32,0.16);border-radius:999px;background:#fff;cursor:pointer;"><option value="">+ catégorie…</option>${g.addableCats.map((c) => html`<option value=${c.id}>${c.name}</option>`)}</select>` : ''}
-                  </span>
-                  <a href=${g.previewUrl} target="_blank" title="Aperçu de la zone (boucle catégories)" style="font-size:11.5px;font-weight:600;color:#8D1D2C;flex:0 0 auto;">↗ Aperçu</a>
-                  <button onClick=${g.del} title="Supprimer la zone" style="flex:0 0 auto;width:28px;height:28px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:pointer;font-size:12px;color:#8D1D2C;">✕</button>
+                    ${g.catChips.length ? '' : html`<span style="font-size:11px;color:#B8860B;">${v.t('sector.noCatFollows')}</span>`}
+                    ${g.addableCats.length ? html`<select onChange=${g.onAddCat} style="padding:4px 7px;font-size:11.5px;border:1px solid rgba(35,34,32,0.16);border-radius:999px;background:#fff;cursor:pointer;"><option value="">${v.t('sector.addCat')}</option>${g.addableCats.map((c) => html`<option value=${c.id}>${c.name}</option>`)}</select>` : ''}
+                  </div>
                 </div>
               `)}
             </div>
@@ -3952,8 +3966,8 @@ class App extends Component {
                   <div style="min-width:0;">
                     <div style="display:flex;align-items:center;gap:7px;"><a href=${p.playerUrl} target="_blank" title="Ouvrir ce player dans un onglet (test live)" style="font-size:14px;font-weight:600;color:#232220;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name} <span style="color:#B8B2A8;font-weight:400;">↗</span></a><span style=${p.kioskStyle}>${p.kioskLabel}</span></div>
                     <div style="font-size:11.5px;color:#8A847C;">${p.hw} · ${p.orient}</div>
-                    ${p.groupOptions.length ? html`<select value=${p.groupId} onChange=${p.setGroup} title="Zone d'écrans de ce magasin, ou film du magasin" style="margin-top:5px;max-width:190px;padding:4px 7px;font-size:11px;font-weight:600;border:1px solid ${p.groupId ? 'rgba(110,74,43,0.4)' : 'rgba(35,34,32,0.16)'};border-radius:7px;background:${p.groupId ? 'rgba(110,74,43,0.08)' : '#FBF8F2'};color:${p.groupId ? '#6E4A2B' : '#4A4640'};cursor:pointer;">
-                      <option value="">🏬 Film du magasin</option>
+                    ${p.groupOptions.length ? html`<select value=${p.groupId} onChange=${p.setGroup} title=${v.t('sector.playerPick')} style="margin-top:5px;max-width:190px;padding:4px 7px;font-size:11px;font-weight:600;border:1px solid ${p.groupId ? 'rgba(110,74,43,0.4)' : 'rgba(35,34,32,0.16)'};border-radius:7px;background:${p.groupId ? 'rgba(110,74,43,0.08)' : '#FBF8F2'};color:${p.groupId ? '#6E4A2B' : '#4A4640'};cursor:pointer;">
+                      <option value="">${v.t('sector.storeFilm')}</option>
                       ${p.groupOptions.map((g) => html`<option value=${g.id}>▦ ${g.name}</option>`)}
                     </select>` : ''}
                   </div>

@@ -181,6 +181,29 @@ export const I18N = {
   'wiz.step.broadcast': { fr: 'Diffusion', en: 'Broadcast', it: 'Trasmissione' },
   'wiz.title': { fr: '🎬 Assistant de diffusion', en: '🎬 Broadcast wizard', it: '🎬 Assistente di trasmissione' },
   'wiz.close': { fr: '✕ Fermer', en: '✕ Close', it: '✕ Chiudi' },
+
+  // -- secteurs d'écrans (zones d'un magasin) --
+  'sector.plural': { fr: 'Secteurs d\'écrans', en: 'Screen sectors', it: 'Settori di schermi' },
+  'sector.add': { fr: '+ Ajouter un secteur', en: '+ Add a sector', it: '+ Aggiungi un settore' },
+  'sector.namePlaceholder': { fr: 'Nom du secteur', en: 'Sector name', it: 'Nome del settore' },
+  'sector.newName': { fr: 'Nouveau secteur', en: 'New sector', it: 'Nuovo settore' },
+  'sector.screens': { fr: 'Écrans', en: 'Screens', it: 'Schermi' },
+  'sector.screenCount': { fr: 'Nombre d\'écrans du secteur', en: 'Number of screens in the sector', it: 'Numero di schermi del settore' },
+  'sector.screenSize': { fr: 'Diagonale d\'une dalle', en: 'Diagonal of one panel', it: 'Diagonale di un pannello' },
+  'sector.orient': { fr: 'Position des écrans', en: 'Screen orientation', it: 'Orientamento degli schermi' },
+  'sector.portrait': { fr: 'Portrait', en: 'Portrait', it: 'Verticale' },
+  'sector.landscape': { fr: 'Paysage', en: 'Landscape', it: 'Orizzontale' },
+  'sector.categories': { fr: 'Catégories :', en: 'Categories:', it: 'Categorie:' },
+  'sector.noCatFollows': { fr: 'aucune = suit le film du magasin', en: 'none = follows the store film', it: 'nessuna = segue il film del negozio' },
+  'sector.addCat': { fr: '+ catégorie…', en: '+ category…', it: '+ categoria…' },
+  'sector.preview': { fr: '↗ Aperçu', en: '↗ Preview', it: '↗ Anteprima' },
+  'sector.delete': { fr: 'Supprimer le secteur', en: 'Delete the sector', it: 'Elimina il settore' },
+  'sector.storeFilm': { fr: '🏬 Film du magasin', en: '🏬 Store film', it: '🏬 Film del negozio' },
+  'sector.playerPick': { fr: 'Secteur d\'écrans de ce magasin, ou film du magasin', en: 'Screen sector of this store, or the store film', it: 'Settore di schermi di questo negozio, o film del negozio' },
+  'sector.added': { fr: 'Secteur d\'écrans ajouté ✓', en: 'Screen sector added ✓', it: 'Settore di schermi aggiunto ✓' },
+  'sector.deleted': { fr: 'Secteur supprimé ✓', en: 'Sector deleted ✓', it: 'Settore eliminato ✓' },
+  'sector.delConfirm': { fr: 'Supprimer ce secteur ? Les écrans rattachés repassent au film du magasin.', en: 'Delete this sector? Attached screens go back to the store film.', it: 'Eliminare questo settore? Gli schermi collegati tornano al film del negozio.' },
+  'sector.help': { fr: 'Un magasin peut avoir plusieurs SECTEURS d\'écrans, chacun avec SA position (portrait ou paysage), SON nombre d\'écrans et SON filtre de catégories — configuration totalement indépendante d\'un secteur à l\'autre. Un secteur avec des catégories diffuse en boucle SES catégories toute la journée. Rattache un écran à un secteur dans sa ligne ; un écran sans secteur suit le film du magasin.', en: 'A store can have several screen SECTORS, each with ITS OWN orientation (portrait or landscape), ITS OWN screen count and ITS OWN category filter — fully independent from one sector to the next. A sector with categories loops ITS categories all day. Attach a screen to a sector in its row; a screen without a sector follows the store film.', it: 'Un negozio può avere più SETTORI di schermi, ognuno con IL SUO orientamento (verticale o orizzontale), IL SUO numero di schermi e IL SUO filtro di categorie — configurazione totalmente indipendente da un settore all\'altro. Un settore con categorie riproduce in loop LE SUE categorie tutto il giorno. Collega uno schermo a un settore nella sua riga; uno schermo senza settore segue il film del negozio.' },
 };
 
 // Étapes de l'assistant, dans l'ordre (clés vers I18N).

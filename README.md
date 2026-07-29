@@ -142,20 +142,30 @@ Un seul gabarit s'adapte à chaque point de vente, **résolu par magasin à la d
   `sig_products.unavailable`) : le produit est **retiré des boucles en mode Continu** (le reste
   du catalogue continue) et signalé en régie. Prévu pour brancher un futur signal de stock ERP.
 
-### Groupes d'écrans (grands magasins)
-Un magasin peut piloter plusieurs **zones d'affichage indépendantes**, gérées dans **Réseau** :
+### Secteurs d'écrans — gestion par secteur (grands magasins)
+Un magasin peut piloter plusieurs **secteurs d'affichage indépendants**, gérés dans **Réseau**.
+**Chaque secteur a SA propre configuration d'écrans**, sans aucun impact sur les autres secteurs
+ni sur le magasin :
 
-- Chaque **groupe** (`sig_screen_groups`) a son propre **combo d'écrans** (taille/orientation)
-  et un **filtre de catégories**. Un groupe avec des catégories diffuse une **boucle continue de
-  ces catégories TOUTE LA JOURNÉE** (sans moment ni saison) ; sans catégorie il suit le film du
-  magasin.
-- Un **écran** (`sig_players.group_id`) rattaché à un groupe prend **son contenu et son format**
-  (menu par écran, dans la fiche magasin) ; un écran sans groupe suit le film du magasin (défaut,
+- **Position des écrans** : **portrait** ou **paysage**, choisie par deux boutons dédiés dans la
+  ligne du secteur (un aperçu miniature montre l'agencement réel des dalles).
+- **Nombre d'écrans** : 1 à 6 par secteur, avec la diagonale d'une dalle (32″ → 85″).
+- La **résolution totale** du secteur se recalcule à chaque changement (ex. 3 × portrait =
+  6480 × 3840 px · 1 × paysage = 3840 × 2160 px) et s'affiche à côté des réglages.
+- **Configuration totalement indépendante** : modifier un secteur ne touche ni les autres
+  secteurs ni le format du magasin (couvert par un test dédié dans `test/live-test.js`).
+
+Chaque secteur (`sig_screen_groups`) porte aussi un **filtre de catégories** : avec des catégories
+il diffuse une **boucle continue de ces catégories TOUTE LA JOURNÉE** (sans moment ni saison) ;
+sans catégorie il suit le film du magasin.
+
+- Un **écran** (`sig_players.group_id`) rattaché à un secteur prend **son contenu et son format**
+  (menu par écran, dans la fiche magasin) ; un écran sans secteur suit le film du magasin (défaut,
   rétro-compatible).
 - Contenu résolu à l'assignation du player, avec les prix, la langue et les jetons du magasin
-  (comme la visionneuse). Aperçu d'une zone : `GET /api/v1/film?group=<id>`.
+  (comme la visionneuse). Aperçu d'un secteur : `GET /api/v1/film?group=<id>`.
 - Le rendu utilise le canevas 6480 × 3840 mis à l'échelle de l'écran (limite existante de l'app) :
-  une zone dont le combo est proportionnel au mur (ex. 3 × portrait) remplit nativement ; un
+  un secteur dont le combo est proportionnel au mur (ex. 3 × portrait) remplit nativement ; un
   simple écran portrait est mis à l'échelle. API : `POST /stores/{id}/groups`, `POST /groups/{id}`,
   `DELETE /groups/{id}`, `POST /players/{id}/group`.
 
@@ -199,7 +209,7 @@ exécute côté serveur : ping TCP de l'hôte, `GET assignment`, `GET dataset pr
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + cycle complet — 51 tests
+npm test              # serveur jetable (BDD temporaire) + cycle complet — 52 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
 node test/live-test.js http://185.180.206.46/signage --password=… --mutate

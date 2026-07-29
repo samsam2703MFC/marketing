@@ -479,6 +479,44 @@ async function main() {
         await call('DELETE', `/api/v1/groups/${gid}`);
       }
     });
+    await step('Secteurs d\'écrans — position + nombre, config INDÉPENDANTE', async () => {
+      const fleetRes = await call('GET', '/api/v1/fleet');
+      const store = fleetRes.stores[0];
+      if (!store) throw new Error('aucun magasin');
+      const storePx0 = store.format.px;
+      // Deux secteurs du MÊME magasin, configurés différemment.
+      const a = await call('POST', `/api/v1/stores/${store.id}/groups`, { name: 'Secteur A LT', screens: 3, size: 55, orient: 'portrait', cats: [] });
+      const b = await call('POST', `/api/v1/stores/${store.id}/groups`, { name: 'Secteur B LT', screens: 1, size: 43, orient: 'paysage', cats: [] });
+      try {
+        if (a.group.format.w !== 6480 || a.group.format.h !== 3840) throw new Error(`secteur A (3 × portrait) → ${a.group.format.px}`);
+        if (b.group.format.w !== 3840 || b.group.format.h !== 2160) throw new Error(`secteur B (1 × paysage) → ${b.group.format.px}`);
+        // Modifier A ne doit toucher NI B NI le magasin.
+        await call('POST', `/api/v1/groups/${a.group.id}`, { screens: 2, orient: 'paysage' });
+        const fl2 = await call('GET', '/api/v1/fleet');
+        const st2 = fl2.stores.find((s) => s.id === store.id);
+        const gA = st2.groups.find((g) => g.id === a.group.id);
+        const gB = st2.groups.find((g) => g.id === b.group.id);
+        if (!gA || gA.format.w !== 7680 || gA.format.h !== 2160) throw new Error(`secteur A non mis à jour → ${gA && gA.format.px}`);
+        if (!gB || gB.format.px !== b.group.format.px) throw new Error('secteur B modifié par la config de A — pas indépendant');
+        if (st2.format.px !== storePx0) throw new Error('le format du MAGASIN a été modifié par un secteur');
+        // Un écran rattaché prend le format de SON secteur.
+        const player = (store.players || [])[0];
+        let asgTxt = 'pas d\'écran à rattacher';
+        if (player) {
+          await call('POST', `/api/v1/players/${player.id}/group`, { groupId: b.group.id });
+          const asg = await call('GET', `/api/v1/players/${player.id}/assignment?token=${player.token}`);
+          await call('POST', `/api/v1/players/${player.id}/group`, { groupId: '' }); // détacher AVANT assertions
+          if (!asg.snapshot.format || asg.snapshot.format.w !== 3840 || asg.snapshot.format.h !== 2160) {
+            throw new Error(`l'écran ne reçoit pas le format de SON secteur → ${asg.snapshot.format && asg.snapshot.format.px}`);
+          }
+          asgTxt = `écran « ${player.name} » → secteur B (${asg.snapshot.format.px})`;
+        }
+        return `A ${gA.format.label} (${gA.format.px}) · B ${gB.format.label} (${gB.format.px}) · magasin inchangé · ${asgTxt}`;
+      } finally {
+        await call('DELETE', `/api/v1/groups/${a.group.id}`);
+        await call('DELETE', `/api/v1/groups/${b.group.id}`);
+      }
+    });
     await step('Promotion — sous-type dynamique + badge résolu dans le film', async () => {
       const before = await call('GET', '/api/v1/promo-types');
       const st = await call('GET', '/api/v1/state');
