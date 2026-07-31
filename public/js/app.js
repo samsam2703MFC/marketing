@@ -2117,11 +2117,14 @@ class App extends Component {
     };
     // Rangée 1 : les catégories (tags colorés) — rangée 2 : les éléments de la
     // catégorie choisie, prêts à glisser sur la ligne du temps.
+    // L'orientation est le filtre PRINCIPAL : les compteurs de catégorie ne
+    // comptent que les items du format d'écran choisi.
+    const libByOrient = st.library.filter((mm) => this.fitsOrient(mm, st.libOrient));
     const tagCount = {};
-    st.library.forEach((mm) => { const t = tagOf(mm).id; tagCount[t] = (tagCount[t] || 0) + 1; });
+    libByOrient.forEach((mm) => { const t = tagOf(mm).id; tagCount[t] = (tagCount[t] || 0) + 1; });
     const libTagChips = [
       {
-        id: 'all', label: 'Tous', count: st.library.length, color: '#232220',
+        id: 'all', label: 'Tous', count: libByOrient.length, color: '#232220',
         active: st.libFilter === 'all',
         pick: () => this.setState({ libFilter: 'all' }),
       },
@@ -4920,17 +4923,19 @@ class App extends Component {
 
       ${filmMode === 'continu' ? contPanel : html`
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 18px;">
-        <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">Bibliothèque — choisis une catégorie, puis glisse un élément sur la ligne du temps (ou clique ＋)</h3>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px;">
-          ${v.libTagChips.map((t) => html`
-            <button onClick=${t.pick} style=${t.style}><span style=${t.dotStyle}></span>${t.label}<span style="font-weight:400;opacity:0.75;">${t.count}</span></button>
-          `)}
-        </div>
-        <!-- Filtre de format : n'affiche que les items compatibles 16:9 / 9:16 -->
-        <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
-          <span style="font-size:11.5px;color:#8A847C;">Format :</span>
+        <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">Bibliothèque — choisis d'abord l'orientation de l'écran, puis une catégorie, et glisse un élément sur la ligne du temps (ou clique ＋)</h3>
+        <!-- 1 · Orientation de l'écran : filtre principal du montage -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid rgba(35,34,32,0.08);">
+          <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8D1D2C;">1 · Orientation de l'écran</span>
           ${v.libOrientChips.map((o) => html`
             <button onClick=${o.pick} style=${o.style}><span>${o.icon}</span>${o.label}<span style="font-weight:400;opacity:0.75;">${o.count}</span></button>
+          `)}
+        </div>
+        <!-- 2 · Catégorie de bibliothèque -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+          <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">2 · Catégorie</span>
+          ${v.libTagChips.map((t) => html`
+            <button onClick=${t.pick} style=${t.style}><span style=${t.dotStyle}></span>${t.label}<span style="font-weight:400;opacity:0.75;">${t.count}</span></button>
           `)}
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
