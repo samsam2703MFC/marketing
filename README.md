@@ -223,9 +223,21 @@ diffusion** (`applyHtmlVars`, juste avant les jetons magasin) :
 | **Campagne** | nom · accroche · thème · visuel · couleur · date de début / de fin |
 | **Magasin / contexte** | nom · adresse · horaires · téléphone · date du jour · période active · moment |
 
+Les **constantes d'identité de marque** — `{{ logo }}`, `{{ logoBlanc }}` — sont résolues **d'office,
+sans liaison** (une liaison explicite reste prioritaire). Une source **Image / marque** permet de
+pointer les autres visuels (`{{ filigrane }}`, `{{ illustration }}`…) sur les images livrées.
+
+**Placer une variable à l'écran** : cliquer sa pastille ouvre son placement — flèches, curseurs X/Y
+(px de la maquette) et « Recentrer ». La valeur est alors enrobée dans un span translaté, en aperçu
+comme à la diffusion ; une variable située **dans un attribut** (`src="{{ logo }}"`) n'est jamais
+enrobée, pour ne pas casser le HTML.
+
 Une variable **laissée non liée** retombe sur les jetons standards (`{{magasin}}`, `{{date}}`…) ou
 reste visible telle quelle — rien n'est inventé. Une variable d'image non liée est neutralisée à
-l'affichage (pas d'image cassée). Liaisons stockées dans `sig_modules.html_vars` (JSON).
+l'affichage (pas d'image cassée). Liaisons et placements sont stockés dans `sig_modules.html_vars`
+(JSON). L'**aperçu du compositeur** applique les liaisons en direct (`resolveHtmlPreview`) ; les
+champs propres à un magasin s'y affichent en repère `‹Nom du magasin›` tant qu'aucun magasin n'est
+choisi.
 
 ### Campagnes marketing
 Une **campagne** est aussi un **type d'élément** (`sig_element_types` → `campagne`), mais son

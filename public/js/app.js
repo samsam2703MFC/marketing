@@ -11,7 +11,7 @@ import { continuousDefaults, normContinuous } from './continuous.js';
 // Internationalisation de l'interface (FR / EN / IT), choix par navigateur.
 import { UI_LANGS, UI_LANG_IDS, tr, WIZ_STEP_KEYS } from './i18n.js';
 // Gabarits HTML : formats source (16:9, 9:16, A1…), variables et exemple.
-import { HTML_PRESETS, HTML_TOKENS, HTML_EXAMPLE_A1, HTML_VAR_SOURCES, HTML_BRAND_VARS, HTML_ASSETS, htmlVarNames } from './html-templates.js';
+import { HTML_PRESETS, HTML_TOKENS, HTML_VAR_SOURCES, HTML_BRAND_VARS, HTML_ASSETS, htmlVarNames, wrapHtmlVarPos } from './html-templates.js';
 // Générateur de QR code autonome (pour brancher un écran en scannant).
 import { qrSvg } from './vendor/qr.js';
 const qrDataUri = (url) => { try { return 'data:image/svg+xml;utf8,' + encodeURIComponent(qrSvg(String(url), { scale: 5, margin: 3 })); } catch { return ''; } };
@@ -124,6 +124,7 @@ class App extends Component {
     fleet: [],
     library: [],
     elementTypes: [], addPicker: false, openSec: 'items',
+    htmlVarSel: '',
     promoTypes: [], promoDraft: null, promoDirty: false, promoBusy: false, promoSavedAt: 0,
     campaigns: [], campaignDraft: null, campaignDirty: false, campaignBusy: false, campaignSavedAt: 0,
     catalog: { categories: [], products: [] },
@@ -398,12 +399,13 @@ class App extends Component {
       }
       return null;
     };
-    return String(code).replace(/\{\{([^{}]+)\}\}/g, (m0, raw) => {
+    return String(code).replace(/\{\{([^{}]+)\}\}/g, (m0, raw, offset, full) => {
       const k = String(raw).trim().toLowerCase();
-      const out = resolve(map.get(k));
-      if (out != null) return out;
-      if (Object.prototype.hasOwnProperty.call(HTML_BRAND_VARS, k)) return HTML_BRAND_VARS[k];
-      return m0;   // non liée : reste visible (jetons magasin résolus à la diffusion)
+      const b = map.get(k);
+      let out = resolve(b);
+      if (out == null && Object.prototype.hasOwnProperty.call(HTML_BRAND_VARS, k)) out = HTML_BRAND_VARS[k];
+      if (out == null) return m0;   // non liée : reste visible (résolue à la diffusion)
+      return wrapHtmlVarPos(out, b, full, offset);
     });
   }
   resolveMod(m) {
@@ -1346,6 +1348,26 @@ class App extends Component {
     try { ta.setSelectionRange(pos, pos); ta.focus(); } catch { /* champ détaché */ }
     this.setSelField('html', next);
   }
+  // Décale une variable à l'écran (x/y en px de la maquette).
+  moveHtmlVar(name, dx, dy) {
+    const lib = this.cloneLib();
+    const m = lib.find((x) => x.id === this.state.selId);
+    if (!m) return;
+    const vars = { ...(m.htmlVars || {}) };
+    const cur = vars[name] || {};
+    vars[name] = { ...cur, x: Math.round((cur.x || 0) + dx), y: Math.round((cur.y || 0) + dy) };
+    m.htmlVars = vars;
+    this.setLib(lib);
+  }
+  setHtmlVarPos(name, x, y) {
+    const lib = this.cloneLib();
+    const m = lib.find((x2) => x2.id === this.state.selId);
+    if (!m) return;
+    const vars = { ...(m.htmlVars || {}) };
+    vars[name] = { ...(vars[name] || {}), x: Math.round(x), y: Math.round(y) };
+    m.htmlVars = vars;
+    this.setLib(lib);
+  }
   // Lie (ou délie) une variable du gabarit à une source de données.
   setHtmlVar(name, patch) {
     const lib = this.cloneLib();
@@ -1356,21 +1378,6 @@ class App extends Component {
     else vars[name] = { ...(vars[name] || {}), ...patch };
     m.htmlVars = vars;
     this.setLib(lib);
-  }
-  // Charge l'exemple d'affiche (code + format source) dans l'élément courant.
-  loadHtmlExample() {
-    const cur = this.sel();
-    if (!cur) return;
-    if (String(cur.html || '').trim() && !window.confirm('Remplacer le code actuel par l\'exemple ?')) return;
-    const lib = this.cloneLib();
-    const m = lib.find((x) => x.id === this.state.selId);
-    if (!m) return;
-    m.html = HTML_EXAMPLE_A1.html; m.htmlW = HTML_EXAMPLE_A1.w; m.htmlH = HTML_EXAMPLE_A1.h;
-    if (!m.name || /^Gabarit HTML/i.test(m.name)) m.name = 'Affiche A1';
-    this.setLib(lib);
-    const ta = document.getElementById('sig-html-editor');
-    if (ta) ta.value = m.html;
-    this.showToast('Exemple d\'affiche A1 chargé — adapte le code ✓');
   }
   setTag(f, v) { const lib = this.cloneLib(); const m = lib.find((x) => x.id === this.state.selId); m.tag = { ...m.tag, [f]: v }; this.setLib(lib); }
   setSched(f, v) { const lib = this.cloneLib(); const m = lib.find((x) => x.id === this.state.selId); m.schedule = { ...m.schedule, [f]: v }; this.setLib(lib); }
@@ -2801,6 +2808,14 @@ class App extends Component {
         return {
           name, src, field: bind.field || '', value: bind.value || '',
           bound: !!src, brand, isBrandAuto: !src && !!brand,
+          x: bind.x || 0, y: bind.y || 0,
+          moved: !!(bind.x || bind.y),
+          selected: st.htmlVarSel === name,
+          select: () => this.setState({ htmlVarSel: st.htmlVarSel === name ? '' : name }),
+          nudge: (dx, dy) => this.moveHtmlVar(name, dx, dy),
+          onX: (e) => this.setHtmlVarPos(name, parseInt(e.target.value, 10) || 0, bind.y || 0),
+          onY: (e) => this.setHtmlVarPos(name, bind.x || 0, parseInt(e.target.value, 10) || 0),
+          resetPos: () => this.setHtmlVarPos(name, 0, 0),
           sources: HTML_VAR_SOURCES.map((x) => ({ id: x.id, label: x.label })),
           fields: srcDef ? srcDef.fields : [],
           needsPick: ['produit', 'promotion', 'campagne', 'image'].includes(src),
@@ -2819,8 +2834,6 @@ class App extends Component {
           || Object.prototype.hasOwnProperty.call(HTML_BRAND_VARS, n.toLowerCase())).length;
         return `${ok}/${names.length} résolue(s)`;
       })(),
-      loadHtmlExample: () => this.loadHtmlExample(),
-      htmlExampleLabel: HTML_EXAMPLE_A1.label,
       mediaAgencyUrl: new URL('agence', location.href).toString(),
       // -- campagne marketing : on choisit une campagne dans la liste --
       campaignInfo: isCampaign ? this.campaignInfo(m) : null,
@@ -4563,7 +4576,6 @@ class App extends Component {
             ${secOpen('htmlcode') && html`<div style=${secBody}>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
               <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;max-width:420px;">Colle ici ton <strong>code HTML</strong> (document complet ou fragment) : il est mis à l'échelle de l'écran. Les <strong>variables</strong> ci-dessous sont remplacées <strong>par magasin</strong> à la diffusion.</p>
-              <button onClick=${v.loadHtmlExample} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">✨ ${v.htmlExampleLabel}</button>
             </div>
 
             <!-- Format source de la maquette : ratio + dimensions -->
@@ -4598,7 +4610,7 @@ class App extends Component {
                 <div style="display:flex;flex-direction:column;gap:7px;">
                   ${v.htmlVarRows.map((r) => html`
                     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                      <code style="flex:0 0 auto;min-width:120px;font-size:12px;font-weight:700;color:${(r.bound || r.isBrandAuto) ? '#2E6E4E' : '#8D1D2C'};background:${(r.bound || r.isBrandAuto) ? 'rgba(46,110,78,0.10)' : 'rgba(141,29,44,0.07)'};border-radius:6px;padding:5px 9px;">${'{{ ' + r.name + ' }}'}</code>
+                      <button onClick=${r.select} title="Cliquer pour placer cette variable à l'écran" style="flex:0 0 auto;min-width:120px;text-align:left;font-family:ui-monospace,monospace;font-size:12px;font-weight:700;cursor:pointer;color:${(r.bound || r.isBrandAuto) ? '#2E6E4E' : '#8D1D2C'};background:${(r.bound || r.isBrandAuto) ? 'rgba(46,110,78,0.10)' : 'rgba(141,29,44,0.07)'};border:1px solid ${r.selected ? '#232220' : 'transparent'};border-radius:6px;padding:5px 9px;">${'{{ ' + r.name + ' }}'}${r.moved ? html`<span style="font-weight:400;opacity:0.7;"> ⤧</span>` : ''}</button>
                       <select value=${r.src} onChange=${r.onSrc} style="flex:0 0 auto;padding:7px 9px;font-size:12px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;">
                         <option value="">${r.isBrandAuto ? '✓ auto — identité de marque' : '— non liée —'}</option>
                         ${r.sources.map((s) => html`<option value=${s.id}>${s.label}</option>`)}
@@ -4620,6 +4632,30 @@ class App extends Component {
                       `}
                       ${r.bound && html`<button onClick=${r.clear} title="Délier" style="flex:0 0 auto;width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:pointer;font-size:11px;color:#8D1D2C;">✕</button>`}
                     </div>
+                    ${r.selected && html`
+                      <div style="margin:2px 0 6px 8px;padding:10px 12px;border-radius:9px;background:#fff;border:1px solid rgba(35,34,32,0.14);display:flex;flex-direction:column;gap:8px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                          <span style="font-size:11.5px;color:#8A847C;">Place à l'écran — décalage en px de la maquette</span>
+                          <span style="display:flex;align-items:center;gap:4px;">
+                            <button onClick=${() => r.nudge(0, -10)} title="Monter" style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;">↑</button>
+                            <button onClick=${() => r.nudge(0, 10)} title="Descendre" style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;">↓</button>
+                            <button onClick=${() => r.nudge(-10, 0)} title="Gauche" style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;">←</button>
+                            <button onClick=${() => r.nudge(10, 0)} title="Droite" style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;">→</button>
+                            <button onClick=${r.resetPos} title="Remettre à zéro" style="padding:4px 10px;font-size:11.5px;font-weight:600;border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;color:#8A847C;">Recentrer</button>
+                          </span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                          <span style="font-size:11.5px;color:#8A847C;width:14px;">X</span>
+                          <input type="range" min="-800" max="800" step="5" value=${r.x} onInput=${r.onX} style="flex:1 1 auto;accent-color:#8D1D2C;" />
+                          <span style="font-size:11.5px;font-weight:600;width:52px;text-align:right;font-variant-numeric:tabular-nums;">${r.x} px</span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                          <span style="font-size:11.5px;color:#8A847C;width:14px;">Y</span>
+                          <input type="range" min="-800" max="800" step="5" value=${r.y} onInput=${r.onY} style="flex:1 1 auto;accent-color:#8D1D2C;" />
+                          <span style="font-size:11.5px;font-weight:600;width:52px;text-align:right;font-variant-numeric:tabular-nums;">${r.y} px</span>
+                        </div>
+                      </div>
+                    `}
                   `)}
                 </div>
               </div>

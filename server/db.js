@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { hashPassword, verifyPassword, newSessionToken } from './auth.js';
 // Config du mode « continu » : source unique partagée avec la régie.
 import { continuousDefaults, normContinuous } from '../public/js/continuous.js';
+// Enrobage du décalage d'une variable de gabarit (partagé avec la régie).
+import { wrapHtmlVarPos } from '../public/js/html-templates.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const DB_PATH = process.env.SIG_DB || join(ROOT, 'data', 'signage.db');
@@ -1267,12 +1269,13 @@ export function applyHtmlVars(modules, storeId, date = new Date()) {
     // Index insensible à la casse (les noms viennent du code collé).
     const byKey = new Map();
     for (const k of Object.keys(binds)) byKey.set(String(k).trim().toLowerCase(), binds[k]);
-    m.html = m.html.replace(/\{\{([^{}]+)\}\}/g, (m0, raw) => {
+    m.html = m.html.replace(/\{\{([^{}]+)\}\}/g, (m0, raw, offset, full) => {
       const k = String(raw).trim().toLowerCase();
-      const out = resolve(byKey.get(k));
-      if (out != null) return out;                       // liaison explicite
-      if (Object.prototype.hasOwnProperty.call(HTML_BRAND_VARS, k)) return HTML_BRAND_VARS[k];
-      return m0;                                         // sinon : jetons magasin
+      const b = byKey.get(k);
+      let out = resolve(b);                              // liaison explicite
+      if (out == null && Object.prototype.hasOwnProperty.call(HTML_BRAND_VARS, k)) out = HTML_BRAND_VARS[k];
+      if (out == null) return m0;                        // sinon : jetons magasin
+      return wrapHtmlVarPos(out, b, full, offset);       // décalage éventuel
     });
   }
 }

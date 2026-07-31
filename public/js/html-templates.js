@@ -150,3 +150,19 @@ export const HTML_EXAMPLE_A1 = {
 </body>
 </html>`,
 };
+
+// Une variable peut être décalée à l'écran (x/y en px de la maquette) : sa
+// valeur est alors enrobée dans un span translaté. On ne le fait QUE si la
+// variable est en position de texte — à l'intérieur d'une balise (ex.
+// src="{{ logo }}"), enrober casserait le HTML.
+export function insideTag(html, index) {
+  const lt = html.lastIndexOf('<', index);
+  const gt = html.lastIndexOf('>', index);
+  return lt > gt;
+}
+export function wrapHtmlVarPos(value, bind, fullHtml, index) {
+  const x = (bind && bind.x) || 0;
+  const y = (bind && bind.y) || 0;
+  if ((!x && !y) || insideTag(fullHtml, index)) return value;
+  return `<span style="display:inline-block;transform:translate(${x}px, ${y}px);">${value}</span>`;
+}
