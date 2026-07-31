@@ -123,7 +123,7 @@ class App extends Component {
     test: { state: 'idle', rows: [] },
     fleet: [],
     library: [],
-    elementTypes: [], addPicker: false, openSec: 'items',
+    elementTypes: [], addPicker: false, openSec: ['items'],
     htmlVarSel: '', filmMomentSel: '',
     promoTypes: [], promoDraft: null, promoDirty: false, promoBusy: false, promoSavedAt: 0,
     campaigns: [], campaignDraft: null, campaignDirty: false, campaignBusy: false, campaignSavedAt: 0,
@@ -350,6 +350,26 @@ class App extends Component {
   // diffusion. Miroir de applyHtmlVars (serveur) ; les champs propres à un
   // magasin, inconnus ici, s'affichent en repère ‹…› plutôt qu'inventés.
   resolveHtmlPreview(code, binds) {
+    // L'aperçu tourne à 60 im/s : sans mémo, on referait à chaque image de la
+    // regex sur des kilo-octets de code (substitution + placement). On ne
+    // recalcule que si le code, les liaisons ou les données référencées bougent.
+    const key = code.length + '|' + code.slice(0, 64) + '|' + JSON.stringify(binds) + '|' + this._previewStamp();
+    if (this._htmlPrevKey === key) return this._htmlPrevOut;
+    const out = this._resolveHtmlPreviewNow(code, binds);
+    this._htmlPrevKey = key; this._htmlPrevOut = out;
+    return out;
+  }
+  // Empreinte des données qui alimentent les variables : si elles changent,
+  // l'aperçu doit être recalculé.
+  _previewStamp() {
+    const st = this.state;
+    return [
+      (st.catalog.products || []).length, (st.catalog.categories || []).length,
+      (st.promoTypes || []).length, (st.campaigns || []).length,
+      (st.seasonsCurrent || []).join(','), st.prodMomentsCurrent || '', st.dataVer || 0,
+    ].join('.');
+  }
+  _resolveHtmlPreviewNow(code, binds) {
     const st = this.state;
     const map = new Map();
     for (const k of Object.keys(binds || {})) map.set(String(k).trim().toLowerCase(), binds[k]);
@@ -713,9 +733,10 @@ class App extends Component {
   // ------------------------------------------------------- modules & playlist
   selectMod(id) {
     const mm = this.state.library.find((x) => x.id === id);
-    this.setState({ selId: id, t: 0, openSec: this.defaultSecFor(mm) });
+    this.setState({ selId: id, t: 0, openSec: [this.defaultSecFor(mm)] });
   }
-  // Volets repliables de l'éditeur : un seul ouvert, centré à l'écran.
+  // Volets repliables de l'éditeur : plusieurs peuvent rester ouverts. Celui-ci
+  // est simplement le premier ouvert à la sélection d'un élément.
   defaultSecFor(mm) {
     if (!mm) return null;
     if (mm.type === 'produit') return 'produit';
@@ -725,11 +746,17 @@ class App extends Component {
     if (mm.type === 'category') return 'items';
     return 'tag';
   }
+  // Les volets de l'éditeur s'ouvrent/ferment indépendamment : on peut garder
+  // le code ET les variables sous les yeux, au lieu d'un seul volet à la fois.
   toggleSec(id, el) {
-    const open = this.state.openSec === id ? null : id;
-    this.setState({ openSec: open });
-    // Auto-focus : le volet qui vient de s'ouvrir se centre dans l'écran.
-    if (open && el) setTimeout(() => { try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch { /* navigateur ancien */ } }, 90);
+    const cur = Array.isArray(this.state.openSec) ? this.state.openSec : (this.state.openSec ? [this.state.openSec] : []);
+    const wasOpen = cur.includes(id);
+    this.setState({ openSec: wasOpen ? cur.filter((x) => x !== id) : [...cur, id] });
+    // Le volet qui vient de s'ouvrir se centre — mais sans arracher la vue si
+    // d'autres volets sont déjà ouverts (on reste là où on travaille).
+    if (!wasOpen && el && !cur.length) {
+      setTimeout(() => { try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch { /* navigateur ancien */ } }, 90);
+    }
   }
   // Un nouveau module rejoint directement la playlist (retirable avec ✕) :
   // sinon il n'apparaîtrait pas dans le film publié et c'est trop facile à rater.
@@ -751,7 +778,7 @@ class App extends Component {
     else if (t.id === 'animation') { base.name = 'Nouveauté'; base.sub = 'cette semaine'; base.dur = 6; base.libTag = 'promo'; }
     else { base.name = t.label || 'Élément'; }
     lib.push(base);
-    this.setLib(lib, { selId: id, addPicker: false, composerTab: 'lib', openSec: this.defaultSecFor(base), ...this.playlistPatch([...this.state.playlist, id]) });
+    this.setLib(lib, { selId: id, addPicker: false, composerTab: 'lib', openSec: [this.defaultSecFor(base)], ...this.playlistPatch([...this.state.playlist, id]) });
   }
   elementTypeOf(m) {
     return (this.state.elementTypes || []).find((t) => t.id === (m && m.type)) || null;
@@ -2729,6 +2756,8 @@ class App extends Component {
       addProd: () => this.addProd(),
       saveCat: () => this.saveCatalog(),
       filmDaysVals, filmSlotVals, filmStoreVals, filmAllStores, filmSchedSummary,
+      // Ces listes ne dépendent pas du temps : on évite de les rebâtir 60 fois
+      // par seconde pendant la lecture de l'aperçu.
       // Items de bibliothèque épinglables dans la boucle (au format visé).
       contItemRatios: (() => {
         const cfg = this.activeFilm().continuous || {};
@@ -3200,7 +3229,7 @@ class App extends Component {
 
     // Volets repliables de l'éditeur : en-tête cliquable, résumé quand fermé,
     // un seul volet ouvert à la fois, centré à l'écran à l'ouverture.
-    const secOpen = (id) => st.openSec === id;
+    const secOpen = (id) => (Array.isArray(st.openSec) ? st.openSec.includes(id) : st.openSec === id);
     const secCard = 'background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;overflow:hidden;';
     const secBody = 'padding:2px 24px 22px;';
     const secHead = (id, title, summary) => html`
@@ -3365,6 +3394,11 @@ class App extends Component {
         </div>
         <div style="display:flex;flex-direction:column;gap:18px;">
           <div style="display:flex;gap:26px;flex-wrap:wrap;">
+            ${cField('Orientation de l\'écran', html`<div style="display:flex;gap:7px;">
+              ${[['paysage', '▭ 16:9 paysage'], ['portrait', '▯ 9:16 portrait']].map(([id, lab]) => html`
+                <button onClick=${() => { this.updateContinuous({ orient: id }); this.setState({ libOrient: id }); }} style="padding:7px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${cont.orient === id ? '#232220' : 'rgba(35,34,32,0.16)'};background:${cont.orient === id ? '#232220' : '#fff'};color:${cont.orient === id ? '#fff' : '#232220'};">${lab}</button>
+              `)}
+            </div>`, 'Format des écrans visés par cette boucle. C’est le PREMIER filtre : seuls les éléments de bibliothèque à ce format sont proposés (items précis, promotions, campagnes) et diffusés.')}
             ${cField('Sources — oui / non', html`<div style="display:flex;flex-direction:column;gap:7px;">
               ${cUse('saison', 'Produits de saison', 'Ne garder que les produits liés à une période active (onglet Périodes).')}
               ${cUse('promotion', 'Promotions', 'Injecter les éléments « promotion » de la bibliothèque.', 'promotion')}
