@@ -67,6 +67,7 @@ export const moduleDur = (m, secPerLine) => {
   if (m.type === 'animation') return m.dur > 0 ? m.dur : 6;
   if (m.type === 'promotion') return m.dur > 0 ? m.dur : 7;
   if (m.type === 'campagne') return m.dur > 0 ? m.dur : 8;
+  if (m.type === 'html') return m.dur > 0 ? m.dur : 10;
   return Math.max(1, activeItems(m).length) * secPerLine;
 };
 
@@ -100,6 +101,35 @@ export function watermarkEl(h, m) {
   // filigrane : grand logo très discret, centré derrière/devant.
   return h('div', { key: 'wm', style: { position: 'absolute', inset: 0, zIndex: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' } },
     h('img', { src: 'assets/logo.png', alt: '', style: { width: '58%', height: 'auto', opacity: 0.1 } }));
+}
+
+// ---------------------------------------------------------------------------
+// Gabarit HTML — le code collé en régie peut être un document complet
+// (<!DOCTYPE>, <head><style>…</style></head>, <body>…</body>) ou un simple
+// fragment. On en extrait les feuilles de style et le contenu du corps.
+export function splitHtmlDoc(src) {
+  let s = String(src || '');
+  // Feuilles de style : collectées puis retirées du corps.
+  const css = [];
+  s = s.replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gi, (m0, inner) => { css.push(inner); return ''; });
+  // Corps : <body>…</body> s'il existe, sinon on retire l'enveloppe du document.
+  const body = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(s);
+  let out = body ? body[1] : s
+    .replace(/<!DOCTYPE[^>]*>/gi, '')
+    .replace(/<\/?(?:html|body)\b[^>]*>/gi, '')
+    .replace(/<head\b[^>]*>[\s\S]*?<\/head>/gi, '');
+  return { css: css.join('\n'), body: out.trim() };
+}
+// Hygiène du code collé : le gabarit vient de la régie (admin), mais on retire
+// tout ce qui pourrait s'exécuter — scripts, gestionnaires on*, URL javascript:.
+export function sanitizeHtml(src) {
+  return String(src || '')
+    .replace(/<script\b[\s\S]*?<\/script>/gi, '')
+    .replace(/<script\b[^>]*\/?>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*"[^"]*"/gi, '')
+    .replace(/\son[a-z]+\s*=\s*'[^']*'/gi, '')
+    .replace(/\son[a-z]+\s*=\s*[^\s>]+/gi, '')
+    .replace(/javascript:/gi, '');
 }
 
 export function renderModule(h, m, lt, opts) {
@@ -264,6 +294,40 @@ function renderModuleInner(h, m, lt, opts) {
       else kids.push(h('div', { key: 'pbg', style: { position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${col}, ${mixHex(col, '#000000', 0.28)})` } }));
       kids.push(h('div', { key: 'pwrap', style: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 260px', opacity: a, transform: `scale(${zoom})`, transformOrigin: 'center' } }, offer(!band)));
     }
+    const te = tagEl(); if (te) kids.push(te);
+    return kids;
+  }
+
+  // ---- Gabarit HTML : code collé en régie, mis à l'échelle de l'écran ------
+  // La maquette a sa taille source (m.htmlW × m.htmlH — ex. 1920×1080 pour du
+  // 16:9, 1080×1920 pour du 9:16, 840×1189 pour une affiche A1). On la met à
+  // l'échelle du canevas : adapter (tout visible), remplir (recadre) ou étirer.
+  if (m.type === 'html') {
+    const raw = m.html || '';
+    if (!raw.trim()) {
+      kids.push(h('div', { key: 'hnone', style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', gap: 60, alignItems: 'center', justifyContent: 'center', background: '#F5EFE4' } },
+        h('div', { style: { fontSize: 260, color: '#C9C3B8', fontFamily: FUI } }, '⟨⟩'),
+        h('div', { style: { fontFamily: FUI, fontSize: 90, color: '#8A847C', letterSpacing: '0.14em', textTransform: 'uppercase' } }, 'colle ton code HTML dans la régie')));
+      return kids;
+    }
+    const { css, body } = splitHtmlDoc(sanitizeHtml(raw));
+    const dw = Math.max(64, m.htmlW || 1920);
+    const dh = Math.max(64, m.htmlH || 1080);
+    const mode = m.layout || 'fit';
+    const sx = W / dw, sy = H / dh;
+    const s = mode === 'cover' ? Math.max(sx, sy) : Math.min(sx, sy);
+    const tf = mode === 'stretch' ? `scale(${sx}, ${sy})` : `scale(${s})`;
+    kids.push(h('div', { key: 'hbg', style: { position: 'absolute', inset: 0, background: '#F5EFE4', overflow: 'hidden' } }));
+    if (css) kids.push(h('style', { key: 'hcss', dangerouslySetInnerHTML: { __html: css } }));
+    kids.push(h('div', {
+      key: 'hwrap',
+      style: {
+        position: 'absolute', left: '50%', top: '50%', width: dw, height: dh,
+        marginLeft: -dw / 2, marginTop: -dh / 2, transform: tf, transformOrigin: 'center',
+        overflow: 'hidden',
+      },
+      dangerouslySetInnerHTML: { __html: body },
+    }));
     const te = tagEl(); if (te) kids.push(te);
     return kids;
   }

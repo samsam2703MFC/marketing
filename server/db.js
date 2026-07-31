@@ -293,6 +293,11 @@ function migrate(db) {
   if (!modCols2.includes('promo_type')) db.exec(`ALTER TABLE sig_modules ADD COLUMN promo_type TEXT NOT NULL DEFAULT ''`);
   // Élément « campagne » : référence une campagne marketing (sig_campaigns).
   if (!modCols2.includes('campaign_ref')) db.exec(`ALTER TABLE sig_modules ADD COLUMN campaign_ref TEXT NOT NULL DEFAULT ''`);
+  // Élément « gabarit HTML » : code collé par la régie + taille de sa maquette
+  // source (ex. 1920 × 1080 pour du 16:9, 840 × 1189 pour une affiche A1).
+  if (!modCols2.includes('html')) db.exec(`ALTER TABLE sig_modules ADD COLUMN html TEXT NOT NULL DEFAULT ''`);
+  if (!modCols2.includes('html_w')) db.exec(`ALTER TABLE sig_modules ADD COLUMN html_w INTEGER NOT NULL DEFAULT 1920`);
+  if (!modCols2.includes('html_h')) db.exec(`ALTER TABLE sig_modules ADD COLUMN html_h INTEGER NOT NULL DEFAULT 1080`);
 
   // Les anciennes bases limitaient le type par un CHECK (category|liaison) —
   // les types vivent désormais dans sig_element_types : on reconstruit la
@@ -331,7 +336,10 @@ function migrate(db) {
         surprise     INTEGER NOT NULL DEFAULT 0,
         watermark    TEXT NOT NULL DEFAULT 'none',
         promo_type   TEXT NOT NULL DEFAULT '',
-        campaign_ref TEXT NOT NULL DEFAULT ''
+        campaign_ref TEXT NOT NULL DEFAULT '',
+        html         TEXT NOT NULL DEFAULT '',
+        html_w       INTEGER NOT NULL DEFAULT 1920,
+        html_h       INTEGER NOT NULL DEFAULT 1080
       );
       INSERT INTO sig_modules_new (${cols}) SELECT ${cols} FROM sig_modules;
       DROP TABLE sig_modules;
@@ -569,8 +577,22 @@ function ensureElementTypes(db) {
         campaignLayouts, 0, 7);
     }
   };
+  // Type « gabarit HTML » : on colle du code (maquette, affiche…) et il est mis
+  // à l'échelle sur l'écran. Les variables {{…}} y sont résolues par magasin.
+  const htmlLayouts = JSON.stringify([
+    { id: 'fit', icon: '▭', label: 'Adapter — maquette entière visible' },
+    { id: 'cover', icon: '◼', label: 'Remplir l\'écran (recadre les bords)' },
+    { id: 'stretch', icon: '⤢', label: 'Étirer aux dimensions de l\'écran' },
+  ]);
+  const ensureHtml = () => {
+    if (!db.prepare('SELECT 1 FROM sig_element_types WHERE id = ?').get('html')) {
+      insType.run('html', 'Gabarit HTML — coller du code', '⟨⟩',
+        'Colle du HTML (maquette, affiche, gabarit généré) : il est mis à l\'échelle sur l\'écran. Les variables {{magasin}}, {{adresse}}, {{date}}, {{saison}}… y sont remplacées par magasin à la diffusion.',
+        htmlLayouts, 0, 8);
+    }
+  };
   const n = db.prepare('SELECT COUNT(*) AS n FROM sig_element_types').get().n;
-  if (n > 0) { ensureMedia(); ensurePromotion(); ensureCampaign(); return; }
+  if (n > 0) { ensureMedia(); ensurePromotion(); ensureCampaign(); ensureHtml(); return; }
   const catLayouts = [
     { id: 'illo-right', icon: '▤', label: 'Texte à gauche · illustration à droite' },
     { id: 'illo-left', icon: '▤', label: 'Texte à droite · illustration à gauche' },
@@ -602,6 +624,7 @@ function ensureElementTypes(db) {
   ensureMedia();
   ensurePromotion();
   ensureCampaign();
+  ensureHtml();
 }
 
 // ---------------------------------------------------------------------------
@@ -1115,6 +1138,8 @@ export function applyStoreTokens(modules, storeId, date = new Date()) {
   for (const m of modules || []) {
     if (typeof m.name === 'string' && m.name.indexOf('{{') !== -1) m.name = sub(m.name);
     if (typeof m.sub === 'string' && m.sub.indexOf('{{') !== -1) m.sub = sub(m.sub);
+    // Gabarit HTML : les mêmes variables sont résolues DANS le code collé.
+    if (typeof m.html === 'string' && m.html.indexOf('{{') !== -1) m.html = sub(m.html);
   }
 }
 
@@ -1562,6 +1587,9 @@ export function loadModules() {
           : { type: m.promo_type || '', name: 'Offre', icon: '🏷️', color: '#C0392B' };
       })(),
       campaignRef: m.campaign_ref || '',
+      html: m.html || '',
+      htmlW: m.html_w || 1920,
+      htmlH: m.html_h || 1080,
       // Campagne résolue pour l'affichage (nom · portée · visuel · thème · dates).
       campaign: m.type === 'campagne'
         ? (campaign || { id: m.campaign_ref || '', name: 'Campagne', scope: 'produit', productRef: '', theme: '', image: '', message: '', dateFrom: '', dateTo: '', color: '#8D1D2C', active: true })
@@ -1628,8 +1656,9 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
     const insMod = db.prepare(`INSERT INTO sig_modules
       (id, type, name, sub, layout, motion, motion_title, motion_list, motion_illo,
        tag_enabled, tag_label, tag_img, sched_days, sched_from, sched_to, pos, sort_order, lib_tag,
-       cat_ref, product_ref, video, surprise, watermark, dur, promo_type, campaign_ref, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
+       cat_ref, product_ref, video, surprise, watermark, dur, promo_type, campaign_ref,
+       html, html_w, html_h, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
     const insItem = db.prepare(`INSERT INTO sig_module_items
       (module_id, position, name, price, img, src, active) VALUES (?, ?, ?, ?, ?, ?, ?)`);
     // Les types valides viennent de la table sig_element_types (rien en dur).
@@ -1649,7 +1678,10 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
         m.surprise ? 1 : 0,
         ['filigrane', 'logo', 'nouveau'].includes(m.watermark) ? m.watermark : 'none',
         Number.isFinite(parseFloat(m.dur)) ? Math.max(0, Math.min(120, parseFloat(m.dur))) : 0,
-        String(m.promoType || ''), String(m.campaignRef || '')
+        String(m.promoType || ''), String(m.campaignRef || ''),
+        String(m.html || ''),
+        Math.max(64, Math.min(20000, parseInt(m.htmlW, 10) || 1920)),
+        Math.max(64, Math.min(20000, parseInt(m.htmlH, 10) || 1080))
       );
       // Un élément lié au catalogue (ou une campagne) ne stocke pas d'items propres.
       if (!m.catRef && !m.productRef && m.type !== 'campagne') {

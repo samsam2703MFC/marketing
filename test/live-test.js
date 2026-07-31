@@ -126,6 +126,7 @@ async function main() {
     for (const x of t.types) if (!Array.isArray(x.layouts) || !x.layouts.length) throw new Error(`type ${x.id} sans mises en page`);
     if (!t.types.some((x) => x.id === 'promotion')) throw new Error('type « promotion » manquant');
     if (!t.types.some((x) => x.id === 'campagne')) throw new Error('type « campagne » manquant');
+    if (!t.types.some((x) => x.id === 'html')) throw new Error('type « html » (gabarit) manquant');
     return t.types.map((x) => x.id).join(' · ');
   });
   await step('GET /api/v1/promo-types — sous-types de promotion (dynamiques)', async () => {
@@ -582,6 +583,36 @@ async function main() {
         await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
         await call('PUT', '/api/v1/campaigns', { campaigns: before.campaigns });
       }
+    });
+    await step('Gabarit HTML — code collé + variables résolues par magasin', async () => {
+      const fleetRes = await call('GET', '/api/v1/fleet');
+      const store = fleetRes.stores[0];
+      if (!store) throw new Error('aucun magasin en base');
+      const st = await call('GET', '/api/v1/state');
+      const coord0 = { address: store.address || '' };
+      // Document complet (doctype + head/style + body) avec variables et un
+      // <script> qui doit être retiré à l'affichage.
+      const code = `<!DOCTYPE html><html><head><style>.k{color:#8D1D2C}</style></head>`
+        + `<body><div class="k">{{magasin}} — {{adresse}}</div><script>alert(1)</script></body></html>`;
+      const htmlMod = { id: 'mHTMLLT', type: 'html', name: 'Gabarit LT', html: code, htmlW: 1080, htmlH: 1920, layout: 'fit', dur: 9, items: [] };
+      await call('POST', `/api/v1/stores/${store.id}`, { address: 'HTMLADDR-LT' });
+      await call('PUT', '/api/v1/draft', {
+        modules: [...st.modules, htmlMod],
+        playlists: [...st.playlists, { id: 'pl-htmlLT', name: 'Film gabarit LT', items: ['mHTMLLT'] }],
+        activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop,
+      });
+      const f = await (await fetch(BASE + `/api/v1/film?film=pl-htmlLT&store=${encodeURIComponent(store.id)}`)).json();
+      // restauration AVANT les assertions
+      await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      await call('POST', `/api/v1/stores/${store.id}`, coord0);
+      const m = (f.modules || []).find((x) => x.id === 'mHTMLLT');
+      if (!m) throw new Error('gabarit HTML absent du film');
+      if (m.htmlW !== 1080 || m.htmlH !== 1920) throw new Error(`format source perdu : ${m.htmlW}×${m.htmlH}`);
+      if (!m.html || !m.html.includes('.k{color:#8D1D2C}')) throw new Error('le code collé (style) n\'est pas conservé');
+      if (m.html.includes('{{magasin}}')) throw new Error('{{magasin}} non résolu dans le HTML');
+      if (!m.html.includes(store.store)) throw new Error('nom du magasin non injecté dans le HTML');
+      if (!m.html.includes('HTMLADDR-LT')) throw new Error('{{adresse}} non résolue dans le HTML');
+      return `${m.htmlW}×${m.htmlH} · « ${store.store} » + adresse injectés`;
     });
     await step('POST heartbeat — auto-enregistrement d\'un player de test', async () => {
       const hb = await call('POST', `/api/v1/players/${pid}/heartbeat`, {

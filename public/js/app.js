@@ -10,6 +10,8 @@ import {
 import { continuousDefaults, normContinuous } from './continuous.js';
 // Internationalisation de l'interface (FR / EN / IT), choix par navigateur.
 import { UI_LANGS, UI_LANG_IDS, tr, WIZ_STEP_KEYS } from './i18n.js';
+// Gabarits HTML : formats source (16:9, 9:16, A1…), variables et exemple.
+import { HTML_PRESETS, HTML_TOKENS, HTML_EXAMPLE_A1 } from './html-templates.js';
 // Générateur de QR code autonome (pour brancher un écran en scannant).
 import { qrSvg } from './vendor/qr.js';
 const qrDataUri = (url) => { try { return 'data:image/svg+xml;utf8,' + encodeURIComponent(qrSvg(String(url), { scale: 5, margin: 3 })); } catch { return ''; } };
@@ -680,6 +682,9 @@ class App extends Component {
     if (mm.type === 'film') return mm.video ? `vidéo · ${mm.dur || 10} s` : 'vidéo à importer';
     if (mm.type === 'animation') return `animation · ${mm.dur || 6} s`;
     if (mm.type === 'produit') return mm.items && mm.items[0] ? `à la une : ${mm.items[0].name}` : 'produit à choisir';
+    if (mm.type === 'html') return String(mm.html || '').trim() ? `gabarit HTML · ${mm.htmlW || 1920}×${mm.htmlH || 1080}` : 'gabarit HTML · code à coller';
+    if (mm.type === 'promotion') return `promotion${mm.promo && mm.promo.name ? ' · ' + mm.promo.name : ''}`;
+    if (mm.type === 'campagne') return `campagne${mm.campaign && mm.campaign.name ? ' · ' + mm.campaign.name : ''}`;
     const n = this.activeItems(mm).length;
     return `${n} produits${mm.catRef ? ' · ⛓ table produits' : ''}`;
   }
@@ -1236,6 +1241,45 @@ class App extends Component {
   }
 
   setSelField(f, v) { const lib = this.cloneLib(); lib.find((x) => x.id === this.state.selId)[f] = v; this.setLib(lib); }
+  // ---- gabarit HTML : format source, variables, exemple -------------------
+  // Applique un format source (16:9, 9:16, A1…) à la maquette collée.
+  setHtmlPreset(p) {
+    const lib = this.cloneLib();
+    const m = lib.find((x) => x.id === this.state.selId);
+    if (!m) return;
+    m.htmlW = p.w; m.htmlH = p.h;
+    this.setLib(lib);
+  }
+  // Insère une variable {{…}} à la position du curseur dans l'éditeur de code.
+  insertHtmlToken(tok) {
+    const cur = this.sel();
+    if (!cur) return;
+    const ta = document.getElementById('sig-html-editor');
+    if (!ta) { this.setSelField('html', String(cur.html || '') + tok); return; }
+    const v = ta.value;
+    const a = ta.selectionStart == null ? v.length : ta.selectionStart;
+    const b = ta.selectionEnd == null ? a : ta.selectionEnd;
+    const next = v.slice(0, a) + tok + v.slice(b);
+    ta.value = next;
+    const pos = a + tok.length;
+    try { ta.setSelectionRange(pos, pos); ta.focus(); } catch { /* champ détaché */ }
+    this.setSelField('html', next);
+  }
+  // Charge l'exemple d'affiche (code + format source) dans l'élément courant.
+  loadHtmlExample() {
+    const cur = this.sel();
+    if (!cur) return;
+    if (String(cur.html || '').trim() && !window.confirm('Remplacer le code actuel par l\'exemple ?')) return;
+    const lib = this.cloneLib();
+    const m = lib.find((x) => x.id === this.state.selId);
+    if (!m) return;
+    m.html = HTML_EXAMPLE_A1.html; m.htmlW = HTML_EXAMPLE_A1.w; m.htmlH = HTML_EXAMPLE_A1.h;
+    if (!m.name || /^Gabarit HTML/i.test(m.name)) m.name = 'Affiche A1';
+    this.setLib(lib);
+    const ta = document.getElementById('sig-html-editor');
+    if (ta) ta.value = m.html;
+    this.showToast('Exemple d\'affiche A1 chargé — adapte le code ✓');
+  }
   setTag(f, v) { const lib = this.cloneLib(); const m = lib.find((x) => x.id === this.state.selId); m.tag = { ...m.tag, [f]: v }; this.setLib(lib); }
   setSched(f, v) { const lib = this.cloneLib(); const m = lib.find((x) => x.id === this.state.selId); m.schedule = { ...m.schedule, [f]: v }; this.setLib(lib); }
   setSchedBoth(from, to) { const lib = this.cloneLib(); const m = lib.find((x) => x.id === this.state.selId); m.schedule = { ...m.schedule, from, to }; this.setLib(lib); }
@@ -1791,6 +1835,7 @@ class App extends Component {
     const isMedia = m.type === 'media';
     const isPromo = m.type === 'promotion';
     const isCampaign = m.type === 'campagne';
+    const isHtml = m.type === 'html';
     const selType = this.elementTypeOf(m);
     const total = this.total();
     const { m: playM, lt } = this.activeInScope();
@@ -2594,7 +2639,38 @@ class App extends Component {
       deployStyle: `padding:11px 22px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:${tgtCount && !st.deploying ? 'pointer' : 'not-allowed'};${tgtCount ? 'background:#8D1D2C;color:#fff;' : 'background:rgba(35,34,32,0.10);color:#8A847C;'}opacity:${st.deploying ? 0.7 : 1};`,
       hasToast: !!st.toast, toast: st.toast,
       playlistEmpty: st.playlist.length === 0,
-      isCategory: isCat, isLiaison: isLia, isProduit, isFilmEl, isAnim, isMedia, isPromo, isCampaign,
+      isCategory: isCat, isLiaison: isLia, isProduit, isFilmEl, isAnim, isMedia, isPromo, isCampaign, isHtml,
+      selId: m.id,
+      // -- gabarit HTML : code collé, format source, variables, exemple --
+      htmlCode: m.html || '',
+      htmlW: m.htmlW || 1920,
+      htmlH: m.htmlH || 1080,
+      // Ratio lisible : forme entière quand elle est simple (16:9, 4:3…),
+      // sinon forme décimale (une A1 ne se simplifie pas → 1:1,42).
+      htmlRatio: (() => {
+        const w = m.htmlW || 1920, hh = m.htmlH || 1080;
+        const g = (a, b) => (b ? g(b, a % b) : a);
+        const d = g(w, hh) || 1;
+        const rw = Math.round(w / d), rh = Math.round(hh / d);
+        if (rw <= 32 && rh <= 32) return `${rw}:${rh}`;
+        return w >= hh
+          ? `${(w / hh).toFixed(2).replace('.', ',')}:1`
+          : `1:${(hh / w).toFixed(2).replace('.', ',')}`;
+      })(),
+      htmlSummary: (m.html || '').trim()
+        ? `${Math.round((m.html || '').length / 1024 * 10) / 10} Ko · ${m.htmlW || 1920}×${m.htmlH || 1080}`
+        : 'aucun code',
+      onHtmlCode: (e) => this.setSelField('html', e.target.value),
+      onHtmlW: (e) => this.setSelField('htmlW', Math.max(64, Math.min(20000, parseInt(e.target.value, 10) || 1920))),
+      onHtmlH: (e) => this.setSelField('htmlH', Math.max(64, Math.min(20000, parseInt(e.target.value, 10) || 1080))),
+      htmlPresets: HTML_PRESETS.map((p) => ({
+        ...p,
+        active: (m.htmlW || 1920) === p.w && (m.htmlH || 1080) === p.h,
+        pick: () => this.setHtmlPreset(p),
+      })),
+      htmlTokens: HTML_TOKENS.map((t) => ({ ...t, insert: () => this.insertHtmlToken(t.token) })),
+      loadHtmlExample: () => this.loadHtmlExample(),
+      htmlExampleLabel: HTML_EXAMPLE_A1.label,
       mediaAgencyUrl: new URL('agence', location.href).toString(),
       // -- campagne marketing : on choisit une campagne dans la liste --
       campaignInfo: isCampaign ? this.campaignInfo(m) : null,
@@ -2630,7 +2706,7 @@ class App extends Component {
         { id: 'logo', label: 'Logo (coin)' }, { id: 'nouveau', label: 'Ruban « Nouveau »' },
       ].map((o) => ({ ...o, active: (m.watermark || 'none') === o.id, pick: () => this.setSelField('watermark', o.id) })),
       hasSub: isLia || isAnim || isProduit || isPromo,
-      hasDur: isProduit || isFilmEl || isAnim || isMedia || isPromo || isCampaign,
+      hasDur: isProduit || isFilmEl || isAnim || isMedia || isPromo || isCampaign || isHtml,
       selName: m.name,
       selTypeLabel: selType ? selType.label : (isLia ? 'Liaison' : 'Catégorie'),
       selTypeBadge: `display:inline-flex;align-items:center;padding:4px 11px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;${isLia ? 'background:rgba(35,34,32,0.10);color:#8A847C;' : 'background:rgba(141,29,44,0.12);color:#8D1D2C;'}`,
@@ -4310,6 +4386,44 @@ class App extends Component {
             <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
               ${v.motionSimple.map((o) => html`<button onClick=${o.pick} style=${o.style}>${o.label}</button>`)}
             </div>
+            </div>`}
+          </div>
+        `}
+
+        ${v.isHtml && html`
+          <div style=${secCard}>
+            ${secHead('htmlcode', 'Code HTML', v.htmlSummary)}
+            ${secOpen('htmlcode') && html`<div style=${secBody}>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+              <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;max-width:420px;">Colle ici ton <strong>code HTML</strong> (document complet ou fragment) : il est mis à l'échelle de l'écran. Les <strong>variables</strong> ci-dessous sont remplacées <strong>par magasin</strong> à la diffusion.</p>
+              <button onClick=${v.loadHtmlExample} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">✨ ${v.htmlExampleLabel}</button>
+            </div>
+
+            <!-- Format source de la maquette : ratio + dimensions -->
+            <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:7px;">Format de la maquette collée <span style="font-weight:400;">— ratio ${v.htmlRatio}</span></label>
+            <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px;">
+              ${v.htmlPresets.map((p) => html`
+                <button onClick=${p.pick} title=${`${p.w} × ${p.h} px`} style="padding:8px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;${p.active ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.14);'}">${p.label}</button>
+              `)}
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+              <input type="number" min="64" max="20000" value=${v.htmlW} onInput=${v.onHtmlW} title="Largeur de la maquette (px)" style="width:104px;padding:9px 11px;font-size:13.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;text-align:right;" />
+              <span style="color:#8A847C;font-size:13px;">×</span>
+              <input type="number" min="64" max="20000" value=${v.htmlH} onInput=${v.onHtmlH} title="Hauteur de la maquette (px)" style="width:104px;padding:9px 11px;font-size:13.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;text-align:right;" />
+              <span style="font-size:12px;color:#8A847C;">px · la mise en page (Adapter / Remplir / Étirer) décide du cadrage</span>
+            </div>
+
+            <!-- Variables insérables au curseur -->
+            <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:7px;">Variables — clique pour insérer dans le code</label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+              ${v.htmlTokens.map((t) => html`
+                <button onClick=${t.insert} title=${t.label} style="padding:5px 11px;font-size:12px;font-weight:600;font-family:ui-monospace,monospace;color:#8D1D2C;background:rgba(141,29,44,0.07);border:1px solid rgba(141,29,44,0.22);border-radius:7px;cursor:pointer;">${t.token}</button>
+              `)}
+            </div>
+
+            <!-- Éditeur de code (non contrôlé : la saisie résiste aux re-rendus) -->
+            <textarea id="sig-html-editor" key=${'html-' + v.selId} defaultValue=${v.htmlCode} onInput=${v.onHtmlCode} spellcheck="false" placeholder="Colle ton HTML ici — ex. une affiche générée, un gabarit…" style="width:100%;box-sizing:border-box;min-height:280px;padding:12px 13px;font-size:12px;line-height:1.5;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#FBF8F2;resize:vertical;"></textarea>
+            <p style="margin:9px 0 0;font-size:11.5px;color:#8A847C;line-height:1.5;">Les polices <strong>Gotham</strong> et <strong>Vank</strong> et les images de <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">assets/</code> sont déjà disponibles — pas besoin de redéclarer <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">@font-face</code>. Les <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">&lt;script&gt;</code> et gestionnaires d'événements sont retirés à l'affichage (sécurité) ; les <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">&lt;style&gt;</code> sont conservés.</p>
             </div>`}
           </div>
         `}
