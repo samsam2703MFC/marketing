@@ -512,7 +512,7 @@ class App extends Component {
       },
       planDays: (Array.isArray(p.planDays) && p.planDays.length === 7) ? p.planDays.map(Boolean) : [true, true, true, true, true, true, true],
       stores: Array.isArray(p.stores) ? p.stores : [],
-      mode: p.mode === 'continu' ? 'continu' : 'playlist',
+      mode: 'continu',   // la régie ne fait plus que du continu
       continuous: normContinuous(p.continuous),
     };
   }
@@ -3288,20 +3288,14 @@ class App extends Component {
     // ---- Mode du film : Playlist (manuel) ou Continu (boucle auto) ----------
     const filmMode = this.activeFilm().mode === 'continu' ? 'continu' : 'playlist';
     const cont = normContinuous(this.activeFilm().continuous);
-    const modeBtn = (id, label, sub) => html`
-      <button onClick=${() => this.setFilmMode(id)} style="flex:1 1 0;text-align:left;padding:11px 15px;border-radius:12px;cursor:pointer;border:1px solid ${filmMode === id ? '#8D1D2C' : 'rgba(35,34,32,0.14)'};background:${filmMode === id ? '#8D1D2C' : '#FBF8F2'};color:${filmMode === id ? '#fff' : '#232220'};">
-        <div style="font-size:13.5px;font-weight:700;">${label}</div>
-        <div style="font-size:11px;opacity:0.82;margin-top:2px;">${sub}</div>
-      </button>`;
+    // Le film est toujours en mode continu : on ne monte plus de séquence à la
+    // main, on pose des règles et la boucle se compose en direct.
     const filmModeToggle = html`
       <div style="margin-top:14px;padding-top:14px;border-top:1px dashed rgba(35,34,32,0.12);">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
-          <span style="font-size:10px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">Mode du film</span>
-          ${infoTip('« Playlist » : tu montes la séquence à la main sur la ligne du temps (contrôle total). « Continu » : tu ne montes rien — tu poses des règles (source, moments, ratios…) et la boucle se compose toute seule et s’adapte au fil de la journée, sans republier.')}
-        </div>
-        <div style="display:flex;gap:10px;">
-          ${modeBtn('playlist', '▤ Playlist', 'Séquence montée à la main')}
-          ${modeBtn('continu', '🔄 Continu', 'Boucle composée en direct · saisons · moments · tags')}
+        <div style="display:flex;align-items:center;gap:6px;">
+          ${infoTip('Le film ne monte rien à la main : tu poses des règles (sources, moments, formats, ratios…) et la boucle se compose toute seule, en s’adaptant au fil de la journée, sans republier.')}
+          <span style="font-size:12px;font-weight:600;color:#6E4A2B;">🔄 Boucle continue</span>
+          <span style="font-size:11.5px;color:#8A847C;">composée en direct · saisons · moments · formats</span>
         </div>
       </div>`;
     // Panneau de réglages du mode continu.
