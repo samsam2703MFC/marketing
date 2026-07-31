@@ -517,6 +517,11 @@ function migrate(db) {
   );
   `);
 
+  // Règle : un PRODUIT porte une photo (sig_products.img), une CATÉGORIE porte
+  // une illustration (sig_product_categories.img).
+  const catCols = db.prepare('PRAGMA table_info(sig_product_categories)').all().map((c) => c.name);
+  if (!catCols.includes('img')) db.exec(`ALTER TABLE sig_product_categories ADD COLUMN img TEXT NOT NULL DEFAULT ''`);
+
   // Langue d'affichage du magasin (les alias produits/catégories la suivent).
   const stCols2 = db.prepare('PRAGMA table_info(sig_stores)').all().map((c) => c.name);
   if (!stCols2.includes('lang')) db.exec(`ALTER TABLE sig_stores ADD COLUMN lang TEXT NOT NULL DEFAULT 'fr'`);
@@ -804,7 +809,7 @@ export function loadCatalog() {
     return out;
   };
   const categories = db.prepare('SELECT * FROM sig_product_categories ORDER BY sort_order').all()
-    .map((c) => ({ id: c.id, name: c.name, active: !!c.active, aliases: aliasesOf('category', c.id) }));
+    .map((c) => ({ id: c.id, name: c.name, img: c.img || '', active: !!c.active, aliases: aliasesOf('category', c.id) }));
   const priceRows = db.prepare('SELECT * FROM sig_product_prices').all();
   const pricesByProduct = new Map();
   for (const r of priceRows) {
@@ -828,7 +833,7 @@ export function saveCatalog({ categories, products }) {
     db.exec('DELETE FROM sig_aliases');
     db.exec('DELETE FROM sig_products');
     db.exec('DELETE FROM sig_product_categories');
-    const insCat = db.prepare('INSERT OR REPLACE INTO sig_product_categories(id, name, sort_order, active) VALUES (?, ?, ?, ?)');
+    const insCat = db.prepare('INSERT OR REPLACE INTO sig_product_categories(id, name, img, sort_order, active) VALUES (?, ?, ?, ?, ?)');
     const insProd = db.prepare('INSERT OR REPLACE INTO sig_products(id, category_id, name, price, img, src, active, unavailable, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     const insPrice = db.prepare('INSERT OR REPLACE INTO sig_product_prices(product_id, store_id, price) VALUES (?, ?, ?)');
     const insAlias = db.prepare('INSERT OR REPLACE INTO sig_aliases(kind, ref_id, lang, name) VALUES (?, ?, ?, ?)');
@@ -838,7 +843,7 @@ export function saveCatalog({ categories, products }) {
       }
     };
     (categories || []).forEach((c, i) => {
-      insCat.run(String(c.id), String(c.name || `Catégorie ${i + 1}`), i, c.active === false ? 0 : 1);
+      insCat.run(String(c.id), String(c.name || `Catégorie ${i + 1}`), String(c.img || ''), i, c.active === false ? 0 : 1);
       putAliases('category', c.id, c.aliases);
     });
     const catIds = new Set((categories || []).map((c) => String(c.id)));
@@ -1166,7 +1171,10 @@ export const HTML_VAR_SOURCES = [
   { id: 'image', label: 'Image / marque', fields: [] },
   { id: 'produit', label: 'Produit', fields: [
     { id: 'nom', label: 'Nom' }, { id: 'prix', label: 'Prix' },
-    { id: 'image', label: 'Photo / illustration' }, { id: 'categorie', label: 'Catégorie' },
+    { id: 'image', label: 'Photo' }, { id: 'categorie', label: 'Catégorie' },
+  ] },
+  { id: 'categorie', label: 'Catégorie', fields: [
+    { id: 'nom', label: 'Nom' }, { id: 'illustration', label: 'Illustration' },
   ] },
   { id: 'promotion', label: 'Promotion', fields: [
     { id: 'nom', label: 'Nom du type' }, { id: 'icone', label: 'Icône' },
@@ -1232,6 +1240,12 @@ export function applyHtmlVars(modules, storeId, date = new Date()) {
         if (field === 'image') return p.img || '';
         if (field === 'categorie') { const c = oneCat.get(p.category_id); return c ? c.name : ''; }
         return p.name || '';
+      }
+      case 'categorie': {
+        const c = val ? db.prepare('SELECT * FROM sig_product_categories WHERE id = ?').get(val) : null;
+        if (!c) return '';
+        if (field === 'illustration') return c.img || '';
+        return c.name || '';
       }
       case 'promotion': {
         const t = val ? onePromo.get(val) : null;
@@ -1738,6 +1752,7 @@ export function loadModules() {
       motionList: m.motion_list || undefined,
       motionIllo: m.motion_illo || undefined,
       catRef: m.cat_ref || '',
+      catImg: m.cat_ref ? ((db.prepare('SELECT img FROM sig_product_categories WHERE id = ?').get(m.cat_ref) || {}).img || '') : '',
       productRef: m.product_ref || '',
       video: m.video || '',
       surprise: !!m.surprise,

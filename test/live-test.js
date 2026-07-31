@@ -614,6 +614,24 @@ async function main() {
       if (!m.html.includes('HTMLADDR-LT')) throw new Error('{{adresse}} non résolue dans le HTML');
       return `${m.htmlW}×${m.htmlH} · « ${store.store} » + adresse injectés`;
     });
+    await step('Règle photo/illustration — produit = photo, catégorie = illustration', async () => {
+      const before = await call('GET', '/api/v1/catalog');
+      if (!before.categories.length) return 'aucune catégorie au catalogue';
+      const cats = JSON.parse(JSON.stringify(before.categories));
+      cats[0].img = 'assets/sweet-tart-big.png';       // illustration de la catégorie
+      await call('PUT', '/api/v1/catalog', { categories: cats, products: before.products });
+      try {
+        const mid = await call('GET', '/api/v1/catalog');
+        const c0 = mid.categories.find((c) => c.id === cats[0].id);
+        if (!c0 || c0.img !== 'assets/sweet-tart-big.png') throw new Error('illustration de catégorie non persistée');
+        // un produit garde SA photo, distincte de l'illustration de sa catégorie
+        const p0 = mid.products.find((p) => p.categoryId === c0.id);
+        if (p0 && !p0.img) throw new Error('photo du produit perdue');
+        return `catégorie « ${c0.name} » → illustration · produit → photo (${p0 ? p0.img : 'aucun produit'})`;
+      } finally {
+        await call('PUT', '/api/v1/catalog', { categories: before.categories, products: before.products });
+      }
+    });
     await step('POST heartbeat — auto-enregistrement d\'un player de test', async () => {
       const hb = await call('POST', `/api/v1/players/${pid}/heartbeat`, {
         token, name: 'Écran de test live', state: 'playing', cachePct: 100, media: 'test', playedVer: 0, dataVer: 0,

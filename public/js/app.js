@@ -371,6 +371,11 @@ class App extends Component {
         if (field === 'categorie') return ((st.catalog.categories || []).find((c) => c.id === p.categoryId) || {}).name || '';
         return p.name || '';
       }
+      if (b.src === 'categorie') {
+        const c = (st.catalog.categories || []).find((x) => x.id === val);
+        if (!c) return '';
+        return field === 'illustration' ? (c.img || '') : (c.name || '');
+      }
       if (b.src === 'promotion') {
         const t = (st.promoTypes || []).find((x) => x.id === val);
         if (!t) return '';
@@ -433,7 +438,11 @@ class App extends Component {
     const prods = this.state.catalog.products || [];
     const toItem = (p) => ({ name: p.name, price: p.price, img: p.img, src: p.src, active: p.active !== false, productId: p.id });
     let items;
-    if (m.catRef) items = prods.filter((p) => p.categoryId === m.catRef).map(toItem);
+    if (m.catRef) {
+      items = prods.filter((p) => p.categoryId === m.catRef).map(toItem);
+      const cat = (this.state.catalog.categories || []).find((c) => c.id === m.catRef);
+      if (cat && cat.img) return { ...m, items, promo, catImg: cat.img };
+    }
     else { const p = prods.find((x) => x.id === m.productRef); items = p ? [toItem(p)] : []; }
     return { ...m, items, promo };
   }
@@ -2337,6 +2346,10 @@ class App extends Component {
           if (isBaseLang) x.name = e.target.value;
           else { x.aliases = x.aliases || {}; if (e.target.value.trim()) x.aliases[editLang] = e.target.value; else delete x.aliases[editLang]; }
         }),
+        // Règle : une CATÉGORIE porte une illustration (le produit, lui, une photo).
+        img: c.img || '',
+        imgOk: imgRenderable(c.img || ''),
+        onImg: (e) => this.setCat((d) => { const x = d.categories.find((y) => y.id === c.id); if (x) x.img = e.target.value; }),
         toggleActive: (e) => { e.stopPropagation(); this.setCat((d) => { const x = d.categories.find((y) => y.id === c.id); if (x) x.active = !(x.active !== false); }); },
         del: (e) => { e.stopPropagation(); this.delProdCat(c.id); },
       };
@@ -2801,6 +2814,7 @@ class App extends Component {
         const opts = src === 'produit' ? (st.catalog.products || []).map((p) => ({ id: p.id, label: p.name }))
           : src === 'promotion' ? (st.promoTypes || []).map((t) => ({ id: t.id, label: `${t.icon || ''} ${t.name}` }))
           : src === 'campagne' ? (st.campaigns || []).map((c) => ({ id: c.id, label: c.name }))
+          : src === 'categorie' ? (st.catalog.categories || []).map((c) => ({ id: c.id, label: c.name }))
           : src === 'image' ? HTML_ASSETS.map((a) => ({ id: a.id, label: a.label }))
           : [];
         // Constante de marque (ex. {{ logo }}) : résolue d'office, aucune
@@ -2820,7 +2834,7 @@ class App extends Component {
           resetPos: () => this.setHtmlVarPos(name, 0, 0),
           sources: HTML_VAR_SOURCES.map((x) => ({ id: x.id, label: x.label })),
           fields: srcDef ? srcDef.fields : [],
-          needsPick: ['produit', 'promotion', 'campagne', 'image'].includes(src),
+          needsPick: ['produit', 'categorie', 'promotion', 'campagne', 'image'].includes(src),
           pickOptions: opts,
           isLiteral: src === 'literal',
           // Choisir une source pré-remplit son premier champ : le menu affiche
@@ -3572,6 +3586,17 @@ class App extends Component {
               <button onClick=${c.toggleActive} title="Active / inactive" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;flex:0 0 auto;border:1px solid rgba(35,34,32,0.12);cursor:pointer;background:${c.active ? 'rgba(46,110,78,0.12)' : 'rgba(35,34,32,0.06)'};color:${c.active ? '#2E6E4E' : '#8A847C'};font-size:12px;">${c.active ? '✓' : '⃠'}</button>
               <button onClick=${c.del} title="Supprimer la catégorie" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;flex:0 0 auto;border:1px solid rgba(35,34,32,0.12);cursor:pointer;background:rgba(255,255,255,0.7);color:#8D1D2C;font-size:12px;">🗑</button>
             </div>
+            ${c.on && v.isBaseLang && html`
+              <div onClick=${(e) => e.stopPropagation()} style="display:flex;align-items:center;gap:8px;margin:-4px 0 4px;padding:8px 10px;border-radius:9px;background:rgba(255,255,255,0.55);border:1px solid rgba(35,34,32,0.08);">
+                ${c.imgOk
+                  ? html`<img src=${c.img} alt="" loading="lazy" style="width:30px;height:30px;border-radius:7px;object-fit:contain;flex:0 0 auto;border:1px solid rgba(35,34,32,0.12);background:#fff;" />`
+                  : html`<span title="Aucune illustration" style="width:30px;height:30px;border-radius:7px;flex:0 0 auto;border:1px dashed rgba(35,34,32,0.22);background:#F5EFE4;display:flex;align-items:center;justify-content:center;font-size:13px;color:#C9C3B8;">🖼</span>`}
+                <div style="flex:1 1 auto;min-width:0;">
+                  <div style="font-size:10.5px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;margin-bottom:3px;">Illustration de la catégorie</div>
+                  <input value=${c.img} onInput=${c.onImg} placeholder="assets/… ou URL" spellcheck="false" title="Une catégorie porte une illustration ; un produit porte une photo." style="width:100%;box-sizing:border-box;padding:6px 9px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.14);border-radius:7px;background:#fff;" />
+                </div>
+              </div>
+            `}
           `)}
           ${!v.prodCats.length && html`<div style="font-size:12px;color:#8A847C;padding:8px;">Aucune catégorie — clique ＋ pour commencer.</div>`}
         </div>

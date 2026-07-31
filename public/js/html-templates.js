@@ -48,7 +48,10 @@ export const HTML_VAR_SOURCES = [
   { id: 'image', label: 'Image / marque', fields: [] },
   { id: 'produit', label: 'Produit', fields: [
     { id: 'nom', label: 'Nom' }, { id: 'prix', label: 'Prix' },
-    { id: 'image', label: 'Photo / illustration' }, { id: 'categorie', label: 'Catégorie' },
+    { id: 'image', label: 'Photo' }, { id: 'categorie', label: 'Catégorie' },
+  ] },
+  { id: 'categorie', label: 'Catégorie', fields: [
+    { id: 'nom', label: 'Nom' }, { id: 'illustration', label: 'Illustration' },
   ] },
   { id: 'promotion', label: 'Promotion', fields: [
     { id: 'nom', label: 'Nom du type' }, { id: 'icone', label: 'Icône' },

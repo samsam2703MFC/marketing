@@ -202,6 +202,13 @@ code »**. On y colle du HTML (document complet avec `<head><style>` ou simple f
 - **Sécurité** : `splitHtmlDoc` extrait styles + corps, `sanitizeHtml` retire `<script>`, les
   gestionnaires `on*` et les URL `javascript:` (le code vient de la régie, admin authentifiée).
 
+### Règle photo / illustration
+Un **produit** porte une **photo** (`sig_products.img`) ; une **catégorie** porte une
+**illustration** (`sig_product_categories.img`, saisie dans l'onglet Produits en sélectionnant la
+catégorie). L'écran « catégorie » affiche l'**illustration de la catégorie** quand elle est
+renseignée, et retombe sinon sur la photo du produit courant (comportement d'origine, donc
+rétro-compatible). Les deux sont exposées séparément aux variables d'un gabarit HTML.
+
 ### Format des items (16:9 / 9:16) — filtre de montage
 Un écran est **soit paysage, soit portrait** : chaque élément porte donc un **format de diffusion**
 (`sig_modules.orient`) valant **`paysage`** (16:9, défaut) ou **`portrait`** (9:16) — il n'y a pas
@@ -218,7 +225,8 @@ diffusion** (`applyHtmlVars`, juste avant les jetons magasin) :
 | Source | Champs |
 |---|---|
 | **Valeur libre** | texte saisi |
-| **Produit** | nom · prix (celui du magasin s'il existe) · photo · catégorie |
+| **Produit** | nom · prix (celui du magasin s'il existe) · **photo** · catégorie |
+| **Catégorie** | nom · **illustration** |
 | **Promotion** | nom du type · icône · couleur · description |
 | **Campagne** | nom · accroche · thème · visuel · couleur · date de début / de fin |
 | **Magasin / contexte** | nom · adresse · horaires · téléphone · date du jour · période active · moment |
@@ -265,7 +273,7 @@ exécute côté serveur : ping TCP de l'hôte, `GET assignment`, `GET dataset pr
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + cycle complet — 53 tests
+npm test              # serveur jetable (BDD temporaire) + cycle complet — 54 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
 node test/live-test.js http://185.180.206.46/signage --password=… --mutate

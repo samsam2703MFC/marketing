@@ -539,7 +539,7 @@ function renderModuleInner(h, m, lt, opts) {
     onMouseDown: drag ? opts.onIlloDown : undefined,
     style: { position: 'absolute', left: cfg.illoCX - cfg.illoSize / 2, top: illoCY - cfg.illoSize / 2, width: cfg.illoSize, height: cfg.illoSize, opacity: op * cfg.illoOp, zIndex: drag ? 9 : z, transform: `translateY(${wobY}px) rotate(${wobR}deg)`, transformOrigin: 'center', cursor: drag ? 'grab' : 'default' },
   },
-  h('img', { src: act[i].img, alt: '', draggable: false, style: { width: cfg.illoSize, height: cfg.illoSize, objectFit: 'contain', display: 'block', pointerEvents: 'none' } }));
+  h('img', { src: m.catImg || act[i].img, alt: '', draggable: false, style: { width: cfg.illoSize, height: cfg.illoSize, objectFit: 'contain', display: 'block', pointerEvents: 'none' } }));
   if (cfg.illoShown && cfg.illoBehind && n) { if (idx !== fromI) kids.push(illo(fromI, 1 - cross, 0)); kids.push(illo(idx, cross, 0)); }
   if (n) kids.push(h('div', { key: 'ba', onMouseDown: drag ? opts.onListDown : undefined, style: { position: 'absolute', left: cfg.listL, top: bandY - BAND_H / 2, width: BAND_W, height: BAND_H, background: RUBY, borderRadius: 18, zIndex: 1, boxShadow: '0 30px 70px rgba(141,29,44,0.28)', cursor: drag ? 'grab' : 'default' } }));
   act.forEach((t, i) => {
