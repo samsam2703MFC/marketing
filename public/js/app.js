@@ -2730,7 +2730,8 @@ class App extends Component {
       })(),
       filmMomentRows: (() => {
         const mo = st.filmMomentSel || st.prodMomentsCurrent || 'matin';
-        return this.playlistMods().map((mm) => {
+        // Le film filtre sur DEUX axes : le moment ET le format d'écran.
+        return this.playlistMods().filter((mm) => this.fitsOrient(mm, st.libOrient)).map((mm) => {
           const rm = this.resolveMod(mm);
           const items = (rm.items || []).filter((it) => it.active !== false);
           const kept = items.filter((it) => !it.productId || this.prodSoldAt(it.productId, mo));
@@ -5076,7 +5077,7 @@ class App extends Component {
         <div style="margin-top:14px;padding-top:13px;border-top:1px solid rgba(35,34,32,0.10);">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
             ${infoTip('Aperçu du contenu réellement diffusé à chaque moment de la journée. Un produit n’est retenu que s’il est vendu à ce créneau (table « Périodes de vente », onglet Périodes) ; sans aucune règle il passe à tous les moments. Un élément dont tous les produits sont hors créneau est signalé — il serait sauté à l’écran.')}
-            <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8D1D2C;">Contenu par moment</span>
+            <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8D1D2C;">Contenu par moment · ${v.libOrient === 'portrait' ? '9:16 portrait' : '16:9 paysage'}</span>
             ${v.filmMomentTabs.map((mo) => html`
               <button onClick=${mo.pick} style="padding:6px 13px;font-size:12px;font-weight:600;border-radius:999px;cursor:pointer;${mo.active ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.14);'}">${mo.label}${mo.isNow ? ' ●' : ''}</button>
             `)}
