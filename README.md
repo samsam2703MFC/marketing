@@ -203,12 +203,29 @@ code »**. On y colle du HTML (document complet avec `<head><style>` ou simple f
   gestionnaires `on*` et les URL `javascript:` (le code vient de la régie, admin authentifiée).
 
 ### Format des items (16:9 / 9:16) — filtre de montage
-Chaque élément porte un **format de diffusion** (`sig_modules.orient`) : **Tous formats** (défaut),
-**16:9 paysage** ou **9:16 portrait**. Ce format sert de **filtre des items disponibles** au
-montage — bibliothèque et ligne du temps proposent uniquement les éléments compatibles avec le
-format visé ; les éléments « tous formats » restent proposés partout. Un **gabarit HTML** laissé en
-« tous formats » déduit son orientation de la taille de sa maquette, et choisir un préréglage
-16:9 / 9:16 fixe directement le format de l'item.
+Un écran est **soit paysage, soit portrait** : chaque élément porte donc un **format de diffusion**
+(`sig_modules.orient`) valant **`paysage`** (16:9, défaut) ou **`portrait`** (9:16) — il n'y a pas
+d'entre-deux. Ce format sert de **filtre des items disponibles** au montage : la bibliothèque et la
+ligne du temps ne proposent que les éléments du format visé (les deux vues sont **disjointes**).
+Sur un **gabarit HTML**, choisir un préréglage 16:9 / 9:16 fixe directement le format de l'item.
+
+### Variables d'un gabarit HTML — détectées et liées aux données
+Chaque **`{{ variable }}`** présente dans le code collé est **détectée et remontée** dans le volet
+« Code HTML » (les espaces sont tolérés : `{{ titre }}` = `{{titre}}`). Pour chacune, on choisit une
+**source de données** et le **champ** à afficher — la substitution a lieu **par magasin, à la
+diffusion** (`applyHtmlVars`, juste avant les jetons magasin) :
+
+| Source | Champs |
+|---|---|
+| **Valeur libre** | texte saisi |
+| **Produit** | nom · prix (celui du magasin s'il existe) · photo · catégorie |
+| **Promotion** | nom du type · icône · couleur · description |
+| **Campagne** | nom · accroche · thème · visuel · couleur · date de début / de fin |
+| **Magasin / contexte** | nom · adresse · horaires · téléphone · date du jour · période active · moment |
+
+Une variable **laissée non liée** retombe sur les jetons standards (`{{magasin}}`, `{{date}}`…) ou
+reste visible telle quelle — rien n'est inventé. Une variable d'image non liée est neutralisée à
+l'affichage (pas d'image cassée). Liaisons stockées dans `sig_modules.html_vars` (JSON).
 
 ### Campagnes marketing
 Une **campagne** est aussi un **type d'élément** (`sig_element_types` → `campagne`), mais son

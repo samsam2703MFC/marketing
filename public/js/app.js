@@ -11,7 +11,7 @@ import { continuousDefaults, normContinuous } from './continuous.js';
 // Internationalisation de l'interface (FR / EN / IT), choix par navigateur.
 import { UI_LANGS, UI_LANG_IDS, tr, WIZ_STEP_KEYS } from './i18n.js';
 // Gabarits HTML : formats source (16:9, 9:16, A1…), variables et exemple.
-import { HTML_PRESETS, HTML_TOKENS, HTML_EXAMPLE_A1 } from './html-templates.js';
+import { HTML_PRESETS, HTML_TOKENS, HTML_EXAMPLE_A1, HTML_VAR_SOURCES, htmlVarNames } from './html-templates.js';
 // Générateur de QR code autonome (pour brancher un écran en scannant).
 import { qrSvg } from './vendor/qr.js';
 const qrDataUri = (url) => { try { return 'data:image/svg+xml;utf8,' + encodeURIComponent(qrSvg(String(url), { scale: 5, margin: 3 })); } catch { return ''; } };
@@ -110,7 +110,7 @@ class App extends Component {
     dirty: false, saved: true, scope: 'module', clipboard: null, past: [], future: [],
     selId: null, playlist: [],
     playlists: [], activePl: null, editingFilm: false, editFilmName: '', libFilter: 'all',
-    libOrient: 'all',
+    libOrient: 'paysage',
     filmFilter: 'all', filmTagInput: '',
     editingStore: null, editStoreName: '',
     view: 'home', composerTab: 'lib', publishing: false, deploying: false, version: 1, dataVer: 1, hbTick: 0, toast: '',
@@ -662,7 +662,7 @@ class App extends Component {
       id, type: t.id, name: '', sub: '', libTag: t.id === 'liaison' ? 'liaison' : 'produit',
       layout: (t.layouts && t.layouts[0] && t.layouts[0].id) || 'illo-right', motion: 'm1',
       tag: newTag(), schedule: newSched(), pos: newPos(), items: [],
-      catRef: '', productRef: '', video: '', dur: 0,
+      catRef: '', productRef: '', video: '', dur: 0, orient: 'paysage',
     };
     if (t.id === 'category') { base.name = 'Nouvelle catégorie'; base.items = [{ name: 'Produit', price: '0,00', img: 'assets/cake.png', src: 'illus', active: true }]; }
     else if (t.id === 'liaison') { base.name = 'Liaison'; base.sub = 'faites maison chaque matin'; }
@@ -677,26 +677,18 @@ class App extends Component {
   elementTypeOf(m) {
     return (this.state.elementTypes || []).find((t) => t.id === (m && m.type)) || null;
   }
-  // Orientation effective d'un élément : 16:9 paysage, 9:16 portrait, ou
-  // « auto » (tous formats). Un gabarit HTML laissé en auto la déduit de la
-  // taille de sa maquette (1080×1920 → portrait).
+  // Orientation effective d'un élément : 16:9 paysage ou 9:16 portrait — un
+  // écran est l'un ou l'autre, il n'y a pas d'entre-deux.
   orientOf(mm) {
-    if (!mm) return 'auto';
-    if (mm.orient === 'paysage' || mm.orient === 'portrait') return mm.orient;
-    if (mm.type === 'html') {
-      const w = mm.htmlW || 1920, h = mm.htmlH || 1080;
-      if (w > h) return 'paysage';
-      if (h > w) return 'portrait';
-    }
-    return 'auto';
+    if (!mm) return 'paysage';
+    if (mm.orient === 'portrait') return 'portrait';
+    if (mm.orient === 'paysage') return 'paysage';
+    // Repli : un gabarit HTML suit la forme de sa maquette, sinon paysage.
+    if (mm.type === 'html' && (mm.htmlH || 0) > (mm.htmlW || 0)) return 'portrait';
+    return 'paysage';
   }
-  // Un élément est proposable pour un format donné s'il lui correspond ou
-  // s'il est « auto » (utilisable partout).
-  fitsOrient(mm, want) {
-    if (want === 'all') return true;
-    const o = this.orientOf(mm);
-    return o === 'auto' || o === want;
-  }
+  // Un élément n'est proposable que pour SON format d'écran.
+  fitsOrient(mm, want) { return this.orientOf(mm) === want; }
   modMeta(mm) {
     if (mm.type === 'liaison') return 'Liaison';
     if (mm.type === 'media') return 'média ciblé · moment + saison';
@@ -1270,7 +1262,7 @@ class App extends Component {
     if (!m) return;
     m.htmlW = p.w; m.htmlH = p.h;
     // Le format choisi fixe aussi l'orientation de l'item (filtre au montage).
-    m.orient = p.w > p.h ? 'paysage' : (p.h > p.w ? 'portrait' : 'auto');
+    m.orient = p.h > p.w ? 'portrait' : 'paysage';
     this.setLib(lib);
   }
   // Insère une variable {{…}} à la position du curseur dans l'éditeur de code.
@@ -1287,6 +1279,17 @@ class App extends Component {
     const pos = a + tok.length;
     try { ta.setSelectionRange(pos, pos); ta.focus(); } catch { /* champ détaché */ }
     this.setSelField('html', next);
+  }
+  // Lie (ou délie) une variable du gabarit à une source de données.
+  setHtmlVar(name, patch) {
+    const lib = this.cloneLib();
+    const m = lib.find((x) => x.id === this.state.selId);
+    if (!m) return;
+    const vars = { ...(m.htmlVars || {}) };
+    if (patch === null) delete vars[name];
+    else vars[name] = { ...(vars[name] || {}), ...patch };
+    m.htmlVars = vars;
+    this.setLib(lib);
   }
   // Charge l'exemple d'affiche (code + format source) dans l'élément courant.
   loadHtmlExample() {
@@ -2051,7 +2054,6 @@ class App extends Component {
     // Filtre de format : ne proposer au montage que les items compatibles avec
     // l'orientation visée (les items « tous formats » restent toujours offerts).
     const ORIENTS = [
-      { id: 'all', label: 'Tous formats', icon: '▦' },
       { id: 'paysage', label: '16:9 paysage', icon: '▭' },
       { id: 'portrait', label: '9:16 portrait', icon: '▯' },
     ];
@@ -2532,11 +2534,10 @@ class App extends Component {
       libOrientChips, libOrient: st.libOrient,
       // Orientation de l'élément courant (filtre de disponibilité au montage).
       orientOpts: [
-        { id: 'auto', label: 'Tous formats', hint: 'proposé partout' },
         { id: 'paysage', label: '16:9 paysage', hint: 'écrans paysage' },
         { id: 'portrait', label: '9:16 portrait', hint: 'écrans portrait' },
-      ].map((o) => ({ ...o, active: (m.orient || 'auto') === o.id, pick: () => this.setSelField('orient', o.id) })),
-      orientSummary: ({ auto: 'tous formats', paysage: '16:9 paysage', portrait: '9:16 portrait' })[m.orient || 'auto'],
+      ].map((o) => ({ ...o, active: this.orientOf(m) === o.id, pick: () => this.setSelField('orient', o.id) })),
+      orientSummary: this.orientOf(m) === 'portrait' ? '9:16 portrait' : '16:9 paysage',
       orientEffective: this.orientOf(m),
       prodCats, prodRows, storeCols, prodSelCat, langChips, isBaseLang,
       seasonRows, seasonsDirty: st.seasonsDirty, seasonsBusy: st.seasonsBusy, seasonsCount: (st.seasons || []).length,
@@ -2716,6 +2717,36 @@ class App extends Component {
         pick: () => this.setHtmlPreset(p),
       })),
       htmlTokens: HTML_TOKENS.map((t) => ({ ...t, insert: () => this.insertHtmlToken(t.token) })),
+      // Variables détectées DANS le code collé, remontées pour être liées aux
+      // données (produit, promotion, campagne, magasin) ou à une valeur libre.
+      htmlVarRows: htmlVarNames(m.html || '').map((name) => {
+        const bind = ((m.htmlVars || {})[name]) || {};
+        const src = bind.src || '';
+        const srcDef = HTML_VAR_SOURCES.find((x) => x.id === src) || null;
+        const opts = src === 'produit' ? (st.catalog.products || []).map((p) => ({ id: p.id, label: p.name }))
+          : src === 'promotion' ? (st.promoTypes || []).map((t) => ({ id: t.id, label: `${t.icon || ''} ${t.name}` }))
+          : src === 'campagne' ? (st.campaigns || []).map((c) => ({ id: c.id, label: c.name }))
+          : [];
+        return {
+          name, src, field: bind.field || '', value: bind.value || '',
+          bound: !!src,
+          sources: HTML_VAR_SOURCES.map((x) => ({ id: x.id, label: x.label })),
+          fields: srcDef ? srcDef.fields : [],
+          needsPick: ['produit', 'promotion', 'campagne'].includes(src),
+          pickOptions: opts,
+          isLiteral: src === 'literal',
+          onSrc: (e) => this.setHtmlVar(name, { src: e.target.value, field: '', value: '' }),
+          onField: (e) => this.setHtmlVar(name, { field: e.target.value }),
+          onValue: (e) => this.setHtmlVar(name, { value: e.target.value }),
+          clear: () => this.setHtmlVar(name, null),
+        };
+      }),
+      htmlVarsSummary: (() => {
+        const names = htmlVarNames(m.html || '');
+        if (!names.length) return 'aucune variable';
+        const bound = names.filter((n) => ((m.htmlVars || {})[n] || {}).src).length;
+        return `${bound}/${names.length} liée(s)`;
+      })(),
       loadHtmlExample: () => this.loadHtmlExample(),
       htmlExampleLabel: HTML_EXAMPLE_A1.label,
       mediaAgencyUrl: new URL('agence', location.href).toString(),
@@ -4260,7 +4291,7 @@ class App extends Component {
           </div>
           <div style="margin-top:14px;">
             <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:7px;">
-              ${infoTip('Format de l’élément : sert de FILTRE au montage. Un élément 16:9 n’est proposé que quand tu montes pour des écrans paysage, un 9:16 que pour du portrait. « Tous formats » reste proposé partout. Pour un gabarit HTML laissé en « Tous formats », l’orientation est déduite de la taille de sa maquette.')}
+              ${infoTip('Format de l’élément : un écran est soit paysage (16:9), soit portrait (9:16). Ce choix sert de FILTRE au montage — un élément 16:9 n’est proposé que quand tu montes pour des écrans paysage, un 9:16 que pour du portrait.')}
               <span>Format de diffusion</span>
             </label>
             <div style="display:flex;flex-wrap:wrap;gap:7px;">
@@ -4484,6 +4515,42 @@ class App extends Component {
                 <button onClick=${t.insert} title=${t.label} style="padding:5px 11px;font-size:12px;font-weight:600;font-family:ui-monospace,monospace;color:#8D1D2C;background:rgba(141,29,44,0.07);border:1px solid rgba(141,29,44,0.22);border-radius:7px;cursor:pointer;">${t.token}</button>
               `)}
             </div>
+
+            <!-- Variables détectées dans le code, à lier aux données -->
+            ${v.htmlVarRows.length ? html`
+              <div style="margin-bottom:14px;padding:12px 13px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.12);">
+                <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px;">
+                  ${infoTip('Chaque {{ variable }} trouvée dans ton code est listée ici. Lie-la à une donnée (produit, promotion, campagne, magasin) ou à une valeur libre : elle sera remplacée à la diffusion, magasin par magasin. Une variable laissée « non liée » retombe sur les jetons standards ({{magasin}}, {{date}}…) ou reste visible telle quelle.')}
+                  <span style="font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#8D1D2C;">Variables détectées — ${v.htmlVarsSummary}</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:7px;">
+                  ${v.htmlVarRows.map((r) => html`
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                      <code style="flex:0 0 auto;min-width:120px;font-size:12px;font-weight:700;color:${r.bound ? '#2E6E4E' : '#8D1D2C'};background:${r.bound ? 'rgba(46,110,78,0.10)' : 'rgba(141,29,44,0.07)'};border-radius:6px;padding:5px 9px;">${'{{ ' + r.name + ' }}'}</code>
+                      <select value=${r.src} onChange=${r.onSrc} style="flex:0 0 auto;padding:7px 9px;font-size:12px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;">
+                        <option value="">— non liée —</option>
+                        ${r.sources.map((s) => html`<option value=${s.id}>${s.label}</option>`)}
+                      </select>
+                      ${r.needsPick && html`
+                        <select value=${r.value} onChange=${r.onValue} style="flex:1 1 130px;min-width:0;padding:7px 9px;font-size:12px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;">
+                          <option value="">— choisir —</option>
+                          ${r.pickOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
+                        </select>
+                      `}
+                      ${r.fields.length ? html`
+                        <select value=${r.field} onChange=${r.onField} style="flex:0 0 auto;padding:7px 9px;font-size:12px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;">
+                          ${r.fields.map((f) => html`<option value=${f.id}>${f.label}</option>`)}
+                        </select>
+                      ` : ''}
+                      ${r.isLiteral && html`
+                        <input value=${r.value} onInput=${r.onValue} placeholder="valeur affichée" style="flex:1 1 150px;min-width:0;padding:7px 10px;font-size:12px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
+                      `}
+                      ${r.bound && html`<button onClick=${r.clear} title="Délier" style="flex:0 0 auto;width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:pointer;font-size:11px;color:#8D1D2C;">✕</button>`}
+                    </div>
+                  `)}
+                </div>
+              </div>
+            ` : ''}
 
             <!-- Éditeur de code (non contrôlé : la saisie résiste aux re-rendus) -->
             <textarea id="sig-html-editor" key=${'html-' + v.selId} defaultValue=${v.htmlCode} onInput=${v.onHtmlCode} spellcheck="false" placeholder="Colle ton HTML ici — ex. une affiche générée, un gabarit…" style="width:100%;box-sizing:border-box;min-height:280px;padding:12px 13px;font-size:12px;line-height:1.5;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#FBF8F2;resize:vertical;"></textarea>

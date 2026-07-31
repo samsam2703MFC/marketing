@@ -310,7 +310,12 @@ function renderModuleInner(h, m, lt, opts) {
         h('div', { style: { fontFamily: FUI, fontSize: 90, color: '#8A847C', letterSpacing: '0.14em', textTransform: 'uppercase' } }, 'colle ton code HTML dans la régie')));
       return kids;
     }
-    const { css, body } = splitHtmlDoc(sanitizeHtml(raw));
+    // Une variable d'image encore non liée ({{ logo }} dans un src) donnerait
+    // une image cassée et une requête inutile : on la neutralise à l'affichage.
+    const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+    const { css, body } = splitHtmlDoc(
+      sanitizeHtml(raw).replace(/\b(src|srcset)\s*=\s*("|')\s*\{\{[^{}]*\}\}\s*\2/gi, `src="${BLANK}"`)
+    );
     const dw = Math.max(64, m.htmlW || 1920);
     const dh = Math.max(64, m.htmlH || 1080);
     const mode = m.layout || 'fit';

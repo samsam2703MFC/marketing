@@ -295,12 +295,24 @@ function migrate(db) {
   if (!modCols2.includes('campaign_ref')) db.exec(`ALTER TABLE sig_modules ADD COLUMN campaign_ref TEXT NOT NULL DEFAULT ''`);
   // Élément « gabarit HTML » : code collé par la régie + taille de sa maquette
   // source (ex. 1920 × 1080 pour du 16:9, 840 × 1189 pour une affiche A1).
-  // Orientation de l'élément : 'auto' (tous formats), 'paysage' (16:9) ou
-  // 'portrait' (9:16). Sert de filtre des items disponibles au montage.
-  if (!modCols2.includes('orient')) db.exec(`ALTER TABLE sig_modules ADD COLUMN orient TEXT NOT NULL DEFAULT 'auto'`);
+  // Orientation de l'élément : 'paysage' (16:9) ou 'portrait' (9:16) — un écran
+  // est l'un ou l'autre. Sert de filtre des items disponibles au montage.
+  if (!modCols2.includes('orient')) db.exec(`ALTER TABLE sig_modules ADD COLUMN orient TEXT NOT NULL DEFAULT 'paysage'`);
   if (!modCols2.includes('html')) db.exec(`ALTER TABLE sig_modules ADD COLUMN html TEXT NOT NULL DEFAULT ''`);
+  // Liaisons des variables du gabarit HTML vers les données (JSON) :
+  // { nomVariable: { src: 'literal|magasin|produit|promotion|campagne', field, value } }
+  if (!modCols2.includes('html_vars')) db.exec(`ALTER TABLE sig_modules ADD COLUMN html_vars TEXT NOT NULL DEFAULT '{}'`);
   if (!modCols2.includes('html_w')) db.exec(`ALTER TABLE sig_modules ADD COLUMN html_w INTEGER NOT NULL DEFAULT 1920`);
   if (!modCols2.includes('html_h')) db.exec(`ALTER TABLE sig_modules ADD COLUMN html_h INTEGER NOT NULL DEFAULT 1080`);
+  // Reprise unique de l'ancien état « auto » (tous formats) : un écran est
+  // portrait OU paysage. Un gabarit HTML retombe sur la forme de sa maquette,
+  // le reste sur paysage (16:9, le format d'écran courant).
+  if (!getSetting('mig_orient_binaire')) {
+    db.prepare(`UPDATE sig_modules SET orient = 'portrait' WHERE orient NOT IN ('paysage', 'portrait') AND type = 'html' AND html_h > html_w`).run();
+    db.prepare(`UPDATE sig_modules SET orient = 'paysage' WHERE orient NOT IN ('paysage', 'portrait')`).run();
+    setSetting('mig_orient_binaire', '1');
+  }
+
 
   // Les anciennes bases limitaient le type par un CHECK (category|liaison) —
   // les types vivent désormais dans sig_element_types : on reconstruit la
@@ -340,8 +352,9 @@ function migrate(db) {
         watermark    TEXT NOT NULL DEFAULT 'none',
         promo_type   TEXT NOT NULL DEFAULT '',
         campaign_ref TEXT NOT NULL DEFAULT '',
-        orient       TEXT NOT NULL DEFAULT 'auto',
+        orient       TEXT NOT NULL DEFAULT 'paysage',
         html         TEXT NOT NULL DEFAULT '',
+        html_vars    TEXT NOT NULL DEFAULT '{}',
         html_w       INTEGER NOT NULL DEFAULT 1920,
         html_h       INTEGER NOT NULL DEFAULT 1080
       );
@@ -1119,6 +1132,125 @@ export const STORE_TOKENS = [
   { key: 'saison', label: 'Période(s) active(s) du jour' },
   { key: 'moment', label: 'Moment (matin / midi / après-midi)' },
 ];
+// ---------------------------------------------------------------------------
+// Variables d'un gabarit HTML — chaque {{ variable }} détectée dans le code est
+// liée à une source de données (produit, promotion, campagne, magasin) ou à une
+// valeur libre. On résout ici, AVANT les jetons magasin : ce qui n'est pas lié
+// retombe donc sur {{magasin}}, {{date}}… s'il porte l'un de ces noms.
+// Catalogue des champs proposés (source unique régie ↔ serveur).
+export const HTML_VAR_SOURCES = [
+  { id: 'literal', label: 'Valeur libre', fields: [] },
+  { id: 'produit', label: 'Produit', fields: [
+    { id: 'nom', label: 'Nom' }, { id: 'prix', label: 'Prix' },
+    { id: 'image', label: 'Photo / illustration' }, { id: 'categorie', label: 'Catégorie' },
+  ] },
+  { id: 'promotion', label: 'Promotion', fields: [
+    { id: 'nom', label: 'Nom du type' }, { id: 'icone', label: 'Icône' },
+    { id: 'couleur', label: 'Couleur' }, { id: 'description', label: 'Description' },
+  ] },
+  { id: 'campagne', label: 'Campagne', fields: [
+    { id: 'nom', label: 'Nom' }, { id: 'message', label: 'Accroche' },
+    { id: 'theme', label: 'Thème / gamme' }, { id: 'image', label: 'Visuel' },
+    { id: 'couleur', label: 'Couleur' }, { id: 'du', label: 'Date de début' }, { id: 'au', label: 'Date de fin' },
+  ] },
+  { id: 'magasin', label: 'Magasin / contexte', fields: [
+    { id: 'nom', label: 'Nom du magasin' }, { id: 'adresse', label: 'Adresse' },
+    { id: 'horaires', label: 'Horaires' }, { id: 'tel', label: 'Téléphone' },
+    { id: 'date', label: 'Date du jour' }, { id: 'saison', label: 'Période active' },
+    { id: 'moment', label: 'Moment' },
+  ] },
+];
+// Extrait les noms de variables d'un code HTML : {{ titre }}, {{titreAccent}}…
+export function htmlVarNames(code) {
+  const out = [];
+  const seen = new Set();
+  String(code || '').replace(/\{\{([^{}]+)\}\}/g, (m0, raw) => {
+    const name = String(raw).trim();
+    const k = name.toLowerCase();
+    if (name && !seen.has(k)) { seen.add(k); out.push(name); }
+    return m0;
+  });
+  return out;
+}
+export function applyHtmlVars(modules, storeId, date = new Date()) {
+  const list = (modules || []).filter((m) => m && m.type === 'html' && typeof m.html === 'string' && m.html.indexOf('{{') !== -1);
+  if (!list.length) return;
+  const db = getDb();
+  const store = storeId ? db.prepare('SELECT name, address, hours, phone FROM sig_stores WHERE id = ?').get(storeId) : null;
+  const oneProd = db.prepare('SELECT * FROM sig_products WHERE id = ?');
+  const oneCat = db.prepare('SELECT name FROM sig_product_categories WHERE id = ?');
+  const onePromo = db.prepare('SELECT * FROM sig_promo_types WHERE id = ?');
+  const oneCamp = db.prepare('SELECT * FROM sig_campaigns WHERE id = ?');
+  const seasonNames = currentSeasons(date).map((s) => s.name).filter(Boolean).join(', ');
+  const momentLabel = { matin: 'matin', midi: 'midi', aprem: 'après-midi' }[currentMoment(date)] || '';
+  let dateLabel = '';
+  try { dateLabel = date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }); } catch { dateLabel = ''; }
+  // Prix du magasin s'il existe, sinon prix par défaut du produit.
+  const priceOf = (p) => {
+    if (!p) return '';
+    if (storeId) {
+      const r = db.prepare('SELECT price FROM sig_product_prices WHERE product_id = ? AND store_id = ?').get(p.id, storeId);
+      if (r && r.price) return r.price;
+    }
+    return p.price || '';
+  };
+  const resolve = (bind) => {
+    if (!bind || typeof bind !== 'object') return null;
+    const val = String(bind.value || '');
+    const field = String(bind.field || '');
+    switch (bind.src) {
+      case 'literal': return val;
+      case 'produit': {
+        const p = val ? oneProd.get(val) : null;
+        if (!p) return '';
+        if (field === 'prix') return priceOf(p);
+        if (field === 'image') return p.img || '';
+        if (field === 'categorie') { const c = oneCat.get(p.category_id); return c ? c.name : ''; }
+        return p.name || '';
+      }
+      case 'promotion': {
+        const t = val ? onePromo.get(val) : null;
+        if (!t) return '';
+        if (field === 'icone') return t.icon || '';
+        if (field === 'couleur') return t.color || '';
+        if (field === 'description') return t.descr || '';
+        return t.name || '';
+      }
+      case 'campagne': {
+        const c = val ? oneCamp.get(val) : null;
+        if (!c) return '';
+        if (field === 'message') return c.message || '';
+        if (field === 'theme') return c.theme || '';
+        if (field === 'image') return c.image || '';
+        if (field === 'couleur') return c.color || '';
+        if (field === 'du') return c.date_from || '';
+        if (field === 'au') return c.date_to || '';
+        return c.name || '';
+      }
+      case 'magasin': {
+        if (field === 'adresse') return store ? (store.address || '') : '';
+        if (field === 'horaires') return store ? (store.hours || '') : '';
+        if (field === 'tel') return store ? (store.phone || '') : '';
+        if (field === 'date') return dateLabel;
+        if (field === 'saison') return seasonNames;
+        if (field === 'moment') return momentLabel;
+        return store ? (store.name || '') : '';
+      }
+      default: return null;
+    }
+  };
+  for (const m of list) {
+    const binds = (m.htmlVars && typeof m.htmlVars === 'object') ? m.htmlVars : {};
+    // Index insensible à la casse (les noms viennent du code collé).
+    const byKey = new Map();
+    for (const k of Object.keys(binds)) byKey.set(String(k).trim().toLowerCase(), binds[k]);
+    if (!byKey.size) continue;
+    m.html = m.html.replace(/\{\{([^{}]+)\}\}/g, (m0, raw) => {
+      const out = resolve(byKey.get(String(raw).trim().toLowerCase()));
+      return out == null ? m0 : out;   // non liée : laissée aux jetons magasin
+    });
+  }
+}
 export function applyStoreTokens(modules, storeId, date = new Date()) {
   const db = getDb();
   const store = storeId ? db.prepare('SELECT name, address, hours, phone FROM sig_stores WHERE id = ?').get(storeId) : null;
@@ -1591,8 +1723,9 @@ export function loadModules() {
           : { type: m.promo_type || '', name: 'Offre', icon: '🏷️', color: '#C0392B' };
       })(),
       campaignRef: m.campaign_ref || '',
-      orient: m.orient || 'auto',
+      orient: m.orient === 'portrait' ? 'portrait' : 'paysage',
       html: m.html || '',
+      htmlVars: (() => { try { return JSON.parse(m.html_vars || '{}') || {}; } catch { return {}; } })(),
       htmlW: m.html_w || 1920,
       htmlH: m.html_h || 1080,
       // Campagne résolue pour l'affichage (nom · portée · visuel · thème · dates).
@@ -1662,8 +1795,8 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
       (id, type, name, sub, layout, motion, motion_title, motion_list, motion_illo,
        tag_enabled, tag_label, tag_img, sched_days, sched_from, sched_to, pos, sort_order, lib_tag,
        cat_ref, product_ref, video, surprise, watermark, dur, promo_type, campaign_ref,
-       orient, html, html_w, html_h, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
+       orient, html, html_vars, html_w, html_h, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
     const insItem = db.prepare(`INSERT INTO sig_module_items
       (module_id, position, name, price, img, src, active) VALUES (?, ?, ?, ?, ?, ?, ?)`);
     // Les types valides viennent de la table sig_element_types (rien en dur).
@@ -1684,8 +1817,9 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
         ['filigrane', 'logo', 'nouveau'].includes(m.watermark) ? m.watermark : 'none',
         Number.isFinite(parseFloat(m.dur)) ? Math.max(0, Math.min(120, parseFloat(m.dur))) : 0,
         String(m.promoType || ''), String(m.campaignRef || ''),
-        ['paysage', 'portrait'].includes(m.orient) ? m.orient : 'auto',
+        m.orient === 'portrait' ? 'portrait' : 'paysage',
         String(m.html || ''),
+        JSON.stringify(m.htmlVars && typeof m.htmlVars === 'object' ? m.htmlVars : {}),
         Math.max(64, Math.min(20000, parseInt(m.htmlW, 10) || 1920)),
         Math.max(64, Math.min(20000, parseInt(m.htmlH, 10) || 1080))
       );

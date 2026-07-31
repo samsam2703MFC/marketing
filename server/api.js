@@ -6,7 +6,7 @@ import {
   getDb, getSetting, setSetting, getIntSetting,
   loadModules, loadPlaylist, loadPlaylists, activePlaylistId, saveDraft, storeFormat, DB_PATH,
   loadElementTypes, loadCatalog, saveCatalog, applyStorePrices, applyStoreLang, applyStoreTokens, loadLangs,
-  loadPromoTypes, savePromoTypes, loadCampaigns, saveCampaigns,
+  loadPromoTypes, savePromoTypes, loadCampaigns, saveCampaigns, applyHtmlVars,
   loadSeasons, saveSeasons, currentSeasons, currentMoment,
   loadMedia, addMediaRow, getMediaRow, delMediaRow,
   loadProductMoments, saveProductMoments, SALE_MOMENTS, currentSaleMoment,
@@ -138,6 +138,9 @@ function finishSnapshot(snap, storeId, date = new Date()) {
   if (!snap || !Array.isArray(snap.modules)) return snap;
   applyStorePrices(snap.modules, storeId);
   applyStoreLang(snap.modules, storeId);
+  // Variables liées d'un gabarit HTML d'abord, puis les jetons magasin pour
+  // tout ce qui n'a pas été lié explicitement.
+  applyHtmlVars(snap.modules, storeId, date);
   applyStoreTokens(snap.modules, storeId, date);
   resolveSurprise(snap.modules);
   resolveMediaElements(snap.modules, date);

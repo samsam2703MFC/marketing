@@ -22,6 +22,45 @@ export const HTML_TOKENS = [
   { token: '{{moment}}', label: 'Matin / midi / après-midi' },
 ];
 
+// Sources de données auxquelles lier une variable détectée dans le code.
+// Miroir de HTML_VAR_SOURCES côté serveur (db.js) — même ids, mêmes champs.
+export const HTML_VAR_SOURCES = [
+  { id: 'literal', label: 'Valeur libre', fields: [] },
+  { id: 'produit', label: 'Produit', fields: [
+    { id: 'nom', label: 'Nom' }, { id: 'prix', label: 'Prix' },
+    { id: 'image', label: 'Photo / illustration' }, { id: 'categorie', label: 'Catégorie' },
+  ] },
+  { id: 'promotion', label: 'Promotion', fields: [
+    { id: 'nom', label: 'Nom du type' }, { id: 'icone', label: 'Icône' },
+    { id: 'couleur', label: 'Couleur' }, { id: 'description', label: 'Description' },
+  ] },
+  { id: 'campagne', label: 'Campagne', fields: [
+    { id: 'nom', label: 'Nom' }, { id: 'message', label: 'Accroche' },
+    { id: 'theme', label: 'Thème / gamme' }, { id: 'image', label: 'Visuel' },
+    { id: 'couleur', label: 'Couleur' }, { id: 'du', label: 'Date de début' }, { id: 'au', label: 'Date de fin' },
+  ] },
+  { id: 'magasin', label: 'Magasin / contexte', fields: [
+    { id: 'nom', label: 'Nom du magasin' }, { id: 'adresse', label: 'Adresse' },
+    { id: 'horaires', label: 'Horaires' }, { id: 'tel', label: 'Téléphone' },
+    { id: 'date', label: 'Date du jour' }, { id: 'saison', label: 'Période active' },
+    { id: 'moment', label: 'Moment' },
+  ] },
+];
+
+// Noms des variables présentes dans un code : {{ titre }}, {{titreAccent}}…
+// (même extraction que côté serveur, insensible aux espaces).
+export function htmlVarNames(code) {
+  const out = [];
+  const seen = new Set();
+  String(code || '').replace(/\{\{([^{}]+)\}\}/g, (m0, raw) => {
+    const name = String(raw).trim();
+    const k = name.toLowerCase();
+    if (name && !seen.has(k)) { seen.add(k); out.push(name); }
+    return m0;
+  });
+  return out;
+}
+
 // Exemple : affiche A1 (840 × 1189, ratio √2) aux couleurs de la marque, avec
 // les variables en place. Les polices Gotham/Vank sont déjà chargées par
 // l'application — inutile de redéclarer @font-face. Les illustrations viennent
