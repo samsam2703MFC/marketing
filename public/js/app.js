@@ -124,7 +124,7 @@ class App extends Component {
     fleet: [],
     library: [],
     elementTypes: [], addPicker: false, openSec: 'items',
-    htmlVarSel: '',
+    htmlVarSel: '', filmMomentSel: '',
     promoTypes: [], promoDraft: null, promoDirty: false, promoBusy: false, promoSavedAt: 0,
     campaigns: [], campaignDraft: null, campaignDirty: false, campaignBusy: false, campaignSavedAt: 0,
     catalog: { categories: [], products: [] },
@@ -1000,6 +1000,15 @@ class App extends Component {
     else if (!rows[i].exception) rows[i] = { ...rows[i], exception: true }; // inclus → exclu (exception)
     else rows.splice(i, 1);                                                 // exclu → rien
     this.setState({ prodMoments: rows, prodMomentsDirty: true });
+  }
+  // Vendu à ce moment ? Sans aucune règle, un produit est vendu tout le temps ;
+  // sinon il faut une règle « vendu » à ce moment (et pas une exception).
+  prodSoldAt(productId, moment) {
+    const rows = (this.state.prodMoments || []).filter((r) => r.productId === productId);
+    if (!rows.length) return true;
+    const here = rows.find((r) => r.moment === moment);
+    if (here) return !here.exception;
+    return !rows.some((r) => !r.exception);   // règles ailleurs seulement → exclu ici
   }
   prodMomentState(productId, moment) {
     const r = (this.state.prodMoments || []).find((x) => x.productId === productId && x.moment === moment);
@@ -2709,6 +2718,35 @@ class App extends Component {
       addProd: () => this.addProd(),
       saveCat: () => this.saveCatalog(),
       filmDaysVals, filmSlotVals, filmStoreVals, filmAllStores, filmSchedSummary,
+      // Contenu du film vu à un moment donné (matin / midi / après-midi) : on
+      // n'affiche que ce qui serait réellement éligible à ce créneau.
+      filmMomentTabs: (() => {
+        const cur = st.filmMomentSel || st.prodMomentsCurrent || 'matin';
+        return saleMoments.map((mo) => ({
+          id: mo.id, label: mo.label, isNow: st.prodMomentsCurrent === mo.id,
+          active: cur === mo.id,
+          pick: () => this.setState({ filmMomentSel: mo.id }),
+        }));
+      })(),
+      filmMomentRows: (() => {
+        const mo = st.filmMomentSel || st.prodMomentsCurrent || 'matin';
+        return this.playlistMods().map((mm) => {
+          const rm = this.resolveMod(mm);
+          const items = (rm.items || []).filter((it) => it.active !== false);
+          const kept = items.filter((it) => !it.productId || this.prodSoldAt(it.productId, mo));
+          const hidden = items.length - kept.length;
+          return {
+            id: mm.id,
+            name: mm.name || 'Élément',
+            icon: (this.elementTypeOf(mm) || {}).icon || '▤',
+            empty: items.length > 0 && kept.length === 0,
+            detail: items.length
+              ? `${kept.length}/${items.length} produit(s)${hidden ? ` · ${hidden} hors créneau` : ''}`
+              : this.modMeta(mm),
+            names: kept.slice(0, 6).map((it) => it.name).join(' · '),
+          };
+        });
+      })(),
       filmCatVals, filmTagVals, filmTagInput: st.filmTagInput,
       onFilmTagInput: (e) => this.setState({ filmTagInput: e.target.value }),
       onFilmTagKey: (e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); this.addFilmTag(st.filmTagInput); this.setState({ filmTagInput: '' }); } },
@@ -5033,6 +5071,29 @@ class App extends Component {
           </div>
         </div>
         <p style="margin:12px 0 0;font-size:11.5px;color:#8A847C;">Hors créneau, les écrans affichent l'attente (le lien de partage montre toujours le film). « Tous » = le film part sur tout le réseau à la publication.</p>
+
+        <!-- Contenu du film filtré par moment de vente (matin / midi / après-midi) -->
+        <div style="margin-top:14px;padding-top:13px;border-top:1px solid rgba(35,34,32,0.10);">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+            ${infoTip('Aperçu du contenu réellement diffusé à chaque moment de la journée. Un produit n’est retenu que s’il est vendu à ce créneau (table « Périodes de vente », onglet Périodes) ; sans aucune règle il passe à tous les moments. Un élément dont tous les produits sont hors créneau est signalé — il serait sauté à l’écran.')}
+            <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8D1D2C;">Contenu par moment</span>
+            ${v.filmMomentTabs.map((mo) => html`
+              <button onClick=${mo.pick} style="padding:6px 13px;font-size:12px;font-weight:600;border-radius:999px;cursor:pointer;${mo.active ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.14);'}">${mo.label}${mo.isNow ? ' ●' : ''}</button>
+            `)}
+          </div>
+          ${v.filmMomentRows.length ? html`
+            <div style="display:flex;flex-direction:column;gap:5px;">
+              ${v.filmMomentRows.map((r) => html`
+                <div style="display:flex;align-items:center;gap:9px;padding:7px 11px;border-radius:8px;background:${r.empty ? 'rgba(141,29,44,0.06)' : '#FBF8F2'};border:1px solid ${r.empty ? 'rgba(141,29,44,0.25)' : 'rgba(35,34,32,0.08)'};">
+                  <span style="flex:0 0 auto;font-size:13px;">${r.icon}</span>
+                  <span style="flex:0 0 auto;font-size:12.5px;font-weight:600;min-width:120px;">${r.name}</span>
+                  <span style="flex:0 0 auto;font-size:11.5px;color:${r.empty ? '#8D1D2C' : '#8A847C'};">${r.empty ? '⚠ rien à ce moment — élément sauté' : r.detail}</span>
+                  ${r.names && html`<span style="flex:1 1 auto;min-width:0;font-size:11px;color:#8A847C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.names}</span>`}
+                </div>
+              `)}
+            </div>
+          ` : html`<p style="margin:0;font-size:12px;color:#8A847C;">Ce film n'a pas encore de contenu.</p>`}
+        </div>
       </div>
 
       ${previewBlock}
