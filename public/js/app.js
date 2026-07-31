@@ -110,6 +110,7 @@ class App extends Component {
     dirty: false, saved: true, scope: 'module', clipboard: null, past: [], future: [],
     selId: null, playlist: [],
     playlists: [], activePl: null, editingFilm: false, editFilmName: '', libFilter: 'all',
+    libOrient: 'all',
     filmFilter: 'all', filmTagInput: '',
     editingStore: null, editStoreName: '',
     view: 'home', composerTab: 'lib', publishing: false, deploying: false, version: 1, dataVer: 1, hbTick: 0, toast: '',
@@ -675,6 +676,26 @@ class App extends Component {
   }
   elementTypeOf(m) {
     return (this.state.elementTypes || []).find((t) => t.id === (m && m.type)) || null;
+  }
+  // Orientation effective d'un élément : 16:9 paysage, 9:16 portrait, ou
+  // « auto » (tous formats). Un gabarit HTML laissé en auto la déduit de la
+  // taille de sa maquette (1080×1920 → portrait).
+  orientOf(mm) {
+    if (!mm) return 'auto';
+    if (mm.orient === 'paysage' || mm.orient === 'portrait') return mm.orient;
+    if (mm.type === 'html') {
+      const w = mm.htmlW || 1920, h = mm.htmlH || 1080;
+      if (w > h) return 'paysage';
+      if (h > w) return 'portrait';
+    }
+    return 'auto';
+  }
+  // Un élément est proposable pour un format donné s'il lui correspond ou
+  // s'il est « auto » (utilisable partout).
+  fitsOrient(mm, want) {
+    if (want === 'all') return true;
+    const o = this.orientOf(mm);
+    return o === 'auto' || o === want;
   }
   modMeta(mm) {
     if (mm.type === 'liaison') return 'Liaison';
@@ -1248,6 +1269,8 @@ class App extends Component {
     const m = lib.find((x) => x.id === this.state.selId);
     if (!m) return;
     m.htmlW = p.w; m.htmlH = p.h;
+    // Le format choisi fixe aussi l'orientation de l'item (filtre au montage).
+    m.orient = p.w > p.h ? 'paysage' : (p.h > p.w ? 'portrait' : 'auto');
     this.setLib(lib);
   }
   // Insère une variable {{…}} à la position du curseur dans l'éditeur de code.
@@ -1871,7 +1894,8 @@ class App extends Component {
 
     const inPlaylistCount = {};
     st.playlist.forEach((id) => { inPlaylistCount[id] = (inPlaylistCount[id] || 0) + 1; });
-    const library = st.library.map((mm) => {
+    // La liste de la bibliothèque suit le filtre de format choisi au montage.
+    const library = st.library.filter((mm) => this.fitsOrient(mm, st.libOrient)).map((mm) => {
       const isLi = mm.type === 'liaison', selc = mm.id === st.selId;
       const cnt = inPlaylistCount[mm.id] || 0;
       return {
@@ -2024,7 +2048,21 @@ class App extends Component {
       style: `display:inline-flex;align-items:center;gap:7px;padding:8px 14px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;transition:all 0.15s;${c.active ? `background:${c.color};color:#fff;border:1px solid ${c.color};` : `background:#fff;color:${c.color};border:1px solid ${c.color}55;`}`,
       dotStyle: `width:8px;height:8px;border-radius:50%;background:${c.active ? '#fff' : c.color};`,
     }));
-    const libCards = st.library.filter((mm) => st.libFilter === 'all' || tagOf(mm).id === st.libFilter).map((mm) => ({
+    // Filtre de format : ne proposer au montage que les items compatibles avec
+    // l'orientation visée (les items « tous formats » restent toujours offerts).
+    const ORIENTS = [
+      { id: 'all', label: 'Tous formats', icon: '▦' },
+      { id: 'paysage', label: '16:9 paysage', icon: '▭' },
+      { id: 'portrait', label: '9:16 portrait', icon: '▯' },
+    ];
+    const libOrientChips = ORIENTS.map((o) => ({
+      id: o.id, label: o.label, icon: o.icon,
+      count: st.library.filter((mm) => this.fitsOrient(mm, o.id)).length,
+      active: st.libOrient === o.id,
+      pick: () => this.setState({ libOrient: o.id }),
+      style: `display:inline-flex;align-items:center;gap:6px;padding:7px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;${st.libOrient === o.id ? 'background:#232220;color:#fff;border:1px solid #232220;' : 'background:#fff;color:#5B564E;border:1px solid rgba(35,34,32,0.18);'}`,
+    }));
+    const libCards = st.library.filter((mm) => (st.libFilter === 'all' || tagOf(mm).id === st.libFilter) && this.fitsOrient(mm, st.libOrient)).map((mm) => ({
       name: mm.name,
       typeIcon: (this.elementTypeOf(mm) || {}).icon || '▤',
       meta: this.modMeta(mm),
@@ -2491,6 +2529,15 @@ class App extends Component {
       uiLangs: UI_LANGS.map((l) => ({ ...l, active: l.id === st.uiLang, pick: () => this.setUiLang(l.id) })),
       playlist, library, layoutOptions, motionGroups, items, days, posFields, timeSlots, crumbs,
       timelineBlocks, timelineTotal, timelineEndDrop, libCards, libTagChips, libEmptyMsg, pubDaysVals,
+      libOrientChips, libOrient: st.libOrient,
+      // Orientation de l'élément courant (filtre de disponibilité au montage).
+      orientOpts: [
+        { id: 'auto', label: 'Tous formats', hint: 'proposé partout' },
+        { id: 'paysage', label: '16:9 paysage', hint: 'écrans paysage' },
+        { id: 'portrait', label: '9:16 portrait', hint: 'écrans portrait' },
+      ].map((o) => ({ ...o, active: (m.orient || 'auto') === o.id, pick: () => this.setSelField('orient', o.id) })),
+      orientSummary: ({ auto: 'tous formats', paysage: '16:9 paysage', portrait: '9:16 portrait' })[m.orient || 'auto'],
+      orientEffective: this.orientOf(m),
       prodCats, prodRows, storeCols, prodSelCat, langChips, isBaseLang,
       seasonRows, seasonsDirty: st.seasonsDirty, seasonsBusy: st.seasonsBusy, seasonsCount: (st.seasons || []).length,
       seasonsCurrentCount: (st.seasonsCurrent || []).length,
@@ -4153,7 +4200,13 @@ class App extends Component {
     <aside style="background:#F3EEE6;border-right:1px solid rgba(35,34,32,0.10);display:flex;flex-direction:column;min-height:0;overflow:auto;">
       <div style="flex:0 0 auto;padding:18px 18px 10px;">
         <h2 style="margin:0 0 3px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">${v.t('composer.library')}</h2>
-        <p style="margin:0;font-size:11.5px;color:#8A847C;line-height:1.4;">Tous les éléments · clique pour éditer · ＋ ajoute au film affiché dans l'onglet Playlist</p>
+        <p style="margin:0 0 9px;font-size:11.5px;color:#8A847C;line-height:1.4;">Tous les éléments · clique pour éditer · ＋ ajoute au film affiché dans l'onglet Playlist</p>
+        <!-- Filtre de format : 16:9 paysage / 9:16 portrait -->
+        <div style="display:flex;gap:5px;flex-wrap:wrap;">
+          ${v.libOrientChips.map((o) => html`
+            <button onClick=${o.pick} title=${o.label} style=${o.style + 'padding:5px 10px;font-size:11.5px;'}><span>${o.icon}</span>${o.id === 'all' ? 'Tous' : o.label.split(' ')[0]}<span style="font-weight:400;opacity:0.75;">${o.count}</span></button>
+          `)}
+        </div>
       </div>
       <div style="flex:1 1 auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:7px;">
         ${v.library.map((ml) => html`
@@ -4202,6 +4255,17 @@ class App extends Component {
             <div style="display:flex;flex-wrap:wrap;gap:7px;">
               ${v.libTagPicker.map((t) => html`
                 <button onClick=${t.pick} style=${t.style}><span style=${t.dotStyle}></span>${t.label}</button>
+              `)}
+            </div>
+          </div>
+          <div style="margin-top:14px;">
+            <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:7px;">
+              ${infoTip('Format de l’élément : sert de FILTRE au montage. Un élément 16:9 n’est proposé que quand tu montes pour des écrans paysage, un 9:16 que pour du portrait. « Tous formats » reste proposé partout. Pour un gabarit HTML laissé en « Tous formats », l’orientation est déduite de la taille de sa maquette.')}
+              <span>Format de diffusion</span>
+            </label>
+            <div style="display:flex;flex-wrap:wrap;gap:7px;">
+              ${v.orientOpts.map((o) => html`
+                <button onClick=${o.pick} title=${o.hint} style="padding:8px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;${o.active ? 'background:#232220;color:#fff;border:1px solid #232220;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.16);'}">${o.label}</button>
               `)}
             </div>
           </div>
@@ -4649,9 +4713,16 @@ class App extends Component {
       ${filmMode === 'continu' ? contPanel : html`
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 18px;">
         <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">Bibliothèque — choisis une catégorie, puis glisse un élément sur la ligne du temps (ou clique ＋)</h3>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px;">
           ${v.libTagChips.map((t) => html`
             <button onClick=${t.pick} style=${t.style}><span style=${t.dotStyle}></span>${t.label}<span style="font-weight:400;opacity:0.75;">${t.count}</span></button>
+          `)}
+        </div>
+        <!-- Filtre de format : n'affiche que les items compatibles 16:9 / 9:16 -->
+        <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+          <span style="font-size:11.5px;color:#8A847C;">Format :</span>
+          ${v.libOrientChips.map((o) => html`
+            <button onClick=${o.pick} style=${o.style}><span>${o.icon}</span>${o.label}<span style="font-weight:400;opacity:0.75;">${o.count}</span></button>
           `)}
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">

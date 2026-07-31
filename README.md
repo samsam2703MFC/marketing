@@ -186,6 +186,30 @@ un **sous-type**.
   neutre « Offre » jusqu'à réassignation. Ces sous-types pourront être **alimentés depuis l'ERP**
   (menu Promotions) dans un second temps. API : `GET /promo-types`, `PUT /promo-types`.
 
+### Gabarit HTML (coller du code) + variables
+Type d'élément **`html`** : dans la bibliothèque, **＋ Élément → « Gabarit HTML — coller du
+code »**. On y colle du HTML (document complet avec `<head><style>` ou simple fragment) ; il est
+**mis à l'échelle** sur le canevas 6480 × 3840.
+
+- **Format source** de la maquette (`sig_modules.html_w/html_h`) avec préréglages **16:9 paysage ·
+  9:16 portrait · A1 portrait · A1 paysage**, ou dimensions libres. Trois mises en page :
+  *Adapter* (tout visible), *Remplir* (recadre), *Étirer*.
+- **Variables** : les mêmes jetons que les titres — `{{magasin}}`, `{{adresse}}`, `{{horaires}}`,
+  `{{tel}}`, `{{date}}`, `{{saison}}`, `{{moment}}` — sont résolus **dans le code** et **par
+  magasin** à la diffusion (`applyStoreTokens`). Boutons cliquables pour les insérer au curseur.
+- Bouton **« ✨ Affiche A1 (exemple) »** : charge un gabarit d'affiche prêt à l'emploi. Les polices
+  **Gotham/Vank** et les images de `assets/` sont déjà chargées — pas besoin de `@font-face`.
+- **Sécurité** : `splitHtmlDoc` extrait styles + corps, `sanitizeHtml` retire `<script>`, les
+  gestionnaires `on*` et les URL `javascript:` (le code vient de la régie, admin authentifiée).
+
+### Format des items (16:9 / 9:16) — filtre de montage
+Chaque élément porte un **format de diffusion** (`sig_modules.orient`) : **Tous formats** (défaut),
+**16:9 paysage** ou **9:16 portrait**. Ce format sert de **filtre des items disponibles** au
+montage — bibliothèque et ligne du temps proposent uniquement les éléments compatibles avec le
+format visé ; les éléments « tous formats » restent proposés partout. Un **gabarit HTML** laissé en
+« tous formats » déduit son orientation de la taille de sa maquette, et choisir un préréglage
+16:9 / 9:16 fixe directement le format de l'item.
+
 ### Campagnes marketing
 Une **campagne** est aussi un **type d'élément** (`sig_element_types` → `campagne`), mais son
 contenu vient d'une **liste d'entités** — on n'a qu'à en **déposer une comme item**.
@@ -209,7 +233,7 @@ exécute côté serveur : ping TCP de l'hôte, `GET assignment`, `GET dataset pr
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + cycle complet — 52 tests
+npm test              # serveur jetable (BDD temporaire) + cycle complet — 53 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
 node test/live-test.js http://185.180.206.46/signage --password=… --mutate

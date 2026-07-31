@@ -295,6 +295,9 @@ function migrate(db) {
   if (!modCols2.includes('campaign_ref')) db.exec(`ALTER TABLE sig_modules ADD COLUMN campaign_ref TEXT NOT NULL DEFAULT ''`);
   // Élément « gabarit HTML » : code collé par la régie + taille de sa maquette
   // source (ex. 1920 × 1080 pour du 16:9, 840 × 1189 pour une affiche A1).
+  // Orientation de l'élément : 'auto' (tous formats), 'paysage' (16:9) ou
+  // 'portrait' (9:16). Sert de filtre des items disponibles au montage.
+  if (!modCols2.includes('orient')) db.exec(`ALTER TABLE sig_modules ADD COLUMN orient TEXT NOT NULL DEFAULT 'auto'`);
   if (!modCols2.includes('html')) db.exec(`ALTER TABLE sig_modules ADD COLUMN html TEXT NOT NULL DEFAULT ''`);
   if (!modCols2.includes('html_w')) db.exec(`ALTER TABLE sig_modules ADD COLUMN html_w INTEGER NOT NULL DEFAULT 1920`);
   if (!modCols2.includes('html_h')) db.exec(`ALTER TABLE sig_modules ADD COLUMN html_h INTEGER NOT NULL DEFAULT 1080`);
@@ -337,6 +340,7 @@ function migrate(db) {
         watermark    TEXT NOT NULL DEFAULT 'none',
         promo_type   TEXT NOT NULL DEFAULT '',
         campaign_ref TEXT NOT NULL DEFAULT '',
+        orient       TEXT NOT NULL DEFAULT 'auto',
         html         TEXT NOT NULL DEFAULT '',
         html_w       INTEGER NOT NULL DEFAULT 1920,
         html_h       INTEGER NOT NULL DEFAULT 1080
@@ -1587,6 +1591,7 @@ export function loadModules() {
           : { type: m.promo_type || '', name: 'Offre', icon: '🏷️', color: '#C0392B' };
       })(),
       campaignRef: m.campaign_ref || '',
+      orient: m.orient || 'auto',
       html: m.html || '',
       htmlW: m.html_w || 1920,
       htmlH: m.html_h || 1080,
@@ -1657,8 +1662,8 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
       (id, type, name, sub, layout, motion, motion_title, motion_list, motion_illo,
        tag_enabled, tag_label, tag_img, sched_days, sched_from, sched_to, pos, sort_order, lib_tag,
        cat_ref, product_ref, video, surprise, watermark, dur, promo_type, campaign_ref,
-       html, html_w, html_h, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
+       orient, html, html_w, html_h, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
     const insItem = db.prepare(`INSERT INTO sig_module_items
       (module_id, position, name, price, img, src, active) VALUES (?, ?, ?, ?, ?, ?, ?)`);
     // Les types valides viennent de la table sig_element_types (rien en dur).
@@ -1679,6 +1684,7 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
         ['filigrane', 'logo', 'nouveau'].includes(m.watermark) ? m.watermark : 'none',
         Number.isFinite(parseFloat(m.dur)) ? Math.max(0, Math.min(120, parseFloat(m.dur))) : 0,
         String(m.promoType || ''), String(m.campaignRef || ''),
+        ['paysage', 'portrait'].includes(m.orient) ? m.orient : 'auto',
         String(m.html || ''),
         Math.max(64, Math.min(20000, parseInt(m.htmlW, 10) || 1920)),
         Math.max(64, Math.min(20000, parseInt(m.htmlH, 10) || 1080))
