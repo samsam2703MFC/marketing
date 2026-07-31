@@ -2638,6 +2638,17 @@ class App extends Component {
         { id: 'portrait', label: '9:16 portrait', hint: 'écrans portrait' },
       ].map((o) => ({ ...o, active: this.orientOf(m) === o.id, pick: () => this.setSelField('orient', o.id) })),
       orientSummary: this.orientOf(m) === 'portrait' ? '9:16 portrait' : '16:9 paysage',
+      // Moments où l'item peut passer (aucun coché = tous les moments).
+      momentOpts: saleMoments.map((mo) => {
+        const cur = Array.isArray(m.moments) ? m.moments : [];
+        return {
+          id: mo.id, label: mo.label, active: cur.includes(mo.id),
+          toggle: () => this.setSelField('moments', cur.includes(mo.id) ? cur.filter((x) => x !== mo.id) : [...cur, mo.id]),
+        };
+      }),
+      momentSummary: (Array.isArray(m.moments) && m.moments.length)
+        ? m.moments.map((x) => ({ matin: 'matin', midi: 'midi', aprem: 'après-midi' })[x] || x).join(' · ')
+        : 'tous les moments',
       orientEffective: this.orientOf(m),
       prodCats, prodRows, storeCols, prodSelCat, langChips, isBaseLang,
       seasonRows, seasonsDirty: st.seasonsDirty, seasonsBusy: st.seasonsBusy, seasonsCount: (st.seasons || []).length,
@@ -2718,6 +2729,28 @@ class App extends Component {
       addProd: () => this.addProd(),
       saveCat: () => this.saveCatalog(),
       filmDaysVals, filmSlotVals, filmStoreVals, filmAllStores, filmSchedSummary,
+      // Items de bibliothèque épinglables dans la boucle (au format visé).
+      contItemRatios: (() => {
+        const cfg = this.activeFilm().continuous || {};
+        const want = cfg.orient === 'portrait' ? 'portrait' : 'paysage';
+        const cur = Array.isArray(cfg.itemRatios) ? cfg.itemRatios : [];
+        return (st.library || []).filter((mm) => this.orientOf(mm) === want).map((mm) => {
+          const found = cur.find((r) => r.id === mm.id);
+          const mos = Array.isArray(mm.moments) ? mm.moments : [];
+          return {
+            id: mm.id, name: mm.name || 'Élément',
+            icon: (this.elementTypeOf(mm) || {}).icon || '▤',
+            moments: mos.length ? mos.map((x) => ({ matin: 'matin', midi: 'midi', aprem: 'après-midi' })[x] || x).join(' · ') : 'tous moments',
+            n: found ? found.n : 0,
+            onN: (e) => {
+              const n = Math.max(0, Math.min(99, parseInt(e.target.value, 10) || 0));
+              const next = cur.filter((r) => r.id !== mm.id);
+              if (n > 0) next.push({ id: mm.id, n });
+              this.updateContinuous({ itemRatios: next });
+            },
+          };
+        });
+      })(),
       // Contenu du film vu à un moment donné (matin / midi / après-midi) : on
       // n'affiche que ce qui serait réellement éligible à ce créneau.
       filmMomentTabs: (() => {
@@ -3302,6 +3335,16 @@ class App extends Component {
     const cField = (label, node, tip) => html`<label style="display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;"><span style="display:inline-flex;align-items:center;gap:5px;">${label}${tip ? infoTip(tip) : ''}</span>${node}</label>`;
     const cNum = (key, val, min, max) => html`<input type="number" min=${min} max=${max} value=${val} onInput=${(e) => this.updateContinuous({ [key]: e.target.value })} style="width:92px;padding:8px 10px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;" />`;
     const cChoice = (key, opts) => html`<div style="display:flex;gap:6px;flex-wrap:wrap;">${opts.map(([id, lab]) => html`<button onClick=${() => this.updateContinuous({ [key]: id })} style="padding:7px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${cont[key] === id ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${cont[key] === id ? '#8D1D2C' : '#fff'};color:${cont[key] === id ? '#fff' : '#232220'};">${lab}</button>`)}</div>`;
+    // Source oui/non : quand elle est active, son ratio « 1 : N » s'affiche.
+    const cUse = (key, label, help, ratioKey) => {
+      const on = !!(cont.use || {})[key];
+      return html`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <button onClick=${() => this.updateContinuous({ use: { ...(cont.use || {}), [key]: !on } })} title=${help} style="min-width:150px;text-align:left;padding:7px 12px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${on ? '#8D1D2C' : '#fff'};color:${on ? '#fff' : '#232220'};">${on ? '✓ ' : ''}${label}</button>
+        ${on && ratioKey ? html`<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#8A847C;">1 :
+          <input type="number" min="0" max="99" value=${(cont.ratios || {})[ratioKey] || 0} onInput=${(e) => this.updateContinuous({ ratios: { ...(cont.ratios || {}), [ratioKey]: e.target.value } })} style="width:64px;padding:6px 8px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;text-align:right;" />
+        </span>` : ''}
+      </div>`;
+    };
     const cToggle = (key, yes, no) => html`<div style="display:flex;gap:6px;">${[[true, yes], [false, no]].map(([b, lab]) => html`<button onClick=${() => this.updateContinuous({ [key]: b })} style="padding:7px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${!!cont[key] === b ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${!!cont[key] === b ? '#8D1D2C' : '#fff'};color:${!!cont[key] === b ? '#fff' : '#232220'};">${lab}</button>`)}</div>`;
     const cRatio = (key, label) => html`<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;"><span style="width:150px;color:#232220;font-weight:600;">${label}</span><span style="color:#8A847C;">1 :</span><input type="number" min="0" max="99" value=${cont.ratios[key]} onInput=${(e) => this.updateContRatio(key, e.target.value)} style="width:66px;padding:7px 9px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;" /></label>`;
     const catChips = (st.catalog.categories || []).map((c) => {
@@ -3322,7 +3365,11 @@ class App extends Component {
         </div>
         <div style="display:flex;flex-direction:column;gap:18px;">
           <div style="display:flex;gap:26px;flex-wrap:wrap;">
-            ${cField('Source des fiches', cChoice('source', [['saison', 'Produits de saison'], ['categories', 'Tout sauf catégories'], ['tout', 'Tout le catalogue']]), 'D’où viennent les fiches produit. « Produits de saison » = seulement ceux liés à une période active (onglet Périodes). « Tout sauf catégories » = tout le catalogue sauf les catégories cochées ci-dessous. « Tout le catalogue » = tous les produits actifs.')}
+            ${cField('Sources — oui / non', html`<div style="display:flex;flex-direction:column;gap:7px;">
+              ${cUse('saison', 'Produits de saison', 'Ne garder que les produits liés à une période active (onglet Périodes).')}
+              ${cUse('promotion', 'Promotions', 'Injecter les éléments « promotion » de la bibliothèque.', 'promotion')}
+              ${cUse('campagne', 'Campagnes commerciales', 'Injecter les éléments « campagne » de la bibliothèque.', 'campagne')}
+            </div>`, 'Chaque source s’active ou non. Quand elle est active, son ratio « 1 : N » apparaît à côté — c’est sa part dans la boucle. Les éléments injectés sont ceux de la bibliothèque au bon FORMAT d’écran et au bon MOMENT.')}
             ${cField('Adapter au moment', cToggle('perMoment', 'Oui (matin/midi/aprem)', 'Non'), 'Si activé, la boucle ne montre que les produits vendus au moment courant (table « Périodes de vente » dans l’onglet Périodes) : viennoiseries le matin, sandwichs le midi, etc.')}
             ${cField('Ordre', cChoice('order', [['catalogue', 'Catalogue'], ['aleatoire', 'Aléatoire']]), 'Ordre de passage. « Catalogue » = l’ordre du catalogue. « Aléatoire » = mélangé (stable pendant une fenêtre, re-mélangé au changement de moment/saison).')}
           </div>
@@ -3343,6 +3390,21 @@ class App extends Component {
               ${cRatio('media', 'Vidéo/photo ciblée')}
               ${cRatio('animation', 'Animation promo')}
               ${cRatio('surprise', 'Vidéo surprise')}
+            </div>
+            <!-- Items précis de la bibliothèque, avec leur propre ratio -->
+            <div style="display:flex;align-items:center;gap:6px;margin:14px 0 8px;">
+              <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Items précis · ${cont.orient === 'portrait' ? '9:16 portrait' : '16:9 paysage'}</span>
+              ${infoTip('Épingle un élément PRÉCIS de la bibliothèque dans la boucle, avec son propre ratio « 1 : N ». Seuls les éléments au format d’écran de cette boucle sont proposés, et un élément tagué par moment ne passera qu’à ces moments-là. 0 = non épinglé.')}
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;max-width:420px;">
+              ${v.contItemRatios.length ? v.contItemRatios.map((it) => html`
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="flex:0 0 auto;font-size:13px;">${it.icon}</span>
+                  <span style="flex:1 1 auto;min-width:0;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${it.name}<span style="color:#8A847C;"> · ${it.moments}</span></span>
+                  <span style="flex:0 0 auto;font-size:12px;color:#8A847C;">1 :</span>
+                  <input type="number" min="0" max="99" value=${it.n} onInput=${it.onN} style="width:64px;padding:6px 8px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:${it.n ? 'rgba(141,29,44,0.06)' : '#FBF8F2'};text-align:right;" />
+                </div>
+              `) : html`<span style="font-size:12px;color:#8A847C;">Aucun élément de bibliothèque à ce format.</span>`}
             </div>
           </div>
           <div style="display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start;">
@@ -4450,6 +4512,17 @@ class App extends Component {
             <div style="display:flex;flex-wrap:wrap;gap:7px;">
               ${v.orientOpts.map((o) => html`
                 <button onClick=${o.pick} title=${o.hint} style="padding:8px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;${o.active ? 'background:#232220;color:#fff;border:1px solid #232220;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.16);'}">${o.label}</button>
+              `)}
+            </div>
+          </div>
+          <div style="margin-top:14px;">
+            <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:7px;">
+              ${infoTip('Périodes de la journée où cet élément peut passer. Aucune cochée = il passe à tous les moments. Sert au filtrage de la boucle continue et à l’aperçu « Contenu par moment ».')}
+              <span>Moments de diffusion <span style="font-weight:400;">— ${v.momentSummary}</span></span>
+            </label>
+            <div style="display:flex;flex-wrap:wrap;gap:7px;">
+              ${v.momentOpts.map((o) => html`
+                <button onClick=${o.toggle} style="padding:8px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;${o.active ? 'background:#6E4A2B;color:#fff;border:1px solid #6E4A2B;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.16);'}">${o.active ? '✓ ' : ''}${o.label}</button>
               `)}
             </div>
           </div>

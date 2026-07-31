@@ -17,7 +17,13 @@ export function continuousDefaults() {
     clipDur: 12,             // durée d'un clip vidéo (s)
     maxItems: 12,            // nb max de slots dans la boucle
     // Ratios « 1 : N » par type d'élément (0 = jamais).
-    ratios: { liaison: 5, produitSeul: 6, media: 3, animation: 0, surprise: 8 },
+    ratios: { liaison: 5, produitSeul: 6, media: 3, animation: 0, surprise: 8, promotion: 0, campagne: 0 },
+    // Sources activées (oui/non). Quand une source est active, son ratio compte.
+    use: { saison: true, promotion: false, campagne: false },
+    // Items précis de la bibliothèque, avec leur propre ratio : [{ id, n }].
+    itemRatios: [],
+    // Format d'écran visé par la boucle : 'paysage' (16:9) ou 'portrait' (9:16).
+    orient: 'paysage',
     refresh: 'moment',       // 'moment' (au changement moment/saison) | 'minutes'
     refreshMin: 10,          // recomposition toutes les N minutes si refresh==='minutes'
     fallback: 'tout',        // 'tout' | 'aucun' si rien en saison/moment
@@ -45,7 +51,19 @@ export function normContinuous(c) {
       media: num(rr.media, d.ratios.media, 0, 99),
       animation: num(rr.animation, d.ratios.animation, 0, 99),
       surprise: num(rr.surprise, d.ratios.surprise, 0, 99),
+      promotion: num(rr.promotion, d.ratios.promotion, 0, 99),
+      campagne: num(rr.campagne, d.ratios.campagne, 0, 99),
     },
+    use: (() => {
+      const u = (c.use && typeof c.use === 'object') ? c.use : {};
+      // Compat : l'ancien champ `source === 'saison'` valait « saisons : oui ».
+      const saison = u.saison != null ? !!u.saison : (c.source ? c.source === 'saison' : d.use.saison);
+      return { saison, promotion: !!u.promotion, campagne: !!u.campagne };
+    })(),
+    itemRatios: (Array.isArray(c.itemRatios) ? c.itemRatios : [])
+      .map((r) => ({ id: String((r && r.id) || ''), n: num(r && r.n, 0, 0, 99) }))
+      .filter((r) => r.id && r.n > 0),
+    orient: c.orient === 'portrait' ? 'portrait' : 'paysage',
     refresh: c.refresh === 'minutes' ? 'minutes' : 'moment',
     refreshMin: num(c.refreshMin, d.refreshMin, 1, 240),
     fallback: c.fallback === 'aucun' ? 'aucun' : 'tout',

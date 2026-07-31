@@ -300,6 +300,8 @@ function migrate(db) {
   // Orientation de l'élément : 'paysage' (16:9) ou 'portrait' (9:16) — un écran
   // est l'un ou l'autre. Sert de filtre des items disponibles au montage.
   if (!modCols2.includes('orient')) db.exec(`ALTER TABLE sig_modules ADD COLUMN orient TEXT NOT NULL DEFAULT 'paysage'`);
+  // Moments de la journée où l'item peut passer (JSON). Vide = tous les moments.
+  if (!modCols2.includes('moments')) db.exec(`ALTER TABLE sig_modules ADD COLUMN moments TEXT NOT NULL DEFAULT '[]'`);
   if (!modCols2.includes('html')) db.exec(`ALTER TABLE sig_modules ADD COLUMN html TEXT NOT NULL DEFAULT ''`);
   // Liaisons des variables du gabarit HTML vers les données (JSON) :
   // { nomVariable: { src: 'literal|magasin|produit|promotion|campagne', field, value } }
@@ -355,6 +357,7 @@ function migrate(db) {
         promo_type   TEXT NOT NULL DEFAULT '',
         campaign_ref TEXT NOT NULL DEFAULT '',
         orient       TEXT NOT NULL DEFAULT 'paysage',
+        moments      TEXT NOT NULL DEFAULT '[]',
         html         TEXT NOT NULL DEFAULT '',
         html_vars    TEXT NOT NULL DEFAULT '{}',
         html_w       INTEGER NOT NULL DEFAULT 1920,
@@ -998,7 +1001,7 @@ export function buildContinuous(cfg, date = new Date(), ctx = {}) {
     // Les catégories choisies sont des EXCEPTIONS : tout SAUF ces catégories.
     const cats = new Set(cfg.categories);
     pool = pool.filter((p) => !cats.has(p.categoryId));
-  } else if (cfg.source === 'saison') {
+  } else if (cfg.use.saison) {
     const inSeason = new Set(currentSeasons(date).flatMap((s) => s.products || []));
     const seasonPool = inSeason.size ? pool.filter((p) => inSeason.has(p.id)) : [];
     pool = seasonPool.length ? seasonPool : (cfg.fallback === 'aucun' ? [] : pool);
@@ -1027,6 +1030,23 @@ export function buildContinuous(cfg, date = new Date(), ctx = {}) {
     ? { id, type: 'media', layout: 'cover', mediaKind: 'photo', mediaUrl: 'media/' + encodeURIComponent(c.filename), dur: cfg.clipDur, items: [], tag: { enabled: false } }
     : { id, type: 'film', video: 'media/' + encodeURIComponent(c.filename), dur: cfg.clipDur, items: [], tag: { enabled: false } });
 
+  // 3bis) Éléments de la bibliothèque éligibles : bon FORMAT d'écran et bon
+  // MOMENT (un élément sans tag de moment passe à tous les moments).
+  const lib = loadModules();
+  const libOk = (mm) => {
+    const o = mm.orient === 'portrait' ? 'portrait' : 'paysage';
+    if (o !== cfg.orient) return false;
+    const mos = Array.isArray(mm.moments) ? mm.moments : [];
+    return !mos.length || mos.includes(moment);
+  };
+  const libByType = (t) => lib.filter((mm) => mm.type === t && libOk(mm));
+  const promos = cfg.use.promotion ? libByType('promotion') : [];
+  const camps = cfg.use.campagne ? libByType('campagne') : [];
+  // Items précis choisis en régie, avec leur propre ratio.
+  const picked = (cfg.itemRatios || [])
+    .map((r) => ({ n: r.n, mm: lib.find((x) => x.id === r.id) }))
+    .filter((r) => r.mm && libOk(r.mm));
+
   // 4) Composition : slots avec ratios « 1 : N » par type d'élément.
   const modules = [];
   const R = cfg.ratios;
@@ -1034,6 +1054,11 @@ export function buildContinuous(cfg, date = new Date(), ctx = {}) {
   const L = Math.max(4, Math.min(cfg.maxItems, (Math.max(catLists.length, pool.length) || 2) * 2));
   let catI = 0, prodI = 0;
   for (let i = 1; i <= L; i++) {
+    // Un item précis passe en premier : c'est un choix explicite de la régie.
+    const pick = picked.find((r) => hit(r.n, i));
+    if (pick) { modules.push({ ...pick.mm, id: `k-item-${i}-${pick.mm.id}` }); continue; }
+    if (hit(R.promotion, i) && promos.length) { const pm = promos[Math.floor(rng() * promos.length)]; modules.push({ ...pm, id: `k-promo-${i}` }); continue; }
+    if (hit(R.campagne, i) && camps.length) { const cp = camps[Math.floor(rng() * camps.length)]; modules.push({ ...cp, id: `k-camp-${i}` }); continue; }
     if (hit(R.liaison, i)) { modules.push({ id: `k-lia-${i}`, type: 'liaison', name: "L'Atelier By", sub: '', items: [], tag: { enabled: false } }); continue; }
     if (hit(R.media, i) && clips.length) { modules.push(clipModule(clips[Math.floor(rng() * clips.length)], `k-clip-${i}`)); continue; }
     if (hit(R.produitSeul, i) && pool.length) { const p = pool[prodI++ % pool.length]; modules.push({ id: `k-prod-${i}`, type: 'produit', name: catName.get(p.categoryId) || 'À la une', layout: 'hero-left', motion: 'm1', productRef: p.id, dur: cfg.prodDur, items: [item(p)], tag: { enabled: false } }); continue; }
@@ -1769,6 +1794,7 @@ export function loadModules() {
       })(),
       campaignRef: m.campaign_ref || '',
       orient: m.orient === 'portrait' ? 'portrait' : 'paysage',
+      moments: (() => { try { const a = JSON.parse(m.moments || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } })(),
       html: m.html || '',
       htmlVars: (() => { try { return JSON.parse(m.html_vars || '{}') || {}; } catch { return {}; } })(),
       htmlW: m.html_w || 1920,
@@ -1840,8 +1866,8 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
       (id, type, name, sub, layout, motion, motion_title, motion_list, motion_illo,
        tag_enabled, tag_label, tag_img, sched_days, sched_from, sched_to, pos, sort_order, lib_tag,
        cat_ref, product_ref, video, surprise, watermark, dur, promo_type, campaign_ref,
-       orient, html, html_vars, html_w, html_h, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
+       orient, moments, html, html_vars, html_w, html_h, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
     const insItem = db.prepare(`INSERT INTO sig_module_items
       (module_id, position, name, price, img, src, active) VALUES (?, ?, ?, ?, ?, ?, ?)`);
     // Les types valides viennent de la table sig_element_types (rien en dur).
@@ -1863,6 +1889,7 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
         Number.isFinite(parseFloat(m.dur)) ? Math.max(0, Math.min(120, parseFloat(m.dur))) : 0,
         String(m.promoType || ''), String(m.campaignRef || ''),
         m.orient === 'portrait' ? 'portrait' : 'paysage',
+        JSON.stringify((Array.isArray(m.moments) ? m.moments : []).filter((x) => ['matin', 'midi', 'aprem'].includes(x))),
         String(m.html || ''),
         JSON.stringify(m.htmlVars && typeof m.htmlVars === 'object' ? m.htmlVars : {}),
         Math.max(64, Math.min(20000, parseInt(m.htmlW, 10) || 1920)),
