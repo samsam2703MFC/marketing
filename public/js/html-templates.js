@@ -166,3 +166,46 @@ export function wrapHtmlVarPos(value, bind, fullHtml, index) {
   if ((!x && !y) || insideTag(fullHtml, index)) return value;
   return `<span style="display:inline-block;transform:translate(${x}px, ${y}px);">${value}</span>`;
 }
+
+// Placement d'une variable qui vit DANS une balise (ex. src="{{ illustration }}") :
+// on ne peut pas enrober sa valeur sans casser le HTML, alors on applique la
+// translation à la balise elle-même, en complétant son style. Passe faite AVANT
+// la substitution, tant que les {{ … }} permettent encore de situer la balise.
+export function applyHtmlVarPositions(code, binds) {
+  let s = String(code || '');
+  const map = new Map();
+  for (const k of Object.keys(binds || {})) map.set(String(k).trim().toLowerCase(), binds[k]);
+  if (!map.size) return s;
+  // Chaque injection décale les positions : on relance le balayage après coup,
+  // les balises déjà traitées étant marquées (data-sigpos).
+  for (let guard = 0; guard < 200; guard++) {
+    const re = /\{\{([^{}]+)\}\}/g;
+    let hit = null, m;
+    while ((m = re.exec(s))) {
+      const b = map.get(String(m[1]).trim().toLowerCase());
+      if (!b || (!b.x && !b.y)) continue;
+      if (!insideTag(s, m.index)) continue;           // texte : enrobage suffit
+      const lt = s.lastIndexOf('<', m.index);
+      const gt = s.indexOf('>', m.index);
+      if (lt < 0 || gt < 0) continue;
+      const tag = s.slice(lt, gt + 1);
+      if (tag.indexOf('data-sigpos') !== -1) continue; // déjà placée
+      hit = { lt, gt, tag, x: b.x || 0, y: b.y || 0 };
+      break;
+    }
+    if (!hit) break;
+    // La déclaration ajoutée en dernier l'emporte sur un transform existant.
+    const decl = `transform:translate(${hit.x}px, ${hit.y}px);`;
+    let tag = hit.tag;
+    const sm = /\sstyle\s*=\s*"([^"]*)"/i.exec(tag);
+    if (sm) {
+      const merged = sm[1].replace(/;\s*$/, '') + ';' + decl;
+      tag = tag.slice(0, sm.index) + ` style="${merged}"` + tag.slice(sm.index + sm[0].length);
+    } else {
+      tag = tag.replace(/\s*\/?>$/, (end) => ` style="${decl}"${end}`);
+    }
+    tag = tag.replace(/\s*\/?>$/, (end) => ` data-sigpos="1"${end}`);
+    s = s.slice(0, hit.lt) + tag + s.slice(hit.gt + 1);
+  }
+  return s;
+}

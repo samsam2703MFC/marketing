@@ -228,9 +228,12 @@ sans liaison** (une liaison explicite reste prioritaire). Une source **Image / m
 pointer les autres visuels (`{{ filigrane }}`, `{{ illustration }}`…) sur les images livrées.
 
 **Placer une variable à l'écran** : cliquer sa pastille ouvre son placement — flèches, curseurs X/Y
-(px de la maquette) et « Recentrer ». La valeur est alors enrobée dans un span translaté, en aperçu
-comme à la diffusion ; une variable située **dans un attribut** (`src="{{ logo }}"`) n'est jamais
-enrobée, pour ne pas casser le HTML.
+(px de la maquette) et « Recentrer ». Deux cas, tous deux pris en charge en aperçu comme à la
+diffusion : une variable **en position de texte** voit sa valeur enrobée dans un span translaté ;
+une variable **dans un attribut** (`src="{{ illustration }}"`) ne peut pas être enrobée sans casser
+le HTML, alors la translation est portée par **la balise elle-même** (`applyHtmlVarPositions`, passe
+faite avant la substitution) — le style d'origine de la balise est préservé, la déclaration ajoutée
+en dernier l'emportant sur un `transform` existant.
 
 Une variable **laissée non liée** retombe sur les jetons standards (`{{magasin}}`, `{{date}}`…) ou
 reste visible telle quelle — rien n'est inventé. Une variable d'image non liée est neutralisée à

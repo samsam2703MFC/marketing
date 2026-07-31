@@ -8,7 +8,7 @@ import { hashPassword, verifyPassword, newSessionToken } from './auth.js';
 // Config du mode « continu » : source unique partagée avec la régie.
 import { continuousDefaults, normContinuous } from '../public/js/continuous.js';
 // Enrobage du décalage d'une variable de gabarit (partagé avec la régie).
-import { wrapHtmlVarPos } from '../public/js/html-templates.js';
+import { wrapHtmlVarPos, applyHtmlVarPositions } from '../public/js/html-templates.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const DB_PATH = process.env.SIG_DB || join(ROOT, 'data', 'signage.db');
@@ -1269,6 +1269,8 @@ export function applyHtmlVars(modules, storeId, date = new Date()) {
     // Index insensible à la casse (les noms viennent du code collé).
     const byKey = new Map();
     for (const k of Object.keys(binds)) byKey.set(String(k).trim().toLowerCase(), binds[k]);
+    // Variables situées dans une balise : la translation va sur la balise.
+    m.html = applyHtmlVarPositions(m.html, binds);
     m.html = m.html.replace(/\{\{([^{}]+)\}\}/g, (m0, raw, offset, full) => {
       const k = String(raw).trim().toLowerCase();
       const b = byKey.get(k);

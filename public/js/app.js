@@ -11,7 +11,7 @@ import { continuousDefaults, normContinuous } from './continuous.js';
 // Internationalisation de l'interface (FR / EN / IT), choix par navigateur.
 import { UI_LANGS, UI_LANG_IDS, tr, WIZ_STEP_KEYS } from './i18n.js';
 // Gabarits HTML : formats source (16:9, 9:16, A1…), variables et exemple.
-import { HTML_PRESETS, HTML_TOKENS, HTML_VAR_SOURCES, HTML_BRAND_VARS, HTML_ASSETS, htmlVarNames, wrapHtmlVarPos } from './html-templates.js';
+import { HTML_PRESETS, HTML_TOKENS, HTML_VAR_SOURCES, HTML_BRAND_VARS, HTML_ASSETS, htmlVarNames, wrapHtmlVarPos, applyHtmlVarPositions } from './html-templates.js';
 // Générateur de QR code autonome (pour brancher un écran en scannant).
 import { qrSvg } from './vendor/qr.js';
 const qrDataUri = (url) => { try { return 'data:image/svg+xml;utf8,' + encodeURIComponent(qrSvg(String(url), { scale: 5, margin: 3 })); } catch { return ''; } };
@@ -399,6 +399,8 @@ class App extends Component {
       }
       return null;
     };
+    // Variables situées dans une balise : la translation va sur la balise.
+    code = applyHtmlVarPositions(code, binds);
     return String(code).replace(/\{\{([^{}]+)\}\}/g, (m0, raw, offset, full) => {
       const k = String(raw).trim().toLowerCase();
       const b = map.get(k);
@@ -2821,7 +2823,12 @@ class App extends Component {
           needsPick: ['produit', 'promotion', 'campagne', 'image'].includes(src),
           pickOptions: opts,
           isLiteral: src === 'literal',
-          onSrc: (e) => this.setHtmlVar(name, { src: e.target.value, field: '', value: '' }),
+          // Choisir une source pré-remplit son premier champ : le menu affiche
+          // « Nom », la donnée dit « nom » — pas d'écart entre les deux.
+          onSrc: (e) => {
+            const sd = HTML_VAR_SOURCES.find((x) => x.id === e.target.value);
+            this.setHtmlVar(name, { src: e.target.value, field: (sd && sd.fields[0]) ? sd.fields[0].id : '', value: '' });
+          },
           onField: (e) => this.setHtmlVar(name, { field: e.target.value }),
           onValue: (e) => this.setHtmlVar(name, { value: e.target.value }),
           clear: () => this.setHtmlVar(name, null),
