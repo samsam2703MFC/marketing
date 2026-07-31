@@ -1138,8 +1138,30 @@ export const STORE_TOKENS = [
 // valeur libre. On résout ici, AVANT les jetons magasin : ce qui n'est pas lié
 // retombe donc sur {{magasin}}, {{date}}… s'il porte l'un de ces noms.
 // Catalogue des champs proposés (source unique régie ↔ serveur).
+// Variables toujours identiques (identité de marque) : résolues d'office, sans
+// que la régie ait à les lier. Une liaison explicite reste prioritaire.
+export const HTML_BRAND_VARS = {
+  logo: 'assets/logo.png',
+  logoblanc: 'assets/logo-white.png',
+  'logo-blanc': 'assets/logo-white.png',
+  logowhite: 'assets/logo-white.png',
+};
+// Images livrées avec l'application, proposées pour les variables visuelles.
+export const HTML_ASSETS = [
+  { id: 'assets/logo.png', label: 'Logo' },
+  { id: 'assets/logo-white.png', label: 'Logo blanc' },
+  { id: 'assets/sweet-tart-big.png', label: 'Tarte (grande)' },
+  { id: 'assets/sweet-tart-small.png', label: 'Tarte (petite)' },
+  { id: 'assets/cake.png', label: 'Gâteau' },
+  { id: 'assets/cake-slice.png', label: 'Part de gâteau' },
+  { id: 'assets/cookies.png', label: 'Cookie' },
+  { id: 'assets/cherry.png', label: 'Cerise' },
+  { id: 'assets/apple.png', label: 'Pomme' },
+  { id: 'assets/rhubarb.png', label: 'Rhubarbe' },
+];
 export const HTML_VAR_SOURCES = [
   { id: 'literal', label: 'Valeur libre', fields: [] },
+  { id: 'image', label: 'Image / marque', fields: [] },
   { id: 'produit', label: 'Produit', fields: [
     { id: 'nom', label: 'Nom' }, { id: 'prix', label: 'Prix' },
     { id: 'image', label: 'Photo / illustration' }, { id: 'categorie', label: 'Catégorie' },
@@ -1200,6 +1222,7 @@ export function applyHtmlVars(modules, storeId, date = new Date()) {
     const field = String(bind.field || '');
     switch (bind.src) {
       case 'literal': return val;
+      case 'image': return val;
       case 'produit': {
         const p = val ? oneProd.get(val) : null;
         if (!p) return '';
@@ -1244,10 +1267,12 @@ export function applyHtmlVars(modules, storeId, date = new Date()) {
     // Index insensible à la casse (les noms viennent du code collé).
     const byKey = new Map();
     for (const k of Object.keys(binds)) byKey.set(String(k).trim().toLowerCase(), binds[k]);
-    if (!byKey.size) continue;
     m.html = m.html.replace(/\{\{([^{}]+)\}\}/g, (m0, raw) => {
-      const out = resolve(byKey.get(String(raw).trim().toLowerCase()));
-      return out == null ? m0 : out;   // non liée : laissée aux jetons magasin
+      const k = String(raw).trim().toLowerCase();
+      const out = resolve(byKey.get(k));
+      if (out != null) return out;                       // liaison explicite
+      if (Object.prototype.hasOwnProperty.call(HTML_BRAND_VARS, k)) return HTML_BRAND_VARS[k];
+      return m0;                                         // sinon : jetons magasin
     });
   }
 }

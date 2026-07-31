@@ -22,10 +22,30 @@ export const HTML_TOKENS = [
   { token: '{{moment}}', label: 'Matin / midi / après-midi' },
 ];
 
-// Sources de données auxquelles lier une variable détectée dans le code.
-// Miroir de HTML_VAR_SOURCES côté serveur (db.js) — même ids, mêmes champs.
+// Variables toujours identiques (identité de marque) : résolues d'office côté
+// serveur, sans liaison. Miroir de HTML_BRAND_VARS dans db.js.
+export const HTML_BRAND_VARS = {
+  logo: 'assets/logo.png',
+  logoblanc: 'assets/logo-white.png',
+  'logo-blanc': 'assets/logo-white.png',
+  logowhite: 'assets/logo-white.png',
+};
+// Images livrées avec l'application (miroir de HTML_ASSETS dans db.js).
+export const HTML_ASSETS = [
+  { id: 'assets/logo.png', label: 'Logo' },
+  { id: 'assets/logo-white.png', label: 'Logo blanc' },
+  { id: 'assets/sweet-tart-big.png', label: 'Tarte (grande)' },
+  { id: 'assets/sweet-tart-small.png', label: 'Tarte (petite)' },
+  { id: 'assets/cake.png', label: 'Gâteau' },
+  { id: 'assets/cake-slice.png', label: 'Part de gâteau' },
+  { id: 'assets/cookies.png', label: 'Cookie' },
+  { id: 'assets/cherry.png', label: 'Cerise' },
+  { id: 'assets/apple.png', label: 'Pomme' },
+  { id: 'assets/rhubarb.png', label: 'Rhubarbe' },
+];
 export const HTML_VAR_SOURCES = [
   { id: 'literal', label: 'Valeur libre', fields: [] },
+  { id: 'image', label: 'Image / marque', fields: [] },
   { id: 'produit', label: 'Produit', fields: [
     { id: 'nom', label: 'Nom' }, { id: 'prix', label: 'Prix' },
     { id: 'image', label: 'Photo / illustration' }, { id: 'categorie', label: 'Catégorie' },

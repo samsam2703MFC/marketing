@@ -11,7 +11,7 @@ import { continuousDefaults, normContinuous } from './continuous.js';
 // Internationalisation de l'interface (FR / EN / IT), choix par navigateur.
 import { UI_LANGS, UI_LANG_IDS, tr, WIZ_STEP_KEYS } from './i18n.js';
 // Gabarits HTML : formats source (16:9, 9:16, A1…), variables et exemple.
-import { HTML_PRESETS, HTML_TOKENS, HTML_EXAMPLE_A1, HTML_VAR_SOURCES, htmlVarNames } from './html-templates.js';
+import { HTML_PRESETS, HTML_TOKENS, HTML_EXAMPLE_A1, HTML_VAR_SOURCES, HTML_BRAND_VARS, HTML_ASSETS, htmlVarNames } from './html-templates.js';
 // Générateur de QR code autonome (pour brancher un écran en scannant).
 import { qrSvg } from './vendor/qr.js';
 const qrDataUri = (url) => { try { return 'data:image/svg+xml;utf8,' + encodeURIComponent(qrSvg(String(url), { scale: 5, margin: 3 })); } catch { return ''; } };
@@ -344,7 +344,73 @@ class App extends Component {
     const c = (this.state.campaigns || []).find((x) => x.id === m.campaignRef);
     return c || { id: m.campaignRef || '', name: 'Campagne', scope: 'produit', productRef: '', theme: '', image: '', message: '', dateFrom: '', dateTo: '', color: '#8D1D2C', active: true };
   }
+  // Aperçu d'un gabarit HTML : applique les liaisons de variables avec les
+  // données déjà chargées en régie, pour voir le rendu réel sans attendre la
+  // diffusion. Miroir de applyHtmlVars (serveur) ; les champs propres à un
+  // magasin, inconnus ici, s'affichent en repère ‹…› plutôt qu'inventés.
+  resolveHtmlPreview(code, binds) {
+    const st = this.state;
+    const map = new Map();
+    for (const k of Object.keys(binds || {})) map.set(String(k).trim().toLowerCase(), binds[k]);
+    const prods = st.catalog.products || [];
+    const fieldLabel = (srcId, fieldId) => {
+      const src = HTML_VAR_SOURCES.find((x) => x.id === srcId);
+      const f = src && src.fields.find((x) => x.id === fieldId);
+      return f ? f.label : (src ? src.label : '');
+    };
+    const resolve = (b) => {
+      if (!b || !b.src) return null;
+      const val = String(b.value || ''), field = String(b.field || '');
+      if (b.src === 'literal' || b.src === 'image') return val;
+      if (b.src === 'produit') {
+        const p = prods.find((x) => x.id === val);
+        if (!p) return '';
+        if (field === 'prix') return p.price || '';
+        if (field === 'image') return p.img || '';
+        if (field === 'categorie') return ((st.catalog.categories || []).find((c) => c.id === p.categoryId) || {}).name || '';
+        return p.name || '';
+      }
+      if (b.src === 'promotion') {
+        const t = (st.promoTypes || []).find((x) => x.id === val);
+        if (!t) return '';
+        if (field === 'icone') return t.icon || '';
+        if (field === 'couleur') return t.color || '';
+        if (field === 'description') return t.descr || '';
+        return t.name || '';
+      }
+      if (b.src === 'campagne') {
+        const c = (st.campaigns || []).find((x) => x.id === val);
+        if (!c) return '';
+        if (field === 'message') return c.message || '';
+        if (field === 'theme') return c.theme || '';
+        if (field === 'image') return c.image || '';
+        if (field === 'couleur') return c.color || '';
+        if (field === 'du') return c.dateFrom || '';
+        if (field === 'au') return c.dateTo || '';
+        return c.name || '';
+      }
+      if (b.src === 'magasin') {
+        // Ce que la régie connaît déjà sans magasin choisi.
+        if (field === 'date') { try { return new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }); } catch { return ''; } }
+        if (field === 'saison') return (st.seasons || []).filter((x) => (st.seasonsCurrent || []).includes(x.id)).map((x) => x.name).join(', ');
+        if (field === 'moment') return st.prodMomentsCurrent || '';
+        return '\u2039' + fieldLabel('magasin', field || 'nom') + '\u203a';   // dépend du magasin
+      }
+      return null;
+    };
+    return String(code).replace(/\{\{([^{}]+)\}\}/g, (m0, raw) => {
+      const k = String(raw).trim().toLowerCase();
+      const out = resolve(map.get(k));
+      if (out != null) return out;
+      if (Object.prototype.hasOwnProperty.call(HTML_BRAND_VARS, k)) return HTML_BRAND_VARS[k];
+      return m0;   // non liée : reste visible (jetons magasin résolus à la diffusion)
+    });
+  }
   resolveMod(m) {
+    // Gabarit HTML : l'aperçu montre les variables déjà liées.
+    if (m && m.type === 'html' && typeof m.html === 'string' && m.html.indexOf('{{') !== -1) {
+      return { ...m, html: this.resolveHtmlPreview(m.html, m.htmlVars || {}) };
+    }
     // Élément « promotion » : annote le badge du sous-type pour l'aperçu.
     const promo = this.promoBadge(m);
     // Élément « campagne » : contenu porté par la campagne (produit lié éventuel).
@@ -2726,13 +2792,18 @@ class App extends Component {
         const opts = src === 'produit' ? (st.catalog.products || []).map((p) => ({ id: p.id, label: p.name }))
           : src === 'promotion' ? (st.promoTypes || []).map((t) => ({ id: t.id, label: `${t.icon || ''} ${t.name}` }))
           : src === 'campagne' ? (st.campaigns || []).map((c) => ({ id: c.id, label: c.name }))
+          : src === 'image' ? HTML_ASSETS.map((a) => ({ id: a.id, label: a.label }))
           : [];
+        // Constante de marque (ex. {{ logo }}) : résolue d'office, aucune
+        // liaison à faire — sauf si la régie en choisit une explicitement.
+        const brand = Object.prototype.hasOwnProperty.call(HTML_BRAND_VARS, name.toLowerCase())
+          ? HTML_BRAND_VARS[name.toLowerCase()] : '';
         return {
           name, src, field: bind.field || '', value: bind.value || '',
-          bound: !!src,
+          bound: !!src, brand, isBrandAuto: !src && !!brand,
           sources: HTML_VAR_SOURCES.map((x) => ({ id: x.id, label: x.label })),
           fields: srcDef ? srcDef.fields : [],
-          needsPick: ['produit', 'promotion', 'campagne'].includes(src),
+          needsPick: ['produit', 'promotion', 'campagne', 'image'].includes(src),
           pickOptions: opts,
           isLiteral: src === 'literal',
           onSrc: (e) => this.setHtmlVar(name, { src: e.target.value, field: '', value: '' }),
@@ -2744,8 +2815,9 @@ class App extends Component {
       htmlVarsSummary: (() => {
         const names = htmlVarNames(m.html || '');
         if (!names.length) return 'aucune variable';
-        const bound = names.filter((n) => ((m.htmlVars || {})[n] || {}).src).length;
-        return `${bound}/${names.length} liée(s)`;
+        const ok = names.filter((n) => ((m.htmlVars || {})[n] || {}).src
+          || Object.prototype.hasOwnProperty.call(HTML_BRAND_VARS, n.toLowerCase())).length;
+        return `${ok}/${names.length} résolue(s)`;
       })(),
       loadHtmlExample: () => this.loadHtmlExample(),
       htmlExampleLabel: HTML_EXAMPLE_A1.label,
@@ -4520,17 +4592,18 @@ class App extends Component {
             ${v.htmlVarRows.length ? html`
               <div style="margin-bottom:14px;padding:12px 13px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.12);">
                 <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px;">
-                  ${infoTip('Chaque {{ variable }} trouvée dans ton code est listée ici. Lie-la à une donnée (produit, promotion, campagne, magasin) ou à une valeur libre : elle sera remplacée à la diffusion, magasin par magasin. Une variable laissée « non liée » retombe sur les jetons standards ({{magasin}}, {{date}}…) ou reste visible telle quelle.')}
+                  ${infoTip('Chaque {{ variable }} trouvée dans ton code est listée ici. Lie-la à une donnée (produit, promotion, campagne, magasin) ou à une valeur libre : elle sera remplacée à la diffusion, magasin par magasin. Une variable laissée « non liée » retombe sur les jetons standards ({{magasin}}, {{date}}…) ou reste visible telle quelle. Les constantes de marque comme {{ logo }} sont résolues d’office — rien à lier.')}
                   <span style="font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#8D1D2C;">Variables détectées — ${v.htmlVarsSummary}</span>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:7px;">
                   ${v.htmlVarRows.map((r) => html`
                     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                      <code style="flex:0 0 auto;min-width:120px;font-size:12px;font-weight:700;color:${r.bound ? '#2E6E4E' : '#8D1D2C'};background:${r.bound ? 'rgba(46,110,78,0.10)' : 'rgba(141,29,44,0.07)'};border-radius:6px;padding:5px 9px;">${'{{ ' + r.name + ' }}'}</code>
+                      <code style="flex:0 0 auto;min-width:120px;font-size:12px;font-weight:700;color:${(r.bound || r.isBrandAuto) ? '#2E6E4E' : '#8D1D2C'};background:${(r.bound || r.isBrandAuto) ? 'rgba(46,110,78,0.10)' : 'rgba(141,29,44,0.07)'};border-radius:6px;padding:5px 9px;">${'{{ ' + r.name + ' }}'}</code>
                       <select value=${r.src} onChange=${r.onSrc} style="flex:0 0 auto;padding:7px 9px;font-size:12px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;">
-                        <option value="">— non liée —</option>
+                        <option value="">${r.isBrandAuto ? '✓ auto — identité de marque' : '— non liée —'}</option>
                         ${r.sources.map((s) => html`<option value=${s.id}>${s.label}</option>`)}
                       </select>
+                      ${r.isBrandAuto && html`<img src=${r.brand} alt="" style="flex:0 0 auto;height:22px;width:auto;max-width:80px;object-fit:contain;" />`}
                       ${r.needsPick && html`
                         <select value=${r.value} onChange=${r.onValue} style="flex:1 1 130px;min-width:0;padding:7px 9px;font-size:12px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;">
                           <option value="">— choisir —</option>
