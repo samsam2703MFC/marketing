@@ -1013,10 +1013,15 @@ export function currentSeasons(date = new Date()) {
 // Périodes de vente (moments de la journée) par produit — table de jointure.
 // moment ∈ {matin, midi, aprem}. exception = true → produit EXCLU à ce moment.
 export const SALE_MOMENTS = ['matin', 'midi', 'aprem'];
+// Les QUATRE familles taguables partagent cette table et les mêmes règles.
+export const MOMENT_KINDS = ['produit', 'categorie', 'promotion', 'campagne'];
 export function loadProductMoments() {
   return getDb().prepare('SELECT product_id, moment, exception, kind FROM sig_product_moments ORDER BY kind, product_id, moment').all()
-    .map((r) => ({ productId: r.product_id, moment: r.moment, exception: !!r.exception, kind: r.kind === 'categorie' ? 'categorie' : 'produit' }));
+    .map((r) => ({ productId: r.product_id, moment: r.moment, exception: !!r.exception, kind: normMomentKind(r.kind) }));
 }
+// Les quatre familles taguées vivent dans la même table (les identifiants ne se
+// recoupent pas) : produit, catégorie, promotion, campagne.
+function normMomentKind(k) { return MOMENT_KINDS.includes(k) ? k : 'produit'; }
 export function saveProductMoments(rows) {
   const db = getDb();
   db.exec('BEGIN');
@@ -1025,7 +1030,7 @@ export function saveProductMoments(rows) {
     const ins = db.prepare('INSERT OR REPLACE INTO sig_product_moments(product_id, moment, exception, kind) VALUES (?, ?, ?, ?)');
     for (const r of (Array.isArray(rows) ? rows : [])) {
       if (!r || !r.productId || !SALE_MOMENTS.includes(r.moment)) continue;
-      ins.run(String(r.productId), String(r.moment), r.exception ? 1 : 0, r.kind === 'categorie' ? 'categorie' : 'produit');
+      ins.run(String(r.productId), String(r.moment), r.exception ? 1 : 0, normMomentKind(r.kind));
     }
     db.exec('COMMIT');
   } catch (e) { db.exec('ROLLBACK'); throw e; }
@@ -1037,36 +1042,37 @@ export function currentSaleMoment(date = new Date()) { return currentMoment(date
 // Un produit est-il vendu au moment donné ? Règle : si le produit a au moins
 // une ligne d'inclusion (exception=0), il n'est vendu QU'À ces moments-là ;
 // une ligne exception=1 retire ce moment. Sans aucune ligne → tous les moments.
-export function productMomentFilter(date = new Date()) {
+// Produits, catégories, promotions, campagnes : mêmes règles pour les quatre.
+// Une lecture de la table, quatre filtres.
+export function momentTagFilters(date = new Date()) {
   const rows = loadProductMoments();
   const moment = currentSaleMoment(date);
-  const incl = new Map();   // productId -> Set(moments inclus)
-  const excl = new Map();   // productId -> Set(moments exclus)
-  const cIncl = new Map();  // idem pour les CATÉGORIES
-  const cExcl = new Map();
-  for (const r of rows) {
-    const cat = r.kind === 'categorie';
-    const bag = cat ? (r.exception ? cExcl : cIncl) : (r.exception ? excl : incl);
-    if (!bag.has(r.productId)) bag.set(r.productId, new Set());
-    bag.get(r.productId).add(r.moment);
+  const out = {};
+  for (const kind of MOMENT_KINDS) {
+    const incl = new Map();   // id -> Set(moments inclus)
+    const excl = new Map();   // id -> Set(moments exclus)
+    for (const r of rows) {
+      if ((r.kind || 'produit') !== kind) continue;
+      const bag = r.exception ? excl : incl;
+      if (!bag.has(r.productId)) bag.set(r.productId, new Set());
+      bag.get(r.productId).add(r.moment);
+    }
+    out[kind] = (id) => {
+      if (!id) return true;
+      if (excl.has(id) && excl.get(id).has(moment)) return false;
+      const inc = incl.get(id);
+      if (inc && inc.size) return inc.has(moment);
+      return true; // aucune règle d'inclusion : visible à tous les moments
+    };
   }
+  return out;
+}
+export function productMomentFilter(date = new Date()) {
+  const f4 = momentTagFilters(date);
   // Une catégorie hors créneau retire tous ses produits : le tag de la
   // catégorie prime, celui du produit affine à l'intérieur.
-  const catOk = (categoryId) => {
-    if (!categoryId) return true;
-    if (cExcl.has(categoryId) && cExcl.get(categoryId).has(moment)) return false;
-    const inc = cIncl.get(categoryId);
-    if (inc && inc.size) return inc.has(moment);
-    return true;
-  };
-  const inner = (productId) => {
-    if (excl.has(productId) && excl.get(productId).has(moment)) return false;
-    const inc = incl.get(productId);
-    if (inc && inc.size) return inc.has(moment);
-    return true; // aucune règle d'inclusion : vendu à tous les moments
-  };
-  // On expose un filtre qui reçoit le produit (id + catégorie).
-  const f = (productId, categoryId) => catOk(categoryId) && inner(productId);
+  const catOk = f4.categorie;
+  const f = (productId, categoryId) => catOk(categoryId) && f4.produit(productId);
   f.catOk = catOk;
   return f;
 }
@@ -1141,9 +1147,19 @@ export function buildContinuous(cfg, date = new Date(), ctx = {}) {
   // 3bis) Éléments de la bibliothèque éligibles : bon FORMAT d'écran et bon
   // MOMENT (un élément sans tag de moment passe à tous les moments).
   const lib = loadModules();
+  // La promotion et la campagne PORTENT elles-mêmes leur tag de période : un
+  // élément qui pointe vers une promo hors créneau ne passe pas, même si
+  // l'élément lui-même n'est tagué nulle part.
+  const tagOk = momentTagFilters(date);
+  const entityMomentOk = (mm) => {
+    if (mm.type === 'promotion' && mm.promoType) return tagOk.promotion(mm.promoType);
+    if (mm.type === 'campagne' && mm.campaignRef) return tagOk.campagne(mm.campaignRef);
+    return true;
+  };
   const libOk = (mm) => {
     const o = mm.orient === 'portrait' ? 'portrait' : 'paysage';
     if (o !== cfg.orient) return false;
+    if (!entityMomentOk(mm)) return false;
     const mos = Array.isArray(mm.moments) ? mm.moments : [];
     return !mos.length || mos.includes(moment);
   };

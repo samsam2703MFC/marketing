@@ -60,6 +60,19 @@ const infoTip = (text) => html`
   </span>`;
 const PHOTO_TIP = 'Qualité top : photo carrée d’au moins 2000 × 2000 px, idéal 2500 × 2500 — elle est affichée en très grand sur les écrans. Produit centré, fond clair et uni (ou PNG détouré). Trop grande ? Elle est réduite automatiquement. En dessous de 1500 px, elle risque de paraître floue.';
 
+// Tag de période d'une entité (promotion, campagne) : trois cases matin / midi
+// / après-midi qui cyclent visible → exclu → vide. Même vocabulaire et mêmes
+// règles que la table « Périodes de vente » des produits et des catégories.
+const MOMENT_TAG_TIP = 'Périodes de la journée où cette fiche peut passer sur les écrans. Clique pour cycler : visible → exclue → vide. Aucune case = elle passe à tous les moments. Enregistré tout de suite.';
+const momentTagCells = (cells) => html`
+  <span style="display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap;">
+    <span style="font-size:10.5px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#8A847C;">Périodes</span>
+    ${infoTip(MOMENT_TAG_TIP)}
+    ${cells.map((c) => html`
+      <button key=${c.moment} onClick=${c.toggle} title=${c.state === 'incl' ? 'Visible à ce moment' : (c.state === 'excl' ? 'Exclue à ce moment' : 'Aucune règle')} style="padding:4px 10px;font-size:11.5px;font-weight:600;border-radius:999px;cursor:pointer;${c.state === 'incl' ? 'border:1px solid #2E6E4E;background:rgba(46,110,78,0.12);color:#2E6E4E;' : (c.state === 'excl' ? 'border:1px solid #8D1D2C;background:rgba(141,29,44,0.10);color:#8D1D2C;text-decoration:line-through;' : 'border:1px solid rgba(35,34,32,0.16);background:#fff;color:#8A847C;')}">${c.label}</button>
+    `)}
+  </span>`;
+
 // Nombre maximum de films par moment de la journée (planning).
 const MAX_PLAN_FILMS = 5;
 
@@ -1005,6 +1018,7 @@ class App extends Component {
   openPromotions() {
     const draft = JSON.parse(JSON.stringify(this.state.promoTypes || []));
     this.setState({ view: 'promotions', promoDraft: draft, promoDirty: false });
+    this.loadProdMoments(); // les promotions se taguent aussi par période
   }
   setPromoDraft(mut) {
     const arr = JSON.parse(JSON.stringify(this.state.promoDraft || this.state.promoTypes || []));
@@ -1085,6 +1099,7 @@ class App extends Component {
   openCampaigns() {
     const draft = JSON.parse(JSON.stringify(this.state.campaigns || []));
     this.setState({ view: 'campaigns', campaignDraft: draft, campaignDirty: false });
+    this.loadProdMoments(); // les campagnes se taguent aussi par période
   }
   setCampaignDraft(mut) {
     const arr = JSON.parse(JSON.stringify(this.state.campaignDraft || this.state.campaigns || []));
@@ -1121,6 +1136,8 @@ class App extends Component {
     catch { /* indisponible : ignore */ }
   }
   // Bascule l'appartenance d'un produit à un moment (clic = inclus → exclu → rien).
+  // Renvoie les lignes obtenues : setState est différé, l'appelant qui veut les
+  // envoyer au serveur doit partir de cette valeur, pas de this.state.
   cycleProdMoment(productId, moment, kind = 'produit') {
     const rows = (this.state.prodMoments || []).slice();
     const i = rows.findIndex((r) => r.productId === productId && r.moment === moment && (r.kind || 'produit') === kind);
@@ -1128,6 +1145,7 @@ class App extends Component {
     else if (!rows[i].exception) rows[i] = { ...rows[i], exception: true }; // inclus → exclu (exception)
     else rows.splice(i, 1);                                                 // exclu → rien
     this.setState({ prodMoments: rows, prodMomentsDirty: true });
+    return rows;
   }
   // Vendu à ce moment ? Sans aucune règle, un produit est vendu tout le temps ;
   // sinon il faut une règle « vendu » à ce moment (et pas une exception).
@@ -1141,6 +1159,24 @@ class App extends Component {
   prodMomentState(productId, moment, kind = 'produit') {
     const r = (this.state.prodMoments || []).find((x) => x.productId === productId && x.moment === moment && (x.kind || 'produit') === kind);
     return r ? (r.exception ? 'excl' : 'incl') : 'none';
+  }
+  // Promotions et campagnes se taguent depuis LEUR onglet, qui a déjà son
+  // propre bouton d'enregistrement : on écrit la période dans la foulée pour
+  // ne pas laisser deux « à enregistrer » concurrents dans le même écran.
+  async cycleEntityMoment(kind, id, moment) {
+    const rows = this.cycleProdMoment(id, moment, kind);
+    try {
+      const r = await api('PUT', '/product-moments', { rows });
+      this.setState({ prodMoments: r.rows || rows, prodMomentsDirty: false });
+    } catch (e) { this.showToast(`Erreur : ${e.message}`); }
+  }
+  // Cellules matin/midi/après-midi pour une entité taguable (promo, campagne).
+  entityMomentCells(kind, id) {
+    return [{ id: 'matin', label: 'Matin' }, { id: 'midi', label: 'Midi' }, { id: 'aprem', label: 'Après-midi' }].map((mo) => ({
+      moment: mo.id, label: mo.label,
+      state: this.prodMomentState(id, mo.id, kind),
+      toggle: () => this.cycleEntityMoment(kind, id, mo.id),
+    }));
   }
   // ---- Accueil « prêt à diffuser » ---------------------------------------
   openHome() { this.setState({ view: 'home' }); this.loadProdMoments(); this.refreshFleet(); }
@@ -2814,6 +2850,8 @@ class App extends Component {
         return {
           id: t.id, name: t.name, icon: t.icon || '🏷️', color: t.color || '#C0392B',
           descr: t.descr || '', active: t.active !== false, used,
+          // La promotion porte elle-même son tag de période (matin/midi/aprem).
+          moCells: this.entityMomentCells('promotion', t.id),
           isFirst: i === 0, isLast: i === arr.length - 1,
           onName: (e) => this.updatePromoType(t.id, { name: e.target.value }),
           onIcon: (e) => this.updatePromoType(t.id, { icon: e.target.value }),
@@ -2857,6 +2895,8 @@ class App extends Component {
           dateFrom: c.dateFrom || '', dateTo: c.dateTo || '', color: c.color || '#8D1D2C',
           active: c.active !== false, used, isFirst: i === 0, isLast: i === arr.length - 1,
           isGamme: (c.scope || 'produit') === 'gamme',
+          // La campagne porte elle-même son tag de période (matin/midi/aprem).
+          moCells: this.entityMomentCells('campagne', c.id),
           imageOk: imgRenderable(c.image || ''),
           onName: (e) => this.updateCampaign(c.id, { name: e.target.value }),
           onScope: (e) => this.updateCampaign(c.id, { scope: e.target.value }),
@@ -4165,6 +4205,7 @@ class App extends Component {
                 <input value=${t.descr} onInput=${t.onDescr} placeholder="Description courte (ex. Réduction sur un créneau horaire)" style="flex:1 1 320px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;color:#4A4640;" />
                 <span style="font-size:11px;color:${t.used ? '#6E4A2B' : '#B8B2A8'};">${t.used ? v.t('common.usedBy', { n: t.used }) : v.t('common.unused')}</span>
               </div>
+              <div style="margin-top:9px;padding-left:2px;">${momentTagCells(t.moCells)}</div>
             </div>
           `)}
           ${!v.promoRows.length && html`<p style="margin:0;font-size:12.5px;color:#8A847C;padding:8px 0;">Aucun sous-type de promotion. « + Ajouter une promotion » pour en créer un.</p>`}
@@ -4231,6 +4272,7 @@ class App extends Component {
                 <input value=${c.image} onInput=${c.onImage} placeholder="URL du visuel (optionnel — sinon la photo du produit lié est utilisée)" spellcheck="false" style="flex:1 1 320px;min-width:0;padding:7px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;" />
                 <span style="font-size:11px;color:${c.used ? '#6E4A2B' : '#B8B2A8'};">${c.used ? v.t('common.usedBy', { n: c.used }) : v.t('common.unused')}</span>
               </div>
+              <div style="margin-top:9px;">${momentTagCells(c.moCells)}</div>
             </div>
           `)}
           ${!v.campaignRows.length && html`<p style="margin:0;font-size:12.5px;color:#8A847C;padding:8px 0;">Aucune campagne. « + Ajouter une campagne » pour en créer une (ou importe-les depuis l'ERP plus tard).</p>`}

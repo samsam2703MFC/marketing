@@ -518,6 +518,49 @@ async function main() {
         await call('DELETE', `/api/v1/groups/${b.group.id}`);
       }
     });
+    await step('Périodes sur une PROMOTION et une CAMPAGNE', async () => {
+      const st = await call('GET', '/api/v1/state');
+      const pmBefore = await call('GET', '/api/v1/product-moments');
+      const moment = pmBefore.current;
+      const other = ['matin', 'midi', 'aprem'].find((m) => m !== moment);
+      const pt = (await call('GET', '/api/v1/promo-types')).promoTypes[0];
+      const cmps = (await call('GET', '/api/v1/campaigns')).campaigns;
+      if (!pt || !cmps.length) return 'aucun sous-type de promotion ou campagne';
+      const cmp = cmps[0];
+      // Deux éléments de bibliothèque : une promo et une campagne, non tagués
+      // eux-mêmes — c'est l'ENTITÉ pointée qui porte la période.
+      const mods = [...st.modules,
+        { id: 'mPromoLT', type: 'promotion', name: 'Promo LT', promoType: pt.id, orient: 'paysage', moments: [], items: [] },
+        { id: 'mCampLT', type: 'campagne', name: 'Camp LT', campaignRef: cmp.id, orient: 'paysage', moments: [], items: [] }];
+      const film = { id: 'pl-tagLT', name: 'Tags LT', items: [], mode: 'continu',
+        continuous: { source: 'tout', perMoment: false, order: 'catalogue', maxItems: 12, orient: 'paysage',
+          ratios: { liaison: 0, produitSeul: 0, media: 0, animation: 0, surprise: 0 },
+          itemRatios: [{ id: 'mPromoLT', on: true, n: 2 }, { id: 'mCampLT', on: true, n: 3 }] } };
+      const put = () => call('PUT', '/api/v1/draft', { modules: mods, playlists: [...st.playlists, film], activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      const namesOf = async () => {
+        const f = await (await fetch(BASE + '/api/v1/film?film=pl-tagLT')).json();
+        return (f.modules || []).map((m) => m.name || '').join('|');
+      };
+      try {
+        await put();
+        const both = await namesOf();
+        if (!both.includes('Promo LT') || !both.includes('Camp LT')) throw new Error('sans tag, les deux devraient passer : ' + both);
+        // La promo n'est visible qu'à un AUTRE moment → elle disparaît.
+        await call('PUT', '/api/v1/product-moments', { rows: [{ productId: pt.id, moment: other, exception: false, kind: 'promotion' }] });
+        const noPromo = await namesOf();
+        if (noPromo.includes('Promo LT')) throw new Error(`la promo « ${pt.name} » passe hors de sa période`);
+        if (!noPromo.includes('Camp LT')) throw new Error('la campagne ne devrait pas être affectée par le tag de la promo');
+        // Idem pour la campagne, via une exception au moment courant.
+        await call('PUT', '/api/v1/product-moments', { rows: [{ productId: cmp.id, moment, exception: true, kind: 'campagne' }] });
+        const noCamp = await namesOf();
+        if (noCamp.includes('Camp LT')) throw new Error(`la campagne « ${cmp.name} » passe alors qu'elle est exclue à ${moment}`);
+        if (!noCamp.includes('Promo LT')) throw new Error('la promo devrait être revenue (son tag a été remplacé)');
+        return `promo « ${pt.name} » limitée à ${other} → absente à ${moment} · campagne « ${cmp.name} » exclue à ${moment} → absente`;
+      } finally {
+        await call('PUT', '/api/v1/product-moments', { rows: pmBefore.rows });
+        await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      }
+    });
     await step('Catégories de bibliothèque — éditables + table liée', async () => {
       const before = await call('GET', '/api/v1/lib-categories');
       if (!Array.isArray(before.libCategories) || !before.libCategories.length) throw new Error('aucune catégorie de bibliothèque');
