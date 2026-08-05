@@ -632,6 +632,25 @@ async function main() {
         await call('PUT', '/api/v1/catalog', { categories: before.categories, products: before.products });
       }
     });
+    await step('Période sur une CATÉGORIE — retire tous ses produits hors créneau', async () => {
+      const before = await call('GET', '/api/v1/product-moments');
+      const cat = await call('GET', '/api/v1/catalog');
+      const c0 = (cat.categories || [])[0];
+      if (!c0) return 'aucune catégorie au catalogue';
+      const now = before.current || 'matin';
+      const other = ['matin', 'midi', 'aprem'].find((m) => m !== now);
+      try {
+        // La catégorie n'est vendue QU'À un autre moment que maintenant.
+        await call('PUT', '/api/v1/product-moments', { rows: [{ productId: c0.id, moment: other, exception: false, kind: 'categorie' }] });
+        const f = await (await fetch(BASE + '/api/v1/film?film=' + encodeURIComponent((await call('GET', '/api/v1/state')).activePlaylistId))).json();
+        const pids = (f.modules || []).flatMap((m) => (m.items || []).map((it) => it.productId)).filter(Boolean);
+        const catOf = new Map(cat.products.map((p) => [p.id, p.categoryId]));
+        if (pids.some((pid) => catOf.get(pid) === c0.id)) throw new Error(`des produits de « ${c0.name} » passent hors créneau de leur catégorie`);
+        return `catégorie « ${c0.name} » vendue à ${other} → aucun de ses produits à ${now}`;
+      } finally {
+        await call('PUT', '/api/v1/product-moments', { rows: before.rows });
+      }
+    });
     await step('POST heartbeat — auto-enregistrement d\'un player de test', async () => {
       const hb = await call('POST', `/api/v1/players/${pid}/heartbeat`, {
         token, name: 'Écran de test live', state: 'playing', cachePct: 100, media: 'test', playedVer: 0, dataVer: 0,

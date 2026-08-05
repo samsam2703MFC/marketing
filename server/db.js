@@ -520,6 +520,11 @@ function migrate(db) {
   );
   `);
 
+  // Les périodes de vente taguent aussi les CATÉGORIES : même table, un champ
+  // « kind » distingue produit et catégorie (les ids ne se recoupent pas).
+  const pmCols = db.prepare('PRAGMA table_info(sig_product_moments)').all().map((c) => c.name);
+  if (!pmCols.includes('kind')) db.exec(`ALTER TABLE sig_product_moments ADD COLUMN kind TEXT NOT NULL DEFAULT 'produit'`);
+
   // Règle : un PRODUIT porte une photo (sig_products.img), une CATÉGORIE porte
   // une illustration (sig_product_categories.img).
   const catCols = db.prepare('PRAGMA table_info(sig_product_categories)').all().map((c) => c.name);
@@ -922,18 +927,18 @@ export function currentSeasons(date = new Date()) {
 // moment ∈ {matin, midi, aprem}. exception = true → produit EXCLU à ce moment.
 export const SALE_MOMENTS = ['matin', 'midi', 'aprem'];
 export function loadProductMoments() {
-  return getDb().prepare('SELECT product_id, moment, exception FROM sig_product_moments ORDER BY product_id, moment').all()
-    .map((r) => ({ productId: r.product_id, moment: r.moment, exception: !!r.exception }));
+  return getDb().prepare('SELECT product_id, moment, exception, kind FROM sig_product_moments ORDER BY kind, product_id, moment').all()
+    .map((r) => ({ productId: r.product_id, moment: r.moment, exception: !!r.exception, kind: r.kind === 'categorie' ? 'categorie' : 'produit' }));
 }
 export function saveProductMoments(rows) {
   const db = getDb();
   db.exec('BEGIN');
   try {
     db.exec('DELETE FROM sig_product_moments');
-    const ins = db.prepare('INSERT OR REPLACE INTO sig_product_moments(product_id, moment, exception) VALUES (?, ?, ?)');
+    const ins = db.prepare('INSERT OR REPLACE INTO sig_product_moments(product_id, moment, exception, kind) VALUES (?, ?, ?, ?)');
     for (const r of (Array.isArray(rows) ? rows : [])) {
       if (!r || !r.productId || !SALE_MOMENTS.includes(r.moment)) continue;
-      ins.run(String(r.productId), String(r.moment), r.exception ? 1 : 0);
+      ins.run(String(r.productId), String(r.moment), r.exception ? 1 : 0, r.kind === 'categorie' ? 'categorie' : 'produit');
     }
     db.exec('COMMIT');
   } catch (e) { db.exec('ROLLBACK'); throw e; }
@@ -950,17 +955,33 @@ export function productMomentFilter(date = new Date()) {
   const moment = currentSaleMoment(date);
   const incl = new Map();   // productId -> Set(moments inclus)
   const excl = new Map();   // productId -> Set(moments exclus)
+  const cIncl = new Map();  // idem pour les CATÉGORIES
+  const cExcl = new Map();
   for (const r of rows) {
-    const bag = r.exception ? excl : incl;
+    const cat = r.kind === 'categorie';
+    const bag = cat ? (r.exception ? cExcl : cIncl) : (r.exception ? excl : incl);
     if (!bag.has(r.productId)) bag.set(r.productId, new Set());
     bag.get(r.productId).add(r.moment);
   }
-  return (productId) => {
+  // Une catégorie hors créneau retire tous ses produits : le tag de la
+  // catégorie prime, celui du produit affine à l'intérieur.
+  const catOk = (categoryId) => {
+    if (!categoryId) return true;
+    if (cExcl.has(categoryId) && cExcl.get(categoryId).has(moment)) return false;
+    const inc = cIncl.get(categoryId);
+    if (inc && inc.size) return inc.has(moment);
+    return true;
+  };
+  const inner = (productId) => {
     if (excl.has(productId) && excl.get(productId).has(moment)) return false;
     const inc = incl.get(productId);
     if (inc && inc.size) return inc.has(moment);
     return true; // aucune règle d'inclusion : vendu à tous les moments
   };
+  // On expose un filtre qui reçoit le produit (id + catégorie).
+  const f = (productId, categoryId) => catOk(categoryId) && inner(productId);
+  f.catOk = catOk;
+  return f;
 }
 
 // ---------------------------------------------------------------------------
@@ -996,7 +1017,7 @@ export function buildContinuous(cfg, date = new Date(), ctx = {}) {
   const activeSeasons = new Set(currentSeasons(date).map((s) => s.id));
 
   // 1) Pool de produits éligibles : actif + pas en rupture + source + moment de vente.
-  let pool = products.filter((p) => p.active && !p.unavailable && momentOk(p.id));
+  let pool = products.filter((p) => p.active && !p.unavailable && momentOk(p.id, p.categoryId));
   if (cfg.source === 'categories') {
     // Les catégories choisies sont des EXCEPTIONS : tout SAUF ces catégories.
     const cats = new Set(cfg.categories);

@@ -1020,10 +1020,10 @@ class App extends Component {
     catch { /* indisponible : ignore */ }
   }
   // Bascule l'appartenance d'un produit à un moment (clic = inclus → exclu → rien).
-  cycleProdMoment(productId, moment) {
+  cycleProdMoment(productId, moment, kind = 'produit') {
     const rows = (this.state.prodMoments || []).slice();
-    const i = rows.findIndex((r) => r.productId === productId && r.moment === moment);
-    if (i < 0) rows.push({ productId, moment, exception: false });          // rien → inclus
+    const i = rows.findIndex((r) => r.productId === productId && r.moment === moment && (r.kind || 'produit') === kind);
+    if (i < 0) rows.push({ productId, moment, exception: false, kind });     // rien → inclus
     else if (!rows[i].exception) rows[i] = { ...rows[i], exception: true }; // inclus → exclu (exception)
     else rows.splice(i, 1);                                                 // exclu → rien
     this.setState({ prodMoments: rows, prodMomentsDirty: true });
@@ -1031,14 +1031,14 @@ class App extends Component {
   // Vendu à ce moment ? Sans aucune règle, un produit est vendu tout le temps ;
   // sinon il faut une règle « vendu » à ce moment (et pas une exception).
   prodSoldAt(productId, moment) {
-    const rows = (this.state.prodMoments || []).filter((r) => r.productId === productId);
+    const rows = (this.state.prodMoments || []).filter((r) => r.productId === productId && (r.kind || 'produit') === 'produit');
     if (!rows.length) return true;
     const here = rows.find((r) => r.moment === moment);
     if (here) return !here.exception;
     return !rows.some((r) => !r.exception);   // règles ailleurs seulement → exclu ici
   }
-  prodMomentState(productId, moment) {
-    const r = (this.state.prodMoments || []).find((x) => x.productId === productId && x.moment === moment);
+  prodMomentState(productId, moment, kind = 'produit') {
+    const r = (this.state.prodMoments || []).find((x) => x.productId === productId && x.moment === moment && (x.kind || 'produit') === kind);
     return r ? (r.exception ? 'excl' : 'incl') : 'none';
   }
   // ---- Accueil « prêt à diffuser » ---------------------------------------
@@ -2620,6 +2620,14 @@ class App extends Component {
       id: gk, name: gk === '_none' ? 'Sans catégorie' : (pmCatName.get(gk) || gk),
       count: products.length, collapsed: !!st.pmCollapsed[gk],
       toggle: () => this.togglePmCat(gk), products,
+      // La catégorie porte elle aussi ses périodes de vente : hors créneau,
+      // elle retire TOUS ses produits (le tag produit affine à l'intérieur).
+      taggable: gk !== '_none',
+      cells: saleMoments.map((mo) => ({
+        moment: mo.id,
+        state: this.prodMomentState(gk, mo.id, 'categorie'),
+        toggle: () => this.cycleProdMoment(gk, mo.id, 'categorie'),
+      })),
     });
     const prodMomentCats = [];
     const pmSeen = new Set();
@@ -3893,7 +3901,7 @@ class App extends Component {
             <button onClick=${v.saveProdMoments} disabled=${!v.prodMomentsDirty || v.prodMomentsBusy} style="padding:8px 16px;font-size:12.5px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.prodMomentsDirty && !v.prodMomentsBusy ? 'pointer' : 'not-allowed'};background:${v.prodMomentsDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.prodMomentsDirty ? '#fff' : '#8A847C'};">${v.prodMomentsBusy ? 'Enregistrement…' : (v.prodMomentsDirty ? 'Enregistrer' : '✓ Enregistré')}</button>
           </div>
         </div>
-        <p style="margin:0 0 12px;font-size:12px;color:#8A847C;max-width:820px;">Clique une case pour cycler : <strong style="color:#2E6E4E;">vendu</strong> → <strong style="color:#8D1D2C;">exception (exclu)</strong> → vide. Un produit sans aucune case cochée est vendu à tous les moments. En mode continu, la boucle ne montre que les produits vendus au moment courant${v.prodMomentsCurrent ? html` (actuellement : <strong>${v.prodMomentsCurrent}</strong>)` : ''}. Les produits sont regroupés par catégorie (clique une catégorie pour la plier/déplier).</p>
+        <p style="margin:0 0 12px;font-size:12px;color:#8A847C;max-width:820px;">Clique une case pour cycler : <strong style="color:#2E6E4E;">vendu</strong> → <strong style="color:#8D1D2C;">exception (exclu)</strong> → vide. Un produit sans aucune case cochée est vendu à tous les moments. En mode continu, la boucle ne montre que les produits vendus au moment courant${v.prodMomentsCurrent ? html` (actuellement : <strong>${v.prodMomentsCurrent}</strong>)` : ''}. La ligne d'une <strong>catégorie</strong> se tague aussi : hors créneau, elle retire <strong>tous</strong> ses produits, et les tags produits affinent à l'intérieur. Clique une catégorie pour la plier/déplier.</p>
         <div style="overflow-x:auto;">
           <table style="border-collapse:collapse;width:100%;min-width:420px;font-size:13px;">
             <thead><tr>
@@ -3903,13 +3911,16 @@ class App extends Component {
             <tbody>
               ${v.prodMomentCats.map((cat) => html`
                 <tr>
-                  <td colspan="4" style="padding:0;">
+                  <td style="padding:0;">
                     <button onClick=${cat.toggle} style="width:100%;box-sizing:border-box;display:flex;align-items:center;gap:9px;padding:9px 10px;background:#F5EFE4;border:none;border-top:1px solid rgba(35,34,32,0.08);border-bottom:1px solid rgba(35,34,32,0.08);cursor:pointer;text-align:left;">
                       <span style="flex:0 0 auto;font-size:10px;color:#8D1D2C;display:inline-block;transform:rotate(${cat.collapsed ? '0' : '90'}deg);">▶</span>
                       <span style="flex:1 1 auto;font-size:12.5px;font-weight:700;color:#6E4A2B;">${cat.name}</span>
                       <span style="flex:0 0 auto;font-size:11px;color:#8A847C;">${cat.count} produit(s)</span>
                     </button>
                   </td>
+                  ${cat.cells.map((c) => html`<td style="padding:5px 10px;text-align:center;background:#F5EFE4;border-top:1px solid rgba(35,34,32,0.08);border-bottom:1px solid rgba(35,34,32,0.08);">
+                    ${cat.taggable ? html`<button onClick=${c.toggle} title="Période de vente de la CATÉGORIE — hors créneau, elle retire tous ses produits" style="width:34px;height:26px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;border:1px solid ${c.state === 'incl' ? 'rgba(46,110,78,0.45)' : (c.state === 'excl' ? 'rgba(141,29,44,0.45)' : 'rgba(35,34,32,0.16)')};background:${c.state === 'incl' ? 'rgba(46,110,78,0.18)' : (c.state === 'excl' ? 'rgba(141,29,44,0.16)' : '#fff')};color:${c.state === 'incl' ? '#2E6E4E' : (c.state === 'excl' ? '#8D1D2C' : '#C9C3B8')};">${c.state === 'incl' ? '✓' : (c.state === 'excl' ? '✕' : '·')}</button>` : ''}
+                  </td>`)}
                 </tr>
                 ${cat.collapsed ? '' : cat.products.map((p) => html`
                   <tr>
