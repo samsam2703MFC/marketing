@@ -142,6 +142,8 @@ class App extends Component {
     libCats: [], libSources: [], libCatDraft: null, libCatDirty: false, libCatBusy: false,
     // « Régie → Apparition… » : le résumé que l'ERP lit sur la fiche produit.
     appearance: null, appearanceBusy: false,
+    // Matières premières : ingrédient ↔ animation de la bibliothèque.
+    ingredients: [], ingDraft: null, ingDirty: false, ingBusy: false, ingDiag: null,
     campaigns: [], campaignDraft: null, campaignDirty: false, campaignBusy: false, campaignSavedAt: 0,
     catalog: { categories: [], products: [] },
     catDraft: null, catDirty: false, catSel: '', catSaving: false, langs: [], catLang: 'fr',
@@ -230,6 +232,8 @@ class App extends Component {
       const cmp = await api('GET', '/campaigns').catch(() => ({ campaigns: [] }));
       // Catégories de la bibliothèque : le classement des éléments, en base.
       const lc = await api('GET', '/lib-categories').catch(() => ({ libCategories: [], libSources: [] }));
+      // Matières premières : ingrédient ↔ animation.
+      const ing = await api('GET', '/ingredients').catch(() => ({ ingredients: [] }));
       const pwa = await api('GET', '/pwa-config').catch(() => null);
       const plan = await api('GET', '/plan').catch(() => ({ windows: [], byStore: {} }));
       const playlists = ((Array.isArray(st.playlists) && st.playlists.length)
@@ -246,6 +250,7 @@ class App extends Component {
         promoTypes: pt.promoTypes || [],
         campaigns: cmp.campaigns || [],
         libCats: lc.libCategories || [], libSources: lc.libSources || [],
+        ingredients: ing.ingredients || [],
         pwaForm: pwa ? {
           host: pwa.host, port: pwa.port, db: pwa.db, user: pwa.user,
           password: '', hasPassword: !!pwa.hasPassword,
@@ -1049,6 +1054,41 @@ class App extends Component {
       this.setState({ promoBusy: false, promoTypes: r.promoTypes || [], promoDraft: JSON.parse(JSON.stringify(r.promoTypes || [])), promoDirty: false, promoSavedAt: Date.now() });
       this.showToast('Promotions enregistrées ✓');
     } catch (e) { this.setState({ promoBusy: false }); this.showToast(`Erreur : ${e.message}`); }
+  }
+
+  // ---- matières premières : ingrédient ↔ animation --------------------------
+  // Le lien se règle ICI ; le module produit du franchiseur ne fait que le lire.
+  ingList() { return this.state.ingDraft || this.state.ingredients || []; }
+  setIngDraft(mut) {
+    const arr = JSON.parse(JSON.stringify(this.ingList()));
+    mut(arr);
+    this.setState({ ingDraft: arr, ingDirty: true });
+  }
+  addIngredient() { this.setIngDraft((a) => a.push({ id: 'ing' + uid(), name: 'Nouvel ingrédient', extRef: '', moduleId: '', active: true })); }
+  updateIngredient(id, patch) { this.setIngDraft((a) => { const x = a.find((y) => y.id === id); if (x) Object.assign(x, patch); }); }
+  delIngredient(id) { this.setIngDraft((a) => { const i = a.findIndex((y) => y.id === id); if (i >= 0) a.splice(i, 1); }); }
+  moveIngredient(id, dir) {
+    this.setIngDraft((a) => {
+      const i = a.findIndex((y) => y.id === id); const j = i + dir;
+      if (i < 0 || j < 0 || j >= a.length) return;
+      const [row] = a.splice(i, 1); a.splice(j, 0, row);
+    });
+  }
+  async saveIngredients() {
+    if (this.state.ingBusy) return;
+    const list = this.ingList();
+    if (list.some((x) => !String(x.name || '').trim())) { this.showToast('Chaque ingrédient a besoin d\'un nom'); return; }
+    this.setState({ ingBusy: true });
+    try {
+      const r = await api('PUT', '/ingredients', { ingredients: list });
+      this.setState({ ingBusy: false, ingredients: r.ingredients || [], ingDraft: null, ingDirty: false });
+      this.showToast('Matières premières enregistrées ✓');
+    } catch (e) { this.setState({ ingBusy: false }); this.showToast(`Erreur : ${e.message}`); }
+  }
+  async inspectIngredients() {
+    this.setState({ ingDiag: { busy: true } });
+    try { this.setState({ ingDiag: await api('POST', '/ingredients/inspect', {}) }); }
+    catch (e) { this.setState({ ingDiag: { ok: false, error: e.message } }); }
   }
 
   // ---- « Régie → Apparition… » ---------------------------------------------
@@ -2879,6 +2919,27 @@ class App extends Component {
           del: () => { if (used === 0 || window.confirm(`${used} élément(s) utilisent « ${t.name} ». Supprimer quand même ce sous-type ?`)) this.delPromoType(t.id); },
         };
       }),
+      // -- matières premières : ingrédient ↔ animation --
+      ingDirty: st.ingDirty, ingBusy: st.ingBusy, ingDiag: st.ingDiag,
+      addIngredient: () => this.addIngredient(), saveIngredients: () => this.saveIngredients(),
+      inspectIngredients: () => this.inspectIngredients(),
+      // Animations de la bibliothèque : les seules cibles d'un ingrédient.
+      ingAnimOptions: (st.library || []).filter((mm) => mm.type === 'animation')
+        .map((mm) => ({ id: mm.id, label: mm.name || 'Animation' })),
+      ingRows: this.ingList().map((x, i, arr) => ({
+        id: x.id, name: x.name, extRef: x.extRef || '', moduleId: x.moduleId || '',
+        active: x.active !== false, isFirst: i === 0, isLast: i === arr.length - 1,
+        // Une animation supprimée de la bibliothèque laisse un lien orphelin :
+        // on le dit plutôt que de faire semblant.
+        orphan: !!x.moduleId && !(st.library || []).some((mm) => mm.id === x.moduleId),
+        onName: (e) => this.updateIngredient(x.id, { name: e.target.value }),
+        onRef: (e) => this.updateIngredient(x.id, { extRef: e.target.value }),
+        onAnim: (e) => this.updateIngredient(x.id, { moduleId: e.target.value }),
+        toggleActive: () => this.updateIngredient(x.id, { active: x.active === false }),
+        up: () => this.moveIngredient(x.id, -1),
+        down: () => this.moveIngredient(x.id, 1),
+        del: () => this.delIngredient(x.id),
+      })),
       // -- catégories de la bibliothèque (classement des éléments) --
       libCatDirty: st.libCatDirty, libCatBusy: st.libCatBusy,
       addLibCat: () => this.addLibCat(), saveLibCats: () => this.saveLibCats(),
@@ -3740,6 +3801,57 @@ class App extends Component {
           </div>
         </div>
         <button onClick=${v.saveHd} disabled=${v.hdSaving} style="padding:11px 22px;font-size:13.5px;font-weight:600;color:#fff;background:#8D1D2C;border:none;border-radius:999px;cursor:${v.hdSaving ? 'wait' : 'pointer'};">${v.hdSaving ? 'Enregistrement…' : 'Enregistrer le stockage HD'}</button>
+      </div>
+
+      <!-- Matières premières : ingrédient ↔ animation de la bibliothèque -->
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;margin-top:20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Matières premières — ingrédient ↔ animation</h2>
+          <div style="display:flex;align-items:center;gap:8px;">
+            ${v.ingDirty ? html`<span style="font-size:11.5px;font-weight:600;color:#B8860B;">modifications non enregistrées</span>` : ''}
+            <button onClick=${v.addIngredient} style="padding:6px 13px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">+ Ingrédient</button>
+          </div>
+        </div>
+        <p style="margin:0 0 14px;font-size:12px;color:#8A847C;line-height:1.5;">Lie une matière première à <strong>une animation</strong> de la bibliothèque : c'est ce lien que le module produit du franchiseur (Produit → Ingrédient) vient lire. Le réglage se fait <strong>ici</strong> — la régie est la seule source. La référence ERP est optionnelle : elle rapproche les deux mondes sans dépendre du nom.</p>
+        ${v.ingAnimOptions.length ? '' : html`<p style="margin:0 0 12px;font-size:12px;color:#B8860B;">Aucune animation dans la bibliothèque — crée un élément « animation » dans le Compositeur pour pouvoir en lier une.</p>`}
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          ${v.ingRows.map((x) => html`
+            <div key=${x.id} style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:9px 11px;border-radius:10px;border:1px solid ${x.active ? 'rgba(35,34,32,0.10)' : 'rgba(35,34,32,0.06)'};background:${x.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};">
+              <input key=${'ign-' + x.id} defaultValue=${x.name} onChange=${x.onName} placeholder="Nom de l'ingrédient (ex. Beurre AOP)" style="flex:1 1 180px;min-width:0;padding:7px 10px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
+              <input key=${'igr-' + x.id} defaultValue=${x.extRef} onChange=${x.onRef} placeholder="réf. ERP (optionnel)" spellcheck="false" style="flex:0 1 140px;min-width:0;padding:7px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;" />
+              <label style="display:inline-flex;align-items:center;gap:6px;flex:1 1 220px;min-width:0;">
+                <span style="font-size:10.5px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#8A847C;white-space:nowrap;">Animation</span>
+                <select value=${x.moduleId} onChange=${x.onAnim} style="flex:1 1 auto;min-width:0;padding:6px 8px;font-size:12px;border:1px solid ${x.orphan ? 'rgba(184,134,11,0.6)' : 'rgba(35,34,32,0.16)'};border-radius:8px;background:#fff;cursor:pointer;">
+                  <option value="">— aucune —</option>
+                  ${v.ingAnimOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
+                </select>
+              </label>
+              ${x.orphan ? html`<span style="font-size:11px;color:#B8860B;">animation supprimée</span>` : ''}
+              <button onClick=${x.toggleActive} title=${x.active ? 'Rendre inactif' : 'Réactiver'} style="flex:0 0 auto;padding:5px 11px;font-size:11.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${x.active ? '#2E6E4E' : 'rgba(35,34,32,0.18)'};background:${x.active ? 'rgba(46,110,78,0.10)' : '#fff'};color:${x.active ? '#2E6E4E' : '#8A847C'};">${x.active ? '✓ Actif' : 'Inactif'}</button>
+              <span style="flex:0 0 auto;display:inline-flex;gap:3px;">
+                <button onClick=${x.up} disabled=${x.isFirst} title="Monter" style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:${x.isFirst ? 'default' : 'pointer'};opacity:${x.isFirst ? 0.35 : 1};">↑</button>
+                <button onClick=${x.down} disabled=${x.isLast} title="Descendre" style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:${x.isLast ? 'default' : 'pointer'};opacity:${x.isLast ? 0.35 : 1};">↓</button>
+                <button onClick=${x.del} title="Supprimer" style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;color:#8D1D2C;cursor:pointer;">✕</button>
+              </span>
+            </div>
+          `)}
+          ${!v.ingRows.length && html`<p style="margin:0;font-size:12.5px;color:#8A847C;">Aucune matière première. « + Ingrédient » pour en déclarer une.</p>`}
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px;">
+          <button onClick=${v.saveIngredients} disabled=${v.ingBusy || !v.ingDirty} style="padding:11px 22px;font-size:13.5px;font-weight:600;color:#fff;background:${v.ingDirty ? '#8D1D2C' : 'rgba(141,29,44,0.35)'};border:none;border-radius:999px;cursor:${v.ingBusy ? 'wait' : (v.ingDirty ? 'pointer' : 'default')};">${v.ingBusy ? 'Enregistrement…' : 'Enregistrer les matières premières'}</button>
+          <button onClick=${v.inspectIngredients} title="Cherche la table des ingrédients dans la base de l'ERP (lecture seule, rien n'est importé)" style="padding:9px 16px;font-size:12.5px;font-weight:600;color:#6E4A2B;background:#fff;border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">🔎 Diagnostic ERP</button>
+        </div>
+        ${v.ingDiag && html`
+          <div style="margin-top:12px;padding:11px 13px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.08);font-size:12px;color:#4A4640;">
+            ${v.ingDiag.busy ? 'Recherche…'
+              : (v.ingDiag.error ? html`<span style="color:#8D1D2C;">Diagnostic impossible — la base de l'ERP n'est pas joignable : ${v.ingDiag.error}</span>`
+                : (v.ingDiag.ok
+                  ? html`<div>Base <strong>${v.ingDiag.db}</strong> — table(s) trouvée(s) :
+                      ${v.ingDiag.inspected.map((t) => html`<div style="margin-top:6px;"><strong>${t.table}</strong> <span style="color:#8A847C;font-family:ui-monospace,monospace;">${t.columns.join(', ')}</span></div>`)}
+                    </div>`
+                  : 'Aucune table d\'ingrédients reconnue dans la base de l\'ERP. Les matières premières se saisissent alors directement ci-dessus.'))}
+          </div>
+        `}
       </div>
 
       <!-- Catégories de la bibliothèque : classement des éléments + table liée -->

@@ -450,6 +450,33 @@ export async function inspectSeasons(table) {
   return { db, inspected };
 }
 
+// M\u00eame principe que inspectSeasons, pour les MATI\u00c8RES PREMI\u00c8RES : on cherche la
+// table des ingr\u00e9dients c\u00f4t\u00e9 ERP afin de pouvoir y rattacher les animations
+// r\u00e9gl\u00e9es en r\u00e9gie. Purement informatif \u2014 rien n'est import\u00e9 automatiquement.
+export async function inspectIngredients(table) {
+  const cfg = pwaConfig();
+  const db = await detectSchema(cfg);
+  const candidates = (table && String(table).trim())
+    ? [String(table).trim()]
+    : ['ws_ingredient', 'ws_ingredients', 'ingredient', 'ingredients', 'matiere_premiere',
+      'matieres_premieres', 'ws_matiere', 'raw_material', 'raw_materials', 'ws_raw_material'];
+  const inspected = [];
+  for (const t of candidates) {
+    try {
+      const colsT = await tableColsTyped(cfg, db, t);
+      if (!colsT.length) continue;
+      const cols = colsT.map((c) => c.name);
+      let sample = [];
+      try {
+        const s = await mysqlRows(cfg, `SELECT * FROM ${qid(db)}.${qid(t)} LIMIT 1`);
+        sample = (s[0] || []).map((x) => String(x == null ? '' : x).slice(0, 60));
+      } catch { /* table vide/illisible */ }
+      inspected.push({ table: t, columns: cols, types: colsT.map((c) => `${c.name} (${c.type})`), sample });
+    } catch { /* table absente : suivante */ }
+  }
+  return { db, inspected };
+}
+
 const slugify = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 

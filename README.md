@@ -317,6 +317,14 @@ URL du CMS, IP / hôte player, token — persistés en base. **« Tester la conn
 exécute côté serveur : ping TCP de l'hôte, `GET assignment`, `GET dataset prix`,
 `POST heartbeat` (dry-run), avec latences réelles.
 
+**Matières premières** (`sig_ingredients`) : chaque ingrédient peut être **lié à une animation**
+de la bibliothèque — c'est ce lien que le module produit du franchiseur (Produit → Ingrédient)
+vient lire (`GET /api/v1/ingredients`). Le réglage se fait ici : la régie est la seule source.
+La **référence ERP** est optionnelle et rapproche les deux mondes sans dépendre du nom ; une
+animation supprimée de la bibliothèque laisse un lien signalé « animation supprimée ».
+Le bouton **🔎 Diagnostic ERP** cherche la table des ingrédients dans la base de l'ERP
+(`POST /api/v1/ingredients/inspect`, lecture seule — rien n'est importé).
+
 **Catégories de la bibliothèque** (`sig_lib_categories`) : le classement des éléments s'édite ici
 — nom, couleur, ordre, actif/inactif, et la **table de la régie** qui alimente la catégorie
 (produits, catégories produit, promotions, campagnes, périodes, médiathèque). Rien n'est écrit en
@@ -326,7 +334,7 @@ qui la portent restent visibles ; la liste ne peut pas être vidée.
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + cycle complet — 61 tests
+npm test              # serveur jetable (BDD temporaire) + cycle complet — 62 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
 node test/live-test.js http://185.180.206.46/signage --password=… --mutate
@@ -351,6 +359,7 @@ session admin  : POST /api/v1/login · /logout · GET /me
                  GET /promo-types · PUT /promo-types (sous-types de promotion)
                  GET /campaigns · PUT /campaigns (campagnes marketing)
                  GET /lib-categories · PUT /lib-categories (classement + table liée)
+                 GET /ingredients · PUT /ingredients (matière première ↔ animation)
                  GET /product-moments · PUT /product-moments (tags de période,
                    kind = produit | categorie | promotion | campagne)
                  GET /appearance?product={id} (Régie → Apparition…, lecture ERP)

@@ -7,7 +7,7 @@ import {
   loadModules, loadPlaylist, loadPlaylists, activePlaylistId, saveDraft, storeFormat, DB_PATH,
   loadElementTypes, loadCatalog, saveCatalog, applyStorePrices, applyStoreLang, applyStoreTokens, loadLangs,
   loadPromoTypes, savePromoTypes, loadCampaigns, saveCampaigns, applyHtmlVars,
-  loadLibCategories, saveLibCategories, LIB_SOURCES,
+  loadLibCategories, saveLibCategories, LIB_SOURCES, loadIngredients, saveIngredients,
   loadSeasons, saveSeasons, currentSeasons, currentMoment,
   loadMedia, addMediaRow, getMediaRow, delMediaRow,
   loadProductMoments, saveProductMoments, SALE_MOMENTS, currentSaleMoment, momentTagFilters,
@@ -17,7 +17,7 @@ import {
   checkLogin, createSession, sessionUser, destroySession,
 } from './db.js';
 import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
-import { publicPwaConfig, savePwaConfig, resetPwaConfig, testPwa, importPwa, pwaBaseName, importSeasons, inspectSeasons } from './pwadb.js';
+import { publicPwaConfig, savePwaConfig, resetPwaConfig, testPwa, importPwa, pwaBaseName, importSeasons, inspectSeasons, inspectIngredients } from './pwadb.js';
 import { scheduleMirror, syncMirror, mirrorStatus } from './mirror.js';
 import { runConnectionTest, runDeployTests, tcpPing } from './livetest.js';
 
@@ -966,6 +966,26 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
         return send(200, { ok: false, error: String(e.message || e) });
       }
     }
+    // ---- matières premières : ingrédient ↔ animation -----------------------
+    // Le lien se règle en régie ; le module produit du franchiseur ne fait que
+    // le lire. Le diagnostic cherche la table des ingrédients côté ERP.
+    if (req.method === 'GET' && path === '/ingredients') return send(200, { ingredients: loadIngredients() });
+    if (req.method === 'PUT' && path === '/ingredients') {
+      const body = await readBody();
+      if (!Array.isArray(body.ingredients)) return send(400, { error: 'ingredients requis' });
+      const ingredients = saveIngredients(body.ingredients);
+      scheduleMirror();
+      return send(200, { ok: true, ingredients, savedAt: nowIso() });
+    }
+    if (req.method === 'POST' && path === '/ingredients/inspect') {
+      try {
+        const body = await readBody();
+        const det = await inspectIngredients(body.table);
+        const insp = det.inspected || [];
+        return send(200, { ok: insp.length > 0, db: det.db, inspected: insp });
+      } catch (e) { return send(200, { ok: false, error: e.message }); }
+    }
+
     // Diagnostic (lecture seule) : liste les colonnes réelles des tables de
     // périodes candidates et signale la colonne d'illustration détectée.
     if (req.method === 'POST' && path === '/seasons/inspect') {

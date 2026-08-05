@@ -518,6 +518,25 @@ async function main() {
         await call('DELETE', `/api/v1/groups/${b.group.id}`);
       }
     });
+    await step('Matières premières — ingrédient lié à une animation', async () => {
+      const before = await call('GET', '/api/v1/ingredients');
+      const st = await call('GET', '/api/v1/state');
+      const anim = (st.modules || []).find((m) => m.type === 'animation');
+      try {
+        const row = { id: 'ingLTTEST', name: 'Beurre AOP LT', extRef: 'MP-42', moduleId: anim ? anim.id : '', active: true };
+        const saved = await call('PUT', '/api/v1/ingredients', { ingredients: [...before.ingredients, row] });
+        const back = (saved.ingredients || []).find((x) => x.id === row.id);
+        if (!back || back.name !== row.name || back.extRef !== 'MP-42' || back.moduleId !== row.moduleId) {
+          throw new Error('aller-retour incorrect : ' + JSON.stringify(back));
+        }
+        // Un ingrédient sans nom est refusé (ligne inutilisable).
+        const noName = await call('PUT', '/api/v1/ingredients', { ingredients: [{ id: 'x', name: '  ' }] });
+        if ((noName.ingredients || []).length) throw new Error('un ingrédient sans nom a été accepté');
+        return `« ${row.name} » (réf. MP-42)${anim ? ` → animation « ${anim.name || anim.id} »` : ' · aucune animation en bibliothèque'}`;
+      } finally {
+        await call('PUT', '/api/v1/ingredients', { ingredients: before.ingredients });
+      }
+    });
     await step('Réécriture du catalogue — les réglages de la régie survivent', async () => {
       // Le rafraîchissement ERP réécrit le catalogue (DELETE + INSERT sur les
       // mêmes ids). Les tags de période, eux, appartiennent à la régie : ils ne

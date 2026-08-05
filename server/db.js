@@ -453,6 +453,20 @@ function migrate(db) {
   -- (produits, catégories produit, promotions, campagnes, périodes, médias) —
   -- c'est ce qui alimente ses éléments. Un élément pointe vers sa catégorie via
   -- sig_modules.lib_tag.
+  -- Matières premières : un ingrédient peut être LIÉ À UNE ANIMATION de la
+  -- bibliothèque (ex. « beurre AOP » → l'animation qui la met en avant). Le
+  -- lien se règle en régie ; le module produit du franchiseur ne fait que le
+  -- lire. « ext_ref » garde l'identifiant de l'ingrédient côté ERP quand il
+  -- existe, pour rapprocher les deux mondes sans dépendre du nom.
+  CREATE TABLE IF NOT EXISTS sig_ingredients (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL DEFAULT '',
+    ext_ref    TEXT NOT NULL DEFAULT '',
+    module_id  TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    active     INTEGER NOT NULL DEFAULT 1
+  );
+
   CREATE TABLE IF NOT EXISTS sig_lib_categories (
     id         TEXT PRIMARY KEY,
     name       TEXT NOT NULL DEFAULT '',
@@ -742,6 +756,36 @@ export function savePromoTypes(list) {
     throw e;
   }
   return loadPromoTypes();
+}
+
+// ---------------------------------------------------------------------------
+// Matières premières — chaque ingrédient peut pointer vers UNE animation de la
+// bibliothèque. Le lien se règle en régie ; le module produit du franchiseur ne
+// fait que le lire (GET /api/v1/ingredients).
+export function loadIngredients() {
+  return getDb().prepare('SELECT * FROM sig_ingredients ORDER BY sort_order, name').all().map((r) => ({
+    id: r.id, name: r.name, extRef: r.ext_ref, moduleId: r.module_id, active: !!r.active,
+  }));
+}
+export function saveIngredients(list) {
+  const db = getDb();
+  const rows = (Array.isArray(list) ? list : [])
+    .map((r) => ({
+      id: String(r.id || '').trim(),
+      name: String(r.name || '').trim(),
+      extRef: String(r.extRef || '').trim(),
+      moduleId: String(r.moduleId || '').trim(),
+      active: r.active === false ? 0 : 1,
+    }))
+    .filter((r) => r.id && r.name);
+  db.exec('BEGIN');
+  try {
+    db.exec('DELETE FROM sig_ingredients');
+    const ins = db.prepare('INSERT OR REPLACE INTO sig_ingredients(id, name, ext_ref, module_id, sort_order, active) VALUES (?, ?, ?, ?, ?, ?)');
+    rows.forEach((r, i) => ins.run(r.id, r.name, r.extRef, r.moduleId, i, r.active));
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  return loadIngredients();
 }
 
 // ---------------------------------------------------------------------------
