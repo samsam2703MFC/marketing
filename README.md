@@ -203,6 +203,12 @@ la même table (`sig_product_moments`, colonne `kind`) :
 Trois cases par entité, qui cyclent **visible → exclue → vide**. Sans aucune case, l'entité passe
 à tous les moments. Une inclusion la restreint à ces moments-là ; une exception retire un moment.
 
+Un **rafraîchissement ERP n'efface pas ce qui a été réglé en régie** : les tags de période
+(table à part), les **photos de produits**, les **illustrations de catégories** et l'état
+**rupture** sont repris par identifiant d'un import à l'autre — l'ERP fournit le nom, le prix,
+la catégorie et l'état actif ; la régie garde le reste. Le compte-rendu d'import indique combien
+de visuels ont été conservés.
+
 **Régie → Apparition…** — `GET /api/v1/appearance?product=<id>` renvoie, pour un produit, tout ce
 que la régie sait de son passage à l'écran : périodes du produit **et** de sa catégorie, visibilité
 à l'instant présent (avec la raison), saisons actives, campagnes liées, éléments de bibliothèque
@@ -320,7 +326,7 @@ qui la portent restent visibles ; la liste ne peut pas être vidée.
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + cycle complet — 60 tests
+npm test              # serveur jetable (BDD temporaire) + cycle complet — 61 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
 node test/live-test.js http://185.180.206.46/signage --password=… --mutate

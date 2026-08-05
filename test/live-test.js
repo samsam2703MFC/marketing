@@ -518,6 +518,35 @@ async function main() {
         await call('DELETE', `/api/v1/groups/${b.group.id}`);
       }
     });
+    await step('Réécriture du catalogue — les réglages de la régie survivent', async () => {
+      // Le rafraîchissement ERP réécrit le catalogue (DELETE + INSERT sur les
+      // mêmes ids). Les tags de période, eux, appartiennent à la régie : ils ne
+      // doivent pas partir avec.
+      const cat = await call('GET', '/api/v1/catalog');
+      const p = (cat.products || []).find((x) => x.active !== false);
+      if (!p) return 'aucun produit actif';
+      const pmBefore = await call('GET', '/api/v1/product-moments');
+      const lcBefore = await call('GET', '/api/v1/lib-categories');
+      try {
+        await call('PUT', '/api/v1/product-moments', { rows: [
+          { productId: p.id, moment: 'matin', exception: false, kind: 'produit' },
+          { productId: p.categoryId, moment: 'midi', exception: true, kind: 'categorie' },
+        ] });
+        // Réécriture intégrale du catalogue, ids inchangés.
+        await call('PUT', '/api/v1/catalog', { categories: cat.categories, products: cat.products });
+        const after = await call('GET', '/api/v1/product-moments');
+        const mine = (after.rows || []).filter((r) => r.productId === p.id || r.productId === p.categoryId);
+        if (mine.length !== 2) throw new Error(`les tags ont été perdus à la réécriture : ${JSON.stringify(after.rows)}`);
+        const lcAfter = await call('GET', '/api/v1/lib-categories');
+        if (lcAfter.libCategories.length !== lcBefore.libCategories.length) throw new Error('les catégories de bibliothèque ont bougé');
+        // Le visuel et l'état rupture restent ceux de la régie.
+        const p2 = (await call('GET', '/api/v1/catalog')).products.find((x) => x.id === p.id);
+        if (p2.img !== p.img || p2.src !== p.src) throw new Error(`visuel modifié : ${p2.src} ${p2.img}`);
+        return `tags produit + catégorie conservés · visuel « ${p2.src} » intact · ${lcAfter.libCategories.length} catégorie(s) de bibliothèque`;
+      } finally {
+        await call('PUT', '/api/v1/product-moments', { rows: pmBefore.rows });
+      }
+    });
     await step('Régie → Apparition — résumé lu par la carte produit ERP', async () => {
       const cat = await call('GET', '/api/v1/catalog');
       const p = (cat.products || []).find((x) => x.active !== false);

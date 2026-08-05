@@ -525,16 +525,26 @@ async function doImport(cfg, queries) {
   const priceRows = queries.qShopPrices.trim() ? await mysqlRows(cfg, queries.qShopPrices) : [];
   const aliasRows = cfg.qAliases.trim() ? await mysqlRows(cfg, cfg.qAliases) : [];
 
+  // Ce qui a été saisi EN RÉGIE ne doit pas être écrasé par un import : la
+  // photo d'un produit, l'illustration d'une catégorie et l'état « rupture »
+  // appartiennent au back office, pas à l'ERP. On les reprend par id.
+  const before = loadCatalog();
+  const prevCat = new Map((before.categories || []).map((c) => [c.id, c]));
+  const prevProd = new Map((before.products || []).map((p) => [p.id, p]));
+
   // Certaines bases ont plusieurs lignes par produit ou par catégorie (une
   // par langue, par boutique…) : on garde la première de chaque id.
   let dupes = 0;
+  let kept = 0;
   const categories = [];
   const seenCat = new Set();
   for (const [id, name] of catRows) {
     const cid = `pw${id}`;
     if (seenCat.has(cid)) { dupes++; continue; }
     seenCat.add(cid);
-    categories.push({ id: cid, name: name || `Catégorie ${id}`, active: true, aliases: {} });
+    const old = prevCat.get(cid);
+    if (old && old.img) kept++;
+    categories.push({ id: cid, name: name || `Catégorie ${id}`, active: true, aliases: {}, img: (old && old.img) || '' });
   }
   const catIds = new Set(categories.map((c) => c.id));
 
@@ -543,12 +553,17 @@ async function doImport(cfg, queries) {
   for (const [id, catId, name, price, active] of prodRows) {
     const pid = `pwp${id}`;
     if (byId.has(pid)) { dupes++; continue; }
+    const old = prevProd.get(pid);
+    if (old && old.img && old.img !== 'assets/cake.png') kept++;
     const p = {
       id: pid,
       categoryId: catIds.has(`pw${catId}`) ? `pw${catId}` : '',
       name: name || `Produit ${id}`,
       price: frPrice(price) || '0,00',
-      img: 'assets/cake.png', src: 'illus',
+      // Visuel et rupture : réglés en régie, conservés d'un import à l'autre.
+      img: (old && old.img) || 'assets/cake.png',
+      src: (old && old.src === 'photo') ? 'photo' : 'illus',
+      unavailable: !!(old && old.unavailable),
       active: active == null || !(active === '0' || active === '' || /^(false|no|non)$/i.test(active)),
       prices: {}, aliases: {},
     };
@@ -662,6 +677,7 @@ async function doImport(cfg, queries) {
     aliases: nAliases,
     relinked,
     ...(dupes ? { dupes } : {}),
+    ...(kept ? { visuelsConserves: kept } : {}),
     ...(created.length ? { createdStores: created } : {}),
     ...(inactiveShops ? { inactiveShops } : {}),
     ...(langSet ? { langSet, langSource: langFound } : (langFound ? { langSource: langFound } : {})),
