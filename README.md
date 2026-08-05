@@ -155,9 +155,14 @@ ni sur le magasin :
 - **Configuration totalement indépendante** : modifier un secteur ne touche ni les autres
   secteurs ni le format du magasin (couvert par un test dédié dans `test/live-test.js`).
 
-Chaque secteur (`sig_screen_groups`) porte aussi un **filtre de catégories** : avec des catégories
-il diffuse une **boucle continue de ces catégories TOUTE LA JOURNÉE** (sans moment ni saison) ;
-sans catégorie il suit le film du magasin.
+Chaque secteur (`sig_screen_groups`) dit **explicitement ce qu'il filtre**, avec deux bascules :
+
+- **Les périodes** (`filter_moments`, défaut non) : ne montrer que ce qui se vend au moment
+  courant (matin / midi / après-midi), d'après les tags de période.
+- **Les catégories** (`filter_cats`, défaut oui) : ne montrer que les catégories choisies ;
+  la liste ne s'affiche que quand ce filtre est actif.
+
+Un secteur qui **ne filtre rien** suit le film du magasin (comportement d'origine).
 
 - Un **écran** (`sig_players.group_id`) rattaché à un secteur prend **son contenu et son format**
   (menu par écran, dans la fiche magasin) ; un écran sans secteur suit le film du magasin (défaut,
@@ -168,6 +173,42 @@ sans catégorie il suit le film du magasin.
   un secteur dont le combo est proportionnel au mur (ex. 3 × portrait) remplit nativement ; un
   simple écran portrait est mis à l'échelle. API : `POST /stores/{id}/groups`, `POST /groups/{id}`,
   `DELETE /groups/{id}`, `POST /players/{id}/group`.
+
+### Boucle continue — parcourir toute la bibliothèque
+Un film ne se monte plus à la main : on pose des règles et la boucle se compose en direct
+(**format d'écran**, sources oui/non, ratios « 1 : N » par type, rafraîchissement…).
+
+**Créer une boucle, c'est passer en revue TOUS les éléments de la bibliothèque** au format
+d'écran visé. Chaque ligne porte sa **case actif / inactif**, son **ratio de passage** « 1 : N »
+(un passage tous les N slots) et un **crayon** qui renvoie à son édition dans la bibliothèque.
+Décocher une ligne garde son ratio en mémoire ; cocher une ligne sans ratio lui en donne un
+(une case cochée qui ne passe jamais serait un piège silencieux). « Tout activer / Tout
+désactiver » ne touche qu'au format affiché : les réglages de l'autre orientation sont intacts.
+
+Stocké dans `continuous.itemRatios` = `[{ id, on, n }]` (l'ancien format `{ id, n }` reste lu :
+il vaut « actif si n > 0 »). Un élément tagué par moment ne passe qu'à ces moments-là.
+
+### Tags de période — la régie est la seule source
+**Tous les paramètres de tag se font dans le back office de la régie.** Quatre familles sont
+taguables sur les périodes de la journée (matin / midi / après-midi), avec les mêmes règles et
+la même table (`sig_product_moments`, colonne `kind`) :
+
+| Famille | Où se pose le tag | Effet |
+| --- | --- | --- |
+| **produit** | onglet **Périodes**, table produit × moment | le produit ne passe qu'à ses moments |
+| **catégorie** | même table, sur la ligne de la catégorie | hors créneau, elle retire **tous** ses produits ; les tags produits affinent à l'intérieur |
+| **promotion** | onglet **Promotions**, sous la fiche du sous-type | une promo hors créneau ne passe pas, même si l'élément qui la porte n'est tagué nulle part |
+| **campagne** | onglet **Campagnes**, sous la fiche de la campagne | idem pour les campagnes |
+
+Trois cases par entité, qui cyclent **visible → exclue → vide**. Sans aucune case, l'entité passe
+à tous les moments. Une inclusion la restreint à ces moments-là ; une exception retire un moment.
+
+**Régie → Apparition…** — `GET /api/v1/appearance?product=<id>` renvoie, pour un produit, tout ce
+que la régie sait de son passage à l'écran : périodes du produit **et** de sa catégorie, visibilité
+à l'instant présent (avec la raison), saisons actives, campagnes liées, éléments de bibliothèque
+qui le montrent, secteurs d'écrans où il peut apparaître. C'est **la** lecture destinée à la fiche
+produit de l'ERP : la régie règle, l'ERP affiche. Le même résumé s'ouvre en régie avec le bouton
+**👁** de la ligne produit (onglet Produits), pour vérifier d'un coup d'œil ce que l'ERP verra.
 
 ### Promotions (offres commerciales)
 Une **promotion** est un **type d'élément** à part entière (`sig_element_types` → `promotion`),
@@ -270,10 +311,16 @@ URL du CMS, IP / hôte player, token — persistés en base. **« Tester la conn
 exécute côté serveur : ping TCP de l'hôte, `GET assignment`, `GET dataset prix`,
 `POST heartbeat` (dry-run), avec latences réelles.
 
+**Catégories de la bibliothèque** (`sig_lib_categories`) : le classement des éléments s'édite ici
+— nom, couleur, ordre, actif/inactif, et la **table de la régie** qui alimente la catégorie
+(produits, catégories produit, promotions, campagnes, périodes, médiathèque). Rien n'est écrit en
+dur dans l'interface. Une catégorie inactive n'est plus proposée au classement, mais les éléments
+qui la portent restent visibles ; la liste ne peut pas être vidée.
+
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + cycle complet — 54 tests
+npm test              # serveur jetable (BDD temporaire) + cycle complet — 60 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
 node test/live-test.js http://185.180.206.46/signage --password=… --mutate
@@ -297,6 +344,10 @@ session admin  : POST /api/v1/login · /logout · GET /me
                  GET /catalog · PUT /catalog (produits · prix · rupture)
                  GET /promo-types · PUT /promo-types (sous-types de promotion)
                  GET /campaigns · PUT /campaigns (campagnes marketing)
+                 GET /lib-categories · PUT /lib-categories (classement + table liée)
+                 GET /product-moments · PUT /product-moments (tags de période,
+                   kind = produit | categorie | promotion | campagne)
+                 GET /appearance?product={id} (Régie → Apparition…, lecture ERP)
                  POST /push-prices · POST /override · POST /test
                  GET /publications · POST /settings · GET /ping-host
 token player   : GET  /api/v1/players/{id}/assignment?token=…

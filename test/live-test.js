@@ -518,6 +518,37 @@ async function main() {
         await call('DELETE', `/api/v1/groups/${b.group.id}`);
       }
     });
+    await step('Régie → Apparition — résumé lu par la carte produit ERP', async () => {
+      const cat = await call('GET', '/api/v1/catalog');
+      const p = (cat.products || []).find((x) => x.active !== false);
+      if (!p) return 'aucun produit actif';
+      const pmBefore = await call('GET', '/api/v1/product-moments');
+      const moment = pmBefore.current;
+      const other = ['matin', 'midi', 'aprem'].find((m) => m !== moment);
+      try {
+        const a0 = await call('GET', `/api/v1/appearance?product=${encodeURIComponent(p.id)}`);
+        if (!a0.produit || a0.produit.id !== p.id) throw new Error('produit absent du résumé');
+        if (!Array.isArray(a0.periodes) || a0.periodes.length !== 3) throw new Error('les 3 périodes devraient être décrites');
+        if (a0.maintenant.visible !== true) throw new Error('sans règle, le produit devrait être visible maintenant');
+        if (!Array.isArray(a0.secteurs)) throw new Error('secteurs absents');
+        // Un tag posé en régie se lit tout de suite dans le résumé.
+        await call('PUT', '/api/v1/product-moments', { rows: [{ productId: p.id, moment: other, exception: false, kind: 'produit' }] });
+        const a1 = await call('GET', `/api/v1/appearance?product=${encodeURIComponent(p.id)}`);
+        if (a1.maintenant.visible !== false || a1.maintenant.raison !== 'hors période') throw new Error('le tag de période n\'est pas reflété : ' + JSON.stringify(a1.maintenant));
+        const row = a1.periodes.find((m) => m.id === other);
+        if (!row || row.produit !== 'visible' || !row.visible) throw new Error('la période taguée devrait être « visible » : ' + JSON.stringify(row));
+        // Le tag de la CATÉGORIE se lit aussi, et prime.
+        await call('PUT', '/api/v1/product-moments', { rows: [{ productId: p.categoryId, moment: other, exception: false, kind: 'categorie' }] });
+        const a2 = await call('GET', `/api/v1/appearance?product=${encodeURIComponent(p.id)}`);
+        const r2 = a2.periodes.find((m) => m.id === moment);
+        if (!r2 || r2.categorie !== 'aucune règle' || r2.visible) throw new Error('le tag de catégorie devrait masquer ce créneau : ' + JSON.stringify(r2));
+        const bad = await fetch(BASE + '/api/v1/appearance?product=nexiste-pas', { headers: { authorization: `Bearer ${authToken}` } });
+        if (bad.status !== 404) throw new Error(`produit inconnu → ${bad.status} (404 attendu)`);
+        return `« ${p.name} » · ${a0.periodes.length} périodes · ${a0.secteurs.length} secteur(s) · ${a0.elements.length} élément(s) · tags produit + catégorie reflétés`;
+      } finally {
+        await call('PUT', '/api/v1/product-moments', { rows: pmBefore.rows });
+      }
+    });
     await step('Périodes sur une PROMOTION et une CAMPAGNE', async () => {
       const st = await call('GET', '/api/v1/state');
       const pmBefore = await call('GET', '/api/v1/product-moments');

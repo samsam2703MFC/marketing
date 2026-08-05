@@ -10,7 +10,7 @@ import {
   loadLibCategories, saveLibCategories, LIB_SOURCES,
   loadSeasons, saveSeasons, currentSeasons, currentMoment,
   loadMedia, addMediaRow, getMediaRow, delMediaRow,
-  loadProductMoments, saveProductMoments, SALE_MOMENTS, currentSaleMoment,
+  loadProductMoments, saveProductMoments, SALE_MOMENTS, currentSaleMoment, momentTagFilters,
   buildContinuous, continuousRevision, normContinuous,
   loadScreenGroups, screenGroupById, saveScreenGroup, deleteScreenGroup, setPlayerGroup,
   loadPlan, savePlan, planFilmAt, setActiveWeek, duplicateWeek,
@@ -134,6 +134,74 @@ function applyGroupContent(snap, group, date) {
   snap.continuous = true; snap.revision = gen.revision; snap.continuousMeta = gen.meta;
   snap.playlistName = group.name; snap.zoneCats = useCats ? cats : [];
   return true;
+}
+// « Régie → Apparition… » : le résumé, pour un produit, de tout ce que la régie
+// sait de son passage à l'écran — périodes du produit ET de sa catégorie,
+// saisons, campagnes, éléments de bibliothèque qui le montrent, secteurs
+// d'écrans où il peut apparaître. Lecture seule : tous les réglages se font
+// dans le back office de la régie, l'ERP ne fait que l'afficher.
+function appearanceOf(productId, date = new Date()) {
+  const cat = loadCatalog();
+  const p = (cat.products || []).find((x) => x.id === productId);
+  if (!p) return { error: `produit inconnu : ${productId}` };
+  const catName = new Map((cat.categories || []).map((c) => [c.id, c.name]));
+  const rows = loadProductMoments();
+  const stateOf = (kind, id, mo) => {
+    const r = rows.find((x) => x.productId === id && x.moment === mo && x.kind === kind);
+    return r ? (r.exception ? 'exclu' : 'visible') : 'aucune règle';
+  };
+  // Visible à un moment donné = la catégorie laisse passer ET le produit aussi.
+  const okAt = (kind, id, mo) => {
+    const mine = rows.filter((x) => x.productId === id && x.kind === kind);
+    if (!mine.length) return true;
+    const here = mine.find((x) => x.moment === mo);
+    if (here) return !here.exception;
+    return !mine.some((x) => !x.exception);
+  };
+  const LBL = { matin: 'Matin', midi: 'Midi', aprem: 'Après-midi' };
+  const moments = SALE_MOMENTS.map((mo) => ({
+    id: mo, label: LBL[mo] || mo,
+    produit: stateOf('produit', p.id, mo),
+    categorie: stateOf('categorie', p.categoryId, mo),
+    visible: okAt('categorie', p.categoryId, mo) && okAt('produit', p.id, mo),
+  }));
+  const now = currentSaleMoment(date);
+  const nowRow = moments.find((m) => m.id === now) || { visible: true };
+  const modules = loadModules();
+  const shows = (m) => m.productRef === p.id || (m.items || []).some((it) => it.productId === p.id);
+  const tagOk = momentTagFilters(date);
+  const stores = getDb().prepare('SELECT id, name FROM sig_stores ORDER BY name').all();
+  const sectors = stores.flatMap((s) => loadScreenGroups(s.id).map((g) => ({
+    storeId: s.id, store: s.name, sectorId: g.id, sector: g.name,
+    filtreCategories: g.filterCats !== false && g.cats.length > 0,
+    filtrePeriodes: !!g.filterMoments,
+    // Le secteur montre ce produit s'il ne filtre pas les catégories, ou si la
+    // sienne est dans la liste. Le filtre de périodes s'applique en plus.
+    montre: !(g.filterCats !== false && g.cats.length) || g.cats.includes(p.categoryId),
+  })));
+  return {
+    source: 'Régie — back office (lecture seule)',
+    produit: {
+      id: p.id, nom: p.name, prix: p.price, actif: p.active !== false,
+      rupture: !!p.unavailable, categorieId: p.categoryId, categorie: catName.get(p.categoryId) || '',
+    },
+    maintenant: {
+      moment: now, label: LBL[now] || now,
+      visible: p.active !== false && !p.unavailable && !!nowRow.visible,
+      raison: p.active === false ? 'produit inactif' : (p.unavailable ? 'produit en rupture' : (nowRow.visible ? '' : 'hors période')),
+    },
+    periodes: moments,
+    saisons: currentSeasons(date).filter((s) => (s.products || []).includes(p.id)).map((s) => ({ id: s.id, nom: s.name })),
+    campagnes: loadCampaigns().filter((c) => c.productRef === p.id).map((c) => ({
+      id: c.id, nom: c.name, active: c.active !== false, dansSaPeriode: tagOk.campagne(c.id),
+    })),
+    elements: modules.filter(shows).map((m) => ({
+      id: m.id, type: m.type, nom: m.name || '',
+      orientation: m.orient === 'portrait' ? 'portrait' : 'paysage',
+      periodes: Array.isArray(m.moments) ? m.moments : [],
+    })),
+    secteurs: sectors,
+  };
 }
 // Finition d'un snapshot avant diffusion : prix + langue du magasin, puis
 // pioche des vidéos surprise et des médias ciblés. UN SEUL endroit, appelé par
@@ -776,6 +844,16 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       const promoTypes = savePromoTypes(body.promoTypes);
       scheduleMirror();
       return send(200, { ok: true, promoTypes, savedAt: nowIso() });
+    }
+
+    // ---- « Régie → Apparition… » : ce que l'ERP LIT pour la carte produit ---
+    // La régie est la seule source des tags (tous les réglages se font ici) ;
+    // l'ERP ne fait que lire ce résumé pour l'afficher sur la fiche produit.
+    if (req.method === 'GET' && path === '/appearance') {
+      const pid = url.searchParams.get('product') || '';
+      if (!pid) return send(400, { error: 'paramètre product requis' });
+      const out = appearanceOf(pid);
+      return out.error ? send(404, out) : send(200, out);
     }
 
     // ---- catégories de la bibliothèque (classement des éléments) -----------

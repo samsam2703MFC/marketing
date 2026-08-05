@@ -140,6 +140,8 @@ class App extends Component {
     // Catégories de la bibliothèque : éditables dans les Paramètres (nom,
     // couleur, table de la régie qui les alimente).
     libCats: [], libSources: [], libCatDraft: null, libCatDirty: false, libCatBusy: false,
+    // « Régie → Apparition… » : le résumé que l'ERP lit sur la fiche produit.
+    appearance: null, appearanceBusy: false,
     campaigns: [], campaignDraft: null, campaignDirty: false, campaignBusy: false, campaignSavedAt: 0,
     catalog: { categories: [], products: [] },
     catDraft: null, catDirty: false, catSel: '', catSaving: false, langs: [], catLang: 'fr',
@@ -1047,6 +1049,16 @@ class App extends Component {
       this.setState({ promoBusy: false, promoTypes: r.promoTypes || [], promoDraft: JSON.parse(JSON.stringify(r.promoTypes || [])), promoDirty: false, promoSavedAt: Date.now() });
       this.showToast('Promotions enregistrées ✓');
     } catch (e) { this.setState({ promoBusy: false }); this.showToast(`Erreur : ${e.message}`); }
+  }
+
+  // ---- « Régie → Apparition… » ---------------------------------------------
+  // Exactement ce que l'ERP lit et affiche sur la fiche produit : la régie est
+  // la seule à régler les tags, on montre ici le résultat tel qu'il sera vu.
+  async openAppearance(productId) {
+    if (this.state.appearance && this.state.appearance.produit.id === productId) { this.setState({ appearance: null }); return; }
+    this.setState({ appearanceBusy: true });
+    try { this.setState({ appearance: await api('GET', `/appearance?product=${encodeURIComponent(productId)}`), appearanceBusy: false }); }
+    catch (e) { this.setState({ appearanceBusy: false }); this.showToast(`Erreur : ${e.message}`); }
   }
 
   // ---- catégories de la bibliothèque : le classement des éléments -----------
@@ -2559,6 +2571,9 @@ class App extends Component {
       up: () => this.moveProd(p.id, -1),
       down: () => this.moveProd(p.id, 1),
       del: () => this.delProd(p.id),
+      // Ouvre le résumé « Régie → Apparition… » de ce produit (celui que l'ERP lit).
+      showAppearance: () => this.openAppearance(p.id),
+      appearanceOpen: !!(st.appearance && st.appearance.produit.id === p.id),
       storePrices: storeCols.map((sc) => ({
         storeId: sc.id,
         value: (p.prices || {})[sc.id] || '',
@@ -2833,6 +2848,7 @@ class App extends Component {
         : 'tous les moments',
       orientEffective: this.orientOf(m),
       prodCats, prodRows, storeCols, prodSelCat, langChips, isBaseLang,
+      appearance: st.appearance, appearanceBusy: st.appearanceBusy,
       seasonRows, seasonsDirty: st.seasonsDirty, seasonsBusy: st.seasonsBusy, seasonsCount: (st.seasons || []).length,
       seasonsCurrentCount: (st.seasonsCurrent || []).length,
       addSeason: () => this.addSeason(), saveSeasons: () => this.saveSeasons(), importSeasons: () => this.importSeasons(),
@@ -3975,6 +3991,7 @@ class App extends Component {
                   <button onClick=${p.toggleUnavailable} title="En rupture / indisponible — masqué des boucles continues (mode Continu) et signalé. Réactive quand le produit revient." style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;cursor:pointer;border:1px solid ${p.unavailable ? 'rgba(141,29,44,0.4)' : 'rgba(35,34,32,0.12)'};background:${p.unavailable ? 'rgba(141,29,44,0.14)' : '#FBF8F2'};color:${p.unavailable ? '#8D1D2C' : '#C9C3B8'};font-size:14px;">⦸</button>
                 </div>
                 <div style="display:flex;align-items:center;gap:4px;justify-content:flex-end;">
+                  <button onClick=${p.showAppearance} title="Régie → Apparition… — où et quand ce produit passe à l'écran (c'est ce que lit la fiche produit de l'ERP)" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:7px;cursor:pointer;font-size:12px;border:1px solid ${p.appearanceOpen ? 'rgba(141,29,44,0.4)' : 'rgba(35,34,32,0.12)'};background:${p.appearanceOpen ? 'rgba(141,29,44,0.10)' : '#FBF8F2'};color:${p.appearanceOpen ? '#8D1D2C' : '#6E4A2B'};">👁</button>
                   <button onClick=${p.up} title="Monter" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#FBF8F2;cursor:pointer;font-size:12px;">↑</button>
                   <button onClick=${p.down} title="Descendre" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#FBF8F2;cursor:pointer;font-size:12px;">↓</button>
                   <button onClick=${p.del} title="Supprimer" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#FBF8F2;cursor:pointer;font-size:12px;color:#8D1D2C;">✕</button>
@@ -3983,6 +4000,45 @@ class App extends Component {
             </div>
           </div>
           ${!v.prodRows.length && html`<div style="font-size:12.5px;color:#8A847C;padding:14px 4px 4px;">Aucun produit dans cette catégorie — « + Ajouter un produit ».</div>`}
+          <!-- Régie → Apparition… : le résumé lu par la fiche produit de l'ERP -->
+          ${v.appearance && html`
+            <div style="margin-top:16px;border:1px solid rgba(141,29,44,0.22);border-radius:14px;padding:16px 18px;background:#FFFFFF;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+                <div style="display:flex;align-items:center;gap:7px;">
+                  <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Régie → Apparition… · ${v.appearance.produit.nom}</h3>
+                  ${infoTip('Tout ce que la régie sait du passage de ce produit à l’écran. Les tags se règlent ICI (Périodes, secteurs, campagnes) ; la fiche produit de l’ERP lit ce même résumé, en lecture seule.')}
+                </div>
+                <span style="font-size:12px;font-weight:600;color:${v.appearance.maintenant.visible ? '#2E6E4E' : '#8D1D2C'};">${v.appearance.maintenant.visible ? '● À l\'écran maintenant' : '○ Pas à l\'écran'} · ${v.appearance.maintenant.label}${v.appearance.maintenant.raison ? ` — ${v.appearance.maintenant.raison}` : ''}</span>
+              </div>
+              <div style="display:flex;gap:22px;flex-wrap:wrap;font-size:12.5px;">
+                <div style="flex:1 1 260px;min-width:0;">
+                  <div style="font-size:10.5px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;margin-bottom:6px;">Périodes de la journée</div>
+                  ${v.appearance.periodes.map((m) => html`
+                    <div key=${m.id} style="display:flex;align-items:center;gap:8px;padding:3px 0;">
+                      <span style="width:9px;height:9px;border-radius:50%;flex:0 0 auto;background:${m.visible ? '#2E6E4E' : '#8D1D2C'};"></span>
+                      <span style="width:82px;flex:0 0 auto;font-weight:600;">${m.label}</span>
+                      <span style="color:#8A847C;">produit : ${m.produit} · catégorie : ${m.categorie}</span>
+                    </div>
+                  `)}
+                </div>
+                <div style="flex:1 1 240px;min-width:0;">
+                  <div style="font-size:10.5px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;margin-bottom:6px;">Secteurs d'écrans</div>
+                  ${v.appearance.secteurs.length ? v.appearance.secteurs.map((s) => html`
+                    <div key=${s.sectorId} style="padding:3px 0;color:${s.montre ? '#232220' : '#8A847C'};">
+                      ${s.montre ? '✓' : '○'} ${s.store} · ${s.sector}
+                      <span style="color:#8A847C;">${s.filtrePeriodes ? ' · filtre les périodes' : ''}${s.filtreCategories ? ' · filtre les catégories' : ''}</span>
+                    </div>
+                  `) : html`<span style="color:#8A847C;">Aucun secteur — les écrans suivent le film du magasin.</span>`}
+                </div>
+                <div style="flex:1 1 220px;min-width:0;">
+                  <div style="font-size:10.5px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;margin-bottom:6px;">Saisons · campagnes · éléments</div>
+                  <div style="padding:3px 0;">${v.appearance.saisons.length ? v.appearance.saisons.map((s) => s.nom).join(' · ') : html`<span style="color:#8A847C;">aucune période active</span>`}</div>
+                  <div style="padding:3px 0;">${v.appearance.campagnes.length ? v.appearance.campagnes.map((c) => `${c.nom}${c.dansSaPeriode ? '' : ' (hors créneau)'}`).join(' · ') : html`<span style="color:#8A847C;">aucune campagne</span>`}</div>
+                  <div style="padding:3px 0;">${v.appearance.elements.length ? `${v.appearance.elements.length} élément(s) de bibliothèque` : html`<span style="color:#8A847C;">aucun élément ne le montre</span>`}</div>
+                </div>
+              </div>
+            </div>
+          `}
           <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Prix par magasin : laisse vide pour utiliser le prix par défaut. Langues : FR = noms de base ; dans une autre langue, le champ nom édite la traduction (vide = nom de base). Chaque magasin affiche automatiquement ses prix ET sa langue (réglée dans Réseau). État : ✓ actif · <strong style="color:#8D1D2C;">⦸ rupture</strong> = temporairement indisponible, retiré des boucles en mode Continu (le reste du catalogue continue).</p>
         </div>
       </div>
