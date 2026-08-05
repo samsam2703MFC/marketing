@@ -651,6 +651,38 @@ async function main() {
         await call('PUT', '/api/v1/product-moments', { rows: before.rows });
       }
     });
+    await step('Parcours de la bibliothèque — case actif + ratio de passage', async () => {
+      const st = await call('GET', '/api/v1/state');
+      // Un élément de bibliothèque en paysage sert de cobaye.
+      const mm = (st.modules || []).find((m) => m.orient !== 'portrait' && m.type !== 'html');
+      if (!mm) return 'aucun élément de bibliothèque en paysage';
+      const film = (id, itemRatios) => ({
+        id, name: 'Parcours LT', items: [], mode: 'continu',
+        continuous: { source: 'tout', perMoment: false, order: 'catalogue', maxItems: 12, orient: 'paysage',
+          ratios: { liaison: 0, produitSeul: 0, media: 0, animation: 0, surprise: 0 }, itemRatios },
+      });
+      const put = (pls) => call('PUT', '/api/v1/draft', { modules: st.modules, playlists: pls, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      const slots = async (id) => {
+        const f = await (await fetch(BASE + '/api/v1/film?film=' + id)).json();
+        return (f.modules || []).filter((x) => String(x.id).startsWith('k-item-')).length;
+      };
+      try {
+        // 1) coché → il passe. 2) décoché mais ratio gardé → il ne passe plus.
+        await put([...st.playlists, film('pl-loopOnLT', [{ id: mm.id, on: true, n: 2 }])]);
+        const on = await slots('pl-loopOnLT');
+        await put([...st.playlists, film('pl-loopOffLT', [{ id: mm.id, on: false, n: 2 }])]);
+        const off = await slots('pl-loopOffLT');
+        // 3) compat : l'ancien format { id, n } vaut « actif ».
+        await put([...st.playlists, film('pl-loopOldLT', [{ id: mm.id, n: 2 }])]);
+        const old = await slots('pl-loopOldLT');
+        if (!on) throw new Error('élément coché absent de la boucle');
+        if (off) throw new Error(`élément décoché présent ${off} fois dans la boucle`);
+        if (!old) throw new Error('ancien format { id, n } non reconnu comme actif');
+        return `« ${mm.name || mm.id} » : coché ${on} passage(s), décoché 0, ancien format ${old}`;
+      } finally {
+        await put(st.playlists);
+      }
+    });
     await step('POST heartbeat — auto-enregistrement d\'un player de test', async () => {
       const hb = await call('POST', `/api/v1/players/${pid}/heartbeat`, {
         token, name: 'Écran de test live', state: 'playing', cachePct: 100, media: 'test', playedVer: 0, dataVer: 0,

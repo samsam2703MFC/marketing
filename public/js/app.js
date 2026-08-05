@@ -68,6 +68,9 @@ const PHOTO_TIP = 'Qualité top : photo carrée d’au moins 2000 × 2000 px, id
 // Nombre maximum de films par moment de la journée (planning).
 const MAX_PLAN_FILMS = 5;
 
+// Ratio de passage proposé quand on active un élément dans la boucle.
+const LOOP_RATIO_DEF = 6;
+
 // Assistant de diffusion (fil d'Ariane) : étapes de bout en bout.
 
 const POSF = [
@@ -564,6 +567,61 @@ class App extends Component {
     const f = this.activeFilm();
     const n = Math.max(0, Math.min(99, parseInt(val, 10) || 0));
     this.updateContinuous({ ratios: { ...(f.continuous || {}).ratios, [key]: n } });
+  }
+  // --- Parcours de la bibliothèque pour la boucle -------------------------
+  // Créer une boucle, c'est passer en revue TOUS les éléments de la
+  // bibliothèque au format visé : chacun a sa case actif/inactif et son ratio
+  // de passage. La ligne décochée garde son ratio en mémoire.
+  contLoopItems() {
+    const want = (this.activeFilm().continuous || {}).orient === 'portrait' ? 'portrait' : 'paysage';
+    return (this.state.library || []).filter((mm) => this.orientOf(mm) === want);
+  }
+  setLoopItem(id, patch) {
+    const cur = (this.activeFilm().continuous || {}).itemRatios || [];
+    const found = cur.find((r) => r.id === id) || { id, on: false, n: 0 };
+    const next = cur.filter((r) => r.id !== id).concat([{ ...found, ...patch }]);
+    this.updateContinuous({ itemRatios: next });
+  }
+  setAllLoopItems(on) {
+    const cur = (this.activeFilm().continuous || {}).itemRatios || [];
+    const rows = this.contLoopItems();
+    // On ne touche qu'aux éléments visibles (le format courant) : les réglages
+    // de l'autre orientation restent intacts.
+    const ids = new Set(rows.map((mm) => mm.id));
+    const kept = cur.filter((r) => !ids.has(r.id));
+    const next = on
+      ? kept.concat(rows.map((mm) => {
+        const f = cur.find((r) => r.id === mm.id);
+        return { id: mm.id, on: true, n: (f && f.n) || LOOP_RATIO_DEF };
+      }))
+      : kept.concat(cur.filter((r) => ids.has(r.id)).map((r) => ({ ...r, on: false })));
+    this.updateContinuous({ itemRatios: next });
+  }
+  contLoopRows() {
+    const cur = (this.activeFilm().continuous || {}).itemRatios || [];
+    const MO = { matin: 'matin', midi: 'midi', aprem: 'après-midi' };
+    return this.contLoopItems().map((mm) => {
+      const f = cur.find((r) => r.id === mm.id);
+      const on = !!(f && f.on);
+      const mos = Array.isArray(mm.moments) ? mm.moments : [];
+      return {
+        id: mm.id, name: mm.name || 'Élément', on,
+        icon: (this.elementTypeOf(mm) || {}).icon || '▤',
+        typeName: (this.elementTypeOf(mm) || {}).name || mm.type,
+        moments: mos.length ? mos.map((x) => MO[x] || x).join(' · ') : 'tous moments',
+        n: (f && f.n) || 0,
+        // Cocher une ligne sans ratio lui donne un ratio de départ : une case
+        // cochée qui ne passe jamais serait un piège.
+        toggle: () => this.setLoopItem(mm.id, { on: !on, n: (f && f.n) || LOOP_RATIO_DEF }),
+        // « Édition dans la bibliothèque » : on saute à l'élément là où il se
+        // règle vraiment, sans quitter le fil du parcours.
+        edit: () => { this.setComposerTab('lib'); this.selectMod(mm.id); },
+        onN: (e) => {
+          const n = Math.max(0, Math.min(99, parseInt(e.target.value, 10) || 0));
+          this.setLoopItem(mm.id, { n, on: n > 0 ? true : false });
+        },
+      };
+    });
   }
   setFilmCat(cat) { this.updateFilm({ cat }); }
   addFilmTag(t) {
@@ -2637,6 +2695,8 @@ class App extends Component {
     }
     for (const [gk, products] of pmByCat) if (!pmSeen.has(gk)) prodMomentCats.push(pmCatOf(gk, products));
     const pmAllCollapsed = prodMomentCats.length > 0 && prodMomentCats.every((c) => c.collapsed);
+    // Parcours de la bibliothèque pour la boucle (calculé une fois par rendu).
+    const contLoopRows = this.contLoopRows();
 
     // ---- médiathèque agence (vue admin) ----
     const MOMENT_LBL = { matin: 'Matin', midi: 'Midi', aprem: 'Après-midi', all: 'Toute la journée' };
@@ -2766,28 +2826,12 @@ class App extends Component {
       filmDaysVals, filmSlotVals, filmStoreVals, filmAllStores, filmSchedSummary,
       // Ces listes ne dépendent pas du temps : on évite de les rebâtir 60 fois
       // par seconde pendant la lecture de l'aperçu.
-      // Items de bibliothèque épinglables dans la boucle (au format visé).
-      contItemRatios: (() => {
-        const cfg = this.activeFilm().continuous || {};
-        const want = cfg.orient === 'portrait' ? 'portrait' : 'paysage';
-        const cur = Array.isArray(cfg.itemRatios) ? cfg.itemRatios : [];
-        return (st.library || []).filter((mm) => this.orientOf(mm) === want).map((mm) => {
-          const found = cur.find((r) => r.id === mm.id);
-          const mos = Array.isArray(mm.moments) ? mm.moments : [];
-          return {
-            id: mm.id, name: mm.name || 'Élément',
-            icon: (this.elementTypeOf(mm) || {}).icon || '▤',
-            moments: mos.length ? mos.map((x) => ({ matin: 'matin', midi: 'midi', aprem: 'après-midi' })[x] || x).join(' · ') : 'tous moments',
-            n: found ? found.n : 0,
-            onN: (e) => {
-              const n = Math.max(0, Math.min(99, parseInt(e.target.value, 10) || 0));
-              const next = cur.filter((r) => r.id !== mm.id);
-              if (n > 0) next.push({ id: mm.id, n });
-              this.updateContinuous({ itemRatios: next });
-            },
-          };
-        });
-      })(),
+      // Parcours de la bibliothèque : TOUS les éléments au format visé, chacun
+      // avec sa case actif/inactif et son ratio de passage.
+      contItemRatios: contLoopRows,
+      contLoopOn: contLoopRows.filter((r) => r.on).length,
+      contLoopAll: () => this.setAllLoopItems(true),
+      contLoopNone: () => this.setAllLoopItems(false),
       // Contenu du film vu à un moment donné (matin / midi / après-midi) : on
       // n'affiche que ce qui serait réellement éligible à ce créneau.
       filmMomentTabs: (() => {
@@ -3433,18 +3477,25 @@ class App extends Component {
               ${cRatio('animation', 'Animation promo')}
               ${cRatio('surprise', 'Vidéo surprise')}
             </div>
-            <!-- Items précis de la bibliothèque, avec leur propre ratio -->
-            <div style="display:flex;align-items:center;gap:6px;margin:14px 0 8px;">
-              <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Items précis · ${cont.orient === 'portrait' ? '9:16 portrait' : '16:9 paysage'}</span>
-              ${infoTip('Épingle un élément PRÉCIS de la bibliothèque dans la boucle, avec son propre ratio « 1 : N ». Seuls les éléments au format d’écran de cette boucle sont proposés, et un élément tagué par moment ne passera qu’à ces moments-là. 0 = non épinglé.')}
+            <!-- Parcours de la bibliothèque : actif/inactif + ratio de passage -->
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:16px 0 8px;">
+              <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Parcours de la bibliothèque · ${cont.orient === 'portrait' ? '9:16 portrait' : '16:9 paysage'}</span>
+              ${infoTip('Créer une boucle, c’est passer en revue TOUS les éléments de la bibliothèque : coche ceux qui doivent passer et donne à chacun son ratio « 1 : N » (un passage tous les N slots). Seuls les éléments au format d’écran de cette boucle sont listés, et un élément tagué par moment ne passera qu’à ces moments-là. Décocher garde le ratio en mémoire.')}
+              <span style="font-size:11.5px;font-weight:600;color:${v.contLoopOn ? '#6E4A2B' : '#8A847C'};">${v.contLoopOn} / ${v.contItemRatios.length} actif(s)</span>
+              ${v.contItemRatios.length ? html`<span style="display:inline-flex;gap:5px;">
+                <button onClick=${v.contLoopAll} style="padding:4px 10px;font-size:11.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid rgba(35,34,32,0.16);background:#fff;color:#232220;">Tout activer</button>
+                <button onClick=${v.contLoopNone} style="padding:4px 10px;font-size:11.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid rgba(35,34,32,0.16);background:#fff;color:#232220;">Tout désactiver</button>
+              </span>` : ''}
             </div>
-            <div style="display:flex;flex-direction:column;gap:6px;max-width:420px;">
+            <div style="display:flex;flex-direction:column;gap:4px;max-width:470px;max-height:290px;overflow:auto;padding-right:4px;">
               ${v.contItemRatios.length ? v.contItemRatios.map((it) => html`
-                <div style="display:flex;align-items:center;gap:8px;">
+                <div key=${it.id} style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:9px;border:1px solid ${it.on ? 'rgba(141,29,44,0.28)' : 'rgba(35,34,32,0.10)'};background:${it.on ? 'rgba(141,29,44,0.05)' : '#FBF8F2'};">
+                  <button onClick=${it.toggle} title=${it.on ? 'Actif dans la boucle — cliquer pour retirer' : 'Inactif — cliquer pour ajouter à la boucle'} style="flex:0 0 auto;width:19px;height:19px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;line-height:1;border-radius:5px;cursor:pointer;border:1px solid ${it.on ? '#8D1D2C' : 'rgba(35,34,32,0.28)'};background:${it.on ? '#8D1D2C' : '#fff'};color:#fff;">${it.on ? '✓' : ''}</button>
                   <span style="flex:0 0 auto;font-size:13px;">${it.icon}</span>
-                  <span style="flex:1 1 auto;min-width:0;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${it.name}<span style="color:#8A847C;"> · ${it.moments}</span></span>
+                  <span style="flex:1 1 auto;min-width:0;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${it.on ? '#232220' : '#8A847C'};">${it.name}<span style="color:#8A847C;"> · ${it.moments}</span></span>
                   <span style="flex:0 0 auto;font-size:12px;color:#8A847C;">1 :</span>
-                  <input type="number" min="0" max="99" value=${it.n} onInput=${it.onN} style="width:64px;padding:6px 8px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:${it.n ? 'rgba(141,29,44,0.06)' : '#FBF8F2'};text-align:right;" />
+                  <input type="number" min="0" max="99" value=${it.n} onInput=${it.onN} title="Un passage tous les N slots de la boucle" style="width:62px;padding:5px 8px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;text-align:right;" />
+                  <button onClick=${it.edit} title="Éditer cet élément dans la bibliothèque" style="flex:0 0 auto;padding:4px 7px;font-size:12px;border-radius:7px;cursor:pointer;border:1px solid rgba(35,34,32,0.14);background:#fff;color:#6E4A2B;">✎</button>
                 </div>
               `) : html`<span style="font-size:12px;color:#8A847C;">Aucun élément de bibliothèque à ce format.</span>`}
             </div>

@@ -20,7 +20,8 @@ export function continuousDefaults() {
     ratios: { liaison: 5, produitSeul: 6, media: 3, animation: 0, surprise: 8, promotion: 0, campagne: 0 },
     // Sources activées (oui/non). Quand une source est active, son ratio compte.
     use: { saison: true, promotion: false, campagne: false },
-    // Items précis de la bibliothèque, avec leur propre ratio : [{ id, n }].
+    // Parcours de la bibliothèque : une ligne par élément, avec sa case
+    // actif/inactif et son ratio de passage : [{ id, on, n }].
     itemRatios: [],
     // Format d'écran visé par la boucle : 'paysage' (16:9) ou 'portrait' (9:16).
     orient: 'paysage',
@@ -60,9 +61,17 @@ export function normContinuous(c) {
       const saison = u.saison != null ? !!u.saison : (c.source ? c.source === 'saison' : d.use.saison);
       return { saison, promotion: !!u.promotion, campagne: !!u.campagne };
     })(),
+    // Chaque élément de la bibliothèque a sa ligne : actif oui/non + ratio.
+    // Compat : les anciennes lignes { id, n } valaient « actif si n > 0 ».
+    // Un élément actif passe au moins une fois (ratio plancher à 1) — sinon la
+    // case cochée serait un piège silencieux.
     itemRatios: (Array.isArray(c.itemRatios) ? c.itemRatios : [])
-      .map((r) => ({ id: String((r && r.id) || ''), n: num(r && r.n, 0, 0, 99) }))
-      .filter((r) => r.id && r.n > 0),
+      .map((r) => {
+        const n = num(r && r.n, 0, 0, 99);
+        const on = (r && r.on != null) ? !!r.on : n > 0;
+        return { id: String((r && r.id) || ''), on, n: on ? Math.max(1, n) : n };
+      })
+      .filter((r) => r.id && (r.on || r.n > 0)),
     orient: c.orient === 'portrait' ? 'portrait' : 'paysage',
     refresh: c.refresh === 'minutes' ? 'minutes' : 'moment',
     refreshMin: num(c.refreshMin, d.refreshMin, 1, 240),

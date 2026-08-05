@@ -1063,8 +1063,11 @@ export function buildContinuous(cfg, date = new Date(), ctx = {}) {
   const libByType = (t) => lib.filter((mm) => mm.type === t && libOk(mm));
   const promos = cfg.use.promotion ? libByType('promotion') : [];
   const camps = cfg.use.campagne ? libByType('campagne') : [];
-  // Items précis choisis en régie, avec leur propre ratio.
+  // Parcours de la bibliothèque : seules les lignes COCHÉES entrent dans la
+  // boucle, avec leur propre ratio (une ligne décochée garde son ratio en
+  // mémoire mais ne passe pas).
   const picked = (cfg.itemRatios || [])
+    .filter((r) => r.on !== false && r.n > 0)
     .map((r) => ({ n: r.n, mm: lib.find((x) => x.id === r.id) }))
     .filter((r) => r.mm && libOk(r.mm));
 
