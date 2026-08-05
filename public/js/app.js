@@ -2369,6 +2369,12 @@ class App extends Component {
         // Position des écrans du secteur : choix direct portrait / paysage.
         setOrient: (orient) => { if (orient !== (g.format || {}).orient) this.saveGroup(g.id, { orient }); },
         onAddCat: (e) => { const cid = e.target.value; e.target.value = ''; if (cid) this.saveGroup(g.id, { cats: [...(g.cats || []), cid] }); },
+        // Le secteur dit lui-même ce qu'il filtre : les périodes, les catégories.
+        filterMoments: !!g.filterMoments, filterCats: g.filterCats !== false,
+        toggleMoments: () => this.saveGroup(g.id, { filterMoments: !g.filterMoments }),
+        toggleCats: () => this.saveGroup(g.id, { filterCats: g.filterCats === false }),
+        // Ni période ni catégorie → rien à filtrer, l'écran suit le magasin.
+        noFilter: !g.filterMoments && (g.filterCats === false || !(g.cats || []).length),
         previewUrl: this.filmUrl({ group: g.id }),
         copyPreview: () => this.copyLink(this.filmUrl({ group: g.id })),
         del: () => this.delGroup(g.id),
@@ -4413,12 +4419,21 @@ class App extends Component {
                     <a href=${g.previewUrl} target="_blank" title="Aperçu du secteur (boucle catégories)" style="font-size:11.5px;font-weight:600;color:#8D1D2C;flex:0 0 auto;">${v.t('sector.preview')}</a>
                     <button onClick=${g.del} title=${v.t('sector.delete')} style="flex:0 0 auto;width:28px;height:28px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:pointer;font-size:12px;color:#8D1D2C;">✕</button>
                   </div>
-                  <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                  <!-- Ce que le secteur filtre : périodes et/ou catégories -->
+                  <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
+                    <span style="font-size:10.5px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#8A847C;">${v.t('sector.filters')}</span>
+                    ${[[g.filterMoments, g.toggleMoments, v.t('sector.filterMoments'), v.t('sector.filterMomentsHelp')],
+                       [g.filterCats, g.toggleCats, v.t('sector.filterCats'), v.t('sector.filterCatsHelp')]].map(([on, toggle, label, help]) => html`
+                      <button onClick=${toggle} title=${help} style="display:inline-flex;align-items:center;gap:5px;padding:4px 11px;font-size:11.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${on ? '#8D1D2C' : '#fff'};color:${on ? '#fff' : '#8A847C'};">${on ? '✓' : '○'} ${label}</button>
+                    `)}
+                    ${g.noFilter ? html`<span style="font-size:11px;color:#B8860B;">${v.t('sector.noFilter')}</span>` : ''}
+                  </div>
+                  ${g.filterCats ? html`<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
                     <span style="font-size:10.5px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#8A847C;">${v.t('sector.categories')}</span>
                     ${g.catChips.map((c) => html`<span style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.28);border-radius:999px;padding:2px 5px 2px 9px;">${c.name}<button onClick=${c.remove} style="width:15px;height:15px;border-radius:50%;border:none;background:rgba(110,74,43,0.18);color:#6E4A2B;cursor:pointer;font-size:9px;line-height:1;">✕</button></span>`)}
                     ${g.catChips.length ? '' : html`<span style="font-size:11px;color:#B8860B;">${v.t('sector.noCatFollows')}</span>`}
                     ${g.addableCats.length ? html`<select onChange=${g.onAddCat} style="padding:4px 7px;font-size:11.5px;border:1px solid rgba(35,34,32,0.16);border-radius:999px;background:#fff;cursor:pointer;"><option value="">${v.t('sector.addCat')}</option>${g.addableCats.map((c) => html`<option value=${c.id}>${c.name}</option>`)}</select>` : ''}
-                  </div>
+                  </div>` : ''}
                 </div>
               `)}
             </div>

@@ -196,6 +196,20 @@ export const I18N = {
   'sector.categories': { fr: 'Catégories :', en: 'Categories:', it: 'Categorie:' },
   'sector.noCatFollows': { fr: 'aucune = suit le film du magasin', en: 'none = follows the store film', it: 'nessuna = segue il film del negozio' },
   'sector.addCat': { fr: '+ catégorie…', en: '+ category…', it: '+ categoria…' },
+  'sector.filters': { fr: 'Ce secteur filtre :', en: 'This sector filters:', it: 'Questo settore filtra:' },
+  'sector.filterMoments': { fr: 'Les périodes', en: 'Sale periods', it: 'Le fasce orarie' },
+  'sector.filterCats': { fr: 'Les catégories', en: 'Categories', it: 'Le categorie' },
+  'sector.filterMomentsHelp': {
+    fr: 'Oui : le secteur ne montre que les produits vendus au moment courant (matin / midi / après-midi), selon les tags de période. Non : il diffuse toute la journée sans tenir compte des périodes.',
+    en: 'On: the sector only shows products sold at the current moment (morning / noon / afternoon), per the period tags. Off: it plays all day regardless of periods.',
+    it: 'Sì: il settore mostra solo i prodotti venduti nel momento corrente (mattina / mezzogiorno / pomeriggio), secondo i tag di fascia. No: trasmette tutto il giorno senza tenere conto delle fasce.',
+  },
+  'sector.filterCatsHelp': {
+    fr: 'Oui : seules les catégories choisies ci-dessous passent sur ce secteur. Non : tout le catalogue passe (les catégories choisies sont gardées en mémoire).',
+    en: 'On: only the categories chosen below play on this sector. Off: the whole catalogue plays (the chosen categories are kept in memory).',
+    it: 'Sì: solo le categorie scelte qui sotto passano su questo settore. No: passa tutto il catalogo (le categorie scelte restano in memoria).',
+  },
+  'sector.noFilter': { fr: 'aucun filtre = suit le film du magasin', en: 'no filter = follows the store film', it: 'nessun filtro = segue il film del negozio' },
   'sector.preview': { fr: '↗ Aperçu', en: '↗ Preview', it: '↗ Anteprima' },
   'sector.delete': { fr: 'Supprimer le secteur', en: 'Delete the sector', it: 'Elimina il settore' },
   'sector.storeFilm': { fr: '🏬 Film du magasin', en: '🏬 Store film', it: '🏬 Film del negozio' },
@@ -203,7 +217,7 @@ export const I18N = {
   'sector.added': { fr: 'Secteur d\'écrans ajouté ✓', en: 'Screen sector added ✓', it: 'Settore di schermi aggiunto ✓' },
   'sector.deleted': { fr: 'Secteur supprimé ✓', en: 'Sector deleted ✓', it: 'Settore eliminato ✓' },
   'sector.delConfirm': { fr: 'Supprimer ce secteur ? Les écrans rattachés repassent au film du magasin.', en: 'Delete this sector? Attached screens go back to the store film.', it: 'Eliminare questo settore? Gli schermi collegati tornano al film del negozio.' },
-  'sector.help': { fr: 'Un magasin peut avoir plusieurs SECTEURS d\'écrans, chacun avec SA position (portrait ou paysage), SON nombre d\'écrans et SON filtre de catégories — configuration totalement indépendante d\'un secteur à l\'autre. Un secteur avec des catégories diffuse en boucle SES catégories toute la journée. Rattache un écran à un secteur dans sa ligne ; un écran sans secteur suit le film du magasin.', en: 'A store can have several screen SECTORS, each with ITS OWN orientation (portrait or landscape), ITS OWN screen count and ITS OWN category filter — fully independent from one sector to the next. A sector with categories loops ITS categories all day. Attach a screen to a sector in its row; a screen without a sector follows the store film.', it: 'Un negozio può avere più SETTORI di schermi, ognuno con IL SUO orientamento (verticale o orizzontale), IL SUO numero di schermi e IL SUO filtro di categorie — configurazione totalmente indipendente da un settore all\'altro. Un settore con categorie riproduce in loop LE SUE categorie tutto il giorno. Collega uno schermo a un settore nella sua riga; uno schermo senza settore segue il film del negozio.' },
+  'sector.help': { fr: 'Un magasin peut avoir plusieurs SECTEURS d\'écrans, chacun avec SA position (portrait ou paysage), SON nombre d\'écrans et SES filtres — configuration totalement indépendante d\'un secteur à l\'autre. Chaque secteur dit ce qu\'il filtre : les PÉRIODES (n\'afficher que ce qui se vend au moment courant) et/ou les CATÉGORIES (n\'afficher que celles choisies). Un secteur qui ne filtre rien suit le film du magasin. Rattache un écran à un secteur dans sa ligne.', en: 'A store can have several screen SECTORS, each with ITS OWN orientation (portrait or landscape), ITS OWN screen count and ITS OWN filters — fully independent from one sector to the next. Each sector states what it filters: the PERIODS (only show what sells at the current moment) and/or the CATEGORIES (only show the chosen ones). A sector that filters nothing follows the store film. Attach a screen to a sector in its row.', it: 'Un negozio può avere più SETTORI di schermi, ognuno con IL SUO orientamento (verticale o orizzontale), IL SUO numero di schermi e I SUOI filtri — configurazione totalmente indipendente da un settore all\'altro. Ogni settore dichiara cosa filtra: le FASCE ORARIE (mostrare solo ciò che si vende nel momento corrente) e/o le CATEGORIE (mostrare solo quelle scelte). Un settore che non filtra nulla segue il film del negozio. Collega uno schermo a un settore nella sua riga.' },
 };
 
 // Étapes de l'assistant, dans l'ordre (clés vers I18N).

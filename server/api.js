@@ -114,20 +114,24 @@ function applyContinuous(snap, date) {
   snap.continuousMeta = gen.meta;
   return true;
 }
-// Groupe d'écrans à filtre de catégories : remplace le contenu du snapshot par
-// une boucle continue des catégories du groupe, TOUTE LA JOURNÉE (ni moment ni
-// saison). Renvoie true si le contenu a été remplacé (groupe avec catégories) ;
-// false si le groupe n'a pas de filtre (→ garder le film du magasin).
+// Secteur d'écrans : remplace le contenu du snapshot par sa propre boucle
+// continue. Le secteur décide EXPLICITEMENT de ce qu'il filtre — les périodes
+// de vente (matin/midi/après-midi) et/ou les catégories. Renvoie true si le
+// contenu a été remplacé ; false si le secteur ne filtre rien (→ garder le
+// film du magasin).
 function applyGroupContent(snap, group, date) {
   let cats = [];
   try { cats = JSON.parse(group.cats || '[]'); } catch { cats = []; }
-  if (!cats.length) return false;
-  const cfg = normContinuous({ source: 'tout', perMoment: false, order: 'catalogue', catsInclude: cats,
+  const useCats = group.filter_cats !== 0 && cats.length > 0;
+  const useMoments = group.filter_moments === 1;
+  if (!useCats && !useMoments) return false;
+  const cfg = normContinuous({ source: 'tout', perMoment: useMoments, order: 'catalogue',
+    catsInclude: useCats ? cats : [],
     ratios: { liaison: 0, produitSeul: 1, media: 0, animation: 0, surprise: 0 }, maxItems: 40, fallback: 'tout' });
   const gen = buildContinuous(cfg, date, { surprise: surpriseUrls() });
   snap.modules = gen.modules; snap.playlist = gen.playlist; snap.media = gen.media;
   snap.continuous = true; snap.revision = gen.revision; snap.continuousMeta = gen.meta;
-  snap.playlistName = group.name; snap.zoneCats = cats;
+  snap.playlistName = group.name; snap.zoneCats = useCats ? cats : [];
   return true;
 }
 // Finition d'un snapshot avant diffusion : prix + langue du magasin, puis

@@ -518,6 +518,62 @@ async function main() {
         await call('DELETE', `/api/v1/groups/${b.group.id}`);
       }
     });
+    await step('Secteur — filtre PÉRIODES / CATÉGORIES au choix', async () => {
+      const fleetRes = await call('GET', '/api/v1/fleet');
+      const store = fleetRes.stores[0];
+      const cat = await call('GET', '/api/v1/catalog');
+      const c0 = (cat.categories || [])[0];
+      if (!store || !c0) return 'aucun magasin ou catégorie';
+      const pmBefore = await call('GET', '/api/v1/product-moments');
+      const moment = pmBefore.current;
+      // Le catalogue de démo n'a qu'une catégorie : on en ajoute une seconde le
+      // temps du test, sinon « filtrer les catégories » ne changerait rien.
+      const cLT = { id: 'pc_cLT', name: 'Catégorie LT', img: '' };
+      const pLT = { id: 'pr_cLT', name: 'Produit LT', price: '3,50', categoryId: cLT.id, img: 'assets/cookies.png', active: true };
+      await call('PUT', '/api/v1/catalog', { categories: [...cat.categories, cLT], products: [...cat.products, pLT] });
+      const g = await call('POST', `/api/v1/stores/${store.id}/groups`, { name: 'Secteur filtre LT', screens: 1, size: 55, orient: 'paysage', cats: [c0.id] });
+      const pidsOf = async () => {
+        const f = await (await fetch(BASE + `/api/v1/film?group=${encodeURIComponent(g.group.id)}`)).json();
+        return (f.modules || []).flatMap((m) => (m.items || []).map((it) => it.productId)).filter(Boolean);
+      };
+      try {
+        // Par défaut : filtre catégories oui, périodes non (comportement d'origine).
+        if (g.group.filterCats !== true || g.group.filterMoments !== false) throw new Error('défauts du secteur inattendus : ' + JSON.stringify({ c: g.group.filterCats, m: g.group.filterMoments }));
+        const catOf = new Map([...cat.products, pLT].map((p) => [p.id, p.categoryId]));
+        const only = await pidsOf();
+        if (!only.length || only.some((pid) => catOf.get(pid) !== c0.id)) throw new Error(`le filtre catégories ne tient pas (${only.length} produit(s))`);
+        // Catégories non + périodes oui → sa propre boucle, tout le catalogue.
+        // On repart d'une table de périodes vide pour isoler l'effet mesuré.
+        await call('PUT', '/api/v1/product-moments', { rows: [] });
+        await call('POST', `/api/v1/groups/${g.group.id}`, { filterCats: false, filterMoments: true });
+        const all = await pidsOf();
+        // La boucle est bornée en nombre de slots : on compare les CATÉGORIES
+        // atteintes, pas le nombre de passages.
+        if (!all.some((pid) => catOf.get(pid) !== c0.id)) throw new Error('« catégories : non » devrait élargir hors de la catégorie choisie');
+        // Périodes : un produit exclu au moment courant disparaît…
+        const target = [...cat.products, pLT].find((p) => p.active !== false && !p.unavailable && all.includes(p.id));
+        if (!target) throw new Error('aucun produit testable pour les périodes');
+        await call('PUT', '/api/v1/product-moments', { rows: [{ productId: target.id, moment, exception: true }] });
+        const timed = await pidsOf();
+        if (timed.includes(target.id)) throw new Error(`« périodes : oui » ne filtre pas (${target.name} passe hors créneau)`);
+        // …et revient dès que le secteur ne filtre plus les périodes.
+        await call('POST', `/api/v1/groups/${g.group.id}`, { filterMoments: false, filterCats: true });
+        const back = await pidsOf();
+        if (!back.includes(target.id)) throw new Error('« périodes : non » devrait laisser passer le produit');
+        // Aucun filtre → le secteur suit le film du magasin (pas de boucle propre).
+        await call('POST', `/api/v1/groups/${g.group.id}`, { filterCats: false, filterMoments: false });
+        const none = await (await fetch(BASE + `/api/v1/film?group=${encodeURIComponent(g.group.id)}`)).json();
+        const shop = await (await fetch(BASE + `/api/v1/film?store=${encodeURIComponent(store.id)}`)).json();
+        const ids = (f) => (f.modules || []).map((m) => m.id).join('|');
+        if (ids(none) !== ids(shop)) throw new Error('sans filtre, le secteur devrait diffuser le film du magasin');
+        const nCats = new Set(all.map((pid) => catOf.get(pid))).size;
+        return `catégories oui (« ${c0.name} » seule) → non (${nCats} catégories) · périodes oui/non (${target.name} masqué puis rendu) · sans filtre = film du magasin`;
+      } finally {
+        await call('PUT', '/api/v1/product-moments', { rows: pmBefore.rows });
+        await call('PUT', '/api/v1/catalog', { categories: cat.categories, products: cat.products });
+        await call('DELETE', `/api/v1/groups/${g.group.id}`);
+      }
+    });
     await step('Promotion — sous-type dynamique + badge résolu dans le film', async () => {
       const before = await call('GET', '/api/v1/promo-types');
       const st = await call('GET', '/api/v1/state');

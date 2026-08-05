@@ -257,6 +257,14 @@ function migrate(db) {
   const plColsG = db.prepare('PRAGMA table_info(sig_players)').all().map((c) => c.name);
   if (plColsG.length && !plColsG.includes('group_id')) db.exec(`ALTER TABLE sig_players ADD COLUMN group_id TEXT NOT NULL DEFAULT ''`);
 
+  // Ce que le SECTEUR filtre, explicitement : les périodes de vente (matin /
+  // midi / après-midi) et les catégories. Historiquement, un secteur avec des
+  // catégories les filtrait et ignorait toujours les périodes → filter_cats
+  // vaut 1 et filter_moments 0 par défaut, l'existant ne bouge pas.
+  const sgCols = db.prepare('PRAGMA table_info(sig_screen_groups)').all().map((c) => c.name);
+  if (sgCols.length && !sgCols.includes('filter_moments')) db.exec(`ALTER TABLE sig_screen_groups ADD COLUMN filter_moments INTEGER NOT NULL DEFAULT 0`);
+  if (sgCols.length && !sgCols.includes('filter_cats')) db.exec(`ALTER TABLE sig_screen_groups ADD COLUMN filter_cats INTEGER NOT NULL DEFAULT 1`);
+
   // Illustration de période (importable depuis ws_season si la table l'expose,
   // ou saisie à la main) : URL/chemin de l'image affichée dans l'onglet Périodes.
   const seasonCols = db.prepare('PRAGMA table_info(sig_seasons)').all().map((c) => c.name);
@@ -1550,6 +1558,9 @@ export function loadScreenGroups(storeId) {
     id: g.id, storeId: g.store_id, name: g.name,
     screens: g.screens, size: g.screen_size, orient: g.screen_orient,
     cats: (() => { try { return JSON.parse(g.cats || '[]'); } catch { return []; } })(),
+    // Ce que ce secteur filtre : les périodes de vente, les catégories.
+    filterMoments: g.filter_moments === 1,
+    filterCats: g.filter_cats == null ? true : g.filter_cats === 1,
     format: storeFormat(g),
   }));
 }
@@ -1566,9 +1577,11 @@ export function saveScreenGroup(storeId, patch) {
   const orient = (patch.orient === 'portrait' || patch.orient === 'paysage') ? patch.orient : (cur ? cur.screen_orient : 'portrait');
   const curCats = cur ? (() => { try { return JSON.parse(cur.cats || '[]'); } catch { return []; } })() : [];
   const cats = JSON.stringify(Array.isArray(patch.cats) ? patch.cats.map(String) : curCats);
+  const fMom = patch.filterMoments != null ? (patch.filterMoments ? 1 : 0) : (cur ? (cur.filter_moments === 1 ? 1 : 0) : 0);
+  const fCat = patch.filterCats != null ? (patch.filterCats ? 1 : 0) : (cur ? (cur.filter_cats === 0 ? 0 : 1) : 1);
   const sort = cur ? cur.sort_order : (db.prepare('SELECT COUNT(*) AS n FROM sig_screen_groups WHERE store_id = ?').get(storeId).n);
-  db.prepare('INSERT OR REPLACE INTO sig_screen_groups(id, store_id, name, screens, screen_size, screen_orient, cats, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(id, storeId, name, screens, size, orient, cats, sort);
+  db.prepare('INSERT OR REPLACE INTO sig_screen_groups(id, store_id, name, screens, screen_size, screen_orient, cats, filter_moments, filter_cats, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, storeId, name, screens, size, orient, cats, fMom, fCat, sort);
   return loadScreenGroups(storeId).find((x) => x.id === id) || null;
 }
 export function deleteScreenGroup(id) {
