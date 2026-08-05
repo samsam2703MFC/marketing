@@ -30,6 +30,7 @@ export function getDb() {
   ensurePlaylists(db);
   ensureElementTypes(db);
   ensurePromoTypes(db);
+  ensureLibCategories(db);
   ensureCatalog(db);
   // Migration ponctuelle : l'ancien créneau par défaut (08:00–20:00) éteignait
   // les écrans le soir sans que ce soit un choix — passage en 24h/24.
@@ -446,6 +447,21 @@ function migrate(db) {
     active     INTEGER NOT NULL DEFAULT 1
   );
 
+  -- Catégories de la BIBLIOTHÈQUE (le classement des éléments : Produit, Fêtes,
+  -- Promo, Liaison…). Éditables dans les Paramètres, comme les sous-types de
+  -- promotion. « src » dit à quelle TABLE de la régie la catégorie est liée
+  -- (produits, catégories produit, promotions, campagnes, périodes, médias) —
+  -- c'est ce qui alimente ses éléments. Un élément pointe vers sa catégorie via
+  -- sig_modules.lib_tag.
+  CREATE TABLE IF NOT EXISTS sig_lib_categories (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL DEFAULT '',
+    color      TEXT NOT NULL DEFAULT '#8D1D2C',
+    src        TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    active     INTEGER NOT NULL DEFAULT 1
+  );
+
   -- Campagnes marketing : entités listées (nom, portée produit/gamme, visuel,
   -- accroche, période). Gérable en régie et importable depuis l'ERP ensuite.
   -- L'utilisateur n'a qu'à les DÉPOSER comme item : un élément « campagne »
@@ -726,6 +742,69 @@ export function savePromoTypes(list) {
     throw e;
   }
   return loadPromoTypes();
+}
+
+// ---------------------------------------------------------------------------
+// Catégories de la bibliothèque — le classement des éléments, éditable dans les
+// Paramètres. Chaque catégorie dit à quelle TABLE de la régie elle est liée
+// (`src`) : c'est la donnée qui alimente ses éléments.
+export const LIB_SOURCES = [
+  { id: '', name: 'Aucune table (libre)' },
+  { id: 'produits', name: 'Produits' },
+  { id: 'categories', name: 'Catégories produit' },
+  { id: 'promotions', name: 'Promotions' },
+  { id: 'campagnes', name: 'Campagnes' },
+  { id: 'saisons', name: 'Périodes / saisons' },
+  { id: 'medias', name: 'Médiathèque' },
+];
+const LIB_SRC_IDS = new Set(LIB_SOURCES.map((s) => s.id));
+
+function ensureLibCategories(db) {
+  const n = db.prepare('SELECT COUNT(*) AS n FROM sig_lib_categories').get().n;
+  if (n > 0) return;
+  const ins = db.prepare('INSERT INTO sig_lib_categories(id, name, color, src, sort_order, active) VALUES (?, ?, ?, ?, ?, 1)');
+  // Les quatre catégories historiques, avec la table qui les alimente.
+  const seed = [
+    ['produit', 'Produit', '#8D1D2C', 'produits'],
+    ['fetes', 'Fêtes', '#B8860B', 'saisons'],
+    ['promo', 'Promo', '#2E6E4E', 'promotions'],
+    ['liaison', 'Liaison', '#8A847C', ''],
+  ];
+  seed.forEach((s, i) => ins.run(s[0], s[1], s[2], s[3], i));
+}
+
+export function loadLibCategories() {
+  return getDb().prepare('SELECT * FROM sig_lib_categories ORDER BY sort_order, name').all().map((c) => ({
+    id: c.id, name: c.name, color: c.color, src: c.src, active: !!c.active,
+  }));
+}
+
+// Remplace l'ensemble des catégories de bibliothèque (édition en régie). Un
+// élément qui pointait vers une catégorie supprimée garde son identifiant :
+// il retombe sur la première catégorie à l'affichage, rien n'est perdu.
+export function saveLibCategories(list) {
+  const db = getDb();
+  const rows = (Array.isArray(list) ? list : [])
+    .map((c) => ({
+      id: String(c.id || '').trim(),
+      name: String(c.name || '').trim(),
+      color: /^#[0-9a-fA-F]{3,8}$/.test(String(c.color || '')) ? c.color : '#8D1D2C',
+      src: LIB_SRC_IDS.has(String(c.src || '')) ? String(c.src || '') : '',
+      active: c.active === false ? 0 : 1,
+    }))
+    .filter((c) => c.id && c.name);
+  if (!rows.length) return loadLibCategories(); // jamais de bibliothèque sans classement
+  db.exec('BEGIN');
+  try {
+    db.exec('DELETE FROM sig_lib_categories');
+    const ins = db.prepare('INSERT OR REPLACE INTO sig_lib_categories(id, name, color, src, sort_order, active) VALUES (?, ?, ?, ?, ?, ?)');
+    rows.forEach((c, i) => ins.run(c.id, c.name, c.color, c.src, i, c.active));
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+  return loadLibCategories();
 }
 
 // ---------------------------------------------------------------------------

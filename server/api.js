@@ -7,6 +7,7 @@ import {
   loadModules, loadPlaylist, loadPlaylists, activePlaylistId, saveDraft, storeFormat, DB_PATH,
   loadElementTypes, loadCatalog, saveCatalog, applyStorePrices, applyStoreLang, applyStoreTokens, loadLangs,
   loadPromoTypes, savePromoTypes, loadCampaigns, saveCampaigns, applyHtmlVars,
+  loadLibCategories, saveLibCategories, LIB_SOURCES,
   loadSeasons, saveSeasons, currentSeasons, currentMoment,
   loadMedia, addMediaRow, getMediaRow, delMediaRow,
   loadProductMoments, saveProductMoments, SALE_MOMENTS, currentSaleMoment,
@@ -775,6 +776,17 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       const promoTypes = savePromoTypes(body.promoTypes);
       scheduleMirror();
       return send(200, { ok: true, promoTypes, savedAt: nowIso() });
+    }
+
+    // ---- catégories de la bibliothèque (classement des éléments) -----------
+    // Éditables dans les Paramètres, avec la TABLE de la régie qui les alimente.
+    if (req.method === 'GET' && path === '/lib-categories') return send(200, { libCategories: loadLibCategories(), libSources: LIB_SOURCES });
+    if (req.method === 'PUT' && path === '/lib-categories') {
+      const body = await readBody();
+      if (!Array.isArray(body.libCategories)) return send(400, { error: 'libCategories requis' });
+      const libCategories = saveLibCategories(body.libCategories);
+      scheduleMirror();
+      return send(200, { ok: true, libCategories, libSources: LIB_SOURCES, savedAt: nowIso() });
     }
 
     // ---- campagnes marketing (liste d'entités déposables comme item) --------

@@ -39,13 +39,8 @@ const SLOTS = [
   { label: 'Toute la journée', from: '00:00', to: '23:59' },
 ];
 // Catégories de bibliothèque — chaque tag a sa couleur.
-const LIB_TAGS = [
-  { id: 'produit', label: 'Produit', color: '#8D1D2C' },
-  { id: 'fetes', label: 'Fêtes', color: '#B8860B' },
-  { id: 'promo', label: 'Promo', color: '#2E6E4E' },
-  { id: 'liaison', label: 'Liaison', color: '#8A847C' },
-];
-const tagOf = (m) => LIB_TAGS.find((t) => t.id === (m.libTag || (m.type === 'liaison' ? 'liaison' : 'produit'))) || LIB_TAGS[0];
+// Les catégories de la bibliothèque vivent en base (table sig_lib_categories,
+// éditable dans les Paramètres) : voir App.libCatList() / App.libCatOf().
 
 // Catégories de films — chaque catégorie a sa couleur (bibliothèque de films).
 const FILM_CATS = [
@@ -129,6 +124,9 @@ class App extends Component {
     elementTypes: [], addPicker: false, openSec: ['items'],
     htmlVarSel: '', filmMomentSel: '',
     promoTypes: [], promoDraft: null, promoDirty: false, promoBusy: false, promoSavedAt: 0,
+    // Catégories de la bibliothèque : éditables dans les Paramètres (nom,
+    // couleur, table de la régie qui les alimente).
+    libCats: [], libSources: [], libCatDraft: null, libCatDirty: false, libCatBusy: false,
     campaigns: [], campaignDraft: null, campaignDirty: false, campaignBusy: false, campaignSavedAt: 0,
     catalog: { categories: [], products: [] },
     catDraft: null, catDirty: false, catSel: '', catSaving: false, langs: [], catLang: 'fr',
@@ -215,6 +213,8 @@ class App extends Component {
       const pt = await api('GET', '/promo-types').catch(() => ({ promoTypes: [] }));
       // Campagnes marketing : liste d'entités à déposer comme item.
       const cmp = await api('GET', '/campaigns').catch(() => ({ campaigns: [] }));
+      // Catégories de la bibliothèque : le classement des éléments, en base.
+      const lc = await api('GET', '/lib-categories').catch(() => ({ libCategories: [], libSources: [] }));
       const pwa = await api('GET', '/pwa-config').catch(() => null);
       const plan = await api('GET', '/plan').catch(() => ({ windows: [], byStore: {} }));
       const playlists = ((Array.isArray(st.playlists) && st.playlists.length)
@@ -230,6 +230,7 @@ class App extends Component {
         langs: lg.langs || [{ id: 'fr', label: 'Français' }],
         promoTypes: pt.promoTypes || [],
         campaigns: cmp.campaigns || [],
+        libCats: lc.libCategories || [], libSources: lc.libSources || [],
         pwaForm: pwa ? {
           host: pwa.host, port: pwa.port, db: pwa.db, user: pwa.user,
           password: '', hasPassword: !!pwa.hasPassword,
@@ -1032,6 +1033,48 @@ class App extends Component {
       this.setState({ promoBusy: false, promoTypes: r.promoTypes || [], promoDraft: JSON.parse(JSON.stringify(r.promoTypes || [])), promoDirty: false, promoSavedAt: Date.now() });
       this.showToast('Promotions enregistrées ✓');
     } catch (e) { this.setState({ promoBusy: false }); this.showToast(`Erreur : ${e.message}`); }
+  }
+
+  // ---- catégories de la bibliothèque : le classement des éléments -----------
+  // Elles vivent en base (rien en dur) et disent à quelle TABLE de la régie
+  // elles sont liées : c'est la donnée qui alimente leurs éléments.
+  libCatList() {
+    const l = this.state.libCatDraft || this.state.libCats || [];
+    return l.length ? l : [{ id: 'produit', name: 'Produit', color: '#8D1D2C', src: 'produits', active: true }];
+  }
+  libCatOf(m) {
+    const l = this.libCatList();
+    const want = (m && m.libTag) || (m && m.type === 'liaison' ? 'liaison' : 'produit');
+    return l.find((c) => c.id === want) || l[0];
+  }
+  setLibCatDraft(mut) {
+    const arr = JSON.parse(JSON.stringify(this.state.libCatDraft || this.state.libCats || []));
+    mut(arr);
+    this.setState({ libCatDraft: arr, libCatDirty: true });
+  }
+  addLibCat() {
+    this.setLibCatDraft((a) => a.push({ id: 'lc' + uid(), name: 'Nouvelle catégorie', color: '#6E4A2B', src: '', active: true }));
+  }
+  updateLibCat(id, patch) { this.setLibCatDraft((a) => { const c = a.find((x) => x.id === id); if (c) Object.assign(c, patch); }); }
+  delLibCat(id) { this.setLibCatDraft((a) => { const i = a.findIndex((x) => x.id === id); if (i >= 0) a.splice(i, 1); }); }
+  moveLibCat(id, dir) {
+    this.setLibCatDraft((a) => {
+      const i = a.findIndex((x) => x.id === id); const j = i + dir;
+      if (i < 0 || j < 0 || j >= a.length) return;
+      const [row] = a.splice(i, 1); a.splice(j, 0, row);
+    });
+  }
+  async saveLibCats() {
+    if (this.state.libCatBusy) return;
+    const list = this.state.libCatDraft || [];
+    if (!list.length) { this.showToast('Garde au moins une catégorie de bibliothèque'); return; }
+    if (list.some((c) => !String(c.name || '').trim())) { this.showToast('Chaque catégorie a besoin d\'un nom'); return; }
+    this.setState({ libCatBusy: true });
+    try {
+      const r = await api('PUT', '/lib-categories', { libCategories: list });
+      this.setState({ libCatBusy: false, libCats: r.libCategories || [], libCatDraft: null, libCatDirty: false });
+      this.showToast('Catégories de bibliothèque enregistrées ✓');
+    } catch (e) { this.setState({ libCatBusy: false }); this.showToast(`Erreur : ${e.message}`); }
   }
 
   // ---- campagnes marketing : liste d'entités à déposer comme item -----------
@@ -2050,8 +2093,8 @@ class App extends Component {
       : null);
     // Chip de catégorie de bibliothèque (Produit / Fêtes / Promo / Liaison), colorée.
     const catChipOf = (mm) => {
-      const t = tagOf(mm);
-      return h('span', { style: { flex: '0 0 auto', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: t.color, background: t.color + '1A', border: `1px solid ${t.color}55`, borderRadius: 999, padding: '2px 7px' } }, t.label);
+      const t = this.libCatOf(mm);
+      return h('span', { style: { flex: '0 0 auto', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: t.color, background: t.color + '1A', border: `1px solid ${t.color}55`, borderRadius: 999, padding: '2px 7px' } }, t.name);
     };
 
     const playlist = st.playlist.map((id, i) => {
@@ -2215,15 +2258,17 @@ class App extends Component {
     // comptent que les items du format d'écran choisi.
     const libByOrient = st.library.filter((mm) => this.fitsOrient(mm, st.libOrient));
     const tagCount = {};
-    libByOrient.forEach((mm) => { const t = tagOf(mm).id; tagCount[t] = (tagCount[t] || 0) + 1; });
+    libByOrient.forEach((mm) => { const t = this.libCatOf(mm).id; tagCount[t] = (tagCount[t] || 0) + 1; });
     const libTagChips = [
       {
         id: 'all', label: 'Tous', count: libByOrient.length, color: '#232220',
         active: st.libFilter === 'all',
         pick: () => this.setState({ libFilter: 'all' }),
       },
-      ...LIB_TAGS.map((t) => ({
-        id: t.id, label: t.label, count: tagCount[t.id] || 0, color: t.color,
+      // Les catégories désactivées ne servent plus au classement, mais restent
+      // proposées tant qu'elles portent encore des éléments.
+      ...this.libCatList().filter((t) => t.active !== false || tagCount[t.id]).map((t) => ({
+        id: t.id, label: t.name, count: tagCount[t.id] || 0, color: t.color,
         active: st.libFilter === t.id,
         pick: () => this.setState({ libFilter: t.id }),
       })),
@@ -2245,19 +2290,19 @@ class App extends Component {
       pick: () => this.setState({ libOrient: o.id }),
       style: `display:inline-flex;align-items:center;gap:6px;padding:7px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;${st.libOrient === o.id ? 'background:#232220;color:#fff;border:1px solid #232220;' : 'background:#fff;color:#5B564E;border:1px solid rgba(35,34,32,0.18);'}`,
     }));
-    const libCards = st.library.filter((mm) => (st.libFilter === 'all' || tagOf(mm).id === st.libFilter) && this.fitsOrient(mm, st.libOrient)).map((mm) => ({
+    const libCards = st.library.filter((mm) => (st.libFilter === 'all' || this.libCatOf(mm).id === st.libFilter) && this.fitsOrient(mm, st.libOrient)).map((mm) => ({
       name: mm.name,
       typeIcon: (this.elementTypeOf(mm) || {}).icon || '▤',
       meta: this.modMeta(mm),
-      tagLabel: tagOf(mm).label,
-      tagColor: tagOf(mm).color,
+      tagLabel: this.libCatOf(mm).name,
+      tagColor: this.libCatOf(mm).color,
       inFilm: (inPlaylistCount[mm.id] || 0) > 0,
       onDragStart: (e) => { e.dataTransfer.setData('text/plain', 'lib:' + mm.id); e.dataTransfer.effectAllowed = 'copy'; },
       add: () => this.appendToTimeline(mm.id),
       edit: () => { this.setComposerTab('lib'); this.selectMod(mm.id); },
     }));
     const libEmptyMsg = st.library.length && !libCards.length
-      ? `Aucun élément dans la catégorie « ${(LIB_TAGS.find((t) => t.id === st.libFilter) || {}).label || st.libFilter} ».`
+      ? `Aucun élément dans la catégorie « ${(this.libCatList().find((t) => t.id === st.libFilter) || {}).name || st.libFilter} ».`
       : '';
     const pubDaysVals = DAYS.map((lab, d) => ({
       label: lab,
@@ -2780,6 +2825,24 @@ class App extends Component {
           del: () => { if (used === 0 || window.confirm(`${used} élément(s) utilisent « ${t.name} ». Supprimer quand même ce sous-type ?`)) this.delPromoType(t.id); },
         };
       }),
+      // -- catégories de la bibliothèque (classement des éléments) --
+      libCatDirty: st.libCatDirty, libCatBusy: st.libCatBusy,
+      addLibCat: () => this.addLibCat(), saveLibCats: () => this.saveLibCats(),
+      libSourceOptions: (st.libSources || []).length ? st.libSources : [{ id: '', name: 'Aucune table (libre)' }],
+      libCatRows: this.libCatList().map((c, i, arr) => {
+        const used = (st.library || []).filter((mm) => this.libCatOf(mm).id === c.id).length;
+        return {
+          id: c.id, name: c.name, color: c.color || '#8D1D2C', src: c.src || '',
+          active: c.active !== false, used, isFirst: i === 0, isLast: i === arr.length - 1,
+          onName: (e) => this.updateLibCat(c.id, { name: e.target.value }),
+          onColor: (e) => this.updateLibCat(c.id, { color: e.target.value }),
+          onSrc: (e) => this.updateLibCat(c.id, { src: e.target.value }),
+          toggleActive: () => this.updateLibCat(c.id, { active: c.active === false }),
+          up: () => this.moveLibCat(c.id, -1),
+          down: () => this.moveLibCat(c.id, 1),
+          del: () => { if (used === 0 || window.confirm(`${used} élément(s) sont classés dans « ${c.name} ». Supprimer quand même cette catégorie ?`)) this.delLibCat(c.id); },
+        };
+      }),
       // -- campagnes marketing (liste d'entités) --
       campaignDirty: st.campaignDirty, campaignBusy: st.campaignBusy,
       campaignCount: (st.campaignDraft || st.campaigns || []).length,
@@ -3124,10 +3187,10 @@ class App extends Component {
         pick: () => this.setSelField('motion', o.id),
         style: `text-align:left;padding:10px 13px;font-size:12.5px;font-weight:500;border-radius:9px;cursor:pointer;background:${(m.motion || 'm1') === o.id ? 'rgba(141,29,44,0.08)' : '#FBF8F2'};border:1px solid ${(m.motion || 'm1') === o.id ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};color:#232220;`,
       })),
-      libTagPicker: LIB_TAGS.map((t) => {
-        const on = tagOf(m).id === t.id;
+      libTagPicker: this.libCatList().filter((t) => t.active !== false || this.libCatOf(m).id === t.id).map((t) => {
+        const on = this.libCatOf(m).id === t.id;
         return {
-          label: t.label,
+          label: t.name,
           pick: () => this.setSelField('libTag', t.id),
           style: `display:inline-flex;align-items:center;gap:7px;padding:7px 13px;font-size:12px;font-weight:600;border-radius:999px;cursor:pointer;${on ? `background:${t.color};color:#fff;border:1px solid ${t.color};` : `background:#fff;color:${t.color};border:1px solid ${t.color}55;`}`,
           dotStyle: `width:7px;height:7px;border-radius:50%;background:${on ? '#fff' : t.color};`,
@@ -3621,6 +3684,40 @@ class App extends Component {
           </div>
         </div>
         <button onClick=${v.saveHd} disabled=${v.hdSaving} style="padding:11px 22px;font-size:13.5px;font-weight:600;color:#fff;background:#8D1D2C;border:none;border-radius:999px;cursor:${v.hdSaving ? 'wait' : 'pointer'};">${v.hdSaving ? 'Enregistrement…' : 'Enregistrer le stockage HD'}</button>
+      </div>
+
+      <!-- Catégories de la bibliothèque : classement des éléments + table liée -->
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;margin-top:20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Catégories de la bibliothèque</h2>
+          <div style="display:flex;align-items:center;gap:8px;">
+            ${v.libCatDirty ? html`<span style="font-size:11.5px;font-weight:600;color:#B8860B;">modifications non enregistrées</span>` : ''}
+            <button onClick=${v.addLibCat} style="padding:6px 13px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">+ Catégorie</button>
+          </div>
+        </div>
+        <p style="margin:0 0 14px;font-size:12px;color:#8A847C;line-height:1.5;">Le classement des éléments de la bibliothèque. Chaque catégorie dit à quelle <strong>table de la régie</strong> elle est liée : c'est la donnée qui alimente ses éléments. Une catégorie inactive n'est plus proposée au classement, mais les éléments qui la portent restent visibles.</p>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          ${v.libCatRows.map((c) => html`
+            <div key=${c.id} style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:9px 11px;border-radius:10px;border:1px solid ${c.active ? 'rgba(35,34,32,0.10)' : 'rgba(35,34,32,0.06)'};background:${c.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};">
+              <input key=${'lcc-' + c.id} type="color" defaultValue=${c.color} onChange=${c.onColor} title="Couleur de la catégorie" style="flex:0 0 auto;width:30px;height:30px;padding:0;border:1px solid rgba(35,34,32,0.14);border-radius:7px;background:#fff;cursor:pointer;" />
+              <input key=${'lcn-' + c.id} defaultValue=${c.name} onChange=${c.onName} placeholder="Nom de la catégorie" style="flex:1 1 150px;min-width:0;padding:7px 10px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
+              <label style="display:inline-flex;align-items:center;gap:6px;flex:1 1 210px;min-width:0;">
+                <span style="font-size:10.5px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#8A847C;white-space:nowrap;">Table liée</span>
+                <select value=${c.src} onChange=${c.onSrc} title="Table de la régie qui alimente cette catégorie" style="flex:1 1 auto;min-width:0;padding:6px 8px;font-size:12px;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;cursor:pointer;">
+                  ${v.libSourceOptions.map((s) => html`<option value=${s.id}>${s.name}</option>`)}
+                </select>
+              </label>
+              <span style="flex:0 0 auto;font-size:11.5px;color:#8A847C;">${c.used} élément(s)</span>
+              <button onClick=${c.toggleActive} title=${c.active ? 'Rendre inactive' : 'Réactiver'} style="flex:0 0 auto;padding:5px 11px;font-size:11.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${c.active ? '#2E6E4E' : 'rgba(35,34,32,0.18)'};background:${c.active ? 'rgba(46,110,78,0.10)' : '#fff'};color:${c.active ? '#2E6E4E' : '#8A847C'};">${c.active ? '✓ Active' : 'Inactive'}</button>
+              <span style="flex:0 0 auto;display:inline-flex;gap:3px;">
+                <button onClick=${c.up} disabled=${c.isFirst} title="Monter" style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:${c.isFirst ? 'default' : 'pointer'};opacity:${c.isFirst ? 0.35 : 1};">↑</button>
+                <button onClick=${c.down} disabled=${c.isLast} title="Descendre" style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:${c.isLast ? 'default' : 'pointer'};opacity:${c.isLast ? 0.35 : 1};">↓</button>
+                <button onClick=${c.del} title="Supprimer" style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;color:#8D1D2C;cursor:pointer;">✕</button>
+              </span>
+            </div>
+          `)}
+        </div>
+        <button onClick=${v.saveLibCats} disabled=${v.libCatBusy || !v.libCatDirty} style="margin-top:16px;padding:11px 22px;font-size:13.5px;font-weight:600;color:#fff;background:${v.libCatDirty ? '#8D1D2C' : 'rgba(141,29,44,0.35)'};border:none;border-radius:999px;cursor:${v.libCatBusy ? 'wait' : (v.libCatDirty ? 'pointer' : 'default')};">${v.libCatBusy ? 'Enregistrement…' : 'Enregistrer les catégories'}</button>
       </div>
 
       <!-- Espace Vidéo — Agence -->

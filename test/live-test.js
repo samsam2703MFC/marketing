@@ -518,6 +518,31 @@ async function main() {
         await call('DELETE', `/api/v1/groups/${b.group.id}`);
       }
     });
+    await step('Catégories de bibliothèque — éditables + table liée', async () => {
+      const before = await call('GET', '/api/v1/lib-categories');
+      if (!Array.isArray(before.libCategories) || !before.libCategories.length) throw new Error('aucune catégorie de bibliothèque');
+      if (!Array.isArray(before.libSources) || !before.libSources.some((s) => s.id === 'produits')) throw new Error('tables liées non exposées');
+      const seeded = before.libCategories.find((c) => c.id === 'produit');
+      if (!seeded || seeded.src !== 'produits') throw new Error('la catégorie « produit » devrait être liée à la table produits');
+      try {
+        const extra = { id: 'lcLTTEST', name: 'Catégorie LT', color: '#123456', src: 'campagnes', active: true };
+        const saved = await call('PUT', '/api/v1/lib-categories', { libCategories: [...before.libCategories, extra] });
+        const back = (saved.libCategories || []).find((c) => c.id === extra.id);
+        if (!back || back.name !== extra.name || back.color !== extra.color || back.src !== 'campagnes') {
+          throw new Error('aller-retour de la catégorie incorrect : ' + JSON.stringify(back));
+        }
+        // Une table inconnue retombe sur « aucune » plutôt que d'être écrite telle quelle.
+        const fake = await call('PUT', '/api/v1/lib-categories', { libCategories: [{ ...extra, src: 'table-qui-nexiste-pas' }] });
+        const f = (fake.libCategories || []).find((c) => c.id === extra.id);
+        if (!f || f.src !== '') throw new Error('table inconnue acceptée : ' + JSON.stringify(f));
+        // Liste vide refusée : la bibliothèque garde toujours un classement.
+        const empty = await call('PUT', '/api/v1/lib-categories', { libCategories: [] });
+        if (!(empty.libCategories || []).length) throw new Error('une liste vide a effacé le classement');
+        return `${before.libCategories.length} catégorie(s) · ${before.libSources.length} tables liables · aller-retour + garde-fous OK`;
+      } finally {
+        await call('PUT', '/api/v1/lib-categories', { libCategories: before.libCategories });
+      }
+    });
     await step('Secteur — filtre PÉRIODES / CATÉGORIES au choix', async () => {
       const fleetRes = await call('GET', '/api/v1/fleet');
       const store = fleetRes.stores[0];
