@@ -50,6 +50,7 @@ $pdo = Database::connection();
 // --- Jeu de données -------------------------------------------------------
 $pdo->exec('DELETE FROM mar_crm_lead_event');
 $pdo->exec('DELETE FROM mar_crm_lead');
+$pdo->exec('DELETE FROM mar_campaign_kpi_snapshot');
 $pdo->exec('DELETE FROM mar_fund_movement');
 $pdo->exec('DELETE FROM mar_campaign_shop');
 $pdo->exec('DELETE FROM mar_campaign');
@@ -68,6 +69,11 @@ $pdo->exec("INSERT INTO mar_campaign (id, brand_id, type_id, name, scope, status
     (10, 1, 1, 'Barbecue été', 'RESEAU', 'live', '2026-07-01', '2026-08-31', 12000),
     (11, 1, 7, 'Portes ouvertes Uccle', 'LOCALE', 'planned', '2026-09-01', '2026-09-15', 2500)");
 $pdo->exec('INSERT INTO mar_campaign_shop (campaign_id, shop_id) VALUES (11, 2)');
+
+$pdo->exec("INSERT INTO mar_campaign_kpi_snapshot (campaign_id, shop_id, kpi_code, kpi_label, value, target_value, measured_at)
+    VALUES
+    (10, NULL, 'tickets_jour', 'Tickets / jour réseau', 412, 380, '2026-07-28 08:00:00'),
+    (10, 1,    'tickets_jour', 'Tickets / jour',         96,  80, '2026-07-28 08:00:00')");
 
 $pdo->exec("INSERT INTO mar_crm_lead (id, campaign_id, sector_id, shop_id, company_name, status_code) VALUES
     (100, 10, 1, 1, 'Office Dupont', 'todo'),
@@ -117,6 +123,13 @@ check('les deux leads remontent', count($leads['leads']) === 2);
 check('l\'entonnoir garde ses 5 états', count($leads['funnel']) === 5);
 check('l\'entonnoir compte les leads à appeler', ($leads['funnel'][0]['leads_count'] ?? null) === 2);
 check('les initiales sont calculées', ($leads['leads'][0]['initials'] ?? '') === 'CL');
+
+$response = call($router, 'GET', '/api/v1/marketing/campaigns/10/monitor');
+$kpi      = $response['body']['kpis'][0] ?? [];
+// PDO renvoie les DECIMAL en chaîne. La colonne s'appelant simplement `value`,
+// elle échappait aux règles de suffixe et remontait « 412.00 » jusqu'à l'écran.
+check('les valeurs de KPI sont numériques', is_float($kpi['value'] ?? null), gettype($kpi['value'] ?? null));
+check('les cibles de KPI sont numériques', is_float($kpi['target_value'] ?? null));
 
 // --- Vue Franchisé --------------------------------------------------------
 echo "\nVue Franchisé (FRANCHISEE, boutique 1 uniquement)\n";

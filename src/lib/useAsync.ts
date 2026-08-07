@@ -56,3 +56,41 @@ export function formatDate(iso: string | null): string {
 
   return `${day}/${month}/${year}`
 }
+
+/**
+ * Nombre lisible.
+ *
+ * PDO renvoie les colonnes DECIMAL en chaîne et l'API les convertit en nombres :
+ * un compte de tickets arrive donc à `412` mais un panier à `4.55`. Afficher la
+ * valeur brute donnait « 412.00 » et « 1284.00 ». On garde les décimales
+ * seulement quand elles portent de l'information.
+ */
+export function formatNumber(value: number | null): string {
+  if (value === null || Number.isNaN(value)) return '—'
+
+  return value.toLocaleString('fr-FR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: Number.isInteger(value) ? 0 : 2,
+  })
+}
+
+const MONTH_NAMES = [
+  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+]
+
+/**
+ * Clé de période du grand livre en libellé lisible.
+ * Le serveur renvoie `2026-07-01` (mois), `2026-T3` (trimestre) ou `2026`.
+ */
+export function formatPeriod(key: string): string {
+  if (/^\d{4}$/.test(key)) return key
+
+  const quarter = key.match(/^(\d{4})-T(\d)$/)
+  if (quarter) return `${quarter[2]}ᵉ trimestre ${quarter[1]}`
+
+  const month = key.match(/^(\d{4})-(\d{2})/)
+  if (month) return `${MONTH_NAMES[Number(month[2]) - 1]} ${month[1]}`
+
+  return key
+}

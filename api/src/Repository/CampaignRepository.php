@@ -377,12 +377,22 @@ final class CampaignRepository
      */
     private function castRow(array $row): array
     {
+        // Colonnes numériques dont le nom ne porte aucun suffixe exploitable.
+        // `mar_campaign_kpi_snapshot.value` en fait partie : sans elle, un KPI
+        // repartait en chaîne « 1284.00 » et s'affichait tel quel.
+        static $numericColumns = ['value', 'amount', 'quantity', 'rate_pct'];
+
         foreach ($row as $key => $value) {
             if ($value === null || !is_string($value)) {
                 continue;
             }
 
-            if (str_ends_with($key, '_amount') || str_ends_with($key, '_pct') || str_ends_with($key, '_value')) {
+            if (
+                in_array($key, $numericColumns, true)
+                || str_ends_with($key, '_amount')
+                || str_ends_with($key, '_pct')
+                || str_ends_with($key, '_value')
+            ) {
                 $row[$key] = (float) $value;
             } elseif (str_ends_with($key, '_id') || str_ends_with($key, '_count') || $key === 'id') {
                 $row[$key] = (int) $value;

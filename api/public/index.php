@@ -30,9 +30,12 @@ $router = new Router();
  * fichier laisserait n'importe qui se déclarer BRAND_ADMIN.
  */
 if (getenv('MAR_DEV_AUTH') === '1') {
-    $userId = (int) ($_SERVER['HTTP_X_DEV_USER_ID'] ?? 0);
-    $role   = (string) ($_SERVER['HTTP_X_DEV_ROLE'] ?? 'BRAND_ADMIN');
-    $shops  = array_filter(explode(',', (string) ($_SERVER['HTTP_X_DEV_SHOPS'] ?? '')));
+    // Les en-têtes priment, ce qui permet de simuler plusieurs rôles depuis
+    // curl ; à défaut, MAR_DEV_USER_ID sert d'identité par défaut pour ouvrir
+    // l'interface dans un navigateur sans monter tout le flux d'authentification.
+    $userId = (int) ($_SERVER['HTTP_X_DEV_USER_ID'] ?? getenv('MAR_DEV_USER_ID') ?: 0);
+    $role   = (string) ($_SERVER['HTTP_X_DEV_ROLE'] ?? getenv('MAR_DEV_ROLE') ?: 'BRAND_ADMIN');
+    $shops  = array_filter(explode(',', (string) ($_SERVER['HTTP_X_DEV_SHOPS'] ?? getenv('MAR_DEV_SHOPS') ?: '')));
 
     if ($userId > 0) {
         AuthContext::set($userId, $role, null, array_map('intval', $shops));
