@@ -28,6 +28,35 @@ $dryRun = in_array('--dry-run', $argv, true);
 $root   = dirname(__DIR__);
 $pdo    = Database::fromEnv();
 
+/**
+ * Garde-fou de version.
+ *
+ * Le schéma a besoin du type JSON (`mar_crm_segment.rule_json`) et de
+ * `DATETIME DEFAULT CURRENT_TIMESTAMP`, apparus respectivement en MySQL 5.7 et
+ * 5.6.5. Sur un serveur plus ancien, les migrations échoueraient à mi-parcours
+ * en laissant une base à moitié créée : mieux vaut refuser de commencer.
+ */
+$version = (string) $pdo->query('SELECT VERSION()')->fetchColumn();
+$isMaria = stripos($version, 'mariadb') !== false;
+preg_match('/^(\d+)\.(\d+)/', $version, $m);
+$major = (int) ($m[1] ?? 0);
+$minor = (int) ($m[2] ?? 0);
+
+$supported = $isMaria
+    ? ($major > 10 || ($major === 10 && $minor >= 2))
+    : ($major > 5 || ($major === 5 && $minor >= 7));
+
+printf("Serveur : %s\n", $version);
+
+if (!$supported) {
+    fprintf(
+        STDERR,
+        "Version trop ancienne. Requis : MySQL 5.7+ ou MariaDB 10.2+ (type JSON).\n"
+        . "Aucune migration n'a été appliquée.\n"
+    );
+    exit(2);
+}
+
 $pdo->exec(
     'CREATE TABLE IF NOT EXISTS mar_schema_migration (
         id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

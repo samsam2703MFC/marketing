@@ -33,6 +33,17 @@ Le job s'arrête net si l'un des quatre premiers manque, plutôt que d'échouer 
 
 La clé de déploiement doit être **dédiée à ce dépôt** et restreinte au chemin de déploiement. Ne collez jamais une clé ou un mot de passe dans une conversation ou un fichier du dépôt — seuls les secrets GitHub sont un endroit correct.
 
+### Variables (pas des secrets)
+
+Dans **Settings → Secrets and variables → Actions → Variables**. Ces chemins n'ont rien de sensible, et les mettre en secrets les rendrait illisibles dans les logs pour rien.
+
+| Variable | Valeur si l'application est servie sous `/marketing` |
+|---|---|
+| `VITE_BASE` | `/marketing/` — préfixe des URL d'assets. Laissée vide, le JS et le CSS répondent 404 dès que la page ne vit pas à la racine du domaine. |
+| `VITE_API_BASE` | `/marketing` — préfixe des appels à l'API. Vide, ils partent à la racine du domaine et tombent à côté. |
+
+Les deux sont vides par défaut, ce qui vise la racine — correct pour un déploiement qui n'est pas en sous-répertoire.
+
 ### Connexion à la base côté serveur
 
 `db/migrate.php` lit sa connexion dans l'environnement du serveur : `MAR_DB_HOST`/`MAR_DB_PORT` (ou `MAR_DB_SOCKET`), puis `MAR_DB_NAME`, `MAR_DB_USER`, `MAR_DB_PASSWORD`. Ces valeurs vivent côté serveur, pas dans les secrets GitHub — la CI n'a jamais besoin des identifiants de base.

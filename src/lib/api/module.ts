@@ -14,11 +14,20 @@ import type {
  * d'origine, catalogue produit, statistiques de vente).
  */
 
-const BASE = '/api/v1/marketing'
+/**
+ * Préfixe des appels au module.
+ *
+ * L'application peut être servie sous un sous-répertoire (`/marketing`) : sans
+ * ce préfixe, les appels partiraient à la racine du domaine et tomberaient à
+ * côté. Vide en développement, où le proxy Vite sert `/api`.
+ */
+const API_ROOT = (import.meta.env.VITE_API_BASE ?? '').replace(/\/+$/, '')
+
+const BASE = `${API_ROOT}/api/v1/marketing`
 
 /**
  * Le module est servi par l'application elle-même, pas derrière le proxy `/erp`
- * de l'ERP : on force donc une racine vide pour que `/api/...` parte à l'origine.
+ * de l'ERP : on force donc une racine vide pour que le chemin parte de l'origine.
  */
 function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   return httpRequest<T>(path, { ...options, baseUrl: '' })

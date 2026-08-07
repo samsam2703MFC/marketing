@@ -86,6 +86,12 @@ jobs:
         run: npm ci
 
       - name: Typecheck et build
+        # Variables de dépôt (Settings → Variables), pas des secrets : ces
+        # chemins n'ont rien de sensible. Vides, le build vise la racine du
+        # domaine — correct pour un déploiement qui n'est pas en sous-répertoire.
+        env:
+          VITE_BASE: ${{ vars.VITE_BASE }}
+          VITE_API_BASE: ${{ vars.VITE_API_BASE }}
         run: npm run build
 
       - name: Archiver le build

@@ -13,6 +13,8 @@ MAR_DB_HOST=127.0.0.1 MAR_DB_NAME=marketing MAR_DB_USER=… MAR_DB_PASSWORD=… 
 
 L'ordre des fichiers est contraint par les clés étrangères — 010 (les vues) en dernier.
 
+Le script commence par afficher la version du serveur et refuse de démarrer en dessous de **MySQL 5.7** ou **MariaDB 10.2** : le schéma a besoin du type `JSON` (`mar_crm_segment.rule_json`). Sans ce contrôle, les migrations échoueraient à mi-parcours en laissant une base à moitié créée.
+
 ### Encodage
 
 Chaque fichier commence par `SET NAMES utf8mb4;`, et ce n'est pas décoratif : **le client `mysql` en ligne de commande est souvent configuré avec `character_set_client = latin1`**. Sans cette ligne, les accents de ce module sont double-encodés au chargement — « Planifiée » se stocke en `Planifi\xC3\x83\xC2\xA9e` au lieu de `Planifi\xC3\xA9e`, et ressort en « PlanifiÃ©e » dans l'API. Le schéma paraît correct, seuls les libellés sont corrompus, ce qui rend le défaut facile à manquer.
