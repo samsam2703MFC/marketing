@@ -126,6 +126,7 @@ jobs:
       SSH_USER: ${{ secrets.SSH_USER || secrets.DEPLOY_USER }}
       SSH_PASSWORD: ${{ secrets.SSH_PASSWORD || secrets.DEPLOY_PASSWORD }}
       SSH_KEY: ${{ secrets.SSH_KEY || secrets.DEPLOY_SSH_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS || secrets.DEPLOY_KNOWN_HOSTS }}
       SSH_PORT: ${{ vars.SSH_PORT || '22' }}
       CONFIG_DIR: ${{ vars.CONFIG_DIR || '/var/www/private/marketing' }}
       MAR_DB_NAME: ${{ secrets.MAR_DB_NAME }}
@@ -156,6 +157,7 @@ jobs:
             printf '| `SSH_HOST` (ou `DEPLOY_HOST`) | %s |\n'         "$([ -n "$SSH_HOST" ] && echo 'présent' || echo '**absent**')"
             printf '| `SSH_USER` (ou `DEPLOY_USER`) | %s |\n'         "$([ -n "$SSH_USER" ] && echo 'présent' || echo '**absent**')"
             printf '| `SSH_PASSWORD` / `SSH_KEY` | %s |\n'            "$([ -n "$SSH_PASSWORD" ] || [ -n "$SSH_KEY" ] && echo 'présent' || echo '**absent**')"
+            printf '| `SSH_KNOWN_HOSTS` | %s |\n'                      "$([ -n "$SSH_KNOWN_HOSTS" ] && echo 'présent — empreinte vérifiée' || echo 'absent — vérification désactivée')"
             printf '| `DEPLOY_DIR` | `%s` |\n'                        "$DEPLOY_DIR"
             printf '| `CONFIG_DIR` | `%s` |\n'                        "$CONFIG_DIR"
             printf '| `MAR_DB_NAME` | %s |\n'                         "$([ -n "$MAR_DB_NAME" ] && echo 'présent — le .env sera écrit' || echo 'absent — .env laissé en place')"
@@ -187,15 +189,28 @@ jobs:
       - name: Préparer l'accès SSH
         if: steps.check.outputs.configured == 'true'
         run: |
+          install -m 700 -d ~/.ssh
+
+          # L'empreinte de l'hôte, quand elle est fournie, évite d'accepter
+          # aveuglément n'importe quel serveur répondant à cette adresse.
+          if [ -n "$SSH_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+            chmod 600 ~/.ssh/known_hosts
+            HOST_OPTS="-o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
+            echo "Empreinte d'hôte fournie : vérification activée."
+          else
+            HOST_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+            echo "Pas d'empreinte d'hôte : vérification désactivée (ajoutez SSH_KNOWN_HOSTS)."
+          fi
+
           if [ -n "$SSH_KEY" ]; then
-            install -m 700 -d ~/.ssh
             printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
             chmod 600 ~/.ssh/id_deploy
-            echo "SSH_OPTS=-p $SSH_PORT -i $HOME/.ssh/id_deploy -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" >> "$GITHUB_ENV"
+            echo "SSH_OPTS=-p $SSH_PORT -i $HOME/.ssh/id_deploy $HOST_OPTS" >> "$GITHUB_ENV"
             echo "SSH_CMD=ssh" >> "$GITHUB_ENV"
           else
             sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
-            echo "SSH_OPTS=-p $SSH_PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" >> "$GITHUB_ENV"
+            echo "SSH_OPTS=-p $SSH_PORT $HOST_OPTS" >> "$GITHUB_ENV"
             echo "SSH_CMD=sshpass -e ssh" >> "$GITHUB_ENV"
           fi
 
