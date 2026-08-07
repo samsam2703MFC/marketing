@@ -1,0 +1,3 @@
+# Les fichiers de migration décrivent le schéma complet : rien ici ne doit être
+# servi par le web.
+Require all denied

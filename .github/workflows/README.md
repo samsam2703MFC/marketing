@@ -11,7 +11,7 @@ Tourne sur chaque push et chaque pull request, sans aucun secret :
 
 ## Job `deploy`
 
-Ne part que sur un push vers `main`, après le job `test`, et passe par l'environnement GitHub `production` — vous pouvez y exiger une approbation manuelle.
+Ne part que sur un push vers `main` (ou un `Run workflow` manuel), après le job `test`.
 
 Ordre voulu : API et migrations d'abord, front en dernier. Si une migration échoue, les utilisateurs restent sur la version précédente au lieu de tomber sur une interface dont le schéma manque.
 
@@ -49,9 +49,9 @@ Les deux sont vides par défaut, ce qui vise la racine — correct pour un dépl
 
 Les identifiants sont évidemment nécessaires — pour créer les tables comme pour écrire dedans. Ils ne passent simplement pas par GitHub : `db/migrate.php` s'exécute **sur le serveur**, appelé par SSH, et l'API y tourne en permanence.
 
-Ils vivent dans un fichier **`.env` à la racine du déploiement** (`$DEPLOY_PATH/.env`). Deux façons de l'obtenir, au choix :
+Ils vivent dans un fichier **`.env` placé un cran au-dessus de `DEPLOY_DIR`**, donc hors de la racine web. C'est délibéré : `DEPLOY_DIR` est servi par le serveur web, et un `.env` posé dedans serait téléchargeable — identifiants MySQL compris. Deux façons de l'obtenir, au choix :
 
-**A — par GitHub (automatique).** Ajoutez ces secrets à l'environnement `production` ; le déploiement (ré)écrit le fichier à chaque passage, en `chmod 600` :
+**A — par GitHub (automatique).** Ajoutez ces secrets ; le déploiement (ré)écrit le fichier à chaque passage, en `chmod 600` :
 
 | Secret | Défaut si absent |
 |---|---|
@@ -76,7 +76,7 @@ En mode A, le fichier est composé dans le runner puis transféré — jamais as
 
 Un fichier plutôt que des variables exportées dans un profil de shell, parce qu'aucun des deux consommateurs ne les verrait : `ssh user@host "php db/migrate.php"` ouvre une session **non interactive**, qui ne charge pas `~/.bashrc`, et l'API tourne sous PHP-FPM, dont l'environnement vient de la configuration du pool. Les variables réellement présentes dans l'environnement restent prioritaires sur le fichier.
 
-Le fichier se place au-dessus de la racine web (`api/public`), donc il n'est pas servi. Le déploiement ne le touche jamais : `rsync` ne pousse que `api/` et `db/`.
+L'API cherche le fichier dans cet ordre, premier lisible gagnant : `MAR_ENV_FILE`, puis le parent de `DEPLOY_DIR`, puis `DEPLOY_DIR` lui-même. La troisième position n'est tolérée que pour ne pas casser une installation existante ; `api/.htaccess` et `db/.htaccess` y refusent les fichiers commençant par un point, ainsi que le code PHP et les migrations. Ces règles supposent `AllowOverride` actif — si ce n'est pas le cas sur ce vhost, la seule protection réelle est l'emplacement du fichier.
 
 ## À adapter
 

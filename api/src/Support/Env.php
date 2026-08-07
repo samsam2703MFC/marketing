@@ -25,7 +25,21 @@ final class Env
 {
     private static bool $loaded = false;
 
-    /** Charge le fichier une seule fois. Son absence n'est pas une erreur. */
+    /**
+     * Charge le fichier une seule fois. Son absence n'est pas une erreur.
+     *
+     * Ordre de recherche, le premier lisible gagne :
+     *   1. `MAR_ENV_FILE` — chemin explicite ;
+     *   2. le répertoire **parent** du déploiement ;
+     *   3. la racine du déploiement.
+     *
+     * Le parent passe avant : la racine du déploiement est servie par le serveur
+     * web, donc un `.env` posé dedans est téléchargeable — identifiants MySQL
+     * compris. Le placer un cran au-dessus le met hors de portée. La troisième
+     * option reste tolérée pour ne pas casser une installation existante, mais
+     * le déploiement y écrit aussi un `.htaccess` qui refuse les fichiers
+     * commençant par un point.
+     */
     public static function load(?string $path = null): void
     {
         if (self::$loaded) {
@@ -33,9 +47,24 @@ final class Env
         }
 
         self::$loaded = true;
-        $path ??= dirname(__DIR__, 3) . '/.env';
 
-        if (!is_readable($path)) {
+        if ($path === null) {
+            $root       = dirname(__DIR__, 3);
+            $candidates = array_filter([
+                getenv('MAR_ENV_FILE') ?: null,
+                dirname($root) . '/.env',
+                $root . '/.env',
+            ]);
+
+            foreach ($candidates as $candidate) {
+                if (is_readable($candidate)) {
+                    $path = $candidate;
+                    break;
+                }
+            }
+        }
+
+        if ($path === null || !is_readable($path)) {
             return;
         }
 

@@ -1,0 +1,15 @@
+# Le module est déployé sous la racine web : sans cette règle, un fichier de
+# configuration posé à côté du code serait téléchargeable, identifiants MySQL
+# compris. On refuse les fichiers commençant par un point, et le code PHP lui-même
+# — seul api/public/index.php doit être atteignable.
+<FilesMatch "^\.">
+  Require all denied
+</FilesMatch>
+
+<FilesMatch "\.(php|sql|md)$">
+  Require all denied
+</FilesMatch>
+
+<FilesMatch "^index\.php$">
+  Require all granted
+</FilesMatch>

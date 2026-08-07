@@ -118,6 +118,7 @@ jobs:
       SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
       SSH_KEY: ${{ secrets.SSH_KEY }}
       SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+      MAR_DB_NAME: ${{ secrets.MAR_DB_NAME }}
       DEPLOY_DIR: ${{ vars.DEPLOY_DIR || '/var/www/html/webshop/marketing' }}
 
     steps:
@@ -192,6 +193,36 @@ jobs:
           if [ -n "$SSH_KEY" ]; then PRE=""; else PRE="sshpass -e"; fi
           $PRE $RSYNC --exclude 'tests' -e "ssh $SSH_OPTS" api/ "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/api/"
           $PRE $RSYNC -e "ssh $SSH_OPTS" db/ "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/db/"
+
+      # Optionnel : si les secrets de base sont renseignés, le .env est (ré)écrit
+      # à chaque déploiement, **au-dessus** de la racine du déploiement — celle-ci
+      # est servie par le serveur web, un .env posé dedans serait téléchargeable.
+      - name: Écrire la configuration base sur le serveur
+        if: steps.check.outputs.configured == 'true' && env.MAR_DB_NAME != ''
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
+          MAR_DB_HOST: ${{ secrets.MAR_DB_HOST }}
+          MAR_DB_PORT: ${{ secrets.MAR_DB_PORT }}
+          MAR_DB_NAME: ${{ secrets.MAR_DB_NAME }}
+          MAR_DB_USER: ${{ secrets.MAR_DB_USER }}
+          MAR_DB_PASSWORD: ${{ secrets.MAR_DB_PASSWORD }}
+        run: |
+          umask 077
+          # Valeurs entre guillemets et échappées : sans cela, un mot de passe
+          # bordé d'espaces ou déjà entouré de guillemets serait tronqué à la
+          # relecture, et l'authentification échouerait sans indice.
+          esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/\"/\\\"/g'; }
+          {
+            printf 'MAR_DB_HOST="%s"\n'     "$(esc "${MAR_DB_HOST:-127.0.0.1}")"
+            printf 'MAR_DB_PORT="%s"\n'     "$(esc "${MAR_DB_PORT:-3306}")"
+            printf 'MAR_DB_NAME="%s"\n'     "$(esc "$MAR_DB_NAME")"
+            printf 'MAR_DB_USER="%s"\n'     "$(esc "$MAR_DB_USER")"
+            printf 'MAR_DB_PASSWORD="%s"\n' "$(esc "$MAR_DB_PASSWORD")"
+          } > .env.deploy
+          if [ -n "$SSH_KEY" ]; then PRE=""; else PRE="sshpass -e"; fi
+          $PRE rsync -a --chmod=600 -e "ssh $SSH_OPTS" \
+            .env.deploy "$SSH_USER@$SSH_HOST:$(dirname "$DEPLOY_DIR")/.env"
+          rm -f .env.deploy
 
       - name: Appliquer les migrations
         if: steps.check.outputs.configured == 'true'
