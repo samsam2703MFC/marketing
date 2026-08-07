@@ -15,7 +15,11 @@ declare(strict_types=1);
  * vue modifiée soit réellement mise à jour.
  *
  * Usage :
- *   php db/migrate.php [--dry-run]
+ *   php db/migrate.php [--dry-run] [--baseline]
+ *
+ * `--baseline` enregistre tous les fichiers comme appliqués sans les exécuter.
+ * Sert au cas d'une base créée avant l'existence du registre : sans lui, le
+ * runner tenterait de recréer des tables déjà présentes.
  *
  * Connexion : MAR_DB_HOST/PORT ou MAR_DB_SOCKET, puis MAR_DB_NAME/USER/PASSWORD.
  */
@@ -24,9 +28,10 @@ require __DIR__ . '/../api/src/autoload.php';
 
 use Marketing\Support\Database;
 
-$dryRun = in_array('--dry-run', $argv, true);
-$root   = dirname(__DIR__);
-$pdo    = Database::fromEnv();
+$dryRun   = in_array('--dry-run', $argv, true);
+$baseline = in_array('--baseline', $argv, true);
+$root     = dirname(__DIR__);
+$pdo      = Database::fromEnv();
 
 /**
  * Garde-fou de version.
@@ -102,14 +107,37 @@ foreach ($files as $path) {
         continue;
     }
 
-    printf("  → %s%s\n", $name, $dryRun ? ' (simulation)' : '');
+    printf(
+        "  → %s%s\n",
+        $name,
+        $dryRun ? ' (simulation)' : ($baseline ? ' (enregistré sans exécution)' : '')
+    );
 
     if ($dryRun) {
         $appliedNow++;
         continue;
     }
 
-    $pdo->exec((string) $sql);
+    if (!$baseline) {
+        try {
+            $pdo->exec((string) $sql);
+        } catch (PDOException $e) {
+            // Une trace PHP brute n'aide personne au milieu d'un déploiement.
+            fprintf(STDERR, "\nÉchec sur %s :\n  %s\n", $name, $e->getMessage());
+
+            if ($e->getCode() === '42S01') {
+                fprintf(
+                    STDERR,
+                    "\nLes tables existent déjà mais le registre est vide — base créée avant\n"
+                    . "l'existence de mar_schema_migration. Rejouez avec --baseline pour les\n"
+                    . "enregistrer sans les réexécuter.\n"
+                );
+            }
+
+            fprintf(STDERR, "\nLes fichiers suivants n'ont pas été appliqués.\n");
+            exit(3);
+        }
+    }
 
     $statement = $pdo->prepare(
         'INSERT INTO mar_schema_migration (filename, checksum) VALUES (:filename, :checksum)

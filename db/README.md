@@ -5,9 +5,14 @@ Schéma issu de `DATA_MODEL.md` du handoff de design. **Toutes les tables porten
 ## Exécution
 
 ```bash
-MAR_DB_HOST=127.0.0.1 MAR_DB_NAME=marketing MAR_DB_USER=… MAR_DB_PASSWORD=… \
-  php db/migrate.php
+php db/migrate.php              # applique ce qui manque
+php db/migrate.php --dry-run    # liste sans rien écrire
+php db/migrate.php --baseline   # enregistre sans exécuter (base préexistante)
 ```
+
+La connexion vient du fichier `.env` à la racine du déploiement (voir `.env.example`), ou de l'environnement du processus s'il est déjà renseigné — ce dernier reste prioritaire. Le fichier est nécessaire parce qu'une session SSH non interactive ne charge pas les profils de shell, et que PHP-FPM tient son environnement de la configuration du pool.
+
+`--baseline` sert au cas d'une base créée avant l'existence du registre : sans lui, le runner tenterait de recréer des tables déjà présentes. Il le détecte d'ailleurs et le dit, plutôt que de laisser remonter une trace PHP.
 
 `db/migrate.php` tient un registre — `mar_schema_migration` — et n'applique que les fichiers absents. Rejouer les `.sql` à la main fonctionne au premier chargement mais échoue au second, les `CREATE TABLE` se heurtant aux tables existantes. Les fichiers de vues font exception : écrits en `CREATE OR REPLACE`, ils sont rejoués à chaque passage pour qu'une vue modifiée soit réellement mise à jour.
 

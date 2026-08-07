@@ -41,9 +41,17 @@ final class Database
      */
     public static function fromEnv(): PDO
     {
+        // Le fichier `.env` de la racine du déploiement complète l'environnement :
+        // ni la session SSH non interactive ni le pool PHP-FPM ne voient les
+        // variables exportées dans un profil de shell.
+        Env::load();
+
         $database = getenv('MAR_DB_NAME') ?: '';
         if ($database === '') {
-            throw new RuntimeException('MAR_DB_NAME est requis pour ouvrir la connexion.');
+            throw new RuntimeException(
+                'MAR_DB_NAME est requis. Renseignez le fichier .env à la racine du déploiement '
+                . '(voir .env.example) ou l\'environnement du processus.'
+            );
         }
 
         $socket = getenv('MAR_DB_SOCKET') ?: '';

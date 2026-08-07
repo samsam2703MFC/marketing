@@ -46,7 +46,20 @@ Les deux sont vides par défaut, ce qui vise la racine — correct pour un dépl
 
 ### Connexion à la base côté serveur
 
-`db/migrate.php` lit sa connexion dans l'environnement du serveur : `MAR_DB_HOST`/`MAR_DB_PORT` (ou `MAR_DB_SOCKET`), puis `MAR_DB_NAME`, `MAR_DB_USER`, `MAR_DB_PASSWORD`. Ces valeurs vivent côté serveur, pas dans les secrets GitHub — la CI n'a jamais besoin des identifiants de base.
+Les identifiants sont évidemment nécessaires — pour créer les tables comme pour écrire dedans. Ils ne passent simplement pas par GitHub : `db/migrate.php` s'exécute **sur le serveur**, appelé par SSH, et l'API y tourne en permanence.
+
+Ils vivent dans un fichier **`.env` à la racine du déploiement** (`$DEPLOY_PATH/.env`), à créer une fois à la main depuis `.env.example` :
+
+```
+MAR_DB_HOST=127.0.0.1
+MAR_DB_NAME=marketing
+MAR_DB_USER=…
+MAR_DB_PASSWORD=…
+```
+
+Un fichier plutôt que des variables exportées dans un profil de shell, parce qu'aucun des deux consommateurs ne les verrait : `ssh user@host "php db/migrate.php"` ouvre une session **non interactive**, qui ne charge pas `~/.bashrc`, et l'API tourne sous PHP-FPM, dont l'environnement vient de la configuration du pool. Les variables réellement présentes dans l'environnement restent prioritaires sur le fichier.
+
+Le fichier se place au-dessus de la racine web (`api/public`), donc il n'est pas servi. Le déploiement ne le touche jamais : `rsync` ne pousse que `api/` et `db/`.
 
 ## À adapter
 
