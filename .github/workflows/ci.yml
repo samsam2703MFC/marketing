@@ -233,30 +233,56 @@ jobs:
         env:
           SSHPASS: ${{ secrets.SSH_PASSWORD }}
         run: |
-          # BatchMode : sans lui, une clé non autorisée fait attendre une saisie
-          # de mot de passe jusqu'au délai d'expiration du job, au lieu d'échouer
-          # tout de suite avec un message exploitable.
-          if out=$($SSH_CMD $SSH_OPTS -o BatchMode=yes -o ConnectTimeout=15 \
-                     "$SSH_USER@$SSH_HOST" \
-                     "mkdir -p '$DEPLOY_DIR' '$DEPLOY_DIR/api' '$DEPLOY_DIR/db' && command -v rsync" 2>&1); then
-            echo "Connexion établie, rsync présent."
-          else
-            # Publié en annotation : les logs bruts ne sont pas toujours
-            # consultables, les annotations le sont via l'API.
-            echo "::error title=Connexion SSH refusée::$(printf '%s' "$out" | tr '\n' ' ' | cut -c1-450)"
-            {
-              echo "### Connexion SSH refusée"
-              echo
-              echo '```'
-              printf '%s\n' "$out"
-              echo '```'
-              echo
-              echo "Pistes : la clé publique correspondant à \`SSH_KEY\` doit figurer dans"
-              echo "\`~/.ssh/authorized_keys\` de \`SSH_USER\` sur le serveur, ou définissez"
-              echo "\`SSH_PASSWORD\` pour utiliser l'authentification par mot de passe."
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
+          # Chaque contrôle laisse une trace : la version précédente enchaînait
+          # mkdir et la détection de rsync avec &&, et un échec sortait
+          # silencieusement — impossible de savoir lequel des deux avait cédé.
+          # `which` en secours de `command -v`, que tous les shells n'ont pas.
+          out=$($SSH_CMD $SSH_OPTS -o BatchMode=yes -o ConnectTimeout=15 "$SSH_USER@$SSH_HOST" "
+            echo \"USER=\$(id -un 2>/dev/null)\"
+            if mkdir -p '$DEPLOY_DIR' '$DEPLOY_DIR/api' '$DEPLOY_DIR/db' 2>&1; then
+              echo MKDIR_OK
+            else
+              echo MKDIR_FAIL
+            fi
+            if [ -w '$DEPLOY_DIR' ]; then echo WRITABLE; else echo NOT_WRITABLE; fi
+            r=\$(command -v rsync 2>/dev/null || which rsync 2>/dev/null || echo '')
+            if [ -n \"\$r\" ]; then echo \"RSYNC=\$r\"; else echo RSYNC_MISSING; fi
+            p=\$(command -v php 2>/dev/null || which php 2>/dev/null || echo '')
+            if [ -n \"\$p\" ]; then echo \"PHP=\$p\"; else echo PHP_MISSING; fi
+          " 2>&1) || true
+
+          printf '%s\n' "$out"
+          {
+            echo "### Diagnostic serveur"
+            echo '```'
+            printf '%s\n' "$out"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          fail=0
+          case "$out" in
+            *MKDIR_FAIL*|*NOT_WRITABLE*)
+              echo "::error title=Droits insuffisants::L'utilisateur SSH ne peut pas écrire dans $DEPLOY_DIR. Sur le serveur : chown -R <utilisateur>:www-data $DEPLOY_DIR"
+              fail=1 ;;
+          esac
+          case "$out" in
+            *RSYNC_MISSING*)
+              echo "::error title=rsync absent::rsync introuvable pour l'utilisateur SSH. Sur le serveur : apt-get install -y rsync"
+              fail=1 ;;
+          esac
+          case "$out" in
+            *PHP_MISSING*)
+              echo "::error title=php absent::php introuvable pour l'utilisateur SSH — les migrations ne pourront pas s'exécuter."
+              fail=1 ;;
+          esac
+          case "$out" in
+            *MKDIR_OK*) ;;
+            *)
+              echo "::error title=Commande distante muette::Aucun marqueur reçu. Sortie brute : $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-350)"
+              fail=1 ;;
+          esac
+
+          exit $fail
 
       # rsync SANS --delete : le répertoire vit sous une racine web partagée avec
       # d'autres modules, et un DEPLOY_DIR mal réglé effacerait leurs fichiers.
