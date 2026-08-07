@@ -1,0 +1,53 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Table de routage du module marketing.
+ *
+ * Préfixe `/api/v1/marketing/` — avec une barre oblique, à ne pas confondre avec
+ * les `/api/v1/marketing-campaigns` de l'ERP, qui restent en place. Les deux
+ * familles peuvent cohabiter le temps de la bascule : c'est `mar_campaign` qui
+ * fait foi côté module.
+ *
+ * Dans l'ERP, ces routes doivent être redéclarées par le routeur de
+ * l'application ; seuls les contrôleurs sont à reprendre.
+ */
+
+use Marketing\Controller\CampaignController;
+use Marketing\Controller\FundController;
+use Marketing\Controller\LeadController;
+use Marketing\Controller\ReferenceController;
+use Marketing\Support\Router;
+
+return static function (Router $router): void {
+    $references = new ReferenceController();
+    $campaigns  = new CampaignController();
+    $funds      = new FundController();
+    $leads      = new LeadController();
+
+    // Référentiels
+    $router->get('/api/v1/marketing/references', [$references, 'index']);
+    $router->get('/api/v1/marketing/brands',     [$references, 'brands']);
+
+    // Campagnes
+    $router->get('/api/v1/marketing/campaigns',                 [$campaigns, 'index']);
+    $router->get('/api/v1/marketing/campaigns/calendar',        [$campaigns, 'calendar']);
+    $router->get('/api/v1/marketing/campaigns/{id}',            [$campaigns, 'show']);
+    $router->get('/api/v1/marketing/campaigns/{id}/monitor',    [$campaigns, 'monitor']);
+    $router->post('/api/v1/marketing/campaigns',                [$campaigns, 'store']);
+    $router->patch('/api/v1/marketing/campaigns/{id}',          [$campaigns, 'update']);
+    $router->delete('/api/v1/marketing/campaigns/{id}',         [$campaigns, 'destroy']);
+
+    // Leads B2B
+    $router->get('/api/v1/marketing/campaigns/{id}/leads',      [$leads, 'index']);
+    $router->patch('/api/v1/marketing/leads/{id}/status',       [$leads, 'updateStatus']);
+    $router->get('/api/v1/marketing/leads/{id}/history',        [$leads, 'history']);
+
+    // Fonds, leviers et ROI
+    $router->get('/api/v1/marketing/funds/ledger',              [$funds, 'ledger']);
+    $router->get('/api/v1/marketing/funds/levers',              [$funds, 'leverSummary']);
+    $router->post('/api/v1/marketing/funds/movements',          [$funds, 'storeMovement']);
+    $router->get('/api/v1/marketing/roi/quarterly',             [$funds, 'roiQuarterly']);
+    $router->get('/api/v1/marketing/campaigns/{id}/roi-costs',  [$funds, 'roiCosts']);
+};

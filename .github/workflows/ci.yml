@@ -1,0 +1,167 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Le service MySQL 8 fait ici ce que l'environnement de développement ne
+  # permettait pas : rejouer le schéma sur le moteur réellement visé, et non sur
+  # un MariaDB de substitution.
+  test:
+    name: Schéma, API, front
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: marketing_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installer PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql
+
+      - name: Installer Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Appliquer les migrations et les seeds
+        env:
+          MAR_DB_HOST: 127.0.0.1
+          MAR_DB_PORT: '3306'
+          MAR_DB_NAME: marketing_test
+          MAR_DB_USER: root
+          MAR_DB_PASSWORD: root
+        run: php db/migrate.php
+
+      - name: Vérifier l'idempotence du runner
+        env:
+          MAR_DB_HOST: 127.0.0.1
+          MAR_DB_PORT: '3306'
+          MAR_DB_NAME: marketing_test
+          MAR_DB_USER: root
+          MAR_DB_PASSWORD: root
+        # Un second passage ne doit rien casser : c'est exactement ce que fera
+        # chaque déploiement suivant sur une base déjà migrée.
+        run: php db/migrate.php
+
+      - name: Vérifier le préfixe mar_
+        run: |
+          # Une table sans préfixe est une régression : la convention est absolue.
+          stray=$(mysql -h 127.0.0.1 -uroot -proot -N -e \
+            "SELECT COUNT(*) FROM information_schema.tables
+             WHERE table_schema='marketing_test' AND table_name NOT LIKE 'mar\\_%';")
+          echo "Objets hors préfixe : $stray"
+          test "$stray" -eq 0
+
+      - name: Lint PHP
+        run: find api -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
+
+      - name: Tests de l'API
+        env:
+          MAR_DB_HOST: 127.0.0.1
+          MAR_DB_PORT: '3306'
+          MAR_DB_NAME: marketing_test
+          MAR_DB_USER: root
+          MAR_DB_PASSWORD: root
+        run: php api/tests/smoke.php
+
+      - name: Installer les dépendances front
+        run: npm ci
+
+      - name: Typecheck et build
+        run: npm run build
+
+      - name: Archiver le build
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  deploy:
+    name: Déploiement
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    # L'environnement porte les secrets et permet d'exiger une approbation
+    # manuelle avant toute mise en ligne.
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Récupérer le build
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      # Sans secrets configurés, le job s'arrête ici plutôt que d'échouer à
+      # mi-parcours avec un déploiement partiel.
+      - name: Vérifier la configuration
+        run: |
+          missing=""
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_PATH; do
+            eval "value=\${$name}"
+            [ -z "$value" ] && missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "Secrets manquants :$missing"
+            echo "Voir .github/workflows/README.md pour la liste attendue."
+            exit 1
+          fi
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+
+      - name: Préparer la clé SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          # L'empreinte de l'hôte est vérifiée : sans elle, la connexion accepte
+          # n'importe quel serveur qui répond à cette adresse.
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      # L'API part avant les migrations : le runner s'appuie sur l'autoloader de
+      # api/src, il doit donc déjà être en place sur le serveur.
+      - name: Publier l'API et les migrations
+        run: |
+          target="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}"
+          rsync -az --delete --exclude 'tests' --exclude 'public/index.php' \
+            -e "ssh -i ~/.ssh/id_deploy" api/ "$target/api/"
+          rsync -az --delete -e "ssh -i ~/.ssh/id_deploy" db/ "$target/db/"
+
+      - name: Appliquer les migrations
+        # Exécutées côté serveur : le runner tient son registre en base et
+        # n'applique que ce qui manque, donc un redéploiement ne casse rien.
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "cd ${{ secrets.DEPLOY_PATH }} && php db/migrate.php"
+
+      # Le front en dernier : si une migration échoue, les utilisateurs restent
+      # sur la version précédente plutôt que sur une interface sans son schéma.
+      - name: Publier le front
+        run: |
+          rsync -az --delete -e "ssh -i ~/.ssh/id_deploy" \
+            dist/ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/public/"
