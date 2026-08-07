@@ -92,7 +92,7 @@ jobs:
         # répertoire de déploiement privé de la racine web. Une variable en moins
         # à tenir, et une occasion de moins de désaccorder les deux.
         env:
-          DEPLOY_DIR: ${{ vars.DEPLOY_DIR || '/var/www/html/marketing' }}
+          DEPLOY_DIR: ${{ vars.DEPLOY_DIR || vars.DEPLOY_PATH || '/var/www/html/marketing' }}
           VITE_BASE: ${{ vars.VITE_BASE }}
           VITE_API_BASE: ${{ vars.VITE_API_BASE }}
         run: |
@@ -118,15 +118,18 @@ jobs:
     # Conventions reprises de back_office_ws_franchisor, qui se déploie déjà sur
     # ce serveur : mêmes noms de secrets, même méthode. Un dépôt de plus ne doit
     # pas inventer sa propre façon de faire.
+    # Les deux conventions de nommage sont acceptées : celle de
+    # back_office_ws_franchisor (SSH_*) et celle que ce dépôt utilisait avant
+    # d'être aligné (DEPLOY_*). Le déploiement ne doit pas échouer sur un nom.
     env:
-      SSH_HOST: ${{ secrets.SSH_HOST }}
-      SSH_USER: ${{ secrets.SSH_USER }}
-      SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
-      SSH_KEY: ${{ secrets.SSH_KEY }}
+      SSH_HOST: ${{ secrets.SSH_HOST || secrets.DEPLOY_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER || secrets.DEPLOY_USER }}
+      SSH_PASSWORD: ${{ secrets.SSH_PASSWORD || secrets.DEPLOY_PASSWORD }}
+      SSH_KEY: ${{ secrets.SSH_KEY || secrets.DEPLOY_SSH_KEY }}
       SSH_PORT: ${{ vars.SSH_PORT || '22' }}
       CONFIG_DIR: ${{ vars.CONFIG_DIR || '/var/www/private/marketing' }}
       MAR_DB_NAME: ${{ secrets.MAR_DB_NAME }}
-      DEPLOY_DIR: ${{ vars.DEPLOY_DIR || '/var/www/html/marketing' }}
+      DEPLOY_DIR: ${{ vars.DEPLOY_DIR || vars.DEPLOY_PATH || '/var/www/html/marketing' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -143,14 +146,29 @@ jobs:
       - name: Vérifier la configuration
         id: check
         run: |
+          # Inventaire lisible dans le résumé du run : uniquement des noms et
+          # des présences, jamais une valeur.
+          {
+            echo "### Configuration du déploiement"
+            echo
+            echo "| Élément | État |"
+            echo "|---|---|"
+            printf '| `SSH_HOST` (ou `DEPLOY_HOST`) | %s |\n'         "$([ -n "$SSH_HOST" ] && echo 'présent' || echo '**absent**')"
+            printf '| `SSH_USER` (ou `DEPLOY_USER`) | %s |\n'         "$([ -n "$SSH_USER" ] && echo 'présent' || echo '**absent**')"
+            printf '| `SSH_PASSWORD` / `SSH_KEY` | %s |\n'            "$([ -n "$SSH_PASSWORD" ] || [ -n "$SSH_KEY" ] && echo 'présent' || echo '**absent**')"
+            printf '| `DEPLOY_DIR` | `%s` |\n'                        "$DEPLOY_DIR"
+            printf '| `CONFIG_DIR` | `%s` |\n'                        "$CONFIG_DIR"
+            printf '| `MAR_DB_NAME` | %s |\n'                         "$([ -n "$MAR_DB_NAME" ] && echo 'présent — le .env sera écrit' || echo 'absent — .env laissé en place')"
+          } >> "$GITHUB_STEP_SUMMARY"
+
           if [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ]; then
             {
               echo "### Déploiement non configuré"
               echo
               echo "Secrets attendus dans **Settings → Secrets and variables → Actions** :"
-              echo "- \`SSH_HOST\` — ex. 185.180.206.46"
-              echo "- \`SSH_USER\`"
-              echo "- \`SSH_PASSWORD\` (ou \`SSH_KEY\` pour une clé, préférable)"
+              echo "- \`SSH_HOST\` — ex. 185.180.206.46  *(ou \`DEPLOY_HOST\`)*"
+              echo "- \`SSH_USER\`  *(ou \`DEPLOY_USER\`)*"
+              echo "- \`SSH_PASSWORD\` *(ou \`DEPLOY_PASSWORD\`, ou \`SSH_KEY\`/\`DEPLOY_SSH_KEY\`)*"
               echo
               echo "Variables facultatives : \`SSH_PORT\` (défaut 22), \`DEPLOY_DIR\`"
               echo "(défaut \`/var/www/html/marketing\`)."

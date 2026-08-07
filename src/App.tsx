@@ -3,9 +3,7 @@ import * as api from './lib/api/module'
 import { useAsync } from './lib/useAsync'
 import { titleFor } from './lib/navigation'
 import type { Role, Route } from './lib/navigation'
-import { useLogin, useSession } from './state/auth'
 import Sidebar from './components/Sidebar'
-import LoginView from './views/LoginView'
 import DashboardView from './views/DashboardView'
 import CampaignsView from './views/CampaignsView'
 import CalendarView from './views/CalendarView'
@@ -14,37 +12,52 @@ import CampaignMonitorView from './views/CampaignMonitorView'
 import PendingView from './views/PendingView'
 
 export default function App() {
-  const local = useSession()
+  // Le module n'a pas d'écran de connexion : embarqué dans l'ERP, l'identité
+  // vient de son middleware. On lui demande simplement si elle est établie.
+  const session = useAsync(() => api.getSession(), [])
 
-  // Le module interroge sa propre API : embarqué dans l'ERP, l'identité est déjà
-  // posée par le middleware et l'écran de connexion n'a pas lieu d'être. Déployé
-  // seul, il faut se connecter.
-  const remote = useAsync(() => api.getSession(), [])
-
-  if (remote.loading) {
+  if (session.loading) {
     return (
       <div className="app">
         <main className="app__body">
-          <p className="muted">Vérification de la session…</p>
+          <p className="muted">Ouverture du module…</p>
         </main>
       </div>
     )
   }
 
-  if (remote.error) {
+  if (session.error) {
     return (
       <div className="app">
         <main className="app__body">
-          <p className="error">Module marketing injoignable : {remote.error}</p>
+          <p className="error">Module marketing injoignable : {session.error}</p>
           <p className="muted">
-            Vérifiez que l’API répond à <code>/api/v1/marketing/session</code>.
+            L’API doit répondre à <code>/api/v1/marketing/session</code>.
           </p>
         </main>
       </div>
     )
   }
 
-  if (!remote.data?.authenticated && !local) return <LoginView />
+  // Pas de formulaire de connexion ici : ce serait un second chemin
+  // d'authentification à maintenir, et il ne saurait pas parler à l'ERP. On dit
+  // ce qui manque, plutôt que de proposer une porte qui n'ouvre sur rien.
+  if (!session.data?.authenticated) {
+    return (
+      <div className="app">
+        <main className="app__body">
+          <section className="card pending">
+            <h2>Session non établie</h2>
+            <p className="muted">
+              Ce module lit l’identité de l’ERP. Ouvrez-le depuis l’ERP, ou définissez
+              <code> MAR_DEV_AUTH=1</code> et <code>MAR_DEV_USER_ID</code> dans le fichier
+              de configuration du serveur pour y accéder directement.
+            </p>
+          </section>
+        </main>
+      </div>
+    )
+  }
 
   return <Workspace />
 }
@@ -54,7 +67,6 @@ export default function App() {
  * par écran, comme le prototype.
  */
 function Workspace() {
-  const { signOut } = useLogin()
   const [role, setRole] = useState<Role>('BRAND_ADMIN')
   const [route, setRoute] = useState<Route>('dashboard')
   const [campaignId, setCampaignId] = useState<number | null>(null)
@@ -141,9 +153,6 @@ function Workspace() {
                 Franchisé
               </button>
             </div>
-            <button type="button" className="ghost" onClick={() => void signOut()}>
-              Déconnexion
-            </button>
           </div>
         </header>
 
