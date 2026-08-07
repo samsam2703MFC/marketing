@@ -219,8 +219,30 @@ jobs:
         env:
           SSHPASS: ${{ secrets.SSH_PASSWORD }}
         run: |
-          $SSH_CMD $SSH_OPTS "$SSH_USER@$SSH_HOST" \
-            "mkdir -p '$DEPLOY_DIR' '$DEPLOY_DIR/api' '$DEPLOY_DIR/db' && command -v rsync >/dev/null || (echo 'rsync manquant sur le serveur'; exit 1)"
+          # BatchMode : sans lui, une clé non autorisée fait attendre une saisie
+          # de mot de passe jusqu'au délai d'expiration du job, au lieu d'échouer
+          # tout de suite avec un message exploitable.
+          if out=$($SSH_CMD $SSH_OPTS -o BatchMode=yes -o ConnectTimeout=15 \
+                     "$SSH_USER@$SSH_HOST" \
+                     "mkdir -p '$DEPLOY_DIR' '$DEPLOY_DIR/api' '$DEPLOY_DIR/db' && command -v rsync" 2>&1); then
+            echo "Connexion établie, rsync présent."
+          else
+            # Publié en annotation : les logs bruts ne sont pas toujours
+            # consultables, les annotations le sont via l'API.
+            echo "::error title=Connexion SSH refusée::$(printf '%s' "$out" | tr '\n' ' ' | cut -c1-450)"
+            {
+              echo "### Connexion SSH refusée"
+              echo
+              echo '```'
+              printf '%s\n' "$out"
+              echo '```'
+              echo
+              echo "Pistes : la clé publique correspondant à \`SSH_KEY\` doit figurer dans"
+              echo "\`~/.ssh/authorized_keys\` de \`SSH_USER\` sur le serveur, ou définissez"
+              echo "\`SSH_PASSWORD\` pour utiliser l'authentification par mot de passe."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
       # rsync SANS --delete : le répertoire vit sous une racine web partagée avec
       # d'autres modules, et un DEPLOY_DIR mal réglé effacerait leurs fichiers.
