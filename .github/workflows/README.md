@@ -48,7 +48,19 @@ Les deux sont vides par défaut, ce qui vise la racine — correct pour un dépl
 
 Les identifiants sont évidemment nécessaires — pour créer les tables comme pour écrire dedans. Ils ne passent simplement pas par GitHub : `db/migrate.php` s'exécute **sur le serveur**, appelé par SSH, et l'API y tourne en permanence.
 
-Ils vivent dans un fichier **`.env` à la racine du déploiement** (`$DEPLOY_PATH/.env`), à créer une fois à la main depuis `.env.example` :
+Ils vivent dans un fichier **`.env` à la racine du déploiement** (`$DEPLOY_PATH/.env`). Deux façons de l'obtenir, au choix :
+
+**A — par GitHub (automatique).** Ajoutez ces secrets à l'environnement `production` ; le déploiement (ré)écrit le fichier à chaque passage, en `chmod 600` :
+
+| Secret | Défaut si absent |
+|---|---|
+| `MAR_DB_NAME` | — obligatoire pour activer ce mode |
+| `MAR_DB_USER` | — |
+| `MAR_DB_PASSWORD` | — |
+| `MAR_DB_HOST` | `127.0.0.1` |
+| `MAR_DB_PORT` | `3306` |
+
+**B — à la main (par défaut).** Sans `MAR_DB_NAME`, l'étape est sautée et le fichier que vous avez posé sur le serveur reste intact :
 
 ```
 MAR_DB_HOST=127.0.0.1
@@ -56,6 +68,10 @@ MAR_DB_NAME=marketing
 MAR_DB_USER=…
 MAR_DB_PASSWORD=…
 ```
+
+Le mode A évite l'étape manuelle et rend une reconstruction du serveur reproductible ; en échange, les identifiants existent à deux endroits, et toute personne administratrice du dépôt peut les remplacer. Le mode B les garde sur la seule machine qui en a besoin.
+
+En mode A, le fichier est composé dans le runner puis transféré — jamais assemblé dans une commande distante, qui ferait apparaître le mot de passe dans la liste des processus du serveur. Chaque valeur part entre guillemets et échappée : sans cela, un mot de passe bordé d'espaces ou déjà entouré de guillemets serait tronqué à la relecture, et l'authentification échouerait sans indice. Le trajet aller-retour est couvert par les tests.
 
 Un fichier plutôt que des variables exportées dans un profil de shell, parce qu'aucun des deux consommateurs ne les verrait : `ssh user@host "php db/migrate.php"` ouvre une session **non interactive**, qui ne charge pas `~/.bashrc`, et l'API tourne sous PHP-FPM, dont l'environnement vient de la configuration du pool. Les variables réellement présentes dans l'environnement restent prioritaires sur le fichier.
 

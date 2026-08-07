@@ -56,14 +56,7 @@ final class Env
             $key   = trim(substr($line, 0, $position));
             $value = trim(substr($line, $position + 1));
 
-            // Retire les guillemets encadrants, courants pour un mot de passe
-            // contenant des espaces ou un `#`.
-            if (strlen($value) >= 2) {
-                $first = $value[0];
-                if (($first === '"' || $first === "'") && str_ends_with($value, $first)) {
-                    $value = substr($value, 1, -1);
-                }
-            }
+            $value = self::unquote($value);
 
             if ($key === '' || getenv($key) !== false) {
                 continue;
@@ -72,5 +65,37 @@ final class Env
             putenv(sprintf('%s=%s', $key, $value));
             $_ENV[$key] = $value;
         }
+    }
+
+    /**
+     * Retire une paire de guillemets encadrants et déséchappe le contenu.
+     *
+     * La valeur brute a déjà été rognée, ce qui est le comportement attendu pour
+     * un fichier écrit à la main — on ne veut pas d'un mot de passe cassé par une
+     * espace oubliée en fin de ligne. Une valeur qui doit *réellement* contenir
+     * des espaces en bordure, ou qui est elle-même entourée de guillemets, se
+     * protège en étant écrite entre guillemets : c'est ce que fait le
+     * déploiement, et sans cela ces deux cas seraient tronqués en silence.
+     */
+    private static function unquote(string $value): string
+    {
+        if (strlen($value) < 2) {
+            return $value;
+        }
+
+        $quote = $value[0];
+
+        if (($quote !== '"' && $quote !== "'") || !str_ends_with($value, $quote)) {
+            return $value;
+        }
+
+        $inner = substr($value, 1, -1);
+
+        // Les guillemets simples sont littéraux, comme dans un shell.
+        if ($quote === "'") {
+            return $inner;
+        }
+
+        return str_replace(['\\"', '\\\\'], ['"', '\\'], $inner);
     }
 }

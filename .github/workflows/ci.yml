@@ -110,6 +110,15 @@ jobs:
     # manuelle avant toute mise en ligne.
     environment: production
 
+    # Remontés au niveau du job : le contexte `secrets` n'est pas exposé de
+    # façon fiable dans un `if:` d'étape, contrairement à `env`.
+    env:
+      MAR_DB_HOST: ${{ secrets.MAR_DB_HOST }}
+      MAR_DB_PORT: ${{ secrets.MAR_DB_PORT }}
+      MAR_DB_NAME: ${{ secrets.MAR_DB_NAME }}
+      MAR_DB_USER: ${{ secrets.MAR_DB_USER }}
+      MAR_DB_PASSWORD: ${{ secrets.MAR_DB_PASSWORD }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -157,6 +166,32 @@ jobs:
           rsync -az --delete --exclude 'tests' --exclude 'public/index.php' \
             -e "ssh -i ~/.ssh/id_deploy" api/ "$target/api/"
           rsync -az --delete -e "ssh -i ~/.ssh/id_deploy" db/ "$target/db/"
+
+      # Optionnel : si les secrets de base sont renseignés, le .env du serveur est
+      # (ré)écrit à chaque déploiement. Sinon l'étape est sautée et le fichier
+      # posé à la main sur le serveur reste en place.
+      #
+      # Le fichier est construit dans le runner puis transféré, jamais composé
+      # dans une commande distante : un `ssh host "echo …"` ferait apparaître le
+      # mot de passe dans la liste des processus du serveur.
+      - name: Écrire la configuration base sur le serveur
+        if: ${{ env.MAR_DB_NAME != '' }}
+        run: |
+          umask 077
+          # Chaque valeur part entre guillemets, contenu échappé : sans cela, un
+          # mot de passe bordé d'espaces ou déjà entouré de guillemets serait
+          # tronqué à la relecture, et l'authentification échouerait sans indice.
+          esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+          {
+            printf 'MAR_DB_HOST="%s"\n'     "$(esc "${MAR_DB_HOST:-127.0.0.1}")"
+            printf 'MAR_DB_PORT="%s"\n'     "$(esc "${MAR_DB_PORT:-3306}")"
+            printf 'MAR_DB_NAME="%s"\n'     "$(esc "$MAR_DB_NAME")"
+            printf 'MAR_DB_USER="%s"\n'     "$(esc "$MAR_DB_USER")"
+            printf 'MAR_DB_PASSWORD="%s"\n' "$(esc "$MAR_DB_PASSWORD")"
+          } > .env.deploy
+          rsync -a --chmod=600 -e "ssh -i ~/.ssh/id_deploy" \
+            .env.deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/.env"
+          rm -f .env.deploy
 
       - name: Appliquer les migrations
         # Exécutées côté serveur : le runner tient son registre en base et

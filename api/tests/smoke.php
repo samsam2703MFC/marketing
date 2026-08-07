@@ -179,6 +179,54 @@ check(
     json_encode($response['body']) ?: ''
 );
 
+// --- Lecture du .env ------------------------------------------------------
+// Le déploiement écrit ce fichier avec les identifiants de base. Une valeur mal
+// relue ne lève rien : l'authentification MySQL échoue sans dire pourquoi.
+echo "\nLecture du .env\n";
+
+/** Écrit une valeur comme le fait le workflow, la relit, et compare. */
+function roundTrip(string $value): bool
+{
+    $escaped = str_replace(['\\', '"'], ['\\\\', '\\"'], $value);
+    $file    = sys_get_temp_dir() . '/mar_env_' . md5($value) . '.env';
+    file_put_contents($file, sprintf("MAR_TEST_VALUE=\"%s\"\n", $escaped));
+
+    // Env ne charge qu'une fois : on remet le drapeau à zéro entre les cas.
+    $flag = new ReflectionProperty(\Marketing\Support\Env::class, 'loaded');
+    $flag->setValue(null, false);
+    putenv('MAR_TEST_VALUE');
+    unset($_ENV['MAR_TEST_VALUE']);
+
+    \Marketing\Support\Env::load($file);
+    $read = getenv('MAR_TEST_VALUE');
+    unlink($file);
+
+    return $read === $value;
+}
+
+foreach ([
+    'simple'                  => 's3cret',
+    'dièse'                   => 'p@ss#word',
+    'signe égal'              => 'a=b=c',
+    'espaces internes'        => 'two words',
+    'guillemets internes'     => 'he said "hi"',
+    'valeur déjà entre guillemets' => '"quoted"',
+    'espaces en bordure'      => '  padded  ',
+    'antislash'               => 'back\\slash',
+] as $label => $value) {
+    check(sprintf('mot de passe — %s', $label), roundTrip($value));
+}
+
+// L'environnement réel doit rester prioritaire sur le fichier, sinon un pool
+// PHP-FPM correctement configuré serait écrasé par un .env oublié.
+$file = sys_get_temp_dir() . '/mar_env_priority.env';
+file_put_contents($file, "MAR_TEST_PRIORITY=depuis_le_fichier\n");
+putenv('MAR_TEST_PRIORITY=depuis_l_environnement');
+(new ReflectionProperty(\Marketing\Support\Env::class, 'loaded'))->setValue(null, false);
+\Marketing\Support\Env::load($file);
+check("l'environnement réel prime sur le fichier", getenv('MAR_TEST_PRIORITY') === 'depuis_l_environnement');
+unlink($file);
+
 // --- Résultat -------------------------------------------------------------
 printf("\n%d réussis, %d échoués\n", $passed, $failed);
 exit($failed === 0 ? 0 : 1);
