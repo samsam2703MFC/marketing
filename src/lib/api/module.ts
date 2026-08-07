@@ -34,6 +34,29 @@ function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
 }
 
 // ---------------------------------------------------------------------------
+// Session
+// ---------------------------------------------------------------------------
+
+/**
+ * État d'authentification vu par le module.
+ *
+ * Le module est prévu pour être embarqué dans l'ERP, dont le middleware pose
+ * l'identité. Le front ne peut pas deviner s'il l'est : il le demande.
+ */
+export interface Session {
+  authenticated: boolean
+  user_id?: number
+  role?: string
+  brand_id?: number | null
+  shop_ids?: number[] | null
+  login_hint?: string
+}
+
+export function getSession(): Promise<Session> {
+  return request<Session>(`${BASE}/session`)
+}
+
+// ---------------------------------------------------------------------------
 // Référentiels
 // ---------------------------------------------------------------------------
 

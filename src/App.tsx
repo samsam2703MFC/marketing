@@ -14,9 +14,37 @@ import CampaignMonitorView from './views/CampaignMonitorView'
 import PendingView from './views/PendingView'
 
 export default function App() {
-  const session = useSession()
+  const local = useSession()
 
-  if (!session) return <LoginView />
+  // Le module interroge sa propre API : embarqué dans l'ERP, l'identité est déjà
+  // posée par le middleware et l'écran de connexion n'a pas lieu d'être. Déployé
+  // seul, il faut se connecter.
+  const remote = useAsync(() => api.getSession(), [])
+
+  if (remote.loading) {
+    return (
+      <div className="app">
+        <main className="app__body">
+          <p className="muted">Vérification de la session…</p>
+        </main>
+      </div>
+    )
+  }
+
+  if (remote.error) {
+    return (
+      <div className="app">
+        <main className="app__body">
+          <p className="error">Module marketing injoignable : {remote.error}</p>
+          <p className="muted">
+            Vérifiez que l’API répond à <code>/api/v1/marketing/session</code>.
+          </p>
+        </main>
+      </div>
+    )
+  }
+
+  if (!remote.data?.authenticated && !local) return <LoginView />
 
   return <Workspace />
 }

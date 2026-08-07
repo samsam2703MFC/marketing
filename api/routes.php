@@ -18,6 +18,7 @@ use Marketing\Controller\CampaignController;
 use Marketing\Controller\FundController;
 use Marketing\Controller\LeadController;
 use Marketing\Controller\ReferenceController;
+use Marketing\Controller\SessionController;
 use Marketing\Support\Router;
 
 return static function (Router $router): void {
@@ -25,6 +26,12 @@ return static function (Router $router): void {
     $campaigns  = new CampaignController();
     $funds      = new FundController();
     $leads      = new LeadController();
+    $session    = new SessionController();
+
+    // Session — publique : elle ne dit que si l'appelant est authentifié.
+    // Le front s'en sert pour savoir s'il est embarqué dans l'ERP, auquel cas
+    // l'identité est déjà posée et son écran de connexion n'a pas lieu d'être.
+    $router->get('/api/v1/marketing/session', [$session, 'show'], true);
 
     // Référentiels
     $router->get('/api/v1/marketing/references', [$references, 'index']);

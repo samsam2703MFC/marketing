@@ -29,6 +29,11 @@ $router = new Router();
  * est explicitement activé. Sans ce garde-fou, un déploiement accidentel de ce
  * fichier laisserait n'importe qui se déclarer BRAND_ADMIN.
  */
+// Le fichier de configuration est lu avant tout : sans cela, MAR_DEV_AUTH posé
+// dans le .env serait ignoré, la variable n'existant pas dans l'environnement du
+// pool PHP-FPM.
+\Marketing\Support\Env::load();
+
 if (getenv('MAR_DEV_AUTH') === '1') {
     // Les en-têtes priment, ce qui permet de simuler plusieurs rôles depuis
     // curl ; à défaut, MAR_DEV_USER_ID sert d'identité par défaut pour ouvrir
