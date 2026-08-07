@@ -47,6 +47,33 @@ function call(Router $router, string $method, string $path, array $query = [], a
 
 $pdo = Database::connection();
 
+/**
+ * Garde-fou : ce test est destructeur.
+ *
+ * Il vide les tables `mar_` avant de monter son jeu de données. Les tables du
+ * module vivant désormais dans `atelier_db`, aux côtés de celles de l'ERP, un
+ * lancement distrait contre la base de production effacerait les campagnes, les
+ * leads et le grand livre réels. Le préfixe `mar_` limite les dégâts au module,
+ * il ne les empêche pas.
+ *
+ * On n'accepte donc qu'une base dont le nom se reconnaît comme jetable, sauf
+ * autorisation explicite.
+ */
+$database = (string) $pdo->query('SELECT DATABASE()')->fetchColumn();
+$looksDisposable = (bool) preg_match('/(^|_)(test|ci|dev|tmp)([0-9_]|$)/i', $database);
+
+if (!$looksDisposable && getenv('MAR_ALLOW_DESTRUCTIVE_TESTS') !== '1') {
+    fprintf(
+        STDERR,
+        "Refus d'exécution : « %s » ne ressemble pas à une base jetable.\n"
+        . "Ce test vide les tables mar_ avant de commencer.\n\n"
+        . "Utilisez une base dédiée (marketing_test, ci8…), ou forcez avec\n"
+        . "MAR_ALLOW_DESTRUCTIVE_TESTS=1 si vous savez ce que vous faites.\n",
+        $database
+    );
+    exit(4);
+}
+
 // --- Jeu de données -------------------------------------------------------
 $pdo->exec('DELETE FROM mar_crm_lead_event');
 $pdo->exec('DELETE FROM mar_crm_lead');

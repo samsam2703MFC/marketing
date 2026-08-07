@@ -23,16 +23,23 @@ sudo chmod 750 /var/www/private/marketing
 
 ## 2. Base MySQL
 
+**Pas de nouvelle base.** Les tables du module vont dans `atelier_db`, aux côtés de celles de l'ERP. C'est tout l'intérêt du préfixe `mar_` : les 54 tables et 6 vues du module s'y reconnaissent au premier coup d'œil et ne peuvent entrer en collision avec rien.
+
+Rien à créer, donc — seulement des droits, si l'utilisateur MySQL du module n'est pas déjà celui de l'ERP :
+
 ```sql
-CREATE DATABASE marketing CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'marketing'@'localhost' IDENTIFIED BY 'REMPLACER_PAR_UN_MOT_DE_PASSE';
-GRANT ALL PRIVILEGES ON marketing.* TO 'marketing'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, INDEX, REFERENCES, CREATE VIEW
+  ON atelier_db.* TO 'VOTRE_UTILISATEUR'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-Le module a besoin de `CREATE`, `ALTER` et `DROP` : il crée ses 54 tables et ses 6 vues lui-même, via `db/migrate.php`. Le schéma exige **MySQL 5.7 ou plus** (type `JSON`) ; le runner vérifie la version et refuse de démarrer en dessous plutôt que de laisser une base à moitié créée.
+`CREATE`, `ALTER`, `DROP` et `CREATE VIEW` sont nécessaires : `db/migrate.php` crée lui-même les tables et les vues du module.
 
----
+⚠️ **À savoir avant de créer un utilisateur dédié.** MySQL ne sait pas restreindre des droits à un préfixe de tables : accorder `DROP` sur `atelier_db.*` le donne aussi sur les tables de l'ERP. Si cela vous gêne, réutilisez l'utilisateur MySQL existant de l'ERP plutôt que d'en ajouter un second aux mêmes pouvoirs — vous n'élargirez pas la surface.
+
+Le schéma exige **MySQL 5.7 ou plus** (type `JSON`). Le runner vérifie la version et refuse de démarrer en dessous, plutôt que d'échouer à mi-parcours en laissant des tables à moitié créées.
+
+Vérifié sur MySQL 8.0.46 : migration dans une base contenant déjà des tables non préfixées, 61 objets `mar_` créés, tables voisines et leurs données intactes.
 
 ## 3. Configuration
 
@@ -42,8 +49,8 @@ Le module a besoin de `CREATE`, `ALTER` et `DROP` : il crée ses 54 tables et se
 sudo tee /var/www/private/marketing/.env > /dev/null <<'EOF'
 MAR_DB_HOST="127.0.0.1"
 MAR_DB_PORT="3306"
-MAR_DB_NAME="marketing"
-MAR_DB_USER="marketing"
+MAR_DB_NAME="atelier_db"
+MAR_DB_USER="VOTRE_UTILISATEUR"
 MAR_DB_PASSWORD="REMPLACER_PAR_UN_MOT_DE_PASSE"
 EOF
 sudo chmod 600 /var/www/private/marketing/.env
@@ -65,21 +72,28 @@ sudo a2enmod rewrite
 
 ### Variante A — la plus simple
 
-Les règles voyagent déjà avec l'application (`public/.htaccess` est livré dans le build). Il suffit d'autoriser leur lecture :
+Les règles voyagent déjà avec l'application (`public/.htaccess` est livré dans le build). Il suffit d'autoriser leur lecture.
 
-```apache
+**Cette configuration s'écrit dans un fichier — ne la collez pas dans le shell**, il la prendrait pour des commandes. La commande ci-dessous crée le fichier pour vous :
+
+```bash
+sudo tee /etc/apache2/conf-available/marketing.conf > /dev/null <<'EOF'
 <Directory /var/www/html/marketing>
     Options -Indexes +FollowSymLinks
     AllowOverride All
     Require all granted
 </Directory>
+EOF
+
+sudo a2enconf marketing
 ```
 
 ### Variante B — si `AllowOverride` doit rester à `None`
 
-Mêmes règles, posées directement dans la configuration du site :
+Mêmes règles, écrites en dur dans la configuration. Même remarque : c'est une commande complète, à coller telle quelle.
 
-```apache
+```bash
+sudo tee /etc/apache2/conf-available/marketing.conf > /dev/null <<'EOF'
 <Directory /var/www/html/marketing>
     Options -Indexes +FollowSymLinks
     AllowOverride None
@@ -116,6 +130,9 @@ Mêmes règles, posées directement dans la configuration du site :
 <Directory /var/www/html/marketing/db>
     Require all denied
 </Directory>
+EOF
+
+sudo a2enconf marketing
 ```
 
 Puis :
@@ -128,7 +145,9 @@ sudo apache2ctl configtest && sudo systemctl reload apache2
 
 ## 5. Vérification
 
-Après le premier déploiement, sur le serveur :
+**À faire après le premier déploiement, pas avant.** Sur un répertoire encore vide, `page 200` ne veut rien dire : c'est un listing de répertoire, pas l'application. Et les trois `404` restants sont ceux de fichiers qui n'existent pas encore, pas la preuve qu'ils sont protégés.
+
+Sur le serveur :
 
 ```bash
 BASE=http://localhost/marketing
