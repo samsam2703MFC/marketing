@@ -37,11 +37,12 @@ Dans **Settings → Secrets and variables → Actions → Variables**. Ces chemi
 | Variable | Valeur si l'application est servie sous `/marketing` |
 |---|---|
 | `SSH_PORT` | Port SSH, défaut `22` |
-| `DEPLOY_DIR` | Répertoire serveur, défaut `/var/www/html/webshop/marketing` |
-| `VITE_BASE` | Préfixe des URL d'assets — le chemin URL de `DEPLOY_DIR`, ex. `/webshop/marketing/`. Laissée vide, le JS et le CSS répondent 404 dès que la page ne vit pas à la racine du domaine. |
-| `VITE_API_BASE` | Préfixe des appels à l'API, ex. `/webshop/marketing`. Vide, ils partent à la racine du domaine et tombent à côté. |
+| `DEPLOY_DIR` | Répertoire serveur, défaut `/var/www/html/marketing` |
+| `CONFIG_DIR` | Où vit le `.env`, **hors racine web**. Défaut `/var/www/private/marketing` |
+| `VITE_BASE` | *(facultatif)* préfixe des URL d'assets. Déduit de `DEPLOY_DIR` si absent |
+| `VITE_API_BASE` | *(facultatif)* préfixe des appels API. Déduit de `DEPLOY_DIR` si absent |
 
-`DEPLOY_DIR` suit la convention existante : `/var/www/html/webshop/backoffice_franchisor` est servi à `http://<hôte>/webshop/backoffice_franchisor`. La racine web est donc `/var/www/html`, et `VITE_BASE` est simplement `DEPLOY_DIR` sans ce préfixe.
+`VITE_BASE` et `VITE_API_BASE` se déduisent de `DEPLOY_DIR` privé de la racine web `/var/www/html` : `/var/www/html/marketing` donne `/marketing/` et `/marketing`. Une variable de moins à tenir, et une occasion de moins de désaccorder le chemin d'assets et le chemin d'API. Ne les renseignez que si votre racine web n'est pas `/var/www/html`.
 
 Les deux sont vides par défaut, ce qui vise la racine — correct pour un déploiement qui n'est pas en sous-répertoire.
 
@@ -49,7 +50,11 @@ Les deux sont vides par défaut, ce qui vise la racine — correct pour un dépl
 
 Les identifiants sont évidemment nécessaires — pour créer les tables comme pour écrire dedans. Ils ne passent simplement pas par GitHub : `db/migrate.php` s'exécute **sur le serveur**, appelé par SSH, et l'API y tourne en permanence.
 
-Ils vivent dans un fichier **`.env` placé un cran au-dessus de `DEPLOY_DIR`**, donc hors de la racine web. C'est délibéré : `DEPLOY_DIR` est servi par le serveur web, et un `.env` posé dedans serait téléchargeable — identifiants MySQL compris. Deux façons de l'obtenir, au choix :
+Ils vivent dans un fichier **`.env` sous `CONFIG_DIR`** (défaut `/var/www/private/marketing`), hors de la racine web. C'est délibéré : `DEPLOY_DIR` est servi par Apache, et un `.env` posé dedans serait téléchargeable — identifiants MySQL compris.
+
+L'application étant servie à `/marketing`, « un cran au-dessus » ne suffit pas : le parent est `/var/www/html`, c'est-à-dire la racine web elle-même. Le déploiement écrit donc le `.env` sous `CONFIG_DIR` et dépose un pointeur `api/.env-path` qui en donne le chemin — ce pointeur ne contient aucun secret.
+
+Deux façons de l'obtenir, au choix :
 
 **A — par GitHub (automatique).** Ajoutez ces secrets ; le déploiement (ré)écrit le fichier à chaque passage, en `chmod 600` :
 
@@ -76,7 +81,7 @@ En mode A, le fichier est composé dans le runner puis transféré — jamais as
 
 Un fichier plutôt que des variables exportées dans un profil de shell, parce qu'aucun des deux consommateurs ne les verrait : `ssh user@host "php db/migrate.php"` ouvre une session **non interactive**, qui ne charge pas `~/.bashrc`, et l'API tourne sous PHP-FPM, dont l'environnement vient de la configuration du pool. Les variables réellement présentes dans l'environnement restent prioritaires sur le fichier.
 
-L'API cherche le fichier dans cet ordre, premier lisible gagnant : `MAR_ENV_FILE`, puis le parent de `DEPLOY_DIR`, puis `DEPLOY_DIR` lui-même. La troisième position n'est tolérée que pour ne pas casser une installation existante ; `api/.htaccess` et `db/.htaccess` y refusent les fichiers commençant par un point, ainsi que le code PHP et les migrations. Ces règles supposent `AllowOverride` actif — si ce n'est pas le cas sur ce vhost, la seule protection réelle est l'emplacement du fichier.
+L'API cherche le fichier dans cet ordre, premier lisible gagnant : `MAR_ENV_FILE`, le chemin inscrit dans `api/.env-path`, le parent de `DEPLOY_DIR`, puis `DEPLOY_DIR` lui-même. La troisième position n'est tolérée que pour ne pas casser une installation existante ; `api/.htaccess` et `db/.htaccess` y refusent les fichiers commençant par un point, ainsi que le code PHP et les migrations. Ces règles supposent `AllowOverride` actif — si ce n'est pas le cas sur ce vhost, la seule protection réelle est l'emplacement du fichier.
 
 ## À adapter
 

@@ -88,13 +88,19 @@ jobs:
         run: npm ci
 
       - name: Typecheck et build
-        # Variables de dépôt (Settings → Variables), pas des secrets : ces
-        # chemins n'ont rien de sensible. Vides, le build vise la racine du
-        # domaine — correct pour un déploiement qui n'est pas en sous-répertoire.
+        # Les chemins du front se déduisent de DEPLOY_DIR : le chemin URL est le
+        # répertoire de déploiement privé de la racine web. Une variable en moins
+        # à tenir, et une occasion de moins de désaccorder les deux.
         env:
+          DEPLOY_DIR: ${{ vars.DEPLOY_DIR || '/var/www/html/marketing' }}
           VITE_BASE: ${{ vars.VITE_BASE }}
           VITE_API_BASE: ${{ vars.VITE_API_BASE }}
-        run: npm run build
+        run: |
+          URL_PATH=$(printf '%s' "$DEPLOY_DIR" | sed 's|^/var/www/html||; s|/$||')
+          export VITE_BASE="${VITE_BASE:-$URL_PATH/}"
+          export VITE_API_BASE="${VITE_API_BASE:-$URL_PATH}"
+          echo "base=$VITE_BASE  api=$VITE_API_BASE"
+          npm run build
 
       - name: Archiver le build
         uses: actions/upload-artifact@v4
@@ -118,8 +124,9 @@ jobs:
       SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
       SSH_KEY: ${{ secrets.SSH_KEY }}
       SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+      CONFIG_DIR: ${{ vars.CONFIG_DIR || '/var/www/private/marketing' }}
       MAR_DB_NAME: ${{ secrets.MAR_DB_NAME }}
-      DEPLOY_DIR: ${{ vars.DEPLOY_DIR || '/var/www/html/webshop/marketing' }}
+      DEPLOY_DIR: ${{ vars.DEPLOY_DIR || '/var/www/html/marketing' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -146,7 +153,7 @@ jobs:
               echo "- \`SSH_PASSWORD\` (ou \`SSH_KEY\` pour une clé, préférable)"
               echo
               echo "Variables facultatives : \`SSH_PORT\` (défaut 22), \`DEPLOY_DIR\`"
-              echo "(défaut \`/var/www/html/webshop/marketing\`)."
+              echo "(défaut \`/var/www/html/marketing\`)."
             } >> "$GITHUB_STEP_SUMMARY"
             echo "Déploiement sauté : SSH_HOST ou SSH_USER absent."
             echo "configured=false" >> "$GITHUB_OUTPUT"
@@ -220,9 +227,15 @@ jobs:
             printf 'MAR_DB_PASSWORD="%s"\n' "$(esc "$MAR_DB_PASSWORD")"
           } > .env.deploy
           if [ -n "$SSH_KEY" ]; then PRE=""; else PRE="sshpass -e"; fi
-          $PRE rsync -a --chmod=600 -e "ssh $SSH_OPTS" \
-            .env.deploy "$SSH_USER@$SSH_HOST:$(dirname "$DEPLOY_DIR")/.env"
+          $SSH_CMD $SSH_OPTS "$SSH_USER@$SSH_HOST" "mkdir -p '$CONFIG_DIR' && chmod 750 '$CONFIG_DIR'"
+          $PRE rsync -a --chmod=600 -e "ssh $SSH_OPTS" .env.deploy "$SSH_USER@$SSH_HOST:$CONFIG_DIR/.env"
           rm -f .env.deploy
+          # Pointeur vers la configuration : il ne contient qu'un chemin, aucun
+          # secret. Nécessaire parce que le parent de DEPLOY_DIR est ici la racine
+          # web elle-même — y poser le .env le rendrait téléchargeable.
+          printf '%s\n' "$CONFIG_DIR/.env" > .env-path
+          $PRE rsync -a -e "ssh $SSH_OPTS" .env-path "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/api/.env-path"
+          rm -f .env-path
 
       - name: Appliquer les migrations
         if: steps.check.outputs.configured == 'true'

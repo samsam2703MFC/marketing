@@ -30,15 +30,21 @@ final class Env
      *
      * Ordre de recherche, le premier lisible gagne :
      *   1. `MAR_ENV_FILE` — chemin explicite ;
-     *   2. le répertoire **parent** du déploiement ;
-     *   3. la racine du déploiement.
+     *   2. le chemin inscrit dans `api/.env-path` ;
+     *   3. le répertoire parent du déploiement ;
+     *   4. la racine du déploiement.
      *
-     * Le parent passe avant : la racine du déploiement est servie par le serveur
-     * web, donc un `.env` posé dedans est téléchargeable — identifiants MySQL
-     * compris. Le placer un cran au-dessus le met hors de portée. La troisième
-     * option reste tolérée pour ne pas casser une installation existante, mais
-     * le déploiement y écrit aussi un `.htaccess` qui refuse les fichiers
-     * commençant par un point.
+     * Le fichier de configuration doit vivre **hors de la racine web** : la
+     * racine du déploiement est servie par Apache, un `.env` posé dedans est
+     * téléchargeable, identifiants MySQL compris.
+     *
+     * D'où le pointeur `api/.env-path` : « un cran au-dessus » ne suffit pas.
+     * L'application étant servie à `/marketing`, son parent est `/var/www/html`,
+     * c'est-à-dire la racine web elle-même. Le pointeur ne contient qu'un chemin,
+     * aucun secret, et laisse choisir librement un emplacement hors de portée.
+     *
+     * Les positions 3 et 4 ne sont tolérées que pour ne pas casser une
+     * installation existante.
      */
     public static function load(?string $path = null): void
     {
@@ -50,8 +56,10 @@ final class Env
 
         if ($path === null) {
             $root       = dirname(__DIR__, 3);
+            $pointer    = dirname(__DIR__, 2) . '/.env-path';
             $candidates = array_filter([
                 getenv('MAR_ENV_FILE') ?: null,
+                is_readable($pointer) ? trim((string) file_get_contents($pointer)) : null,
                 dirname($root) . '/.env',
                 $root . '/.env',
             ]);
