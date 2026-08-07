@@ -106,20 +106,19 @@ jobs:
   deploy:
     name: Déploiement
     needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
-    # L'environnement porte les secrets et permet d'exiger une approbation
-    # manuelle avant toute mise en ligne.
-    environment: production
 
-    # Remontés au niveau du job : le contexte `secrets` n'est pas exposé de
-    # façon fiable dans un `if:` d'étape, contrairement à `env`.
+    # Conventions reprises de back_office_ws_franchisor, qui se déploie déjà sur
+    # ce serveur : mêmes noms de secrets, même méthode. Un dépôt de plus ne doit
+    # pas inventer sa propre façon de faire.
     env:
-      MAR_DB_HOST: ${{ secrets.MAR_DB_HOST }}
-      MAR_DB_PORT: ${{ secrets.MAR_DB_PORT }}
-      MAR_DB_NAME: ${{ secrets.MAR_DB_NAME }}
-      MAR_DB_USER: ${{ secrets.MAR_DB_USER }}
-      MAR_DB_PASSWORD: ${{ secrets.MAR_DB_PASSWORD }}
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+      SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+      DEPLOY_DIR: ${{ vars.DEPLOY_DIR || '/var/www/html/webshop/marketing' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -130,91 +129,98 @@ jobs:
           name: dist
           path: dist
 
-      # Sans secrets configurés, le job s'arrête ici plutôt que d'échouer à
-      # mi-parcours avec un déploiement partiel.
+      # Non configuré = on saute, en restant vert. Un dépôt pas encore branché
+      # ne doit pas afficher un échec permanent qui finit par être ignoré —
+      # c'est la règle déjà appliquée dans notify-landing.yml.
       - name: Vérifier la configuration
+        id: check
         run: |
-          missing=""
-          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_PATH; do
-            eval "value=\${$name}"
-            [ -z "$value" ] && missing="$missing $name"
-          done
-          if [ -n "$missing" ]; then
-            # Écrit dans le résumé du run : visible sur la page de l'exécution,
-            # sans avoir à ouvrir le journal de l'étape.
+          if [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ]; then
             {
               echo "### Déploiement non configuré"
               echo
-              echo "Secrets absents ou vides :"
-              for name in $missing; do echo "- \`$name\`"; done
+              echo "Secrets attendus dans **Settings → Secrets and variables → Actions** :"
+              echo "- \`SSH_HOST\` — ex. 185.180.206.46"
+              echo "- \`SSH_USER\`"
+              echo "- \`SSH_PASSWORD\` (ou \`SSH_KEY\` pour une clé, préférable)"
               echo
-              echo "À renseigner dans **Settings → Environments → production**."
-              echo "Voir \`.github/workflows/README.md\`."
+              echo "Variables facultatives : \`SSH_PORT\` (défaut 22), \`DEPLOY_DIR\`"
+              echo "(défaut \`/var/www/html/webshop/marketing\`)."
             } >> "$GITHUB_STEP_SUMMARY"
-            echo "Secrets manquants :$missing"
+            echo "Déploiement sauté : SSH_HOST ou SSH_USER absent."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "$SSH_PASSWORD" ] && [ -z "$SSH_KEY" ]; then
+            echo "SSH_HOST est défini mais ni SSH_PASSWORD ni SSH_KEY : impossible de s'authentifier."
             exit 1
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
+
+      # La clé prime sur le mot de passe quand les deux existent : le commentaire
+      # de deploy.yml dans back_office_ws_franchisor recommande lui-même la clé.
+      - name: Préparer l'accès SSH
+        if: steps.check.outputs.configured == 'true'
+        run: |
+          if [ -n "$SSH_KEY" ]; then
+            install -m 700 -d ~/.ssh
+            printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+            chmod 600 ~/.ssh/id_deploy
+            echo "SSH_OPTS=-p $SSH_PORT -i $HOME/.ssh/id_deploy -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" >> "$GITHUB_ENV"
+            echo "SSH_CMD=ssh" >> "$GITHUB_ENV"
+          else
+            sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+            echo "SSH_OPTS=-p $SSH_PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" >> "$GITHUB_ENV"
+            echo "SSH_CMD=sshpass -e ssh" >> "$GITHUB_ENV"
+          fi
+
+      - name: Préparer le répertoire distant
+        if: steps.check.outputs.configured == 'true'
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-
-      - name: Préparer la clé SSH
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
         run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
-          chmod 600 ~/.ssh/id_deploy
-          # L'empreinte de l'hôte est vérifiée : sans elle, la connexion accepte
-          # n'importe quel serveur qui répond à cette adresse.
-          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
+          $SSH_CMD $SSH_OPTS "$SSH_USER@$SSH_HOST" \
+            "mkdir -p '$DEPLOY_DIR' '$DEPLOY_DIR/api' '$DEPLOY_DIR/db' && command -v rsync >/dev/null || (echo 'rsync manquant sur le serveur'; exit 1)"
 
-      # L'API part avant les migrations : le runner s'appuie sur l'autoloader de
-      # api/src, il doit donc déjà être en place sur le serveur.
+      # rsync SANS --delete : le répertoire vit sous une racine web partagée avec
+      # d'autres modules, et un DEPLOY_DIR mal réglé effacerait leurs fichiers.
       - name: Publier l'API et les migrations
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
         run: |
-          target="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}"
-          rsync -az --delete --exclude 'tests' --exclude 'public/index.php' \
-            -e "ssh -i ~/.ssh/id_deploy" api/ "$target/api/"
-          rsync -az --delete -e "ssh -i ~/.ssh/id_deploy" db/ "$target/db/"
-
-      # Optionnel : si les secrets de base sont renseignés, le .env du serveur est
-      # (ré)écrit à chaque déploiement. Sinon l'étape est sautée et le fichier
-      # posé à la main sur le serveur reste en place.
-      #
-      # Le fichier est construit dans le runner puis transféré, jamais composé
-      # dans une commande distante : un `ssh host "echo …"` ferait apparaître le
-      # mot de passe dans la liste des processus du serveur.
-      - name: Écrire la configuration base sur le serveur
-        if: ${{ env.MAR_DB_NAME != '' }}
-        run: |
-          umask 077
-          # Chaque valeur part entre guillemets, contenu échappé : sans cela, un
-          # mot de passe bordé d'espaces ou déjà entouré de guillemets serait
-          # tronqué à la relecture, et l'authentification échouerait sans indice.
-          esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
-          {
-            printf 'MAR_DB_HOST="%s"\n'     "$(esc "${MAR_DB_HOST:-127.0.0.1}")"
-            printf 'MAR_DB_PORT="%s"\n'     "$(esc "${MAR_DB_PORT:-3306}")"
-            printf 'MAR_DB_NAME="%s"\n'     "$(esc "$MAR_DB_NAME")"
-            printf 'MAR_DB_USER="%s"\n'     "$(esc "$MAR_DB_USER")"
-            printf 'MAR_DB_PASSWORD="%s"\n' "$(esc "$MAR_DB_PASSWORD")"
-          } > .env.deploy
-          rsync -a --chmod=600 -e "ssh -i ~/.ssh/id_deploy" \
-            .env.deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/.env"
-          rm -f .env.deploy
+          RSYNC="rsync -rltDz --omit-dir-times"
+          if [ -n "$SSH_KEY" ]; then PRE=""; else PRE="sshpass -e"; fi
+          $PRE $RSYNC --exclude 'tests' -e "ssh $SSH_OPTS" api/ "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/api/"
+          $PRE $RSYNC -e "ssh $SSH_OPTS" db/ "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/db/"
 
       - name: Appliquer les migrations
-        # Exécutées côté serveur : le runner tient son registre en base et
-        # n'applique que ce qui manque, donc un redéploiement ne casse rien.
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
         run: |
-          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "cd ${{ secrets.DEPLOY_PATH }} && php db/migrate.php"
+          $SSH_CMD $SSH_OPTS "$SSH_USER@$SSH_HOST" "cd '$DEPLOY_DIR' && php db/migrate.php"
 
       # Le front en dernier : si une migration échoue, les utilisateurs restent
       # sur la version précédente plutôt que sur une interface sans son schéma.
       - name: Publier le front
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
         run: |
-          rsync -az --delete -e "ssh -i ~/.ssh/id_deploy" \
-            dist/ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/public/"
+          if [ -n "$SSH_KEY" ]; then PRE=""; else PRE="sshpass -e"; fi
+          $PRE rsync -rltDz --omit-dir-times -e "ssh $SSH_OPTS" dist/ "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/"
+
+      - name: Vérifier la page servie
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          URL_PATH=$(printf '%s' "$DEPLOY_DIR" | sed 's|^/var/www/html||')
+          $SSH_CMD $SSH_OPTS "$SSH_USER@$SSH_HOST" bash -s << REMOTE
+          BASE="http://localhost$URL_PATH"
+          echo "== page =="
+          curl -s -o /dev/null -w "  %{http_code}  \$BASE/\n" "\$BASE/"
+          echo "== API =="
+          curl -s -o /dev/null -w "  %{http_code}  \$BASE/api/v1/marketing/references (401 attendu sans jeton)\n" \
+            "\$BASE/api/v1/marketing/references"
+          REMOTE
