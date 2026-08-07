@@ -20,7 +20,7 @@ final class Request
 
     public static function fromGlobals(): self
     {
-        $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+        $path = self::stripBasePath(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
         $raw  = file_get_contents('php://input') ?: '';
 
         $decoded = $raw === '' ? [] : json_decode($raw, true);
@@ -31,6 +31,36 @@ final class Request
             $_GET,
             is_array($decoded) ? $decoded : [],
         );
+    }
+
+    /**
+     * Retire le préfixe du sous-répertoire d'installation.
+     *
+     * Les routes sont déclarées en absolu (`/api/v1/marketing/...`), mais
+     * l'application est servie sous un chemin — `/marketing` ici. Sans ce
+     * nettoyage, `REQUEST_URI` vaut `/marketing/api/v1/...` et aucune route ne
+     * correspond : toute l'API répond 404 en production alors qu'elle passe en
+     * développement, où elle est servie à la racine.
+     *
+     * `MAR_BASE_PATH` permet de forcer le préfixe ; à défaut on coupe à la
+     * première occurrence de `/api/v1/`, ce qui vaut pour n'importe quel
+     * répertoire d'installation.
+     */
+    private static function stripBasePath(string $path): string
+    {
+        $base = getenv('MAR_BASE_PATH');
+        if (is_string($base) && $base !== '') {
+            $base = '/' . trim($base, '/');
+            if ($base !== '/' && str_starts_with($path, $base)) {
+                $path = substr($path, strlen($base));
+
+                return $path === '' ? '/' : $path;
+            }
+        }
+
+        $position = strpos($path, '/api/v1/');
+
+        return $position !== false && $position > 0 ? substr($path, $position) : $path;
     }
 
     public function withParams(array $params): self

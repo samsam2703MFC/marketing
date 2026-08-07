@@ -175,6 +175,24 @@ check('un état inconnu est rejeté', $response['status'] === 422, 'statut ' . $
 $response = call($router, 'GET', '/api/v1/marketing/campaigns/10/leads');
 check('l\'entonnoir se recalcule après le changement', ($response['body']['funnel'][1]['leads_count'] ?? null) === 1);
 
+// --- Installation en sous-répertoire --------------------------------------
+// Les routes sont absolues mais l'application est servie sous /marketing : sans
+// retrait du préfixe, toute l'API répond 404 en production tout en passant en
+// développement, où elle est servie à la racine.
+echo "\nInstallation en sous-répertoire\n";
+$strip = new ReflectionMethod(Request::class, 'stripBasePath');
+$strip->setAccessible(true);
+
+foreach ([
+    '/api/v1/marketing/references'                          => '/api/v1/marketing/references',
+    '/marketing/api/v1/marketing/references'                 => '/api/v1/marketing/references',
+    '/webshop/marketing/api/v1/marketing/campaigns/10/leads' => '/api/v1/marketing/campaigns/10/leads',
+    '/marketing/'                                            => '/marketing/',
+] as $uri => $expected) {
+    $got = $strip->invoke(null, $uri);
+    check(sprintf('préfixe retiré — %s', $uri), $got === $expected, 'obtenu ' . $got);
+}
+
 // --- Étanchéité des erreurs ----------------------------------------------
 // PDOException hérite de RuntimeException : sans traitement séparé, un message
 // SQL — qui cite tables et colonnes — repartirait au client dans une 422.

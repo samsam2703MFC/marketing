@@ -1,0 +1,26 @@
+# L'application est servie depuis un sous-répertoire (/marketing) et non depuis
+# la racine du domaine. Sans ces règles, deux choses cassent : les appels API
+# n'atteignent jamais le contrôleur frontal PHP, et un rechargement de page
+# renvoie 404 puisque le routage est côté client.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Les appels /api/... partent vers le contrôleur frontal du module.
+  # REQUEST_URI n'est pas modifié par la réécriture : PHP voit toujours le
+  # chemin d'origine et en retire lui-même le préfixe d'installation.
+  RewriteRule ^api/(.*)$ api/public/index.php [L,QSA]
+
+  # Fichier ou répertoire réel : servi tel quel.
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Sinon l'application, qui gère son propre routage.
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+# Le fichier de configuration ne vit pas ici, mais si une installation le pose
+# malgré tout à la racine du déploiement, il ne doit pas être téléchargeable.
+<FilesMatch "^\.">
+  Require all denied
+</FilesMatch>

@@ -1,15 +1,14 @@
-# Le module est déployé sous la racine web : sans cette règle, un fichier de
-# configuration posé à côté du code serait téléchargeable, identifiants MySQL
-# compris. On refuse les fichiers commençant par un point, et le code PHP lui-même
-# — seul api/public/index.php doit être atteignable.
+# Le module est déployé sous la racine web. Seul le contrôleur frontal doit être
+# atteignable : ni les sources PHP, ni les fichiers de configuration.
 <FilesMatch "^\.">
   Require all denied
 </FilesMatch>
 
-<FilesMatch "\.(php|sql|md)$">
+<FilesMatch "\.(sql|md|json|lock)$">
   Require all denied
 </FilesMatch>
 
-<FilesMatch "^index\.php$">
-  Require all granted
+# Tout le PHP sauf index.php (le contrôleur frontal, sous public/).
+<FilesMatch "^(?!index\.php$).*\.php$">
+  Require all denied
 </FilesMatch>
