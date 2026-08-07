@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Permet de relancer après avoir renseigné les secrets, sans commit vide.
+  workflow_dispatch:
 
 jobs:
   # Le service MySQL 8 fait ici ce que l'environnement de développement ne
@@ -138,8 +140,18 @@ jobs:
             [ -z "$value" ] && missing="$missing $name"
           done
           if [ -n "$missing" ]; then
+            # Écrit dans le résumé du run : visible sur la page de l'exécution,
+            # sans avoir à ouvrir le journal de l'étape.
+            {
+              echo "### Déploiement non configuré"
+              echo
+              echo "Secrets absents ou vides :"
+              for name in $missing; do echo "- \`$name\`"; done
+              echo
+              echo "À renseigner dans **Settings → Environments → production**."
+              echo "Voir \`.github/workflows/README.md\`."
+            } >> "$GITHUB_STEP_SUMMARY"
             echo "Secrets manquants :$missing"
-            echo "Voir .github/workflows/README.md pour la liste attendue."
             exit 1
           fi
         env:
