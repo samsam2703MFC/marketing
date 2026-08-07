@@ -193,13 +193,27 @@ jobs:
 
           # L'empreinte de l'hôte, quand elle est fournie, évite d'accepter
           # aveuglément n'importe quel serveur répondant à cette adresse.
+          HOST_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
           if [ -n "$SSH_KNOWN_HOSTS" ]; then
             printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
             chmod 600 ~/.ssh/known_hosts
-            HOST_OPTS="-o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
-            echo "Empreinte d'hôte fournie : vérification activée."
+
+            # Une empreinte fournie ne suffit pas : encore faut-il qu'elle couvre
+            # cet hôte. Sinon ssh refuse la connexion pour une clé manquante, ce
+            # qui ressemble à un refus d'authentification et envoie chercher le
+            # problème au mauvais endroit.
+            if ssh-keygen -F "$SSH_HOST" -f ~/.ssh/known_hosts > /dev/null 2>&1; then
+              HOST_OPTS="-o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
+              echo "Empreinte d'hôte trouvée : vérification activée."
+            else
+              # On avertit fort plutôt que de bloquer le déploiement sur un secret
+              # incomplet : sans entrée utilisable, on n'est pas plus protégé en
+              # échouant qu'en continuant.
+              echo "::warning title=Empreinte d'hôte inutilisable::SSH_KNOWN_HOSTS ne contient aucune entrée pour cet hôte — vérification désactivée. Régénérez-la avec : ssh-keyscan -t rsa,ecdsa,ed25519 <hôte>"
+              echo "Empreinte fournie mais sans entrée pour cet hôte : vérification désactivée."
+            fi
           else
-            HOST_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
             echo "Pas d'empreinte d'hôte : vérification désactivée (ajoutez SSH_KNOWN_HOSTS)."
           fi
 
