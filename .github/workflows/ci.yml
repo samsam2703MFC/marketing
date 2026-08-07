@@ -188,6 +188,8 @@ jobs:
       # de deploy.yml dans back_office_ws_franchisor recommande lui-même la clé.
       - name: Préparer l'accès SSH
         if: steps.check.outputs.configured == 'true'
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
         run: |
           install -m 700 -d ~/.ssh
 
@@ -217,15 +219,41 @@ jobs:
             echo "Pas d'empreinte d'hôte : vérification désactivée (ajoutez SSH_KNOWN_HOSTS)."
           fi
 
+          # sshpass est installé d'office : la clé peut se révéler inutilisable et
+          # le mot de passe devenir le seul recours.
+          sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+
+          CHOSEN=""
           if [ -n "$SSH_KEY" ]; then
             printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
             chmod 600 ~/.ssh/id_deploy
-            echo "SSH_OPTS=-p $SSH_PORT -i $HOME/.ssh/id_deploy $HOST_OPTS" >> "$GITHUB_ENV"
-            echo "SSH_CMD=ssh" >> "$GITHUB_ENV"
-          else
-            sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+            KEY_OPTS="-p $SSH_PORT -i $HOME/.ssh/id_deploy $HOST_OPTS"
+
+            # Une clé peut authentifier sans rien permettre : c'est le cas d'une
+            # clé à commande forcée (`command=` dans authorized_keys), qui ignore
+            # la commande demandée et sort en silence. On l'écarte en vérifiant
+            # qu'un simple echo revient.
+            if probe=$(ssh $KEY_OPTS -o BatchMode=yes -o ConnectTimeout=15 \
+                         "$SSH_USER@$SSH_HOST" 'echo SSH_PROBE_OK' 2>&1) \
+               && [ "${probe#*SSH_PROBE_OK}" != "$probe" ]; then
+              CHOSEN=key
+              echo "SSH_OPTS=$KEY_OPTS" >> "$GITHUB_ENV"
+              echo "SSH_CMD=ssh" >> "$GITHUB_ENV"
+              echo "Authentification par clé : opérationnelle."
+            else
+              echo "::warning title=Clé SSH inutilisable::La clé authentifie mais n'exécute aucune commande — typiquement une clé à commande forcée. Repli sur SSH_PASSWORD."
+              echo "Clé refusée pour l'exécution de commandes."
+            fi
+          fi
+
+          if [ -z "$CHOSEN" ]; then
+            if [ -z "$SSH_PASSWORD" ]; then
+              echo "::error title=Aucune authentification exploitable::La clé n'exécute pas de commande et SSH_PASSWORD n'est pas défini. Ajoutez SSH_PASSWORD, ou installez une clé de déploiement sans commande forcée dans authorized_keys."
+              exit 1
+            fi
             echo "SSH_OPTS=-p $SSH_PORT $HOST_OPTS" >> "$GITHUB_ENV"
             echo "SSH_CMD=sshpass -e ssh" >> "$GITHUB_ENV"
+            echo "Authentification par mot de passe."
           fi
 
       - name: Préparer le répertoire distant
