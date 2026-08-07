@@ -1,3 +1,7 @@
+-- Charset explicite : le client mysql par défaut est souvent en latin1,
+-- ce qui double-encode les accents de ce fichier au chargement.
+SET NAMES utf8mb4;
+
 -- =============================================================================
 -- 002 — Campagnes : référentiels, campagne, périmètre, objectifs, KPI
 -- =============================================================================

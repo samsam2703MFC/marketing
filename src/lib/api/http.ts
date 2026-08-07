@@ -36,6 +36,12 @@ export interface RequestOptions {
   /** En-têtes additionnels — utile pour `If-None-Match` sur les routes à ETag. */
   headers?: Record<string, string>
   signal?: AbortSignal
+  /**
+   * Racine à utiliser à la place de celle de l'ERP. Le module marketing est
+   * servi par l'application elle-même (`/api/...`), pas derrière le proxy
+   * `/erp` — d'où cette surcharge plutôt qu'un second client dupliqué.
+   */
+  baseUrl?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -73,8 +79,9 @@ async function refreshTokens(): Promise<AuthTokens> {
 // Construction et exécution des requêtes
 // ---------------------------------------------------------------------------
 
-function buildUrl(path: string, query?: Record<string, QueryValue>): string {
-  const url = `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
+function buildUrl(path: string, query?: Record<string, QueryValue>, baseUrl?: string): string {
+  const root = baseUrl ?? API_BASE_URL
+  const url = `${root}${path.startsWith('/') ? path : `/${path}`}`
   if (!query) return url
 
   const params = new URLSearchParams()
@@ -145,7 +152,7 @@ async function execute(
 
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`
 
-  return fetch(buildUrl(path, options.query), {
+  return fetch(buildUrl(path, options.query, options.baseUrl), {
     method: options.method ?? 'GET',
     headers,
     body: payload,

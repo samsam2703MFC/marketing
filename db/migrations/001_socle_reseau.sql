@@ -1,3 +1,7 @@
+-- Charset explicite : le client mysql par défaut est souvent en latin1,
+-- ce qui double-encode les accents de ce fichier au chargement.
+SET NAMES utf8mb4;
+
 -- =============================================================================
 -- 001 — Socle réseau : marques, boutiques, rattachements, leviers
 -- Module marketing franchise — toutes les tables portent le préfixe `mar_`.

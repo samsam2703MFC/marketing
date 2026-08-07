@@ -17,8 +17,11 @@
   --muted: #7a736a;
   --line: #e6e0d8;
   --paper: #faf7f2;
-  --accent: #8b5e34;
+  --accent: #8D1D2C;
   --danger: #b3261e;
+  --chip: #EDE7DE;
+  --table-head: #FBF9F5;
+  --row-line: rgba(34, 34, 34, 0.06);
 
   color-scheme: light;
   font-family: 'Gotham', system-ui, sans-serif;
@@ -168,4 +171,71 @@ button.ghost {
   display: grid;
   gap: 1rem;
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
+/* Pastilles de statut et de levier — les couleurs viennent de l'API, jamais d'ici */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.chip--lever {
+  background: var(--chip);
+  color: var(--ink);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+/* Tableaux */
+.table-card {
+  margin-top: 1rem;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+thead th {
+  text-align: left;
+  font-weight: 400;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--table-head);
+  padding: 10px 14px;
+}
+
+tbody td {
+  padding: 13px 14px;
+  border-top: 1px solid var(--row-line);
+}
+
+.num {
+  text-align: right;
 }

@@ -5,12 +5,24 @@ Schéma issu de `DATA_MODEL.md` du handoff de design. **Toutes les tables porten
 ## Exécution
 
 ```bash
-mysql -u <user> -p <db> < db/migrations/001_socle_reseau.sql
-# … dans l'ordre numérique, puis :
-mysql -u <user> -p <db> < db/seeds/001_referentiels.sql
+MAR_DB_HOST=127.0.0.1 MAR_DB_NAME=marketing MAR_DB_USER=… MAR_DB_PASSWORD=… \
+  php db/migrate.php
 ```
 
+`db/migrate.php` tient un registre — `mar_schema_migration` — et n'applique que les fichiers absents. Rejouer les `.sql` à la main fonctionne au premier chargement mais échoue au second, les `CREATE TABLE` se heurtant aux tables existantes. Les fichiers de vues font exception : écrits en `CREATE OR REPLACE`, ils sont rejoués à chaque passage pour qu'une vue modifiée soit réellement mise à jour.
+
 L'ordre des fichiers est contraint par les clés étrangères — 010 (les vues) en dernier.
+
+### Encodage
+
+Chaque fichier commence par `SET NAMES utf8mb4;`, et ce n'est pas décoratif : **le client `mysql` en ligne de commande est souvent configuré avec `character_set_client = latin1`**. Sans cette ligne, les accents de ce module sont double-encodés au chargement — « Planifiée » se stocke en `Planifi\xC3\x83\xC2\xA9e` au lieu de `Planifi\xC3\xA9e`, et ressort en « PlanifiÃ©e » dans l'API. Le schéma paraît correct, seuls les libellés sont corrompus, ce qui rend le défaut facile à manquer.
+
+Ne retirez pas cette ligne, et si vous chargez les fichiers autrement, vérifiez :
+
+```sql
+SELECT HEX(SUBSTRING(label, 7, 2)) FROM mar_campaign_status WHERE code = 'planned';
+-- attendu C3A9 (le « é »), pas C383C2A9
+```
 
 ## État de validation
 
@@ -24,6 +36,7 @@ Le schéma a été **exécuté et vérifié**, pas seulement écrit :
 | Objets hors préfixe `mar_` | 0 |
 | Clés étrangères | 74 |
 | `SELECT` sur chacune des 6 vues, avec données | OK, valeurs contrôlées |
+| Accents identiques via client CLI et via `migrate.php` | OK (`C3A9`) |
 
 ⚠️ **La validation a tourné sur MariaDB 10.11**, pas sur MySQL 8 : c'est le moteur qui a pu être installé dans l'environnement de développement. Le DDL n'utilise rien qui diverge entre les deux (pas de fonction de fenêtrage, pas de CTE, `JSON` seulement en stockage), mais un rejeu sur le moteur de production reste à faire avant mise en service.
 
