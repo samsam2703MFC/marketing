@@ -1557,3 +1557,150 @@ table select,
   min-width: 18rem;
   max-width: 30rem;
 }
+
+/* ---------------------------------------------------------------------------
+   Période de campagne — calendrier ouvert, deux clics.
+
+   Les `<input type="date">` demandaient d'ouvrir un sélecteur, choisir,
+   refermer, recommencer sur le second, et affichaient `mm/dd/yyyy` — l'ordre
+   américain — à des gens qui écrivent le jour d'abord. Le calendrier reste
+   ouvert : premier clic le début, deuxième la fin.
+   --------------------------------------------------------------------------- */
+.calendar {
+  margin-top: 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 0.6rem 0.75rem 0.85rem;
+}
+
+.calendar__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.calendar__range {
+  flex: 1;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.calendar__range strong {
+  color: var(--ink);
+}
+
+.calendar__nav,
+.calendar__clear {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted-2);
+  font-size: 13px;
+  line-height: 1;
+  padding: 6px 10px;
+}
+
+.calendar__nav:hover,
+.calendar__clear:hover {
+  color: var(--ink);
+  border-color: var(--muted-2);
+}
+
+/* Deux mois côte à côte : une campagne franchit presque toujours une fin de
+   mois, et naviguer entre les deux clics ferait perdre le premier de vue. */
+.calendar__months {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.6rem 1.4rem;
+  margin-top: 0.6rem;
+}
+
+.calendar__title {
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--ink);
+  padding-bottom: 0.35rem;
+}
+
+.calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.calendar__weekday {
+  text-align: center;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding-bottom: 2px;
+}
+
+.calendar__blank {
+  height: 30px;
+}
+
+.calendar__day {
+  height: 30px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-family: inherit;
+}
+
+.calendar__day:hover {
+  background: var(--table-head);
+}
+
+/* Aujourd'hui se repère sans être sélectionné : un simple point sous le jour,
+   qui ne se confond pas avec une borne retenue. */
+.calendar__day.is-today {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.calendar__day.is-inside {
+  background: rgba(141, 29, 44, 0.09);
+  border-radius: 0;
+}
+
+.calendar__day.is-from,
+.calendar__day.is-to {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.calendar__day.is-from {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.calendar__day.is-to {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+/* Une borne unique — premier clic posé, second attendu — reprend ses quatre
+   coins : sans cela elle s'affiche comme la moitié d'une plage inexistante. */
+.calendar__day.is-from.is-to {
+  border-radius: 7px;
+}
+
+/* Le nom de la campagne se relit dans les listes, les calendriers et les
+   briefs : il se compose en pleine largeur, à la taille d'un titre. */
+.input--title {
+  width: 100%;
+  font-size: 15px;
+  padding: 9px 12px;
+}

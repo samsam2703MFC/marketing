@@ -5,6 +5,7 @@ import type { CampaignDraft, ClientTarget, References } from '../../lib/api/modu
 import type { Role } from '../../lib/navigation'
 import { describeError } from '../../state/auth'
 import ProspectPanel from './ProspectPanel'
+import RangeCalendar from './RangeCalendar'
 
 /**
  * Assistant de création de campagne, en sept étapes.
@@ -589,33 +590,26 @@ function FramingStep({
       </ul>
 
       <h3 className="section-label">Identité & période</h3>
-      <div className="filters__row">
-        <label className="field field--wide">
-          Nom
-          <input
-            type="text"
-            value={draft.name}
-            placeholder="Barbecue été — opération terrasse"
-            onChange={(e) => patch({ name: e.target.value })}
-          />
-        </label>
-        <label className="field">
-          Du
-          <input
-            type="date"
-            value={draft.starts_on}
-            onChange={(e) => patch({ starts_on: e.target.value })}
-          />
-        </label>
-        <label className="field">
-          Au
-          <input
-            type="date"
-            value={draft.ends_on}
-            onChange={(e) => patch({ ends_on: e.target.value })}
-          />
-        </label>
-      </div>
+
+      {/* Le nom occupe toute la largeur : c'est la ligne qu'on relira dans les
+          listes, les calendriers et les briefs, et il fallait la composer dans
+          un champ deux fois plus court qu'elle. */}
+      <label className="field field--block">
+        Nom
+        <input
+          type="text"
+          className="input--title"
+          value={draft.name}
+          placeholder="Barbecue été — opération terrasse"
+          onChange={(e) => patch({ name: e.target.value })}
+        />
+      </label>
+
+      <RangeCalendar
+        from={draft.starts_on}
+        to={draft.ends_on}
+        onChange={(range) => patch(range)}
+      />
 
       <h3 className="section-label">Portée</h3>
       {role === 'BRAND_ADMIN' ? (
@@ -851,24 +845,11 @@ function OfferStep({ refs, draft, patch }: StepProps) {
         + Ajouter un élément
       </button>
 
+      {/* Même calendrier qu'à l'étape 1 : la fenêtre de l'offre est une période
+          comme l'autre, et deux façons de saisir une date dans le même
+          assistant se paient au premier écart entre les deux. */}
       <h3 className="section-label">Fenêtre</h3>
       <div className="filters__row">
-        <label className="field">
-          Du
-          <input
-            type="date"
-            value={draft.offer_from}
-            onChange={(e) => patch({ offer_from: e.target.value })}
-          />
-        </label>
-        <label className="field">
-          Au
-          <input
-            type="date"
-            value={draft.offer_to}
-            onChange={(e) => patch({ offer_to: e.target.value })}
-          />
-        </label>
         <button
           type="button"
           className="filter"
@@ -878,6 +859,11 @@ function OfferStep({ refs, draft, patch }: StepProps) {
           Reprendre la période de campagne
         </button>
       </div>
+      <RangeCalendar
+        from={draft.offer_from}
+        to={draft.offer_to}
+        onChange={(range) => patch({ offer_from: range.starts_on, offer_to: range.ends_on })}
+      />
 
       <h3 className="section-label">Horaire</h3>
       <div className="filters__row">
