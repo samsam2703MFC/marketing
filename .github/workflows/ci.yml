@@ -391,9 +391,24 @@ jobs:
           # root, l'API ne peut pas l'ouvrir — elle perd les identifiants de base
           # sans qu'aucune étape n'échoue, puisque rien ne les lit avant le
           # premier appel qui touche la base.
-          $PRE rsync -a --chmod=640 -e "ssh $SSH_OPTS" .env.deploy "$SSH_USER@$SSH_HOST:$CONFIG_DIR/.env"
-          $SSH_CMD $SSH_OPTS "$SSH_USER@$SSH_HOST" \
-            "chgrp www-data '$CONFIG_DIR/.env' 2>/dev/null || true; chmod 640 '$CONFIG_DIR/.env'; chmod 750 '$CONFIG_DIR'; chgrp www-data '$CONFIG_DIR' 2>/dev/null || true"
+          # Fusion, pas écrasement : le déploiement possède les clés MAR_DB_*,
+          # rien d'autre. Une réécriture intégrale effaçait à chaque mise en ligne
+          # les réglages posés à la main sur le serveur, sans le dire.
+          $PRE rsync -a --chmod=640 -e "ssh $SSH_OPTS" .env.deploy "$SSH_USER@$SSH_HOST:$CONFIG_DIR/.env.db"
+          $SSH_CMD $SSH_OPTS "$SSH_USER@$SSH_HOST" "
+            cd '$CONFIG_DIR'
+            touch .env
+            # On conserve toute ligne qui n'appartient pas au déploiement, puis
+            # on ajoute les siennes — elles arrivent en dernier, donc priment.
+            grep -vE '^(MAR_DB_HOST|MAR_DB_PORT|MAR_DB_NAME|MAR_DB_USER|MAR_DB_PASSWORD)=' .env > .env.merged 2>/dev/null || true
+            cat .env.db >> .env.merged
+            mv .env.merged .env
+            rm -f .env.db
+            chgrp www-data .env 2>/dev/null || true
+            chmod 640 .env
+            chmod 750 '$CONFIG_DIR'
+            chgrp www-data '$CONFIG_DIR' 2>/dev/null || true
+          "
           rm -f .env.deploy
           # Pointeur vers la configuration : il ne contient qu'un chemin, aucun
           # secret. Nécessaire parce que le parent de DEPLOY_DIR est ici la racine
