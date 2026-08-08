@@ -424,12 +424,36 @@ jobs:
         env:
           SSHPASS: ${{ secrets.SSH_PASSWORD }}
         run: |
-          URL_PATH=$(printf '%s' "$DEPLOY_DIR" | sed 's|^/var/www/html||')
-          $SSH_CMD $SSH_OPTS "$SSH_USER@$SSH_HOST" bash -s << REMOTE
-          BASE="http://localhost$URL_PATH"
-          echo "== page =="
-          curl -s -o /dev/null -w "  %{http_code}  \$BASE/\n" "\$BASE/"
-          echo "== API =="
-          curl -s -o /dev/null -w "  %{http_code}  \$BASE/api/v1/marketing/references (401 attendu sans jeton)\n" \
-            "\$BASE/api/v1/marketing/references"
-          REMOTE
+          # Une étape qui se contente d'afficher des codes passe au vert quoi
+          # qu'il arrive : elle donne l'illusion d'un contrôle. Chaque code est
+          # donc comparé à ce qu'on attend.
+          URL_PATH=$(printf '%s' "$DEPLOY_DIR" | sed 's|^/var/www/html||; s|/$||')
+          out=$($SSH_CMD $SSH_OPTS -o BatchMode=yes "$SSH_USER@$SSH_HOST" "
+            B=http://localhost$URL_PATH
+            for p in '/' '/api/v1/marketing/session' '/api/v1/marketing/references' '/.env' '/db/migrate.php'; do
+              printf '%s %s\n' \"\$p\" \"\$(curl -s -o /dev/null -w '%{http_code}' \"\$B\$p\")\"
+            done
+          " 2>&1 | grep -v 'Permanently added')
+
+          printf '%s\n' "$out"
+          { echo "### Contrôles HTTP"; echo '```'; printf '%s\n' "$out"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+          code() { printf '%s\n' "$out" | awk -v p="$1" '$1==p {print $2}'; }
+          fail=0
+          check() {
+            got=$(code "$1")
+            case " $2 " in
+              *" $got "*) echo "  ok   $1 → $got" ;;
+              *) echo "  NON  $1 → $got (attendu : $2)"
+                 echo "::error title=Contrôle HTTP::$1 répond $got, attendu $2 — $3"
+                 fail=1 ;;
+            esac
+          }
+          # 401 sur une route protégée est le bon résultat : l'API est joignable
+          # et refuse l'accès. Un 404 dirait que la réécriture ne s'applique pas.
+          check '/'                              '200'     "le front n'est pas servi"
+          check '/api/v1/marketing/session'      '200'     "la réécriture vers api/public/index.php ne s'applique pas"
+          check '/api/v1/marketing/references'   '200 401' "l'API ne répond pas correctement"
+          check '/.env'                          '403 404' "le fichier de configuration est exposé"
+          check '/db/migrate.php'                '403 404' "les migrations sont exposées"
+          exit $fail
