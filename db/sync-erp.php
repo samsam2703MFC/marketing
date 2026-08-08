@@ -204,14 +204,10 @@ foreach ($inventory as $table => $detail) {
 
 // Tables à inspecter sans les exploiter encore : on demande leur structure
 // plutôt que de la supposer, ce qui coûte un seul aller-retour au lieu d'un
-// par hypothèse.
-foreach (['b2b_client_type'] as $table) {
-    $columns = $repository->describe($table);
-    printf(
-        "\n%s\n  colonnes présentes    : %s\n",
-        $table,
-        $columns === [] ? 'table absente' : implode(', ', $columns)
-    );
+// par hypothèse. Le préfixe « SONDE » les distingue de l'inventaire des
+// sources, que l'analyse du journal traite différemment.
+foreach ($repository->explore(['b2b', 'company_client', 'client_type']) as $table => $columns) {
+    printf("\nSONDE %s : %s\n", $table, implode(', ', $columns));
 }
 
 $prospects = (int) $pdo->query(

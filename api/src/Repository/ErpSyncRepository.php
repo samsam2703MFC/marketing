@@ -151,6 +151,41 @@ final class ErpSyncRepository
     }
 
     /**
+     * Tables dont le nom contient un fragment, avec leurs colonnes.
+     *
+     * Le lien entre un client et son type professionnel n'apparaît sur aucune
+     * des deux tables : ni clé étrangère sur `client`, ni référence au client
+     * sur `b2b_client_type`. Il passe donc par une table intermédiaire qu'il
+     * faut trouver. La chercher par motif évite d'en essayer les noms un par
+     * un, à un déploiement chacun.
+     *
+     * @param  list<string> $fragments
+     * @return array<string, list<string>>
+     */
+    public function explore(array $fragments): array
+    {
+        $schema = $this->currentSchema();
+        $found  = [];
+
+        foreach ($fragments as $fragment) {
+            $statement = Database::connection()->prepare(
+                'SELECT table_name FROM information_schema.tables
+                  WHERE table_schema = :schema
+                    AND table_name LIKE :pattern
+                    AND table_name NOT LIKE \'mar\\_%\'
+                  ORDER BY table_name'
+            );
+            $statement->execute(['schema' => $schema, 'pattern' => '%' . $fragment . '%']);
+
+            foreach ($statement->fetchAll(PDO::FETCH_COLUMN) as $table) {
+                $found[(string) $table] = $this->describe((string) $table);
+            }
+        }
+
+        return $found;
+    }
+
+    /**
      * Marques du réseau, reprises de l'ERP.
      *
      * Le module ne peut rien faire sans marque : une campagne s'y rattache, une
