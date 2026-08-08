@@ -270,6 +270,28 @@ final class CampaignRepository
     }
 
     /**
+     * Droit d'écriture sur une campagne existante.
+     *
+     * Voir une campagne et pouvoir la modifier sont deux choses distinctes, et
+     * le code les confondait : une campagne réseau est visible de tous les
+     * franchisés — c'est voulu, ils doivent la relayer — et le seul contrôle
+     * avant écriture était cette visibilité. Un franchisé pouvait donc
+     * renommer, rebudgéter, et surtout supprimer une campagne du réseau.
+     *
+     * @param array<string,mixed> $campaign
+     */
+    private function assertWritable(AuthContext $auth, array $campaign): void
+    {
+        if ($auth->isBrandAdmin()) {
+            return;
+        }
+
+        if (($campaign['scope'] ?? null) !== 'LOCALE') {
+            throw new RuntimeException('Une campagne réseau ne se modifie qu\'au niveau du réseau.');
+        }
+    }
+
+    /**
      * Contrôle des données de campagne avant écriture.
      *
      * Trois raisons de le faire ici plutôt que dans le formulaire :
@@ -700,9 +722,26 @@ final class CampaignRepository
     /** @param array<string,mixed> $data */
     public function update(AuthContext $auth, int $id, array $data): bool
     {
-        if ($this->find($auth, $id) === null) {
+        $current = $this->find($auth, $id);
+        if ($current === null) {
             return false;
         }
+
+        $this->assertWritable($auth, $current);
+
+        // Les mêmes contrôles qu'à la création. Ils n'y étaient pas : une
+        // campagne créée valide pouvait ensuite recevoir une portée inconnue,
+        // une période inversée ou une cible fantaisiste. Le cas de la portée
+        // était le plus sournois — une valeur hors « RESEAU » / « LOCALE » fait
+        // sortir la campagne du filtre de périmètre, donc de la vue de tout le
+        // monde, sans qu'aucune erreur ne soit levée nulle part.
+        $data = $this->validated($auth, $data + [
+            'scope'         => $current['scope'],
+            'client_target' => $current['client_target'],
+            'status_code'   => $current['status_code'],
+            'starts_on'     => $current['starts_on'],
+            'ends_on'       => $current['ends_on'],
+        ]);
 
         $columns = [
             'type_id', 'name', 'scope', 'client_target', 'tone', 'status_code',
@@ -733,6 +772,11 @@ final class CampaignRepository
 
     public function delete(AuthContext $auth, int $id): bool
     {
+        $current = $this->find($auth, $id);
+        if ($current !== null) {
+            $this->assertWritable($auth, $current);
+        }
+
         if ($this->find($auth, $id) === null) {
             return false;
         }

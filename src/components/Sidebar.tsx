@@ -41,7 +41,16 @@ export default function Sidebar({
   return (
     <nav className="sidebar" aria-label="Navigation principale">
       <div className="sidebar__head">
-        <img src="/img/logo.png" alt="L'Atelier By" className="sidebar__logo" />
+        {/* Chemin relatif à la racine d'installation : l'application est servie
+            sous /marketing, où « /img/logo.png » désignerait la racine du
+            domaine. Vite réécrit les URL des feuilles de style et de
+            index.html, mais pas celles écrites dans le JSX — les polices et la
+            favicone marchaient donc, et le logo était le seul cassé. */}
+        <img
+          src={`${import.meta.env.BASE_URL}img/logo.png`}
+          alt="L'Atelier By"
+          className="sidebar__logo"
+        />
         <div className="sidebar__kicker">Module Marketing</div>
       </div>
 

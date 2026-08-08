@@ -23,6 +23,14 @@ final class CatalogController
         return Response::data($this->catalog->promotions(AuthContext::current()));
     }
 
+    /** Offres montées dans l'assistant, à côté des promotions du catalogue. */
+    public function campaignOffers(Request $request): array
+    {
+        unset($request);
+
+        return Response::data($this->catalog->campaignOffers(AuthContext::current()));
+    }
+
     public function bundles(Request $request): array
     {
         unset($request);

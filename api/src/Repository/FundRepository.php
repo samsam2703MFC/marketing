@@ -7,6 +7,7 @@ namespace Marketing\Repository;
 use Marketing\Support\AuthContext;
 use Marketing\Support\Database;
 use Marketing\Support\Scope;
+use RuntimeException;
 
 /** Fonds marketing : grand livre, synthèse par levier, ROI. */
 final class FundRepository
@@ -192,10 +193,69 @@ final class FundRepository
     }
 
     /** @param array<string,mixed> $data */
+    /**
+     * Écriture d'un mouvement de fonds.
+     *
+     * Le contrôle est plus strict qu'ailleurs parce que ces lignes forment le
+     * solde du fonds, et que le solde alimente à son tour le ROI. Deux
+     * tolérances de l'implémentation précédente pouvaient le fausser sans que
+     * rien ne le signale :
+     *
+     * — un sens inconnu était ramené à « OUT ». Une faute de frappe sur
+     *   « IN » retirait donc l'argent au lieu de l'ajouter.
+     * — un montant négatif passait tel quel. Une sortie de −100 € créditait le
+     *   fonds, la vue calculant le signe à partir du sens et non du montant.
+     *
+     * @param array<string,mixed> $data
+     */
     public function addMovement(AuthContext $auth, array $data): int
     {
+        $direction = $data['direction'] ?? null;
+        if (!in_array($direction, ['IN', 'OUT'], true)) {
+            throw new RuntimeException('Sens du mouvement inconnu : attendu IN ou OUT.');
+        }
+
+        $amount = $data['amount'] ?? null;
+        if (!is_numeric($amount) || (float) $amount <= 0) {
+            throw new RuntimeException(
+                'Le montant doit être strictement positif : c\'est le sens qui porte le signe.'
+            );
+        }
+
+        $date = (string) ($data['movement_date'] ?? '');
+        $parsed = \DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+        if ($parsed === false || $parsed->format('Y-m-d') !== $date) {
+            throw new RuntimeException('Date de mouvement invalide : format attendu AAAA-MM-JJ.');
+        }
+
+        $label = trim((string) ($data['label'] ?? ''));
+        if ($label === '') {
+            throw new RuntimeException('Le libellé du mouvement est obligatoire.');
+        }
+
+        // Les rattachements sont vérifiés ici plutôt que laissés aux clés
+        // étrangères : une violation de contrainte remonte en erreur interne,
+        // là où l'utilisateur a seulement désigné une campagne supprimée.
         $connection = Database::connection();
-        $statement  = $connection->prepare(
+
+        foreach ([
+            'campaign_id' => ['mar_campaign', 'Campagne introuvable.'],
+            'lever_id'    => ['mar_lever', 'Levier introuvable.'],
+            'shop_id'     => ['mar_shop', 'Boutique introuvable.'],
+        ] as $field => [$table, $message]) {
+            if (empty($data[$field])) {
+                continue;
+            }
+
+            $exists = $connection->prepare(sprintf('SELECT 1 FROM %s WHERE id = :id', $table));
+            $exists->execute(['id' => (int) $data[$field]]);
+
+            if ($exists->fetchColumn() === false) {
+                throw new RuntimeException($message);
+            }
+        }
+
+        $statement = $connection->prepare(
             'INSERT INTO mar_fund_movement
                 (direction, shop_id, campaign_id, lever_id, movement_date, label, amount, source,
                  supplier_name, document_ref, created_by)
@@ -205,16 +265,16 @@ final class FundRepository
         );
 
         $statement->execute([
-            'direction'     => ($data['direction'] ?? 'OUT') === 'IN' ? 'IN' : 'OUT',
-            'shop_id'       => $data['shop_id'] ?? null,
-            'campaign_id'   => $data['campaign_id'] ?? null,
-            'lever_id'      => $data['lever_id'] ?? null,
-            'movement_date' => $data['movement_date'] ?? date('Y-m-d'),
-            'label'         => $data['label'] ?? '',
-            'amount'        => $data['amount'] ?? 0,
-            'source'        => $data['source'] ?? 'AUTRE',
-            'supplier_name' => $data['supplier_name'] ?? null,
-            'document_ref'  => $data['document_ref'] ?? null,
+            'direction'     => $direction,
+            'shop_id'       => $data['shop_id'] ?: null,
+            'campaign_id'   => $data['campaign_id'] ?: null,
+            'lever_id'      => $data['lever_id'] ?: null,
+            'movement_date' => $date,
+            'label'         => $label,
+            'amount'        => (float) $amount,
+            'source'        => $data['source'] ?: 'AUTRE',
+            'supplier_name' => $data['supplier_name'] ?: null,
+            'document_ref'  => $data['document_ref'] ?: null,
             'created_by'    => $auth->userId,
         ]);
 

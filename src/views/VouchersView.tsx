@@ -1,5 +1,6 @@
 import * as api from '../lib/api/module'
 import { useAsync, formatEur } from '../lib/useAsync'
+import LinkBadge from '../components/LinkBadge'
 
 /** Libellés des canaux de diffusion d'un bon. */
 const CHANNELS: Record<string, string> = {
@@ -21,7 +22,17 @@ export default function VouchersView() {
 
   if (error) return <p className="error">{error}</p>
   if (loading) return <p className="muted">Chargement…</p>
-  if (!data?.length) return <p className="muted">Aucun bon enregistré.</p>
+  if (!data?.length) {
+    return (
+      <section className="card">
+        <h2>Vouchers & bons</h2>
+        <p className="muted">
+          Aucun bon : <code>mar_voucher</code> est alimentée par le web-shop et la caisse,
+          dont le raccordement n’est pas encore fait. Le module ne crée pas de bon lui-même.
+        </p>
+      </section>
+    )
+  }
 
   return (
     <section className="card table-card">
@@ -46,7 +57,7 @@ export default function VouchersView() {
                   <span className="voucher__code">{voucher.code}</span>
                   {voucher.campaign_name ? (
                     <div className="muted lead__potential">
-                      <span className="link-badge">⛓</span>
+                      <LinkBadge title={voucher.campaign_name} />
                       {voucher.campaign_name}
                     </div>
                   ) : null}

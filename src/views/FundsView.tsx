@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { module as api } from '../lib/api'
 import { useAsync, formatDate, formatEur, formatPeriod } from '../lib/useAsync'
 import type { Granularity, LedgerPeriod, LedgerRow } from '../lib/api/module'
+import LinkBadge from '../components/LinkBadge'
 
 const GRANULARITIES: Array<{ value: Granularity; label: string }> = [
   { value: 'month', label: 'Mois' },
@@ -154,15 +155,12 @@ function Block({
         <tr key={row.id}>
           <td className="ledger__date">{formatDate(row.movement_date)}</td>
           <td>
-            {/* Le badge ⛓ signale une ligne rattachée à une campagne. */}
+            {/* Badge de rattachement : la ligne est liée à une campagne. */}
             {row.is_linked ? (
-              <span
-                className="link-badge"
-                style={row.lever_color_hex ? { color: row.lever_color_hex } : undefined}
+              <LinkBadge
+                color={row.lever_color_hex ?? undefined}
                 title={row.campaign_name ?? undefined}
-              >
-                ⛓
-              </span>
+              />
             ) : null}
             {row.label}
             {row.shop_name ? <span className="muted"> — {row.shop_name}</span> : null}

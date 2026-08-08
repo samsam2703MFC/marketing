@@ -606,6 +606,103 @@ check(
     ($detail['assets'][0]['pending_count'] ?? null) === count($refs['formats'])
 );
 
+// --- Écritures hors assistant ----------------------------------------------
+// Même audit que sur le constructeur, appliqué aux autres écrans. Deux points
+// pesaient plus que les autres : le solde du fonds, qu'une saisie pouvait
+// fausser sans rien signaler, et le droit d'écriture sur une campagne, qui
+// était déduit du simple fait de la voir.
+echo "\nÉcritures hors assistant\n";
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+// `$extra` en premier : l'union de tableaux garde les clés de gauche, donc
+// l'ordre inverse aurait ignoré chaque valeur que ce test cherche à éprouver.
+$movement = static fn (array $extra): array => call($router, 'POST', '/api/v1/marketing/funds/movements', [], $extra + [
+    'direction' => 'OUT', 'movement_date' => '2026-07-01', 'label' => 'Contrôle', 'amount' => 100,
+]);
+
+// Un sens inconnu était ramené à « OUT » : une faute de frappe sur « IN »
+// retirait l'argent au lieu de l'ajouter.
+check('un sens de mouvement inconnu est refusé', $movement(['direction' => 'LATERAL'])['status'] === 422);
+
+// La vue tire le signe du sens, pas du montant : une sortie négative créditait.
+check('un montant négatif est refusé', $movement(['amount' => -100])['status'] === 422);
+check('un montant nul est refusé', $movement(['amount' => 0])['status'] === 422);
+check('une date invalide est refusée', $movement(['movement_date' => '32/13/2026'])['status'] === 422);
+check('un libellé vide est refusé', $movement(['label' => '   '])['status'] === 422);
+check('une campagne inexistante est refusée', $movement(['campaign_id' => 999999])['status'] === 422);
+check('un levier inexistant est refusé', $movement(['lever_id' => 999999])['status'] === 422);
+check('un mouvement valide passe', $movement(['label' => 'Achat média'])['status'] === 201);
+
+// Le solde ne doit contenir que des mouvements acceptés.
+check(
+    'aucun mouvement douteux n\'a été écrit',
+    (int) $pdo->query("SELECT COUNT(*) FROM mar_fund_movement WHERE label = 'Contrôle' OR amount <= 0")->fetchColumn() === 0
+);
+
+// Les contrôles de la création s'appliquent aussi à la mise à jour.
+$target = (int) $pdo->query("SELECT id FROM mar_campaign WHERE scope = 'RESEAU' ORDER BY id LIMIT 1")->fetchColumn();
+foreach ([
+    'état inconnu'     => ['status_code' => 'zzz'],
+    'portée inconnue'  => ['scope' => 'BIDON'],
+    'cible inconnue'   => ['client_target' => 'b2x'],
+    'période inversée' => ['starts_on' => '2026-12-31', 'ends_on' => '2026-01-01'],
+] as $label => $payload) {
+    $response = call($router, 'PATCH', sprintf('/api/v1/marketing/campaigns/%d', $target), [], $payload);
+    check(sprintf('mise à jour — %s refusée', $label), $response['status'] === 422, 'statut ' . $response['status']);
+}
+
+// Une portée hors référentiel fait sortir la campagne du filtre de périmètre :
+// elle disparaît de la vue de tout le monde, sans erreur nulle part.
+check(
+    'la campagne garde une portée valide',
+    in_array($pdo->query(sprintf('SELECT scope FROM mar_campaign WHERE id = %d', $target))->fetchColumn(), ['RESEAU', 'LOCALE'], true)
+);
+
+// Voir une campagne réseau et pouvoir l'écrire sont deux choses distinctes.
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+$response = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d', $target));
+check('un franchisé voit bien la campagne réseau', $response['status'] === 200);
+
+$response = call($router, 'PATCH', sprintf('/api/v1/marketing/campaigns/%d', $target), [], ['name' => 'Détournée']);
+check('mais ne peut pas la modifier', $response['status'] === 422, 'statut ' . $response['status']);
+
+$response = call($router, 'DELETE', sprintf('/api/v1/marketing/campaigns/%d', $target));
+check('ni la supprimer', $response['status'] === 422, 'statut ' . $response['status']);
+check(
+    'et elle est intacte',
+    $pdo->query(sprintf('SELECT name FROM mar_campaign WHERE id = %d', $target))->fetchColumn() !== 'Détournée'
+);
+
+// --- Offres de campagne visibles depuis « Promotions » ----------------------
+// `mar_promotion` (import catalogue) et `mar_campaign_offer` (assistant) sont
+// deux tables distinctes, et rien ne les reliait : une offre montée à l'étape 2
+// n'apparaissait sur aucun écran de l'onglet où on va la chercher.
+echo "\nOffres de campagne\n";
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+$response = call($router, 'GET', '/api/v1/marketing/campaign-offers');
+$offers   = $response['body'];
+check('les offres de campagne sont exposées', $response['status'] === 200);
+check('l\'offre de l\'assistant y figure', count($offers) >= 1, count($offers) . ' offre(s)');
+check(
+    'elle porte sa campagne et son état',
+    ($offers[0]['campaign_name'] ?? '') !== '' && ($offers[0]['campaign_status_label'] ?? '') !== ''
+);
+check('ses éléments sont comptés', ($offers[0]['items_count'] ?? null) !== null);
+
+// Le périmètre s'applique comme partout ailleurs.
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+$response = call($router, 'GET', '/api/v1/marketing/campaign-offers');
+check('les offres sont cloisonnées', $response['status'] === 200);
+check(
+    'aucune offre d\'une campagne hors périmètre',
+    array_reduce(
+        $response['body'],
+        static fn (bool $ok, array $o): bool => $ok && $o['campaign_id'] !== 11,
+        true
+    )
+);
+
 // --- Vivier B2B et génération des leads -----------------------------------
 // La génération ne fabrique pas de sociétés : elle puise dans un vivier
 // importé. Ce qui compte ici, c'est qu'un vivier vide ne produise rien et le

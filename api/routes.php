@@ -52,7 +52,8 @@ return static function (Router $router): void {
     $router->delete('/api/v1/marketing/campaigns/{id}',         [$campaigns, 'destroy']);
 
     // Outils de campagne
-    $router->get('/api/v1/marketing/promotions', [$catalog, 'promotions']);
+    $router->get('/api/v1/marketing/promotions',      [$catalog, 'promotions']);
+    $router->get('/api/v1/marketing/campaign-offers', [$catalog, 'campaignOffers']);
     $router->get('/api/v1/marketing/bundles',    [$catalog, 'bundles']);
     $router->get('/api/v1/marketing/vouchers',   [$catalog, 'vouchers']);
 

@@ -66,6 +66,12 @@ final class ProspectRepository
     {
         $connection = Database::connection();
 
+        $brand = $connection->prepare('SELECT 1 FROM mar_brand WHERE id = :id AND is_active = 1');
+        $brand->execute(['id' => $brandId]);
+        if ($brand->fetchColumn() === false) {
+            throw new RuntimeException('Marque introuvable ou inactive.');
+        }
+
         $sectors = [];
         foreach ($connection->query('SELECT id, code, label FROM mar_b2b_sector')->fetchAll() as $sector) {
             $sectors[mb_strtolower((string) $sector['code'])]  = (int) $sector['id'];

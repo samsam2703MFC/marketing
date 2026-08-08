@@ -7,7 +7,17 @@ export default function BundlesView() {
 
   if (error) return <p className="error">{error}</p>
   if (loading) return <p className="muted">Chargement…</p>
-  if (!data?.length) return <p className="muted">Aucun bundle enregistré.</p>
+  if (!data?.length) {
+    return (
+      <section className="card">
+        <h2>Bundles & menus</h2>
+        <p className="muted">
+          Aucun bundle : <code>mar_bundle</code> est alimentée par l’import produit de l’ERP,
+          qui n’est pas encore raccordé. Le module ne crée pas de bundle lui-même.
+        </p>
+      </section>
+    )
+  }
 
   return (
     <div className="campaign-grid">

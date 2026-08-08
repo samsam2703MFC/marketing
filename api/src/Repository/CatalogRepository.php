@@ -51,6 +51,56 @@ final class CatalogRepository
      *
      * @return list<array<string,mixed>>
      */
+    /**
+     * Offres portées par une campagne.
+     *
+     * `mar_promotion` et `mar_campaign_offer` décrivent deux choses proches
+     * mais distinctes : la première est une promotion du catalogue, alimentée
+     * par l'import produit ; la seconde est l'offre montée dans l'assistant de
+     * campagne. Rien ne les reliait, si bien qu'une offre créée à l'étape 2
+     * n'apparaissait sur aucun écran de l'onglet « Promotions » — l'endroit
+     * exact où l'on va la chercher.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function campaignOffers(AuthContext $auth): array
+    {
+        [$scopeSql, $bindings] = Scope::campaignFilter($auth, 'c');
+
+        $statement = Database::connection()->prepare(sprintf(
+            'SELECT co.id, co.title, co.mechanic_text, co.starts_on, co.ends_on,
+                    co.hour_from, co.hour_to,
+                    t.label     AS template_label,
+                    c.id        AS campaign_id,
+                    c.name      AS campaign_name,
+                    st.label    AS campaign_status_label,
+                    st.text_hex AS campaign_status_text_hex,
+                    st.bg_rgba  AS campaign_status_bg_rgba,
+                    COUNT(coi.id) AS items_count
+               FROM mar_campaign_offer co
+               JOIN mar_campaign c            ON c.id = co.campaign_id
+               JOIN mar_campaign_status st    ON st.code = c.status_code
+               LEFT JOIN mar_offer_template t ON t.id = co.template_id
+               LEFT JOIN mar_campaign_offer_item coi ON coi.campaign_offer_id = co.id
+              WHERE %s
+              GROUP BY co.id, co.title, co.mechanic_text, co.starts_on, co.ends_on,
+                       co.hour_from, co.hour_to, t.label, c.id, c.name,
+                       st.label, st.text_hex, st.bg_rgba, c.starts_on
+              ORDER BY c.starts_on DESC, co.id DESC',
+            $scopeSql
+        ));
+        $statement->execute($bindings);
+
+        $rows = $statement->fetchAll();
+        foreach ($rows as &$row) {
+            $row['id']          = (int) $row['id'];
+            $row['campaign_id'] = (int) $row['campaign_id'];
+            $row['items_count'] = (int) $row['items_count'];
+        }
+
+        return $rows;
+    }
+
     public function bundles(): array
     {
         $connection = Database::connection();

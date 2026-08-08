@@ -441,6 +441,34 @@ export function listPromotions(): Promise<Promotion[]> {
   return request<Promotion[]>(`${BASE}/promotions`)
 }
 
+/**
+ * Offres montées dans l'assistant de campagne.
+ *
+ * Table distincte de `mar_promotion`, qui vient de l'import catalogue : sans
+ * cet appel, une offre créée à l'étape 2 n'apparaissait nulle part dans
+ * l'onglet « Promotions » — l'endroit où on va la chercher.
+ */
+export interface CampaignOffer {
+  id: number
+  title: string
+  mechanic_text: string | null
+  starts_on: string | null
+  ends_on: string | null
+  hour_from: string | null
+  hour_to: string | null
+  template_label: string | null
+  campaign_id: number
+  campaign_name: string
+  campaign_status_label: string
+  campaign_status_text_hex: string
+  campaign_status_bg_rgba: string
+  items_count: number
+}
+
+export function listCampaignOffers(): Promise<CampaignOffer[]> {
+  return request<CampaignOffer[]>(`${BASE}/campaign-offers`)
+}
+
 export interface BundleItem {
   name: string
   detail: string | null
@@ -605,7 +633,7 @@ export interface LedgerRow {
   campaign_name: string | null
   lever_label: string | null
   lever_color_hex: string | null
-  /** Le badge ⛓ : la ligne est rattachée à une campagne. */
+  /** Vrai si la ligne est rattachée à une campagne (badge de liaison). */
   is_linked: boolean
 }
 

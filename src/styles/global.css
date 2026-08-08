@@ -668,7 +668,8 @@ tbody td {
 }
 
 .link-badge {
-  margin-right: 6px;
+  margin-right: 5px;
+  vertical-align: -2px;
 }
 
 /* Leads */
