@@ -506,8 +506,13 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           # Le résumé part aussi en annotation : c'est la seule sortie lisible
-          # sans ouvrir le journal complet du job.
-          summary=$(printf '%s\n' "$out" | grep -E '^(Base|Marque|Boutiques|Comptes|  #)' | tr '\n' ' | ' | cut -c1-900)
+          # sans ouvrir le journal complet du job. Les lignes d'erreur y sont
+          # incluses — la première version ne gardait que les lignes de compte
+          # rendu, et laissait donc de côté celle qui expliquait l'échec.
+          summary=$(printf '%s\n' "$out" \
+            | grep -vE 'Permanently added|Warning: Permanently' \
+            | grep -E '.' \
+            | tr '\n' '|' | sed 's/|/ | /g' | cut -c1-900)
 
           if [ $rc -ne 0 ]; then
             case "$out" in
