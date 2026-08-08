@@ -104,6 +104,32 @@ final class ErpSyncRepository
     ];
 
     /**
+     * Produits du catalogue ERP.
+     *
+     * `suggested_sale_price` en tête : c'est le prix que cette installation
+     * porte sur ses produits, les autres noms sont des replis génériques.
+     *
+     * @var array<string, list<string>>
+     */
+    private const PRODUCT_COLUMNS = [
+        'id'       => ['id', 'id_product', 'product_id'],
+        'name'     => ['name', 'label', 'nom', 'libelle'],
+        'category' => ['id_category', 'category_id', 'id_product_category'],
+        'price'    => ['suggested_sale_price', 'price', 'price_amount', 'prix', 'sale_price'],
+        'active'   => ['is_active', 'active', 'enabled', 'actif'],
+    ];
+
+    /**
+     * Familles de produits, pour situer chaque référence dans le sélecteur.
+     *
+     * @var array<string, list<string>>
+     */
+    private const PRODUCT_CATEGORY_COLUMNS = [
+        'id'   => ['id', 'id_category', 'id_product_category'],
+        'name' => ['name', 'label', 'nom', 'libelle'],
+    ];
+
+    /**
      * Secteurs visés : les types de compte professionnel de l'ERP.
      *
      * @var array<string, list<string>>
@@ -169,9 +195,134 @@ final class ErpSyncRepository
             $result['links'] = ['error' => $failure->getMessage()];
         }
 
+        // Le catalogue vient en marge : son échec ne remet pas en cause la
+        // reprise des boutiques et du vivier, qui portent tous les écrans B2B.
+        try {
+            $result['products'] = $this->syncProducts($auth);
+        } catch (Throwable $failure) {
+            $result['products'] = ['error' => $failure->getMessage()];
+        }
+
         $result['inventory'] = $this->inventory;
 
         return $result;
+    }
+
+    /**
+     * Produits de l'ERP → catalogue `mar_offer_item`.
+     *
+     * C'est cette reprise qui donne à l'étape « Offre » de l'assistant une
+     * sélection de vraies références : sans elle, les éléments d'offre se
+     * saisissent en clair, et `mar_campaign_offer_item.offer_item_id` reste
+     * vide. Le rapprochement se fait sur `sku_ref` (« erp-<id> »), unique
+     * depuis 020, pour que la reprise soit rejouable sans dupliquer.
+     *
+     * @return array<string, mixed>
+     */
+    public function syncProducts(AuthContext $auth): array
+    {
+        [$schema, $table] = $this->source('MAR_ERP_PRODUCTS_TABLE', 'product');
+        $columns = $this->resolve($schema, $table, self::PRODUCT_COLUMNS, ['id', 'name']);
+
+        // Un produit désactivé côté ERP ne se vend plus : il n'a rien à faire
+        // dans une offre. Le filtre ne s'applique que si la colonne existe.
+        $where = isset($columns['active'])
+            ? sprintf('`%1$s` IS NULL OR `%1$s` <> 0', $columns['active'])
+            : null;
+
+        $rows = $this->readSource($schema, $table, $columns, $where);
+
+        // Libellés des familles. Leur absence ne bloque pas : un produit sans
+        // famille reste un produit — le sélecteur le montrera sans rubrique.
+        $families = [];
+        try {
+            [$familySchema, $familyTable] = $this->source('MAR_ERP_PRODUCT_CATEGORIES_TABLE', 'product_category');
+            $familyColumns = $this->resolve($familySchema, $familyTable, self::PRODUCT_CATEGORY_COLUMNS, ['id', 'name']);
+
+            foreach ($this->readSource($familySchema, $familyTable, $familyColumns) as $family) {
+                $families[(int) $family['id']] = trim((string) ($family['name'] ?? ''));
+            }
+        } catch (Throwable) {
+            // Table de familles absente ou illisible : tant pis pour la rubrique.
+        }
+
+        $connection = Database::connection();
+        $connection->beginTransaction();
+
+        try {
+            $upsert = $connection->prepare(
+                'INSERT INTO mar_offer_item
+                    (category, sku_ref, name, detail, price_amount, is_active, created_by)
+                 VALUES
+                    (\'produit\', :sku_ref, :name, :detail, :price_amount, 1, :created_by)
+                 ON DUPLICATE KEY UPDATE
+                    name         = VALUES(name),
+                    detail       = VALUES(detail),
+                    price_amount = VALUES(price_amount),
+                    is_active    = 1'
+            );
+
+            $created = 0;
+            $updated = 0;
+            $skipped = 0;
+            $seen    = [];
+
+            foreach ($rows as $row) {
+                $name = trim((string) ($row['name'] ?? ''));
+                if ($name === '') {
+                    $skipped++;
+                    continue;
+                }
+
+                $familyId = isset($row['category']) ? (int) $row['category'] : 0;
+                $family   = trim((string) ($families[$familyId] ?? ''));
+                $skuRef   = 'erp-' . $row['id'];
+
+                $upsert->execute([
+                    'sku_ref'      => $skuRef,
+                    'name'         => mb_substr($name, 0, 200),
+                    'detail'       => $family === '' ? null : mb_substr($family, 0, 400),
+                    'price_amount' => isset($row['price']) && $row['price'] !== null && $row['price'] !== ''
+                        ? (float) $row['price']
+                        : null,
+                    'created_by'   => $auth->userId ?: null,
+                ]);
+
+                $upsert->rowCount() === 1 ? $created++ : $updated++;
+                $seen[] = $skuRef;
+            }
+
+            // Les références disparues de l'ERP sortent du sélecteur sans être
+            // supprimées : les offres déjà montées dessus gardent leur libellé
+            // et leur rattachement.
+            $retired = 0;
+            if ($seen !== []) {
+                $placeholders = implode(',', array_fill(0, count($seen), '?'));
+                $retire = $connection->prepare(
+                    "UPDATE mar_offer_item SET is_active = 0
+                      WHERE category = 'produit' AND sku_ref LIKE 'erp-%'
+                        AND is_active = 1 AND sku_ref NOT IN ($placeholders)"
+                );
+                $retire->execute($seen);
+                $retired = $retire->rowCount();
+            }
+
+            $connection->commit();
+        } catch (Throwable $failure) {
+            $connection->rollBack();
+
+            throw $failure;
+        }
+
+        return [
+            'source'  => $schema . '.' . $table,
+            'columns' => $columns,
+            'read'    => count($rows),
+            'created' => $created,
+            'updated' => $updated,
+            'skipped' => $skipped,
+            'retired' => $retired,
+        ];
     }
 
     /** @return array<string, array<string, list<string>>> */

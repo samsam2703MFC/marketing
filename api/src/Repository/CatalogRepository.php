@@ -19,6 +19,32 @@ use Marketing\Support\Scope;
 final class CatalogRepository
 {
     /**
+     * Catalogue actif, pour composer une offre sur de vraies références.
+     *
+     * L'étape « Offre » de l'assistant s'en sert comme source de sélection.
+     * Tant que la reprise ERP n'a pas tourné il est vide, et la saisie libre
+     * reste le seul chemin — l'écran le dit plutôt que de le laisser deviner.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function offerItems(): array
+    {
+        $rows = Database::connection()->query(
+            'SELECT id, category, sku_ref, name, detail, price_amount
+               FROM mar_offer_item
+              WHERE is_active = 1
+              ORDER BY detail IS NULL, detail, name'
+        )->fetchAll();
+
+        return array_map(static function (array $row): array {
+            $row['id']           = (int) $row['id'];
+            $row['price_amount'] = $row['price_amount'] === null ? null : (float) $row['price_amount'];
+
+            return $row;
+        }, $rows);
+    }
+
+    /**
      * Mécaniques promotionnelles.
      *
      * @return list<array<string,mixed>>

@@ -726,19 +726,49 @@ final class CampaignRepository
             return;
         }
 
+        // Un rattachement ne vaut que vers une référence de catalogue qui
+        // existe : un identifiant périmé — référence retirée entre la saisie
+        // et l'envoi — retombe sur le libellé seul plutôt que de faire échouer
+        // la campagne entière sur une clé étrangère.
+        $wanted = [];
+        foreach ($items as $item) {
+            if (is_array($item) && (int) ($item['offer_item_id'] ?? 0) > 0) {
+                $wanted[] = (int) $item['offer_item_id'];
+            }
+        }
+
+        $knownIds = [];
+        if ($wanted !== []) {
+            $placeholders = implode(',', array_fill(0, count($wanted), '?'));
+            $lookup = $connection->prepare(
+                "SELECT id FROM mar_offer_item WHERE id IN ($placeholders)"
+            );
+            $lookup->execute($wanted);
+            $knownIds = array_map('intval', $lookup->fetchAll(PDO::FETCH_COLUMN));
+        }
+
         $statement = $connection->prepare(
-            'INSERT INTO mar_campaign_offer_item (campaign_offer_id, label, sort_order)
-             VALUES (:offer_id, :label, :sort_order)'
+            'INSERT INTO mar_campaign_offer_item (campaign_offer_id, offer_item_id, label, sort_order)
+             VALUES (:offer_id, :offer_item_id, :label, :sort_order)'
         );
 
         $order = 0;
-        foreach ($items as $label) {
-            $label = trim((string) $label);
+        foreach ($items as $item) {
+            // Deux formes acceptées : la chaîne libre historique, et l'élément
+            // choisi au catalogue — un libellé accompagné de sa référence.
+            $label  = trim((string) (is_array($item) ? ($item['label'] ?? '') : $item));
+            $itemId = is_array($item) ? (int) ($item['offer_item_id'] ?? 0) : 0;
+
             if ($label === '') {
                 continue;
             }
 
-            $statement->execute(['offer_id' => $offerId, 'label' => $label, 'sort_order' => ++$order]);
+            $statement->execute([
+                'offer_id'      => $offerId,
+                'offer_item_id' => in_array($itemId, $knownIds, true) ? $itemId : null,
+                'label'         => $label,
+                'sort_order'    => ++$order,
+            ]);
         }
     }
 

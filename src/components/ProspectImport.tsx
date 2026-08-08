@@ -260,6 +260,9 @@ export default function ProspectImport() {
                   ['Boutiques', sync.shops],
                   ['Comptes B2B', sync.prospects],
                   ['Secteurs', sync.sectors],
+                  // Le rapport du catalogue peut porter une erreur seule : la
+                  // ligne ne se montre que quand la reprise a réellement lu.
+                  ['Produits', sync.products && 'read' in sync.products ? sync.products : undefined],
                 ] as Array<[string, SyncReport | undefined]>
               )
                 .filter((entry): entry is [string, SyncReport] => entry[1] !== undefined)
@@ -285,6 +288,10 @@ export default function ProspectImport() {
           seule. Un tableau à zéro n'aurait pas dit laquelle des deux. */}
       {sync?.links?.error ? (
         <p className="error">Secteurs non rattachés : {sync.links.error}</p>
+      ) : null}
+
+      {sync?.products && 'error' in sync.products ? (
+        <p className="error">Catalogue produit non repris : {sync.products.error}</p>
       ) : null}
 
       {sync?.links && !sync.links.error ? (

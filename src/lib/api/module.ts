@@ -438,7 +438,11 @@ export interface CampaignDraft {
     all_day?: boolean
     hour_from?: string | null
     hour_to?: string | null
-    items?: string[]
+    /**
+     * Élément choisi au catalogue (libellé + référence) ou saisi en clair.
+     * Le serveur accepte aussi la chaîne nue, forme historique des brouillons.
+     */
+    items?: Array<{ label: string; offer_item_id?: number | null } | string>
   }
 }
 
@@ -473,7 +477,7 @@ export interface CampaignDraftState
     mechanic_text: string | null
     hour_from: string | null
     hour_to: string | null
-    items: Array<{ label: string }>
+    items: Array<{ label: string; offer_item_id: number | null }>
   } | null
 }
 
@@ -522,6 +526,22 @@ export function getMonitor(id: number): Promise<{ kpis: MonitorKpi[]; shops: Mon
 // ---------------------------------------------------------------------------
 // Outils de campagne
 // ---------------------------------------------------------------------------
+
+/** Référence du catalogue marketing (`mar_offer_item`), reprise de l'ERP. */
+export interface OfferItem {
+  id: number
+  category: string
+  sku_ref: string | null
+  name: string
+  /** Famille de produits, quand la reprise l'a trouvée. */
+  detail: string | null
+  price_amount: number | null
+}
+
+/** Catalogue actif — la source de sélection de l'étape « Offre ». */
+export function listOfferItems(): Promise<OfferItem[]> {
+  return request<OfferItem[]>(`${BASE}/offer-items`)
+}
 
 export interface Promotion {
   id: number
@@ -775,6 +795,8 @@ export interface SyncResult {
   prospects: SyncReport
   sectors?: SyncReport
   links?: SectorLinkReport
+  /** Reprise du catalogue produit. Échoue seule, comme les rattachements. */
+  products?: SyncReport | { error: string }
 }
 
 export function syncErp(): Promise<SyncResult> {

@@ -16,6 +16,14 @@ final class CatalogController
     {
     }
 
+    /** Références actives du catalogue, pour l'étape « Offre » de l'assistant. */
+    public function offerItems(Request $request): array
+    {
+        unset($request);
+
+        return Response::data($this->catalog->offerItems());
+    }
+
     public function promotions(Request $request): array
     {
         unset($request);

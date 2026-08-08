@@ -350,6 +350,15 @@ echo "\nAssistant de création\n";
 AuthContext::set(1, 'BRAND_ADMIN', 1);
 
 $channelId = (int) $pdo->query("SELECT id FROM mar_channel WHERE code = 'plv'")->fetchColumn();
+
+// Une référence de catalogue, comme la reprise ERP en écrit : l'étape « Offre »
+// rattache ses éléments dessus, et le rattachement doit survivre à l'écriture.
+$pdo->exec(
+    "INSERT INTO mar_offer_item (category, sku_ref, name, detail, price_amount)
+     VALUES ('produit', 'erp-9901', 'Tarte du jour', 'Tartes', 14.90)"
+);
+$catalogItemId = (int) $pdo->lastInsertId();
+
 $response  = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
     // Volontairement sans brand_id : le back-office connaît sa marque, et une
     // seule est active. Le serveur doit la résoudre plutôt que refuser.
@@ -386,7 +395,15 @@ $response  = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
         'all_day'       => false,
         'hour_from'     => '11:30:00',
         'hour_to'       => '14:00:00',
-        'items'         => ['Brochette maison', 'Limonade', '  ', 'Tarte du jour'],
+        // Les trois formes que le serveur doit accepter : la chaîne libre
+        // historique, l'élément rattaché au catalogue, et une référence
+        // périmée qui doit retomber sur le libellé seul plutôt qu'échouer.
+        'items'         => [
+            'Brochette maison',
+            ['label' => 'Tarte du jour', 'offer_item_id' => $catalogItemId],
+            '  ',
+            ['label' => 'Référence disparue', 'offer_item_id' => 999999],
+        ],
     ],
     'pos_survey_enabled' => true,
     'pos_questions'   => [
@@ -482,6 +499,27 @@ check('l\'offre est créée', $offerId > 0);
 check(
     'les éléments vides de l\'offre sont écartés',
     (int) $pdo->query(sprintf('SELECT COUNT(*) FROM mar_campaign_offer_item WHERE campaign_offer_id = %d', $offerId))->fetchColumn() === 3
+);
+check(
+    'l\'élément choisi au catalogue garde sa référence',
+    (int) $pdo->query(sprintf(
+        'SELECT COUNT(*) FROM mar_campaign_offer_item WHERE campaign_offer_id = %d AND offer_item_id = %d',
+        $offerId,
+        $catalogItemId
+    ))->fetchColumn() === 1
+);
+check(
+    'la référence périmée retombe sur le libellé seul',
+    $pdo->query(sprintf(
+        'SELECT offer_item_id FROM mar_campaign_offer_item WHERE campaign_offer_id = %d AND label = \'Référence disparue\'',
+        $offerId
+    ))->fetchColumn() === null
+);
+
+$response = call($router, 'GET', '/api/v1/marketing/offer-items');
+check(
+    'le catalogue expose la référence active',
+    in_array('Tarte du jour', array_column($response['body'], 'name'), true)
 );
 check(
     'la fenêtre de l\'offre est distincte de la campagne',

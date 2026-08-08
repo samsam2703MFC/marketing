@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { module as api } from '../../lib/api'
 import { useAsync, formatDate, formatEur } from '../../lib/useAsync'
-import type { CampaignDraft, ClientTarget, References } from '../../lib/api/module'
+import type { CampaignDraft, ClientTarget, OfferItem, References } from '../../lib/api/module'
 import type { Role } from '../../lib/navigation'
 import { describeError } from '../../state/auth'
 import ProspectPanel from './ProspectPanel'
@@ -38,6 +38,16 @@ interface RetroStep {
   position_id: number | null
 }
 
+/**
+ * Élément de l'offre : une référence choisie au catalogue repris de l'ERP
+ * (`offer_item_id` renseigné), ou une saisie libre pour ce que le catalogue
+ * n'a pas (`offer_item_id` nul, le libellé reste éditable).
+ */
+interface OfferElement {
+  offer_item_id: number | null
+  label: string
+}
+
 /** Brouillon en cours de saisie. Les nombres restent des chaînes tant qu'on tape. */
 interface Draft {
   // 1 — Type & cadrage
@@ -57,7 +67,7 @@ interface Draft {
   offer_template_id: number | null
   offer_title: string
   offer_mechanic: string
-  offer_items: string[]
+  offer_items: OfferElement[]
   offer_all_day: boolean
   offer_hour_from: string
   offer_hour_to: string
@@ -169,7 +179,7 @@ const STEPS: Step[] = [
       if (!d.offer_all_day && (d.offer_hour_from === '' || d.offer_hour_to === '')) {
         return 'Précisez la plage horaire, ou revenez sur « toute la journée ».'
       }
-      if (d.offer_items.some((item) => item.trim() !== '') && d.offer_title.trim() === '') {
+      if (d.offer_items.some((item) => item.label.trim() !== '') && d.offer_title.trim() === '') {
         return 'Nommez l’offre pour pouvoir lui rattacher des éléments.'
       }
       return null
@@ -510,7 +520,10 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
     offer_template_id: state.offer?.template_id ?? null,
     offer_title: state.offer?.title ?? '',
     offer_mechanic: state.offer?.mechanic_text ?? '',
-    offer_items: (state.offer?.items ?? []).map((item) => item.label),
+    offer_items: (state.offer?.items ?? []).map((item) => ({
+      offer_item_id: item.offer_item_id ?? null,
+      label: item.label,
+    })),
     // « Toute la journée » est l'absence d'horaire, pas une plage 00:00–23:59 :
     // c'est le NULL en base qui les distingue, et il se relit tel quel.
     offer_all_day: (state.offer?.hour_from ?? null) === null,
@@ -579,7 +592,9 @@ function resumeStep(key: string | null, draft: Draft): number {
 }
 
 function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): CampaignDraft {
-  const items = draft.offer_items.map((item) => item.trim()).filter((item) => item !== '')
+  const items = draft.offer_items
+    .map((item) => ({ label: item.label.trim(), offer_item_id: item.offer_item_id }))
+    .filter((item) => item.label !== '')
 
   return {
     // Omise quand le sélecteur est sur « toutes marques » : le serveur la
@@ -980,10 +995,42 @@ function FramingStep({
 // ---------------------------------------------------------------------------
 
 function OfferStep({ refs, draft, patch }: StepProps) {
-  const setItem = (index: number, value: string) => {
+  // Le catalogue repris de l'ERP (`mar_offer_item`). Vide tant que la reprise
+  // n'a pas tourné : l'écran le dit, et la saisie libre reste ouverte.
+  const catalog = useAsync(() => api.listOfferItems(), [])
+  const [query, setQuery] = useState('')
+
+  const catalogItems = catalog.data ?? []
+  const chosenIds = new Set(
+    draft.offer_items
+      .map((item) => item.offer_item_id)
+      .filter((id): id is number => id !== null),
+  )
+
+  // Huit résultats suffisent à choisir ; au-delà, c'est la recherche qu'on
+  // affine, pas la liste qu'on fait défiler.
+  const needle = query.trim().toLowerCase()
+  const matches =
+    needle === ''
+      ? []
+      : catalogItems
+          .filter(
+            (item) =>
+              !chosenIds.has(item.id) &&
+              (item.name.toLowerCase().includes(needle) ||
+                (item.detail ?? '').toLowerCase().includes(needle)),
+          )
+          .slice(0, 8)
+
+  const setItemLabel = (index: number, value: string) => {
     const items = [...draft.offer_items]
-    items[index] = value
+    items[index] = { ...items[index], label: value }
     patch({ offer_items: items })
+  }
+
+  const addFromCatalog = (item: OfferItem) => {
+    patch({ offer_items: [...draft.offer_items, { offer_item_id: item.id, label: item.name }] })
+    setQuery('')
   }
 
   return (
@@ -1036,18 +1083,29 @@ function OfferStep({ refs, draft, patch }: StepProps) {
         </label>
       </div>
 
-      {/* Le catalogue produit vient de l'ERP et n'est pas encore importé : les
-          éléments se saisissent en clair, et se rattacheront à des références
-          le jour où l'import existe (mar_campaign_offer_item.offer_item_id). */}
+      {/* Les éléments se choisissent dans le catalogue repris de l'ERP ; la
+          saisie libre reste ouverte pour ce que le catalogue n'a pas
+          (mar_campaign_offer_item.offer_item_id reste alors NULL). */}
       <ul className="line-list">
         {draft.offer_items.map((item, index) => (
           <li key={index}>
-            <input
-              type="text"
-              value={item}
-              placeholder="Élément de l’offre"
-              onChange={(e) => setItem(index, e.target.value)}
-            />
+            {item.offer_item_id !== null ? (
+              <span className="line-list__ref">
+                {item.label}
+                <span className="muted">
+                  {' — '}
+                  {catalogItems.find((entry) => entry.id === item.offer_item_id)?.detail ??
+                    'catalogue'}
+                </span>
+              </span>
+            ) : (
+              <input
+                type="text"
+                value={item.label}
+                placeholder="Élément de l’offre"
+                onChange={(e) => setItemLabel(index, e.target.value)}
+              />
+            )}
             <button
               type="button"
               className="filter"
@@ -1060,13 +1118,60 @@ function OfferStep({ refs, draft, patch }: StepProps) {
           </li>
         ))}
       </ul>
-      <button
-        type="button"
-        className="filter"
-        onClick={() => patch({ offer_items: [...draft.offer_items, ''] })}
-      >
-        + Ajouter un élément
-      </button>
+
+      <div className="filters__row">
+        <label className="field field--grow">
+          Ajouter un produit du catalogue
+          <input
+            type="search"
+            value={query}
+            placeholder={
+              catalog.loading
+                ? 'Chargement du catalogue…'
+                : catalogItems.length === 0
+                  ? 'Catalogue vide — lancez la reprise ERP'
+                  : 'Rechercher : tarte, salade, cookie…'
+            }
+            disabled={catalog.loading || catalogItems.length === 0}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+        <button
+          type="button"
+          className="filter"
+          onClick={() =>
+            patch({ offer_items: [...draft.offer_items, { offer_item_id: null, label: '' }] })
+          }
+        >
+          + Élément libre
+        </button>
+      </div>
+
+      {matches.length > 0 ? (
+        <ul className="line-list">
+          {matches.map((item) => (
+            <li key={item.id}>
+              <button type="button" className="filter" onClick={() => addFromCatalog(item)}>
+                + {item.name}
+              </button>
+              <span className="muted">
+                {item.detail ?? '—'}
+                {item.price_amount !== null ? ` · ${formatEur(item.price_amount, 2)}` : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {needle !== '' && matches.length === 0 && catalogItems.length > 0 ? (
+        <p className="muted">Aucune référence ne répond à « {query.trim()} ».</p>
+      ) : null}
+      {catalog.error ? <p className="error">Catalogue indisponible : {catalog.error}</p> : null}
+      {!catalog.loading && !catalog.error && catalogItems.length === 0 ? (
+        <p className="muted">
+          Le catalogue produit est vide : lancez la reprise ERP depuis l'écran du vivier B2B pour
+          sélectionner de vraies références.
+        </p>
+      ) : null}
 
       <h3 className="section-label">Horaire</h3>
       <div className="filters__row">
@@ -1677,7 +1782,7 @@ function ReviewStep({
   const targetTotal = Object.values(draft.targets)
     .filter((value) => value !== '')
     .reduce((sum, value) => sum + Number(value), 0)
-  const items = draft.offer_items.filter((item) => item.trim() !== '')
+  const items = draft.offer_items.filter((item) => item.label.trim() !== '')
 
   const rows: Array<[string, string]> = [
     ['Nom', draft.name],
