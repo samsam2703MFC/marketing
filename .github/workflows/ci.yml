@@ -541,6 +541,12 @@ jobs:
             # bouton de l'écran CRM permet de la relancer.
             echo "::warning title=Reprise non effectuée::Les boutiques et le vivier B2B restent dans leur état précédent."
           else
+            # La vérification d'abord, dans sa propre annotation : dans le
+            # résumé complet elle arrive en dernier, c'est-à-dire au-delà de la
+            # longueur qu'une annotation conserve.
+            verif=$(printf '%s\n' "$out" | grep -E '^(Boutiques dans le module|Comptes B2B repris)' | tr '\n' ' | ')
+            [ -n "$verif" ] && echo "::notice title=Vérification::$verif"
+
             echo "::notice title=Reprise ERP::$summary"
 
             # Une annotation par table : la limite de longueur d'une annotation
