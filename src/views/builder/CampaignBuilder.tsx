@@ -1375,7 +1375,17 @@ function ReviewStep({
 // 7 — Leads CRM
 // ---------------------------------------------------------------------------
 
-function LeadsStep({ refs, draft, patch }: StepProps) {
+/**
+ * Dernière étape : la génération des leads.
+ *
+ * L'effectif affiché vient du vivier réel, pas du chiffre de cadrage porté par
+ * le secteur. Les deux sont montrés côte à côte : promettre 184 comptes quand
+ * le vivier en contient douze produit un entonnoir qui ne se remplira jamais,
+ * et personne ne saura pourquoi.
+ */
+function LeadsStep({ draft, patch }: StepProps) {
+  const availability = useAsync(() => api.getSectorAvailability(), [])
+
   if (draft.client_target === 'b2c') {
     return (
       <>
@@ -1388,15 +1398,16 @@ function LeadsStep({ refs, draft, patch }: StepProps) {
     )
   }
 
-  const sectors = refs.b2bSectors.filter((sector) => draft.sector_ids.includes(sector.id))
-  const estimated = sectors.reduce((sum, sector) => sum + sector.estimated_leads_count, 0)
+  const rows = (availability.data ?? []).filter((sector) => draft.sector_ids.includes(sector.id))
+  const available = rows.reduce((sum, sector) => sum + sector.available, 0)
+  const estimated = rows.reduce((sum, sector) => sum + sector.estimated_leads_count, 0)
 
   return (
     <>
       <h2>Leads CRM</h2>
       <p className="muted">
-        Les comptes des secteurs retenus sont distribués aux boutiques référentes, à l’état
-        « à appeler ». Ils apparaissent ensuite dans le suivi de la campagne.
+        Les comptes du vivier B2B correspondant aux secteurs retenus sont distribués aux
+        boutiques de la campagne, à l’état « à appeler ». Ils apparaissent ensuite dans son suivi.
       </p>
 
       <div className="filters__row">
@@ -1416,20 +1427,56 @@ function LeadsStep({ refs, draft, patch }: StepProps) {
         </button>
       </div>
 
-      {sectors.length === 0 ? (
+      {availability.error ? <p className="error">{availability.error}</p> : null}
+      {availability.loading ? <p className="muted">Lecture du vivier…</p> : null}
+
+      {draft.sector_ids.length === 0 ? (
         <p className="muted wizard__hint">
           Aucun secteur retenu à l’étape 1 : rien ne serait généré.
         </p>
       ) : (
         <>
-          <ul className="chips">
-            {sectors.map((sector) => (
-              <li key={sector.id} className="chip chip--lever">
-                {sector.label} · {sector.estimated_leads_count}
-              </li>
-            ))}
-          </ul>
-          <p className="muted wizard__hint">{estimated} comptes estimés au total.</p>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Secteur</th>
+                  <th className="num">Cadrage</th>
+                  <th className="num">Dans le vivier</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((sector) => (
+                  <tr key={sector.id}>
+                    <td>{sector.label}</td>
+                    <td className="num muted">{sector.estimated_leads_count}</td>
+                    <td className="num">{sector.available}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="ledger__total">
+                  <td>Total</td>
+                  <td className="num muted">{estimated}</td>
+                  <td className="num">{available}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {!availability.loading && available === 0 ? (
+            <p className="muted wizard__hint">
+              Le vivier ne contient aucun compte sur ces secteurs : la génération ne créera rien.
+              Importez-le depuis <strong>Fidélité &amp; CRM</strong>, puis relancez la génération
+              depuis le suivi de la campagne — elle ne crée que les comptes non encore rattachés.
+            </p>
+          ) : (
+            <p className="muted wizard__hint">
+              {available} compte{available > 1 ? 's' : ''} sera{available > 1 ? 'ont' : ''} créé
+              {available > 1 ? 's' : ''}. Le chiffre de cadrage ({estimated}) reste l’objectif de
+              démarchage, pas ce qui est disponible.
+            </p>
+          )}
         </>
       )}
     </>

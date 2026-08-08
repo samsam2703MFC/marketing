@@ -322,7 +322,9 @@ export interface CampaignDraft {
   }
 }
 
-export function createCampaign(draft: CampaignDraft): Promise<{ inserted_id: number }> {
+export function createCampaign(
+  draft: CampaignDraft,
+): Promise<{ inserted_id: number; leads?: LeadGenerationReport }> {
   return request(`${BASE}/campaigns`, { method: 'POST', body: draft })
 }
 
@@ -459,6 +461,67 @@ export function setLeadStatus(leadId: number, statusCode: string, note?: string)
     method: 'PATCH',
     body: { status_code: statusCode, note },
   })
+}
+
+// ---------------------------------------------------------------------------
+// Vivier B2B
+// ---------------------------------------------------------------------------
+
+/**
+ * Effectif d'un secteur, sous deux angles qui ne disent pas la même chose :
+ * `estimated_leads_count` est une intention de démarchage, `available` ce
+ * qu'on a réellement sous la main.
+ */
+export interface SectorAvailability {
+  id: number
+  code: string
+  label: string
+  estimated_leads_count: number
+  available: number
+}
+
+export function getSectorAvailability(): Promise<SectorAvailability[]> {
+  return request<SectorAvailability[]>(`${BASE}/b2b/sectors`)
+}
+
+/** Une ligne du fichier importé, déjà découpée par le client. */
+export interface ProspectRow {
+  external_ref?: string
+  company_name: string
+  sector?: string
+  contact_name?: string
+  contact_email?: string
+  contact_phone?: string
+  size_label?: string
+  potential_amount?: string
+  city?: string
+  postal_code?: string
+}
+
+export interface ImportReport {
+  imported: number
+  updated: number
+  skipped: number
+  /** Sans référence d'origine, un réimport ne saura pas reconnaître le compte. */
+  without_ref: number
+  errors: string[]
+}
+
+export function importProspects(rows: ProspectRow[], source?: string): Promise<ImportReport> {
+  return request(`${BASE}/b2b/prospects/import`, { method: 'POST', body: { rows, source } })
+}
+
+export interface LeadGenerationReport {
+  created: number
+  skipped_existing: number
+  available: number
+  shops: number
+  /** Renseignée quand rien n'a été créé : dit pourquoi. */
+  reason: string | null
+}
+
+export function generateLeads(campaignId: number): Promise<LeadGenerationReport> {
+  return request(`${BASE}/campaigns/${campaignId}/leads/generate`, { method: 'POST' })
 }
 
 // ---------------------------------------------------------------------------

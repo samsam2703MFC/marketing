@@ -1,5 +1,6 @@
 import { module as api } from '../lib/api'
 import { useAsync, formatEur, formatNumber } from '../lib/useAsync'
+import ProspectImport from '../components/ProspectImport'
 
 /**
  * Fidélité & CRM.
@@ -89,6 +90,8 @@ export default function CrmView() {
           </>
         )}
       </section>
+
+      <ProspectImport />
     </>
   )
 }

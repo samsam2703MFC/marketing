@@ -5,14 +5,17 @@ declare(strict_types=1);
 namespace Marketing\Controller;
 
 use Marketing\Repository\CampaignRepository;
+use Marketing\Repository\ProspectRepository;
 use Marketing\Support\AuthContext;
 use Marketing\Support\Request;
 use Marketing\Support\Response;
 
 final class CampaignController
 {
-    public function __construct(private readonly CampaignRepository $campaigns = new CampaignRepository())
-    {
+    public function __construct(
+        private readonly CampaignRepository $campaigns = new CampaignRepository(),
+        private readonly ProspectRepository $prospects = new ProspectRepository(),
+    ) {
     }
 
     public function index(Request $request): array
@@ -76,9 +79,25 @@ final class CampaignController
             'retroplanning', 'offer',
         ]);
 
-        $id = $this->campaigns->createWithRelations(AuthContext::current(), $payload);
+        $auth = AuthContext::current();
+        $id   = $this->campaigns->createWithRelations($auth, $payload);
 
-        return Response::created('Campagne créée.', $id);
+        // La génération vient après le commit, et non dans la transaction de
+        // création : un vivier vide ne doit pas annuler la campagne. Une
+        // campagne sans ses leads se rattrape en relançant la génération ;
+        // une campagne perdue parce que le vivier n'était pas encore importé,
+        // non.
+        $leads = null;
+        if (!empty($payload['create_crm_leads'])) {
+            $leads = $this->prospects->generateLeads($auth, $id);
+        }
+
+        $response = Response::created('Campagne créée.', $id);
+        if ($leads !== null) {
+            $response['body']['leads'] = $leads;
+        }
+
+        return $response;
     }
 
     public function update(Request $request): array

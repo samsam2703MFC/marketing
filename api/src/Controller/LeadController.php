@@ -5,14 +5,88 @@ declare(strict_types=1);
 namespace Marketing\Controller;
 
 use Marketing\Repository\LeadRepository;
+use Marketing\Repository\ProspectRepository;
 use Marketing\Support\AuthContext;
 use Marketing\Support\Request;
 use Marketing\Support\Response;
 
 final class LeadController
 {
-    public function __construct(private readonly LeadRepository $leads = new LeadRepository())
+    public function __construct(
+        private readonly LeadRepository $leads = new LeadRepository(),
+        private readonly ProspectRepository $prospects = new ProspectRepository(),
+    ) {
+    }
+
+    /** Effectif réel du vivier par secteur, face au chiffre de cadrage. */
+    public function sectorSummary(Request $request): array
     {
+        unset($request);
+
+        return Response::data($this->prospects->summaryBySector());
+    }
+
+    /**
+     * Import du vivier B2B.
+     *
+     * Le fichier est découpé côté client : le serveur reçoit des lignes déjà
+     * structurées. Il n'a pas à connaître les séparateurs, les encodages ni les
+     * en-têtes d'un CSV, et l'utilisateur voit son fichier interprété avant de
+     * l'envoyer plutôt qu'après.
+     */
+    public function importProspects(Request $request): array
+    {
+        $rows = $request->input('rows');
+        if (!is_array($rows) || $rows === []) {
+            return Response::error('Aucune ligne à importer.', 422);
+        }
+
+        if (count($rows) > 5000) {
+            return Response::error('Import limité à 5 000 lignes par envoi.', 422);
+        }
+
+        $brandId = $request->input('brand_id');
+        $auth    = AuthContext::current();
+
+        if (!$auth->isBrandAdmin()) {
+            return Response::error('Le vivier B2B est géré au niveau du réseau.', 403);
+        }
+
+        $source = $request->input('source');
+
+        return Response::data($this->prospects->import(
+            $auth,
+            is_numeric($brandId) ? (int) $brandId : $this->defaultBrandId(),
+            array_values($rows),
+            is_string($source) && $source !== '' ? $source : null
+        ));
+    }
+
+    /** Crée les leads d'une campagne à partir du vivier. */
+    public function generate(Request $request): array
+    {
+        $campaignId = $request->intParam('id');
+        if ($campaignId === null) {
+            return Response::error('Identifiant de campagne invalide.');
+        }
+
+        return Response::data($this->prospects->generateLeads(AuthContext::current(), $campaignId));
+    }
+
+    /** Marque par défaut : l'unique marque active, sinon on refuse de deviner. */
+    private function defaultBrandId(): int
+    {
+        $brands = \Marketing\Support\Database::connection()
+            ->query('SELECT id FROM mar_brand WHERE is_active = 1')
+            ->fetchAll(\PDO::FETCH_COLUMN);
+
+        if (count($brands) !== 1) {
+            throw new \RuntimeException(
+                'Plusieurs marques actives : précisez brand_id pour importer le vivier.'
+            );
+        }
+
+        return (int) $brands[0];
     }
 
     public function index(Request $request): array

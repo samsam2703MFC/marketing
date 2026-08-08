@@ -60,6 +60,11 @@ return static function (Router $router): void {
     $router->get('/api/v1/marketing/campaigns/{id}/leads',      [$leads, 'index']);
     $router->patch('/api/v1/marketing/leads/{id}/status',       [$leads, 'updateStatus']);
     $router->get('/api/v1/marketing/leads/{id}/history',        [$leads, 'history']);
+    $router->post('/api/v1/marketing/campaigns/{id}/leads/generate', [$leads, 'generate']);
+
+    // Vivier B2B : c'est lui qui alimente la génération des leads.
+    $router->get('/api/v1/marketing/b2b/sectors',           [$leads, 'sectorSummary']);
+    $router->post('/api/v1/marketing/b2b/prospects/import', [$leads, 'importProspects']);
 
     // Diffusion
     $router->get('/api/v1/marketing/diffusion',   [$network, 'diffusion']);

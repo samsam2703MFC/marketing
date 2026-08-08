@@ -18,6 +18,36 @@ export default function CampaignMonitorView({ campaignId, leadStatuses, onBack }
   const monitor = useAsync(() => api.getMonitor(campaignId), [campaignId])
   const [reloadKey, setReloadKey] = useState(0)
   const leads = useAsync(() => api.getLeads(campaignId), [campaignId, reloadKey])
+  const [generating, setGenerating] = useState(false)
+  const [generation, setGeneration] = useState<string | null>(null)
+
+  /**
+   * Relance la génération depuis le vivier.
+   *
+   * Rejouable : les comptes déjà rattachés sont écartés côté serveur. C'est ce
+   * qui permet de relancer après un import complémentaire sans se demander si
+   * on va appeler deux fois la même entreprise.
+   */
+  async function generate() {
+    setGenerating(true)
+    setGeneration(null)
+
+    try {
+      const report = await api.generateLeads(campaignId)
+      setGeneration(
+        report.reason ??
+          `${report.created} lead(s) créé(s) sur ${report.shops} boutique(s)` +
+            (report.skipped_existing > 0
+              ? `, ${report.skipped_existing} déjà rattaché(s).`
+              : '.'),
+      )
+      setReloadKey((current) => current + 1)
+    } catch (cause: unknown) {
+      setGeneration(describeError(cause))
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   const refreshLeads = useCallback(() => setReloadKey((key) => key + 1), [])
 
@@ -107,6 +137,13 @@ export default function CampaignMonitorView({ campaignId, leadStatuses, onBack }
             </p>
           </div>
           <Funnel steps={leads.data?.funnel ?? []} />
+        </div>
+
+        <div className="filters__row">
+          <button type="button" className="filter" onClick={generate} disabled={generating}>
+            {generating ? 'Génération…' : 'Générer depuis le vivier B2B'}
+          </button>
+          {generation ? <span className="muted">{generation}</span> : null}
         </div>
 
         {leads.error ? <p className="error">{leads.error}</p> : null}

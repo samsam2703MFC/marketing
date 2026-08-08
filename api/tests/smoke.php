@@ -529,6 +529,173 @@ check(
 $response = call($router, 'GET', '/api/v1/marketing/shops');
 check('la liste des boutiques est cloisonnée', count($response['body']) === 1, count($response['body']) . ' reçue(s)');
 
+// --- Vivier B2B et génération des leads -----------------------------------
+// La génération ne fabrique pas de sociétés : elle puise dans un vivier
+// importé. Ce qui compte ici, c'est qu'un vivier vide ne produise rien et le
+// dise, qu'un import soit rejouable, et qu'une seconde génération ne crée pas
+// de doublons — trois façons de se retrouver avec des leads que personne ne
+// peut appeler, ou appelés deux fois.
+echo "\nVivier B2B\n";
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+$pdo->exec('DELETE FROM mar_crm_lead_event');
+$pdo->exec('DELETE FROM mar_crm_lead');
+$pdo->exec('DELETE FROM mar_b2b_prospect');
+
+$sectorIds = array_column($refs['b2bSectors'], 'id', 'code');
+
+$response = call($router, 'GET', '/api/v1/marketing/b2b/sectors');
+$summary  = $response['body'];
+check('le vivier annonce son effectif réel', ($summary[0]['available'] ?? null) === 0);
+check(
+    'le chiffre de cadrage reste distinct de l\'effectif',
+    ($summary[0]['estimated_leads_count'] ?? 0) > 0
+);
+
+// Campagne B2B de test, sur les deux boutiques.
+$response   = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name'          => 'Rentrée offices',
+    'scope'         => 'LOCALE',
+    'client_target' => 'b2b',
+    'shop_ids'      => [1, 2],
+    'sector_ids'    => [(int) $sectorIds['offices'], (int) $sectorIds['horeca']],
+]);
+$b2bCampaign = (int) $response['body']['inserted_id'];
+
+// Vivier vide : rien ne doit être créé, et la raison doit être dite.
+$response = call($router, 'POST', sprintf('/api/v1/marketing/campaigns/%d/leads/generate', $b2bCampaign));
+check('sans vivier, aucun lead n\'est créé', ($response['body']['created'] ?? null) === 0);
+check('et la raison est explicite', str_contains((string) ($response['body']['reason'] ?? ''), 'vivier'));
+
+// Import du vivier.
+$response = call($router, 'POST', '/api/v1/marketing/b2b/prospects/import', [], [
+    'source' => 'test',
+    'rows'   => [
+        ['external_ref' => 'A1', 'company_name' => 'Deloitte Diegem',  'sector' => 'offices', 'contact_name' => 'A. Verhoeven', 'potential_amount' => '1 250,50'],
+        ['external_ref' => 'A2', 'company_name' => 'AXA Belgium',      'sector' => 'offices'],
+        ['external_ref' => 'A3', 'company_name' => 'Brasserie Sablon', 'sector' => 'Horeca'],
+        ['external_ref' => 'A4', 'company_name' => 'CHU Namur',        'sector' => 'sante'],
+        ['external_ref' => 'A5', 'company_name' => '',                 'sector' => 'offices'],
+        ['external_ref' => 'A6', 'company_name' => 'Société X',        'sector' => 'inexistant'],
+    ],
+]);
+$import = $response['body'];
+check('les lignes valides sont importées', ($import['imported'] ?? null) === 4, json_encode($import));
+check('les lignes inexploitables sont écartées', ($import['skipped'] ?? 0) === 2);
+check('les secteurs inconnus sont signalés', count($import['errors'] ?? []) === 2);
+check(
+    'le séparateur décimal européen est lu',
+    (float) $pdo->query("SELECT potential_amount FROM mar_b2b_prospect WHERE external_ref = 'A1'")->fetchColumn() === 1250.50
+);
+
+// Rejouable : le même fichier met à jour, il ne duplique pas.
+$response = call($router, 'POST', '/api/v1/marketing/b2b/prospects/import', [], [
+    'rows' => [['external_ref' => 'A1', 'company_name' => 'Deloitte Diegem Belgium', 'sector' => 'offices']],
+]);
+check('réimporter met à jour', ($response['body']['updated'] ?? null) === 1);
+check(
+    'et ne crée pas de doublon',
+    (int) $pdo->query('SELECT COUNT(*) FROM mar_b2b_prospect')->fetchColumn() === 4
+);
+
+$response = call($router, 'GET', '/api/v1/marketing/b2b/sectors');
+$offices  = array_values(array_filter($response['body'], static fn (array $s): bool => $s['code'] === 'offices'))[0];
+check('l\'effectif du vivier suit l\'import', $offices['available'] === 2, (string) $offices['available']);
+
+// Génération.
+$response = call($router, 'POST', sprintf('/api/v1/marketing/campaigns/%d/leads/generate', $b2bCampaign));
+$run      = $response['body'];
+check('seuls les secteurs retenus sont mobilisés', ($run['created'] ?? null) === 3, json_encode($run));
+check('la répartition couvre les deux boutiques', ($run['shops'] ?? null) === 2);
+check(
+    'les comptes sont distribués et non entassés',
+    (int) $pdo->query(sprintf(
+        'SELECT COUNT(DISTINCT shop_id) FROM mar_crm_lead WHERE campaign_id = %d',
+        $b2bCampaign
+    ))->fetchColumn() === 2
+);
+check(
+    'chaque lead part à l\'état initial',
+    $pdo->query(sprintf('SELECT DISTINCT status_code FROM mar_crm_lead WHERE campaign_id = %d', $b2bCampaign))->fetchColumn() === 'todo'
+);
+check(
+    'la création est tracée dans l\'historique',
+    (int) $pdo->query(sprintf(
+        'SELECT COUNT(*) FROM mar_crm_lead_event e JOIN mar_crm_lead l ON l.id = e.lead_id WHERE l.campaign_id = %d',
+        $b2bCampaign
+    ))->fetchColumn() === 3
+);
+
+// Relance : rien de neuf, et surtout pas de doublon.
+$response = call($router, 'POST', sprintf('/api/v1/marketing/campaigns/%d/leads/generate', $b2bCampaign));
+check('relancer ne recrée rien', ($response['body']['created'] ?? null) === 0);
+check('les comptes déjà traités sont comptés', ($response['body']['skipped_existing'] ?? null) === 3);
+check(
+    'le nombre de leads est inchangé',
+    (int) $pdo->query(sprintf('SELECT COUNT(*) FROM mar_crm_lead WHERE campaign_id = %d', $b2bCampaign))->fetchColumn() === 3
+);
+
+// Un import complémentaire ne génère que les nouveaux — et la répartition
+// tient compte de ce qui est déjà en place. Un curseur repartant de zéro
+// enverrait chaque compte ajouté au fil de l'eau à la même boutique.
+foreach (['A7' => 'Solvay Business School', 'A8' => 'Collège Saint-Michel'] as $ref => $name) {
+    call($router, 'POST', '/api/v1/marketing/b2b/prospects/import', [], [
+        'rows' => [['external_ref' => $ref, 'company_name' => $name, 'sector' => 'offices']],
+    ]);
+    $response = call($router, 'POST', sprintf('/api/v1/marketing/campaigns/%d/leads/generate', $b2bCampaign));
+    check(sprintf('un import complémentaire ajoute %s', $name), ($response['body']['created'] ?? null) === 1);
+}
+
+$spread = $pdo->query(sprintf(
+    'SELECT COUNT(*) AS total FROM mar_crm_lead WHERE campaign_id = %d GROUP BY shop_id ORDER BY total DESC',
+    $b2bCampaign
+))->fetchAll(PDO::FETCH_COLUMN);
+check(
+    'les générations successives ne déséquilibrent pas la charge',
+    count($spread) === 2 && ((int) $spread[0] - (int) $spread[1]) <= 1,
+    implode(' / ', $spread)
+);
+
+// Une campagne B2C ne génère rien, même si on force l'appel.
+$response  = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name' => 'Promo B2C', 'client_target' => 'b2c', 'sector_ids' => [(int) $sectorIds['offices']],
+]);
+$b2cId     = (int) $response['body']['inserted_id'];
+$response  = call($router, 'POST', sprintf('/api/v1/marketing/campaigns/%d/leads/generate', $b2cId));
+check('une campagne B2C ne génère pas de lead', ($response['body']['created'] ?? null) === 0);
+check('et le dit', str_contains((string) ($response['body']['reason'] ?? ''), 'B2C'));
+
+// Génération à la création : la case de l'assistant doit suffire.
+$response = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name'             => 'Offices automne',
+    'client_target'    => 'b2b',
+    'sector_ids'       => [(int) $sectorIds['offices']],
+    'create_crm_leads' => true,
+]);
+check('l\'assistant génère à la création', ($response['body']['leads']['created'] ?? null) === 4, json_encode($response['body']['leads'] ?? null));
+
+// Périmètre : un franchisé ne distribue pas chez le voisin.
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+$response = call($router, 'POST', '/api/v1/marketing/b2b/prospects/import', [], [
+    'rows' => [['external_ref' => 'B1', 'company_name' => 'Test', 'sector' => 'offices']],
+]);
+check('un franchisé ne peut pas alimenter le vivier', $response['status'] === 403, 'statut ' . $response['status']);
+
+$pdo->exec(sprintf('DELETE FROM mar_crm_lead WHERE campaign_id = %d', $b2bCampaign));
+$response = call($router, 'POST', sprintf('/api/v1/marketing/campaigns/%d/leads/generate', $b2bCampaign));
+check(
+    'un franchisé ne distribue qu\'à sa boutique',
+    ($response['body']['shops'] ?? null) === 1,
+    json_encode($response['body'])
+);
+check(
+    'et aucun lead ne part chez le voisin',
+    (int) $pdo->query(sprintf(
+        'SELECT COUNT(*) FROM mar_crm_lead WHERE campaign_id = %d AND shop_id <> 1',
+        $b2bCampaign
+    ))->fetchColumn() === 0
+);
+
 // --- Installation en sous-répertoire --------------------------------------
 // Les routes sont absolues mais l'application est servie sous /marketing : sans
 // retrait du préfixe, toute l'API répond 404 en production tout en passant en
