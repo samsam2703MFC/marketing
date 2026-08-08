@@ -490,8 +490,14 @@ jobs:
           # commercial : elle se déclare, elle ne se devine pas.
           MAR_BRAND_NAME: ${{ vars.MAR_BRAND_NAME }}
         run: |
+          # Encodé plutôt que cité : le nom traverse le shell du runner puis
+          # celui du serveur, et l'apostrophe de « L'Atelier By » ferme la
+          # chaîne au deuxième. Empiler les échappements aurait tenu jusqu'au
+          # premier nom un peu différent.
           BRAND_OPT=''
-          [ -n "$MAR_BRAND_NAME" ] && BRAND_OPT="--brand='$MAR_BRAND_NAME'"
+          if [ -n "$MAR_BRAND_NAME" ]; then
+            BRAND_OPT="--brand-b64=$(printf '%s' "$MAR_BRAND_NAME" | base64 -w0)"
+          fi
 
           set +e
           out=$($SSH_CMD $SSH_OPTS -o BatchMode=yes "$SSH_USER@$SSH_HOST" "

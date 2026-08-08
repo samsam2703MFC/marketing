@@ -17,6 +17,12 @@ declare(strict_types=1);
  *   php db/sync-erp.php --dry-run        n'écrit rien, dit ce qu'il lirait
  *   php db/sync-erp.php --brand="Nom"    crée l'enseigne quand l'ERP ne la
  *                                        porte nulle part de lisible
+ *
+ * `--brand-b64=` accepte le même nom encodé en base64. C'est ce qu'utilise le
+ * déploiement : la valeur traverse deux interpréteurs de commandes — celui du
+ * runner puis celui du serveur — et une apostrophe dans « L'Atelier By » y
+ * ferme la chaîne. L'encodage supprime la question au lieu d'empiler les
+ * échappements.
  */
 
 use Marketing\Repository\ErpSyncRepository;
@@ -34,6 +40,16 @@ $brandName = '';
 foreach ($argv as $argument) {
     if (str_starts_with($argument, '--brand=')) {
         $brandName = trim(substr($argument, 8));
+    }
+
+    if (str_starts_with($argument, '--brand-b64=')) {
+        $decoded = base64_decode(substr($argument, 12), true);
+        if ($decoded === false) {
+            fprintf(STDERR, "--brand-b64 : encodage base64 invalide.\n");
+            exit(2);
+        }
+
+        $brandName = trim($decoded);
     }
 }
 
