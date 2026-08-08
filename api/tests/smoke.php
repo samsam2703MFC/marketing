@@ -870,6 +870,90 @@ check(
     ))->fetchColumn() === 0
 );
 
+// --- Reprise depuis l'ERP ---------------------------------------------------
+// Les boutiques et les comptes professionnels appartiennent à l'ERP. Le test ne
+// s'exécute que si une source est en place : il ne doit pas échouer sur une
+// machine qui n'a pas l'ERP à côté, mais il ne doit pas non plus passer en
+// silence sans avoir rien vérifié — d'où le message.
+echo "\nReprise depuis l'ERP\n";
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+$erpAvailable = (int) $pdo->query(
+    "SELECT COUNT(*) FROM information_schema.tables
+      WHERE table_schema = 'franchise' AND table_name IN ('shops', 'customers')"
+)->fetchColumn() === 2;
+
+if (!$erpAvailable) {
+    printf("  · source ERP absente (franchise.shops / franchise.customers) — reprise non vérifiée\n");
+} else {
+    $before = (int) $pdo->query('SELECT COUNT(*) FROM mar_shop')->fetchColumn();
+
+    $response = call($router, 'POST', '/api/v1/marketing/erp/sync');
+    $sync     = $response['body'];
+    check('la reprise aboutit', $response['status'] === 200, 'statut ' . $response['status']);
+    check('elle nomme sa source', ($sync['shops']['source'] ?? '') === 'franchise.shops');
+    check(
+        'elle rapporte les colonnes retenues',
+        ($sync['prospects']['columns']['postal_code'] ?? '') !== '',
+        json_encode($sync['prospects']['columns'] ?? [])
+    );
+
+    // Une boutique inactive dans l'ERP ne doit pas rejoindre le périmètre.
+    check('les boutiques fermées sont écartées', ($sync['shops']['skipped'] ?? 0) >= 1);
+    check(
+        'seuls les clients professionnels sont repris',
+        ($sync['prospects']['read'] ?? 0) === (int) $pdo->query(
+            'SELECT COUNT(*) FROM franchise.customers WHERE is_b2b = 1'
+        )->fetchColumn()
+    );
+    check('les accents traversent la reprise', (int) $pdo->query(
+        "SELECT COUNT(*) FROM mar_shop WHERE name LIKE '%Châtelain%'"
+    )->fetchColumn() === 1);
+
+    // Rejouable : le rapprochement se fait sur l'identifiant ERP, donc un
+    // second passage met à jour au lieu de dupliquer — y compris si l'ERP
+    // renomme la boutique et son code.
+    $pdo->exec("UPDATE franchise.shops SET name = 'Châtelain (Fort Jaco)', code = 'chatelain-2' WHERE id = 1");
+    $after = call($router, 'POST', '/api/v1/marketing/erp/sync')['body'];
+    check('un second passage ne crée rien', ($after['shops']['created'] ?? null) === 0, json_encode($after['shops']));
+    check(
+        'une boutique renommée est mise à jour, pas dupliquée',
+        (int) $pdo->query('SELECT COUNT(*) FROM mar_shop WHERE erp_shop_id = 1')->fetchColumn() === 1
+    );
+    $pdo->exec("UPDATE franchise.shops SET name = 'Bruxelles — Châtelain', code = 'chatelain' WHERE id = 1");
+
+    check('les comptes B2B sont rattachés à leur boutique', (int) $pdo->query(
+        "SELECT COUNT(*) FROM mar_b2b_prospect WHERE source = 'ERP' AND shop_id IS NOT NULL"
+    )->fetchColumn() >= 1);
+    check('la reprise a bien ajouté des boutiques', (int) $pdo->query('SELECT COUNT(*) FROM mar_shop')->fetchColumn() > $before);
+
+    // Réservée au réseau.
+    AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+    $response = call($router, 'POST', '/api/v1/marketing/erp/sync');
+    check('un franchisé ne lance pas la reprise', $response['status'] === 403, 'statut ' . $response['status']);
+    AuthContext::set(1, 'BRAND_ADMIN', 1);
+}
+
+// --- Référentiels de libellés ----------------------------------------------
+// Cinq écrans traduisaient un code en libellé avec une table écrite en dur, un
+// sixième affichait le code brut. Ajouter une valeur imposait un déploiement du
+// front là où le reste du module se règle en base.
+echo "\nRéférentiels de libellés\n";
+$response = call($router, 'GET', '/api/v1/marketing/references');
+$refs     = $response['body'];
+
+foreach ([
+    'clientTargets'      => ['b2c', 'B2C — particuliers'],
+    'costKinds'          => ['MEDIA', 'Achat média'],
+    'fundSources'        => ['ROYALTY', 'Royalties'],
+    'reviewPlatforms'    => ['GOOGLE', 'Google Business'],
+    'salesChannels'      => ['WS', 'Web shop'],
+    'promotionMechanics' => ['PERCENT', 'Pourcentage'],
+] as $key => [$code, $label]) {
+    $entries = array_column($refs[$key] ?? [], 'label', 'code');
+    check(sprintf('%s est servi par la base', $key), ($entries[$code] ?? '') === $label, json_encode($entries));
+}
+
 // --- Installation en sous-répertoire --------------------------------------
 // Les routes sont absolues mais l'application est servie sous /marketing : sans
 // retrait du préfixe, toute l'API répond 404 en production tout en passant en

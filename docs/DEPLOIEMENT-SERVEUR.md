@@ -212,3 +212,37 @@ php -m | grep -i pdo_mysql   # doit afficher pdo_mysql
 ⚠️ Ne remplacez pas cette ligne par un test groupé du genre `command -v rsync php || apt-get install …` : si `rsync` et `php` sont déjà présents, le test réussit, l'installation est court-circuitée et **`php-mysql` n'est jamais posé**. Les migrations échouent alors bien plus tard, sur une extension manquante.
 
 `php-mysql` fournit `pdo_mysql`, sans lequel `db/migrate.php` ne peut pas se connecter. Le contrôle `php -m` ci-dessus est la seule preuve qui compte.
+
+## Reprise depuis l'ERP
+
+Les boutiques et les comptes professionnels ne se saisissent pas dans le module :
+ils appartiennent à l'ERP. La reprise se lance depuis **Fidélité & CRM**, et elle
+est rejouable — elle met à jour les fiches connues, n'ajoute que les nouvelles.
+
+Deux variables du fichier `.env` désignent les tables sources, sous la forme
+`schéma.table` :
+
+```
+MAR_ERP_SHOPS_TABLE=franchise.shops
+MAR_ERP_CUSTOMERS_TABLE=franchise.customers
+```
+
+Ce sont les valeurs par défaut ; il n'y a rien à écrire si elles conviennent.
+
+Les colonnes, elles, ne sont pas configurées : la reprise les découvre dans
+`information_schema` et accepte plusieurs noms courants pour chaque notion
+(`zip`, `cp` ou `postal_code` pour un code postal, par exemple). Le compte rendu
+affiché à l'écran indique celles qu'elle a retenues — c'est le seul moyen de
+vérifier, sans accès à la base, qu'elle a lu ce qu'on croit. Si une colonne
+obligatoire manque, elle refuse en nommant ce qu'elle a trouvé à la place.
+
+Deux points à connaître :
+
+- Une boutique inactive dans l'ERP est écartée : elle ne doit pas réapparaître
+  dans le choix de périmètre d'une nouvelle campagne.
+- Seuls les clients marqués `is_b2b` rejoignent le vivier. Les autres sont des
+  particuliers, qu'on ne démarche pas au téléphone.
+
+L'utilisateur MySQL du module doit avoir le droit de lecture sur le schéma de
+l'ERP. Sans lui, la reprise s'arrête sur « table introuvable, ou aucun droit de
+lecture dessus » — les deux cas se ressemblent vus du client MySQL.

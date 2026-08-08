@@ -67,6 +67,9 @@ return static function (Router $router): void {
     $router->get('/api/v1/marketing/b2b/sectors',           [$leads, 'sectorSummary']);
     $router->post('/api/v1/marketing/b2b/prospects/import', [$leads, 'importProspects']);
 
+    // Reprise depuis l'ERP : boutiques et clients marqués professionnels.
+    $router->post('/api/v1/marketing/erp/sync', [$leads, 'syncErp']);
+
     // Diffusion
     $router->get('/api/v1/marketing/diffusion',   [$network, 'diffusion']);
 

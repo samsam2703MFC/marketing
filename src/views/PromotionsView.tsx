@@ -2,22 +2,8 @@ import * as api from '../lib/api/module'
 import { useAsync, formatDate } from '../lib/useAsync'
 import type { CampaignOffer } from '../lib/api/module'
 import LinkBadge from '../components/LinkBadge'
+import { useLabel } from '../state/references'
 
-/**
- * Mécaniques promotionnelles.
- *
- * Le libellé du type de mécanique vient du code stocké : la table n'a pas de
- * référentiel pour ces cinq valeurs, contrairement aux statuts et aux leviers.
- * C'est la seule correspondance qui reste dans le front — à basculer en table
- * si le marketing doit un jour en ajouter.
- */
-const MECHANICS: Record<string, string> = {
-  PERCENT: 'Pourcentage',
-  BUNDLE_FIXED: 'Prix de formule',
-  BUY_X_GET_Y: 'Offre liée',
-  CROSSED_PRICE: 'Prix barré',
-  FREE_DELIVERY: 'Livraison offerte',
-}
 
 export default function PromotionsView() {
   const { data, error, loading } = useAsync(() => api.listPromotions(), [])
@@ -57,6 +43,7 @@ function EmptyCatalog() {
 
 function CatalogTable({ promotions }: { promotions: api.Promotion[] }) {
   const data = promotions
+  const mechanicLabel = useLabel((refs) => refs.promotionMechanics)
 
   return (
     <section className="card table-card">
@@ -77,7 +64,7 @@ function CatalogTable({ promotions }: { promotions: api.Promotion[] }) {
               <tr key={promotion.id}>
                 <td>{promotion.name}</td>
                 <td className="muted">
-                  {MECHANICS[promotion.mechanic_type] ?? promotion.mechanic_type}
+                  {mechanicLabel(promotion.mechanic_type)}
                 </td>
                 <td>{promotion.value_label ?? '—'}</td>
                 <td className="muted">{promotion.scope_label ?? '—'}</td>

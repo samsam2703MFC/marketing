@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { module as api } from '../lib/api'
 import { useAsync, formatNumber } from '../lib/useAsync'
-import type { ImportReport, ProspectRow } from '../lib/api/module'
+import type { ImportReport, ProspectRow, SyncReport } from '../lib/api/module'
 import { describeError } from '../state/auth'
 
 /**
@@ -116,6 +116,8 @@ export default function ProspectImport() {
   const [report, setReport] = useState<ImportReport | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [sync, setSync] = useState<{ shops: SyncReport; prospects: SyncReport } | null>(null)
 
   const parsed = parseCsv(text)
   const named = parsed.rows.filter((row) => (row.company_name ?? '').trim() !== '')
@@ -128,6 +130,28 @@ export default function ProspectImport() {
     { estimated: 0, available: 0 },
   )
 
+  /**
+   * Reprise depuis l'ERP.
+   *
+   * C'est la source normale : les boutiques et les clients professionnels
+   * vivent dans l'ERP, l'import de fichier ne sert qu'aux comptes qu'il ne
+   * connaît pas (prospection achetée, salon, liste d'un franchisé).
+   */
+  async function runSync() {
+    setSyncing(true)
+    setFailure(null)
+    setSync(null)
+
+    try {
+      setSync(await api.syncErp())
+      setReloadKey((current) => current + 1)
+    } catch (cause: unknown) {
+      setFailure(describeError(cause))
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   async function send() {
     setSending(true)
     setFailure(null)
@@ -136,7 +160,7 @@ export default function ProspectImport() {
     try {
       setReport(await api.importProspects(named, 'import CSV'))
       setText('')
-      setReloadKey(reloadKey + 1)
+      setReloadKey((current) => current + 1)
     } catch (cause: unknown) {
       setFailure(describeError(cause))
     } finally {
@@ -182,7 +206,56 @@ export default function ProspectImport() {
         </table>
       </div>
 
+      <h3 className="section-label">Reprendre depuis l’ERP</h3>
+      <p className="muted">
+        Les boutiques et les clients marqués professionnels viennent de l’ERP. La reprise est
+        rejouable : elle met à jour les fiches connues et n’ajoute que les nouvelles.
+      </p>
+      <div className="filters__row">
+        <button type="button" className="filter is-on" onClick={runSync} disabled={syncing}>
+          {syncing ? 'Reprise…' : 'Reprendre boutiques & comptes B2B'}
+        </button>
+      </div>
+
+      {sync ? (
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Reprise</th>
+                <th>Source</th>
+                <th className="num">Lues</th>
+                <th className="num">Créées</th>
+                <th className="num">Mises à jour</th>
+                <th className="num">Écartées</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ['Boutiques', sync.shops],
+                ['Comptes B2B', sync.prospects],
+              ].map(([label, report]) => (
+                <tr key={label as string}>
+                  <td>{label as string}</td>
+                  <td className="muted">
+                    <code>{(report as SyncReport).source}</code>
+                  </td>
+                  <td className="num">{(report as SyncReport).read}</td>
+                  <td className="num">{(report as SyncReport).created}</td>
+                  <td className="num">{(report as SyncReport).updated}</td>
+                  <td className="num">{(report as SyncReport).skipped}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
       <h3 className="section-label">Importer un fichier</h3>
+      <p className="muted">
+        Pour les comptes que l’ERP ne connaît pas : prospection achetée, salon, liste d’un
+        franchisé.
+      </p>
       <p className="muted">
         Colonnes reconnues : <code>ref</code>, <code>société</code>, <code>secteur</code>,{' '}
         <code>contact</code>, <code>email</code>, <code>téléphone</code>, <code>volume</code>,{' '}

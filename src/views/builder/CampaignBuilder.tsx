@@ -536,12 +536,12 @@ function FramingStep({
 
       <h3 className="section-label">Identité & période</h3>
       <div className="filters__row">
-        <label className="field">
+        <label className="field field--wide">
           Nom
           <input
             type="text"
             value={draft.name}
-            placeholder="Barbecue été"
+            placeholder="Barbecue été — opération terrasse"
             onChange={(e) => patch({ name: e.target.value })}
           />
         </label>

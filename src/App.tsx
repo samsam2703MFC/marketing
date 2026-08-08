@@ -20,6 +20,7 @@ import CrmView from './views/CrmView'
 import LocalPresenceView from './views/LocalPresenceView'
 import DamView from './views/DamView'
 import CampaignBuilder from './views/builder/CampaignBuilder'
+import { ReferencesProvider } from './state/references'
 
 export default function App() {
   // Le module n'a pas d'écran de connexion : embarqué dans l'ERP, l'identité
@@ -126,6 +127,7 @@ function Workspace() {
   const refs = references.data
 
   return (
+    <ReferencesProvider value={refs}>
     <div className="workspace">
       <Sidebar
         role={role}
@@ -204,5 +206,6 @@ function Workspace() {
         </main>
       </div>
     </div>
+    </ReferencesProvider>
   )
 }

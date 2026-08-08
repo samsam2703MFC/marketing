@@ -39,6 +39,12 @@ final class ReferenceRepository
             'agencyAsks'      => $this->agencyAsks(),
             'b2bOptions'      => $this->b2bOptions(),
             'retroplanningDefaults' => $this->retroplanningDefaults(),
+            'clientTargets'      => $this->codeLabels('mar_client_target'),
+            'costKinds'          => $this->codeLabels('mar_cost_kind'),
+            'fundSources'        => $this->codeLabels('mar_fund_source'),
+            'reviewPlatforms'    => $this->codeLabels('mar_review_platform'),
+            'salesChannels'      => $this->codeLabels('mar_sales_channel'),
+            'promotionMechanics' => $this->codeLabels('mar_promotion_mechanic'),
         ];
     }
 
@@ -153,6 +159,21 @@ final class ReferenceRepository
         }
 
         return $templates;
+    }
+
+    /**
+     * Référentiel plat code → libellé.
+     *
+     * Six tables partagent la même forme : elles ne servent qu'à traduire un
+     * code stocké en libellé affichable. Une méthode plutôt que six identiques
+     * — le nom de table ne vient jamais d'une entrée utilisateur, il est écrit
+     * ici même.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function codeLabels(string $table): array
+    {
+        return $this->fetch(sprintf('SELECT code, label FROM %s ORDER BY sort_order, code', $table));
     }
 
     /** @return list<array<string,mixed>> */

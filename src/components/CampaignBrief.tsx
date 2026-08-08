@@ -1,5 +1,6 @@
 import { formatDate, formatEur, formatNumber } from '../lib/useAsync'
 import type { CampaignDetail } from '../lib/api/module'
+import { useLabel } from '../state/references'
 
 /**
  * Fiche de cadrage d'une campagne.
@@ -28,13 +29,9 @@ function shortTime(value: string | null): string {
   return value ? value.slice(0, 5) : '—'
 }
 
-const TARGETS: Record<string, string> = {
-  b2c: 'B2C — particuliers',
-  b2b: 'B2B — professionnels',
-  mixte: 'Mixte B2C + B2B',
-}
 
 export default function CampaignBrief({ campaign }: { campaign: CampaignDetail }) {
+  const targetLabel = useLabel((refs) => refs.clientTargets)
   const offer = campaign.offer
   const master = campaign.assets.find((asset) => asset.is_master) ?? campaign.assets[0]
   const enabledChannels = campaign.channels.filter((channel) => channel.is_enabled)
@@ -43,7 +40,7 @@ export default function CampaignBrief({ campaign }: { campaign: CampaignDetail }
   const framing: Array<[string, string]> = [
     ['Type', campaign.type_label ?? '—'],
     ['Ton', campaign.tone_label ?? '—'],
-    ['Cible client', TARGETS[campaign.client_target] ?? campaign.client_target],
+    ['Cible client', targetLabel(campaign.client_target)],
     [
       'Période',
       `${formatDate(campaign.starts_on)} → ${formatDate(campaign.ends_on)}`,

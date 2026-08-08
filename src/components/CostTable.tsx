@@ -1,15 +1,6 @@
 import { formatEur } from '../lib/useAsync'
+import { useLabel } from '../state/references'
 import type { CostKind } from '../lib/api/module'
-
-/** Libellés des natures de coût. Les codes viennent de `mar_roi_cost.cost_kind`. */
-const KINDS: Record<string, string> = {
-  MEDIA: 'Achat média',
-  PRODUCTION: 'Production & impression',
-  AGENCE: 'Honoraires agence',
-  REMISE: 'Remises accordées',
-  LOGISTIQUE: 'Logistique',
-  AUTRE: 'Autres',
-}
 
 /**
  * Postes de coût par nature.
@@ -19,6 +10,8 @@ const KINDS: Record<string, string> = {
  * ne se vérifie pas.
  */
 export default function CostTable({ costs }: { costs: CostKind[] }) {
+  const kindLabel = useLabel((refs) => refs.costKinds)
+
   if (costs.length === 0) {
     return <p className="muted">Aucun poste de coût saisi.</p>
   }
@@ -42,7 +35,7 @@ export default function CostTable({ costs }: { costs: CostKind[] }) {
           <tbody>
             {costs.map((cost) => (
               <tr key={cost.cost_kind}>
-                <td>{KINDS[cost.cost_kind] ?? cost.cost_kind}</td>
+                <td>{kindLabel(cost.cost_kind)}</td>
                 <td className="muted">{cost.sources ?? '—'}</td>
                 <td className="num">{cost.lines_count}</td>
                 <td className="num">{formatEur(cost.total_amount)}</td>

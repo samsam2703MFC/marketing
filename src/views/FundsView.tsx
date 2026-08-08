@@ -3,6 +3,7 @@ import { module as api } from '../lib/api'
 import { useAsync, formatDate, formatEur, formatPeriod } from '../lib/useAsync'
 import type { Granularity, LedgerPeriod, LedgerRow } from '../lib/api/module'
 import LinkBadge from '../components/LinkBadge'
+import { useLabel } from '../state/references'
 
 const GRANULARITIES: Array<{ value: Granularity; label: string }> = [
   { value: 'month', label: 'Mois' },
@@ -144,6 +145,8 @@ function Block({
   total: number
   sign: '+' | '−'
 }) {
+  const sourceLabel = useLabel((refs) => refs.fundSources)
+
   if (rows.length === 0) return null
 
   return (
@@ -165,7 +168,8 @@ function Block({
             {row.label}
             {row.shop_name ? <span className="muted"> — {row.shop_name}</span> : null}
           </td>
-          <td className="muted">{row.supplier_name ?? row.source}</td>
+          {/* Sans référentiel, cette colonne affichait « ROYALTY » tel quel. */}
+          <td className="muted">{row.supplier_name ?? sourceLabel(row.source)}</td>
           <td className="num">{formatEur(row.amount, 2)}</td>
         </tr>
       ))}

@@ -1,14 +1,8 @@
 import * as api from '../lib/api/module'
 import { useAsync, formatEur } from '../lib/useAsync'
 import LinkBadge from '../components/LinkBadge'
+import { useLabel } from '../state/references'
 
-/** Libellés des canaux de diffusion d'un bon. */
-const CHANNELS: Record<string, string> = {
-  WS: 'Web shop',
-  POS: 'Caisse',
-  OFF: 'Office',
-  B2B: 'B2B',
-}
 
 /**
  * Bons et codes.
@@ -19,6 +13,7 @@ const CHANNELS: Record<string, string> = {
  */
 export default function VouchersView() {
   const { data, error, loading } = useAsync(() => api.listVouchers(), [])
+  const channelLabel = useLabel((refs) => refs.salesChannels)
 
   if (error) return <p className="error">{error}</p>
   if (loading) return <p className="muted">Chargement…</p>
@@ -66,7 +61,7 @@ export default function VouchersView() {
                 <td>
                   <ul className="chips">
                     {voucher.channels.map((code) => (
-                      <li key={code} className="chip chip--lever" title={CHANNELS[code] ?? code}>
+                      <li key={code} className="chip chip--lever" title={channelLabel(code)}>
                         {code}
                       </li>
                     ))}

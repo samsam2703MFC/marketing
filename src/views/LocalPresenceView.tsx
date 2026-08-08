@@ -1,15 +1,7 @@
 import { module as api } from '../lib/api'
 import { useAsync, formatNumber } from '../lib/useAsync'
+import { useLabel } from '../state/references'
 
-/** Libellés des plateformes. Les codes viennent de `mar_shop_presence.platform`. */
-const PLATFORMS: Record<string, string> = {
-  GOOGLE: 'Google Business',
-  FACEBOOK: 'Facebook',
-  INSTAGRAM: 'Instagram',
-  TRIPADVISOR: 'Tripadvisor',
-  DELIVEROO: 'Deliveroo',
-  UBEREATS: 'Uber Eats',
-}
 
 /**
  * Présence locale : fiches plateformes et avis.
@@ -20,6 +12,7 @@ const PLATFORMS: Record<string, string> = {
  */
 export default function LocalPresenceView() {
   const { data, error, loading } = useAsync(() => api.getPresence(), [])
+  const platformLabel = useLabel((refs) => refs.reviewPlatforms)
 
   if (error) return <p className="error">{error}</p>
   if (loading) return <p className="muted">Chargement…</p>
@@ -75,7 +68,7 @@ export default function LocalPresenceView() {
                 {shops.map((shop) => (
                   <tr key={shop.id}>
                     <td>{shop.shop_name}</td>
-                    <td className="muted">{PLATFORMS[shop.platform] ?? shop.platform}</td>
+                    <td className="muted">{platformLabel(shop.platform)}</td>
                     <td className="num">
                       {shop.rating_avg === null ? '—' : shop.rating_avg.toFixed(1)}
                     </td>

@@ -1388,3 +1388,15 @@ table select,
   border-radius: 8px;
   background: var(--chip);
 }
+
+/* Le nom de campagne est la seule saisie libre longue de l'étape : à la
+   largeur par défaut, « Barbecue été — opération terrasse » défilait dans un
+   champ de huit caractères visibles. */
+.wizard-card .filters__row > .field--wide {
+  flex: 1 1 22rem;
+  min-width: 18rem;
+}
+
+.field--wide input {
+  width: 100%;
+}

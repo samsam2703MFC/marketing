@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Marketing\Controller;
 
 use Marketing\Repository\LeadRepository;
+use Marketing\Repository\ErpSyncRepository;
 use Marketing\Repository\ProspectRepository;
 use Marketing\Support\AuthContext;
 use Marketing\Support\Request;
@@ -15,7 +16,30 @@ final class LeadController
     public function __construct(
         private readonly LeadRepository $leads = new LeadRepository(),
         private readonly ProspectRepository $prospects = new ProspectRepository(),
+        private readonly ErpSyncRepository $erp = new ErpSyncRepository(),
     ) {
+    }
+
+    /**
+     * Reprend les boutiques et les comptes professionnels depuis l'ERP.
+     *
+     * Réservé au réseau : ces deux jeux sont communs à toutes les boutiques, et
+     * une reprise partielle lancée depuis une boutique laisserait le réseau
+     * dans un état qu'aucun écran ne saurait expliquer.
+     */
+    public function syncErp(Request $request): array
+    {
+        $auth = AuthContext::current();
+        if (!$auth->isBrandAdmin()) {
+            return Response::error('La reprise ERP est gérée au niveau du réseau.', 403);
+        }
+
+        $brandId = $request->input('brand_id');
+
+        return Response::data($this->erp->sync(
+            $auth,
+            is_numeric($brandId) ? (int) $brandId : $this->defaultBrandId()
+        ));
     }
 
     /** Effectif réel du vivier par secteur, face au chiffre de cadrage. */

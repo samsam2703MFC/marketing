@@ -167,6 +167,18 @@ export interface RetroplanningDefault {
   position_label: string | null
 }
 
+/**
+ * Référentiel plat : un code stocké, un libellé affichable.
+ *
+ * Six ensembles partagent cette forme. Ils remplacent autant de tables de
+ * correspondance écrites dans le front, où ajouter une valeur imposait un
+ * déploiement alors que tout le reste du module se règle en base.
+ */
+export interface CodeLabel {
+  code: string
+  label: string
+}
+
 export interface OfferTemplate {
   id: number
   code: string
@@ -197,6 +209,24 @@ export interface References {
   agencyAsks: AgencyAsk[]
   b2bOptions: B2bOption[]
   retroplanningDefaults: RetroplanningDefault[]
+  clientTargets: CodeLabel[]
+  costKinds: CodeLabel[]
+  fundSources: CodeLabel[]
+  reviewPlatforms: CodeLabel[]
+  salesChannels: CodeLabel[]
+  promotionMechanics: CodeLabel[]
+}
+
+/**
+ * Libellé d'un code, ou le code lui-même à défaut.
+ *
+ * Le repli n'est pas décoratif : une valeur venue d'un import et absente du
+ * référentiel doit rester lisible plutôt que de laisser une case vide.
+ */
+export function labelOf(list: CodeLabel[], code: string | null | undefined): string {
+  if (!code) return '—'
+
+  return list.find((entry) => entry.code === code)?.label ?? code
 }
 
 export function getReferences(): Promise<References> {
@@ -596,6 +626,25 @@ export interface ImportReport {
   /** Sans référence d'origine, un réimport ne saura pas reconnaître le compte. */
   without_ref: number
   errors: string[]
+}
+
+/**
+ * Compte rendu d'une reprise ERP.
+ *
+ * `columns` dit quelles colonnes de l'ERP ont été retenues : c'est le seul
+ * moyen de vérifier, sans accès à la base, que la reprise a lu ce qu'on croit.
+ */
+export interface SyncReport {
+  source: string
+  columns: Record<string, string>
+  read: number
+  created: number
+  updated: number
+  skipped: number
+}
+
+export function syncErp(): Promise<{ shops: SyncReport; prospects: SyncReport }> {
+  return request(`${BASE}/erp/sync`, { method: 'POST' })
 }
 
 export function importProspects(rows: ProspectRow[], source?: string): Promise<ImportReport> {
