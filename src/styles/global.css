@@ -1681,63 +1681,545 @@ select:disabled {
   margin-top: 0;
 }
 
-/* Histogramme des ventes : deux lectures, par magasin ou par produit */
-.sales-chart__modes {
-  float: right;
-  display: inline-flex;
-  gap: 6px;
-  text-transform: none;
-  letter-spacing: normal;
-  font-weight: 400;
+/* ── Étape « Objectifs » : période repliée, bandeau réseau, fiches ──────────
+
+   Trois teintes portent tout l'écran, et chacune a un rôle unique : le bordeaux
+   pour ce qui a été vendu, sa version claire pour l'an dernier, le bleu pour ce
+   qui est demandé. Le couple rouge/vert, réflexe habituel pour « réalisé contre
+   objectif », a été écarté : en deutéranopie les deux se confondent (ΔE 0,9),
+   et l'écran ne dirait plus rien à une personne sur douze.                    */
+
+:root {
+  --chart-real: #B03048;
+  --chart-prev: #EBD3D8;
+  --chart-goal: #1B6FA8;
+  --chart-goal-soft: #DEEAF3;
 }
 
-.sales-chart {
+/* La période se règle une fois : elle tient sur une ligne, et le calendrier
+   ne s'ouvre qu'à la demande. Deux mois affichés en permanence mangeaient le
+   haut de l'écran au profit d'un réglage qu'on ne retouche pas. */
+.period-bar {
   display: flex;
-  align-items: flex-end;
-  gap: 12px;
-  padding: 10px 12px 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: #fff;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: #fff;
-  overflow-x: auto;
 }
 
-.sales-chart__group {
+.period-bar strong {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.period-bar__meta {
+  font-size: 12.5px;
+  color: var(--faint);
+}
+
+.period-bar__spacer {
+  flex: 1;
+}
+
+.period-bar__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Bandeau réseau : réalisé, visé, et l'écart entre les deux. */
+.network-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  padding: 14px 18px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.network-strip__totals {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  min-width: 52px;
-}
-
-.sales-chart__bars {
-  display: flex;
-  align-items: flex-end;
   gap: 3px;
-  height: 140px;
-}
-
-.sales-chart__bar {
-  width: 16px;
-  min-height: 2px;
-  border-radius: 4px 4px 0 0;
-  background: var(--accent);
-}
-
-.sales-chart__bar--previous {
-  background: var(--chip);
-  border: 1px solid var(--line);
-}
-
-.sales-chart__label {
-  max-width: 84px;
-  font-size: 10px;
-  color: var(--muted);
-  text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.network-strip__label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.network-strip__figures {
+  font-size: 14.5px;
+}
+
+.network-strip__goal {
+  color: var(--chart-goal);
+}
+
+.network-strip__gauge {
+  flex: 1;
+  min-width: 240px;
+}
+
+/* Deux segments et un écart de 2 px : la séparation se fait par le fond, pas
+   par un trait — une bordure alourdirait une barre de 12 px de haut. */
+.network-strip__bar {
+  display: flex;
+  gap: 2px;
+  height: 12px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.network-strip__done {
+  background: var(--chart-real);
+}
+
+.network-strip__todo {
+  flex: 1;
+  background: var(--chart-goal-soft);
+}
+
+.network-strip__legend {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 5px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* Légende de l'échelle : elle vaut pour toutes les fiches à la fois, donc
+   elle vit dans le titre de section et non dans chaque carte. */
+.shop-legend {
+  float: right;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 11.5px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--muted);
+}
+
+.shop-legend__mark {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+.shop-legend__mark--real { background: var(--chart-real); }
+.shop-legend__mark--prev { background: var(--chart-prev); }
+.shop-legend__mark--goal { background: var(--chart-goal); }
+
+.shop-legend__scale {
+  color: var(--faint);
+}
+
+.shop-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.shop-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+/* Un magasin sans ticket n'est pas un magasin en retard : le fond le sort du
+   lot au lieu de le laisser lire comme une contre-performance. */
+.shop-card--blind {
+  background: var(--total-line);
+}
+
+.shop-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.shop-card__head strong {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.shop-card__tickets {
+  font-size: 11.5px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.shop-card__hero {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Chiffres proportionnels : à cette taille, des chasses égales feraient
+   flotter « 1 541 ». Les colonnes alignées, elles, gardent `tabular-nums`. */
+.shop-card__total {
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.shop-card__unit {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.shop-card__trend {
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.shop-card__bars {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* La valeur vit dans sa propre colonne plutôt qu'au bout de la barre : elle
+   ne peut donc ni chevaucher une barre voisine ni sortir de la carte, et les
+   trois lignes alignent leurs chiffres. */
+.bar-row {
+  display: grid;
+  grid-template-columns: 1fr 62px;
+  align-items: center;
+  gap: 10px;
+}
+
+.bar-row__track {
+  height: 11px;
+  background: var(--total-line);
+  border-radius: 3px;
+}
+
+.bar-row__fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+
+.bar-row__fill--real { background: var(--chart-real); }
+.bar-row__fill--prev { background: var(--chart-prev); }
+.bar-row__fill--goal { background: var(--chart-goal); }
+
+.bar-row__value {
+  font-size: 11.5px;
+  font-weight: 500;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.bar-row__value--muted { color: var(--muted); font-weight: 400; }
+.bar-row__value--goal { color: var(--chart-goal); }
+
+.shop-card__blind {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: #6B4705;
+  background: #F6E7CE;
+  border-radius: 8px;
+}
+
+/* Mix produit : les parts sont classées par volume, donc une seule teinte
+   déclinée du foncé au clair. Une couleur par produit dépenserait cinq
+   teintes pour une information que l'ordre porte déjà. */
+.shop-card__mix-bar {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.shop-card__mix-part { display: block; }
+.shop-card__mix-part--1 { background: #7A1C31; }
+.shop-card__mix-part--2 { background: #A02940; }
+.shop-card__mix-part--3 { background: #BE4A5F; }
+.shop-card__mix-part--4 { background: #D2778A; }
+.shop-card__mix-part--5 { background: #E0A3B0; }
+
+.shop-card__mix-legend {
+  display: block;
+  margin-top: 5px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* La ligne de saisie se colle en bas : une fiche sans mix produit — un
+   magasin qui ne vend qu'une référence — décalerait sinon son champ d'une
+   quinzaine de pixels par rapport à ses voisines de la même rangée. */
+.shop-card__goal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.shop-card__goal-label {
+  flex: 1;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.shop-card__goal input {
+  width: 82px;
+  padding: 6px 9px;
+  font: 500 13px 'Gotham', system-ui, sans-serif;
+  text-align: right;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-variant-numeric: tabular-nums;
+}
+
+.shop-card__goal input.is-invalid {
+  border-color: var(--danger);
+}
+
+.shop-card__effort {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  color: #125A88;
+  background: var(--chart-goal-soft);
+}
+
+.shop-card__effort--blind {
+  color: #8A5B08;
+  background: #F6E7CE;
+}
+
+/* ── Challenge sur les objectifs ────────────────────────────────────────────
+
+   Une seule teinte nouvelle, l'or, et elle ne sert qu'à la récompense : le
+   bordeaux reste ce qui a été vendu, le bleu ce qui est demandé. Un troisième
+   rôle mérite une troisième couleur, pas un emprunt aux deux premières.      */
+
+:root {
+  --prize: #B0792A;
+  --prize-soft: #F6E7CE;
+  --prize-ink: #7A5207;
+}
+
+.section-label__aside {
+  float: right;
+  font-size: 11.5px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--muted);
+}
+
+/* Interrupteur. Un bouton, pas une case : il porte son propre libellé et son
+   explication, et `aria-pressed` dit son état sans dépendre de la couleur. */
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 13px 16px;
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.switch__track {
+  flex: 0 0 auto;
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--chip);
+  transition: background 0.15s ease;
+}
+
+.switch__track::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(28, 26, 23, 0.25);
+  transition: transform 0.15s ease;
+}
+
+.switch.is-on .switch__track { background: var(--prize); }
+.switch.is-on .switch__track::after { transform: translateX(16px); }
+
+.switch__label { font-size: 14px; font-weight: 500; }
+.switch__hint { font-size: 12.5px; color: var(--muted); }
+
+.challenge {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 16px 18px;
+  background: #fff;
+  border: 1px solid var(--prize);
+  border-left-width: 3px;
+  border-radius: 12px;
+}
+
+.challenge__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 28px;
+  align-items: flex-start;
+}
+
+.challenge__field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 220px;
+}
+
+.challenge__label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.challenge__note {
+  font-size: 11.5px;
+  color: var(--muted);
+  max-width: 46ch;
+}
+
+.challenge__prizes { display: flex; flex-wrap: wrap; gap: 8px; }
+.challenge__prize { display: inline-flex; align-items: center; gap: 6px; }
+
+.challenge__prize input {
+  width: 150px;
+  padding: 5px 9px;
+  font: 400 12.5px 'Gotham', system-ui, sans-serif;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+}
+
+.challenge__rank,
+.standings__medal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: var(--chip);
+  color: var(--muted);
+}
+
+/* Or, argent, bronze : les trois premiers rangs seulement, et uniquement quand
+   une dotation les accompagne — un podium sans prix ne se peint pas. */
+.challenge__rank--1, .standings__medal--1 { background: #EFD08A; color: #5A4106; }
+.challenge__rank--2, .standings__medal--2 { background: #DFDCD5; color: #4B4740; }
+.challenge__rank--3, .standings__medal--3 { background: #E7CDB4; color: #6A4419; }
+
+.challenge__flag {
+  margin: 0;
+  padding: 10px 13px;
+  font-size: 12.5px;
+  color: var(--prize-ink);
+  background: var(--prize-soft);
+  border-radius: 8px;
+  max-width: 108ch;
+}
+
+.challenge__footnote { font-size: 12px; max-width: 104ch; }
+
+.challenge .section-label { margin-top: 6px; }
+
+/* Ligne de départ */
+.standings { min-width: 720px; }
+.standings__rank { width: 44px; text-align: center; }
+.standings tbody td { vertical-align: middle; }
+
+.standings__prize {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--prize-ink);
+}
+
+.standings__trigger { width: 110px; }
+.standings__trigger .objectives__pct { justify-content: flex-end; }
+.standings__trigger input { width: 52px; }
+
+.standings__ok {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--green);
+}
+
+.standings__gap {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ligne du seuil dans la fiche magasin */
+.shop-card__challenge {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--prize-ink);
+  background: var(--prize-soft);
+  border-radius: 8px;
+}
+
+.shop-card__challenge strong { font-weight: 600; }
+.shop-card__challenge-gap { font-size: 11.5px; }
 
 /* Champ occupant la largeur, pour les zones de texte et les curseurs */
 .field--block,
