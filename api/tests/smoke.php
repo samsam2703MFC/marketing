@@ -163,6 +163,26 @@ check('9 types de campagne', count($refs['campaignTypes']) === 9, count($refs['c
 check('5 états de lead', count($refs['leadStatuses']) === 5);
 check('les couleurs viennent de la base', ($refs['leadStatuses'][0]['color_hex'] ?? '') === '#8a6d0f');
 
+// La maquette déduisait la pastille de levier par mots-clés sur un texte libre.
+// C'est une relation désormais : si elle casse, la pastille disparaît en
+// silence — d'où ces deux contrôles.
+$types = array_column($refs['campaignTypes'], null, 'code');
+check(
+    'chaque type porte un levier',
+    count(array_filter($refs['campaignTypes'], static fn (array $t): bool => $t['lever_id'] !== null)) === 9,
+    count(array_filter($refs['campaignTypes'], static fn (array $t): bool => $t['lever_id'] !== null)) . '/9'
+);
+check(
+    'la pastille garde la formulation propre au type',
+    ($types['ouverture']['lever_label'] ?? '') === 'Trafic / notoriété',
+    var_export($types['ouverture']['lever_label'] ?? null, true)
+);
+check(
+    'la couleur de pastille vient du levier',
+    ($types['anti_gaspi']['lever_color_hex'] ?? '') === '#10b981',
+    var_export($types['anti_gaspi']['lever_color_hex'] ?? null, true)
+);
+
 $response  = call($router, 'GET', '/api/v1/marketing/campaigns');
 $campaigns = $response['body'];
 check('les deux campagnes sont visibles', count($campaigns) === 2, count($campaigns) . ' reçue(s)');
@@ -331,10 +351,12 @@ AuthContext::set(1, 'BRAND_ADMIN', 1);
 
 $channelId = (int) $pdo->query("SELECT id FROM mar_channel WHERE code = 'plv'")->fetchColumn();
 $response  = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
-    'brand_id'   => 1,
+    // Volontairement sans brand_id : le back-office connaît sa marque, et une
+    // seule est active. Le serveur doit la résoudre plutôt que refuser.
     'name'       => 'Campagne assistant',
     'type_id'    => 1,
     'scope'      => 'LOCALE',
+    'client_target' => 'b2b',
     'starts_on'  => '2026-12-01',
     'ends_on'    => '2026-12-24',
     'budget_amount' => 5000,
@@ -361,11 +383,27 @@ check(
     ))->fetchColumn() === 0.0
 );
 check('l\'objectif de levier est écrit', $count('mar_campaign_lever_target') === 1);
+check(
+    'la marque est déduite du réseau',
+    (int) $pdo->query(sprintf('SELECT brand_id FROM mar_campaign WHERE id = %d', $newId))->fetchColumn() === 1
+);
+check(
+    'la cible client est enregistrée',
+    $pdo->query(sprintf('SELECT client_target FROM mar_campaign WHERE id = %d', $newId))->fetchColumn() === 'b2b'
+);
+
+// Une valeur de cible inconnue retombe sur b2c plutôt que d'entrer telle quelle.
+$response = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name' => 'Cible douteuse', 'client_target' => 'b2x',
+]);
+check(
+    'une cible inconnue retombe sur b2c',
+    $pdo->query("SELECT client_target FROM mar_campaign WHERE name = 'Cible douteuse'")->fetchColumn() === 'b2c'
+);
 
 // Rattachement invalide : rien ne doit subsister, pas même l'en-tête.
 $before   = (int) $pdo->query('SELECT COUNT(*) FROM mar_campaign')->fetchColumn();
 $response = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
-    'brand_id' => 1,
     'name'     => 'Doit être annulée',
     'channels' => [['channel_id' => 999999]],
 ]);
@@ -378,7 +416,6 @@ check(
 // Un franchisé ne rattache pas la campagne d'un confrère.
 AuthContext::set(77, 'FRANCHISEE', 1, [1]);
 $response = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
-    'brand_id' => 1,
     'name'     => 'Tentative hors périmètre',
     'scope'    => 'LOCALE',
     'shop_ids' => [2],

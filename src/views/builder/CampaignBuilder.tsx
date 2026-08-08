@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { module as api } from '../../lib/api'
 import { useAsync, formatDate, formatEur } from '../../lib/useAsync'
-import type { CampaignDraft, References } from '../../lib/api/module'
+import type { CampaignDraft, ClientTarget, References } from '../../lib/api/module'
 import type { Role } from '../../lib/navigation'
 import { describeError } from '../../state/auth'
 
@@ -28,11 +28,11 @@ interface Step {
 interface Draft {
   type_id: number | null
   name: string
-  brand_id: number | null
   starts_on: string
   ends_on: string
   image_url: string
   scope: 'RESEAU' | 'LOCALE'
+  client_target: ClientTarget
   shop_ids: number[]
   budget_amount: string
   targets: Record<number, string>
@@ -44,11 +44,11 @@ interface Draft {
 const EMPTY: Draft = {
   type_id: null,
   name: '',
-  brand_id: null,
   starts_on: '',
   ends_on: '',
   image_url: '',
   scope: 'RESEAU',
+  client_target: 'b2c',
   shop_ids: [],
   budget_amount: '',
   targets: {},
@@ -60,7 +60,7 @@ const EMPTY: Draft = {
 const STEPS: Step[] = [
   {
     key: 'type',
-    label: 'Type de campagne',
+    label: 'Type & cible',
     blocking: (d) => (d.type_id === null ? 'Choisissez un type de campagne.' : null),
   },
   {
@@ -68,7 +68,6 @@ const STEPS: Step[] = [
     label: 'Identité & période',
     blocking: (d) => {
       if (d.name.trim() === '') return 'Donnez un nom à la campagne.'
-      if (d.brand_id === null) return 'Choisissez une marque.'
       if (d.starts_on !== '' && d.ends_on !== '' && d.ends_on < d.starts_on) {
         return 'La date de fin précède la date de début.'
       }
@@ -77,7 +76,7 @@ const STEPS: Step[] = [
   },
   {
     key: 'scope',
-    label: 'Périmètre',
+    label: 'Boutiques',
     blocking: (d) =>
       d.scope === 'LOCALE' && d.shop_ids.length === 0
         ? 'Une campagne locale doit désigner au moins une boutique.'
@@ -99,11 +98,18 @@ const STEPS: Step[] = [
 export default function CampaignBuilder({
   refs,
   role,
+  brandId,
   onCreated,
   onCancel,
 }: {
   refs: References
   role: Role
+  /**
+   * Marque courante, telle que la désigne le sélecteur de la barre latérale.
+   * `'all'` — le cas ordinaire d'un réseau mono-enseigne — laisse le serveur la
+   * résoudre : dans un back-office, la marque est connue, elle ne se saisit pas.
+   */
+  brandId: number | 'all'
   onCreated: (campaignId: number) => void
   onCancel: () => void
 }) {
@@ -117,7 +123,6 @@ export default function CampaignBuilder({
   const [submitting, setSubmitting] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
 
-  const brands = useAsync(() => api.listBrands(), [])
   const shops = useAsync(() => api.listShops(), [])
   const agencies = useAsync(() => api.listAgencies(), [])
 
@@ -129,7 +134,7 @@ export default function CampaignBuilder({
     setFailure(null)
 
     try {
-      const { inserted_id } = await api.createCampaign(toPayload(draft))
+      const { inserted_id } = await api.createCampaign(toPayload(draft, brandId))
       onCreated(inserted_id)
     } catch (cause: unknown) {
       setFailure(describeError(cause))
@@ -164,10 +169,8 @@ export default function CampaignBuilder({
       </ol>
 
       <section className="card">
-        {step === 0 ? <TypeStep refs={refs} draft={draft} patch={patch} /> : null}
-        {step === 1 ? (
-          <IdentityStep brands={brands.data ?? []} draft={draft} patch={patch} />
-        ) : null}
+        {step === 0 ? <TypeStep refs={refs} role={role} draft={draft} patch={patch} /> : null}
+        {step === 1 ? <IdentityStep draft={draft} patch={patch} /> : null}
         {step === 2 ? (
           <ScopeStep role={role} shops={shops.data ?? []} draft={draft} patch={patch} />
         ) : null}
@@ -177,13 +180,7 @@ export default function CampaignBuilder({
           <ChannelsStep refs={refs} agencies={agencies.data ?? []} draft={draft} patch={patch} />
         ) : null}
         {step === 6 ? (
-          <ReviewStep
-            refs={refs}
-            brands={brands.data ?? []}
-            shops={shops.data ?? []}
-            draft={draft}
-            patch={patch}
-          />
+          <ReviewStep refs={refs} shops={shops.data ?? []} draft={draft} patch={patch} />
         ) : null}
       </section>
 
@@ -220,12 +217,15 @@ export default function CampaignBuilder({
 }
 
 /** Brouillon → corps de requête. Les champs vides deviennent `null`, pas `""`. */
-function toPayload(draft: Draft): CampaignDraft {
+function toPayload(draft: Draft, brandId: number | 'all'): CampaignDraft {
   return {
-    brand_id: draft.brand_id as number,
+    // Omise quand le sélecteur est sur « toutes marques » : le serveur la
+    // déduit, et refuse explicitement si plusieurs enseignes sont actives.
+    brand_id: brandId === 'all' ? null : brandId,
     name: draft.name.trim(),
     type_id: draft.type_id,
     scope: draft.scope,
+    client_target: draft.client_target,
     status_code: draft.status_code,
     starts_on: draft.starts_on || null,
     ends_on: draft.ends_on || null,
@@ -254,19 +254,35 @@ function toPayload(draft: Draft): CampaignDraft {
 
 type StepProps = { draft: Draft; patch: (change: Partial<Draft>) => void }
 
-function TypeStep({ refs, draft, patch }: StepProps & { refs: References }) {
+/** Cibles client, telles que la maquette les propose. */
+const CLIENT_TARGETS: Array<{ value: ClientTarget; label: string }> = [
+  { value: 'b2c', label: 'B2C — particuliers' },
+  { value: 'b2b', label: 'B2B — professionnels' },
+  { value: 'mixte', label: 'Mixte B2C + B2B' },
+]
+
+/**
+ * Type, portée et cible : les trois choix que la maquette réunit sur un même
+ * écran, parce qu'ils se décident ensemble — un partenariat local B2B et une
+ * saisonnalité réseau B2C n'ouvrent pas le même assistant derrière.
+ *
+ * La pastille de levier vient du référentiel, couleur comprise. La maquette la
+ * déduisait par mots-clés sur un texte libre ; c'est désormais une relation.
+ */
+function TypeStep({ refs, role, draft, patch }: StepProps & { refs: References; role: Role }) {
   return (
     <>
       <h2>Quel type de campagne ?</h2>
       <p className="muted">
-        Le type détermine le levier suivi par défaut et l’indicateur affiché en pilotage.
+        Le type détermine le levier suivi et l’indicateur affiché en pilotage.
       </p>
-      <ul className="wizard__cards">
+
+      <ul className="type-grid">
         {refs.campaignTypes.map((type) => (
           <li key={type.id}>
             <button
               type="button"
-              className={`wizard__card${draft.type_id === type.id ? ' is-on' : ''}`}
+              className={`type-card${draft.type_id === type.id ? ' is-on' : ''}`}
               onClick={() => patch({ type_id: type.id })}
             >
               {type.icon_path ? (
@@ -280,23 +296,76 @@ function TypeStep({ refs, draft, patch }: StepProps & { refs: References }) {
                   />
                 </svg>
               ) : null}
-              <strong>{type.label}</strong>
+              <strong className="type-card__name">{type.label}</strong>
+              {type.lever_label ? (
+                <span
+                  className="lever-tag"
+                  style={{ background: type.lever_color_hex ?? undefined }}
+                >
+                  {type.lever_label}
+                </span>
+              ) : null}
               {type.default_kpi_label ? (
-                <span className="muted">{type.default_kpi_label}</span>
+                <span className="muted type-card__kpi">{type.default_kpi_label}</span>
               ) : null}
             </button>
           </li>
         ))}
       </ul>
+
+      <h3 className="section-label">Portée</h3>
+      {role === 'BRAND_ADMIN' ? (
+        <div className="choice-row">
+          <button
+            type="button"
+            className={`choice-card${draft.scope === 'RESEAU' ? ' is-on' : ''}`}
+            onClick={() => patch({ scope: 'RESEAU', shop_ids: [] })}
+          >
+            <strong>Réseau</strong>
+            <span className="muted">Toutes les boutiques</span>
+          </button>
+          <button
+            type="button"
+            className={`choice-card${draft.scope === 'LOCALE' ? ' is-on' : ''}`}
+            onClick={() => patch({ scope: 'LOCALE' })}
+          >
+            <strong>Locale</strong>
+            <span className="muted">Validée avec le ou les franchisés</span>
+          </button>
+        </div>
+      ) : (
+        <p className="muted">
+          Une boutique crée des campagnes locales : la portée est fixée, le choix des boutiques
+          se fait à l’étape suivante.
+        </p>
+      )}
+
+      <h3 className="section-label">Cible client</h3>
+      <div className="choice-row">
+        {CLIENT_TARGETS.map((target) => (
+          <button
+            key={target.value}
+            type="button"
+            className={`choice-pill${draft.client_target === target.value ? ' is-on' : ''}`}
+            // Une campagne B2C n'a pas de leads : cocher « générer les leads »
+            // n'aurait alors aucun effet, autant le remettre à zéro ici.
+            onClick={() =>
+              patch({
+                client_target: target.value,
+                create_crm_leads: target.value === 'b2c' ? false : draft.create_crm_leads,
+              })
+            }
+          >
+            {target.label}
+          </button>
+        ))}
+      </div>
     </>
   )
 }
 
-function IdentityStep({
-  brands,
-  draft,
-  patch,
-}: StepProps & { brands: Array<{ id: number; name: string }> }) {
+/** La marque n'y figure pas : dans un back-office, elle est connue. */
+function IdentityStep({ draft, patch }: StepProps) {
   return (
     <>
       <h2>Identité & période</h2>
@@ -309,20 +378,6 @@ function IdentityStep({
             placeholder="Barbecue été"
             onChange={(e) => patch({ name: e.target.value })}
           />
-        </label>
-        <label className="field">
-          Marque
-          <select
-            value={draft.brand_id ?? ''}
-            onChange={(e) => patch({ brand_id: e.target.value === '' ? null : Number(e.target.value) })}
-          >
-            <option value="">—</option>
-            {brands.map((brand) => (
-              <option key={brand.id} value={brand.id}>
-                {brand.name}
-              </option>
-            ))}
-          </select>
         </label>
       </div>
       <div className="filters__row">
@@ -356,6 +411,12 @@ function IdentityStep({
   )
 }
 
+/**
+ * Choix des boutiques. La portée se décide à l'étape 1, avec le type : cet
+ * écran ne fait plus que la servir, et disparaît pour une campagne réseau.
+ *
+ * Les pastilles reprennent celles des filtres — même geste, même apparence.
+ */
 function ScopeStep({
   role,
   shops,
@@ -369,51 +430,49 @@ function ScopeStep({
         : [...draft.shop_ids, shopId],
     })
 
+  if (draft.scope === 'RESEAU') {
+    return (
+      <>
+        <h2>Boutiques</h2>
+        <p className="muted">
+          Campagne réseau : toutes les boutiques sont concernées, il n’y a rien à désigner ici.
+        </p>
+      </>
+    )
+  }
+
   return (
     <>
-      <h2>Périmètre</h2>
+      <h2>Boutiques</h2>
+      <p className="muted">
+        {role === 'BRAND_ADMIN'
+          ? 'Campagne locale : désignez les boutiques avec lesquelles elle est validée.'
+          : 'Campagne locale : choisissez parmi les boutiques qui vous sont rattachées.'}
+      </p>
 
-      {role === 'BRAND_ADMIN' ? (
-        <div className="filters__row">
-          <button
-            type="button"
-            className={`filter${draft.scope === 'RESEAU' ? ' is-on' : ''}`}
-            onClick={() => patch({ scope: 'RESEAU', shop_ids: [] })}
-          >
-            Réseau — toutes les boutiques
-          </button>
-          <button
-            type="button"
-            className={`filter${draft.scope === 'LOCALE' ? ' is-on' : ''}`}
-            onClick={() => patch({ scope: 'LOCALE' })}
-          >
-            Locale — boutiques choisies
-          </button>
-        </div>
+      {shops.length === 0 ? (
+        <p className="muted">Aucune boutique dans votre périmètre.</p>
       ) : (
-        <p className="muted">
-          Une boutique crée des campagnes locales : le périmètre est limité à la ou aux boutiques
-          qui vous sont rattachées.
-        </p>
+        <div className="filters__row">
+          {shops.map((shop) => (
+            <button
+              key={shop.id}
+              type="button"
+              className={`filter${draft.shop_ids.includes(shop.id) ? ' is-on' : ''}`}
+              onClick={() => toggle(shop.id)}
+              title={shop.city ?? undefined}
+            >
+              {shop.name}
+            </button>
+          ))}
+        </div>
       )}
 
-      {draft.scope === 'LOCALE' ? (
-        <ul className="wizard__cards">
-          {shops.map((shop) => (
-            <li key={shop.id}>
-              <button
-                type="button"
-                className={`wizard__card${draft.shop_ids.includes(shop.id) ? ' is-on' : ''}`}
-                onClick={() => toggle(shop.id)}
-              >
-                <strong>{shop.name}</strong>
-                {shop.city ? <span className="muted">{shop.city}</span> : null}
-              </button>
-            </li>
-          ))}
-          {shops.length === 0 ? <p className="muted">Aucune boutique dans votre périmètre.</p> : null}
-        </ul>
-      ) : null}
+      <p className="muted wizard__hint">
+        {draft.shop_ids.length === 0
+          ? 'Aucune boutique sélectionnée'
+          : `${draft.shop_ids.length} boutique${draft.shop_ids.length > 1 ? 's' : ''} sélectionnée${draft.shop_ids.length > 1 ? 's' : ''}`}
+      </p>
     </>
   )
 }
@@ -580,17 +639,14 @@ function ChannelsStep({
 
 function ReviewStep({
   refs,
-  brands,
   shops,
   draft,
   patch,
 }: StepProps & {
   refs: References
-  brands: Array<{ id: number; name: string }>
   shops: Array<{ id: number; name: string }>
 }) {
   const type = refs.campaignTypes.find((entry) => entry.id === draft.type_id)
-  const brand = brands.find((entry) => entry.id === draft.brand_id)
   const chosenShops = shops.filter((shop) => draft.shop_ids.includes(shop.id))
   const channelCount = Object.keys(draft.channels).length
   const targetTotal = Object.values(draft.targets)
@@ -613,8 +669,10 @@ function ReviewStep({
               <td>{type?.label ?? '—'}</td>
             </tr>
             <tr>
-              <td className="muted">Marque</td>
-              <td>{brand?.name ?? '—'}</td>
+              <td className="muted">Cible client</td>
+              <td>
+                {CLIENT_TARGETS.find((t) => t.value === draft.client_target)?.label ?? '—'}
+              </td>
             </tr>
             <tr>
               <td className="muted">Période</td>
@@ -661,14 +719,17 @@ function ReviewStep({
           </select>
         </label>
 
-        <label className="field">
-          <input
-            type="checkbox"
-            checked={draft.create_crm_leads}
-            onChange={(e) => patch({ create_crm_leads: e.target.checked })}
-          />
-          Générer les leads B2B à partir des secteurs
-        </label>
+        {/* Sans cible professionnelle, il n'y a pas de lead à générer. */}
+        {draft.client_target !== 'b2c' ? (
+          <label className="field">
+            <input
+              type="checkbox"
+              checked={draft.create_crm_leads}
+              onChange={(e) => patch({ create_crm_leads: e.target.checked })}
+            />
+            Générer les leads B2B à partir des secteurs
+          </label>
+        ) : null}
       </div>
     </>
   )

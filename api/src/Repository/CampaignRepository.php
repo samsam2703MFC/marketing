@@ -44,7 +44,7 @@ final class CampaignRepository
 
         $sql = sprintf(
             'SELECT
-                c.id, c.name, c.scope, c.status_code, c.starts_on, c.ends_on,
+                c.id, c.name, c.scope, c.client_target, c.status_code, c.starts_on, c.ends_on,
                 c.budget_amount, c.spent_amount, c.image_url, c.approval_status,
                 c.create_crm_leads, c.parent_campaign_id,
                 b.name  AS brand_name,
@@ -194,23 +194,31 @@ final class CampaignRepository
     /** @param array<string,mixed> $data */
     public function create(AuthContext $auth, array $data): int
     {
-        $missing = array_values(array_diff(['brand_id', 'name'], array_keys(array_filter($data, static fn ($v) => $v !== null && $v !== ''))));
-        if ($missing !== []) {
-            throw new RuntimeException('Champs obligatoires manquants : ' . implode(', ', $missing));
+        if (($data['name'] ?? '') === '' || $data['name'] === null) {
+            throw new RuntimeException('Champs obligatoires manquants : name');
         }
+
+        // La marque ne se saisit plus : on est dans un back-office, elle est
+        // connue du contexte. Le client peut la préciser — le sélecteur de
+        // marque de la barre latérale, quand un réseau en exploite plusieurs —
+        // sinon on la déduit.
+        $brandId = $this->resolveBrandId($auth, $data['brand_id'] ?? null);
 
         $connection = Database::connection();
         $statement  = $connection->prepare(
             'INSERT INTO mar_campaign
-                (brand_id, type_id, parent_campaign_id, name, scope, status_code,
+                (brand_id, type_id, parent_campaign_id, name, scope, client_target, status_code,
                  starts_on, ends_on, budget_amount, owner_user_id, create_crm_leads, image_url, created_by)
              VALUES
-                (:brand_id, :type_id, :parent_campaign_id, :name, :scope, :status_code,
+                (:brand_id, :type_id, :parent_campaign_id, :name, :scope, :client_target, :status_code,
                  :starts_on, :ends_on, :budget_amount, :owner_user_id, :create_crm_leads, :image_url, :created_by)'
         );
 
         $statement->execute([
-            'brand_id'           => (int) $data['brand_id'],
+            'brand_id'           => $brandId,
+            'client_target'      => in_array($data['client_target'] ?? 'b2c', ['b2c', 'b2b', 'mixte'], true)
+                ? $data['client_target'] ?? 'b2c'
+                : 'b2c',
             'type_id'            => $data['type_id'] ?? null,
             'parent_campaign_id' => $data['parent_campaign_id'] ?? null,
             'name'               => $data['name'],
@@ -226,6 +234,54 @@ final class CampaignRepository
         ]);
 
         return (int) $connection->lastInsertId();
+    }
+
+    /**
+     * Marque de rattachement d'une campagne.
+     *
+     * Dans l'ordre : celle transmise par l'appelant, puis celle des boutiques
+     * qu'il exploite — un franchisé n'en a qu'une —, puis l'unique marque
+     * active du réseau. Si plusieurs marques sont actives et qu'aucune n'est
+     * désignée, on refuse plutôt que d'en choisir une au hasard : rattacher une
+     * campagne à la mauvaise enseigne ne se voit pas tout de suite.
+     */
+    private function resolveBrandId(AuthContext $auth, mixed $given): int
+    {
+        if ($given !== null && $given !== '' && (int) $given > 0) {
+            return (int) $given;
+        }
+
+        $connection = Database::connection();
+        $shopIds    = Scope::shopIds($auth);
+
+        if ($shopIds !== null && $shopIds !== []) {
+            [$placeholders, $bindings] = Database::inClause($shopIds, 'brand_shop');
+            $statement = $connection->prepare(sprintf(
+                'SELECT DISTINCT brand_id FROM mar_shop WHERE id IN (%s)',
+                $placeholders
+            ));
+            $statement->execute($bindings);
+
+            $brands = array_map('intval', $statement->fetchAll(PDO::FETCH_COLUMN));
+            if (count($brands) === 1) {
+                return $brands[0];
+            }
+        }
+
+        $brands = array_map(
+            'intval',
+            $connection->query('SELECT id FROM mar_brand WHERE is_active = 1')->fetchAll(PDO::FETCH_COLUMN)
+        );
+
+        if (count($brands) === 1) {
+            return $brands[0];
+        }
+
+        throw new RuntimeException(
+            $brands === []
+                ? 'Aucune marque active : impossible de rattacher la campagne.'
+                : 'Plusieurs marques actives : choisissez-en une dans le sélecteur de marque.'
+        );
     }
 
     /**
@@ -358,7 +414,7 @@ final class CampaignRepository
         }
 
         $columns = [
-            'type_id', 'name', 'scope', 'status_code', 'starts_on', 'ends_on',
+            'type_id', 'name', 'scope', 'client_target', 'status_code', 'starts_on', 'ends_on',
             'budget_amount', 'spent_amount', 'approval_status', 'create_crm_leads', 'image_url',
         ];
 

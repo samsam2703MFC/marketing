@@ -57,7 +57,9 @@ final class CampaignController
 
     public function store(Request $request): array
     {
-        $missing = $request->missing(['brand_id', 'name']);
+        // La marque ne fait plus partie de la saisie : le back-office la connaît.
+        // Le dépôt la résout, et refuse explicitement si elle reste ambiguë.
+        $missing = $request->missing(['name']);
         if ($missing !== []) {
             return Response::error('Champs obligatoires manquants.', 422, $missing);
         }
@@ -66,9 +68,9 @@ final class CampaignController
         // un seul appel : le périmètre, les canaux et les objectifs font partie
         // de la campagne, pas d'une seconde étape que l'on pourrait rater.
         $payload = $request->only([
-            'brand_id', 'type_id', 'parent_campaign_id', 'name', 'scope', 'status_code',
-            'starts_on', 'ends_on', 'budget_amount', 'owner_user_id', 'create_crm_leads', 'image_url',
-            'shop_ids', 'channels', 'lever_targets',
+            'brand_id', 'type_id', 'parent_campaign_id', 'name', 'scope', 'client_target',
+            'status_code', 'starts_on', 'ends_on', 'budget_amount', 'owner_user_id',
+            'create_crm_leads', 'image_url', 'shop_ids', 'channels', 'lever_targets',
         ]);
 
         $id = $this->campaigns->createWithRelations(AuthContext::current(), $payload);
@@ -84,7 +86,7 @@ final class CampaignController
         }
 
         $payload = $request->only([
-            'type_id', 'name', 'scope', 'status_code', 'starts_on', 'ends_on',
+            'type_id', 'name', 'scope', 'client_target', 'status_code', 'starts_on', 'ends_on',
             'budget_amount', 'spent_amount', 'approval_status', 'create_crm_leads', 'image_url',
         ]);
 

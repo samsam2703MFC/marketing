@@ -188,6 +188,7 @@ function Workspace() {
             <CampaignBuilder
               refs={refs}
               role={role}
+              brandId={brandId}
               onCreated={openCampaign}
               onCancel={() => navigate('campaigns')}
             />

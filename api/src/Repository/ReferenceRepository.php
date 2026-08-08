@@ -59,9 +59,19 @@ final class ReferenceRepository
     /** @return list<array<string,mixed>> */
     public function campaignTypes(): array
     {
+        // La pastille de levier vient de la base : la maquette la déduisait par
+        // correspondance de mots-clés sur `default_lever_code`, ce que ce
+        // projet remplace. `lever_badge_label` laisse à un type sa formulation
+        // propre (« Trafic / notoriété ») sans dupliquer le levier.
         return $this->fetch(
-            'SELECT id, code, label, default_lever_code, default_kpi_label, icon_path, sort_order
-               FROM mar_campaign_type WHERE is_active = 1 ORDER BY sort_order'
+            'SELECT t.id, t.code, t.label, t.default_lever_code, t.default_kpi_label,
+                    t.icon_path, t.sort_order, t.lever_id,
+                    COALESCE(t.lever_badge_label, l.label) AS lever_label,
+                    l.color_hex                            AS lever_color_hex
+               FROM mar_campaign_type t
+               LEFT JOIN mar_lever l ON l.id = t.lever_id
+              WHERE t.is_active = 1
+              ORDER BY t.sort_order'
         );
     }
 

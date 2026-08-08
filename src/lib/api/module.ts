@@ -80,10 +80,18 @@ export interface CampaignType {
   id: number
   code: string
   label: string
+  /** Formulation d'origine du handoff, conservée pour retrouver l'intention. */
   default_lever_code: string | null
   default_kpi_label: string | null
   icon_path: string | null
+  lever_id: number | null
+  /** Libellé de la pastille : celui du levier, ou la nuance propre au type. */
+  lever_label: string | null
+  lever_color_hex: string | null
 }
+
+/** Cible client d'une campagne — pilote l'entonnoir de leads B2B. */
+export type ClientTarget = 'b2c' | 'b2b' | 'mixte'
 
 export interface LeadStatus {
   code: string
@@ -182,6 +190,7 @@ export interface Campaign {
   id: number
   name: string
   scope: 'RESEAU' | 'LOCALE'
+  client_target: ClientTarget
   status_code: string
   status_label: string
   status_text_hex: string
@@ -236,10 +245,15 @@ export function listShops(): Promise<Shop[]> {
  * campagne budgétée mais sans périmètre.
  */
 export interface CampaignDraft {
-  brand_id: number
   name: string
+  /**
+   * Facultatif : le back-office connaît sa marque. On ne l'envoie que si le
+   * sélecteur de marque en désigne une, pour les réseaux multi-enseignes.
+   */
+  brand_id?: number | null
   type_id?: number | null
   scope?: 'RESEAU' | 'LOCALE'
+  client_target?: ClientTarget
   status_code?: string
   starts_on?: string | null
   ends_on?: string | null
