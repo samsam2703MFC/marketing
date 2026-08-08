@@ -239,6 +239,23 @@ MAR_ERP_SECTORS_TABLE=b2b_client_type
 MAR_ERP_SECTOR_LINK_TABLE=b2b_client_interest_connection
 ```
 
+Les colonnes de la table de liaison font exception à la découverte
+automatique : ici elles s'appellent `id_b2b_client` et `id_interest`, sans
+contrainte déclarée ni convention `id_<table>` qui dise vers quoi elles
+pointent. Elles sont reconnues par une liste de noms connus, et deux variables
+permettent de trancher si une installation en emploie d'autres :
+
+```
+MAR_ERP_SECTOR_LINK_CLIENT_COLUMN=id_b2b_client
+MAR_ERP_SECTOR_LINK_SECTOR_COLUMN=id_interest
+```
+
+Un nom reconnu ne prouve rien : chaque reprise mesure la part des valeurs de
+ces deux colonnes qui existe réellement dans la table visée, et la rapporte
+(`id_interest → b2b_client_type 6/6`). Un rapport dégradé — `1/2`, `0/40` —
+signale que la colonne désigne autre chose, avant que le vivier ne soit
+démarché sur des secteurs faux.
+
 Il n'y a rien à écrire tant que ces valeurs conviennent.
 
 Les colonnes, elles, ne sont pas configurées : la reprise les découvre dans

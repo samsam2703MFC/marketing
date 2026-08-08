@@ -710,6 +710,8 @@ export interface SyncReport {
 export interface SectorLinkReport {
   source?: string
   columns?: Record<string, string>
+  /** Part des valeurs de chaque colonne retenue qui existe dans la table visée. */
+  match?: string
   read?: number
   linked?: number
   unknown_client?: number

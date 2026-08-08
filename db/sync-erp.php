@@ -189,6 +189,13 @@ if (is_array($links)) {
         );
         printf("           colonnes retenues : %s\n", json_encode($links['columns'], JSON_UNESCAPED_UNICODE));
 
+        // La mesure de ce que valent ces colonnes, et non la seule affirmation
+        // qu'elles ont été retenues : deux d'entre elles peuvent l'avoir été
+        // sur la foi de leur nom.
+        if (isset($links['match'])) {
+            printf("           correspondance    : %s\n", $links['match']);
+        }
+
         if (($links['without_sector'] ?? 0) > 0) {
             printf(
                 "           %d compte(s) du vivier sans aucun secteur : ils ne sortiront d'aucune génération\n",

@@ -115,6 +115,37 @@ final class ErpSyncRepository
     ];
 
     /**
+     * Côté client de la table de liaison.
+     *
+     * `id_b2b_client` figure dans la liste parce que cette installation le
+     * nomme ainsi, et qu'aucune table `b2b_client` n'existe pour lui donner un
+     * autre sens. Ce n'est pas une déduction tirée du nom : la correspondance
+     * réelle de ses valeurs est mesurée à chaque reprise et rapportée, de sorte
+     * qu'une colonne qui désignerait autre chose se signale d'elle-même au lieu
+     * de rattacher en silence.
+     *
+     * @var list<string>
+     */
+    private const LINK_CLIENT_COLUMNS = [
+        'id_client', 'client_id', 'id_b2b_client', 'b2b_client_id', 'id_customer', 'customer_id',
+    ];
+
+    /**
+     * Côté secteur de la table de liaison.
+     *
+     * Les noms explicites d'abord. `id_interest` ferme la liste : sur cette
+     * installation, c'est lui qui porte le type de compte, mais le nom seul
+     * laisserait croire à un centre d'intérêt — d'où sa dernière place, et la
+     * mesure qui l'accompagne.
+     *
+     * @var list<string>
+     */
+    private const LINK_SECTOR_COLUMNS = [
+        'id_b2b_client_type', 'b2b_client_type_id', 'id_type', 'type_id',
+        'id_sector', 'sector_id', 'id_interest', 'interest_id',
+    ];
+
+    /**
      * Synchronise boutiques et comptes B2B.
      *
      * @return array<string, mixed>
@@ -684,8 +715,22 @@ final class ErpSyncRepository
             ));
         }
 
-        $clientColumn = $this->columnPointingTo($schema, $junction, $customersTable, $present);
-        $sectorColumn = $this->columnPointingTo($schema, $junction, $sectorsTable, $present);
+        $clientColumn = $this->columnPointingTo(
+            $schema,
+            $junction,
+            $customersTable,
+            $present,
+            'MAR_ERP_SECTOR_LINK_CLIENT_COLUMN',
+            self::LINK_CLIENT_COLUMNS
+        );
+        $sectorColumn = $this->columnPointingTo(
+            $schema,
+            $junction,
+            $sectorsTable,
+            $present,
+            'MAR_ERP_SECTOR_LINK_SECTOR_COLUMN',
+            self::LINK_SECTOR_COLUMNS
+        );
 
         if ($clientColumn === null || $sectorColumn === null) {
             // Message tenu court et sur une seule ligne : il ressort tel quel
@@ -722,6 +767,16 @@ final class ErpSyncRepository
 
         $columns = ['client' => $clientColumn, 'sector' => $sectorColumn];
 
+        // Ce que les colonnes retenues valent réellement, mesuré et rendu à
+        // chaque reprise. Deux d'entre elles ont été reconnues par leur nom, ce
+        // qui ne prouve rien : `id_interest` porte ici le type de compte, mais
+        // le même nom ailleurs désignerait un centre d'intérêt. La part des
+        // valeurs qui retombe sur la table visée le dit sans discussion.
+        $match = $this->matchRate($schema, $junction, [
+            $clientColumn => $customersTable,
+            $sectorColumn => $sectorsTable,
+        ]);
+
         // Une table vide ne vaut pas « plus aucun compte n'a de secteur » : ce
         // serait aussi la conséquence d'un droit de lecture manquant. On ne
         // détruit pas les rattachements existants sur cette base.
@@ -729,6 +784,7 @@ final class ErpSyncRepository
             return [
                 'source'         => $schema . '.' . $junction,
                 'columns'        => $columns,
+                'match'          => $match,
                 'read'           => 0,
                 'linked'         => 0,
                 'unknown_client' => 0,
@@ -823,6 +879,7 @@ final class ErpSyncRepository
         $result = [
             'source'         => $schema . '.' . $junction,
             'columns'        => $columns,
+            'match'          => $match,
             'read'           => count($links),
             'linked'         => $linked,
             'unknown_client' => $unknownClient,
@@ -840,10 +897,11 @@ final class ErpSyncRepository
             $result['warning'] = sprintf(
                 'Aucun rattachement : les %d valeurs de « %s » ne correspondent à aucun type '
                 . 'repris de « %s ». La table de liaison désigne vraisemblablement un autre '
-                . 'référentiel — renseignez MAR_ERP_SECTORS_TABLE.',
+                . 'référentiel — renseignez MAR_ERP_SECTORS_TABLE. Correspondance mesurée : %s.',
                 $unknownSector,
                 $sectorColumn,
-                $sectorsTable
+                $sectorsTable,
+                $match
             );
         }
 
@@ -902,20 +960,9 @@ final class ErpSyncRepository
                     continue;
                 }
 
-                $row = Database::connection()->query(sprintf(
-                    'SELECT COUNT(*) AS total, COUNT(t.id) AS trouves
-                       FROM (SELECT DISTINCT `%s` AS v FROM `%s`.`%s` WHERE `%s` IS NOT NULL) j
-                       LEFT JOIN `%s`.`%s` t ON t.id = j.v',
-                    $column,
-                    $schema,
-                    $junction,
-                    $column,
-                    $schema,
-                    $table
-                ))->fetch();
-
-                if ((int) $row['total'] > 0) {
-                    $report[] = sprintf('%s → %s %d/%d', $column, $table, $row['trouves'], $row['total']);
+                $hit = $this->valuesFoundIn($schema, $junction, $column, $table);
+                if ($hit['total'] > 0) {
+                    $report[] = sprintf('%s → %s %d/%d', $column, $table, $hit['found'], $hit['total']);
                 }
             }
         }
@@ -924,16 +971,81 @@ final class ErpSyncRepository
     }
 
     /**
+     * Correspondance des colonnes finalement retenues.
+     *
+     * Rendue à chaque reprise, et pas seulement en cas d'échec : deux des
+     * quatre sources de résolution ne sont que des noms, et un nom peut être
+     * juste sur une installation et faux sur la suivante. Le rapport « 4/4 » ou
+     * « 1/2 » est ce qui permet de s'en apercevoir avant que le vivier ne soit
+     * démarché sur des secteurs faux.
+     *
+     * @param  array<string, string> $pairs colonne => table visée
+     */
+    private function matchRate(string $schema, string $junction, array $pairs): string
+    {
+        $report = [];
+
+        foreach ($pairs as $column => $table) {
+            $hit      = $this->valuesFoundIn($schema, $junction, $column, $table);
+            $report[] = sprintf('%s → %s %d/%d', $column, $table, $hit['found'], $hit['total']);
+        }
+
+        return implode(' ; ', $report);
+    }
+
+    /**
+     * Part des valeurs distinctes d'une colonne qui existent dans une table.
+     *
+     * @return array{found:int, total:int}
+     */
+    private function valuesFoundIn(string $schema, string $junction, string $column, string $table): array
+    {
+        foreach ([$schema, $junction, $column, $table] as $fragment) {
+            if (preg_match('/^[A-Za-z0-9_]+$/', $fragment) !== 1) {
+                return ['found' => 0, 'total' => 0];
+            }
+        }
+
+        $row = Database::connection()->query(sprintf(
+            'SELECT COUNT(*) AS total, COUNT(t.id) AS trouves
+               FROM (SELECT DISTINCT `%s` AS v FROM `%s`.`%s` WHERE `%s` IS NOT NULL) j
+               LEFT JOIN `%s`.`%s` t ON t.id = j.v',
+            $column,
+            $schema,
+            $junction,
+            $column,
+            $schema,
+            $table
+        ))->fetch();
+
+        return ['found' => (int) $row['trouves'], 'total' => (int) $row['total']];
+    }
+
+    /**
      * Colonne d'une table qui désigne une autre table.
      *
-     * D'abord la contrainte, qui l'affirme ; ensuite seulement la convention de
-     * nommage de cet ERP (`id_<table>`), qui la suggère. Rien d'autre : un nom
-     * approchant ne prouve rien.
+     * Quatre sources, de la plus sûre à la moins sûre : la contrainte, qui
+     * l'affirme ; la configuration, où quelqu'un l'a écrite en connaissance de
+     * cause ; la convention `id_<table>` de cet ERP ; enfin une liste de noms
+     * relevés sur les installations connues.
+     *
+     * Cette dernière n'est pas une preuve, et c'est pourquoi le rattachement
+     * mesure ensuite la part des valeurs qui retombe réellement sur la table
+     * visée, et la rapporte. Une colonne retenue par son nom mais pointant
+     * ailleurs se voit alors dans le compte rendu, au lieu de produire des
+     * secteurs faux sans que rien ne bouge.
      *
      * @param  list<string> $present
+     * @param  list<string> $fallback
      */
-    private function columnPointingTo(string $schema, string $table, string $target, array $present): ?string
-    {
+    private function columnPointingTo(
+        string $schema,
+        string $table,
+        string $target,
+        array $present,
+        ?string $variable = null,
+        array $fallback = []
+    ): ?string {
         $statement = Database::connection()->prepare(
             'SELECT column_name FROM information_schema.key_column_usage
               WHERE table_schema = :schema
@@ -951,10 +1063,38 @@ final class ErpSyncRepository
 
         $lower = array_map('strtolower', $present);
 
-        foreach ([$target . '_id', 'id_' . $target] as $candidate) {
+        $find = static function (string $candidate) use ($lower, $present): ?string {
             $index = array_search(strtolower($candidate), $lower, true);
-            if ($index !== false) {
-                return $present[$index];
+
+            return $index === false ? null : $present[$index];
+        };
+
+        // Colonne imposée par la configuration. Elle prime sur les conventions,
+        // mais doit exister : une valeur obsolète après une migration de l'ERP
+        // ne doit pas faire retomber silencieusement sur une autre colonne.
+        if ($variable !== null) {
+            $configured = trim((string) (Env::get($variable, '') ?: ''));
+            if ($configured !== '') {
+                $match = $find($configured);
+                if ($match === null) {
+                    throw new RuntimeException(sprintf(
+                        '%s désigne « %s », absente de « %s.%s ». Colonnes présentes : %s.',
+                        $variable,
+                        $configured,
+                        $schema,
+                        $table,
+                        implode(', ', $present)
+                    ));
+                }
+
+                return $match;
+            }
+        }
+
+        foreach ([$target . '_id', 'id_' . $target, ...$fallback] as $candidate) {
+            $match = $find($candidate);
+            if ($match !== null) {
+                return $match;
             }
         }
 

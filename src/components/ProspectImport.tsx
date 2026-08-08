@@ -301,6 +301,15 @@ export default function ProspectImport() {
         </p>
       ) : null}
 
+      {/* La correspondance mesurée, et non la seule liste des colonnes
+          retenues : certaines le sont sur la foi de leur nom, et « 4/4 » ou
+          « 1/2 » est ce qui dit si ce nom disait vrai. */}
+      {sync?.links?.match ? (
+        <p className="muted">
+          Correspondance des colonnes : <code>{sync.links.match}</code>
+        </p>
+      ) : null}
+
       {(sync?.links?.without_sector ?? 0) > 0 ? (
         <p className="muted">
           {sync?.links?.without_sector} compte
