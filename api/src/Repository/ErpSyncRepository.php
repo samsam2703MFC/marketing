@@ -151,6 +151,33 @@ final class ErpSyncRepository
     }
 
     /**
+     * Clés étrangères d'une table.
+     *
+     * Chercher le lien par le nom des tables revenait à deviner : `client`
+     * porte `department_id`, `company_client_id`, `office_id`, et aucun ne
+     * désigne sa cible. Les contraintes, elles, la nomment. C'est la seule
+     * source qui ne se trompe pas — quand elles existent.
+     *
+     * @return list<string>
+     */
+    public function foreignKeys(string $table): array
+    {
+        $schema = $this->currentSchema();
+
+        $statement = Database::connection()->prepare(
+            'SELECT CONCAT(column_name, \' -> \', referenced_table_name, \'.\', referenced_column_name)
+               FROM information_schema.key_column_usage
+              WHERE table_schema = :schema
+                AND table_name = :table
+                AND referenced_table_name IS NOT NULL
+              ORDER BY column_name'
+        );
+        $statement->execute(['schema' => $schema, 'table' => $table]);
+
+        return $statement->fetchAll(PDO::FETCH_COLUMN);
+    }
+
+    /**
      * Tables dont le nom contient un fragment, avec leurs colonnes.
      *
      * Le lien entre un client et son type professionnel n'apparaît sur aucune

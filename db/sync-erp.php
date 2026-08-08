@@ -210,6 +210,17 @@ foreach ($repository->explore(['b2b', 'company_client', 'client_type']) as $tabl
     printf("\nSONDE %s : %s\n", $table, implode(', ', $columns));
 }
 
+// Les contraintes disent ce que les noms de colonnes taisent : quelle colonne
+// de `client` désigne quelle table.
+foreach (['client', 'b2b_client_type'] as $table) {
+    $links = $repository->foreignKeys($table);
+    printf(
+        "\nSONDE liens de %s : %s\n",
+        $table,
+        $links === [] ? 'aucune clé étrangère déclarée' : implode(' ; ', $links)
+    );
+}
+
 $prospects = (int) $pdo->query(
     "SELECT COUNT(*) FROM mar_b2b_prospect WHERE source = 'ERP'"
 )->fetchColumn();
