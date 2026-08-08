@@ -542,6 +542,12 @@ jobs:
             echo "::warning title=Reprise non effectuée::Les boutiques et le vivier B2B restent dans leur état précédent."
           else
             echo "::notice title=Reprise ERP::$summary"
+
+            # Inventaire des colonnes sources, en annotation séparée : il ne
+            # tient pas dans la précédente, et c'est lui qui dit si une notion
+            # manque vraiment ou porte simplement un autre nom.
+            inv=$(printf '%s\n' "$out" | sed -n '/notions non reconnues/,$p' | tr '\n' ' | ' | cut -c1-900)
+            [ -n "$inv" ] && echo "::notice title=Colonnes ERP::$inv"
           fi
 
       - name: Publier le front

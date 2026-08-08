@@ -138,6 +138,9 @@ try {
     exit(5);
 }
 
+$inventory = $report['inventory'] ?? [];
+unset($report['inventory']);
+
 foreach ($report as $label => $result) {
     printf(
         "%-10s source %s — %d lue(s), %d créée(s), %d mise(s) à jour, %d écartée(s)%s\n",
@@ -184,6 +187,15 @@ if ($unlinked > 0) {
         . "boutique de l'ERP.\n",
         $unlinked
     );
+}
+
+// Inventaire des sources : ce que les tables de l'ERP contiennent vraiment.
+// C'est ce qui permet de trancher entre « la colonne n'existe pas » et « elle
+// porte un nom auquel la liste des candidates n'a pas pensé ».
+foreach ($inventory as $table => $detail) {
+    printf("\n%s\n", $table);
+    printf("  notions non reconnues : %s\n", implode(', ', $detail['non reconnues']) ?: 'aucune');
+    printf("  colonnes présentes    : %s\n", implode(', ', $detail['disponibles']));
 }
 
 $prospects = (int) $pdo->query(

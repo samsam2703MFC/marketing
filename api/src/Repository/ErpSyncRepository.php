@@ -29,6 +29,13 @@ use Throwable;
 final class ErpSyncRepository
 {
     /**
+     * Colonnes rencontrées, par table, au fil de la résolution.
+     *
+     * @var array<string, array<string, list<string>>>
+     */
+    private array $inventory = [];
+
+    /**
      * Colonnes candidates, par notion. La première trouvée l'emporte.
      *
      * Plusieurs noms par notion parce qu'un ERP francophone hésite entre
@@ -88,10 +95,20 @@ final class ErpSyncRepository
      */
     public function sync(AuthContext $auth, int $brandId): array
     {
-        return [
+        $result = [
             'shops'     => $this->syncShops($auth, $brandId),
             'prospects' => $this->syncProspects($auth, $brandId),
         ];
+
+        $result['inventory'] = $this->inventory;
+
+        return $result;
+    }
+
+    /** @return array<string, array<string, list<string>>> */
+    public function inventory(): array
+    {
+        return $this->inventory;
     }
 
     /**
@@ -513,6 +530,8 @@ final class ErpSyncRepository
      */
     private function resolve(string $schema, string $table, array $candidates, array $required): array
     {
+        $this->inventory[$schema . '.' . $table] = [];
+
         $statement = Database::connection()->prepare(
             'SELECT column_name FROM information_schema.columns
               WHERE table_schema = :schema AND table_name = :table'
@@ -538,6 +557,16 @@ final class ErpSyncRepository
                 }
             }
         }
+
+        // Ce qui n'a pas été reconnu, et ce que la table contient réellement.
+        // Sans cet inventaire, une notion facultative absente — la boutique de
+        // rattachement d'un client, par exemple — se traduit par un silence :
+        // la reprise réussit et le champ reste vide, sans qu'on sache si la
+        // colonne manque ou si elle porte un nom auquel on n'a pas pensé.
+        $this->inventory[$schema . '.' . $table] = [
+            'non reconnues' => array_values(array_diff(array_keys($candidates), array_keys($resolved))),
+            'disponibles'   => $present,
+        ];
 
         $missing = array_values(array_diff($required, array_keys($resolved)));
         if ($missing !== []) {
