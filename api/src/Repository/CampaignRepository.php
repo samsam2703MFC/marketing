@@ -207,11 +207,13 @@ final class CampaignRepository
         $connection = Database::connection();
         $statement  = $connection->prepare(
             'INSERT INTO mar_campaign
-                (brand_id, type_id, parent_campaign_id, name, scope, client_target, status_code,
-                 starts_on, ends_on, budget_amount, owner_user_id, create_crm_leads, image_url, created_by)
+                (brand_id, type_id, parent_campaign_id, name, scope, client_target, tone,
+                 status_code, starts_on, ends_on, budget_amount, objective_coef_pct, agency_note,
+                 b2b_webshop_enabled, owner_user_id, create_crm_leads, image_url, created_by)
              VALUES
-                (:brand_id, :type_id, :parent_campaign_id, :name, :scope, :client_target, :status_code,
-                 :starts_on, :ends_on, :budget_amount, :owner_user_id, :create_crm_leads, :image_url, :created_by)'
+                (:brand_id, :type_id, :parent_campaign_id, :name, :scope, :client_target, :tone,
+                 :status_code, :starts_on, :ends_on, :budget_amount, :objective_coef_pct, :agency_note,
+                 :b2b_webshop_enabled, :owner_user_id, :create_crm_leads, :image_url, :created_by)'
         );
 
         $statement->execute([
@@ -228,6 +230,12 @@ final class CampaignRepository
             'ends_on'            => $data['ends_on'] ?? null,
             'budget_amount'      => $data['budget_amount'] ?? 0,
             'owner_user_id'      => $data['owner_user_id'] ?? $auth->userId,
+            'tone'               => ($data['tone'] ?? null) ?: null,
+            'objective_coef_pct' => ($data['objective_coef_pct'] ?? '') === '' || ($data['objective_coef_pct'] ?? null) === null
+                ? null
+                : $data['objective_coef_pct'],
+            'agency_note'        => ($data['agency_note'] ?? null) ?: null,
+            'b2b_webshop_enabled'=> !empty($data['b2b_webshop_enabled']) ? 1 : 0,
             'create_crm_leads'   => !empty($data['create_crm_leads']) ? 1 : 0,
             'image_url'          => $data['image_url'] ?? null,
             'created_by'         => $auth->userId,
@@ -301,6 +309,13 @@ final class CampaignRepository
         $shopIds  = self::intList($data['shop_ids'] ?? []);
         $channels = is_array($data['channels'] ?? null) ? $data['channels'] : [];
         $targets  = is_array($data['lever_targets'] ?? null) ? $data['lever_targets'] : [];
+        $sectors  = self::intList($data['sector_ids'] ?? []);
+        $asks     = self::intList($data['agency_ask_ids'] ?? []);
+        $b2bOpts  = self::intList($data['b2b_option_ids'] ?? []);
+        $uniforms = self::intList($data['uniform_ids'] ?? []);
+        $formats  = self::intList($data['format_ids'] ?? []);
+        $retro    = is_array($data['retroplanning'] ?? null) ? $data['retroplanning'] : [];
+        $offer    = is_array($data['offer'] ?? null) ? $data['offer'] : null;
 
         // Le contrôle de périmètre passe avant l'ouverture de la transaction :
         // inutile d'écrire quoi que ce soit pour l'annuler ensuite.
@@ -381,6 +396,32 @@ final class CampaignRepository
                 }
             }
 
+            // Jonctions simples : même forme, même garde. Les identifiants sont
+            // déjà filtrés par intList, et les clés étrangères refusent le reste.
+            foreach ([
+                ['mar_campaign_b2b_sector',    'sector_id', $sectors],
+                ['mar_campaign_agency_ask',    'ask_id',    $asks],
+                ['mar_campaign_b2b_option',    'option_id', $b2bOpts],
+                ['mar_campaign_uniform',       'uniform_id', $uniforms],
+            ] as [$table, $column, $ids]) {
+                if ($ids === []) {
+                    continue;
+                }
+
+                $statement = $connection->prepare(sprintf(
+                    'INSERT INTO %s (campaign_id, %s) VALUES (:campaign_id, :value)',
+                    $table,
+                    $column
+                ));
+                foreach ($ids as $id) {
+                    $statement->execute(['campaign_id' => $campaignId, 'value' => $id]);
+                }
+            }
+
+            $this->insertOffer($campaignId, $auth, $offer);
+            $this->insertRetroplanning($campaignId, $auth, $retro);
+            $this->insertAsset($campaignId, $auth, $data['image_url'] ?? null, $data['focal_point_y'] ?? null, $formats);
+
             $connection->commit();
 
             return $campaignId;
@@ -388,6 +429,150 @@ final class CampaignRepository
             $connection->rollBack();
 
             throw $failure;
+        }
+    }
+
+    /**
+     * Offre rattachée à la campagne, avec ses éléments.
+     *
+     * La fenêtre de l'offre est distincte de la période de campagne : une
+     * promotion peut ne courir que sur une partie de l'opération, et les deux
+     * dates se comparent — d'où deux couples de colonnes et non un seul.
+     *
+     * @param array<string,mixed>|null $offer
+     */
+    private function insertOffer(int $campaignId, AuthContext $auth, ?array $offer): void
+    {
+        if ($offer === null || ($offer['title'] ?? '') === '') {
+            return;
+        }
+
+        $connection = Database::connection();
+        $statement  = $connection->prepare(
+            'INSERT INTO mar_campaign_offer
+                (campaign_id, template_id, title, mechanic_text, starts_on, ends_on,
+                 hour_from, hour_to, created_by)
+             VALUES
+                (:campaign_id, :template_id, :title, :mechanic_text, :starts_on, :ends_on,
+                 :hour_from, :hour_to, :created_by)'
+        );
+
+        // « Toute la journée » n'est pas une plage 00:00–23:59 : c'est l'absence
+        // de contrainte horaire. On l'écrit NULL pour que les deux cas restent
+        // distinguables à la lecture.
+        $allDay = !empty($offer['all_day']);
+
+        $statement->execute([
+            'campaign_id'   => $campaignId,
+            'template_id'   => ($offer['template_id'] ?? null) ?: null,
+            'title'         => $offer['title'],
+            'mechanic_text' => $offer['mechanic_text'] ?? null,
+            'starts_on'     => ($offer['starts_on'] ?? null) ?: null,
+            'ends_on'       => ($offer['ends_on'] ?? null) ?: null,
+            'hour_from'     => $allDay ? null : (($offer['hour_from'] ?? null) ?: null),
+            'hour_to'       => $allDay ? null : (($offer['hour_to'] ?? null) ?: null),
+            'created_by'    => $auth->userId,
+        ]);
+
+        $offerId = (int) $connection->lastInsertId();
+        $items   = is_array($offer['items'] ?? null) ? $offer['items'] : [];
+
+        if ($items === []) {
+            return;
+        }
+
+        $statement = $connection->prepare(
+            'INSERT INTO mar_campaign_offer_item (campaign_offer_id, label, sort_order)
+             VALUES (:offer_id, :label, :sort_order)'
+        );
+
+        $order = 0;
+        foreach ($items as $label) {
+            $label = trim((string) $label);
+            if ($label === '') {
+                continue;
+            }
+
+            $statement->execute(['offer_id' => $offerId, 'label' => $label, 'sort_order' => ++$order]);
+        }
+    }
+
+    /**
+     * Jalons du rétroplanning, comptés en jours avant le lancement.
+     *
+     * @param list<array<string,mixed>> $steps
+     */
+    private function insertRetroplanning(int $campaignId, AuthContext $auth, array $steps): void
+    {
+        if ($steps === []) {
+            return;
+        }
+
+        $statement = Database::connection()->prepare(
+            'INSERT INTO mar_retroplanning_step
+                (campaign_id, label, days_before_launch, position_id, sort_order, created_by)
+             VALUES (:campaign_id, :label, :days, :position_id, :sort_order, :created_by)'
+        );
+
+        $order = 0;
+        foreach ($steps as $step) {
+            $label = trim((string) ($step['label'] ?? ''));
+            if ($label === '') {
+                continue;
+            }
+
+            $statement->execute([
+                'campaign_id' => $campaignId,
+                'label'       => $label,
+                'days'        => (int) ($step['days_before_launch'] ?? 0),
+                'position_id' => ($step['position_id'] ?? null) ?: null,
+                'sort_order'  => ++$order,
+                'created_by'  => $auth->userId,
+            ]);
+        }
+    }
+
+    /**
+     * Visuel maître et déclinaisons à produire.
+     *
+     * Les rendus partent en `pending` : rien n'est fabriqué à la création. La
+     * ligne dit qu'un format est attendu, pas qu'il existe — c'est ce qui
+     * permet à l'écran « Pub digitale » d'afficher un reste à produire.
+     *
+     * @param list<int> $formatIds
+     */
+    private function insertAsset(
+        int $campaignId,
+        AuthContext $auth,
+        mixed $imageUrl,
+        mixed $focalPointY,
+        array $formatIds
+    ): void {
+        $imageUrl = is_string($imageUrl) ? trim($imageUrl) : '';
+        if ($imageUrl === '' || $formatIds === []) {
+            return;
+        }
+
+        $connection = Database::connection();
+        $statement  = $connection->prepare(
+            'INSERT INTO mar_campaign_asset (campaign_id, file_url, focal_point_y, is_master, created_by)
+             VALUES (:campaign_id, :file_url, :focal_point_y, 1, :created_by)'
+        );
+        $statement->execute([
+            'campaign_id'   => $campaignId,
+            'file_url'      => $imageUrl,
+            'focal_point_y' => $focalPointY === null || $focalPointY === '' ? null : (float) $focalPointY,
+            'created_by'    => $auth->userId,
+        ]);
+
+        $assetId   = (int) $connection->lastInsertId();
+        $statement = $connection->prepare(
+            'INSERT INTO mar_asset_render (campaign_asset_id, format_id, status)
+             VALUES (:asset_id, :format_id, \'pending\')'
+        );
+
+        foreach ($formatIds as $formatId) {
+            $statement->execute(['asset_id' => $assetId, 'format_id' => $formatId]);
         }
     }
 
@@ -414,8 +599,9 @@ final class CampaignRepository
         }
 
         $columns = [
-            'type_id', 'name', 'scope', 'client_target', 'status_code', 'starts_on', 'ends_on',
-            'budget_amount', 'spent_amount', 'approval_status', 'create_crm_leads', 'image_url',
+            'type_id', 'name', 'scope', 'client_target', 'tone', 'status_code',
+            'starts_on', 'ends_on', 'budget_amount', 'objective_coef_pct', 'agency_note',
+            'b2b_webshop_enabled', 'spent_amount', 'approval_status', 'create_crm_leads', 'image_url',
         ];
 
         $assignments = [];

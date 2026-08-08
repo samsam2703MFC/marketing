@@ -35,6 +35,10 @@ final class ReferenceRepository
             'channels'        => $this->channels(),
             'uniforms'        => $this->uniforms(),
             'offerTemplates'  => $this->offerTemplates(),
+            'tones'           => $this->tones(),
+            'agencyAsks'      => $this->agencyAsks(),
+            'b2bOptions'      => $this->b2bOptions(),
+            'retroplanningDefaults' => $this->retroplanningDefaults(),
         ];
     }
 
@@ -149,6 +153,51 @@ final class ReferenceRepository
         }
 
         return $templates;
+    }
+
+    /** @return list<array<string,mixed>> */
+    public function tones(): array
+    {
+        return $this->fetch(
+            'SELECT id, code, label FROM mar_tone WHERE is_active = 1 ORDER BY sort_order'
+        );
+    }
+
+    /** @return list<array<string,mixed>> */
+    public function agencyAsks(): array
+    {
+        return $this->fetch(
+            'SELECT id, code, label FROM mar_agency_ask WHERE is_active = 1 ORDER BY sort_order'
+        );
+    }
+
+    /** @return list<array<string,mixed>> */
+    public function b2bOptions(): array
+    {
+        return $this->fetch(
+            'SELECT id, code, label, description
+               FROM mar_b2b_option WHERE is_active = 1 ORDER BY sort_order'
+        );
+    }
+
+    /**
+     * Rétroplanning type, pré-rempli par l'assistant.
+     *
+     * Ce sont des délais de métier, discutables et révisables — d'où une table
+     * plutôt qu'une liste en dur dans l'écran.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function retroplanningDefaults(): array
+    {
+        return $this->fetch(
+            'SELECT d.id, d.label, d.days_before_launch, d.position_id,
+                    p.label AS position_label
+               FROM mar_retroplanning_default d
+               LEFT JOIN mar_position p ON p.id = d.position_id
+              WHERE d.is_active = 1
+              ORDER BY d.sort_order'
+        );
     }
 
     /** @return list<array<string,mixed>> */

@@ -95,11 +95,17 @@ final class DiffusionRepository
         [$scopeSql, $bindings] = Scope::campaignFilter($auth, 'c');
 
         $statement = Database::connection()->prepare(sprintf(
+            // Le rattachement vit dans la jonction depuis que l'assistant
+            // permet d'en choisir plusieurs. `u.campaign_id` reste lu pour les
+            // tenues créées avant elle — la migration les y a recopiées, mais
+            // une reprise manuelle ultérieure ne passerait pas forcément par là.
             'SELECT u.id, u.code, u.name, u.description, u.icon_path,
                     c.id AS campaign_id, c.name AS campaign_name
                FROM mar_uniform u
-               LEFT JOIN mar_campaign c ON c.id = u.campaign_id
-              WHERE u.is_active = 1 AND (u.campaign_id IS NULL OR %s)
+               LEFT JOIN mar_campaign_uniform cu ON cu.uniform_id = u.id
+               LEFT JOIN mar_campaign c ON c.id = COALESCE(cu.campaign_id, u.campaign_id)
+              WHERE u.is_active = 1 AND (c.id IS NULL OR %s)
+              GROUP BY u.id, u.code, u.name, u.description, u.icon_path, c.id, c.name, u.sort_order
               ORDER BY u.sort_order',
             $scopeSql
         ));

@@ -139,6 +139,34 @@ export interface Uniform {
   icon_path: string | null
 }
 
+export interface Tone {
+  id: number
+  code: string
+  label: string
+}
+
+export interface AgencyAsk {
+  id: number
+  code: string
+  label: string
+}
+
+export interface B2bOption {
+  id: number
+  code: string
+  label: string
+  description: string | null
+}
+
+/** Jalon type du rétroplanning, en jours avant le lancement. */
+export interface RetroplanningDefault {
+  id: number
+  label: string
+  days_before_launch: number
+  position_id: number | null
+  position_label: string | null
+}
+
 export interface OfferTemplate {
   id: number
   code: string
@@ -165,6 +193,10 @@ export interface References {
   channels: Channel[]
   uniforms: Uniform[]
   offerTemplates: OfferTemplate[]
+  tones: Tone[]
+  agencyAsks: AgencyAsk[]
+  b2bOptions: B2bOption[]
+  retroplanningDefaults: RetroplanningDefault[]
 }
 
 export function getReferences(): Promise<References> {
@@ -260,9 +292,34 @@ export interface CampaignDraft {
   budget_amount?: number
   image_url?: string | null
   create_crm_leads?: boolean
+  tone?: string | null
+  /** Objectif exprimé en écart au N-1 : « N-1 + 12 % ». */
+  objective_coef_pct?: number | null
+  agency_note?: string | null
+  b2b_webshop_enabled?: boolean
+  /** Cadrage vertical du visuel, en pourcentage de la hauteur. */
+  focal_point_y?: number | null
   shop_ids?: number[]
+  sector_ids?: number[]
+  agency_ask_ids?: number[]
+  b2b_option_ids?: number[]
+  uniform_ids?: number[]
+  format_ids?: number[]
   channels?: Array<{ channel_id: number; agency_id?: number | null; budget_amount?: number | null }>
   lever_targets?: Array<{ lever_id: number; target_value: number; target_unit?: string | null }>
+  retroplanning?: Array<{ label: string; days_before_launch: number; position_id?: number | null }>
+  offer?: {
+    title: string
+    template_id?: number | null
+    mechanic_text?: string | null
+    starts_on?: string | null
+    ends_on?: string | null
+    /** Sans contrainte horaire : les heures ne sont alors pas enregistrées. */
+    all_day?: boolean
+    hour_from?: string | null
+    hour_to?: string | null
+    items?: string[]
+  }
 }
 
 export function createCampaign(draft: CampaignDraft): Promise<{ inserted_id: number }> {

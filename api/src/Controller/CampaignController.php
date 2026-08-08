@@ -68,9 +68,12 @@ final class CampaignController
         // un seul appel : le périmètre, les canaux et les objectifs font partie
         // de la campagne, pas d'une seconde étape que l'on pourrait rater.
         $payload = $request->only([
-            'brand_id', 'type_id', 'parent_campaign_id', 'name', 'scope', 'client_target',
-            'status_code', 'starts_on', 'ends_on', 'budget_amount', 'owner_user_id',
-            'create_crm_leads', 'image_url', 'shop_ids', 'channels', 'lever_targets',
+            'brand_id', 'type_id', 'parent_campaign_id', 'name', 'scope', 'client_target', 'tone',
+            'status_code', 'starts_on', 'ends_on', 'budget_amount', 'objective_coef_pct',
+            'agency_note', 'b2b_webshop_enabled', 'owner_user_id', 'create_crm_leads',
+            'image_url', 'focal_point_y', 'shop_ids', 'channels', 'lever_targets',
+            'sector_ids', 'agency_ask_ids', 'b2b_option_ids', 'uniform_ids', 'format_ids',
+            'retroplanning', 'offer',
         ]);
 
         $id = $this->campaigns->createWithRelations(AuthContext::current(), $payload);
@@ -86,8 +89,9 @@ final class CampaignController
         }
 
         $payload = $request->only([
-            'type_id', 'name', 'scope', 'client_target', 'status_code', 'starts_on', 'ends_on',
-            'budget_amount', 'spent_amount', 'approval_status', 'create_crm_leads', 'image_url',
+            'type_id', 'name', 'scope', 'client_target', 'tone', 'status_code',
+            'starts_on', 'ends_on', 'budget_amount', 'objective_coef_pct', 'agency_note',
+            'b2b_webshop_enabled', 'spent_amount', 'approval_status', 'create_crm_leads', 'image_url',
         ]);
 
         return $this->campaigns->update(AuthContext::current(), $id, $payload)

@@ -365,6 +365,37 @@ $response  = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
     // sans montant est un geste courant de l'assistant.
     'channels'   => [['channel_id' => $channelId, 'budget_amount' => null]],
     'lever_targets' => [['lever_id' => 1, 'target_value' => 20000, 'target_unit' => 'EUR']],
+    // Cadrage complet, tel que l'assistant le produit : ton, brief agence,
+    // secteurs, tenues, web-shop B2B, offre, rétroplanning et déclinaisons.
+    'tone'               => 'gourmand',
+    'objective_coef_pct' => 12,
+    'agency_note'        => 'Prévoir un shooting en boutique.',
+    'b2b_webshop_enabled'=> true,
+    'sector_ids'      => array_column($refs['b2bSectors'], 'id'),
+    'agency_ask_ids'  => [(int) $refs['agencyAsks'][0]['id'], (int) $refs['agencyAsks'][2]['id']],
+    'b2b_option_ids'  => [(int) $refs['b2bOptions'][0]['id']],
+    'uniform_ids'     => [(int) $refs['uniforms'][0]['id']],
+    'image_url'       => 'https://exemple.test/visuel.jpg',
+    'focal_point_y'   => 42.5,
+    'format_ids'      => array_column($refs['formats'], 'id'),
+    'offer'           => [
+        'title'         => 'Menu Barbecue',
+        'mechanic_text' => 'Plat + boisson + dessert',
+        'starts_on'     => '2026-12-05',
+        'ends_on'       => '2026-12-20',
+        'all_day'       => false,
+        'hour_from'     => '11:30:00',
+        'hour_to'       => '14:00:00',
+        'items'         => ['Brochette maison', 'Limonade', '  ', 'Tarte du jour'],
+    ],
+    'retroplanning'   => array_map(
+        static fn (array $step): array => [
+            'label'              => $step['label'],
+            'days_before_launch' => $step['days_before_launch'],
+            'position_id'        => $step['position_id'],
+        ],
+        $refs['retroplanningDefaults']
+    ),
 ]);
 check('la campagne complète est créée', $response['status'] === 201, 'statut ' . $response['status']);
 
@@ -391,6 +422,74 @@ check(
     'la cible client est enregistrée',
     $pdo->query(sprintf('SELECT client_target FROM mar_campaign WHERE id = %d', $newId))->fetchColumn() === 'b2b'
 );
+
+$campaignRow = $pdo->query(sprintf(
+    'SELECT tone, objective_coef_pct, agency_note, b2b_webshop_enabled FROM mar_campaign WHERE id = %d',
+    $newId
+))->fetch();
+check('le ton éditorial est enregistré', ($campaignRow['tone'] ?? '') === 'gourmand');
+check('l\'objectif en écart au N-1 est enregistré', (float) ($campaignRow['objective_coef_pct'] ?? 0) === 12.0);
+check('la note de brief est enregistrée', ($campaignRow['agency_note'] ?? '') !== '');
+check('le web-shop B2B est activé', (int) ($campaignRow['b2b_webshop_enabled'] ?? 0) === 1);
+
+check('les six secteurs B2B sont rattachés', $count('mar_campaign_b2b_sector') === 6, (string) $count('mar_campaign_b2b_sector'));
+check('les deux demandes agence sont rattachées', $count('mar_campaign_agency_ask') === 2);
+check('l\'option de web-shop est rattachée', $count('mar_campaign_b2b_option') === 1);
+check('la tenue est rattachée', $count('mar_campaign_uniform') === 1);
+check('les cinq jalons sont écrits', $count('mar_retroplanning_step') === 5, (string) $count('mar_retroplanning_step'));
+
+$offerId = (int) $pdo->query(sprintf('SELECT id FROM mar_campaign_offer WHERE campaign_id = %d', $newId))->fetchColumn();
+check('l\'offre est créée', $offerId > 0);
+check(
+    'les éléments vides de l\'offre sont écartés',
+    (int) $pdo->query(sprintf('SELECT COUNT(*) FROM mar_campaign_offer_item WHERE campaign_offer_id = %d', $offerId))->fetchColumn() === 3
+);
+check(
+    'la fenêtre de l\'offre est distincte de la campagne',
+    $pdo->query(sprintf('SELECT starts_on FROM mar_campaign_offer WHERE id = %d', $offerId))->fetchColumn() === '2026-12-05'
+);
+check(
+    'la plage horaire est conservée',
+    $pdo->query(sprintf('SELECT hour_from FROM mar_campaign_offer WHERE id = %d', $offerId))->fetchColumn() === '11:30:00'
+);
+
+$assetId = (int) $pdo->query(sprintf('SELECT id FROM mar_campaign_asset WHERE campaign_id = %d', $newId))->fetchColumn();
+check('le visuel maître est créé', $assetId > 0);
+check(
+    'le point focal est conservé',
+    (float) $pdo->query(sprintf('SELECT focal_point_y FROM mar_campaign_asset WHERE id = %d', $assetId))->fetchColumn() === 42.5
+);
+check(
+    'une déclinaison est attendue par format',
+    (int) $pdo->query(sprintf('SELECT COUNT(*) FROM mar_asset_render WHERE campaign_asset_id = %d', $assetId))->fetchColumn()
+        === count($refs['formats'])
+);
+check(
+    'les déclinaisons restent à produire',
+    $pdo->query(sprintf('SELECT DISTINCT status FROM mar_asset_render WHERE campaign_asset_id = %d', $assetId))->fetchColumn() === 'pending'
+);
+
+// « Toute la journée » n'est pas une plage 00:00–23:59 : les deux cas doivent
+// rester distinguables, sinon on ne sait plus si l'horaire était contraint.
+call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name'  => 'Offre toute la journée',
+    'offer' => ['title' => 'Tout le jour', 'all_day' => true, 'hour_from' => '09:00:00', 'hour_to' => '18:00:00'],
+]);
+check(
+    'toute la journée n\'écrit pas de plage horaire',
+    $pdo->query("SELECT o.hour_from FROM mar_campaign_offer o
+                   JOIN mar_campaign c ON c.id = o.campaign_id
+                  WHERE c.name = 'Offre toute la journée'")->fetchColumn() === null
+);
+
+// Une tenue choisie doit apparaître sur l'écran « Pub physique », sinon le
+// choix de l'assistant ne va nulle part.
+$response = call($router, 'GET', '/api/v1/marketing/diffusion', ['family' => 'PHYSIQUE']);
+$attached = array_filter(
+    $response['body']['uniforms'] ?? [],
+    static fn (array $u): bool => $u['campaign_id'] !== null
+);
+check('la tenue choisie remonte en diffusion', $attached !== [], count($response['body']['uniforms'] ?? []) . ' tenue(s)');
 
 // Une valeur de cible inconnue retombe sur b2c plutôt que d'entrer telle quelle.
 $response = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
