@@ -374,9 +374,7 @@ jobs:
             # Résumé compact : une annotation est courte, et « installez
             # php-mysql » ne suffit pas quand plusieurs versions de PHP
             # cohabitent et que le paquet a été posé sur la mauvaise.
-            echo \"DIAG php=\$(php -r 'echo PHP_VERSION;' 2>/dev/null) bin=\$(command -v php) \
-pdo_mysql=\$(php -m 2>/dev/null | grep -qi pdo_mysql && echo oui || echo NON) \
-autres=\$(ls /usr/bin/php* 2>/dev/null | tr '\\n' ',' )\"
+            v=\$(php -r 'echo PHP_VERSION;' 2>/dev/null); b=\$(command -v php); m=\$(php -m 2>/dev/null | grep -qi pdo_mysql && echo oui || echo NON); a=\$(ls /usr/bin/php* 2>/dev/null | tr '\\n' ','); echo \"DIAG php=\$v bin=\$b pdo_mysql=\$m autres=\$a\"
             php -m 2>/dev/null | grep -qi pdo_mysql || echo 'PDO_MYSQL_MISSING'
             [ -f db/migrate.php ] || { echo 'MIGRATE_ABSENT'; exit 92; }
             php db/migrate.php 2>&1
