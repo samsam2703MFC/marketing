@@ -3,6 +3,7 @@ import { module as api } from '../../lib/api'
 import { useAsync } from '../../lib/useAsync'
 import type { SalesQuantities, ShopSalesRow } from '../../lib/api/module'
 import type { Draft } from './CampaignBuilder'
+import RangeCalendar from './RangeCalendar'
 
 /**
  * Étape « Objectifs » : un objectif de pièces par boutique, éclairé par les
@@ -193,22 +194,6 @@ export default function ObjectivesStep({
 
       <h3 className="section-label">Période d’analyse</h3>
       <div className="filters__row">
-        <label className="field">
-          Du
-          <input
-            type="date"
-            value={draft.analysis_from}
-            onChange={(e) => patch({ analysis_from: e.target.value })}
-          />
-        </label>
-        <label className="field">
-          Au
-          <input
-            type="date"
-            value={draft.analysis_to}
-            onChange={(e) => patch({ analysis_to: e.target.value })}
-          />
-        </label>
         {shortcuts().map((shortcut) => (
           <button
             key={shortcut.label}
@@ -232,6 +217,20 @@ export default function ObjectivesStep({
           Comparer à N-1
         </button>
       </div>
+
+      {/* Le même calendrier qu'aux autres étapes. Les deux champs natifs
+          affichaient `mm/dd/yyyy` — l'ordre américain — parce qu'un
+          `input[type=date]` suit la locale du navigateur et non celle de
+          l'application : impossible à corriger en CSS, et rien n'empêchait de
+          saisir le 10 janvier pour le 1er octobre. Les raccourcis ci-dessus
+          couvrent les périodes courantes ; le calendrier sert aux autres. */}
+      <RangeCalendar
+        from={draft.analysis_from}
+        to={draft.analysis_to}
+        onChange={(range) =>
+          patch({ analysis_from: range.starts_on, analysis_to: range.ends_on })
+        }
+      />
 
       {periodInvalid ? <p className="error">La date de fin précède la date de début.</p> : null}
 

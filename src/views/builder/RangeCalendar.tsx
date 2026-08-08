@@ -43,11 +43,18 @@ function daysIn(year: number, month: number): number {
   return new Date(year, month + 1, 0).getDate()
 }
 
-/** « 12 septembre 2026 », pour le rappel écrit sous le calendrier. */
+/**
+ * « 12/09/2026 », jour d'abord.
+ *
+ * Le même ordre que partout ailleurs dans le module — récapitulatif, cartes de
+ * campagne, calendrier. Il n'y a plus de saisie libre de date nulle part, donc
+ * plus d'ambiguïté à lever par une forme longue : ce qui compte désormais est
+ * qu'un seul ordre se lise d'un écran à l'autre.
+ */
 function human(value: string): string {
   const [year, month, day] = value.split('-').map(Number)
 
-  return `${day} ${MOIS[month - 1]} ${year}`
+  return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`
 }
 
 function Month({
