@@ -73,19 +73,29 @@ final class ErpSyncRepository
     private const CUSTOMER_COLUMNS = [
         'id'           => ['id', 'id_client', 'id_customer', 'customer_id'],
         'company_name' => ['company_name', 'company', 'raison_sociale', 'societe', 'name', 'nom'],
-        'contact_name' => ['contact_name', 'contact', 'firstname', 'full_name', 'prenom'],
+        // `name` / `surname` : sur cette installation, l'état civil du contact.
+        // Ils passent après `company_name`, qui est résolu en premier et leur
+        // laisse donc la place.
+        'contact_name' => ['contact_name', 'contact', 'full_name', 'name', 'surname', 'firstname', 'prenom'],
         'email'        => ['email', 'mail', 'contact_email'],
         'phone'        => ['phone', 'tel', 'telephone', 'contact_phone', 'gsm'],
         'city'         => ['city', 'ville', 'town'],
         'postal_code'  => ['postal_code', 'zip', 'cp', 'zipcode', 'code_postal'],
         // Boutique de rattachement du client : `id_mainshop` sur cette
         // installation, d'où sa place en tête.
-        'shop_id'      => ['id_mainshop', 'shop_id', 'id_shop', 'boutique_id', 'store_id'],
+        // Boutique de rattachement. `id_main_shop` sur cette installation —
+        // l'inventaire des colonnes l'a montré là où `id_mainshop`, essayé de
+        // mémoire, ne trouvait rien et laissait 893 comptes sans boutique.
+        'shop_id'      => ['id_main_shop', 'id_mainshop', 'preferred_shop_id', 'shop_id', 'id_shop', 'boutique_id', 'store_id'],
         // Le marqueur professionnel n'est pas forcément un booléen : sur cette
         // installation c'est `b2b_client_type`, un type de compte, où « être
         // B2B » signifie « en avoir un ». D'où un nom de notion neutre et un
         // test déduit du type réel de la colonne, plus bas.
         'b2b_flag'     => ['b2b_client_type', 'is_b2b', 'b2b', 'is_professional', 'professionnel'],
+        // Un compte fermé ou bloqué ne se démarche pas : l'appel tomberait sur
+        // une entreprise qui n'est plus cliente, ou qui l'est mal.
+        'active'       => ['active', 'is_active', 'actif', 'enabled'],
+        'blocked'      => ['blocked', 'is_blocked', 'bloque'],
     ];
 
     /**
@@ -334,7 +344,7 @@ final class ErpSyncRepository
             throw $failure;
         }
 
-        return [
+        $result = [
             'source'  => $schema . '.' . $table,
             'columns' => $columns,
             'read'    => count($rows),
@@ -342,6 +352,23 @@ final class ErpSyncRepository
             'updated' => $updated,
             'skipped' => $skipped,
         ];
+
+        // L'ERP rattache ses boutiques à une enseigne. Si elles n'en désignent
+        // pas toutes la même, les rattacher en bloc à une marque unique est
+        // faux — et invisible. On le dit plutôt que de le laisser passer.
+        if (isset($columns['brand'])) {
+            $distinct = array_unique(array_filter(array_column($rows, 'brand'), static fn ($v): bool => $v !== null));
+            if (count($distinct) > 1) {
+                $result['warning'] = sprintf(
+                    'Les boutiques désignent %d enseignes différentes (%s) : toutes ont été '
+                    . 'rattachées à la marque déclarée. Renseignez MAR_ERP_BRANDS_TABLE pour les séparer.',
+                    count($distinct),
+                    implode(', ', $distinct)
+                );
+            }
+        }
+
+        return $result;
     }
 
     /**
@@ -354,12 +381,17 @@ final class ErpSyncRepository
         [$schema, $table] = $this->source('MAR_ERP_CUSTOMERS_TABLE', 'client');
         $columns = $this->resolve($schema, $table, self::CUSTOMER_COLUMNS, ['id', 'company_name', 'b2b_flag']);
 
-        $rows = $this->readSource(
-            $schema,
-            $table,
-            $columns,
-            $this->b2bPredicate($schema, $table, $columns['b2b_flag'])
-        );
+        $where = [$this->b2bPredicate($schema, $table, $columns['b2b_flag'])];
+
+        if (isset($columns['active'])) {
+            $where[] = sprintf('`%s` = 1', $columns['active']);
+        }
+
+        if (isset($columns['blocked'])) {
+            $where[] = sprintf('(`%1$s` IS NULL OR `%1$s` = 0)', $columns['blocked']);
+        }
+
+        $rows = $this->readSource($schema, $table, $columns, implode(' AND ', $where));
 
         // Les boutiques de l'ERP ont été reprises avec leur identifiant
         // d'origine : on s'en sert pour rattacher chaque compte à sa boutique

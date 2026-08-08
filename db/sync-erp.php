@@ -155,6 +155,10 @@ foreach ($report as $label => $result) {
             : ''
     );
     printf("           colonnes retenues : %s\n", json_encode($result['columns'], JSON_UNESCAPED_UNICODE));
+
+    if (isset($result['warning'])) {
+        printf("           ATTENTION : %s\n", $result['warning']);
+    }
 }
 
 // Vérification : ce que le module voit maintenant. C'est le seul contrôle qui
