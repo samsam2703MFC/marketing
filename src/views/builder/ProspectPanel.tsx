@@ -19,6 +19,13 @@ export default function ProspectPanel({ sectorIds }: { sectorIds: number[] }) {
     [sectorIds.join(',')],
   )
 
+  // L'effectif vient de la base, pas de la longueur de la liste : celle-ci est
+  // bornée, et compter ses lignes annoncerait deux cents comptes à qui va en
+  // démarcher neuf cents. L'écart, quand il existe, est écrit noir sur blanc
+  // plutôt que laissé à deviner au bas d'un panneau qui s'arrête net.
+  const count = useAsync(() => api.countProspects(sectorIds), [sectorIds.join(',')])
+  const total = count.data?.total ?? data?.length ?? 0
+
   if (sectorIds.length === 0) {
     return (
       <aside className="side-panel">
@@ -48,7 +55,8 @@ export default function ProspectPanel({ sectorIds }: { sectorIds: number[] }) {
       {data && data.length > 0 ? (
         <>
           <p className="muted">
-            {data.length} compte{data.length > 1 ? 's' : ''} dans le vivier
+            {total} compte{total > 1 ? 's' : ''} dans le vivier
+            {data.length < total ? ` · ${data.length} affichés` : ''}
           </p>
           <ul className="side-panel__list">
             {data.map((prospect) => (

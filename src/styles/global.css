@@ -414,10 +414,20 @@ tbody td {
   color: #fff;
 }
 
+/* La zone de contenu défile sur toute la largeur, et ce sont ses enfants qui
+   sont bornés à 1180 px.
+   La largeur était portée par le conteneur défilant lui-même : sa barre de
+   défilement se plaçait donc à 1180 px du bord, au milieu de l'écran, avec du
+   vide à sa droite. Elle passait pour un trait de séparation entre le
+   formulaire et le panneau — un meuble que rien ne justifiait. Elle revient
+   maintenant au bord de la fenêtre, où on l'attend. */
 .app__body {
   flex: 1;
   overflow-y: auto;
   padding: 22px 24px 40px;
+}
+
+.app__body > * {
   max-width: 1180px;
 }
 

@@ -538,6 +538,13 @@ function FramingStep({
   draft,
   patch,
 }: StepProps & { role: Role; shops: Array<{ id: number; name: string; city: string | null }> }) {
+  // Vrai quand tous les secteurs sont retenus. Comparé sur le nombre, les
+  // identifiants venant de la même liste : un secteur désactivé entre-temps
+  // côté ERP ne doit pas laisser le bouton allumé pour toujours.
+  const allSectors =
+    refs.b2bSectors.length > 0 &&
+    refs.b2bSectors.every((sector) => draft.sector_ids.includes(sector.id))
+
   return (
     <>
       <h2>Quel type de campagne ?</h2>
@@ -695,16 +702,40 @@ function FramingStep({
           <h3 className="section-label">Secteurs visés</h3>
           {/* Le nombre affiché est celui des comptes réellement présents dans le
               vivier, et non un objectif de démarchage : c'est lui qui décide si
-              cocher ce secteur produira des leads. */}
-          <ChipList
-            items={refs.b2bSectors.map((sector) => ({
-              id: sector.id,
-              label: `${sector.label} · ${sector.available_count}`,
-              hint: `${sector.available_count} compte${sector.available_count > 1 ? 's' : ''} dans le vivier`,
-            }))}
-            selected={draft.sector_ids}
-            onToggle={(id) => patch({ sector_ids: toggle(draft.sector_ids, id) })}
-          />
+              cocher ce secteur produira des leads.
+
+              « Tous » d'abord, dans la même rangée que les secteurs : viser
+              l'ensemble du vivier est un cas courant, et le faire à la main
+              demandait autant de clics qu'il y a de types de compte. Le bouton
+              bascule dans les deux sens — c'est aussi le moyen de tout décocher
+              sans reprendre chaque pastille. */}
+          <div className="filters__row">
+            <button
+              type="button"
+              className={`filter${allSectors ? ' is-on' : ''}`}
+              onClick={() =>
+                patch({ sector_ids: allSectors ? [] : refs.b2bSectors.map((s) => s.id) })
+              }
+              title={
+                allSectors
+                  ? 'Retirer tous les secteurs'
+                  : `Viser les ${refs.b2bSectors.length} secteurs du vivier`
+              }
+            >
+              Tous
+            </button>
+            {refs.b2bSectors.map((sector) => (
+              <button
+                key={sector.id}
+                type="button"
+                className={`filter${draft.sector_ids.includes(sector.id) ? ' is-on' : ''}`}
+                onClick={() => patch({ sector_ids: toggle(draft.sector_ids, sector.id) })}
+                title={`${sector.available_count} compte${sector.available_count > 1 ? 's' : ''} dans le vivier`}
+              >
+                {sector.label} · {sector.available_count}
+              </button>
+            ))}
+          </div>
         </>
       ) : null}
 
