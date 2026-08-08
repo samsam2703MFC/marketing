@@ -29,18 +29,18 @@ $router = new Router();
  * est explicitement activé. Sans ce garde-fou, un déploiement accidentel de ce
  * fichier laisserait n'importe qui se déclarer BRAND_ADMIN.
  */
-// Le fichier de configuration est lu avant tout : sans cela, MAR_DEV_AUTH posé
-// dans le .env serait ignoré, la variable n'existant pas dans l'environnement du
-// pool PHP-FPM.
-\Marketing\Support\Env::load();
+// Lu via Env::get et non getenv : `putenv()` est neutralisé sur beaucoup de
+// configurations durcies, et son échec est silencieux — la configuration
+// paraîtrait absente alors que le fichier a bien été lu.
+use Marketing\Support\Env;
 
-if (getenv('MAR_DEV_AUTH') === '1') {
+if (Env::get('MAR_DEV_AUTH') === '1') {
     // Les en-têtes priment, ce qui permet de simuler plusieurs rôles depuis
     // curl ; à défaut, MAR_DEV_USER_ID sert d'identité par défaut pour ouvrir
     // l'interface dans un navigateur sans monter tout le flux d'authentification.
-    $userId = (int) ($_SERVER['HTTP_X_DEV_USER_ID'] ?? getenv('MAR_DEV_USER_ID') ?: 0);
-    $role   = (string) ($_SERVER['HTTP_X_DEV_ROLE'] ?? getenv('MAR_DEV_ROLE') ?: 'BRAND_ADMIN');
-    $shops  = array_filter(explode(',', (string) ($_SERVER['HTTP_X_DEV_SHOPS'] ?? getenv('MAR_DEV_SHOPS') ?: '')));
+    $userId = (int) ($_SERVER['HTTP_X_DEV_USER_ID'] ?? Env::get('MAR_DEV_USER_ID', '0'));
+    $role   = (string) ($_SERVER['HTTP_X_DEV_ROLE'] ?? Env::get('MAR_DEV_ROLE', 'BRAND_ADMIN'));
+    $shops  = array_filter(explode(',', (string) ($_SERVER['HTTP_X_DEV_SHOPS'] ?? Env::get('MAR_DEV_SHOPS', ''))));
 
     if ($userId > 0) {
         AuthContext::set($userId, $role, null, array_map('intval', $shops));

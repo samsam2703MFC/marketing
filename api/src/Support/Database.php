@@ -44,9 +44,7 @@ final class Database
         // Le fichier `.env` de la racine du déploiement complète l'environnement :
         // ni la session SSH non interactive ni le pool PHP-FPM ne voient les
         // variables exportées dans un profil de shell.
-        Env::load();
-
-        $database = getenv('MAR_DB_NAME') ?: '';
+        $database = Env::get('MAR_DB_NAME', '') ?: '';
         if ($database === '') {
             throw new RuntimeException(
                 'MAR_DB_NAME est requis. Renseignez le fichier .env à la racine du déploiement '
@@ -54,18 +52,18 @@ final class Database
             );
         }
 
-        $socket = getenv('MAR_DB_SOCKET') ?: '';
+        $socket = Env::get('MAR_DB_SOCKET', '') ?: '';
         $dsn = $socket !== ''
             ? sprintf('mysql:unix_socket=%s;dbname=%s;charset=utf8mb4', $socket, $database)
             : sprintf(
                 'mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',
-                getenv('MAR_DB_HOST') ?: '127.0.0.1',
-                getenv('MAR_DB_PORT') ?: '3306',
+                Env::get('MAR_DB_HOST', '127.0.0.1'),
+                Env::get('MAR_DB_PORT', '3306'),
                 $database
             );
 
         try {
-            return new PDO($dsn, getenv('MAR_DB_USER') ?: 'root', getenv('MAR_DB_PASSWORD') ?: '', [
+            return new PDO($dsn, Env::get('MAR_DB_USER', 'root'), Env::get('MAR_DB_PASSWORD', ''), [
                 PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 // Les requêtes préparées côté serveur : les valeurs ne sont jamais

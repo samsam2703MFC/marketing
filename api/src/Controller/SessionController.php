@@ -36,6 +36,12 @@ final class SessionController
                 // Indique au front s'il doit proposer sa propre connexion ou
                 // renvoyer vers l'ERP.
                 'login_hint'    => 'erp',
+                // Deux booléens pour distinguer « pas d'identité » de « fichier
+                // de configuration jamais trouvé ». Sans eux, les deux cas
+                // rendent la même réponse et l'installation se diagnostique à
+                // l'aveugle. Aucune valeur n'est divulguée, seulement des états.
+                'config_found'  => \Marketing\Support\Env::source() !== null,
+                'dev_auth'      => \Marketing\Support\Env::get('MAR_DEV_AUTH') === '1',
             ]);
         }
 

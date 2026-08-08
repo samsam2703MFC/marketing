@@ -26,6 +26,48 @@ final class Env
     private static bool $loaded = false;
 
     /**
+     * Valeurs lues, conservées ici.
+     *
+     * `putenv()` ne suffit pas : de nombreuses configurations durcies le
+     * neutralisent via `disable_functions`, et il échoue alors sans bruit —
+     * `getenv()` renvoie `false` et la configuration paraît absente alors que le
+     * fichier a bien été lu. On garde donc les valeurs en propre, et `putenv()`
+     * n'est plus qu'un complément pour le code tiers qui lirait `getenv()`.
+     *
+     * @var array<string,string>
+     */
+    private static array $values = [];
+
+    /** Chemin du fichier réellement chargé, pour le diagnostic. */
+    private static ?string $source = null;
+
+    /**
+     * Valeur de configuration.
+     *
+     * L'environnement réel prime : un pool PHP-FPM ou un conteneur correctement
+     * configuré ne doit pas être écrasé par un fichier oublié.
+     */
+    public static function get(string $key, ?string $default = null): ?string
+    {
+        self::load();
+
+        $fromEnv = getenv($key);
+        if ($fromEnv !== false && $fromEnv !== '') {
+            return $fromEnv;
+        }
+
+        return self::$values[$key] ?? $default;
+    }
+
+    /** Chemin du fichier de configuration chargé, ou `null` si aucun. */
+    public static function source(): ?string
+    {
+        self::load();
+
+        return self::$source;
+    }
+
+    /**
      * Charge le fichier une seule fois. Son absence n'est pas une erreur.
      *
      * Ordre de recherche, le premier lisible gagne :
@@ -95,13 +137,27 @@ final class Env
 
             $value = self::unquote($value);
 
-            if ($key === '' || getenv($key) !== false) {
+            if ($key === '') {
                 continue;
             }
 
-            putenv(sprintf('%s=%s', $key, $value));
+            // Toujours mémorisé : c'est la source fiable. L'environnement réel
+            // reste prioritaire, mais c'est `get()` qui arbitre, pas ce parcours.
+            self::$values[$key] = $value;
+
+            if (getenv($key) !== false) {
+                continue;
+            }
+
+            // Complément, pour le code tiers qui lirait `getenv()` directement.
+            // Peut être neutralisé par `disable_functions` : sans conséquence ici.
+            if (function_exists('putenv')) {
+                @putenv(sprintf('%s=%s', $key, $value));
+            }
             $_ENV[$key] = $value;
         }
+
+        self::$source = $path;
     }
 
     /**

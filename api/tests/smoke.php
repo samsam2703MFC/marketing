@@ -220,6 +220,20 @@ foreach ([
     check(sprintf('préfixe retiré — %s', $uri), $got === $expected, 'obtenu ' . $got);
 }
 
+// La lecture ne doit dépendre ni de putenv ni de getenv : beaucoup de
+// configurations durcies neutralisent putenv via disable_functions, et son
+// échec est muet — la configuration paraît absente alors qu'elle a été lue.
+$file = sys_get_temp_dir() . '/mar_env_store.env';
+file_put_contents($file, "MAR_TEST_STORE=\"depuis_le_fichier\"\n");
+(new ReflectionProperty(\Marketing\Support\Env::class, 'loaded'))->setValue(null, false);
+(new ReflectionProperty(\Marketing\Support\Env::class, 'values'))->setValue(null, []);
+putenv('MAR_TEST_STORE');
+unset($_ENV['MAR_TEST_STORE']);
+\Marketing\Support\Env::load($file);
+check('valeur lisible sans passer par getenv', \Marketing\Support\Env::get('MAR_TEST_STORE') === 'depuis_le_fichier');
+check('le fichier chargé est rapporté', \Marketing\Support\Env::source() === $file);
+unlink($file);
+
 // --- Étanchéité des erreurs ----------------------------------------------
 // PDOException hérite de RuntimeException : sans traitement séparé, un message
 // SQL — qui cite tables et colonnes — repartirait au client dans une 422.
