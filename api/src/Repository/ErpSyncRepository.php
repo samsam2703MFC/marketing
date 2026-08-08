@@ -301,10 +301,10 @@ final class ErpSyncRepository
                     'erp_shop_id' => (int) $row['id'],
                     // `code` est unique par marque : à défaut, l'identifiant
                     // ERP fait un code stable, ce qu'un nom n'est pas.
-                    'code'        => (string) ($row['code'] ?? ('erp-' . $row['id'])),
-                    'name'        => $name,
-                    'city'        => $row['city'] ?? null,
-                    'created_by'  => $auth->userId,
+                    'code'        => mb_substr((string) ($row['code'] ?? ('erp-' . $row['id'])), 0, 40),
+                    'name'        => mb_substr($name, 0, 160),
+                    'city'        => $row['city'] === null ? null : mb_substr((string) $row['city'], 0, 120),
+                    'created_by'  => $auth->userId ?: null,
                 ]);
 
                 $upsert->rowCount() === 1 ? $created++ : $updated++;
@@ -373,9 +373,29 @@ final class ErpSyncRepository
                     is_active     = 1'
             );
 
-            $created = 0;
-            $updated = 0;
-            $skipped = 0;
+            $created   = 0;
+            $updated   = 0;
+            $skipped   = 0;
+            $truncated = 0;
+
+            // Bornes des colonnes du vivier. Un champ annexe plus long que
+            // prévu ne doit pas interrompre la reprise de tout un réseau —
+            // mais il ne doit pas non plus être rogné en silence, d'où le
+            // compteur remonté dans le compte rendu.
+            $clamp = static function (mixed $value, int $length) use (&$truncated): ?string {
+                if ($value === null || $value === '') {
+                    return null;
+                }
+
+                $text = (string) $value;
+                if (mb_strlen($text) <= $length) {
+                    return $text;
+                }
+
+                $truncated++;
+
+                return mb_substr($text, 0, $length);
+            };
 
             foreach ($rows as $row) {
                 $name = trim((string) ($row['company_name'] ?? ''));
@@ -391,15 +411,15 @@ final class ErpSyncRepository
                     // Préfixée : le vivier accepte aussi des imports de
                     // fichiers, et deux origines peuvent numéroter pareil.
                     'external_ref'  => 'erp-' . $row['id'],
-                    'company_name'  => $name,
-                    'contact_name'  => $row['contact_name'] ?? null,
-                    'contact_email' => $row['email'] ?? null,
-                    'contact_phone' => $row['phone'] ?? null,
-                    'city'          => $row['city'] ?? null,
-                    'postal_code'   => $row['postal_code'] ?? null,
+                    'company_name'  => $clamp($name, 200),
+                    'contact_name'  => $clamp($row['contact_name'] ?? null, 160),
+                    'contact_email' => $clamp($row['email'] ?? null, 190),
+                    'contact_phone' => $clamp($row['phone'] ?? null, 80),
+                    'city'          => $clamp($row['city'] ?? null, 120),
+                    'postal_code'   => $clamp($row['postal_code'] ?? null, 40),
                     'shop_id'       => $shopByErpId[$erpShopId] ?? null,
                     'source'        => 'ERP',
-                    'created_by'    => $auth->userId,
+                    'created_by'    => $auth->userId ?: null,
                 ]);
 
                 $upsert->rowCount() === 1 ? $created++ : $updated++;
@@ -413,12 +433,13 @@ final class ErpSyncRepository
         }
 
         return [
-            'source'  => $schema . '.' . $table,
-            'columns' => $columns,
-            'read'    => count($rows),
-            'created' => $created,
-            'updated' => $updated,
-            'skipped' => $skipped,
+            'source'    => $schema . '.' . $table,
+            'columns'   => $columns,
+            'read'      => count($rows),
+            'created'   => $created,
+            'updated'   => $updated,
+            'skipped'   => $skipped,
+            'truncated' => $truncated,
         ];
     }
 

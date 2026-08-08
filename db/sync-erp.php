@@ -140,13 +140,16 @@ try {
 
 foreach ($report as $label => $result) {
     printf(
-        "%-10s source %s — %d lue(s), %d créée(s), %d mise(s) à jour, %d écartée(s)\n",
+        "%-10s source %s — %d lue(s), %d créée(s), %d mise(s) à jour, %d écartée(s)%s\n",
         $label === 'shops' ? 'Boutiques' : 'Comptes',
         $result['source'],
         $result['read'],
         $result['created'],
         $result['updated'],
-        $result['skipped']
+        $result['skipped'],
+        ($result['truncated'] ?? 0) > 0
+            ? sprintf(', %d valeur(s) rognée(s)', $result['truncated'])
+            : ''
     );
     printf("           colonnes retenues : %s\n", json_encode($result['columns'], JSON_UNESCAPED_UNICODE));
 }
