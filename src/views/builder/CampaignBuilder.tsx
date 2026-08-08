@@ -179,9 +179,6 @@ const STEPS: Step[] = [
       if (!d.offer_all_day && (d.offer_hour_from === '' || d.offer_hour_to === '')) {
         return 'Précisez la plage horaire, ou revenez sur « toute la journée ».'
       }
-      if (d.offer_items.some((item) => item.label.trim() !== '') && d.offer_title.trim() === '') {
-        return 'Nommez l’offre pour pouvoir lui rattacher des éléments.'
-      }
       return null
     },
   },
@@ -661,10 +658,12 @@ function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): Cam
         position_id: entry.position_id,
       })),
     offer:
-      draft.offer_title.trim() === ''
+      items.length === 0
         ? undefined
         : {
-            title: draft.offer_title.trim(),
+            // Le titre n'est plus saisi : il suit la gamme choisie à l'étape 2,
+            // à défaut le nom de la campagne.
+            title: draft.offer_title.trim() || `Offre ${draft.name.trim()}`,
             template_id: draft.offer_template_id,
             mechanic_text: draft.offer_mechanic.trim() || null,
             // L'offre court sur la période de la campagne. Elle avait sa
@@ -994,184 +993,304 @@ function FramingStep({
 // 2 — Offre
 // ---------------------------------------------------------------------------
 
-function OfferStep({ refs, draft, patch }: StepProps) {
-  // Le catalogue repris de l'ERP (`mar_offer_item`). Vide tant que la reprise
-  // n'a pas tourné : l'écran le dit, et la saisie libre reste ouverte.
+/** Libellé court d'une gamme : sans emoji de tête, préfixes ni parenthèses. */
+function seasonLabel(name: string): string {
+  const cleaned = name
+    .replace(/^[^\p{L}\p{N}]+/u, '')
+    .replace(/^Icône\s*[-–]\s*/iu, '')
+    .replace(/^Gamme\s+/iu, '')
+    .replace(/\s*\(.*\)\s*$/u, '')
+    .split(/\s+[–—]\s+/u)[0]
+    .trim()
+
+  if (/^B[.\s-]*2[.\s-]*B[.\s-]*$/iu.test(cleaned)) return 'B2B'
+
+  return cleaned || name
+}
+
+/** Forme comparable d'un libellé : minuscule, sans accent ni ponctuation. */
+function compact(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]/g, '')
+}
+
+/** Illustration d'une gamme, reconnue au mot-clé de son nom. */
+function seasonImage(name: string): string | null {
+  const flat = compact(name)
+  const match = (
+    [
+      ['printan', 'printemps'],
+      ['estival', 'ete'],
+      ['automn', 'automne'],
+      ['hivern', 'hiver'],
+      ['noel', 'noel'],
+      ['nicolas', 'saint-nicolas'],
+      ['epiphanie', 'epiphanie'],
+      ['mere', 'fete-des-meres'],
+      ['pascal', 'paques'],
+      ['paque', 'paques'],
+      ['valentin', 'saint-valentin'],
+      ['chandeleur', 'chandeleur'],
+      ['glace', 'glace'],
+      ['b2b', 'b2b'],
+      ['standard', 'standard'],
+    ] as const
+  ).find(([key]) => flat.includes(key))
+
+  return match ? `${import.meta.env.BASE_URL}img/seasons/${match[1]}.png` : null
+}
+
+/** Illustration d'une famille de produits, même principe. */
+function familyImage(family: string): string | null {
+  const flat = compact(family)
+  const match = (
+    [
+      ['tarte', 'sweet-tart-small'],
+      ['patisserie', 'cake-slice'],
+      ['viennoiserie', 'croissant'],
+      ['pain', 'bread-1'],
+      ['boulangerie', 'rolls'],
+      ['salade', 'salads'],
+      ['plat', 'salads'],
+      ['traiteur', 'salads'],
+      ['biscuit', 'cookies'],
+      ['cookie', 'cookies'],
+      ['quiche', 'savoury-tart'],
+      ['snack', 'savoury-tart'],
+    ] as const
+  ).find(([key]) => flat.includes(key))
+
+  return match ? `${import.meta.env.BASE_URL}img/${match[1]}.png` : null
+}
+
+function OfferStep({ draft, patch }: StepProps) {
+  // Le catalogue repris de l'ERP (`mar_offer_item`) : gammes saisonnières et
+  // produits avec leur famille. Vide tant que la reprise n'a pas tourné —
+  // l'écran le dit plutôt que de laisser trois colonnes muettes.
   const catalog = useAsync(() => api.listOfferItems(), [])
-  const [query, setQuery] = useState('')
 
   const catalogItems = catalog.data ?? []
-  const chosenIds = new Set(
+  const seasons = catalogItems.filter((item) => item.category === 'saison')
+  const products = catalogItems.filter((item) => item.category === 'produit')
+  const seasonIds = new Set(seasons.map((item) => item.id))
+  const productById = new Map(products.map((item) => [item.id, item]))
+
+  const familyOf = (item: OfferItem): string => item.detail ?? 'Autres'
+
+  // Familles du catalogue avec leur effectif, dans l'ordre servi (famille, nom).
+  const families: Array<{ name: string; count: number }> = []
+  for (const product of products) {
+    const name = familyOf(product)
+    const entry = families.find((candidate) => candidate.name === name)
+    if (entry) entry.count++
+    else families.push({ name, count: 1 })
+  }
+
+  const chosenSeasonId =
+    draft.offer_items.find(
+      (element) => element.offer_item_id !== null && seasonIds.has(element.offer_item_id),
+    )?.offer_item_id ?? null
+  const chosenSeason = seasons.find((item) => item.id === chosenSeasonId) ?? null
+
+  const checkedIds = new Set(
     draft.offer_items
-      .map((item) => item.offer_item_id)
-      .filter((id): id is number => id !== null),
+      .map((element) => element.offer_item_id)
+      .filter((id): id is number => id !== null && productById.has(id)),
   )
 
-  // Huit résultats suffisent à choisir ; au-delà, c'est la recherche qu'on
-  // affine, pas la liste qu'on fait défiler.
-  const needle = query.trim().toLowerCase()
-  const matches =
-    needle === ''
-      ? []
-      : catalogItems
-          .filter(
-            (item) =>
-              !chosenIds.has(item.id) &&
-              (item.name.toLowerCase().includes(needle) ||
-                (item.detail ?? '').toLowerCase().includes(needle)),
-          )
-          .slice(0, 8)
+  // Une famille est active dès qu'un de ses produits est coché : la cocher
+  // présélectionne tout, la décocher retire tout — et la reprise d'un
+  // brouillon retrouve cet état sans rien stocker de plus.
+  const activeFamilies = new Set(
+    [...checkedIds].map((id) => familyOf(productById.get(id) as OfferItem)),
+  )
+  const visibleProducts = products.filter((item) => activeFamilies.has(familyOf(item)))
 
-  const setItemLabel = (index: number, value: string) => {
-    const items = [...draft.offer_items]
-    items[index] = { ...items[index], label: value }
-    patch({ offer_items: items })
+  const pickSeason = (item: OfferItem) => {
+    const others = draft.offer_items.filter(
+      (element) => element.offer_item_id === null || !seasonIds.has(element.offer_item_id),
+    )
+    const wasActive = chosenSeasonId === item.id
+    patch({
+      offer_items: wasActive
+        ? others
+        : [...others, { offer_item_id: item.id, label: `Gamme ${seasonLabel(item.name)}` }],
+      // Le titre de l'offre suit la gamme : il n'est plus saisi à la main.
+      offer_title: wasActive ? '' : `Offre ${seasonLabel(item.name)}`,
+    })
   }
 
-  const addFromCatalog = (item: OfferItem) => {
-    patch({ offer_items: [...draft.offer_items, { offer_item_id: item.id, label: item.name }] })
-    setQuery('')
+  const toggleFamily = (name: string) => {
+    const familyProducts = products.filter((item) => familyOf(item) === name)
+    const ids = new Set(familyProducts.map((item) => item.id))
+    const others = draft.offer_items.filter(
+      (element) => element.offer_item_id === null || !ids.has(element.offer_item_id),
+    )
+    patch({
+      offer_items: activeFamilies.has(name)
+        ? others
+        : [
+            ...others,
+            ...familyProducts.map((item) => ({ offer_item_id: item.id, label: item.name })),
+          ],
+    })
   }
+
+  const toggleProduct = (item: OfferItem) => {
+    patch({
+      offer_items: checkedIds.has(item.id)
+        ? draft.offer_items.filter((element) => element.offer_item_id !== item.id)
+        : [...draft.offer_items, { offer_item_id: item.id, label: item.name }],
+    })
+  }
+
+  const selectAllVisible = () => {
+    const additions = visibleProducts
+      .filter((item) => !checkedIds.has(item.id))
+      .map((item) => ({ offer_item_id: item.id, label: item.name }))
+    if (additions.length > 0) patch({ offer_items: [...draft.offer_items, ...additions] })
+  }
+
+  const resetOffer = () =>
+    patch({ offer_items: [], offer_title: '', offer_template_id: null, offer_mechanic: '' })
 
   return (
     <>
       <h2>Offre</h2>
       <p className="muted">
-        Facultative : toutes les campagnes n’en portent pas. Elle court sur la période fixée à
-        l’étape 1 — seul l’horaire se précise ici.
+        Facultative : toutes les campagnes n’en portent pas. Composez-la comme en boutique —
+        saison, catégories, produits ; elle court sur la période fixée à l’étape 1, seul
+        l’horaire se précise ici.
       </p>
 
-      <h3 className="section-label">Modèle</h3>
-      <div className="choice-row">
-        {refs.offerTemplates.map((template) => (
-          <button
-            key={template.id}
-            type="button"
-            className={`choice-card${draft.offer_template_id === template.id ? ' is-on' : ''}`}
-            onClick={() =>
-              patch({
-                offer_template_id: draft.offer_template_id === template.id ? null : template.id,
-                offer_title: draft.offer_title === '' ? template.label : draft.offer_title,
-              })
-            }
-          >
-            <strong>{template.label}</strong>
-            {template.description ? <span className="muted">{template.description}</span> : null}
-          </button>
-        ))}
-      </div>
-
-      <h3 className="section-label">Contenu</h3>
-      <div className="filters__row">
-        <label className="field">
-          Intitulé
-          <input
-            type="text"
-            value={draft.offer_title}
-            placeholder="Menu Barbecue"
-            onChange={(e) => patch({ offer_title: e.target.value })}
-          />
-        </label>
-        <label className="field field--grow">
-          Mécanique
-          <input
-            type="text"
-            value={draft.offer_mechanic}
-            placeholder="Plat + boisson + dessert à 12 €"
-            onChange={(e) => patch({ offer_mechanic: e.target.value })}
-          />
-        </label>
-      </div>
-
-      {/* Les éléments se choisissent dans le catalogue repris de l'ERP ; la
-          saisie libre reste ouverte pour ce que le catalogue n'a pas
-          (mar_campaign_offer_item.offer_item_id reste alors NULL). */}
-      <ul className="line-list">
-        {draft.offer_items.map((item, index) => (
-          <li key={index}>
-            {item.offer_item_id !== null ? (
-              <span className="line-list__ref">
-                {item.label}
-                <span className="muted">
-                  {' — '}
-                  {catalogItems.find((entry) => entry.id === item.offer_item_id)?.detail ??
-                    'catalogue'}
-                </span>
-              </span>
-            ) : (
-              <input
-                type="text"
-                value={item.label}
-                placeholder="Élément de l’offre"
-                onChange={(e) => setItemLabel(index, e.target.value)}
-              />
-            )}
-            <button
-              type="button"
-              className="filter"
-              onClick={() =>
-                patch({ offer_items: draft.offer_items.filter((_, i) => i !== index) })
-              }
-            >
-              Retirer
-            </button>
-          </li>
-        ))}
-      </ul>
-
-      <div className="filters__row">
-        <label className="field field--grow">
-          Ajouter un produit du catalogue
-          <input
-            type="search"
-            value={query}
-            placeholder={
-              catalog.loading
-                ? 'Chargement du catalogue…'
-                : catalogItems.length === 0
-                  ? 'Catalogue vide — lancez la reprise ERP'
-                  : 'Rechercher : tarte, salade, cookie…'
-            }
-            disabled={catalog.loading || catalogItems.length === 0}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </label>
-        <button
-          type="button"
-          className="filter"
-          onClick={() =>
-            patch({ offer_items: [...draft.offer_items, { offer_item_id: null, label: '' }] })
-          }
-        >
-          + Élément libre
-        </button>
-      </div>
-
-      {matches.length > 0 ? (
-        <ul className="line-list">
-          {matches.map((item) => (
-            <li key={item.id}>
-              <button type="button" className="filter" onClick={() => addFromCatalog(item)}>
-                + {item.name}
-              </button>
-              <span className="muted">
-                {item.detail ?? '—'}
-                {item.price_amount !== null ? ` · ${formatEur(item.price_amount, 2)}` : ''}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {needle !== '' && matches.length === 0 && catalogItems.length > 0 ? (
-        <p className="muted">Aucune référence ne répond à « {query.trim()} ».</p>
-      ) : null}
       {catalog.error ? <p className="error">Catalogue indisponible : {catalog.error}</p> : null}
-      {!catalog.loading && !catalog.error && catalogItems.length === 0 ? (
+      {!catalog.loading && !catalog.error && products.length === 0 ? (
         <p className="muted">
-          Le catalogue produit est vide : lancez la reprise ERP depuis l'écran du vivier B2B pour
-          sélectionner de vraies références.
+          Le catalogue est vide : lancez la reprise ERP depuis l’écran du vivier B2B pour
+          composer l’offre sur les vraies gammes et les vrais produits.
         </p>
       ) : null}
+
+      <div className="offer-compose">
+        <section className="offer-col">
+          <h3 className="section-label">1 · Saison</h3>
+          <div className="offer-seasons">
+            {seasons.map((item) => {
+              const active = chosenSeasonId === item.id
+              const image = seasonImage(item.name)
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`season-pill${active ? ' is-on' : ''}`}
+                  aria-pressed={active}
+                  title={item.name}
+                  onClick={() => pickSeason(item)}
+                >
+                  {image !== null ? (
+                    <img className="season-pill__icon" src={image} alt="" />
+                  ) : (
+                    <span className="season-pill__icon" aria-hidden="true">
+                      {seasonLabel(item.name).charAt(0)}
+                    </span>
+                  )}
+                  {seasonLabel(item.name)}
+                </button>
+              )
+            })}
+          </div>
+        </section>
+
+        <section className="offer-col">
+          <h3 className="section-label">
+            2 · Catégories
+            {activeFamilies.size > 0 ? (
+              <span className="muted"> ({activeFamilies.size} sélectionnées)</span>
+            ) : null}
+          </h3>
+          <div className="family-tiles">
+            {families.map(({ name, count }) => {
+              const active = activeFamilies.has(name)
+              const image = familyImage(name)
+              return (
+                <button
+                  key={name}
+                  type="button"
+                  className={`family-tile${active ? ' is-on' : ''}`}
+                  aria-pressed={active}
+                  onClick={() => toggleFamily(name)}
+                >
+                  {active ? <span className="family-tile__badge">✓</span> : null}
+                  {image !== null ? (
+                    <img src={image} alt="" />
+                  ) : (
+                    <span className="family-tile__letter" aria-hidden="true">
+                      {name.charAt(0)}
+                    </span>
+                  )}
+                  <strong>{name}</strong>
+                  <span className="muted">
+                    {count} produit{count > 1 ? 's' : ''}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </section>
+
+        <section className="offer-col">
+          <h3 className="section-label">
+            3 · Produits
+            {checkedIds.size > 0 ? (
+              <span className="muted"> ({checkedIds.size} sélectionnés)</span>
+            ) : null}
+            {visibleProducts.length > 0 ? (
+              <button type="button" className="offer-selectall" onClick={selectAllVisible}>
+                Tout sélectionner
+              </button>
+            ) : null}
+          </h3>
+          {visibleProducts.length === 0 ? (
+            <p className="muted">Cochez une catégorie pour lister ses produits.</p>
+          ) : (
+            <div className="product-rows">
+              {visibleProducts.map((item) => {
+                const checked = checkedIds.has(item.id)
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="product-row"
+                    aria-pressed={checked}
+                    onClick={() => toggleProduct(item)}
+                  >
+                    <span className={`product-row__box${checked ? ' is-on' : ''}`} />
+                    {item.name}
+                    <span className="muted product-row__family">{familyOf(item)}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      </div>
+
+      <div className="offer-summary">
+        <strong>Votre offre :</strong>
+        <span>
+          {chosenSeason !== null ? seasonLabel(chosenSeason.name) : 'aucune saison'}
+          {' · '}
+          {activeFamilies.size} catégorie{activeFamilies.size > 1 ? 's' : ''}
+          {' · '}
+          {checkedIds.size} produit{checkedIds.size > 1 ? 's' : ''}
+        </span>
+        <button type="button" className="filter offer-summary__reset" onClick={resetOffer}>
+          Réinitialiser
+        </button>
+      </div>
 
       <h3 className="section-label">Horaire</h3>
       <div className="filters__row">
@@ -1798,9 +1917,9 @@ function ReviewStep({
     ],
     [
       'Offre',
-      draft.offer_title.trim() === ''
+      items.length === 0
         ? 'Aucune'
-        : `${draft.offer_title} · ${items.length} élément${items.length > 1 ? 's' : ''}`,
+        : `${draft.offer_title.trim() || `Offre ${draft.name.trim()}`} · ${items.length} élément${items.length > 1 ? 's' : ''}`,
     ],
     [
       'Horaire',

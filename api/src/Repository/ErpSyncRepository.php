@@ -130,6 +130,17 @@ final class ErpSyncRepository
     ];
 
     /**
+     * Gammes saisonnières de l'ERP (`product_availability_period`).
+     *
+     * @var array<string, list<string>>
+     */
+    private const SEASON_COLUMNS = [
+        'id'     => ['id', 'id_period', 'period_id'],
+        'name'   => ['name', 'label', 'nom', 'libelle'],
+        'active' => ['is_active', 'active', 'enabled', 'actif'],
+    ];
+
+    /**
      * Secteurs visés : les types de compte professionnel de l'ERP.
      *
      * @var array<string, list<string>>
@@ -203,6 +214,14 @@ final class ErpSyncRepository
             $result['products'] = ['error' => $failure->getMessage()];
         }
 
+        // Les gammes saisonnières habillent l'étape « Offre » ; même marge que
+        // le catalogue produit, et même indifférence à leur échec isolé.
+        try {
+            $result['seasons'] = $this->syncSeasons($auth);
+        } catch (Throwable $failure) {
+            $result['seasons'] = ['error' => $failure->getMessage()];
+        }
+
         $result['inventory'] = $this->inventory;
 
         return $result;
@@ -274,9 +293,13 @@ final class ErpSyncRepository
                     continue;
                 }
 
-                $familyId = isset($row['category']) ? (int) $row['category'] : 0;
-                $family   = trim((string) ($families[$familyId] ?? ''));
-                $skuRef   = 'erp-' . $row['id'];
+                // La famille d'affichage est l'ancêtre au millier (11101 →
+                // 11000 « Tartes ») : la catégorie feuille (« Tartissières -
+                // 12Ø ») ferait autant de rubriques que de diamètres de tarte.
+                $familyId  = isset($row['category']) ? (int) $row['category'] : 0;
+                $groupName = trim((string) ($families[intdiv($familyId, 1000) * 1000] ?? ''));
+                $family    = $groupName !== '' ? $groupName : trim((string) ($families[$familyId] ?? ''));
+                $skuRef    = 'erp-' . $row['id'];
 
                 $upsert->execute([
                     'sku_ref'      => $skuRef,
@@ -301,6 +324,96 @@ final class ErpSyncRepository
                 $retire = $connection->prepare(
                     "UPDATE mar_offer_item SET is_active = 0
                       WHERE category = 'produit' AND sku_ref LIKE 'erp-%'
+                        AND is_active = 1 AND sku_ref NOT IN ($placeholders)"
+                );
+                $retire->execute($seen);
+                $retired = $retire->rowCount();
+            }
+
+            $connection->commit();
+        } catch (Throwable $failure) {
+            $connection->rollBack();
+
+            throw $failure;
+        }
+
+        return [
+            'source'  => $schema . '.' . $table,
+            'columns' => $columns,
+            'read'    => count($rows),
+            'created' => $created,
+            'updated' => $updated,
+            'skipped' => $skipped,
+            'retired' => $retired,
+        ];
+    }
+
+    /**
+     * Gammes saisonnières de l'ERP → catalogue, en `category = 'saison'`.
+     *
+     * L'étape « Offre » les propose en tête de composition : une offre se
+     * rattache d'abord à une gamme (« Estivale », « Noël »…) avant de lister
+     * ses produits. Même mécanique rejouable que les produits, sur un
+     * `sku_ref` distinct (« erp-saison-<id> ») pour que les deux familles ne
+     * se marchent pas dessus.
+     *
+     * @return array<string, mixed>
+     */
+    public function syncSeasons(AuthContext $auth): array
+    {
+        [$schema, $table] = $this->source('MAR_ERP_SEASONS_TABLE', 'product_availability_period');
+        $columns = $this->resolve($schema, $table, self::SEASON_COLUMNS, ['id', 'name']);
+
+        $where = isset($columns['active'])
+            ? sprintf('`%1$s` IS NULL OR `%1$s` <> 0', $columns['active'])
+            : null;
+
+        $rows = $this->readSource($schema, $table, $columns, $where);
+
+        $connection = Database::connection();
+        $connection->beginTransaction();
+
+        try {
+            $upsert = $connection->prepare(
+                'INSERT INTO mar_offer_item
+                    (category, sku_ref, name, is_active, created_by)
+                 VALUES
+                    (\'saison\', :sku_ref, :name, 1, :created_by)
+                 ON DUPLICATE KEY UPDATE
+                    name      = VALUES(name),
+                    is_active = 1'
+            );
+
+            $created = 0;
+            $updated = 0;
+            $skipped = 0;
+            $seen    = [];
+
+            foreach ($rows as $row) {
+                $name = trim((string) ($row['name'] ?? ''));
+                if ($name === '') {
+                    $skipped++;
+                    continue;
+                }
+
+                $skuRef = 'erp-saison-' . $row['id'];
+
+                $upsert->execute([
+                    'sku_ref'    => $skuRef,
+                    'name'       => mb_substr($name, 0, 200),
+                    'created_by' => $auth->userId ?: null,
+                ]);
+
+                $upsert->rowCount() === 1 ? $created++ : $updated++;
+                $seen[] = $skuRef;
+            }
+
+            $retired = 0;
+            if ($seen !== []) {
+                $placeholders = implode(',', array_fill(0, count($seen), '?'));
+                $retire = $connection->prepare(
+                    "UPDATE mar_offer_item SET is_active = 0
+                      WHERE category = 'saison' AND sku_ref LIKE 'erp-saison-%'
                         AND is_active = 1 AND sku_ref NOT IN ($placeholders)"
                 );
                 $retire->execute($seen);

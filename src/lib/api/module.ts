@@ -797,6 +797,8 @@ export interface SyncResult {
   links?: SectorLinkReport
   /** Reprise du catalogue produit. Échoue seule, comme les rattachements. */
   products?: SyncReport | { error: string }
+  /** Reprise des gammes saisonnières, même marge que le catalogue. */
+  seasons?: SyncReport | { error: string }
 }
 
 export function syncErp(): Promise<SyncResult> {

@@ -260,9 +260,10 @@ export default function ProspectImport() {
                   ['Boutiques', sync.shops],
                   ['Comptes B2B', sync.prospects],
                   ['Secteurs', sync.sectors],
-                  // Le rapport du catalogue peut porter une erreur seule : la
-                  // ligne ne se montre que quand la reprise a réellement lu.
+                  // Ces rapports peuvent porter une erreur seule : la ligne ne
+                  // se montre que quand la reprise a réellement lu.
                   ['Produits', sync.products && 'read' in sync.products ? sync.products : undefined],
+                  ['Saisons', sync.seasons && 'read' in sync.seasons ? sync.seasons : undefined],
                 ] as Array<[string, SyncReport | undefined]>
               )
                 .filter((entry): entry is [string, SyncReport] => entry[1] !== undefined)
@@ -292,6 +293,10 @@ export default function ProspectImport() {
 
       {sync?.products && 'error' in sync.products ? (
         <p className="error">Catalogue produit non repris : {sync.products.error}</p>
+      ) : null}
+
+      {sync?.seasons && 'error' in sync.seasons ? (
+        <p className="error">Gammes saisonnières non reprises : {sync.seasons.error}</p>
       ) : null}
 
       {sync?.links && !sync.links.error ? (

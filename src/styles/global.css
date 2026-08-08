@@ -1208,6 +1208,228 @@ select:disabled {
   font-size: 12.5px;
 }
 
+/* Étape Offre : composition saison → catégories → produits */
+.offer-compose {
+  display: grid;
+  grid-template-columns: 230px 1fr 1.3fr;
+  gap: 14px;
+  align-items: start;
+  margin-top: 10px;
+}
+
+@media (max-width: 60rem) {
+  .offer-compose {
+    grid-template-columns: 1fr;
+  }
+}
+
+.offer-col {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: #fff;
+}
+
+.offer-seasons {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.season-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 12px 3px 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font: 500 12.5px 'Gotham', system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.season-pill:hover {
+  border-color: var(--accent);
+}
+
+.season-pill.is-on {
+  border-color: var(--accent);
+  background: var(--chip);
+}
+
+.season-pill__icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--paper);
+  object-fit: contain;
+  padding: 3px;
+  font-size: 12px;
+}
+
+.family-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.family-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 12px 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  font: 400 12px 'Gotham', system-ui, sans-serif;
+  text-align: center;
+  cursor: pointer;
+}
+
+.family-tile:hover {
+  border-color: var(--accent);
+}
+
+.family-tile.is-on {
+  border-color: var(--accent);
+  background: var(--chip);
+}
+
+.family-tile img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  background: var(--paper);
+  border-radius: 50%;
+  padding: 6px;
+}
+
+.family-tile__letter {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--paper);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.family-tile strong {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.family-tile .muted {
+  font-size: 10.5px;
+}
+
+.family-tile__badge {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+}
+
+.offer-selectall {
+  float: right;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: 500 11px 'Gotham', system-ui, sans-serif;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.product-rows {
+  display: flex;
+  flex-direction: column;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.product-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  padding: 7px 2px;
+  border: none;
+  border-bottom: 1px solid var(--row-line);
+  border-radius: 0;
+  background: none;
+  color: var(--ink);
+  font: 400 12.5px 'Gotham', system-ui, sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+
+.product-row:last-child {
+  border-bottom: none;
+}
+
+.product-row__family {
+  margin-left: auto;
+  font-size: 10.5px;
+}
+
+.product-row__box {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--faint);
+  border-radius: 4px;
+  background: #fff;
+}
+
+.product-row__box.is-on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.product-row__box.is-on::after {
+  content: '✓';
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.offer-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  font-size: 13px;
+}
+
+.offer-summary__reset {
+  margin-left: auto;
+}
+
 /* Champ occupant la largeur, pour les zones de texte et les curseurs */
 .field--block,
 .field--grow {
