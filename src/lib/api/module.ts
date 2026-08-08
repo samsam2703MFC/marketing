@@ -420,6 +420,8 @@ export interface CampaignDraft {
   /** Cadrage vertical du visuel, en pourcentage de la hauteur. */
   focal_point_y?: number | null
   shop_ids?: number[]
+  /** Objectifs de pièces par boutique (étape « Objectifs »), > 0 seulement. */
+  shop_targets?: Array<{ shop_id: number; target_pieces: number }>
   sector_ids?: number[]
   agency_ask_ids?: number[]
   b2b_option_ids?: number[]
@@ -462,6 +464,7 @@ export interface CampaignDraftState
   extends Omit<CampaignDraft, 'lever_targets' | 'channels' | 'offer'> {
   id: number
   shop_ids: number[]
+  shop_targets: Array<{ shop_id: number; target_pieces: number }>
   sector_ids: number[]
   agency_ask_ids: number[]
   b2b_option_ids: number[]
@@ -543,6 +546,54 @@ export interface OfferItem {
 /** Catalogue actif — la source de sélection de l'étape « Offre ». */
 export function listOfferItems(): Promise<OfferItem[]> {
   return request<OfferItem[]>(`${BASE}/offer-items`)
+}
+
+// ---------------------------------------------------------------------------
+// Ventes réelles — l'historique qui éclaire l'étape « Objectifs »
+// ---------------------------------------------------------------------------
+
+/** Ventes d'une boutique sur la période, par référence de l'offre. */
+export interface ShopSalesRow {
+  shop_id: number
+  shop_name: string
+  /** Pièces vendues par référence (`OfferItem.id`), absentes = zéro. */
+  quantities: Record<number, number>
+  total: number
+  /** Total de la période équivalente N-1, si le comparatif est demandé. */
+  total_previous: number | null
+}
+
+export interface SalesQuantities {
+  from: string
+  to: string
+  compare: boolean
+  products: Array<{ item_id: number; name: string }>
+  shops: ShopSalesRow[]
+  network: {
+    by_product: Record<number, number>
+    total: number
+    total_previous: number | null
+  }
+  /** Tables de caisse réellement lues, ou `null` si aucune. */
+  source: string | null
+  /** Historique indisponible (tables absentes…) : des zéros expliqués. */
+  warning: string | null
+}
+
+export function getSalesQuantities(params: {
+  itemIds: number[]
+  from: string
+  to: string
+  compare: boolean
+}): Promise<SalesQuantities> {
+  return request<SalesQuantities>(`${BASE}/sales/quantities`, {
+    query: {
+      item_ids: params.itemIds.join(','),
+      from: params.from,
+      to: params.to,
+      compare: params.compare ? 1 : 0,
+    },
+  })
 }
 
 export interface Promotion {

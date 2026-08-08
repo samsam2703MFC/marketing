@@ -1395,6 +1395,153 @@ select:disabled {
   margin-left: auto;
 }
 
+/* Étape Objectifs : historique des ventes et objectifs de pièces */
+.objectives {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: opacity 0.15s ease;
+}
+
+.objectives.is-refreshing {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.objectives__scroll {
+  max-height: 420px;
+  overflow: auto;
+}
+
+.objectives__scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--table-head);
+}
+
+.objectives__scroll tfoot td {
+  position: sticky;
+  bottom: 0;
+  background: var(--table-head);
+  font-weight: 500;
+  border-top: 1px solid var(--line);
+}
+
+.objectives__sort {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.objectives__goal input {
+  width: 84px;
+  padding: 4px 7px;
+  font: 600 12.5px 'Gotham', system-ui, sans-serif;
+  text-align: right;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.objectives__goal input.is-invalid {
+  border-color: var(--danger);
+}
+
+.objectives__goal .error {
+  display: block;
+  font-size: 10px;
+}
+
+.objectives__trend-up {
+  color: var(--green);
+  font-weight: 500;
+}
+
+.objectives__trend-down {
+  color: var(--danger);
+  font-weight: 500;
+}
+
+.objectives__trend-flat {
+  color: var(--muted);
+}
+
+.objectives__growth {
+  min-width: 0;
+}
+
+.objectives__growth-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.objectives__growth-input input {
+  width: 56px;
+  padding: 5px 8px;
+  font: 600 12.5px 'Gotham', system-ui, sans-serif;
+  text-align: right;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+/* Histogramme des ventes par magasin */
+.sales-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 10px 12px 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  overflow-x: auto;
+}
+
+.sales-chart__group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 52px;
+}
+
+.sales-chart__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 140px;
+}
+
+.sales-chart__bar {
+  width: 16px;
+  min-height: 2px;
+  border-radius: 4px 4px 0 0;
+  background: var(--accent);
+}
+
+.sales-chart__bar--previous {
+  background: var(--chip);
+  border: 1px solid var(--line);
+}
+
+.sales-chart__label {
+  max-width: 84px;
+  font-size: 10px;
+  color: var(--muted);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Champ occupant la largeur, pour les zones de texte et les curseurs */
 .field--block,
 .field--grow {

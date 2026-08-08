@@ -20,6 +20,7 @@ use Marketing\Controller\FundController;
 use Marketing\Controller\LeadController;
 use Marketing\Controller\NetworkController;
 use Marketing\Controller\ReferenceController;
+use Marketing\Controller\SalesController;
 use Marketing\Controller\SessionController;
 use Marketing\Support\Router;
 
@@ -31,6 +32,7 @@ return static function (Router $router): void {
     $session    = new SessionController();
     $catalog    = new CatalogController();
     $network    = new NetworkController();
+    $sales      = new SalesController();
 
     // Session — publique : elle ne dit que si l'appelant est authentifié.
     // Le front s'en sert pour savoir s'il est embarqué dans l'ERP, auquel cas
@@ -53,6 +55,9 @@ return static function (Router $router): void {
     $router->post('/api/v1/marketing/campaigns',                [$campaigns, 'store']);
     $router->patch('/api/v1/marketing/campaigns/{id}',          [$campaigns, 'update']);
     $router->delete('/api/v1/marketing/campaigns/{id}',         [$campaigns, 'destroy']);
+
+    // Ventes réelles — l'historique qui éclaire l'étape « Objectifs »
+    $router->get('/api/v1/marketing/sales/quantities', [$sales, 'quantities']);
 
     // Outils de campagne
     $router->get('/api/v1/marketing/offer-items',     [$catalog, 'offerItems']);

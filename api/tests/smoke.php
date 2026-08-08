@@ -383,6 +383,8 @@ $response  = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
     'ends_on'    => '2026-12-24',
     'budget_amount' => 5000,
     'shop_ids'   => [1, 2],
+    // Objectifs de pièces (étape « Objectifs ») : un posé, un absent.
+    'shop_targets' => [['shop_id' => 1, 'target_pieces' => 120]],
     // Budget nul volontairement : la colonne est NOT NULL, et activer un canal
     // sans montant est un geste courant de l'assistant.
     'channels'   => [['channel_id' => $channelId, 'budget_amount' => null]],
@@ -442,6 +444,34 @@ $count = static fn (string $table): int => (int) $pdo->query(
 )->fetchColumn();
 
 check('les deux boutiques sont rattachées', $count('mar_campaign_shop') === 2);
+check(
+    'l\'objectif de pièces est écrit sur sa boutique',
+    (int) $pdo->query(sprintf(
+        'SELECT target_pieces FROM mar_campaign_shop WHERE campaign_id = %d AND shop_id = 1',
+        $newId
+    ))->fetchColumn() === 120
+);
+check(
+    'la boutique sans objectif reste à NULL',
+    $pdo->query(sprintf(
+        'SELECT target_pieces FROM mar_campaign_shop WHERE campaign_id = %d AND shop_id = 2',
+        $newId
+    ))->fetchColumn() === null
+);
+
+// L'historique des ventes répond même sans tables de caisse : des zéros
+// expliqués, pas une erreur — l'étape doit rester utilisable partout.
+$response = call($router, 'GET', '/api/v1/marketing/sales/quantities', [
+    'item_ids' => (string) $catalogItemId,
+    'from'     => '2026-01-01',
+    'to'       => '2026-01-31',
+    'compare'  => '1',
+]);
+check('les ventes répondent sans tables de caisse', is_array($response['body']['shops'] ?? null));
+check(
+    'l\'absence d\'historique est expliquée',
+    is_string($response['body']['warning'] ?? null) && $response['body']['warning'] !== ''
+);
 check('le canal est activé sans budget', $count('mar_campaign_channel') === 1);
 check(
     'un canal sans budget vaut zéro',
@@ -690,11 +720,19 @@ $response = call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft',
     'sector_ids'    => [(int) $secteurs['horeca']],
     'channels'      => [['channel_id' => (int) $refs['channels'][1]['id'], 'budget_amount' => 250]],
     'retroplanning' => [['label' => 'Brief agence', 'days_before_launch' => 30]],
+    // Une campagne réseau peut porter des objectifs : la boutique objectivée
+    // est rattachée pour eux, sans faire de la campagne une campagne locale.
+    'shop_targets'  => [['shop_id' => 2, 'target_pieces' => 75]],
 ]);
 check('la reprise aboutit', $response['status'] === 200, 'statut ' . $response['status']);
 
 $etat = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon))['body'];
 check('le nom est repris', $etat['name'] === 'Brouillon repris');
+check(
+    'les objectifs de pièces reviennent avec le brouillon',
+    ($etat['shop_targets'] ?? null) === [['shop_id' => 2, 'target_pieces' => 75]],
+    json_encode($etat['shop_targets'] ?? null)
+);
 check(
     'les rattachements sont remplacés et non empilés',
     $etat['sector_ids'] === [(int) $secteurs['horeca']] && count($etat['channels']) === 1,

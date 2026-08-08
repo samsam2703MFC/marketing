@@ -4,6 +4,7 @@ import { useAsync, formatDate, formatEur } from '../../lib/useAsync'
 import type { CampaignDraft, ClientTarget, OfferItem, References } from '../../lib/api/module'
 import type { Role } from '../../lib/navigation'
 import { describeError } from '../../state/auth'
+import ObjectivesStep from './ObjectivesStep'
 import ProspectPanel from './ProspectPanel'
 import RangeCalendar from './RangeCalendar'
 
@@ -49,7 +50,7 @@ interface OfferElement {
 }
 
 /** Brouillon en cours de saisie. Les nombres restent des chaînes tant qu'on tape. */
-interface Draft {
+export interface Draft {
   // 1 — Type & cadrage
   name: string
   starts_on: string
@@ -68,6 +69,12 @@ interface Draft {
   offer_title: string
   offer_mechanic: string
   offer_items: OfferElement[]
+
+  // 3 — Objectifs (pièces par boutique ; la période n'est qu'une aide d'analyse)
+  shop_objectives: Record<number, string>
+  analysis_from: string
+  analysis_to: string
+  analysis_compare: boolean
 
   // 3 — Objectifs & budget
   budget_amount: string
@@ -93,6 +100,21 @@ interface Draft {
   create_crm_leads: boolean
 }
 
+/** `AAAA-MM-JJ` local — les bornes de la période d'analyse des objectifs. */
+function isoDate(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function today(): string {
+  return isoDate(new Date())
+}
+
+function monthStart(): string {
+  const now = new Date()
+
+  return isoDate(new Date(now.getFullYear(), now.getMonth(), 1))
+}
+
 function emptyDraft(refs: References, role: Role): Draft {
   return {
     name: '',
@@ -113,6 +135,12 @@ function emptyDraft(refs: References, role: Role): Draft {
     offer_title: '',
     offer_mechanic: '',
     offer_items: [],
+
+    shop_objectives: {},
+    // Période d'analyse par défaut : le mois en cours.
+    analysis_from: monthStart(),
+    analysis_to: today(),
+    analysis_compare: false,
 
     budget_amount: '',
     objective_coef_pct: '',
@@ -169,6 +197,15 @@ const STEPS: Step[] = [
     label: 'Offre',
     // L'offre reste facultative — toutes les campagnes n'en portent pas — et
     // n'a plus rien à valider : la composition est libre, l'horaire a disparu.
+    blocking: () => null,
+  },
+  {
+    key: 'objectives',
+    label: 'Objectifs',
+    // Jamais bloquante : les objectifs éclairent, ils n'obligent pas. Une
+    // campagne sans objectif de pièces reste légitime (offre facultative,
+    // budget facultatif — même logique), et la saisie ne laisse passer que
+    // des entiers positifs, il n'y a donc rien d'invalide à retenir.
     blocking: () => null,
   },
   {
@@ -352,7 +389,7 @@ export default function CampaignBuilder({
   // Le panneau des comptes n'a de sens que là où l'on choisit les secteurs, et
   // à la dernière étape où l'on décide de générer les leads.
   const showPanel =
-    draft.client_target !== 'b2c' && (step === 0 || step === 6)
+    draft.client_target !== 'b2c' && (step === 0 || step === 7)
 
   return (
     <>
@@ -401,11 +438,12 @@ export default function CampaignBuilder({
       <section className="card wizard-card">
         {step === 0 ? <FramingStep {...shared} role={role} shops={shops.data ?? []} /> : null}
         {step === 1 ? <OfferStep {...shared} /> : null}
-        {step === 2 ? <BudgetStep {...shared} /> : null}
-        {step === 3 ? <CommunicationStep {...shared} agencies={agencies.data ?? []} /> : null}
-        {step === 4 ? <PlanningStep {...shared} /> : null}
-        {step === 5 ? <ReviewStep {...shared} shops={shops.data ?? []} /> : null}
-        {step === 6 ? <LeadsStep {...shared} /> : null}
+        {step === 2 ? <ObjectivesStep {...shared} /> : null}
+        {step === 3 ? <BudgetStep {...shared} /> : null}
+        {step === 4 ? <CommunicationStep {...shared} agencies={agencies.data ?? []} /> : null}
+        {step === 5 ? <PlanningStep {...shared} /> : null}
+        {step === 6 ? <ReviewStep {...shared} shops={shops.data ?? []} /> : null}
+        {step === 7 ? <LeadsStep {...shared} /> : null}
       </section>
 
       {showPanel ? <ProspectPanel sectorIds={draft.sector_ids} /> : null}
@@ -511,6 +549,13 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
       label: item.label,
     })),
 
+    shop_objectives: Object.fromEntries(
+      (state.shop_targets ?? []).map((target) => [target.shop_id, String(target.target_pieces)]),
+    ),
+    analysis_from: base.analysis_from,
+    analysis_to: base.analysis_to,
+    analysis_compare: base.analysis_compare,
+
     budget_amount: state.budget_amount === undefined || state.budget_amount === null
       ? ''
       : String(state.budget_amount),
@@ -603,6 +648,12 @@ function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): Cam
     create_crm_leads: draft.create_crm_leads,
 
     shop_ids: draft.scope === 'LOCALE' ? draft.shop_ids : [],
+    // Seuls les objectifs réellement posés voyagent : zéro ou vide = aucun.
+    shop_targets: Object.entries(draft.shop_objectives)
+      .map(([shopId, value]) => ({ shop_id: Number(shopId), target_pieces: Number(value) }))
+      .filter(
+        (target) => Number.isInteger(target.target_pieces) && target.target_pieces > 0,
+      ),
     // Les secteurs ne concernent qu'une cible professionnelle : les envoyer
     // pour une campagne B2C peuplerait un entonnoir que rien n'alimente.
     sector_ids: draft.client_target === 'b2c' ? [] : draft.sector_ids,

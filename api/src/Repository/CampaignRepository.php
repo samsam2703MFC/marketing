@@ -584,16 +584,31 @@ final class CampaignRepository
         $questions = is_array($data['pos_questions'] ?? null) ? $data['pos_questions'] : [];
         $offer    = is_array($data['offer'] ?? null) ? $data['offer'] : null;
 
-        if ($shopIds !== []) {
+        // Objectifs de pièces par boutique (étape « Objectifs »). Une boutique
+        // objectivée participe de fait : une campagne réseau écrit donc aussi
+        // ses rattachements, uniquement pour porter les objectifs.
+        $targetsByShop = [];
+        foreach (is_array($data['shop_targets'] ?? null) ? $data['shop_targets'] : [] as $target) {
+            $shopId = (int) ($target['shop_id'] ?? 0);
+            $pieces = (int) ($target['target_pieces'] ?? 0);
+            if ($shopId > 0 && $pieces > 0) {
+                $targetsByShop[$shopId] = $pieces;
+            }
+        }
+
+        $shopRows = array_values(array_unique([...$shopIds, ...array_keys($targetsByShop)]));
+
+        if ($shopRows !== []) {
             $statement = $connection->prepare(
-                'INSERT INTO mar_campaign_shop (campaign_id, shop_id, created_by)
-                 VALUES (:campaign_id, :shop_id, :created_by)'
+                'INSERT INTO mar_campaign_shop (campaign_id, shop_id, target_pieces, created_by)
+                 VALUES (:campaign_id, :shop_id, :target_pieces, :created_by)'
             );
-            foreach ($shopIds as $shopId) {
+            foreach ($shopRows as $shopId) {
                 $statement->execute([
-                    'campaign_id' => $campaignId,
-                    'shop_id'     => $shopId,
-                    'created_by'  => $auth->userId,
+                    'campaign_id'   => $campaignId,
+                    'shop_id'       => $shopId,
+                    'target_pieces' => $targetsByShop[$shopId] ?? null,
+                    'created_by'    => $auth->userId,
                 ]);
             }
         }
@@ -1031,6 +1046,12 @@ final class CampaignRepository
         );
         $channels->execute(['id' => $id]);
 
+        $shopTargets = Database::connection()->prepare(
+            'SELECT shop_id, target_pieces FROM mar_campaign_shop
+              WHERE campaign_id = :id AND target_pieces IS NOT NULL'
+        );
+        $shopTargets->execute(['id' => $id]);
+
         $questions = Database::connection()->prepare(
             'SELECT label, answer_type, options, is_required
                FROM mar_campaign_pos_question WHERE campaign_id = :id ORDER BY sort_order'
@@ -1071,6 +1092,13 @@ final class CampaignRepository
             'focal_point_y'      => $asset === false ? 50 : (int) $asset['focal_point_y'],
 
             'shop_ids'       => $ids('SELECT shop_id FROM mar_campaign_shop WHERE campaign_id = :id'),
+            'shop_targets'   => array_map(
+                static fn (array $row): array => [
+                    'shop_id'       => (int) $row['shop_id'],
+                    'target_pieces' => (int) $row['target_pieces'],
+                ],
+                $shopTargets->fetchAll()
+            ),
             'sector_ids'     => $ids('SELECT sector_id FROM mar_campaign_b2b_sector WHERE campaign_id = :id'),
             'agency_ask_ids' => $ids('SELECT ask_id FROM mar_campaign_agency_ask WHERE campaign_id = :id'),
             'b2b_option_ids' => $ids('SELECT option_id FROM mar_campaign_b2b_option WHERE campaign_id = :id'),
