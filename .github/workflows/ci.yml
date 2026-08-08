@@ -363,8 +363,14 @@ jobs:
           # Pointeur vers la configuration : il ne contient qu'un chemin, aucun
           # secret. Nécessaire parce que le parent de DEPLOY_DIR est ici la racine
           # web elle-même — y poser le .env le rendrait téléchargeable.
+          # 644, et non le 600 qu'imposerait l'umask de cette étape : le pointeur
+          # ne contient qu'un chemin, mais PHP tourne sous www-data et doit
+          # pouvoir le lire. En 600 appartenant au compte de déploiement, il
+          # devient illisible — la configuration paraît alors introuvable alors
+          # que le .env lui-même est parfaitement accessible.
           printf '%s\n' "$CONFIG_DIR/.env" > .env-path
-          $PRE rsync -a -e "ssh $SSH_OPTS" .env-path "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/api/.env-path"
+          $PRE rsync -a --chmod=644 -e "ssh $SSH_OPTS" .env-path "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/api/.env-path"
+          $SSH_CMD $SSH_OPTS "$SSH_USER@$SSH_HOST" "chmod 644 '$DEPLOY_DIR/api/.env-path'"
           rm -f .env-path
 
       - name: Appliquer les migrations
@@ -460,6 +466,18 @@ jobs:
           # et refuse l'accès. Un 404 dirait que la réécriture ne s'applique pas.
           check '/'                              '200'     "le front n'est pas servi"
           check '/api/v1/marketing/session'      '200'     "la réécriture vers api/public/index.php ne s'applique pas"
+
+          # /session expose config_found : sans ce contrôle, un fichier de
+          # configuration jamais lu passe inaperçu jusqu'au premier écran qui
+          # interroge la base, et se manifeste alors en 500 sans lien apparent.
+          cfg=$($SSH_CMD $SSH_OPTS -o BatchMode=yes "$SSH_USER@$SSH_HOST" \
+            "curl -s http://localhost$URL_PATH/api/v1/marketing/session" 2>/dev/null | grep -o '\"config_found\":[a-z]*' || true)
+          echo "  $cfg"
+          case "$cfg" in
+            *false*)
+              echo "::error title=Configuration illisible::L'API ne trouve aucun fichier de configuration. Vérifiez que api/.env-path et le .env sont lisibles par www-data."
+              fail=1 ;;
+          esac
           check '/api/v1/marketing/references'   '200 401' "l'API ne répond pas correctement"
           check '/.env'                          '403 404' "le fichier de configuration est exposé"
           check '/db/migrate.php'                '403 404' "les migrations sont exposées"
