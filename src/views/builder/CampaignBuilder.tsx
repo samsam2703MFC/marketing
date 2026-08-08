@@ -910,17 +910,6 @@ function FramingStep({
         )
       ) : null}
 
-      <h3 className="section-label">Ton</h3>
-      <ChipList
-        items={refs.tones.map((tone) => ({ id: tone.id, label: tone.label }))}
-        selected={refs.tones.filter((t) => t.code === draft.tone).map((t) => t.id)}
-        onToggle={(id) => {
-          const picked = refs.tones.find((tone) => tone.id === id)
-          // Choix unique : recliquer sur le ton retenu le retire.
-          patch({ tone: picked && picked.code !== draft.tone ? picked.code : '' })
-        }}
-      />
-
       <h3 className="section-label">Cible client</h3>
       <div className="choice-row">
         {CLIENT_TARGETS.map((target) => (
@@ -1512,6 +1501,21 @@ function CommunicationStep({
           </div>
         </div>
       ))}
+
+      {/* Le ton rejoint la communication, comme le brief d'agence : l'étape 1
+          décide ce que la campagne est, celle-ci comment elle parle. « Festif »
+          ou « Premium » n'engage ni le périmètre ni la cible — cela engage la
+          création, qui se décide ici, à côté de ceux qui la produiront. */}
+      <h3 className="section-label">Ton</h3>
+      <ChipList
+        items={refs.tones.map((tone) => ({ id: tone.id, label: tone.label }))}
+        selected={refs.tones.filter((t) => t.code === draft.tone).map((t) => t.id)}
+        onToggle={(id) => {
+          const picked = refs.tones.find((tone) => tone.id === id)
+          // Choix unique : recliquer sur le ton retenu le retire.
+          patch({ tone: picked && picked.code !== draft.tone ? picked.code : '' })
+        }}
+      />
 
       {/* L'agence était à l'étape « Type & cadrage », entre la cible client et
           la portée. On y décide ce que la campagne est ; ce qu'on demande à
