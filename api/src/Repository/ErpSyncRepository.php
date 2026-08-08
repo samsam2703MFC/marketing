@@ -61,7 +61,12 @@ final class ErpSyncRepository
         // `id_franchisee_shop` / `id_shop` : cet ERP préfixe ses clés du nom de
         // la table, convention répandue et incompatible avec un simple `id`.
         'id'        => ['id', 'id_franchisee_shop', 'id_shop', 'shop_id'],
-        'name'      => ['name', 'label', 'shop_name', 'nom', 'libelle'],
+        // `representative_name` avant `name` : sur cette installation, `name`
+        // porte la raison sociale du franchisé — « Berdiff s.a. » — là où le
+        // nom d'usage de la boutique est dans `representative_name`. La liste
+        // garde `name` en repli, pour les lignes où le premier est vide.
+        'name'      => ['representative_name', 'name', 'label', 'shop_name', 'nom', 'libelle'],
+        'fallback_name' => ['name', 'label', 'nom'],
         'code'      => ['code', 'slug', 'reference'],
         'city'      => ['city', 'ville', 'town'],
         'is_active' => ['is_active', 'active', 'enabled', 'actif'],
@@ -119,6 +124,30 @@ final class ErpSyncRepository
     public function inventory(): array
     {
         return $this->inventory;
+    }
+
+    /**
+     * Colonnes d'une table de l'ERP, sans rien en lire ni y écrire.
+     *
+     * Sert à découvrir une table dont on connaît le nom mais pas la structure —
+     * `b2b_client_type`, par exemple — avant d'écrire le code qui l'exploitera.
+     * Deviner ses colonnes coûterait un aller-retour de déploiement par
+     * hypothèse ; les demander en coûte un seul.
+     *
+     * @return list<string>
+     */
+    public function describe(string $table): array
+    {
+        [$schema, $name] = $this->source('MAR_ERP_DESCRIBE_TABLE', $table);
+
+        $statement = Database::connection()->prepare(
+            'SELECT column_name FROM information_schema.columns
+              WHERE table_schema = :schema AND table_name = :table
+              ORDER BY ordinal_position'
+        );
+        $statement->execute(['schema' => $schema, 'table' => $name]);
+
+        return $statement->fetchAll(PDO::FETCH_COLUMN);
     }
 
     /**
@@ -317,7 +346,14 @@ final class ErpSyncRepository
                     continue;
                 }
 
+                // Le nom d'usage, à défaut la raison sociale : une boutique
+                // sans nom disparaîtrait du choix de périmètre, alors qu'elle
+                // existe et vend.
                 $name = trim((string) ($row['name'] ?? ''));
+                if ($name === '') {
+                    $name = trim((string) ($row['fallback_name'] ?? ''));
+                }
+
                 if ($name === '') {
                     $skipped++;
                     continue;

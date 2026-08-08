@@ -202,6 +202,18 @@ foreach ($inventory as $table => $detail) {
     printf("  colonnes présentes    : %s\n", implode(', ', $detail['disponibles']));
 }
 
+// Tables à inspecter sans les exploiter encore : on demande leur structure
+// plutôt que de la supposer, ce qui coûte un seul aller-retour au lieu d'un
+// par hypothèse.
+foreach (['b2b_client_type'] as $table) {
+    $columns = $repository->describe($table);
+    printf(
+        "\n%s\n  colonnes présentes    : %s\n",
+        $table,
+        $columns === [] ? 'table absente' : implode(', ', $columns)
+    );
+}
+
 $prospects = (int) $pdo->query(
     "SELECT COUNT(*) FROM mar_b2b_prospect WHERE source = 'ERP'"
 )->fetchColumn();

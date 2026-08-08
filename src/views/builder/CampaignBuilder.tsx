@@ -4,6 +4,7 @@ import { useAsync, formatDate, formatEur } from '../../lib/useAsync'
 import type { CampaignDraft, ClientTarget, References } from '../../lib/api/module'
 import type { Role } from '../../lib/navigation'
 import { describeError } from '../../state/auth'
+import ProspectPanel from './ProspectPanel'
 
 /**
  * Assistant de création de campagne, en sept étapes.
@@ -241,6 +242,11 @@ export default function CampaignBuilder({
 
   const shared = { draft, patch, refs }
 
+  // Le panneau des comptes n'a de sens que là où l'on choisit les secteurs, et
+  // à la dernière étape où l'on décide de générer les leads.
+  const showPanel =
+    draft.client_target !== 'b2c' && (step === 0 || step === 6)
+
   return (
     <>
       <button type="button" className="filter back" onClick={onCancel}>
@@ -271,6 +277,7 @@ export default function CampaignBuilder({
           arrière pour vérifier un choix, et rend visible ce qui est acquis. */}
       {step > 0 ? <RunningRecap {...shared} shops={shops.data ?? []} /> : null}
 
+      <div className={`wizard-layout${showPanel ? ' has-panel' : ''}`}>
       <section className="card wizard-card">
         {step === 0 ? <FramingStep {...shared} role={role} shops={shops.data ?? []} /> : null}
         {step === 1 ? <OfferStep {...shared} /> : null}
@@ -280,6 +287,9 @@ export default function CampaignBuilder({
         {step === 5 ? <ReviewStep {...shared} shops={shops.data ?? []} /> : null}
         {step === 6 ? <LeadsStep {...shared} /> : null}
       </section>
+
+      {showPanel ? <ProspectPanel sectorIds={draft.sector_ids} /> : null}
+      </div>
 
       {blocking ? <p className="muted wizard__hint">{blocking}</p> : null}
       {failure ? <p className="error">{failure}</p> : null}
@@ -421,7 +431,7 @@ function ChipList({
           type="button"
           className={`filter${selected.includes(item.id) ? ' is-on' : ''}`}
           onClick={() => onToggle(item.id)}
-          title={item.hint}
+          title={item.hint ?? item.label}
         >
           {item.label}
         </button>
@@ -473,7 +483,9 @@ function RunningRecap({
       {entries.map(([key, value]) => (
         <li key={key}>
           <span className="muted">{key}</span>
-          <strong>{value}</strong>
+          {/* Le nom entier reste accessible : tronquer à l'affichage ne doit
+              pas revenir à le cacher. */}
+          <strong title={value}>{value}</strong>
         </li>
       ))}
     </ul>
@@ -655,12 +667,6 @@ function FramingStep({
             selected={draft.sector_ids}
             onToggle={(id) => patch({ sector_ids: toggle(draft.sector_ids, id) })}
           />
-          <p className="muted wizard__hint">
-            {refs.b2bSectors
-              .filter((sector) => draft.sector_ids.includes(sector.id))
-              .reduce((sum, sector) => sum + sector.estimated_leads_count, 0)}{' '}
-            comptes estimés sur les secteurs retenus
-          </p>
         </>
       ) : null}
 

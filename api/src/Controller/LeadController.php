@@ -50,6 +50,15 @@ final class LeadController
         return Response::data($this->prospects->summaryBySector());
     }
 
+    /** Comptes du vivier pour les secteurs demandés. */
+    public function prospects(Request $request): array
+    {
+        $raw = $request->queryString('sector_ids') ?? '';
+        $ids = array_values(array_filter(array_map('intval', explode(',', $raw)), static fn (int $v): bool => $v > 0));
+
+        return Response::data($this->prospects->listBySectors(AuthContext::current(), $ids));
+    }
+
     /**
      * Import du vivier B2B.
      *

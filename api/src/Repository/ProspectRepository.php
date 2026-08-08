@@ -52,6 +52,55 @@ final class ProspectRepository
     }
 
     /**
+     * Comptes du vivier, filtrés par secteur.
+     *
+     * Sert le panneau qui accompagne le choix des secteurs dans l'assistant :
+     * annoncer « 184 comptes » sans pouvoir en nommer un seul n'engage à rien.
+     * La boutique de rattachement y figure parce que c'est elle qui appellera.
+     *
+     * @param  list<int> $sectorIds
+     * @return list<array<string,mixed>>
+     */
+    public function listBySectors(AuthContext $auth, array $sectorIds, int $limit = 200): array
+    {
+        if ($sectorIds === []) {
+            return [];
+        }
+
+        [$scopeSql, $bindings] = Scope::shopFilter($auth, 'p.shop_id');
+        [$placeholders, $sectorBindings] = Database::inClause($sectorIds, 'sector');
+
+        // La limite est interpolée après bornage : MySQL refuse un paramètre
+        // lié en LIMIT quand l'émulation des requêtes préparées est coupée.
+        $limit = max(1, min(500, $limit));
+
+        $statement = Database::connection()->prepare(sprintf(
+            'SELECT p.id, p.company_name, p.contact_name, p.contact_email, p.city,
+                    p.postal_code, p.shop_id, s.name AS shop_name, sec.label AS sector_label
+               FROM mar_b2b_prospect p
+               LEFT JOIN mar_shop s       ON s.id = p.shop_id
+               LEFT JOIN mar_b2b_sector sec ON sec.id = p.sector_id
+              WHERE p.is_active = 1
+                AND p.sector_id IN (%s)
+                AND (p.shop_id IS NULL OR %s)
+              ORDER BY p.company_name
+              LIMIT %d',
+            $placeholders,
+            $scopeSql,
+            $limit
+        ));
+        $statement->execute($sectorBindings + $bindings);
+
+        $rows = $statement->fetchAll();
+        foreach ($rows as &$row) {
+            $row['id']      = (int) $row['id'];
+            $row['shop_id'] = $row['shop_id'] === null ? null : (int) $row['shop_id'];
+        }
+
+        return $rows;
+    }
+
+    /**
      * Import du vivier.
      *
      * Rejouable : une ligne portant une référence déjà connue met le compte à

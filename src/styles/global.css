@@ -1400,3 +1400,117 @@ table select,
 .field--wide input {
   width: 100%;
 }
+
+/* Assistant : formulaire à gauche, comptes visés à droite.
+   La colonne n'apparaît que lorsqu'elle a quelque chose à montrer — une
+   gouttière vide serait pire que pas de colonne du tout. */
+.wizard-layout {
+  display: grid;
+  gap: 1rem;
+  align-items: start;
+}
+
+.wizard-layout.has-panel {
+  grid-template-columns: minmax(0, 1fr) 20rem;
+}
+
+/* Sous 1100 px, la colonne passe dessous : à côté, elle réduirait le
+   formulaire au point de faire déborder les grilles de cartes. */
+@media (max-width: 1100px) {
+  .wizard-layout.has-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.side-panel {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1.1rem 1.25rem;
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 3rem);
+  overflow: auto;
+}
+
+.side-panel h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.side-panel p {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+}
+
+.side-panel__list {
+  list-style: none;
+  margin: 0.7rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.side-panel__list li {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--row-line);
+}
+
+.side-panel__list li:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+/* Raison sociale et enseigne peuvent être longues : on tronque à l'affichage,
+   le nom entier restant dans l'infobulle. Laisser filer casserait la colonne. */
+.side-panel__list strong,
+.side-panel__list .muted {
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side-panel__list .muted {
+  font-size: 0.76rem;
+}
+
+/* Noms de boutique longs.
+   L'ERP donne des enseignes comme « L'Atelier By Sombreffe — Zoning de la
+   Basse Sambre » là où le module attendait « Namur ». Sans borne, une pastille
+   de périmètre occupe une ligne entière et le bandeau de rappel pousse la mise
+   en page hors de l'écran. On tronque à l'affichage, jamais en base, et le nom
+   entier reste dans l'infobulle. */
+.wizard-card .filters__row > .filter {
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recap-strip li {
+  min-width: 0;
+  max-width: 18rem;
+}
+
+.recap-strip strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brief__cell {
+  min-width: 0;
+}
+
+.brief__cell strong {
+  overflow-wrap: anywhere;
+}

@@ -601,6 +601,25 @@ export interface SectorAvailability {
   available: number
 }
 
+/** Un compte du vivier, tel que le panneau de l'assistant l'affiche. */
+export interface Prospect {
+  id: number
+  company_name: string
+  contact_name: string | null
+  contact_email: string | null
+  city: string | null
+  postal_code: string | null
+  shop_id: number | null
+  shop_name: string | null
+  sector_label: string | null
+}
+
+export function listProspects(sectorIds: number[]): Promise<Prospect[]> {
+  return request<Prospect[]>(`${BASE}/b2b/prospects`, {
+    query: { sector_ids: sectorIds.join(',') },
+  })
+}
+
 export function getSectorAvailability(): Promise<SectorAvailability[]> {
   return request<SectorAvailability[]>(`${BASE}/b2b/sectors`)
 }

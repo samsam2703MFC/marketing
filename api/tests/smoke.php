@@ -870,6 +870,36 @@ check(
     ))->fetchColumn() === 0
 );
 
+// --- Comptes visés par secteur ---------------------------------------------
+// Le panneau de l'assistant montre les comptes réels du vivier. L'étape
+// n'affichait qu'un chiffre de cadrage — « 184 comptes » — sans pouvoir en
+// nommer un seul, et un chiffre qu'on ne peut pas ouvrir n'engage à rien.
+echo "\nComptes visés par secteur\n";
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+$officesId = (int) array_column($refs['b2bSectors'], 'id', 'code')['offices'];
+$pdo->exec(sprintf('UPDATE mar_b2b_prospect SET sector_id = %d WHERE sector_id IS NULL', $officesId));
+
+$response = call($router, 'GET', '/api/v1/marketing/b2b/prospects', ['sector_ids' => (string) $officesId]);
+check('les comptes du secteur remontent', $response['status'] === 200 && $response['body'] !== []);
+check('chacun porte sa boutique référente', array_key_exists('shop_name', $response['body'][0] ?? []));
+
+$response = call($router, 'GET', '/api/v1/marketing/b2b/prospects', ['sector_ids' => '']);
+check('sans secteur, la liste est vide', $response['body'] === []);
+
+$response = call($router, 'GET', '/api/v1/marketing/b2b/prospects', ['sector_ids' => '999999']);
+check('un secteur inconnu ne renvoie rien', $response['body'] === []);
+
+// Le périmètre s'applique : un franchisé ne consulte pas les comptes du voisin.
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+$response = call($router, 'GET', '/api/v1/marketing/b2b/prospects', ['sector_ids' => (string) $officesId]);
+$foreign  = array_filter(
+    $response['body'],
+    static fn (array $p): bool => $p['shop_id'] !== null && $p['shop_id'] !== 1
+);
+check('aucun compte d\'une autre boutique', $foreign === [], count($foreign) . ' fuite(s)');
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
 // --- Reprise depuis l'ERP ---------------------------------------------------
 // Les boutiques et les comptes professionnels appartiennent à l'ERP : on lit
 // ses tables, on ne les double pas. Il n'y a donc pas de jeu d'essai à monter

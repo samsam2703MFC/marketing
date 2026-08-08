@@ -65,6 +65,7 @@ return static function (Router $router): void {
 
     // Vivier B2B : c'est lui qui alimente la génération des leads.
     $router->get('/api/v1/marketing/b2b/sectors',           [$leads, 'sectorSummary']);
+    $router->get('/api/v1/marketing/b2b/prospects',         [$leads, 'prospects']);
     $router->post('/api/v1/marketing/b2b/prospects/import', [$leads, 'importProspects']);
 
     // Reprise depuis l'ERP : boutiques et clients marqués professionnels.
