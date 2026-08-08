@@ -75,6 +75,8 @@ export interface Draft {
   analysis_from: string
   analysis_to: string
   analysis_compare: boolean
+  /** Progression par produit, en %. Vide = suit la progression générale. */
+  product_growth: Record<number, string>
 
   // 3 — Objectifs & budget
   budget_amount: string
@@ -141,6 +143,7 @@ function emptyDraft(refs: References, role: Role): Draft {
     analysis_from: monthStart(),
     analysis_to: today(),
     analysis_compare: false,
+    product_growth: {},
 
     budget_amount: '',
     objective_coef_pct: '',
@@ -555,6 +558,8 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
     analysis_from: base.analysis_from,
     analysis_to: base.analysis_to,
     analysis_compare: base.analysis_compare,
+    // Aide au calcul, pas une donnée de campagne : elle ne se relit pas.
+    product_growth: {},
 
     budget_amount: state.budget_amount === undefined || state.budget_amount === null
       ? ''

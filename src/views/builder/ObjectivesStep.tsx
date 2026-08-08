@@ -59,6 +59,18 @@ function evolution(total: number, previous: number | null): { text: string; tone
   }
 }
 
+/**
+ * Part des tickets contenant le produit. Sans ticket sur la période, la
+ * question n'a pas de réponse : « — » plutôt qu'un zéro trompeur.
+ */
+function penetration(withProduct: number, tickets: number): string {
+  if (tickets === 0) return '—'
+
+  const pct = (withProduct / tickets) * 100
+
+  return `${pct >= 10 ? Math.round(pct) : pct.toFixed(1).replace('.', ',')} %`
+}
+
 type SortKey = 'name' | 'total'
 
 export default function ObjectivesStep({
@@ -132,28 +144,54 @@ export default function ObjectivesStep({
     patch({ shop_objectives: { ...draft.shop_objectives, [shopId]: value } })
   }
 
+  /** Pourcentage exploitable, ou zéro : une saisie en cours ne fausse rien. */
+  const readPct = (value: string): number =>
+    /^-?\d+$/.test(value.trim()) ? Number(value.trim()) : 0
+
+  /**
+   * Objectif de chaque boutique : son historique produit par produit, chacun
+   * majoré de sa propre progression — celle du produit s'il en porte une, la
+   * générale sinon. L'arrondi vient à la fin, sur le total de la boutique :
+   * arrondir chaque produit d'abord accumulerait sept erreurs sur sept lignes.
+   */
+  const computeObjectives = (
+    growths: Record<number, string>,
+    general: string,
+  ): Record<number, string> => {
+    if (data === null) return draft.shop_objectives
+
+    return Object.fromEntries(
+      data.shops.map((shop) => {
+        const total = data.products.reduce((sum, product) => {
+          const own = growths[product.item_id]
+          const pct = readPct(own !== undefined && own.trim() !== '' ? own : general)
+
+          return sum + (shop.quantities[product.item_id] ?? 0) * (1 + pct / 100)
+        }, 0)
+
+        return [shop.shop_id, String(Math.max(0, Math.round(total)))]
+      }),
+    )
+  }
+
+  /** Progression du produit : la sienne, ou rien — le champ montre la générale. */
+  const growthOf = (itemId: number): string => draft.product_growth[itemId] ?? ''
+
+  const setProductGrowth = (itemId: number, value: string) => {
+    const next = { ...draft.product_growth, [itemId]: value }
+    patch({ product_growth: next, shop_objectives: computeObjectives(next, growthPct) })
+  }
+
   /** Pré-remplit chaque objectif avec les pièces réellement vendues. */
   const copyHistory = () => {
     if (data === null) return
-    patch({
-      shop_objectives: Object.fromEntries(
-        data.shops.map((shop) => [shop.shop_id, String(shop.total)]),
-      ),
-    })
+    patch({ product_growth: {}, shop_objectives: computeObjectives({}, '0') })
   }
 
-  /** Historique × (1 + p %), arrondi à l'entier, jamais négatif. */
+  /** La progression générale s'applique partout : les réglages produit cèdent. */
   const applyGrowth = () => {
     if (data === null || !/^-?\d+$/.test(growthPct.trim())) return
-    const factor = 1 + Number(growthPct.trim()) / 100
-    patch({
-      shop_objectives: Object.fromEntries(
-        data.shops.map((shop) => [
-          shop.shop_id,
-          String(Math.max(0, Math.round(shop.total * factor))),
-        ]),
-      ),
-    })
+    patch({ product_growth: {}, shop_objectives: computeObjectives({}, growthPct) })
   }
 
   const objectivesTotal = Object.values(draft.shop_objectives).reduce(
@@ -257,91 +295,137 @@ export default function ObjectivesStep({
             </p>
           ) : null}
 
-          <div className="filters__row">
+          {/* Rangée d'outils à part : dans les rangées de filtres de
+              l'assistant, un champ porte son étiquette au-dessus, ce qui
+              décalait ces contrôles d'une demi-hauteur par rapport aux
+              pastilles voisines. Ici tout est aligné sur une même ligne. */}
+          <div className="objectives__tools">
             <button type="button" className="filter" onClick={copyHistory}>
               Reprendre l’historique
             </button>
-            <label className="field objectives__growth">
-              Progression
-              <span className="objectives__growth-input">
+            <span className="objectives__general">
+              Progression générale
+              <span className="objectives__pct">
                 <input
                   value={growthPct}
                   inputMode="numeric"
                   onChange={(e) => setGrowthPct(e.target.value)}
-                  aria-label="Progression en pourcentage"
+                  aria-label="Progression générale en pourcentage"
                 />
                 %
               </span>
-            </label>
+            </span>
             <button
               type="button"
               className="filter"
               disabled={!/^-?\d+$/.test(growthPct.trim())}
               onClick={applyGrowth}
             >
-              Appliquer à l’historique
+              Appliquer à tous les produits
             </button>
             {sales.loading ? <span className="muted">Actualisation…</span> : null}
           </div>
 
           <div className="table-card">
             <div className="table-scroll objectives__scroll">
-              <table>
+              {/* Axes inversés : les produits en lignes, les magasins en
+                  colonnes. Les noms de produits — « Bûche cheesecake &
+                  fruits des bois - passion - 4/6 personnes » — tenaient mal
+                  en en-tête de colonne, où ils s'empilaient sur trois lignes
+                  et poussaient le tableau hors du cadre. */}
+              <table className="objectives__table">
                 <thead>
                   <tr>
-                    <th>
-                      <button type="button" className="objectives__sort" onClick={() => toggleSort('name')}>
-                        Magasin{sortMark('name')}
-                      </button>
+                    <th className="objectives__corner">
+                      Produit
+                      <span className="objectives__sorts">
+                        Magasins :
+                        <button
+                          type="button"
+                          className={sortKey === 'name' ? 'objectives__sort is-on' : 'objectives__sort'}
+                          onClick={() => toggleSort('name')}
+                        >
+                          A-Z{sortMark('name')}
+                        </button>
+                        <button
+                          type="button"
+                          className={sortKey === 'total' ? 'objectives__sort is-on' : 'objectives__sort'}
+                          onClick={() => toggleSort('total')}
+                        >
+                          Ventes{sortMark('total')}
+                        </button>
+                      </span>
                     </th>
-                    {data.products.map((product) => (
-                      <th key={product.item_id} className="num">
-                        {product.name}
+                    {sortedShops.map((shop) => (
+                      <th key={shop.shop_id} className="num objectives__shop">
+                        {shop.shop_name}
+                        <span className="objectives__tickets">
+                          {shop.tickets.toLocaleString('fr-BE')} ticket
+                          {shop.tickets > 1 ? 's' : ''}
+                        </span>
                       </th>
                     ))}
-                    <th className="num">
-                      <button type="button" className="objectives__sort" onClick={() => toggleSort('total')}>
-                        Total{sortMark('total')}
-                      </button>
+                    <th className="num objectives__shop">
+                      Total réseau
+                      <span className="objectives__tickets">
+                        {data.network.tickets.toLocaleString('fr-BE')} ticket
+                        {data.network.tickets > 1 ? 's' : ''}
+                      </span>
                     </th>
-                    {compare ? <th className="num">Total N-1</th> : null}
+                    {compare ? <th className="num">N-1</th> : null}
                     {compare ? <th className="num">Évol.</th> : null}
-                    <th className="num">Objectif (pièces)</th>
+                    <th className="num">Progression</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedShops.map((shop) => {
-                    const value = objectiveOf(shop.shop_id)
-                    const valid = objectiveValid(value)
-                    const trend = evolution(shop.total, shop.total_previous)
+                  {data.products.map((product) => {
+                    const total = data.network.by_product[product.item_id] ?? 0
+                    const previous = compare
+                      ? (data.network.by_product_previous?.[product.item_id] ?? 0)
+                      : null
+                    const trend = evolution(total, previous)
 
                     return (
-                      <tr key={shop.shop_id}>
-                        <td>{shop.shop_name}</td>
-                        {data.products.map((product) => (
-                          <td key={product.item_id} className="num">
+                      <tr key={product.item_id}>
+                        <td>{product.name}</td>
+                        {sortedShops.map((shop) => (
+                          <td key={shop.shop_id} className="num">
                             {shop.quantities[product.item_id] ?? 0}
+                            <span className="objectives__rate">
+                              {penetration(
+                                shop.tickets_by_product[product.item_id] ?? 0,
+                                shop.tickets,
+                              )}
+                            </span>
                           </td>
                         ))}
                         <td className="num">
-                          <strong>{shop.total}</strong>
+                          <strong>{total}</strong>
+                          <span className="objectives__rate">
+                            {penetration(
+                              data.network.tickets_by_product[product.item_id] ?? 0,
+                              data.network.tickets,
+                            )}
+                          </span>
                         </td>
-                        {compare ? <td className="num">{shop.total_previous ?? 0}</td> : null}
+                        {compare ? <td className="num">{previous ?? 0}</td> : null}
                         {compare ? (
                           <td className={`num objectives__trend-${trend?.tone ?? 'flat'}`}>
                             {trend?.text ?? '—'}
                           </td>
                         ) : null}
-                        <td className="num objectives__goal">
-                          <input
-                            value={value}
-                            inputMode="numeric"
-                            placeholder="0"
-                            aria-invalid={!valid}
-                            className={valid ? undefined : 'is-invalid'}
-                            onChange={(e) => setObjective(shop.shop_id, e.target.value)}
-                          />
-                          {valid ? null : <span className="error">Entier ≥ 0</span>}
+                        <td className="num">
+                          <span className="objectives__pct">
+                            <input
+                              value={growthOf(product.item_id)}
+                              placeholder={growthPct}
+                              inputMode="numeric"
+                              aria-label={`Progression pour ${product.name}`}
+                              title="Vide : suit la progression générale"
+                              onChange={(e) => setProductGrowth(product.item_id, e.target.value)}
+                            />
+                            %
+                          </span>
                         </td>
                       </tr>
                     )
@@ -349,10 +433,10 @@ export default function ObjectivesStep({
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td>Réseau</td>
-                    {data.products.map((product) => (
-                      <td key={product.item_id} className="num">
-                        {data.network.by_product[product.item_id] ?? 0}
+                    <td>Total période</td>
+                    {sortedShops.map((shop) => (
+                      <td key={shop.shop_id} className="num">
+                        <strong>{shop.total}</strong>
                       </td>
                     ))}
                     <td className="num">
@@ -364,9 +448,75 @@ export default function ObjectivesStep({
                         {evolution(data.network.total, data.network.total_previous)?.text ?? '—'}
                       </td>
                     ) : null}
+                    <td />
+                  </tr>
+
+                  {compare ? (
+                    <tr>
+                      <td>Total N-1</td>
+                      {sortedShops.map((shop) => (
+                        <td key={shop.shop_id} className="num">
+                          {shop.total_previous ?? 0}
+                        </td>
+                      ))}
+                      <td className="num">{data.network.total_previous ?? 0}</td>
+                      <td />
+                      <td />
+                      <td />
+                    </tr>
+                  ) : null}
+
+                  {compare ? (
+                    <tr>
+                      <td>Évolution</td>
+                      {sortedShops.map((shop) => {
+                        const trend = evolution(shop.total, shop.total_previous)
+
+                        return (
+                          <td
+                            key={shop.shop_id}
+                            className={`num objectives__trend-${trend?.tone ?? 'flat'}`}
+                          >
+                            {trend?.text ?? '—'}
+                          </td>
+                        )
+                      })}
+                      <td className="num">
+                        {evolution(data.network.total, data.network.total_previous)?.text ?? '—'}
+                      </td>
+                      <td />
+                      <td />
+                      <td />
+                    </tr>
+                  ) : null}
+
+                  <tr className="objectives__goals">
+                    <td>Objectif (pièces)</td>
+                    {sortedShops.map((shop) => {
+                      const value = objectiveOf(shop.shop_id)
+                      const valid = objectiveValid(value)
+
+                      return (
+                        <td key={shop.shop_id} className="num objectives__goal">
+                          <input
+                            value={value}
+                            inputMode="numeric"
+                            placeholder="0"
+                            aria-label={`Objectif ${shop.shop_name}`}
+                            aria-invalid={!valid}
+                            className={valid ? undefined : 'is-invalid'}
+                            onChange={(e) => setObjective(shop.shop_id, e.target.value)}
+                          />
+                          {valid ? null : <span className="error">Entier ≥ 0</span>}
+                        </td>
+                      )
+                    })}
                     <td className="num">
                       <strong>{objectivesTotal}</strong>
                     </td>
+                    {compare ? <td /> : null}
+                    {compare ? <td /> : null}
+                    <td />
                   </tr>
                 </tfoot>
               </table>

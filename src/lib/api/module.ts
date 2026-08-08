@@ -561,6 +561,10 @@ export interface ShopSalesRow {
   total: number
   /** Total de la période équivalente N-1, si le comparatif est demandé. */
   total_previous: number | null
+  /** Tickets de la période, tous produits confondus. */
+  tickets: number
+  /** Tickets contenant la référence — numérateur du taux de pénétration. */
+  tickets_by_product: Record<number, number>
 }
 
 export interface SalesQuantities {
@@ -575,6 +579,8 @@ export interface SalesQuantities {
     by_product_previous: Record<number, number> | null
     total: number
     total_previous: number | null
+    tickets: number
+    tickets_by_product: Record<number, number>
   }
   /** Tables de caisse réellement lues, ou `null` si aucune. */
   source: string | null

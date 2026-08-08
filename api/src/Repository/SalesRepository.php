@@ -100,6 +100,8 @@ final class SalesRepository
                 'by_product_previous' => null,
                 'total'               => 0,
                 'total_previous'      => null,
+                'tickets'             => 0,
+                'tickets_by_product'  => (object) [],
             ],
             'source'   => null,
             'warning'  => null,
@@ -117,17 +119,19 @@ final class SalesRepository
             }
         }
 
-        $current  = [];
-        $previous = [];
-        $source   = null;
-        $warning  = null;
+        $current       = [];
+        $previous      = [];
+        $ticketsByItem = [];
+        $shopTickets   = [];
+        $source        = null;
+        $warning       = null;
 
         try {
             [$linesSource, $transactionsSource, $lineColumns, $transactionColumns] = $this->resolveSales();
             $source = $linesSource . ' ⋈ ' . $transactionsSource;
 
             if ($itemByErpProduct !== []) {
-                $current = $this->aggregate(
+                [$current, $ticketsByItem] = $this->aggregate(
                     $linesSource,
                     $transactionsSource,
                     $lineColumns,
@@ -137,8 +141,12 @@ final class SalesRepository
                     $to
                 );
 
+                // Tickets de la période, tous produits confondus : c'est le
+                // dénominateur du taux de pénétration.
+                $shopTickets = $this->ticketTotals($transactionsSource, $transactionColumns, $from, $to);
+
                 if ($compare) {
-                    $previous = $this->aggregate(
+                    [$previous] = $this->aggregate(
                         $linesSource,
                         $transactionsSource,
                         $lineColumns,
@@ -181,9 +189,13 @@ final class SalesRepository
             }
         }
 
+        $networkTicketsByItem = [];
+        $networkTickets       = 0;
+
         foreach ($shops as $shop) {
             $erpShopId  = $shop['erp_shop_id'] === null ? null : (int) $shop['erp_shop_id'];
             $quantities = [];
+            $tickets    = [];
             $total      = 0;
 
             foreach ($itemByErpProduct as $erpProductId => $itemId) {
@@ -193,6 +205,16 @@ final class SalesRepository
                     $networkByItem[$itemId] = ($networkByItem[$itemId] ?? 0) + $quantity;
                 }
                 $total += $quantity;
+
+                // Tickets contenant le produit. Comptés distincts par boutique,
+                // ils s'additionnent sans double compte au niveau réseau : un
+                // ticket appartient à une seule boutique.
+                $ticketCount = (int) ($ticketsByItem[$erpShopId][$erpProductId] ?? 0);
+                if ($ticketCount !== 0) {
+                    $tickets[$itemId] = $ticketCount;
+                    $networkTicketsByItem[$itemId] =
+                        ($networkTicketsByItem[$itemId] ?? 0) + $ticketCount;
+                }
             }
 
             $totalPrevious = null;
@@ -201,15 +223,20 @@ final class SalesRepository
                 $networkPrevious += $totalPrevious;
             }
 
+            $shopTicketCount = (int) ($shopTickets[$erpShopId] ?? 0);
+
             $rows[] = [
-                'shop_id'        => (int) $shop['id'],
-                'shop_name'      => (string) $shop['name'],
-                'quantities'     => $quantities === [] ? (object) [] : $quantities,
-                'total'          => $total,
-                'total_previous' => $totalPrevious,
+                'shop_id'            => (int) $shop['id'],
+                'shop_name'          => (string) $shop['name'],
+                'quantities'         => $quantities === [] ? (object) [] : $quantities,
+                'total'              => $total,
+                'total_previous'     => $totalPrevious,
+                'tickets'            => $shopTicketCount,
+                'tickets_by_product' => $tickets === [] ? (object) [] : $tickets,
             ];
 
-            $networkTotal += $total;
+            $networkTotal   += $total;
+            $networkTickets += $shopTicketCount;
         }
 
         return [
@@ -223,8 +250,12 @@ final class SalesRepository
                 'by_product_previous' => $compare
                     ? ($networkByItemPrevious === [] ? (object) [] : $networkByItemPrevious)
                     : null,
-                'total'          => $networkTotal,
-                'total_previous' => $networkPrevious,
+                'total'              => $networkTotal,
+                'total_previous'     => $networkPrevious,
+                'tickets'            => $networkTickets,
+                'tickets_by_product' => $networkTicketsByItem === []
+                    ? (object) []
+                    : $networkTicketsByItem,
             ],
             'source'   => $source,
             'warning'  => $warning,
@@ -232,10 +263,15 @@ final class SalesRepository
     }
 
     /**
-     * Quantités par boutique ERP puis par produit ERP, bornes `[from, to]`.
+     * Quantités et tickets par boutique ERP puis par produit ERP, `[from, to]`.
+     *
+     * Deux mesures d'un même passage en caisse : combien de pièces sont
+     * parties, et dans combien de tickets distincts — le second sert au taux
+     * de pénétration, qu'un total de pièces ne dit pas (dix bûches peuvent
+     * tenir dans un seul ticket).
      *
      * @param  list<int> $erpProductIds
-     * @return array<int, array<int, float>>
+     * @return array{0:array<int, array<int, float>>, 1:array<int, array<int, int>>}
      */
     private function aggregate(
         string $linesSource,
@@ -254,7 +290,8 @@ final class SalesRepository
         $bindings['date_to']   = (new DateTimeImmutable($to))->modify('+1 day')->format('Y-m-d') . ' 00:00:00';
 
         $statement = Database::connection()->prepare(sprintf(
-            'SELECT t.`%s` AS shop, l.`%s` AS product, SUM(l.`%s`) AS quantity
+            'SELECT t.`%s` AS shop, l.`%s` AS product,
+                    SUM(l.`%s`) AS quantity, COUNT(DISTINCT l.`%s`) AS tickets
                FROM %s l
                JOIN %s t ON t.`%s` = l.`%s`
               WHERE l.`%s` IN (%s)
@@ -264,6 +301,7 @@ final class SalesRepository
             $transactionColumns['shop'],
             $lineColumns['product'],
             $lineColumns['quantity'],
+            $lineColumns['transaction'],
             $linesSource,
             $transactionsSource,
             $transactionColumns['id'],
@@ -278,11 +316,53 @@ final class SalesRepository
         $statement->execute($bindings);
 
         $quantities = [];
+        $tickets    = [];
         foreach ($statement->fetchAll() as $row) {
             $quantities[(int) $row['shop']][(int) $row['product']] = (float) $row['quantity'];
+            $tickets[(int) $row['shop']][(int) $row['product']]    = (int) $row['tickets'];
         }
 
-        return $quantities;
+        return [$quantities, $tickets];
+    }
+
+    /**
+     * Tickets d'une boutique sur la période, tous produits confondus.
+     *
+     * Dénominateur du taux de pénétration : sans lui, « 1 653 cougnous » ne
+     * dit pas si la boutique a servi deux cents clients ou dix mille.
+     *
+     * @param  array<string, string> $transactionColumns
+     * @return array<int, int>
+     */
+    private function ticketTotals(
+        string $transactionsSource,
+        array $transactionColumns,
+        string $from,
+        string $to,
+    ): array {
+        $statement = Database::connection()->prepare(sprintf(
+            'SELECT t.`%s` AS shop, COUNT(*) AS tickets
+               FROM %s t
+              WHERE t.`%s` >= :date_from
+                AND t.`%s` <  :date_to
+              GROUP BY t.`%s`',
+            $transactionColumns['shop'],
+            $transactionsSource,
+            $transactionColumns['date'],
+            $transactionColumns['date'],
+            $transactionColumns['shop']
+        ));
+        $statement->execute([
+            'date_from' => $from . ' 00:00:00',
+            'date_to'   => (new DateTimeImmutable($to))->modify('+1 day')->format('Y-m-d') . ' 00:00:00',
+        ]);
+
+        $tickets = [];
+        foreach ($statement->fetchAll() as $row) {
+            $tickets[(int) $row['shop']] = (int) $row['tickets'];
+        }
+
+        return $tickets;
     }
 
     /** Même plage un an plus tôt — mêmes jours, décalés de −1 an. */

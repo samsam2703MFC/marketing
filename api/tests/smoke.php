@@ -469,6 +469,15 @@ $response = call($router, 'GET', '/api/v1/marketing/sales/quantities', [
 ]);
 check('les ventes répondent sans tables de caisse', is_array($response['body']['shops'] ?? null));
 check(
+    'chaque boutique porte ses tickets et sa pénétration',
+    array_reduce(
+        $response['body']['shops'] ?? [],
+        static fn (bool $ok, array $shop): bool =>
+            $ok && array_key_exists('tickets', $shop) && array_key_exists('tickets_by_product', $shop),
+        true
+    )
+);
+check(
     'l\'absence d\'historique est expliquée',
     is_string($response['body']['warning'] ?? null) && $response['body']['warning'] !== ''
 );
