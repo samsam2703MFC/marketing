@@ -169,3 +169,56 @@ button.ghost {
   gap: 1rem;
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
 }
+
+/* Filtre saisons */
+.card--seasons {
+  margin-bottom: 1rem;
+}
+
+.seasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.season {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.3rem 0.85rem 0.3rem 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 0.85rem;
+}
+
+.season:hover {
+  border-color: var(--accent);
+}
+
+.season:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.season--active {
+  border-color: var(--accent);
+  background: rgba(139, 94, 52, 0.1);
+  font-weight: 500;
+}
+
+.season__illustration {
+  display: grid;
+  place-items: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 50%;
+  background: var(--paper);
+  font-size: 1rem;
+}
+
+img.season__illustration {
+  object-fit: cover;
+}
