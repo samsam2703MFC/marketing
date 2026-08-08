@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import SeasonPicker from '../components/SeasonPicker'
-import { SEASONS } from '../lib/seasons'
+import { marketing } from '../lib/api'
+import { describeError } from '../state/auth'
+import { SEASONS, seasonOccurrence } from '../lib/seasons'
 import { CATEGORIES, PRODUCTS } from '../lib/catalog'
 
 /** Nombre de produits par famille — catalogue statique, calculé une fois. */
@@ -11,31 +13,49 @@ const PRODUCT_COUNTS = new Map(
   ]),
 )
 
+/** Campagne créée pour une offre validée. */
+interface SavedOffer {
+  id: number | string
+  name: string
+  dateFrom: string
+  dateTo: string
+}
+
 /**
  * Écran « Nouvelle offre » (maquette A validée) : trois colonnes
  * saison → catégories → produits, synthèse et validation en bas.
  *
  * Cocher une catégorie présélectionne tous ses produits, décochables
- * ensuite un à un. La validation reste locale tant que l'ERP n'expose
- * pas de route « offres ».
+ * ensuite un à un. Faute de route « offres » dans l'ERP, la validation
+ * enregistre une campagne marketing : les dates viennent de l'occurrence
+ * de la saison et la sélection est encodée dans la description (texte
+ * lisible + ligne `[offer:v1]` en JSON, réexploitable plus tard).
  */
 export default function OfferBuilder() {
   const [seasonId, setSeasonId] = useState<number | null>(null)
   const [categoryIds, setCategoryIds] = useState<ReadonlySet<number>>(new Set())
   const [productIds, setProductIds] = useState<ReadonlySet<number>>(new Set())
-  const [validated, setValidated] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState<SavedOffer | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const season = SEASONS.find((candidate) => candidate.id === seasonId) ?? null
   const visibleProducts = PRODUCTS.filter((product) => categoryIds.has(product.categoryId))
   const canValidate = season !== null && productIds.size > 0
 
+  /** Toute retouche repart d'un brouillon : l'offre déjà enregistrée reste en base. */
+  const touch = () => {
+    setSaved(null)
+    setSaveError(null)
+  }
+
   const pickSeason = (id: number | null) => {
-    setValidated(false)
+    touch()
     setSeasonId(id)
   }
 
   const toggleCategory = (id: number) => {
-    setValidated(false)
+    touch()
     const nextCategories = new Set(categoryIds)
     const nextProducts = new Set(productIds)
     const familyProducts = PRODUCTS.filter((product) => product.categoryId === id)
@@ -51,7 +71,7 @@ export default function OfferBuilder() {
   }
 
   const toggleProduct = (id: number) => {
-    setValidated(false)
+    touch()
     const next = new Set(productIds)
     if (next.has(id)) next.delete(id)
     else next.add(id)
@@ -59,7 +79,7 @@ export default function OfferBuilder() {
   }
 
   const selectAllVisible = () => {
-    setValidated(false)
+    touch()
     setProductIds(new Set(visibleProducts.map((product) => product.id)))
   }
 
@@ -67,7 +87,44 @@ export default function OfferBuilder() {
     setSeasonId(null)
     setCategoryIds(new Set())
     setProductIds(new Set())
-    setValidated(false)
+    setSaved(null)
+    setSaveError(null)
+  }
+
+  const saveOffer = async () => {
+    if (!season || saving) return
+    setSaving(true)
+    setSaveError(null)
+
+    const categories = CATEGORIES.filter((category) => categoryIds.has(category.id))
+    const products = PRODUCTS.filter((product) => productIds.has(product.id))
+    const { dateFrom, dateTo } = seasonOccurrence(season)
+    const name = `Offre ${season.emoji} ${season.label}`
+    const description = [
+      `Saison : ${season.emoji} ${season.label}`,
+      `Catégories (${categories.length}) : ${categories.map((category) => category.name).join(', ')}`,
+      `Produits (${products.length}) : ${products.map((product) => product.name).join(', ')}`,
+      '',
+      `[offer:v1] ${JSON.stringify({
+        season: season.id,
+        categories: categories.map((category) => category.id),
+        products: products.map((product) => product.id),
+      })}`,
+    ].join('\n')
+
+    try {
+      const created = await marketing.createCampaign({
+        name,
+        description,
+        date_from: dateFrom,
+        date_to: dateTo,
+      })
+      setSaved({ id: created.inserted_id, name, dateFrom, dateTo })
+    } catch (cause: unknown) {
+      setSaveError(describeError(cause))
+    } finally {
+      setSaving(false)
+    }
   }
 
   const selectedCategoryNames = CATEGORIES.filter((category) => categoryIds.has(category.id)).map(
@@ -149,27 +206,28 @@ export default function OfferBuilder() {
         </section>
       </div>
 
-      {validated && season ? (
+      {saved && season ? (
         <div className="card summary">
           <div>
-            <strong>Offre validée ✓</strong>
+            <strong>Offre enregistrée ✓</strong>
             <ul className="recap">
               <li>
-                Saison : {season.emoji} {season.label}
+                Campagne marketing n° {saved.id} — « {saved.name} »
               </li>
               <li>
-                Catégories ({categoryIds.size}) : {selectedCategoryNames.join(', ')}
+                Période : {saved.dateFrom} → {saved.dateTo}
               </li>
-              <li>Produits : {productIds.size} sélectionnés</li>
+              <li>
+                {selectedCategoryNames.length} catégories ({selectedCategoryNames.join(', ')}) ·{' '}
+                {productIds.size} produits
+              </li>
             </ul>
             <p className="muted footnote">
-              L'enregistrement dans l'ERP sera branché dès qu'une route « offres » existera.
+              Retrouvez-la dans l'onglet Réseau, carte Campagnes — la sélection complète est encodée
+              dans sa description.
             </p>
           </div>
           <span className="summary__spacer" />
-          <button type="button" className="ghost" onClick={() => setValidated(false)}>
-            Modifier
-          </button>
           <button type="button" onClick={reset}>
             Nouvelle offre
           </button>
@@ -185,9 +243,12 @@ export default function OfferBuilder() {
           <button type="button" className="ghost" onClick={reset}>
             Réinitialiser
           </button>
-          <button type="button" disabled={!canValidate} onClick={() => setValidated(true)}>
-            Valider l'offre
+          <button type="button" disabled={!canValidate || saving} onClick={() => void saveOffer()}>
+            {saving ? 'Enregistrement…' : "Valider l'offre"}
           </button>
+          {saveError ? (
+            <p className="error summary__error">Enregistrement impossible : {saveError}</p>
+          ) : null}
         </div>
       )}
     </>

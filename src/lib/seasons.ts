@@ -66,6 +66,40 @@ export function mdRangesOverlap(aFrom: number, aTo: number, bFrom: number, bTo: 
   )
 }
 
+/** `YYYY-MM-DD` à partir d'une année et d'une borne mois-jour (MMDD). */
+function mdToIso(year: number, md: number): string {
+  const month = String(Math.floor(md / 100)).padStart(2, '0')
+  const day = String(md % 100).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+/**
+ * Occurrence courante ou prochaine d'une gamme récurrente, en dates ISO.
+ * Une plage passant le nouvel an garde son année de départ (ex. en janvier,
+ * Noël court depuis décembre de l'année précédente).
+ */
+export function seasonOccurrence(
+  season: Season,
+  today = new Date(),
+): { dateFrom: string; dateTo: string } {
+  const year = today.getFullYear()
+  const todayMd = (today.getMonth() + 1) * 100 + today.getDate()
+  const wraps = season.toMd < season.fromMd
+  let fromYear: number
+  let toYear: number
+  if (!wraps) {
+    fromYear = todayMd > season.toMd ? year + 1 : year
+    toYear = fromYear
+  } else if (todayMd <= season.toMd) {
+    fromYear = year - 1
+    toYear = year
+  } else {
+    fromYear = year
+    toYear = year + 1
+  }
+  return { dateFrom: mdToIso(fromYear, season.fromMd), dateTo: mdToIso(toYear, season.toMd) }
+}
+
 /**
  * Une plage datée (campagne, support…) tombe-t-elle dans la saison ?
  * Sans date exploitable la réponse est `true` : on ne masque pas ce qu'on ne

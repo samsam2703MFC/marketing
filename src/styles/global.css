@@ -428,6 +428,10 @@ img.season__illustration {
   margin: 0;
 }
 
+.summary__error {
+  width: 100%;
+}
+
 .recap {
   margin: 0.35rem 0 0;
   padding-left: 1.1rem;
