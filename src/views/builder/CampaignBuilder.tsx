@@ -68,9 +68,6 @@ interface Draft {
   offer_title: string
   offer_mechanic: string
   offer_items: OfferElement[]
-  offer_all_day: boolean
-  offer_hour_from: string
-  offer_hour_to: string
 
   // 3 — Objectifs & budget
   budget_amount: string
@@ -116,9 +113,6 @@ function emptyDraft(refs: References, role: Role): Draft {
     offer_title: '',
     offer_mechanic: '',
     offer_items: [],
-    offer_all_day: true,
-    offer_hour_from: '',
-    offer_hour_to: '',
 
     budget_amount: '',
     objective_coef_pct: '',
@@ -173,14 +167,9 @@ const STEPS: Step[] = [
   {
     key: 'offer',
     label: 'Offre',
-    blocking: (d) => {
-      // L'offre reste facultative — toutes les campagnes n'en portent pas —
-      // mais une fenêtre à l'envers ou un horaire incomplet sont des erreurs.
-      if (!d.offer_all_day && (d.offer_hour_from === '' || d.offer_hour_to === '')) {
-        return 'Précisez la plage horaire, ou revenez sur « toute la journée ».'
-      }
-      return null
-    },
+    // L'offre reste facultative — toutes les campagnes n'en portent pas — et
+    // n'a plus rien à valider : la composition est libre, l'horaire a disparu.
+    blocking: () => null,
   },
   {
     key: 'budget',
@@ -521,11 +510,6 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
       offer_item_id: item.offer_item_id ?? null,
       label: item.label,
     })),
-    // « Toute la journée » est l'absence d'horaire, pas une plage 00:00–23:59 :
-    // c'est le NULL en base qui les distingue, et il se relit tel quel.
-    offer_all_day: (state.offer?.hour_from ?? null) === null,
-    offer_hour_from: state.offer?.hour_from ?? '',
-    offer_hour_to: state.offer?.hour_to ?? '',
 
     budget_amount: state.budget_amount === undefined || state.budget_amount === null
       ? ''
@@ -672,9 +656,10 @@ function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): Cam
             // diverger sans que personne ne sache laquelle fait foi.
             starts_on: draft.starts_on || null,
             ends_on: draft.ends_on || null,
-            all_day: draft.offer_all_day,
-            hour_from: draft.offer_all_day ? null : draft.offer_hour_from || null,
-            hour_to: draft.offer_all_day ? null : draft.offer_hour_to || null,
+            // L'horaire n'est plus saisi : une offre court toute la journée.
+            all_day: true,
+            hour_from: null,
+            hour_to: null,
             items,
           },
   }
@@ -1165,8 +1150,7 @@ function OfferStep({ draft, patch }: StepProps) {
       <h2>Offre</h2>
       <p className="muted">
         Facultative : toutes les campagnes n’en portent pas. Composez-la comme en boutique —
-        saison, catégories, produits ; elle court sur la période fixée à l’étape 1, seul
-        l’horaire se précise ici.
+        saison, catégories, produits ; elle court sur la période fixée à l’étape 1.
       </p>
 
       {catalog.error ? <p className="error">Catalogue indisponible : {catalog.error}</p> : null}
@@ -1300,45 +1284,6 @@ function OfferStep({ draft, patch }: StepProps) {
         <button type="button" className="filter offer-summary__reset" onClick={resetOffer}>
           Réinitialiser
         </button>
-      </div>
-
-      <h3 className="section-label">Horaire</h3>
-      <div className="filters__row">
-        <button
-          type="button"
-          className={`choice-pill${draft.offer_all_day ? ' is-on' : ''}`}
-          onClick={() => patch({ offer_all_day: true })}
-        >
-          Toute la journée
-        </button>
-        <button
-          type="button"
-          className={`choice-pill${!draft.offer_all_day ? ' is-on' : ''}`}
-          onClick={() => patch({ offer_all_day: false })}
-        >
-          Plage horaire
-        </button>
-
-        {!draft.offer_all_day ? (
-          <>
-            <label className="field">
-              De
-              <input
-                type="time"
-                value={draft.offer_hour_from}
-                onChange={(e) => patch({ offer_hour_from: e.target.value })}
-              />
-            </label>
-            <label className="field">
-              À
-              <input
-                type="time"
-                value={draft.offer_hour_to}
-                onChange={(e) => patch({ offer_hour_to: e.target.value })}
-              />
-            </label>
-          </>
-        ) : null}
       </div>
     </>
   )
@@ -1945,12 +1890,6 @@ function ReviewStep({
       items.length === 0
         ? 'Aucune'
         : `${draft.offer_title.trim() || `Offre ${draft.name.trim()}`} · ${items.length} élément${items.length > 1 ? 's' : ''}`,
-    ],
-    [
-      'Horaire',
-      draft.offer_all_day
-        ? 'Toute la journée'
-        : `${draft.offer_hour_from || '—'} – ${draft.offer_hour_to || '—'}`,
     ],
     ['Budget', formatEur(Number(draft.budget_amount || 0))],
     [
