@@ -430,6 +430,16 @@ tbody td {
   max-width: 1180px;
 }
 
+/* L'assistant est une surface de travail, pas un document : il prend toute la
+   largeur disponible.
+   1180 px est une largeur de lecture — bonne pour un tableau de bord ou une
+   liste, étouffante pour un composeur d'offre, qui laissait sept cents pixels
+   de vide à sa droite sur un écran ordinaire. Ici, plus de plafond : le
+   rembourrage de la zone de contenu suffit à ménager les bords. */
+.app__body--wide > * {
+  max-width: none;
+}
+
 .screen-subtitle {
   font-size: 21px;
   font-weight: 400;
@@ -1209,11 +1219,17 @@ select:disabled {
 }
 
 /* Étape Offre : composition saison → catégories → produits */
+/* Les trois temps l'un sous l'autre, chacun sur toute la largeur.
+   En colonnes, la liste des produits n'avait qu'un tiers de la place et
+   défilait sur douze lignes — c'est pourtant elle qui porte le choix le plus
+   long. Et les colonnes n'avaient pas la même hauteur : dix gammes empilées à
+   gauche creusaient huit cents pixels de vide à droite des catégories.
+   Empilées, les tuiles s'alignent sur une rangée chacune et les produits
+   récupèrent la moitié de l'écran. */
 .offer-compose {
   display: grid;
-  grid-template-columns: 230px 1fr 1.3fr;
-  gap: 14px;
-  align-items: start;
+  grid-template-columns: 1fr;
+  gap: 12px;
   margin-top: 10px;
 }
 
@@ -1346,10 +1362,15 @@ select:disabled {
   cursor: pointer;
 }
 
+/* Colonnes remplies par la largeur disponible : trois sur un écran ordinaire,
+   une sur un portable, sans palier écrit en dur. La hauteur reste bornée — la
+   liste peut compter deux cents références — mais la moitié de l'écran, pas un
+   douzième. */
 .product-rows {
-  display: flex;
-  flex-direction: column;
-  max-height: 380px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 0 22px;
+  max-height: 50vh;
   overflow-y: auto;
 }
 

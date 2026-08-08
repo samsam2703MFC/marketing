@@ -240,7 +240,7 @@ function Workspace() {
           </div>
         </header>
 
-        <main className="app__body fb-scroll">
+        <main className={`app__body${route === 'builder' ? ' app__body--wide' : ''}`}>
           {route === 'dashboard' ? (
             <DashboardView
               statuses={refs.campaignStatuses}
