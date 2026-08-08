@@ -1,3 +1,4 @@
+import { asset } from '../lib/assets'
 import { SEASONS } from '../lib/seasons'
 import type { Season } from '../lib/seasons'
 
@@ -34,7 +35,7 @@ export default function SeasonPicker({ value, onChange, seasons = SEASONS, colum
             onClick={() => onChange(active ? null : season.id)}
           >
             {season.image ? (
-              <img className="season__illustration" src={season.image} alt="" />
+              <img className="season__illustration" src={asset(season.image)} alt="" />
             ) : (
               <span className="season__illustration" aria-hidden="true">
                 {season.emoji}

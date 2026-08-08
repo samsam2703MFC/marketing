@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import SeasonPicker from '../components/SeasonPicker'
 import { marketing } from '../lib/api'
+import { asset } from '../lib/assets'
 import { describeError } from '../state/auth'
 import { SEASONS, seasonOccurrence } from '../lib/seasons'
 import { CATEGORIES, PRODUCTS } from '../lib/catalog'
@@ -161,7 +162,7 @@ export default function OfferBuilder() {
                   onClick={() => toggleCategory(category.id)}
                 >
                   {active ? <span className="tile__badge">✓</span> : null}
-                  <img src={category.image} alt="" />
+                  <img src={asset(category.image)} alt="" />
                   <span className="tile__name">{category.name}</span>
                   <span className="tile__count">{PRODUCT_COUNTS.get(category.id)} produits</span>
                 </button>
@@ -238,7 +239,7 @@ export default function OfferBuilder() {
           <span>
             {season ? (
               <>
-                {season.image ? <img className="season-mini" src={season.image} alt="" /> : season.emoji}{' '}
+                {season.image ? <img className="season-mini" src={asset(season.image)} alt="" /> : season.emoji}{' '}
                 {season.label}
               </>
             ) : (

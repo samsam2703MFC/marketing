@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { AUTH_MODE } from '../lib/api/config'
+import { setTokens } from '../lib/api/tokens'
+import { asset } from '../lib/assets'
 import { useLogin } from '../state/auth'
 
 /**
@@ -12,6 +14,20 @@ export default function LoginView() {
   const [password, setPassword] = useState('')
 
   const usesPhone = AUTH_MODE === 'phone'
+
+  /**
+   * Session de démonstration : ouvre l'interface sans identifiants ERP.
+   * Les vues qui appellent l'API affichent alors leur état d'erreur ;
+   * l'écran Offres, entièrement local, reste pleinement utilisable.
+   */
+  const enterDemo = () => {
+    setTokens({
+      accessToken: 'demo',
+      refreshToken: 'demo',
+      expiresAt: Date.now() + 365 * 24 * 3600 * 1000,
+      sessionId: 'demo',
+    })
+  }
 
   return (
     <main className="auth">
@@ -26,7 +42,7 @@ export default function LoginView() {
           )
         }}
       >
-        <img className="auth__logo" src="/img/logo.png" alt="L’Atelier By" />
+        <img className="auth__logo" src={asset('/img/logo.png')} alt="L’Atelier By" />
         <h1>Module Marketing</h1>
         <p className="muted">Connexion à l’ERP — vue Réseau</p>
 
@@ -56,6 +72,14 @@ export default function LoginView() {
         <button type="submit" disabled={pending}>
           {pending ? 'Connexion…' : 'Se connecter'}
         </button>
+
+        <button type="button" className="ghost auth__demo" onClick={enterDemo}>
+          Explorer la démo (sans connexion)
+        </button>
+        <p className="muted auth__hint">
+          La démo montre l’interface sans données ERP : les vues connectées affichent leur état
+          d’erreur, l’écran Offres est complet.
+        </p>
       </form>
     </main>
   )

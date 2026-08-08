@@ -112,6 +112,15 @@ h2 .muted {
   color: var(--muted);
 }
 
+.auth__demo {
+  margin-top: 0.6rem;
+}
+
+.auth__hint {
+  font-size: 0.75rem;
+  text-align: center;
+}
+
 input {
   font: inherit;
   padding: 0.6rem 0.7rem;

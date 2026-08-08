@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { asset } from './lib/assets'
 import { useLogin, useSession } from './state/auth'
 import LoginView from './views/LoginView'
 import NetworkOverview from './views/NetworkOverview'
@@ -16,7 +17,7 @@ export default function App() {
   return (
     <div className="app">
       <header className="app__header">
-        <img className="app__logo" src="/img/logo.png" alt="L’Atelier By" />
+        <img className="app__logo" src={asset('/img/logo.png')} alt="L’Atelier By" />
         <div>
           <h1>Module Marketing</h1>
           <p className="muted">{view === 'network' ? 'Pilotage — Campagnes' : 'Offres — Nouvelle offre'}</p>
