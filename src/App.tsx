@@ -66,8 +66,14 @@ export default function App() {
  * Coquille applicative : une seule route active à la fois, rendu conditionnel
  * par écran, comme le prototype.
  */
+/**
+ * Périmètre figé à la compilation : Réseau et Franchisé sont deux applications
+ * déployées séparément. Ce n'est plus un état que l'utilisateur bascule.
+ */
+const ROLE: Role = import.meta.env.VITE_ROLE === 'FRANCHISEE' ? 'FRANCHISEE' : 'BRAND_ADMIN'
+
 function Workspace() {
-  const [role, setRole] = useState<Role>('BRAND_ADMIN')
+  const role = ROLE
   const [route, setRoute] = useState<Route>('dashboard')
   const [campaignId, setCampaignId] = useState<number | null>(null)
   const [brandId, setBrandId] = useState<number | 'all'>('all')
@@ -127,32 +133,6 @@ function Workspace() {
               {role === 'BRAND_ADMIN' ? 'Vue Réseau' : 'Vue Franchisé'}
             </p>
             <h1>{titleFor(role, route) || 'Suivi de campagne'}</h1>
-          </div>
-
-          {/* Bascule de rôle : change la navigation, le périmètre et les libellés. */}
-          <div className="topbar__actions">
-            <div className="role-switch" role="group" aria-label="Rôle">
-              <button
-                type="button"
-                className={role === 'BRAND_ADMIN' ? 'is-on' : ''}
-                onClick={() => {
-                  setRole('BRAND_ADMIN')
-                  navigate('dashboard')
-                }}
-              >
-                Réseau
-              </button>
-              <button
-                type="button"
-                className={role === 'FRANCHISEE' ? 'is-on' : ''}
-                onClick={() => {
-                  setRole('FRANCHISEE')
-                  navigate('dashboard')
-                }}
-              >
-                Franchisé
-              </button>
-            </div>
           </div>
         </header>
 

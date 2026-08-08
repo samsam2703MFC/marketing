@@ -87,26 +87,34 @@ jobs:
       - name: Installer les dépendances front
         run: npm ci
 
-      - name: Typecheck et build
-        # Les chemins du front se déduisent de DEPLOY_DIR : le chemin URL est le
-        # répertoire de déploiement privé de la racine web. Une variable en moins
-        # à tenir, et une occasion de moins de désaccorder les deux.
+      # Deux applications distinctes, donc deux builds. Le rôle est figé à la
+      # compilation : chacune n'embarque que sa navigation et ses libellés, et
+      # il n'y a plus de bascule à l'écran.
+      - name: Typecheck et build — Réseau
         env:
           DEPLOY_DIR: ${{ vars.DEPLOY_DIR || vars.DEPLOY_PATH || '/var/www/html/marketing' }}
-          VITE_BASE: ${{ vars.VITE_BASE }}
-          VITE_API_BASE: ${{ vars.VITE_API_BASE }}
         run: |
           URL_PATH=$(printf '%s' "$DEPLOY_DIR" | sed 's|^/var/www/html||; s|/$||')
-          export VITE_BASE="${VITE_BASE:-$URL_PATH/}"
-          export VITE_API_BASE="${VITE_API_BASE:-$URL_PATH}"
-          echo "base=$VITE_BASE  api=$VITE_API_BASE"
-          npm run build
+          VITE_ROLE=BRAND_ADMIN VITE_BASE="$URL_PATH/" VITE_API_BASE="$URL_PATH" npm run build
+          rm -rf dist-reseau && mv dist dist-reseau
+          echo "Réseau : base=$URL_PATH/"
 
-      - name: Archiver le build
+      - name: Build — Franchisé
+        env:
+          DEPLOY_DIR_FRANCHISE: ${{ vars.DEPLOY_DIR_FRANCHISE || '/var/www/html/marketingc' }}
+        run: |
+          URL_PATH=$(printf '%s' "$DEPLOY_DIR_FRANCHISE" | sed 's|^/var/www/html||; s|/$||')
+          VITE_ROLE=FRANCHISEE VITE_BASE="$URL_PATH/" VITE_API_BASE="$URL_PATH" npm run build
+          rm -rf dist-franchise && mv dist dist-franchise
+          echo "Franchisé : base=$URL_PATH/"
+
+      - name: Archiver les builds
         uses: actions/upload-artifact@v4
         with:
           name: dist
-          path: dist/
+          path: |
+            dist-reseau/
+            dist-franchise/
           retention-days: 7
 
   deploy:
@@ -131,6 +139,7 @@ jobs:
       CONFIG_DIR: ${{ vars.CONFIG_DIR || '/var/www/private/marketing' }}
       MAR_DB_NAME: ${{ secrets.MAR_DB_NAME }}
       DEPLOY_DIR: ${{ vars.DEPLOY_DIR || vars.DEPLOY_PATH || '/var/www/html/marketing' }}
+      DEPLOY_DIR_FRANCHISE: ${{ vars.DEPLOY_DIR_FRANCHISE || '/var/www/html/marketingc' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -323,6 +332,9 @@ jobs:
           if [ -n "$SSH_KEY" ]; then PRE=""; else PRE="sshpass -e"; fi
           $PRE $RSYNC --exclude 'tests' -e "ssh $SSH_OPTS" api/ "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/api/"
           $PRE $RSYNC -e "ssh $SSH_OPTS" db/ "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/db/"
+          # L'API est publiée dans les deux répertoires : chacun reste autonome,
+          # et redéployer l'un ne peut pas casser l'autre.
+          $PRE $RSYNC --exclude 'tests' -e "ssh $SSH_OPTS" api/ "$SSH_USER@$SSH_HOST:$DEPLOY_DIR_FRANCHISE/api/"
 
       # Optionnel : si les secrets de base sont renseignés, le .env est (ré)écrit
       # à chaque déploiement, **au-dessus** de la racine du déploiement — celle-ci
@@ -370,7 +382,8 @@ jobs:
           # que le .env lui-même est parfaitement accessible.
           printf '%s\n' "$CONFIG_DIR/.env" > .env-path
           $PRE rsync -a --chmod=644 -e "ssh $SSH_OPTS" .env-path "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/api/.env-path"
-          $SSH_CMD $SSH_OPTS "$SSH_USER@$SSH_HOST" "chmod 644 '$DEPLOY_DIR/api/.env-path'"
+          $PRE rsync -a --chmod=644 -e "ssh $SSH_OPTS" .env-path "$SSH_USER@$SSH_HOST:$DEPLOY_DIR_FRANCHISE/api/.env-path"
+          $SSH_CMD $SSH_OPTS "$SSH_USER@$SSH_HOST" "chmod 644 '$DEPLOY_DIR/api/.env-path' '$DEPLOY_DIR_FRANCHISE/api/.env-path'"
           rm -f .env-path
 
       - name: Appliquer les migrations
@@ -430,7 +443,8 @@ jobs:
           SSHPASS: ${{ secrets.SSH_PASSWORD }}
         run: |
           if [ -n "$SSH_KEY" ]; then PRE=""; else PRE="sshpass -e"; fi
-          $PRE rsync -rltDz --omit-dir-times -e "ssh $SSH_OPTS" dist/ "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/"
+          $PRE rsync -rltDz --omit-dir-times -e "ssh $SSH_OPTS" dist-reseau/ "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/"
+          $PRE rsync -rltDz --omit-dir-times -e "ssh $SSH_OPTS" dist-franchise/ "$SSH_USER@$SSH_HOST:$DEPLOY_DIR_FRANCHISE/"
 
       - name: Vérifier la page servie
         if: steps.check.outputs.configured == 'true'
@@ -481,4 +495,23 @@ jobs:
           check '/api/v1/marketing/references'   '200 401' "l'API ne répond pas correctement"
           check '/.env'                          '403 404' "le fichier de configuration est exposé"
           check '/db/migrate.php'                '403 404' "les migrations sont exposées"
+
+          # La vue Franchisé est une application à part entière : elle mérite les
+          # mêmes contrôles, sinon un déploiement à moitié cassé passerait vert.
+          URL_F=$(printf '%s' "$DEPLOY_DIR_FRANCHISE" | sed 's|^/var/www/html||; s|/$||')
+          outf=$($SSH_CMD $SSH_OPTS -o BatchMode=yes "$SSH_USER@$SSH_HOST" "
+            B=http://localhost$URL_F
+            for p in '/' '/api/v1/marketing/session'; do
+              printf '%s %s\n' \"\$p\" \"\$(curl -s -o /dev/null -w '%{http_code}' \"\$B\$p\")\"
+            done
+          " 2>&1 | grep -v 'Permanently added')
+          echo "  franchisé :"; printf '%s\n' "$outf" | sed 's/^/    /'
+          codef() { printf '%s\n' "$outf" | awk -v p="$1" '$1==p {print $2}'; }
+          for pair in "/:200" "/api/v1/marketing/session:200"; do
+            p=${pair%:*}; want=${pair##*:}; got=$(codef "$p")
+            if [ "$got" != "$want" ]; then
+              echo "::error title=Vue Franchisé::$p répond $got, attendu $want"
+              fail=1
+            fi
+          done
           exit $fail
