@@ -180,7 +180,10 @@ Le déploiement, sous l'utilisateur de `SSH_USER` :
 - disposer de `rsync`.
 
 ```bash
-command -v rsync php || sudo apt-get install -y rsync php-cli php-mysql
+sudo apt-get install -y rsync php-cli php-mysql
+php -m | grep -i pdo_mysql   # doit afficher pdo_mysql
 ```
 
-`php-mysql` fournit `pdo_mysql`, sans lequel les migrations ne peuvent pas s'exécuter.
+⚠️ Ne remplacez pas cette ligne par un test groupé du genre `command -v rsync php || apt-get install …` : si `rsync` et `php` sont déjà présents, le test réussit, l'installation est court-circuitée et **`php-mysql` n'est jamais posé**. Les migrations échouent alors bien plus tard, sur une extension manquante.
+
+`php-mysql` fournit `pdo_mysql`, sans lequel `db/migrate.php` ne peut pas se connecter. Le contrôle `php -m` ci-dessus est la seule preuve qui compte.
