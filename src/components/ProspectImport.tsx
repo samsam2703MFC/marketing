@@ -299,6 +299,24 @@ export default function ProspectImport() {
         <p className="error">Gammes saisonnières non reprises : {sync.seasons.error}</p>
       ) : null}
 
+      {sync?.season_links?.error ? (
+        <p className="error">Disponibilités produit ↔ gamme non reprises : {sync.season_links.error}</p>
+      ) : null}
+
+      {sync?.season_links && !sync.season_links.error ? (
+        <p className="muted">
+          {sync.season_links.linked ?? 0} disponibilité{(sync.season_links.linked ?? 0) > 1 ? 's' : ''}{' '}
+          produit ↔ gamme depuis <code>{sync.season_links.source}</code>
+          {(sync.season_links.unknown_product ?? 0) > 0
+            ? `, ${sync.season_links.unknown_product} ligne(s) sur un produit hors catalogue`
+            : ''}
+          {(sync.season_links.unknown_season ?? 0) > 0
+            ? `, ${sync.season_links.unknown_season} sur une gamme inconnue`
+            : ''}
+          .
+        </p>
+      ) : null}
+
       {sync?.links && !sync.links.error ? (
         <p className="muted">
           {sync.links.linked ?? 0} rattachement{(sync.links.linked ?? 0) > 1 ? 's' : ''} compte ↔

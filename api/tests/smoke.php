@@ -359,6 +359,19 @@ $pdo->exec(
 );
 $catalogItemId = (int) $pdo->lastInsertId();
 
+// Sa gamme saisonnière, et la disponibilité qui les relie : c'est elle qui
+// permet à l'étape « Offre » de filtrer le catalogue par la gamme choisie.
+$pdo->exec(
+    "INSERT INTO mar_offer_item (category, sku_ref, name)
+     VALUES ('saison', 'erp-saison-9901', 'Gamme Estivale (Juin à Août)')"
+);
+$seasonItemId = (int) $pdo->lastInsertId();
+$pdo->exec(sprintf(
+    'INSERT INTO mar_offer_item_season (item_id, season_item_id) VALUES (%d, %d)',
+    $catalogItemId,
+    $seasonItemId
+));
+
 $response  = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
     // Volontairement sans brand_id : le back-office connaît sa marque, et une
     // seule est active. Le serveur doit la résoudre plutôt que refuser.
@@ -520,6 +533,18 @@ $response = call($router, 'GET', '/api/v1/marketing/offer-items');
 check(
     'le catalogue expose la référence active',
     in_array('Tarte du jour', array_column($response['body'], 'name'), true)
+);
+
+$tarteRow = null;
+foreach ($response['body'] as $catalogRow) {
+    if ($catalogRow['name'] === 'Tarte du jour') {
+        $tarteRow = $catalogRow;
+        break;
+    }
+}
+check(
+    'la référence porte ses gammes saisonnières',
+    $tarteRow !== null && in_array($seasonItemId, $tarteRow['season_ids'] ?? [], true)
 );
 check(
     'la fenêtre de l\'offre est distincte de la campagne',

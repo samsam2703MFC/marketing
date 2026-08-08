@@ -29,16 +29,28 @@ final class CatalogRepository
      */
     public function offerItems(): array
     {
-        $rows = Database::connection()->query(
+        $connection = Database::connection();
+
+        $rows = $connection->query(
             'SELECT id, category, sku_ref, name, detail, price_amount
                FROM mar_offer_item
               WHERE is_active = 1
               ORDER BY detail IS NULL, detail, name'
         )->fetchAll();
 
-        return array_map(static function (array $row): array {
+        // Gammes de chaque produit, pour que l'étape « Offre » filtre
+        // catégories et produits par la saison choisie.
+        $seasonsByItem = [];
+        foreach ($connection->query(
+            'SELECT item_id, season_item_id FROM mar_offer_item_season'
+        )->fetchAll() as $link) {
+            $seasonsByItem[(int) $link['item_id']][] = (int) $link['season_item_id'];
+        }
+
+        return array_map(static function (array $row) use ($seasonsByItem): array {
             $row['id']           = (int) $row['id'];
             $row['price_amount'] = $row['price_amount'] === null ? null : (float) $row['price_amount'];
+            $row['season_ids']   = $seasonsByItem[$row['id']] ?? [];
 
             return $row;
         }, $rows);

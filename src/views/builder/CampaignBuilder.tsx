@@ -1069,20 +1069,26 @@ function OfferStep({ draft, patch }: StepProps) {
 
   const familyOf = (item: OfferItem): string => item.detail ?? 'Autres'
 
-  // Familles du catalogue avec leur effectif, dans l'ordre servi (famille, nom).
-  const families: Array<{ name: string; count: number }> = []
-  for (const product of products) {
-    const name = familyOf(product)
-    const entry = families.find((candidate) => candidate.name === name)
-    if (entry) entry.count++
-    else families.push({ name, count: 1 })
-  }
-
   const chosenSeasonId =
     draft.offer_items.find(
       (element) => element.offer_item_id !== null && seasonIds.has(element.offer_item_id),
     )?.offer_item_id ?? null
   const chosenSeason = seasons.find((item) => item.id === chosenSeasonId) ?? null
+
+  // La gamme choisie filtre tout le reste : seuls ses produits — donc leurs
+  // familles — restent proposés. Sans gamme, tout le catalogue est là.
+  const inSeason = (item: OfferItem): boolean =>
+    chosenSeasonId === null || item.season_ids.includes(chosenSeasonId)
+  const seasonProducts = products.filter(inSeason)
+
+  // Familles disponibles avec leur effectif, dans l'ordre servi (famille, nom).
+  const families: Array<{ name: string; count: number }> = []
+  for (const product of seasonProducts) {
+    const name = familyOf(product)
+    const entry = families.find((candidate) => candidate.name === name)
+    if (entry) entry.count++
+    else families.push({ name, count: 1 })
+  }
 
   const checkedIds = new Set(
     draft.offer_items
@@ -1096,24 +1102,32 @@ function OfferStep({ draft, patch }: StepProps) {
   const activeFamilies = new Set(
     [...checkedIds].map((id) => familyOf(productById.get(id) as OfferItem)),
   )
-  const visibleProducts = products.filter((item) => activeFamilies.has(familyOf(item)))
+  const visibleProducts = seasonProducts.filter((item) => activeFamilies.has(familyOf(item)))
 
   const pickSeason = (item: OfferItem) => {
-    const others = draft.offer_items.filter(
-      (element) => element.offer_item_id === null || !seasonIds.has(element.offer_item_id),
-    )
     const wasActive = chosenSeasonId === item.id
+    const nextSeasonId = wasActive ? null : item.id
+    // Changer de gamme écarte les produits cochés qui n'y vivent pas : une
+    // offre estivale ne vend pas la bûche de Noël restée cochée.
+    const keep = draft.offer_items.filter((element) => {
+      if (element.offer_item_id === null) return true
+      if (seasonIds.has(element.offer_item_id)) return false
+      const product = productById.get(element.offer_item_id)
+      if (product === undefined) return true
+      return nextSeasonId === null || product.season_ids.includes(nextSeasonId)
+    })
     patch({
-      offer_items: wasActive
-        ? others
-        : [...others, { offer_item_id: item.id, label: `Gamme ${seasonLabel(item.name)}` }],
+      offer_items:
+        nextSeasonId === null
+          ? keep
+          : [...keep, { offer_item_id: item.id, label: `Gamme ${seasonLabel(item.name)}` }],
       // Le titre de l'offre suit la gamme : il n'est plus saisi à la main.
-      offer_title: wasActive ? '' : `Offre ${seasonLabel(item.name)}`,
+      offer_title: nextSeasonId === null ? '' : `Offre ${seasonLabel(item.name)}`,
     })
   }
 
   const toggleFamily = (name: string) => {
-    const familyProducts = products.filter((item) => familyOf(item) === name)
+    const familyProducts = seasonProducts.filter((item) => familyOf(item) === name)
     const ids = new Set(familyProducts.map((item) => item.id))
     const others = draft.offer_items.filter(
       (element) => element.offer_item_id === null || !ids.has(element.offer_item_id),
@@ -1200,6 +1214,13 @@ function OfferStep({ draft, patch }: StepProps) {
               <span className="muted"> ({activeFamilies.size} sélectionnées)</span>
             ) : null}
           </h3>
+          {families.length === 0 && !catalog.loading ? (
+            <p className="muted">
+              {chosenSeason !== null
+                ? 'Aucun produit rattaché à cette gamme.'
+                : 'Le catalogue est vide.'}
+            </p>
+          ) : null}
           <div className="family-tiles">
             {families.map(({ name, count }) => {
               const active = activeFamilies.has(name)

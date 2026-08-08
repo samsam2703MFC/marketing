@@ -141,6 +141,16 @@ final class ErpSyncRepository
     ];
 
     /**
+     * Liaison produit ↔ gamme (`product_availability_period_connection`).
+     *
+     * @var array<string, list<string>>
+     */
+    private const PRODUCT_SEASON_COLUMNS = [
+        'product' => ['id_product', 'product_id', 'id_item'],
+        'season'  => ['id_period', 'period_id', 'id_availability_period', 'id_season', 'season_id'],
+    ];
+
+    /**
      * Secteurs visés : les types de compte professionnel de l'ERP.
      *
      * @var array<string, list<string>>
@@ -220,6 +230,14 @@ final class ErpSyncRepository
             $result['seasons'] = $this->syncSeasons($auth);
         } catch (Throwable $failure) {
             $result['seasons'] = ['error' => $failure->getMessage()];
+        }
+
+        // Les liens produit ↔ gamme arrivent en dernier : ils ont besoin des
+        // deux reprises précédentes pour rapprocher leurs identifiants.
+        try {
+            $result['season_links'] = $this->syncProductSeasons();
+        } catch (Throwable $failure) {
+            $result['season_links'] = ['error' => $failure->getMessage()];
         }
 
         $result['inventory'] = $this->inventory;
@@ -435,6 +453,91 @@ final class ErpSyncRepository
             'updated' => $updated,
             'skipped' => $skipped,
             'retired' => $retired,
+        ];
+    }
+
+    /**
+     * Disponibilité des produits par gamme → `mar_offer_item_season`.
+     *
+     * C'est cette table qui permet à l'étape « Offre » de ne montrer, une
+     * gamme choisie, que les catégories et produits qui y vivent. Les liens
+     * sont réécrits en bloc à chaque reprise : ils n'ont pas d'histoire
+     * propre, l'ERP fait foi.
+     *
+     * @return array<string, mixed>
+     */
+    public function syncProductSeasons(): array
+    {
+        [$schema, $table] = $this->source(
+            'MAR_ERP_PRODUCT_SEASONS_TABLE',
+            'product_availability_period_connection'
+        );
+        $columns = $this->resolve($schema, $table, self::PRODUCT_SEASON_COLUMNS, ['product', 'season']);
+
+        $rows = $this->readSource($schema, $table, $columns);
+
+        $connection = Database::connection();
+
+        // Rapprochement par les références de reprise : ce sont elles qui
+        // relient un identifiant ERP à sa ligne de catalogue.
+        $productIds = [];
+        $seasonIds  = [];
+        foreach ($connection->query(
+            "SELECT sku_ref, id, category FROM mar_offer_item
+              WHERE sku_ref LIKE 'erp-%' AND category IN ('produit', 'saison')"
+        )->fetchAll() as $item) {
+            if ($item['category'] === 'produit') {
+                $productIds[(string) $item['sku_ref']] = (int) $item['id'];
+            } else {
+                $seasonIds[(string) $item['sku_ref']] = (int) $item['id'];
+            }
+        }
+
+        $connection->beginTransaction();
+
+        try {
+            $connection->exec('DELETE FROM mar_offer_item_season');
+
+            $insert = $connection->prepare(
+                'INSERT IGNORE INTO mar_offer_item_season (item_id, season_item_id)
+                 VALUES (:item_id, :season_item_id)'
+            );
+
+            $linked         = 0;
+            $unknownProduct = 0;
+            $unknownSeason  = 0;
+
+            foreach ($rows as $row) {
+                $itemId   = $productIds['erp-' . $row['product']] ?? null;
+                $seasonId = $seasonIds['erp-saison-' . $row['season']] ?? null;
+
+                if ($itemId === null) {
+                    $unknownProduct++;
+                    continue;
+                }
+                if ($seasonId === null) {
+                    $unknownSeason++;
+                    continue;
+                }
+
+                $insert->execute(['item_id' => $itemId, 'season_item_id' => $seasonId]);
+                $linked += $insert->rowCount();
+            }
+
+            $connection->commit();
+        } catch (Throwable $failure) {
+            $connection->rollBack();
+
+            throw $failure;
+        }
+
+        return [
+            'source'          => $schema . '.' . $table,
+            'columns'         => $columns,
+            'read'            => count($rows),
+            'linked'          => $linked,
+            'unknown_product' => $unknownProduct,
+            'unknown_season'  => $unknownSeason,
         ];
     }
 

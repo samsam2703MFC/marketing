@@ -536,6 +536,8 @@ export interface OfferItem {
   /** Famille de produits, quand la reprise l'a trouvée. */
   detail: string | null
   price_amount: number | null
+  /** Gammes saisonnières où le produit est actif (`mar_offer_item_season`). */
+  season_ids: number[]
 }
 
 /** Catalogue actif — la source de sélection de l'étape « Offre ». */
@@ -799,6 +801,15 @@ export interface SyncResult {
   products?: SyncReport | { error: string }
   /** Reprise des gammes saisonnières, même marge que le catalogue. */
   seasons?: SyncReport | { error: string }
+  /** Liens produit ↔ gamme, réécrits en bloc à chaque reprise. */
+  season_links?: {
+    source?: string
+    read?: number
+    linked?: number
+    unknown_product?: number
+    unknown_season?: number
+    error?: string
+  }
 }
 
 export function syncErp(): Promise<SyncResult> {
