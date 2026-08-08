@@ -276,7 +276,7 @@ jobs:
           # `which` en secours de `command -v`, que tous les shells n'ont pas.
           out=$($SSH_CMD $SSH_OPTS -o BatchMode=yes -o ConnectTimeout=15 "$SSH_USER@$SSH_HOST" "
             echo \"USER=\$(id -un 2>/dev/null)\"
-            if mkdir -p '$DEPLOY_DIR' '$DEPLOY_DIR/api' '$DEPLOY_DIR/db' 2>&1; then
+            if mkdir -p '$DEPLOY_DIR' '$DEPLOY_DIR/api' '$DEPLOY_DIR/db' '$DEPLOY_DIR_FRANCHISE' '$DEPLOY_DIR_FRANCHISE/api' 2>&1; then
               echo MKDIR_OK
             else
               echo MKDIR_FAIL
@@ -330,6 +330,11 @@ jobs:
         run: |
           RSYNC="rsync -rltDz --omit-dir-times"
           if [ -n "$SSH_KEY" ]; then PRE=""; else PRE="sshpass -e"; fi
+          # Filet : l'étape précédente crée ces répertoires, mais un rsync vers
+          # une destination absente échoue sur un code 11 laconique — mieux vaut
+          # s'en assurer ici que de rediagnostiquer une erreur d'E/S.
+          $SSH_CMD $SSH_OPTS "$SSH_USER@$SSH_HOST" \
+            "mkdir -p '$DEPLOY_DIR/api' '$DEPLOY_DIR/db' '$DEPLOY_DIR_FRANCHISE/api'"
           $PRE $RSYNC --exclude 'tests' -e "ssh $SSH_OPTS" api/ "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/api/"
           $PRE $RSYNC -e "ssh $SSH_OPTS" db/ "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/db/"
           # L'API est publiée dans les deux répertoires : chacun reste autonome,
