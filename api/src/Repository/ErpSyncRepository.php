@@ -1524,37 +1524,24 @@ final class ErpSyncRepository
                 : sprintf('%s : %s', $table, implode(', ', $colonnes));
         }
 
-        // Tables dont le nom évoque une recette, un coût ou une taxe. On rend
-        // leur nom et leurs colonnes : c'est ce qui permet de désigner la
-        // source sans la deviner.
-        $statement = Database::connection()->prepare(
-            'SELECT table_name FROM information_schema.tables
-              WHERE table_schema = :schema
-                AND table_name NOT LIKE \'mar\\_%\'
-                AND (table_name LIKE \'%recip%\' OR table_name LIKE \'%recett%\'
-                  OR table_name LIKE \'%ingredient%\' OR table_name LIKE \'%cost%\'
-                  OR table_name LIKE \'%cout%\'      OR table_name LIKE \'%vat%\'
-                  OR table_name LIKE \'%tva%\'       OR table_name LIKE \'%tax%\'
-                  OR table_name LIKE \'%composition%\')
-              ORDER BY table_name
-              LIMIT 15'
-        );
-        $statement->execute(['schema' => $schema]);
-
-        $trouvees = [];
-        foreach ($statement->fetchAll(PDO::FETCH_COLUMN) as $table) {
-            $trouvees[] = sprintf('%s (%s)', $table, implode(', ', $this->columnsOf($schema, (string) $table)));
+        // Chaîne de la recette, table par table. La recherche par fragment de
+        // nom a fait son office — elle a montré `flattened_recipe_ingredient`
+        // et `material_country_vat_rates_connection` — mais elle rend trop de
+        // colonnes pour ce qu'une annotation retient, et se coupait au milieu
+        // du nom qui restait à lire. On nomme donc les tables qui comptent.
+        foreach ([
+            'recette'    => 'product_recipe',
+            'ingrédient' => 'flattened_recipe_ingredient',
+            'matière'    => 'material',
+        ] as $notion => $table) {
+            $colonnes = $this->columnsOf($schema, $table);
+            $rapport[$notion] = $colonnes === []
+                ? sprintf('%s : table absente', $table)
+                : sprintf('%s : %s', $table, implode(', ', $colonnes));
         }
 
-        $rapport['recette / taxe'] = $trouvees === []
-            ? 'aucune table dont le nom évoque une recette, un coût ou une taxe'
-            : implode(' ; ', $trouvees);
-
-        // `product.id_recipe` prouve qu'une table de recettes existe : on suit
-        // la contrainte plutôt que le nom, et on rend ses colonnes. C'est là
-        // que doit se trouver le coût matière d'un produit — le module de food
-        // cost fourni, lui, ne le connaît qu'à l'échelle d'une boutique.
-        $recette = $this->columnPointingTo($schema, 'product', 'recipe', $this->columnsOf($schema, 'product'));
+        // La contrainte, quand elle existe, dit vers quelle table pointe
+        // `product.id_recipe` — plus sûrement que la ressemblance des noms.
         $lien = Database::connection()->prepare(
             'SELECT referenced_table_name FROM information_schema.key_column_usage
               WHERE table_schema = :schema AND table_name = \'product\'
@@ -1564,12 +1551,9 @@ final class ErpSyncRepository
         $lien->execute(['schema' => $schema]);
         $cible = $lien->fetchColumn();
 
-        $rapport['recette du produit'] = $cible === false
-            ? sprintf(
-                'product.id_recipe sans contrainte déclarée%s',
-                $recette === null ? '' : ' (colonne ' . $recette . ')'
-            )
-            : sprintf('%s : %s', $cible, implode(', ', $this->columnsOf($schema, (string) $cible)));
+        $rapport['cible id_recipe'] = $cible === false
+            ? 'aucune contrainte déclarée sur product.id_recipe'
+            : (string) $cible;
 
         return $rapport;
     }
