@@ -160,6 +160,17 @@ function Workspace() {
     setRoute(next)
   }
 
+  /**
+   * Reprise d'un brouillon : l'assistant, et non le suivi.
+   *
+   * Une campagne en brouillon n'a rien à piloter — pas de KPI, pas de lead, pas
+   * de dépense. Ce qu'on veut d'elle, c'est la finir.
+   */
+  function resumeCampaign(id: number) {
+    setCampaignId(id)
+    setRoute('builder')
+  }
+
   if (references.error) {
     return (
       <div className="app">
@@ -225,7 +236,7 @@ function Workspace() {
             <p className="topbar__kicker">
               {role === 'BRAND_ADMIN' ? 'Vue Réseau' : 'Vue Franchisé'}
             </p>
-            <h1>{titleFor(role, route) || 'Suivi de campagne'}</h1>
+            <h1>{titleFor(role, route, campaignId !== null) || 'Suivi de campagne'}</h1>
           </div>
         </header>
 
@@ -245,6 +256,7 @@ function Workspace() {
               brandId={brandId}
               onOpen={openCampaign}
               onCreate={() => navigate('builder')}
+              onResume={resumeCampaign}
             />
           ) : null}
 
@@ -272,6 +284,7 @@ function Workspace() {
               refs={refs}
               role={role}
               brandId={brandId}
+              campaignId={campaignId}
               onCreated={openCampaign}
               onCancel={() => navigate('campaigns')}
             />

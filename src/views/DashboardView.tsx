@@ -18,8 +18,14 @@ export default function DashboardView({ statuses, levers, brandId, onOpen }: Das
   const leverPerf = useAsync(() => api.getLeverSummary(), [])
 
   const rows = campaigns.data ?? []
-  const budget = rows.reduce((sum, c) => sum + c.budget_amount, 0)
-  const spent = rows.reduce((sum, c) => sum + c.spent_amount, 0)
+  // Le budget exclut les brouillons. L'assistant enregistre à chaque étape,
+  // pour qu'une campagne interrompue se reprenne : compter le budget d'une
+  // campagne qu'on n'a pas fini d'écrire annoncerait un engagement que
+  // personne n'a pris.
+  const engaged = rows.filter((c) => c.status_code !== 'draft')
+  const budget = engaged.reduce((sum, c) => sum + c.budget_amount, 0)
+  const spent = engaged.reduce((sum, c) => sum + c.spent_amount, 0)
+  const drafts = rows.length - engaged.length
   const live = rows.filter((c) => c.status_code === 'live')
 
   return (
@@ -46,7 +52,12 @@ export default function DashboardView({ statuses, levers, brandId, onOpen }: Das
         <section className="card">
           <h2>Budget alloué</h2>
           <p className="metric">{formatEur(budget)}</p>
-          <p className="muted">{formatEur(spent)} engagés</p>
+          <p className="muted">
+            {formatEur(spent)} engagés
+            {drafts > 0
+              ? ` · ${drafts} brouillon${drafts > 1 ? 's' : ''} non compté${drafts > 1 ? 's' : ''}`
+              : ''}
+          </p>
         </section>
 
         <section className="card">

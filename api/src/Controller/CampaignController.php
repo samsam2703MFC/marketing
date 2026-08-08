@@ -101,6 +101,52 @@ final class CampaignController
         return $response;
     }
 
+    /**
+     * Brouillon relu pour être repris dans l'assistant.
+     *
+     * Route distincte de `show` : celle-ci sert le suivi et rend des libellés,
+     * là où l'assistant a besoin des identifiants pour recocher ce qui l'était.
+     */
+    public function draft(Request $request): array
+    {
+        $id = $request->intParam('id');
+        if ($id === null) {
+            return Response::error('Identifiant de campagne invalide.');
+        }
+
+        $draft = $this->campaigns->draft(AuthContext::current(), $id);
+
+        return $draft === null ? Response::notFound('Campagne introuvable.') : Response::data($draft);
+    }
+
+    /**
+     * Reprise : la campagne et l'ensemble de ses rattachements.
+     *
+     * Même charge utile que la création. L'assistant n'a pas à savoir s'il
+     * enregistre pour la première fois ou la dixième — c'est la présence d'un
+     * identifiant qui décide, et rien d'autre.
+     */
+    public function replace(Request $request): array
+    {
+        $id = $request->intParam('id');
+        if ($id === null) {
+            return Response::error('Identifiant de campagne invalide.');
+        }
+
+        $payload = $request->only([
+            'type_id', 'name', 'scope', 'client_target', 'tone', 'status_code',
+            'starts_on', 'ends_on', 'budget_amount', 'objective_coef_pct',
+            'agency_note', 'b2b_webshop_enabled', 'pos_survey_enabled', 'pos_questions',
+            'create_crm_leads', 'image_url', 'focal_point_y', 'shop_ids', 'channels',
+            'lever_targets', 'sector_ids', 'agency_ask_ids', 'b2b_option_ids',
+            'uniform_ids', 'format_ids', 'retroplanning', 'offer',
+        ]);
+
+        return $this->campaigns->updateWithRelations(AuthContext::current(), $id, $payload)
+            ? Response::mutated('Brouillon enregistré.')
+            : Response::notFound('Campagne introuvable.');
+    }
+
     public function update(Request $request): array
     {
         $id = $request->intParam('id');

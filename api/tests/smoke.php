@@ -580,6 +580,142 @@ check(
     json_encode($response['body'][0] ?? null)
 );
 
+// --- Reprise d'un brouillon -------------------------------------------------
+// Une campagne en brouillon est une campagne qu'on n'a pas fini d'écrire.
+// Jusqu'ici elle ne pouvait pas l'être : `update()` ne touche que les colonnes,
+// et les rattachements ne s'écrivaient qu'à la création. Un brouillon était un
+// cul-de-sac — visible dans la liste, impossible à terminer.
+echo "\nReprise d'un brouillon\n";
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+$secteurs = array_column($refs['b2bSectors'], 'id', 'code');
+
+$response = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name'           => 'Brouillon à reprendre',
+    'status_code'    => 'draft',
+    'scope'          => 'RESEAU',
+    'client_target'  => 'b2b',
+    'type_id'        => (int) $types['ouverture']['id'],
+    'sector_ids'     => [(int) $secteurs['offices']],
+    'agency_ask_ids' => array_slice(array_column($refs['agencyAsks'], 'id'), 0, 2),
+    'uniform_ids'    => array_slice(array_column($refs['uniforms'], 'id'), 0, 1),
+    'channels'       => [['channel_id' => (int) $refs['channels'][0]['id'], 'budget_amount' => 400]],
+    'retroplanning'  => [['label' => 'Brief agence', 'days_before_launch' => 30]],
+]);
+$brouillon = (int) $response['body']['inserted_id'];
+
+$response = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon));
+$etat     = $response['body'];
+check('le brouillon se relit par identifiants', $response['status'] === 200);
+check(
+    'les pastilles cochées reviennent en identifiants, pas en libellés',
+    $etat['sector_ids'] === [(int) $secteurs['offices']] && count($etat['agency_ask_ids']) === 2,
+    json_encode(['secteurs' => $etat['sector_ids'], 'agence' => $etat['agency_ask_ids']])
+);
+check('les canaux reviennent avec leur budget', ($etat['channels'][0]['budget_amount'] ?? null) == 400);
+check('le rétroplanning enregistré revient', count($etat['retroplanning']) === 1);
+
+// Réécriture en bloc : les rattachements sont remplacés, pas empilés. Les
+// ajouter aux précédents laisserait les canaux d'avant à côté des nouveaux, et
+// les budgets doubleraient sans que rien ne le signale.
+$response = call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon), [], [
+    'name'          => 'Brouillon repris',
+    'status_code'   => 'draft',
+    'scope'         => 'RESEAU',
+    'client_target' => 'b2b',
+    'type_id'       => (int) $types['ouverture']['id'],
+    'sector_ids'    => [(int) $secteurs['horeca']],
+    'channels'      => [['channel_id' => (int) $refs['channels'][1]['id'], 'budget_amount' => 250]],
+    'retroplanning' => [['label' => 'Brief agence', 'days_before_launch' => 30]],
+]);
+check('la reprise aboutit', $response['status'] === 200, 'statut ' . $response['status']);
+
+$etat = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon))['body'];
+check('le nom est repris', $etat['name'] === 'Brouillon repris');
+check(
+    'les rattachements sont remplacés et non empilés',
+    $etat['sector_ids'] === [(int) $secteurs['horeca']] && count($etat['channels']) === 1,
+    json_encode(['secteurs' => $etat['sector_ids'], 'canaux' => count($etat['channels'])])
+);
+check(
+    'les jonctions vidées le restent',
+    $etat['agency_ask_ids'] === [] && $etat['uniform_ids'] === [],
+    json_encode(['agence' => $etat['agency_ask_ids'], 'tenues' => $etat['uniform_ids']])
+);
+check(
+    'le rétroplanning n\'est pas dupliqué',
+    (int) $pdo->query(sprintf(
+        'SELECT COUNT(*) FROM mar_retroplanning_step WHERE campaign_id = %d',
+        $brouillon
+    ))->fetchColumn() === 1
+);
+
+// Une campagne lancée porte des choses que l'assistant ne connaît pas —
+// l'adhésion d'un franchisé, un jalon déjà coché. Les reconstruire à neuf les
+// effacerait : la réécriture en bloc s'arrête au brouillon.
+call($router, 'PATCH', sprintf('/api/v1/marketing/campaigns/%d', $brouillon), [], ['status_code' => 'live']);
+$response = call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon), [], [
+    'name' => 'Tentative sur campagne lancée',
+]);
+check(
+    'une campagne lancée ne se réécrit pas en bloc',
+    $response['status'] === 422,
+    'statut ' . $response['status']
+);
+check(
+    'et son contenu est intact',
+    (int) $pdo->query(sprintf(
+        'SELECT COUNT(*) FROM mar_campaign_channel WHERE campaign_id = %d',
+        $brouillon
+    ))->fetchColumn() === 1
+);
+
+// Le périmètre s'applique à la reprise comme au reste. Lire une campagne
+// réseau est légitime pour un franchisé — il en dépend. La réécrire ne l'est
+// pas : la lecture n'est pas une permission d'écriture, et c'est exactement la
+// confusion qui rendait autrefois une campagne réseau modifiable depuis une
+// boutique.
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+$brouillonLocal = (int) call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name'        => 'Brouillon local',
+    'status_code' => 'draft',
+    'scope'       => 'LOCALE',
+    'shop_ids'    => [1],
+])['body']['inserted_id'];
+
+$response = call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon), [], [
+    'name' => 'Reprise par un franchisé',
+]);
+check(
+    'un franchisé ne reprend pas un brouillon du réseau',
+    $response['status'] === 422,
+    'statut ' . $response['status']
+);
+check(
+    'et le nom du brouillon réseau est intact',
+    $pdo->query(sprintf('SELECT name FROM mar_campaign WHERE id = %d', $brouillon))->fetchColumn()
+        !== 'Reprise par un franchisé'
+);
+
+$response = call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillonLocal), [], [
+    'name'     => 'Brouillon local repris',
+    'scope'    => 'LOCALE',
+    'shop_ids' => [1],
+]);
+check('mais il reprend le sien', $response['status'] === 200, 'statut ' . $response['status']);
+
+$response = call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillonLocal), [], [
+    'name'     => 'Chez le voisin',
+    'scope'    => 'LOCALE',
+    'shop_ids' => [2],
+]);
+check(
+    'sans pouvoir le rattacher à la boutique d\'un confrère',
+    $response['status'] === 422,
+    'statut ' . $response['status']
+);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
 // --- Contrôles à l'écriture ------------------------------------------------
 // L'assistant impose déjà ces règles, mais il n'est qu'un client parmi
 // d'autres. Deux d'entre elles comptent particulièrement : une portée refusée

@@ -8,6 +8,8 @@ interface CampaignsViewProps {
   brandId: number | 'all'
   onOpen: (campaignId: number) => void
   onCreate: () => void
+  /** Rouvre un brouillon dans l'assistant, là où il s'était arrêté. */
+  onResume: (campaignId: number) => void
 }
 
 /**
@@ -16,7 +18,13 @@ interface CampaignsViewProps {
  * Les filtres de statut sont construits depuis le référentiel, pas depuis une
  * liste figée : leurs libellés et leurs couleurs viennent de la base.
  */
-export default function CampaignsView({ statuses, brandId, onOpen, onCreate }: CampaignsViewProps) {
+export default function CampaignsView({
+  statuses,
+  brandId,
+  onOpen,
+  onCreate,
+  onResume,
+}: CampaignsViewProps) {
   const [status, setStatus] = useState<string | null>(null)
   const [scope, setScope] = useState<'RESEAU' | 'LOCALE' | null>(null)
 
@@ -96,7 +104,12 @@ export default function CampaignsView({ statuses, brandId, onOpen, onCreate }: C
 
       <div className="campaign-grid">
         {(data ?? []).map((campaign) => (
-          <CampaignCard key={campaign.id} campaign={campaign} onOpen={onOpen} />
+          <CampaignCard
+            key={campaign.id}
+            campaign={campaign}
+            onOpen={onOpen}
+            onResume={onResume}
+          />
         ))}
       </div>
     </>
@@ -106,10 +119,18 @@ export default function CampaignsView({ statuses, brandId, onOpen, onCreate }: C
 function CampaignCard({
   campaign,
   onOpen,
+  onResume,
 }: {
   campaign: Campaign
   onOpen: (campaignId: number) => void
+  onResume: (campaignId: number) => void
 }) {
+  // Un brouillon est une campagne qu'on n'a pas fini d'écrire : elle n'a rien à
+  // piloter — ni KPI, ni lead, ni dépense — et tout à terminer. Le clic la
+  // rouvre donc dans l'assistant, pas dans le suivi, où il n'y avait rien à
+  // voir et d'où l'on ne pouvait pas revenir la finir.
+  const unfinished = campaign.status_code === 'draft'
+
   // Barre de progression budgétaire, bornée : un dépassement ne doit pas
   // déborder de la carte.
   const ratio = campaign.budget_amount > 0
@@ -117,7 +138,10 @@ function CampaignCard({
     : 0
 
   return (
-    <article className="card campaign" onClick={() => onOpen(campaign.id)}>
+    <article
+      className={`card campaign${unfinished ? ' campaign--draft' : ''}`}
+      onClick={() => (unfinished ? onResume(campaign.id) : onOpen(campaign.id))}
+    >
       {campaign.image_url ? (
         <img className="campaign__image" src={campaign.image_url} alt="" />
       ) : (
@@ -145,12 +169,21 @@ function CampaignCard({
           {formatDate(campaign.starts_on)} → {formatDate(campaign.ends_on)}
         </p>
 
-        <div className="progress" role="presentation">
-          <div className="progress__fill" style={{ width: `${ratio}%` }} />
-        </div>
-        <p className="campaign__budget">
-          {formatEur(campaign.spent_amount)} <span className="muted">/ {formatEur(campaign.budget_amount)}</span>
-        </p>
+        {unfinished ? (
+          // Le budget d'un brouillon ne mesure rien : il n'a pas été engagé.
+          // À sa place, ce qu'il y a à faire.
+          <p className="campaign__resume">Reprendre là où vous en étiez →</p>
+        ) : (
+          <>
+            <div className="progress" role="presentation">
+              <div className="progress__fill" style={{ width: `${ratio}%` }} />
+            </div>
+            <p className="campaign__budget">
+              {formatEur(campaign.spent_amount)}{' '}
+              <span className="muted">/ {formatEur(campaign.budget_amount)}</span>
+            </p>
+          </>
+        )}
       </div>
     </article>
   )

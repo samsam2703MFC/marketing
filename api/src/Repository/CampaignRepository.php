@@ -438,6 +438,139 @@ final class CampaignRepository
      */
     public function createWithRelations(AuthContext $auth, array $data): int
     {
+        $this->assertShopsInScope($auth, self::intList($data['shop_ids'] ?? []));
+
+        $connection = Database::connection();
+        $connection->beginTransaction();
+
+        try {
+            $campaignId = $this->create($auth, $data);
+            $this->writeRelations($campaignId, $auth, $data);
+
+            $connection->commit();
+
+            return $campaignId;
+        } catch (\Throwable $failure) {
+            $connection->rollBack();
+
+            throw $failure;
+        }
+    }
+
+    /**
+     * Reprise d'un brouillon : la campagne et tous ses rattachements.
+     *
+     * Une campagne en brouillon est une campagne qu'on n'a pas fini d'écrire.
+     * Jusqu'ici elle ne pouvait pas l'être : `update()` ne touche que les
+     * colonnes de `mar_campaign`, et l'assistant écrivait ses rattachements à
+     * la seule création. Un brouillon était donc un cul-de-sac — visible dans
+     * la liste, impossible à terminer.
+     *
+     * Les rattachements sont remplacés, pas fusionnés. Les ajouter aux
+     * précédents laisserait les canaux de la version d'avant à côté des
+     * nouveaux : les budgets doubleraient sans que rien ne le signale.
+     *
+     * Réservée au brouillon. Une campagne lancée porte des choses que
+     * l'assistant ne connaît pas — l'adhésion d'un franchisé, le budget local
+     * qu'il a posé, un jalon déjà coché — et les reconstruire à neuf les
+     * effacerait. Pour celles-là, `update()` et ses colonnes suffisent.
+     */
+    public function updateWithRelations(AuthContext $auth, int $id, array $data): bool
+    {
+        $current = $this->find($auth, $id);
+        if ($current === null) {
+            return false;
+        }
+
+        $this->assertWritable($auth, $current);
+
+        if (($current['status_code'] ?? '') !== 'draft') {
+            throw new RuntimeException(
+                'Cette campagne n\'est plus un brouillon : son contenu ne se réécrit plus en bloc.'
+            );
+        }
+
+        $this->assertShopsInScope($auth, self::intList($data['shop_ids'] ?? []));
+
+        $connection = Database::connection();
+        $connection->beginTransaction();
+
+        try {
+            $this->updateColumns($auth, $id, $current, $data);
+            $this->clearRelations($id);
+            $this->writeRelations($id, $auth, $data);
+
+            $connection->commit();
+
+            return true;
+        } catch (\Throwable $failure) {
+            $connection->rollBack();
+
+            throw $failure;
+        }
+    }
+
+    /**
+     * Boutiques hors périmètre : on refuse avant d'ouvrir la transaction.
+     *
+     * Inutile d'écrire quoi que ce soit pour l'annuler ensuite.
+     *
+     * @param list<int> $shopIds
+     */
+    private function assertShopsInScope(AuthContext $auth, array $shopIds): void
+    {
+        foreach ($shopIds as $shopId) {
+            if (!Scope::allowsShop($auth, $shopId)) {
+                throw new RuntimeException('Boutique hors périmètre : ' . $shopId);
+            }
+        }
+    }
+
+    /**
+     * Efface les rattachements d'une campagne.
+     *
+     * Ordre indifférent : chaque table porte une clé étrangère en cascade vers
+     * la campagne, et aucune ne dépend d'une autre — sauf les éléments d'offre,
+     * emportés par la suppression de l'offre, et les déclinaisons, emportées
+     * par celle du visuel.
+     */
+    private function clearRelations(int $campaignId): void
+    {
+        $connection = Database::connection();
+
+        foreach ([
+            'mar_campaign_shop',
+            'mar_campaign_channel',
+            'mar_campaign_lever_target',
+            'mar_campaign_b2b_sector',
+            'mar_campaign_agency_ask',
+            'mar_campaign_b2b_option',
+            'mar_campaign_uniform',
+            'mar_campaign_pos_question',
+            'mar_retroplanning_step',
+            'mar_campaign_offer',
+            'mar_campaign_asset',
+        ] as $table) {
+            $statement = $connection->prepare(
+                sprintf('DELETE FROM %s WHERE campaign_id = :id', $table)
+            );
+            $statement->execute(['id' => $campaignId]);
+        }
+    }
+
+    /**
+     * Rattachements d'une campagne, écrits à neuf.
+     *
+     * Partagé par la création et la reprise : deux copies de ces insertions
+     * auraient divergé au premier champ ajouté, et c'est l'écran de reprise qui
+     * aurait silencieusement perdu ce que la création savait écrire.
+     *
+     * @param array<string,mixed> $data
+     */
+    private function writeRelations(int $campaignId, AuthContext $auth, array $data): void
+    {
+        $connection = Database::connection();
+
         $shopIds  = self::intList($data['shop_ids'] ?? []);
         $channels = is_array($data['channels'] ?? null) ? $data['channels'] : [];
         $targets  = is_array($data['lever_targets'] ?? null) ? $data['lever_targets'] : [];
@@ -450,120 +583,97 @@ final class CampaignRepository
         $questions = is_array($data['pos_questions'] ?? null) ? $data['pos_questions'] : [];
         $offer    = is_array($data['offer'] ?? null) ? $data['offer'] : null;
 
-        // Le contrôle de périmètre passe avant l'ouverture de la transaction :
-        // inutile d'écrire quoi que ce soit pour l'annuler ensuite.
-        foreach ($shopIds as $shopId) {
-            if (!Scope::allowsShop($auth, $shopId)) {
-                throw new RuntimeException('Boutique hors périmètre : ' . $shopId);
+        if ($shopIds !== []) {
+            $statement = $connection->prepare(
+                'INSERT INTO mar_campaign_shop (campaign_id, shop_id, created_by)
+                 VALUES (:campaign_id, :shop_id, :created_by)'
+            );
+            foreach ($shopIds as $shopId) {
+                $statement->execute([
+                    'campaign_id' => $campaignId,
+                    'shop_id'     => $shopId,
+                    'created_by'  => $auth->userId,
+                ]);
             }
         }
 
-        $connection = Database::connection();
-        $connection->beginTransaction();
-
-        try {
-            $campaignId = $this->create($auth, $data);
-
-            if ($shopIds !== []) {
-                $statement = $connection->prepare(
-                    'INSERT INTO mar_campaign_shop (campaign_id, shop_id, created_by)
-                     VALUES (:campaign_id, :shop_id, :created_by)'
-                );
-                foreach ($shopIds as $shopId) {
-                    $statement->execute([
-                        'campaign_id' => $campaignId,
-                        'shop_id'     => $shopId,
-                        'created_by'  => $auth->userId,
-                    ]);
-                }
-            }
-
-            if ($channels !== []) {
-                $statement = $connection->prepare(
-                    'INSERT INTO mar_campaign_channel
-                        (campaign_id, channel_id, agency_id, budget_amount, is_enabled, created_by)
-                     VALUES (:campaign_id, :channel_id, :agency_id, :budget_amount, 1, :created_by)'
-                );
-                foreach ($channels as $channel) {
-                    $channelId = (int) ($channel['channel_id'] ?? 0);
-                    if ($channelId === 0) {
-                        continue;
-                    }
-
-                    // `budget_amount` est NOT NULL DEFAULT 0. Activer un canal
-                    // sans lui donner de budget est légitime — le montant se
-                    // décide plus tard — et doit valoir zéro, pas une 500.
-                    $budget = $channel['budget_amount'] ?? null;
-
-                    $statement->execute([
-                        'campaign_id'   => $campaignId,
-                        'channel_id'    => $channelId,
-                        'agency_id'     => isset($channel['agency_id']) && $channel['agency_id'] !== ''
-                            ? (int) $channel['agency_id']
-                            : null,
-                        'budget_amount' => $budget === null || $budget === '' ? 0 : $budget,
-                        'created_by'    => $auth->userId,
-                    ]);
-                }
-            }
-
-            if ($targets !== []) {
-                $statement = $connection->prepare(
-                    'INSERT INTO mar_campaign_lever_target
-                        (campaign_id, lever_id, target_value, target_unit, created_by)
-                     VALUES (:campaign_id, :lever_id, :target_value, :target_unit, :created_by)'
-                );
-                foreach ($targets as $target) {
-                    $leverId = (int) ($target['lever_id'] ?? 0);
-                    if ($leverId === 0) {
-                        continue;
-                    }
-
-                    $statement->execute([
-                        'campaign_id'  => $campaignId,
-                        'lever_id'     => $leverId,
-                        'target_value' => $target['target_value'] ?? 0,
-                        'target_unit'  => $target['target_unit'] ?? null,
-                        'created_by'   => $auth->userId,
-                    ]);
-                }
-            }
-
-            // Jonctions simples : même forme, même garde. Les identifiants sont
-            // déjà filtrés par intList, et les clés étrangères refusent le reste.
-            foreach ([
-                ['mar_campaign_b2b_sector',    'sector_id', $sectors],
-                ['mar_campaign_agency_ask',    'ask_id',    $asks],
-                ['mar_campaign_b2b_option',    'option_id', $b2bOpts],
-                ['mar_campaign_uniform',       'uniform_id', $uniforms],
-            ] as [$table, $column, $ids]) {
-                if ($ids === []) {
+        if ($channels !== []) {
+            $statement = $connection->prepare(
+                'INSERT INTO mar_campaign_channel
+                    (campaign_id, channel_id, agency_id, budget_amount, is_enabled, created_by)
+                 VALUES (:campaign_id, :channel_id, :agency_id, :budget_amount, 1, :created_by)'
+            );
+            foreach ($channels as $channel) {
+                $channelId = (int) ($channel['channel_id'] ?? 0);
+                if ($channelId === 0) {
                     continue;
                 }
 
-                $statement = $connection->prepare(sprintf(
-                    'INSERT INTO %s (campaign_id, %s) VALUES (:campaign_id, :value)',
-                    $table,
-                    $column
-                ));
-                foreach ($ids as $id) {
-                    $statement->execute(['campaign_id' => $campaignId, 'value' => $id]);
+                // `budget_amount` est NOT NULL DEFAULT 0. Activer un canal
+                // sans lui donner de budget est légitime — le montant se
+                // décide plus tard — et doit valoir zéro, pas une 500.
+                $budget = $channel['budget_amount'] ?? null;
+
+                $statement->execute([
+                    'campaign_id'   => $campaignId,
+                    'channel_id'    => $channelId,
+                    'agency_id'     => isset($channel['agency_id']) && $channel['agency_id'] !== ''
+                        ? (int) $channel['agency_id']
+                        : null,
+                    'budget_amount' => $budget === null || $budget === '' ? 0 : $budget,
+                    'created_by'    => $auth->userId,
+                ]);
+            }
+        }
+
+        if ($targets !== []) {
+            $statement = $connection->prepare(
+                'INSERT INTO mar_campaign_lever_target
+                    (campaign_id, lever_id, target_value, target_unit, created_by)
+                 VALUES (:campaign_id, :lever_id, :target_value, :target_unit, :created_by)'
+            );
+            foreach ($targets as $target) {
+                $leverId = (int) ($target['lever_id'] ?? 0);
+                if ($leverId === 0) {
+                    continue;
                 }
+
+                $statement->execute([
+                    'campaign_id'  => $campaignId,
+                    'lever_id'     => $leverId,
+                    'target_value' => $target['target_value'] ?? 0,
+                    'target_unit'  => $target['target_unit'] ?? null,
+                    'created_by'   => $auth->userId,
+                ]);
+            }
+        }
+
+        // Jonctions simples : même forme, même garde. Les identifiants sont
+        // déjà filtrés par intList, et les clés étrangères refusent le reste.
+        foreach ([
+            ['mar_campaign_b2b_sector',    'sector_id', $sectors],
+            ['mar_campaign_agency_ask',    'ask_id',    $asks],
+            ['mar_campaign_b2b_option',    'option_id', $b2bOpts],
+            ['mar_campaign_uniform',       'uniform_id', $uniforms],
+        ] as [$table, $column, $ids]) {
+            if ($ids === []) {
+                continue;
             }
 
-            $this->insertOffer($campaignId, $auth, $offer);
-            $this->insertRetroplanning($campaignId, $auth, $retro);
-            $this->insertPosQuestions($campaignId, $auth, $questions, !empty($data['pos_survey_enabled']));
-            $this->insertAsset($campaignId, $auth, $data['image_url'] ?? null, $data['focal_point_y'] ?? null, $formats);
-
-            $connection->commit();
-
-            return $campaignId;
-        } catch (\Throwable $failure) {
-            $connection->rollBack();
-
-            throw $failure;
+            $statement = $connection->prepare(sprintf(
+                'INSERT INTO %s (campaign_id, %s) VALUES (:campaign_id, :value)',
+                $table,
+                $column
+            ));
+            foreach ($ids as $id) {
+                $statement->execute(['campaign_id' => $campaignId, 'value' => $id]);
+            }
         }
+
+        $this->insertOffer($campaignId, $auth, $offer);
+        $this->insertRetroplanning($campaignId, $auth, $retro);
+        $this->insertPosQuestions($campaignId, $auth, $questions, !empty($data['pos_survey_enabled']));
+        $this->insertAsset($campaignId, $auth, $data['image_url'] ?? null, $data['focal_point_y'] ?? null, $formats);
     }
 
     /**
@@ -796,6 +906,21 @@ final class CampaignRepository
 
         $this->assertWritable($auth, $current);
 
+        return $this->updateColumns($auth, $id, $current, $data);
+    }
+
+    /**
+     * Colonnes de `mar_campaign`, validées puis écrites.
+     *
+     * Extrait d'`update()` pour que la reprise d'un brouillon en dispose sans
+     * refaire les contrôles de périmètre : elle les a déjà passés, et les
+     * refaire l'obligerait à relire la campagne une seconde fois.
+     *
+     * @param array<string,mixed> $current
+     * @param array<string,mixed> $data
+     */
+    private function updateColumns(AuthContext $auth, int $id, array $current, array $data): bool
+    {
         // Les mêmes contrôles qu'à la création. Ils n'y étaient pas : une
         // campagne créée valide pouvait ensuite recevoir une portée inconnue,
         // une période inversée ou une cible fantaisiste. Le cas de la portée
@@ -817,13 +942,21 @@ final class CampaignRepository
             'create_crm_leads', 'image_url',
         ];
 
+        // Colonnes TINYINT. PDO lie un `false` PHP comme chaîne vide, que MySQL
+        // en mode strict refuse : « Incorrect integer value: '' ». La création
+        // les normalisait déjà, la mise à jour non — le défaut ne se voyait pas
+        // tant que personne n'envoyait un booléen à cette route.
+        $flags = ['b2b_webshop_enabled', 'pos_survey_enabled', 'create_crm_leads'];
+
         $assignments = [];
         $bindings    = ['id' => $id];
 
         foreach ($columns as $column) {
             if (array_key_exists($column, $data)) {
-                $assignments[]      = sprintf('%1$s = :%1$s', $column);
-                $bindings[$column]  = $data[$column];
+                $assignments[]     = sprintf('%1$s = :%1$s', $column);
+                $bindings[$column] = in_array($column, $flags, true)
+                    ? (empty($data[$column]) ? 0 : 1)
+                    : $data[$column];
             }
         }
 
@@ -836,6 +969,101 @@ final class CampaignRepository
         );
 
         return $statement->execute($bindings);
+    }
+
+    /**
+     * Brouillon relu dans la forme que l'assistant sait remplir.
+     *
+     * `find()` sert le suivi et le brief : il rend des libellés — « Horeca »,
+     * « Jeu concours » — parce qu'on les lit. L'assistant, lui, a besoin des
+     * identifiants pour recocher les pastilles. Deux besoins, deux lectures :
+     * faire rendre les deux à `find()` alourdirait chaque ouverture de suivi
+     * pour un écran qui ne s'ouvre qu'à la reprise.
+     *
+     * @return array<string,mixed>|null
+     */
+    public function draft(AuthContext $auth, int $id): ?array
+    {
+        $campaign = $this->find($auth, $id);
+        if ($campaign === null) {
+            return null;
+        }
+
+        $ids = fn (string $sql): array => array_map(
+            'intval',
+            $this->column($sql, $id)
+        );
+
+        $channels = Database::connection()->prepare(
+            'SELECT channel_id, agency_id, budget_amount
+               FROM mar_campaign_channel WHERE campaign_id = :id'
+        );
+        $channels->execute(['id' => $id]);
+
+        $questions = Database::connection()->prepare(
+            'SELECT label, answer_type, options, is_required
+               FROM mar_campaign_pos_question WHERE campaign_id = :id ORDER BY sort_order'
+        );
+        $questions->execute(['id' => $id]);
+
+        $formats = $ids(
+            'SELECT ar.format_id FROM mar_asset_render ar
+               JOIN mar_campaign_asset ca ON ca.id = ar.campaign_asset_id
+              WHERE ca.campaign_id = :id'
+        );
+
+        $master = Database::connection()->prepare(
+            'SELECT file_url, focal_point_y FROM mar_campaign_asset
+              WHERE campaign_id = :id ORDER BY is_master DESC, id LIMIT 1'
+        );
+        $master->execute(['id' => $id]);
+        $asset = $master->fetch();
+
+        return [
+            'id'                 => (int) $campaign['id'],
+            'name'               => $campaign['name'],
+            'type_id'            => $campaign['type_id'],
+            'scope'              => $campaign['scope'],
+            'status_code'        => $campaign['status_code'],
+            'starts_on'          => $campaign['starts_on'],
+            'ends_on'            => $campaign['ends_on'],
+            'tone'               => $campaign['tone'],
+            'client_target'      => $campaign['client_target'],
+            'budget_amount'      => $campaign['budget_amount'],
+            'objective_coef_pct' => $campaign['objective_coef_pct'],
+            'agency_note'        => $campaign['agency_note'],
+            'b2b_webshop_enabled' => (bool) $campaign['b2b_webshop_enabled'],
+            'pos_survey_enabled' => (bool) $campaign['pos_survey_enabled'],
+            'create_crm_leads'   => (bool) $campaign['create_crm_leads'],
+            'image_url'          => $asset === false ? '' : (string) $asset['file_url'],
+            'focal_point_y'      => $asset === false ? 50 : (int) $asset['focal_point_y'],
+
+            'shop_ids'       => $ids('SELECT shop_id FROM mar_campaign_shop WHERE campaign_id = :id'),
+            'sector_ids'     => $ids('SELECT sector_id FROM mar_campaign_b2b_sector WHERE campaign_id = :id'),
+            'agency_ask_ids' => $ids('SELECT ask_id FROM mar_campaign_agency_ask WHERE campaign_id = :id'),
+            'b2b_option_ids' => $ids('SELECT option_id FROM mar_campaign_b2b_option WHERE campaign_id = :id'),
+            'uniform_ids'    => $ids('SELECT uniform_id FROM mar_campaign_uniform WHERE campaign_id = :id'),
+            'format_ids'     => array_values(array_unique($formats)),
+
+            'channels'      => array_map([$this, 'castRow'], $channels->fetchAll()),
+            'lever_targets' => $this->leverTargets($id),
+            'retroplanning' => $this->retroplanning($id),
+            'pos_questions' => array_map([$this, 'castRow'], $questions->fetchAll()),
+            'offer'         => $this->offer($id),
+        ];
+    }
+
+    /**
+     * Première colonne d'une requête paramétrée par la campagne.
+     *
+     * @return list<string>
+     */
+    private function column(string $sql, int $campaignId): array
+    {
+        $statement = Database::connection()->prepare($sql);
+        $statement->execute(['id' => $campaignId]);
+
+        return $statement->fetchAll(PDO::FETCH_COLUMN);
     }
 
     public function delete(AuthContext $auth, int $id): bool

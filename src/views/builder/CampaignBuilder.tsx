@@ -220,17 +220,20 @@ export default function CampaignBuilder({
   refs,
   role,
   brandId,
+  campaignId,
   onCreated,
   onCancel,
 }: {
   refs: References
   role: Role
   /**
-   * Marque courante, telle que la désigne le sélecteur de la barre latérale.
+   * Marque courante, telle que la désigne le périmètre lu dans l'adresse.
    * `'all'` — le cas ordinaire d'un réseau mono-enseigne — laisse le serveur la
    * résoudre : dans un back-office, la marque est connue, elle ne se saisit pas.
    */
   brandId: number | 'all'
+  /** Brouillon repris. `null` pour une campagne neuve. */
+  campaignId: number | null
   onCreated: (campaignId: number) => void
   onCancel: () => void
 }) {
@@ -239,19 +242,109 @@ export default function CampaignBuilder({
   const [submitting, setSubmitting] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
 
+  // Identifiant de la campagne en base. Posé dès le premier enregistrement,
+  // c'est lui qui distingue une création d'une reprise — l'assistant n'a pas à
+  // le savoir autrement.
+  const [savedId, setSavedId] = useState<number | null>(campaignId)
+  const [saving, setSaving] = useState(false)
+  const [savedAt, setSavedAt] = useState<string | null>(null)
+
   const shops = useAsync(() => api.listShops(), [])
   const agencies = useAsync(() => api.listAgencies(), [])
 
+  // Reprise : le brouillon est relu une fois, et l'assistant s'ouvre là où il
+  // s'était arrêté. Repartir de l'étape 1 ferait retraverser ce qui est fait.
+  const loaded = useAsync(
+    async () => (campaignId === null ? null : await api.getCampaignDraft(campaignId)),
+    [campaignId],
+  )
+
+  const [restored, setRestored] = useState(campaignId === null)
+
+  if (!restored && loaded.data) {
+    const next = fromState(loaded.data, refs, role)
+    setDraft(next)
+    setStep(firstIncomplete(next))
+    setRestored(true)
+  }
+
   const patch = (change: Partial<Draft>) => setDraft((current) => ({ ...current, ...change }))
   const blocking = STEPS[step].blocking(draft)
+
+  /**
+   * Écrit le brouillon en base.
+   *
+   * Le premier appel crée la campagne, les suivants la réécrivent. Sans cela,
+   * le brouillon ne vivrait que dans cet onglet : fermer la fenêtre effacerait
+   * une demi-heure de saisie, et « reprendre » n'aurait rien à reprendre.
+   */
+  async function save(): Promise<number | null> {
+    setSaving(true)
+    setFailure(null)
+
+    try {
+      const payload = toPayload(draft, brandId)
+
+      if (savedId === null) {
+        const { inserted_id } = await api.createCampaign({ ...payload, status_code: 'draft' })
+        setSavedId(inserted_id)
+        setSavedAt(new Date().toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' }))
+
+        return inserted_id
+      }
+
+      await api.replaceCampaignDraft(savedId, { ...payload, status_code: 'draft' })
+      setSavedAt(new Date().toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' }))
+
+      return savedId
+    } catch (cause: unknown) {
+      setFailure(describeError(cause))
+
+      return null
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function nextStep() {
+    // L'enregistrement précède l'avancée : si l'écriture échoue, on reste sur
+    // l'étape dont le contenu vient d'être refusé, pas sur la suivante.
+    if ((await save()) === null) {
+      return
+    }
+
+    setStep(step + 1)
+  }
+
+  async function saveAndLeave() {
+    if ((await save()) !== null) {
+      onCancel()
+    }
+  }
 
   async function submit() {
     setSubmitting(true)
     setFailure(null)
 
     try {
-      const { inserted_id } = await api.createCampaign(toPayload(draft, brandId))
-      onCreated(inserted_id)
+      const id = await save()
+      if (id === null) {
+        setSubmitting(false)
+
+        return
+      }
+
+      // Le statut retenu à l'étape « Récap » n'est posé qu'ici : jusque-là, la
+      // campagne reste un brouillon, quelle que soit la case cochée.
+      if (draft.status_code !== 'draft') {
+        await api.updateCampaign(id, { status_code: draft.status_code })
+      }
+
+      if (draft.create_crm_leads) {
+        await api.generateLeads(id)
+      }
+
+      onCreated(id)
     } catch (cause: unknown) {
       setFailure(describeError(cause))
       setSubmitting(false)
@@ -271,24 +364,37 @@ export default function CampaignBuilder({
         ← Annuler
       </button>
 
+      {/* Le fil est une carte de ce qui reste, pas seulement un compteur : une
+          étape complète est atteignable même si elle est devant, ce qui permet
+          de revenir sur le budget d'un brouillon repris sans retraverser six
+          écrans. Une étape incomplète placée avant reste barrée — la suivante
+          en dépend. */}
       <ol className="wizard__steps">
-        {STEPS.map((entry, index) => (
-          <li
-            key={entry.key}
-            className={`wizard__step${index === step ? ' is-on' : ''}${index < step ? ' is-done' : ''}`}
-          >
-            <button
-              type="button"
-              // On peut revenir en arrière librement, mais pas sauter en avant :
-              // une étape suivante peut dépendre d'un choix non encore fait.
-              onClick={() => index < step && setStep(index)}
-              disabled={index > step}
+        {STEPS.map((entry, index) => {
+          const done = STEPS[index].blocking(draft) === null
+          const reachable = index <= step || STEPS.slice(0, index).every((s) => s.blocking(draft) === null)
+
+          return (
+            <li
+              key={entry.key}
+              className={
+                'wizard__step' +
+                (index === step ? ' is-on' : '') +
+                (index !== step && done ? ' is-done' : '')
+              }
             >
-              <span className="wizard__num">{index + 1}</span>
-              {entry.label}
-            </button>
-          </li>
-        ))}
+              <button
+                type="button"
+                onClick={() => reachable && setStep(index)}
+                disabled={!reachable}
+                title={reachable ? undefined : 'Une étape précédente est incomplète.'}
+              >
+                <span className="wizard__num">{index !== step && done ? '✓' : index + 1}</span>
+                {entry.label}
+              </button>
+            </li>
+          )
+        })}
       </ol>
 
       {/* Le récapitulatif suit dès la deuxième étape : il évite de revenir en
@@ -331,22 +437,136 @@ export default function CampaignBuilder({
           <button
             type="button"
             className="filter is-on"
-            onClick={() => setStep(step + 1)}
-            disabled={blocking !== null}
+            onClick={nextStep}
+            disabled={blocking !== null || saving}
           >
-            Étape suivante
+            {saving ? 'Enregistrement…' : 'Étape suivante'}
           </button>
         ) : (
           <button type="button" className="filter is-on" onClick={submit} disabled={submitting}>
             {submitting ? 'Création…' : 'Lancer la campagne'}
           </button>
         )}
+
+        {/* Quitter en cours de route devient normal plutôt qu'accidentel : le
+            brouillon est en base, on le retrouve dans la liste. */}
+        <button
+          type="button"
+          className="filter"
+          onClick={saveAndLeave}
+          disabled={saving || blocking !== null}
+          title={blocking ?? 'Enregistrer le brouillon et revenir à la liste'}
+        >
+          Enregistrer et quitter
+        </button>
+
+        {savedAt !== null ? (
+          <span className="muted wizard-actions__saved">Brouillon enregistré à {savedAt}</span>
+        ) : null}
       </div>
     </>
   )
 }
 
 /** Brouillon → corps de requête. Les champs vides deviennent `null`, pas `""`. */
+/**
+ * Brouillon relu → état de l'assistant.
+ *
+ * L'inverse de `toPayload`. Les deux se lisent côte à côte, et c'est voulu :
+ * un champ ajouté d'un seul côté se voit tout de suite, là où deux fichiers
+ * séparés auraient laissé la reprise perdre en silence ce que la création
+ * savait écrire.
+ */
+function fromState(state: api.CampaignDraftState, refs: References, role: Role): Draft {
+  const base = emptyDraft(refs, role)
+
+  const channels: Draft['channels'] = {}
+  for (const channel of state.channels) {
+    channels[channel.channel_id] = {
+      budget: channel.budget_amount === null ? '' : String(channel.budget_amount),
+      agencyId: channel.agency_id,
+    }
+  }
+
+  const targets: Draft['targets'] = {}
+  for (const target of state.lever_targets) {
+    targets[target.lever_id] = target.target_value === null ? '' : String(target.target_value)
+  }
+
+  return {
+    ...base,
+    name: state.name ?? '',
+    starts_on: state.starts_on ?? '',
+    ends_on: state.ends_on ?? '',
+    type_id: state.type_id ?? null,
+    scope: state.scope ?? base.scope,
+    shop_ids: state.shop_ids,
+    tone: state.tone ?? '',
+    client_target: state.client_target ?? base.client_target,
+    sector_ids: state.sector_ids,
+    agency_ask_ids: state.agency_ask_ids,
+    agency_note: state.agency_note ?? '',
+
+    offer_template_id: state.offer?.template_id ?? null,
+    offer_title: state.offer?.title ?? '',
+    offer_mechanic: state.offer?.mechanic_text ?? '',
+    offer_items: (state.offer?.items ?? []).map((item) => item.label),
+    // « Toute la journée » est l'absence d'horaire, pas une plage 00:00–23:59 :
+    // c'est le NULL en base qui les distingue, et il se relit tel quel.
+    offer_all_day: (state.offer?.hour_from ?? null) === null,
+    offer_hour_from: state.offer?.hour_from ?? '',
+    offer_hour_to: state.offer?.hour_to ?? '',
+
+    budget_amount: state.budget_amount === undefined || state.budget_amount === null
+      ? ''
+      : String(state.budget_amount),
+    objective_coef_pct: state.objective_coef_pct === undefined || state.objective_coef_pct === null
+      ? ''
+      : String(state.objective_coef_pct),
+    targets,
+
+    channels,
+    uniform_ids: state.uniform_ids,
+    b2b_webshop_enabled: state.b2b_webshop_enabled ?? false,
+    b2b_option_ids: state.b2b_option_ids,
+    pos_survey_enabled: state.pos_survey_enabled ?? false,
+    pos_questions: (state.pos_questions ?? []).map((question) => ({
+      label: question.label,
+      answer_type: question.answer_type,
+      options: question.options ?? '',
+      is_required: question.is_required ?? false,
+    })),
+    image_url: state.image_url ?? '',
+    focal_point_y: state.focal_point_y ?? 50,
+    // Le rétroplanning enregistré remplace le modèle : reprendre un brouillon
+    // ne doit pas y réinjecter les jalons types qu'on venait d'en retirer.
+    format_ids: state.format_ids.length > 0 ? state.format_ids : base.format_ids,
+    retro: state.retroplanning.length > 0
+      ? state.retroplanning.map((step) => ({
+          label: step.label,
+          days_before_launch: step.days_before_launch,
+          position_id: step.position_id,
+        }))
+      : base.retro,
+
+    status_code: state.status_code ?? 'draft',
+    create_crm_leads: state.create_crm_leads ?? false,
+  }
+}
+
+/**
+ * Première étape qu'il reste à compléter.
+ *
+ * On ne rouvre pas un brouillon à l'étape 1 : ce serait faire retraverser ce
+ * qui est déjà fait. Chaque étape sait déjà dire ce qui lui manque — c'est
+ * exactement l'information cherchée. Tout complet, on ouvre le récapitulatif.
+ */
+function firstIncomplete(draft: Draft): number {
+  const index = STEPS.findIndex((entry) => entry.blocking(draft) !== null)
+
+  return index === -1 ? STEPS.length - 2 : index
+}
+
 function toPayload(draft: Draft, brandId: number | 'all'): CampaignDraft {
   const items = draft.offer_items.map((item) => item.trim()).filter((item) => item !== '')
 

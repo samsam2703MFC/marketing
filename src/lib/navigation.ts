@@ -100,7 +100,7 @@ export function navFor(role: Role): NavGroup[] {
 }
 
 /** Titre de page, qui suit le rôle : « Campagnes » côté réseau, « Mes campagnes » côté boutique. */
-export function titleFor(role: Role, route: Route): string {
+export function titleFor(role: Role, route: Route, resuming = false): string {
   for (const group of navFor(role)) {
     for (const entry of group.items) {
       if (entry.route === route) return entry.label
@@ -108,7 +108,9 @@ export function titleFor(role: Role, route: Route): string {
   }
 
   if (route === 'campaign') return 'Suivi de campagne'
-  if (route === 'builder') return 'Nouvelle campagne'
+  // Reprendre un brouillon et en créer un ne se ressemblent pas : sans cette
+  // distinction, l'écran annonce « Nouvelle campagne » alors qu'il en rouvre une.
+  if (route === 'builder') return resuming ? 'Reprendre la campagne' : 'Nouvelle campagne'
 
   return ''
 }

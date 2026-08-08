@@ -65,9 +65,14 @@ LEFT JOIN (
   GROUP BY lever_id
 ) spend ON spend.lever_id = l.id
 LEFT JOIN (
-  SELECT lever_id, SUM(target_value) AS target_value, SUM(actual_value) AS actual_value
-  FROM mar_campaign_lever_target
-  GROUP BY lever_id
+  -- Les brouillons sont écartés. L'assistant enregistre maintenant à chaque
+  -- étape, pour qu'une campagne interrompue puisse être reprise : les
+  -- objectifs d'une campagne qu'on n'a pas fini d'écrire — et qui ne sera
+  -- peut-être jamais lancée — gonfleraient sinon ceux du réseau.
+  SELECT clt.lever_id, SUM(clt.target_value) AS target_value, SUM(clt.actual_value) AS actual_value
+  FROM mar_campaign_lever_target clt
+  JOIN mar_campaign c ON c.id = clt.campaign_id AND c.status_code <> 'draft'
+  GROUP BY clt.lever_id
 ) target ON target.lever_id = l.id;
 
 -- KPI temps réel d'une campagne : dernière mesure connue par KPI et par boutique.

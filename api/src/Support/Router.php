@@ -46,6 +46,12 @@ final class Router
         $this->add('PATCH', $pattern, $handler);
     }
 
+    /** PUT et non PATCH : la ressource est remplacée en entier, pas amendée. */
+    public function put(string $pattern, callable $handler): void
+    {
+        $this->add('PUT', $pattern, $handler);
+    }
+
     public function delete(string $pattern, callable $handler): void
     {
         $this->add('DELETE', $pattern, $handler);

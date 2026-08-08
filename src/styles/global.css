@@ -1743,3 +1743,23 @@ table select,
 .wizard-actions .filter.is-on {
   padding: 9px 26px;
 }
+
+/* Un brouillon se termine, il ne se pilote pas : sa carte le dit d'un liseré
+   et d'une invite, à la place d'une barre de budget qui ne mesure rien. */
+.campaign--draft {
+  border-style: dashed;
+}
+
+.campaign__resume {
+  margin: 0.6rem 0 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* L'heure du dernier enregistrement, au bout de la rangée d'actions : quitter
+   en cours de route n'est rassurant que si l'on voit que c'est écrit. */
+.wizard-actions__saved {
+  margin-left: auto;
+  font-size: 12px;
+}

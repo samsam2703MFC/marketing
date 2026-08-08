@@ -446,6 +446,49 @@ export function createCampaign(
   return request(`${BASE}/campaigns`, { method: 'POST', body: draft })
 }
 
+/**
+ * Brouillon relu par identifiants, pour être repris dans l'assistant.
+ *
+ * Distinct de `getCampaign`, qui sert le suivi et rend des libellés : une
+ * pastille se recoche avec un identifiant, pas avec « Horeca ».
+ */
+export interface CampaignDraftState
+  extends Omit<CampaignDraft, 'lever_targets' | 'channels' | 'offer'> {
+  id: number
+  shop_ids: number[]
+  sector_ids: number[]
+  agency_ask_ids: number[]
+  b2b_option_ids: number[]
+  uniform_ids: number[]
+  format_ids: number[]
+  channels: Array<{ channel_id: number; agency_id: number | null; budget_amount: number | null }>
+  /** `target_value` peut être nul : un levier retenu sans chiffre est légitime. */
+  lever_targets: Array<{ lever_id: number; target_value: number | null }>
+  retroplanning: Array<{ label: string; days_before_launch: number; position_id: number | null }>
+  offer: {
+    title: string
+    template_id: number | null
+    mechanic_text: string | null
+    hour_from: string | null
+    hour_to: string | null
+    items: Array<{ label: string }>
+  } | null
+}
+
+export function getCampaignDraft(id: number): Promise<CampaignDraftState> {
+  return request<CampaignDraftState>(`${BASE}/campaigns/${id}/draft`)
+}
+
+/** Remplace le brouillon en entier. PUT : la ressource n'est pas amendée, elle est réécrite. */
+export function replaceCampaignDraft(id: number, draft: CampaignDraft): Promise<{ ok: boolean }> {
+  return request(`${BASE}/campaigns/${id}/draft`, { method: 'PUT', body: draft })
+}
+
+/** Colonnes de la campagne seules — le statut au moment du lancement, par exemple. */
+export function updateCampaign(id: number, change: Partial<CampaignDraft>): Promise<{ ok: boolean }> {
+  return request(`${BASE}/campaigns/${id}`, { method: 'PATCH', body: change })
+}
+
 /** Barre de calendrier : le mois de départ et la portée viennent du serveur. */
 export interface CalendarBar extends Campaign {
   start_month: number

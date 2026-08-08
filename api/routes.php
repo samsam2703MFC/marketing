@@ -47,6 +47,9 @@ return static function (Router $router): void {
     $router->get('/api/v1/marketing/campaigns/calendar',        [$campaigns, 'calendar']);
     $router->get('/api/v1/marketing/campaigns/{id}',            [$campaigns, 'show']);
     $router->get('/api/v1/marketing/campaigns/{id}/monitor',    [$campaigns, 'monitor']);
+    // Reprise d'un brouillon : lecture par identifiants, réécriture en bloc.
+    $router->get('/api/v1/marketing/campaigns/{id}/draft',      [$campaigns, 'draft']);
+    $router->put('/api/v1/marketing/campaigns/{id}/draft',      [$campaigns, 'replace']);
     $router->post('/api/v1/marketing/campaigns',                [$campaigns, 'store']);
     $router->patch('/api/v1/marketing/campaigns/{id}',          [$campaigns, 'update']);
     $router->delete('/api/v1/marketing/campaigns/{id}',         [$campaigns, 'destroy']);
