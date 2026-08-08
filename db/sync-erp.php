@@ -13,8 +13,10 @@ declare(strict_types=1);
  * Lecture seule côté ERP. Le script n'écrit que dans les tables `mar_`.
  *
  * Exécution :
- *   php db/sync-erp.php            reprend, puis affiche les boutiques
- *   php db/sync-erp.php --dry-run  n'écrit rien, dit seulement ce qu'il lirait
+ *   php db/sync-erp.php                  reprend, puis affiche les boutiques
+ *   php db/sync-erp.php --dry-run        n'écrit rien, dit ce qu'il lirait
+ *   php db/sync-erp.php --brand="Nom"    crée l'enseigne quand l'ERP ne la
+ *                                        porte nulle part de lisible
  */
 
 use Marketing\Repository\ErpSyncRepository;
@@ -25,6 +27,15 @@ use Marketing\Support\Env;
 require __DIR__ . '/../api/src/autoload.php';
 
 $dryRun = in_array('--dry-run', $argv, true);
+
+// Nom d'enseigne fourni à la main. Dernier recours : une marque est un fait
+// commercial, elle se lit dans l'ERP quand il la porte, et ne s'invente pas.
+$brandName = '';
+foreach ($argv as $argument) {
+    if (str_starts_with($argument, '--brand=')) {
+        $brandName = trim(substr($argument, 8));
+    }
+}
 
 Env::load();
 
@@ -37,8 +48,46 @@ try {
 
 printf("Base : %s\n", (string) $pdo->query('SELECT DATABASE()')->fetchColumn());
 
-// Marque de rattachement. Une seule active dans le cas courant ; au-delà, on
-// s'arrête plutôt que de rattacher les boutiques à la mauvaise enseigne.
+// L'identité est celle d'un traitement, pas d'une personne : les lignes créées
+// portent `created_by = NULL` plutôt que l'identifiant d'un utilisateur qui
+// n'a rien demandé.
+AuthContext::set(0, 'BRAND_ADMIN', null);
+
+$repository = new ErpSyncRepository();
+
+// Les marques d'abord : sans elles, rien à quoi rattacher une boutique. Le
+// module en avait besoin depuis le début et rien ne les créait — d'où une base
+// installée, migrée, et pourtant inutilisable.
+if ($brandName !== '') {
+    $code = strtolower((string) preg_replace(
+        '/[^A-Za-z0-9]+/',
+        '-',
+        (string) (iconv('UTF-8', 'ASCII//TRANSLIT', $brandName) ?: $brandName)
+    ));
+    $statement = $pdo->prepare(
+        'INSERT INTO mar_brand (code, name) VALUES (:code, :name)
+         ON DUPLICATE KEY UPDATE name = VALUES(name), is_active = 1'
+    );
+    $statement->execute(['code' => trim($code, '-') ?: 'marque', 'name' => $brandName]);
+    printf("Enseigne déclarée : %s\n", $brandName);
+} else {
+    try {
+        $result = $repository->syncBrands(AuthContext::current());
+        printf(
+            "Marques    source %s — %d lue(s), %d créée(s), %d mise(s) à jour\n",
+            $result['source'],
+            $result['read'],
+            $result['created'],
+            $result['updated']
+        );
+    } catch (Throwable $failure) {
+        fprintf(STDERR, "Marques : %s\n", $failure->getMessage());
+        exit(4);
+    }
+}
+
+// Marque de rattachement des boutiques. Une seule active dans le cas courant ;
+// au-delà, on s'arrête plutôt que de les rattacher à la mauvaise enseigne.
 $brands = $pdo->query('SELECT id, name FROM mar_brand WHERE is_active = 1')->fetchAll();
 
 if (count($brands) !== 1) {
@@ -46,7 +95,7 @@ if (count($brands) !== 1) {
         STDERR,
         $brands === []
             ? "Aucune marque active : rien à quoi rattacher les boutiques.\n"
-            : "Plusieurs marques actives (%s) : précisez-la avant de reprendre.\n",
+            : "Plusieurs marques actives (%s) : les boutiques de l'ERP ne disent pas laquelle. Reprise des boutiques non effectuée.\n",
         implode(', ', array_column($brands, 'name'))
     );
     exit(4);
@@ -54,13 +103,7 @@ if (count($brands) !== 1) {
 
 $brandId = (int) $brands[0]['id'];
 printf("Marque : %s\n\n", $brands[0]['name']);
-
-// L'identité est celle d'un traitement, pas d'une personne : les lignes créées
-// portent `created_by = NULL` plutôt que l'identifiant d'un utilisateur qui
-// n'a rien demandé.
 AuthContext::set(0, 'BRAND_ADMIN', $brandId);
-
-$repository = new ErpSyncRepository();
 
 if ($dryRun) {
     echo "Mode --dry-run : lecture seule, aucune écriture.\n\n";

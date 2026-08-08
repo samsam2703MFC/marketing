@@ -485,14 +485,21 @@ jobs:
         if: steps.check.outputs.configured == 'true'
         env:
           SSHPASS: ${{ secrets.SSH_PASSWORD }}
+          # Nom de l'enseigne, utilisé seulement si l'ERP ne porte ni table de
+          # marques ni colonne d'enseigne lisible. Une marque est un fait
+          # commercial : elle se déclare, elle ne se devine pas.
+          MAR_BRAND_NAME: ${{ vars.MAR_BRAND_NAME }}
         run: |
+          BRAND_OPT=''
+          [ -n "$MAR_BRAND_NAME" ] && BRAND_OPT="--brand='$MAR_BRAND_NAME'"
+
           set +e
           out=$($SSH_CMD $SSH_OPTS -o BatchMode=yes "$SSH_USER@$SSH_HOST" "
             cd '$DEPLOY_DIR' 2>/dev/null || { echo 'CD_FAIL'; exit 90; }
             P=''; for c in php php8.3 php8.2 php8.1 php8.0; do command -v \$c >/dev/null 2>&1 || continue; \$c -m 2>/dev/null | grep -qi pdo_mysql && { P=\$c; break; }; done
             [ -n \"\$P\" ] || { echo 'PDO_MYSQL_MISSING'; exit 93; }
             [ -f db/sync-erp.php ] || { echo 'SYNC_ABSENT'; exit 92; }
-            \$P db/sync-erp.php 2>&1
+            \$P db/sync-erp.php $BRAND_OPT 2>&1
           " 2>&1)
           rc=$?
           set -e
@@ -519,6 +526,7 @@ jobs:
               *SYNC_ABSENT*)       hint="db/sync-erp.php n'est pas arrivé sur le serveur" ;;
               *Table*introuvable*) hint="table ERP absente ou sans droit de lecture — voir MAR_ERP_SHOPS_TABLE / MAR_ERP_CUSTOMERS_TABLE" ;;
               *Colonnes*)          hint="colonnes attendues absentes — la sortie nomme celles trouvées" ;;
+              *Aucune\ marque*)     hint="aucune enseigne : définissez la variable de dépôt MAR_BRAND_NAME, ou MAR_ERP_BRANDS_TABLE si l'ERP en porte une table" ;;
               *)                   hint="voir la sortie ci-dessus" ;;
             esac
             echo "::error title=Reprise ERP en échec::$hint — $summary"

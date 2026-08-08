@@ -38,6 +38,18 @@ final class ErpSyncRepository
      *
      * @var array<string, list<string>>
      */
+    /**
+     * Colonnes possibles d'une table de marques.
+     *
+     * @var array<string, list<string>>
+     */
+    private const BRAND_COLUMNS = [
+        'id'   => ['id', 'id_brand', 'id_marque', 'id_enseigne', 'brand_id'],
+        'name' => ['name', 'label', 'nom', 'libelle', 'brand', 'marque', 'enseigne'],
+        'code' => ['code', 'slug', 'reference'],
+    ];
+
+    /** @var array<string, list<string>> */
     private const SHOP_COLUMNS = [
         // `id_franchisee_shop` / `id_shop` : cet ERP préfixe ses clés du nom de
         // la table, convention répandue et incompatible avec un simple `id`.
@@ -46,6 +58,8 @@ final class ErpSyncRepository
         'code'      => ['code', 'slug', 'reference'],
         'city'      => ['city', 'ville', 'town'],
         'is_active' => ['is_active', 'active', 'enabled', 'actif'],
+        // Facultative : un réseau mono-enseigne n'a pas de colonne de marque.
+        'brand'     => ['id_brand', 'brand_id', 'id_marque', 'id_enseigne', 'brand', 'marque', 'enseigne'],
     ];
 
     /** @var array<string, list<string>> */
@@ -78,6 +92,153 @@ final class ErpSyncRepository
             'shops'     => $this->syncShops($auth, $brandId),
             'prospects' => $this->syncProspects($auth, $brandId),
         ];
+    }
+
+    /**
+     * Marques du réseau, reprises de l'ERP.
+     *
+     * Le module ne peut rien faire sans marque : une campagne s'y rattache, une
+     * boutique en dépend. Elle ne s'invente pas pour autant — une enseigne est
+     * un fait commercial, pas une valeur par défaut. On la lit donc là où elle
+     * existe : soit une table de marques, soit la colonne d'enseigne portée par
+     * les boutiques quand elle est textuelle.
+     *
+     * @return array<string, mixed>
+     */
+    public function syncBrands(AuthContext $auth): array
+    {
+        $schema = $this->currentSchema();
+
+        [$table, $columns, $rows] = $this->readBrands($schema);
+
+        $connection = Database::connection();
+        $created    = 0;
+        $updated    = 0;
+
+        $upsert = $connection->prepare(
+            'INSERT INTO mar_brand (code, name, created_by)
+             VALUES (:code, :name, :created_by)
+             ON DUPLICATE KEY UPDATE name = VALUES(name), is_active = 1'
+        );
+
+        foreach ($rows as $row) {
+            $name = trim((string) ($row['name'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+
+            $upsert->execute([
+                'code'       => $row['code'] ?? self::slug($name),
+                'name'       => $name,
+                'created_by' => $auth->userId ?: null,
+            ]);
+
+            $upsert->rowCount() === 1 ? $created++ : $updated++;
+        }
+
+        return [
+            'source'  => $table === null ? '—' : $schema . '.' . $table,
+            'columns' => $columns,
+            'read'    => count($rows),
+            'created' => $created,
+            'updated' => $updated,
+            'skipped' => 0,
+        ];
+    }
+
+    /**
+     * Marques lisibles, et d'où elles viennent.
+     *
+     * @return array{0:?string, 1:array<string,string>, 2:list<array<string,mixed>>}
+     */
+    private function readBrands(string $schema): array
+    {
+        $configured = trim((string) (Env::get('MAR_ERP_BRANDS_TABLE', '') ?: ''));
+
+        if ($configured !== '') {
+            [$brandSchema, $table] = $this->source('MAR_ERP_BRANDS_TABLE', $configured);
+            $columns = $this->resolve($brandSchema, $table, self::BRAND_COLUMNS, ['name']);
+
+            return [$table, $columns, $this->readSource($brandSchema, $table, $columns)];
+        }
+
+        // Table de marques dédiée, reconnue à son nom. Une seule candidate :
+        // on la prend ; plusieurs : on refuse plutôt que de tirer au sort.
+        $statement = Database::connection()->prepare(
+            'SELECT table_name FROM information_schema.tables
+              WHERE table_schema = :schema
+                AND (table_name LIKE \'%brand%\' OR table_name LIKE \'%marque%\'
+                     OR table_name LIKE \'%enseigne%\')
+                AND table_name NOT LIKE \'mar\\_%\'
+              ORDER BY table_name'
+        );
+        $statement->execute(['schema' => $schema]);
+        $candidates = $statement->fetchAll(PDO::FETCH_COLUMN);
+
+        if (count($candidates) === 1) {
+            $table   = (string) $candidates[0];
+            $columns = $this->resolve($schema, $table, self::BRAND_COLUMNS, ['name']);
+
+            return [$table, $columns, $this->readSource($schema, $table, $columns)];
+        }
+
+        if (count($candidates) > 1) {
+            throw new RuntimeException(sprintf(
+                'Plusieurs tables ressemblent à une table de marques (%s). '
+                . 'Renseignez MAR_ERP_BRANDS_TABLE pour trancher.',
+                implode(', ', $candidates)
+            ));
+        }
+
+        // À défaut, l'enseigne portée par les boutiques — utilisable seulement
+        // si elle est écrite en clair. Une colonne d'identifiants ne donnerait
+        // que des numéros, et une marque nommée « 3 » n'aide personne.
+        [$shopSchema, $shopTable] = $this->source('MAR_ERP_SHOPS_TABLE', 'franchisee_shop');
+        $shopColumns = $this->resolve($shopSchema, $shopTable, self::SHOP_COLUMNS, ['id', 'name']);
+
+        if (isset($shopColumns['brand']) && !$this->isNumericColumn($shopSchema, $shopTable, $shopColumns['brand'])) {
+            $rows = Database::connection()->query(sprintf(
+                'SELECT DISTINCT `%s` AS `name` FROM `%s`.`%s` WHERE `%s` IS NOT NULL AND `%s` <> \'\'',
+                $shopColumns['brand'],
+                $shopSchema,
+                $shopTable,
+                $shopColumns['brand'],
+                $shopColumns['brand']
+            ))->fetchAll();
+
+            return [$shopTable, ['name' => $shopColumns['brand']], $rows];
+        }
+
+        throw new RuntimeException(
+            'Aucune marque trouvée dans l\'ERP : ni table de marques, ni colonne '
+            . 'd\'enseigne exploitable sur les boutiques. Renseignez '
+            . 'MAR_ERP_BRANDS_TABLE, ou créez la marque avec '
+            . 'db/sync-erp.php --brand="Nom de l\'enseigne".'
+        );
+    }
+
+    /** Vrai si la colonne stocke un nombre. */
+    private function isNumericColumn(string $schema, string $table, string $column): bool
+    {
+        $statement = Database::connection()->prepare(
+            'SELECT data_type FROM information_schema.columns
+              WHERE table_schema = :schema AND table_name = :table AND column_name = :column'
+        );
+        $statement->execute(['schema' => $schema, 'table' => $table, 'column' => $column]);
+
+        return in_array(strtolower((string) $statement->fetchColumn()), [
+            'tinyint', 'smallint', 'mediumint', 'int', 'integer', 'bigint',
+            'decimal', 'numeric', 'float', 'double', 'bit',
+        ], true);
+    }
+
+    /** Code de marque dérivé du nom, quand l'ERP n'en fournit pas. */
+    private static function slug(string $name): string
+    {
+        $ascii = iconv('UTF-8', 'ASCII//TRANSLIT', $name) ?: $name;
+        $slug  = strtolower((string) preg_replace('/[^A-Za-z0-9]+/', '-', $ascii));
+
+        return trim($slug, '-') ?: 'marque';
     }
 
     /**
