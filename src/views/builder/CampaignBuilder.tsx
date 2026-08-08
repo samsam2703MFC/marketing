@@ -271,7 +271,7 @@ export default function CampaignBuilder({
           arrière pour vérifier un choix, et rend visible ce qui est acquis. */}
       {step > 0 ? <RunningRecap {...shared} shops={shops.data ?? []} /> : null}
 
-      <section className="card">
+      <section className="card wizard-card">
         {step === 0 ? <FramingStep {...shared} role={role} shops={shops.data ?? []} /> : null}
         {step === 1 ? <OfferStep {...shared} /> : null}
         {step === 2 ? <BudgetStep {...shared} /> : null}

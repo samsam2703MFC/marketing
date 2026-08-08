@@ -251,7 +251,70 @@ export function listCampaigns(filters: CampaignFilters = {}): Promise<Campaign[]
   return request<Campaign[]>(`${BASE}/campaigns`, { query: { ...filters } })
 }
 
-export function getCampaign(id: number): Promise<Campaign & Record<string, unknown>> {
+/**
+ * Fiche complète : la campagne et tout ce que l'assistant a saisi.
+ *
+ * Ces champs existaient en base sans qu'aucun écran ne les relise. Une fiche
+ * enregistrée et illisible ne vaut guère mieux qu'une fiche perdue.
+ */
+export interface CampaignDetail extends Campaign {
+  tone: string | null
+  tone_label: string | null
+  objective_coef_pct: number | null
+  agency_note: string | null
+  b2b_webshop_enabled: number | boolean
+  agency_asks: string[]
+  b2b_options: string[]
+  uniforms: string[]
+  // `id` et non `sector_id` : la route renvoie le secteur lui-même, comme
+  // dans les référentiels. Le type annonçait `sector_id`, et rien ne le
+  // contredisait à la compilation — c'est l'avertissement de clé React qui
+  // l'a fait apparaître.
+  sectors: Array<{ id: number; code: string; label: string; estimated_leads_count: number }>
+  shops: Array<{ shop_id: number; shop_name: string; city: string | null }>
+  levers: Array<{
+    lever_id: number
+    label: string
+    color_hex: string
+    target_value: number | null
+    actual_value: number | null
+    target_unit: string | null
+  }>
+  channels: Array<{
+    label: string
+    family: 'PHYSIQUE' | 'DIGITAL'
+    budget_amount: number | null
+    is_enabled: boolean
+    agency_name: string | null
+  }>
+  assets: Array<{
+    id: number
+    file_url: string | null
+    focal_point_y: number | null
+    is_master: boolean
+    renders_count: number
+    /** Déclinaisons encore à produire. */
+    pending_count: number
+  }>
+  retroplanning: Array<{
+    id: number
+    label: string
+    days_before_launch: number
+    position_label: string | null
+    done_at: string | null
+  }>
+  offer: {
+    title: string
+    mechanic_text: string | null
+    starts_on: string | null
+    ends_on: string | null
+    hour_from: string | null
+    hour_to: string | null
+    items: Array<{ label: string }>
+  } | null
+}
+
+export function getCampaign(id: number): Promise<CampaignDetail> {
   return request(`${BASE}/campaigns/${id}`)
 }
 

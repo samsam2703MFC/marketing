@@ -94,11 +94,36 @@ final class CampaignRepository
 
         $row = $this->castRow($row);
 
-        $row['shops']       = $this->shops($id);
-        $row['levers']      = $this->leverTargets($id);
+        $row['shops']         = $this->shops($id);
+        $row['levers']        = $this->leverTargets($id);
         $row['retroplanning'] = $this->retroplanning($id);
-        $row['offer']       = $this->offer($id);
-        $row['sectors']     = $this->sectors($id);
+        $row['offer']         = $this->offer($id);
+        $row['sectors']       = $this->sectors($id);
+
+        // Le reste du cadrage saisi à la création. Sans ces lectures, le brief
+        // était enregistré et illisible : l'agence pouvait le remplir, personne
+        // ne pouvait le relire.
+        $row['tone_label']   = $this->labelOf('mar_tone', 'code', $row['tone'] ?? null);
+        $row['agency_asks']  = $this->joined(
+            'SELECT a.label FROM mar_campaign_agency_ask ca
+               JOIN mar_agency_ask a ON a.id = ca.ask_id
+              WHERE ca.campaign_id = :id ORDER BY a.sort_order',
+            $id
+        );
+        $row['b2b_options']  = $this->joined(
+            'SELECT o.label FROM mar_campaign_b2b_option co
+               JOIN mar_b2b_option o ON o.id = co.option_id
+              WHERE co.campaign_id = :id ORDER BY o.sort_order',
+            $id
+        );
+        $row['uniforms']     = $this->joined(
+            'SELECT u.name FROM mar_campaign_uniform cu
+               JOIN mar_uniform u ON u.id = cu.uniform_id
+              WHERE cu.campaign_id = :id ORDER BY u.sort_order',
+            $id
+        );
+        $row['channels']     = $this->campaignChannels($id);
+        $row['assets']       = $this->assets($id);
 
         return $row;
     }
@@ -198,6 +223,8 @@ final class CampaignRepository
             throw new RuntimeException('Champs obligatoires manquants : name');
         }
 
+        $data = $this->validated($auth, $data);
+
         // La marque ne se saisit plus : on est dans un back-office, elle est
         // connue du contexte. Le client peut la préciser — le sélecteur de
         // marque de la barre latérale, quand un réseau en exploite plusieurs —
@@ -218,13 +245,11 @@ final class CampaignRepository
 
         $statement->execute([
             'brand_id'           => $brandId,
-            'client_target'      => in_array($data['client_target'] ?? 'b2c', ['b2c', 'b2b', 'mixte'], true)
-                ? $data['client_target'] ?? 'b2c'
-                : 'b2c',
+            'client_target'      => $data['client_target'],
             'type_id'            => $data['type_id'] ?? null,
             'parent_campaign_id' => $data['parent_campaign_id'] ?? null,
             'name'               => $data['name'],
-            'scope'              => in_array($data['scope'] ?? 'RESEAU', ['RESEAU', 'LOCALE'], true) ? $data['scope'] ?? 'RESEAU' : 'RESEAU',
+            'scope'              => $data['scope'],
             'status_code'        => $data['status_code'] ?? 'draft',
             'starts_on'          => $data['starts_on'] ?? null,
             'ends_on'            => $data['ends_on'] ?? null,
@@ -242,6 +267,87 @@ final class CampaignRepository
         ]);
 
         return (int) $connection->lastInsertId();
+    }
+
+    /**
+     * Contrôle des données de campagne avant écriture.
+     *
+     * Trois raisons de le faire ici plutôt que dans le formulaire :
+     *
+     * — La portée est une règle de sécurité. L'assistant impose « locale » à un
+     *   franchisé, mais un appel direct à l'API contournait cette contrainte et
+     *   créait une campagne réseau, visible de tout le monde.
+     * — Une valeur inconnue était silencieusement ramenée à « RESEAU », c'est-à-
+     *   dire à la plus permissive. Une faute de frappe élargissait le périmètre.
+     * — Un statut absent du référentiel ou un coefficient hors bornes partaient
+     *   jusqu'à MySQL, qui les refusait par contrainte : le client recevait une
+     *   erreur interne là où il aurait dû lire ce qu'il devait corriger.
+     *
+     * @param  array<string,mixed> $data
+     * @return array<string,mixed>
+     */
+    private function validated(AuthContext $auth, array $data): array
+    {
+        $scope = $data['scope'] ?? 'RESEAU';
+        if (!in_array($scope, ['RESEAU', 'LOCALE'], true)) {
+            throw new RuntimeException('Portée inconnue : attendu RESEAU ou LOCALE.');
+        }
+
+        if (!$auth->isBrandAdmin() && $scope !== 'LOCALE') {
+            throw new RuntimeException('Une boutique ne crée que des campagnes locales.');
+        }
+
+        $data['scope'] = $scope;
+
+        $target = $data['client_target'] ?? 'b2c';
+        if (!in_array($target, ['b2c', 'b2b', 'mixte'], true)) {
+            throw new RuntimeException('Cible client inconnue : attendu b2c, b2b ou mixte.');
+        }
+
+        $data['client_target'] = $target;
+
+        $startsOn = $data['starts_on'] ?? null;
+        $endsOn   = $data['ends_on'] ?? null;
+        if ($startsOn && $endsOn && $endsOn < $startsOn) {
+            throw new RuntimeException('La date de fin précède la date de début.');
+        }
+
+        if (isset($data['budget_amount']) && $data['budget_amount'] !== '' && (float) $data['budget_amount'] < 0) {
+            throw new RuntimeException('Le budget ne peut pas être négatif.');
+        }
+
+        // DECIMAL(5,2) : au-delà, MySQL refuse la valeur en mode strict.
+        $coef = $data['objective_coef_pct'] ?? null;
+        if ($coef !== null && $coef !== '' && abs((float) $coef) > 999.99) {
+            throw new RuntimeException('L\'écart au N-1 doit rester entre -999,99 et 999,99 %.');
+        }
+
+        $connection = Database::connection();
+
+        $status = $data['status_code'] ?? 'draft';
+        $known  = $connection->prepare('SELECT 1 FROM mar_campaign_status WHERE code = :code');
+        $known->execute(['code' => $status]);
+        if ($known->fetchColumn() === false) {
+            $codes = $connection->query('SELECT code FROM mar_campaign_status ORDER BY sort_order')
+                ->fetchAll(PDO::FETCH_COLUMN);
+
+            throw new RuntimeException(sprintf(
+                'État de campagne inconnu : attendu %s.',
+                implode(', ', $codes)
+            ));
+        }
+
+        $data['status_code'] = $status;
+
+        if (!empty($data['type_id'])) {
+            $known = $connection->prepare('SELECT 1 FROM mar_campaign_type WHERE id = :id');
+            $known->execute(['id' => (int) $data['type_id']]);
+            if ($known->fetchColumn() === false) {
+                throw new RuntimeException('Type de campagne inconnu.');
+            }
+        }
+
+        return $data;
     }
 
     /**
@@ -636,6 +742,86 @@ final class CampaignRepository
         return $statement->execute(['id' => $id]);
     }
 
+    /** Libellé d'une valeur de référentiel, ou `null` si elle n'est pas posée. */
+    private function labelOf(string $table, string $keyColumn, ?string $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $statement = Database::connection()->prepare(
+            sprintf('SELECT label FROM %s WHERE %s = :value', $table, $keyColumn)
+        );
+        $statement->execute(['value' => $value]);
+
+        $label = $statement->fetchColumn();
+
+        return $label === false ? null : (string) $label;
+    }
+
+    /**
+     * Libellés d'une table de jonction, en liste.
+     *
+     * @return list<string>
+     */
+    private function joined(string $sql, int $campaignId): array
+    {
+        $statement = Database::connection()->prepare($sql);
+        $statement->execute(['id' => $campaignId]);
+
+        return array_map('strval', $statement->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /** @return list<array<string,mixed>> */
+    private function campaignChannels(int $campaignId): array
+    {
+        $statement = Database::connection()->prepare(
+            'SELECT ch.label, ch.family, cc.budget_amount, cc.is_enabled, a.name AS agency_name
+               FROM mar_campaign_channel cc
+               JOIN mar_channel ch     ON ch.id = cc.channel_id
+               LEFT JOIN mar_agency a  ON a.id = cc.agency_id
+              WHERE cc.campaign_id = :id
+              ORDER BY ch.family, ch.sort_order'
+        );
+        $statement->execute(['id' => $campaignId]);
+
+        $rows = array_map([$this, 'castRow'], $statement->fetchAll());
+        foreach ($rows as &$row) {
+            $row['is_enabled'] = (bool) $row['is_enabled'];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Visuel maître et déclinaisons attendues.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function assets(int $campaignId): array
+    {
+        $statement = Database::connection()->prepare(
+            'SELECT ca.id, ca.file_url, ca.focal_point_y, ca.is_master,
+                    COUNT(ar.id)                                          AS renders_count,
+                    SUM(CASE WHEN ar.status = \'pending\' THEN 1 ELSE 0 END) AS pending_count
+               FROM mar_campaign_asset ca
+               LEFT JOIN mar_asset_render ar ON ar.campaign_asset_id = ca.id
+              WHERE ca.campaign_id = :id
+              GROUP BY ca.id, ca.file_url, ca.focal_point_y, ca.is_master
+              ORDER BY ca.is_master DESC, ca.id'
+        );
+        $statement->execute(['id' => $campaignId]);
+
+        $rows = array_map([$this, 'castRow'], $statement->fetchAll());
+        foreach ($rows as &$row) {
+            $row['is_master']     = (bool) $row['is_master'];
+            $row['renders_count'] = (int) $row['renders_count'];
+            $row['pending_count'] = (int) $row['pending_count'];
+        }
+
+        return $rows;
+    }
+
     /** @return list<array<string,mixed>> */
     private function shops(int $campaignId): array
     {
@@ -744,7 +930,7 @@ final class CampaignRepository
         // Colonnes numériques dont le nom ne porte aucun suffixe exploitable.
         // `mar_campaign_kpi_snapshot.value` en fait partie : sans elle, un KPI
         // repartait en chaîne « 1284.00 » et s'affichait tel quel.
-        static $numericColumns = ['value', 'amount', 'quantity', 'rate_pct'];
+        static $numericColumns = ['value', 'amount', 'quantity', 'rate_pct', 'focal_point_y'];
 
         foreach ($row as $key => $value) {
             if ($value === null || !is_string($value)) {

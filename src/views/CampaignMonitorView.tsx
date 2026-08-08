@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { module as api } from '../lib/api'
 import { useAsync, formatEur, formatNumber } from '../lib/useAsync'
 import { describeError } from '../state/auth'
+import CampaignBrief from '../components/CampaignBrief'
 import type { FunnelStep, Lead, LeadStatus } from '../lib/api/module'
 
 interface MonitorProps {
@@ -58,9 +59,12 @@ export default function CampaignMonitorView({ campaignId, leadStatuses, onBack }
       </button>
 
       {campaign.error ? <p className="error">{campaign.error}</p> : null}
-      {campaign.data ? <h2 className="screen-subtitle">{String(campaign.data.name)}</h2> : null}
+      {campaign.data ? <h2 className="screen-subtitle">{campaign.data.name}</h2> : null}
 
-      {/* a. KPI et classement des boutiques */}
+      {/* a. Cadrage : ce que l'assistant a fait saisir à la création. */}
+      {campaign.data ? <CampaignBrief campaign={campaign.data} /> : null}
+
+      {/* b. KPI et classement des boutiques */}
       <div className="grid">
         {(monitor.data?.kpis ?? []).map((kpi) => (
           <section key={kpi.kpi_code} className="card">

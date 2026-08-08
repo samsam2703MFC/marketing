@@ -491,13 +491,15 @@ $attached = array_filter(
 );
 check('la tenue choisie remonte en diffusion', $attached !== [], count($response['body']['uniforms'] ?? []) . ' tenue(s)');
 
-// Une valeur de cible inconnue retombe sur b2c plutôt que d'entrer telle quelle.
+// Une cible inconnue est refusée, et non ramenée en silence à b2c : une faute
+// de frappe doit se voir, pas produire une campagne au périmètre inattendu.
 $response = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
     'name' => 'Cible douteuse', 'client_target' => 'b2x',
 ]);
+check('une cible inconnue est refusée', $response['status'] === 422, 'statut ' . $response['status']);
 check(
-    'une cible inconnue retombe sur b2c',
-    $pdo->query("SELECT client_target FROM mar_campaign WHERE name = 'Cible douteuse'")->fetchColumn() === 'b2c'
+    'et la campagne n\'est pas créée',
+    (int) $pdo->query("SELECT COUNT(*) FROM mar_campaign WHERE name = 'Cible douteuse'")->fetchColumn() === 0
 );
 
 // Rattachement invalide : rien ne doit subsister, pas même l'en-tête.
@@ -528,6 +530,81 @@ check(
 // Le périmètre s'applique aussi en lecture des boutiques.
 $response = call($router, 'GET', '/api/v1/marketing/shops');
 check('la liste des boutiques est cloisonnée', count($response['body']) === 1, count($response['body']) . ' reçue(s)');
+
+// --- Contrôles à l'écriture ------------------------------------------------
+// L'assistant impose déjà ces règles, mais il n'est qu'un client parmi
+// d'autres. Deux d'entre elles comptent particulièrement : une portée refusée
+// au franchisé — sinon il crée une campagne visible de tout le réseau — et une
+// valeur inconnue rejetée plutôt que ramenée en silence à « RESEAU », qui est
+// la plus permissive.
+echo "\nContrôles à l'écriture\n";
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+$response = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name' => 'Réseau par un franchisé', 'scope' => 'RESEAU',
+]);
+check('un franchisé ne crée pas de campagne réseau', $response['status'] === 422, 'statut ' . $response['status']);
+
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+foreach ([
+    'portée inconnue'      => ['scope' => 'BIDON'],
+    'cible inconnue'       => ['client_target' => 'b2x'],
+    'période inversée'     => ['starts_on' => '2026-12-31', 'ends_on' => '2026-01-01'],
+    'budget négatif'       => ['budget_amount' => -5000],
+    'état inconnu'         => ['status_code' => 'zzz'],
+    'écart au N-1 démesuré'=> ['objective_coef_pct' => 99999],
+    'type inconnu'         => ['type_id' => 999999],
+] as $label => $payload) {
+    $response = call($router, 'POST', '/api/v1/marketing/campaigns', [], ['name' => 'Refus ' . $label] + $payload);
+    check(sprintf('%s est refusée', $label), $response['status'] === 422, 'statut ' . $response['status']);
+}
+
+// Le message doit permettre de corriger, pas seulement de constater.
+$response = call($router, 'POST', '/api/v1/marketing/campaigns', [], ['name' => 'X', 'status_code' => 'zzz']);
+check(
+    'le refus nomme les états acceptés',
+    str_contains((string) ($response['body']['description'] ?? ''), 'draft'),
+    (string) ($response['body']['description'] ?? '')
+);
+
+check(
+    'et rien n\'est écrit',
+    (int) $pdo->query("SELECT COUNT(*) FROM mar_campaign WHERE name LIKE 'Refus %' OR name = 'X'")->fetchColumn() === 0
+);
+
+// --- Relecture du cadrage --------------------------------------------------
+// Tout ce que l'assistant fait saisir doit ressortir de la fiche. Ces champs
+// étaient enregistrés et relus par aucun écran : une fiche illisible ne vaut
+// guère mieux qu'une fiche perdue.
+echo "\nRelecture du cadrage\n";
+$response = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d', $newId));
+$detail   = $response['body'];
+
+foreach ([
+    'ton'              => fn (): bool => ($detail['tone_label'] ?? '') === 'Gourmand',
+    'cible client'     => fn (): bool => ($detail['client_target'] ?? '') === 'b2b',
+    'écart au N-1'     => fn (): bool => (float) ($detail['objective_coef_pct'] ?? 0) === 12.0,
+    'note de brief'    => fn (): bool => ($detail['agency_note'] ?? '') !== '',
+    'demandes agence'  => fn (): bool => count($detail['agency_asks'] ?? []) === 2,
+    'options B2B'      => fn (): bool => count($detail['b2b_options'] ?? []) === 1,
+    'tenues'           => fn (): bool => count($detail['uniforms'] ?? []) === 1,
+    'canaux'           => fn (): bool => count($detail['channels'] ?? []) === 1,
+    'secteurs'         => fn (): bool => count($detail['sectors'] ?? []) === 6,
+    'rétroplanning'    => fn (): bool => count($detail['retroplanning'] ?? []) === 5,
+    'offre'            => fn (): bool => ($detail['offer']['title'] ?? '') === 'Menu Barbecue',
+    'visuel'           => fn (): bool => count($detail['assets'] ?? []) === 1,
+] as $label => $assertion) {
+    check(sprintf('la fiche restitue : %s', $label), $assertion());
+}
+
+check(
+    'le point focal est un nombre, pas une chaîne',
+    is_float($detail['assets'][0]['focal_point_y'] ?? null),
+    gettype($detail['assets'][0]['focal_point_y'] ?? null)
+);
+check(
+    'les déclinaisons attendues sont comptées',
+    ($detail['assets'][0]['pending_count'] ?? null) === count($refs['formats'])
+);
 
 // --- Vivier B2B et génération des leads -----------------------------------
 // La génération ne fabrique pas de sociétés : elle puise dans un vivier

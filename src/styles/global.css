@@ -79,7 +79,12 @@ h2 {
   padding: 1.25rem;
 }
 
-.card ul {
+ /* Listes en prose uniquement.
+   Sans le :not([class]), cette règle l'emportait — par spécificité — sur
+   toutes les grilles et rangées de pastilles définies plus bas, qui se
+   retrouvaient sans marge et indentées de 1,1 rem. Une liste qui porte une
+   classe de mise en page gère son espacement elle-même. */
+.card ul:not([class]) {
   margin: 0;
   padding-left: 1.1rem;
   font-size: 0.9rem;
@@ -925,9 +930,14 @@ table input[type='number'] {
   text-align: right;
 }
 
-table input[type='number']:disabled {
-  background: var(--table-head);
+/* Un champ désactivé ne doit pas ressembler à un bouton : sans fond plein, il
+   se lit comme « pas encore disponible » plutôt que comme « cliquez ici ». */
+input:disabled,
+select:disabled {
+  background: transparent;
   color: var(--faint);
+  border-color: var(--line);
+  cursor: not-allowed;
 }
 
 /* Cartes de type de campagne, portée et cible.
@@ -1211,4 +1221,169 @@ table input[type='number']:disabled {
   padding: 0;
   border: none;
   accent-color: var(--accent);
+}
+
+/* =========================================================================
+   Assistant de campagne — rythme vertical
+   -------------------------------------------------------------------------
+   Le formulaire empile sept blocs de nature différente (grilles, rangées de
+   pastilles, tableaux, champs). S'en remettre aux marges de chacun donnait un
+   espacement au hasard : ici deux blocs collés, là un trou. La règle vit donc
+   sur le conteneur, qui est le seul à voir la suite complète.
+   ========================================================================= */
+.wizard-card {
+  padding: 1.5rem 1.5rem 1.75rem;
+}
+
+.wizard-card > * {
+  margin-top: 1rem;
+}
+
+.wizard-card > *:first-child {
+  margin-top: 0;
+}
+
+.wizard-card > h2 {
+  margin: 0 0 0.2rem;
+}
+
+/* Le chapô suit son titre sans rupture : c'est une même unité de lecture. */
+.wizard-card > h2 + p.muted {
+  margin-top: 0;
+}
+
+.wizard-card > p.muted {
+  max-width: 78ch;
+}
+
+/* Un intertitre ouvre une section : de l'air avant, peu après. */
+.wizard-card > .section-label {
+  margin-top: 1.9rem;
+}
+
+.wizard-card > .section-label + * {
+  margin-top: 0.55rem;
+}
+
+/* Les blocs de canaux (physique / digital) n'ont pas d'intertitre propre au
+   niveau du conteneur : ils portent le leur à l'intérieur. */
+.wizard-card > div > .section-label:first-child {
+  margin-top: 1.9rem;
+}
+
+.wizard-card > div > .section-label + * {
+  margin-top: 0.55rem;
+}
+
+/* Étiquette au-dessus du champ dans les rangées du formulaire : les contrôles
+   s'alignent alors par le haut. Mélanger étiquette à gauche et étiquette
+   au-dessus décalait les champs les uns par rapport aux autres. Les cases à
+   cocher des tableaux gardent leur disposition en ligne. */
+.wizard-card .filters__row > .field {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+/* Champs de saisie — un seul rembourrage pour tous.
+   Ils se côtoient dans les mêmes rangées : deux valeurs différentes se voient
+   immédiatement sur la hauteur des bordures. */
+.field input,
+.field select,
+.field textarea,
+.field--block textarea,
+.field--grow input,
+.line-list input,
+.input--grow,
+table input[type='number'],
+table input[type='text'],
+table select,
+.wizard-card select {
+  padding: 6px 10px;
+  font-size: 12.5px;
+  font-family: inherit;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+/* Le curseur de cadrage n'est pas un champ bordé. */
+.field--grow input[type='range'] {
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.field input[type='checkbox'] {
+  padding: 0;
+  border: none;
+}
+
+/* Une ligne d'offre n'a pas besoin de toute la largeur : au-delà, l'œil perd
+   le lien entre le champ et son bouton. */
+.line-list input {
+  max-width: 26rem;
+}
+
+/* Deux choix côte à côte, pas deux panneaux. */
+.choice-row .choice-card {
+  max-width: 22rem;
+}
+
+/* Fiche de cadrage d'une campagne */
+.brief > * {
+  margin-top: 1rem;
+}
+
+.brief > *:first-child {
+  margin-top: 0;
+}
+
+.brief > h2 {
+  margin: 0;
+}
+
+.brief > .section-label {
+  margin-top: 1.6rem;
+}
+
+.brief > .section-label + * {
+  margin-top: 0.5rem;
+}
+
+.brief__grid {
+  display: grid;
+  gap: 0.9rem 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+.brief__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.9rem;
+}
+
+.brief__cell .muted {
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* L'aperçu reprend le cadrage enregistré : c'est le seul moyen de vérifier,
+   après coup, que le point focal retenu tient sur un format large. */
+.brief__asset {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.brief__asset img {
+  width: 12rem;
+  height: 6rem;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--chip);
 }
