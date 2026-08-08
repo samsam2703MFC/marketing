@@ -13,8 +13,9 @@ import RangeCalendar from './RangeCalendar'
  * trois barres — période, N-1, objectif — sur une échelle commune à tout le
  * réseau : c'est ce qui permet de comparer deux magasins sans remonter à un
  * graphique séparé, et de voir que l'objectif de l'un demande deux fois plus
- * d'effort que celui de l'autre. Le tableau produit par produit reste, replié,
- * pour la saisie fine.
+ * d'effort que celui de l'autre. Le tableau des quantités reste au-dessus, en
+ * permanence : c'est la donnée de départ, et la masquer obligeait à la rouvrir
+ * à chaque passage.
  */
 
 /** `AAAA-MM-JJ` local. */
@@ -159,7 +160,6 @@ export default function ObjectivesStep({
   const [growthPct, setGrowthPct] = useState('5')
   const [attempt, setAttempt] = useState(0)
   const [periodOpen, setPeriodOpen] = useState(false)
-  const [detailOpen, setDetailOpen] = useState(false)
 
   const itemIds = draft.offer_items
     .map((element) => element.offer_item_id)
@@ -499,6 +499,162 @@ export default function ObjectivesStep({
             </div>
           </div>
 
+          {/* Le tableau des quantités, toujours visible : c'est la donnée
+              de départ, et c'est là que se règle la progression d'un produit
+              en particulier. Le replier obligeait à l'ouvrir à chaque fois. */}
+          <h3 className="section-label">
+            Quantités vendues sur la période
+            <span className="section-label__aside">
+              Produits de l’offre × magasins · le petit chiffre est la part des tickets
+            </span>
+          </h3>
+          <div className="table-card">
+            <div className="table-scroll objectives__scroll">
+              {/* Axes inversés : les produits en lignes, les magasins en
+                  colonnes. Les noms de produits — « Bûche cheesecake &
+                  fruits des bois - passion - 4/6 personnes » — tenaient mal
+                  en en-tête de colonne, où ils s'empilaient sur trois lignes
+                  et poussaient le tableau hors du cadre. */}
+              <table className="objectives__table">
+                <thead>
+                  <tr>
+                    <th className="objectives__corner">Produit</th>
+                    {sortedShops.map((shop) => (
+                      <th key={shop.shop_id} className="num objectives__shop">
+                        {shop.shop_name}
+                        <span className="objectives__tickets">
+                          {shop.tickets.toLocaleString('fr-BE')} ticket
+                          {shop.tickets > 1 ? 's' : ''}
+                        </span>
+                      </th>
+                    ))}
+                    <th className="num objectives__shop">
+                      Total réseau
+                      <span className="objectives__tickets">
+                        {data.network.tickets.toLocaleString('fr-BE')} ticket
+                        {data.network.tickets > 1 ? 's' : ''}
+                      </span>
+                    </th>
+                    {compare ? <th className="num">N-1</th> : null}
+                    {compare ? <th className="num">Évol.</th> : null}
+                    <th className="num">Progression</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.products.map((product) => {
+                    const total = data.network.by_product[product.item_id] ?? 0
+                    const previous = compare
+                      ? (data.network.by_product_previous?.[product.item_id] ?? 0)
+                      : null
+                    const trend = evolution(total, previous)
+
+                    return (
+                      <tr key={product.item_id}>
+                        <td>{product.name}</td>
+                        {sortedShops.map((shop) => (
+                          <td key={shop.shop_id} className="num">
+                            {shop.quantities[product.item_id] ?? 0}
+                            <span className="objectives__rate">
+                              {penetration(
+                                shop.tickets_by_product[product.item_id] ?? 0,
+                                shop.tickets,
+                              )}
+                            </span>
+                          </td>
+                        ))}
+                        <td className="num">
+                          <strong>{total}</strong>
+                          <span className="objectives__rate">
+                            {penetration(
+                              data.network.tickets_by_product[product.item_id] ?? 0,
+                              data.network.tickets,
+                            )}
+                          </span>
+                        </td>
+                        {compare ? <td className="num">{previous ?? 0}</td> : null}
+                        {compare ? (
+                          <td className={`num objectives__trend-${trend?.tone ?? 'flat'}`}>
+                            {trend?.text ?? '—'}
+                          </td>
+                        ) : null}
+                        <td className="num">
+                          <span className="objectives__pct">
+                            <input
+                              value={growthOf(product.item_id)}
+                              placeholder={growthPct}
+                              inputMode="numeric"
+                              aria-label={`Progression pour ${product.name}`}
+                              title="Vide : suit la progression générale"
+                              onChange={(e) => setProductGrowth(product.item_id, e.target.value)}
+                            />
+                            %
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td>Total période</td>
+                    {sortedShops.map((shop) => (
+                      <td key={shop.shop_id} className="num">
+                        <strong>{shop.total}</strong>
+                      </td>
+                    ))}
+                    <td className="num">
+                      <strong>{data.network.total}</strong>
+                    </td>
+                    {compare ? <td className="num">{data.network.total_previous ?? 0}</td> : null}
+                    {compare ? (
+                      <td className="num">
+                        {evolution(data.network.total, data.network.total_previous)?.text ?? '—'}
+                      </td>
+                    ) : null}
+                    <td />
+                  </tr>
+
+                  {compare ? (
+                    <tr>
+                      <td>Total N-1</td>
+                      {sortedShops.map((shop) => (
+                        <td key={shop.shop_id} className="num">
+                          {shop.total_previous ?? 0}
+                        </td>
+                      ))}
+                      <td className="num">{data.network.total_previous ?? 0}</td>
+                      <td />
+                      <td />
+                      <td />
+                    </tr>
+                  ) : null}
+
+                  <tr className="objectives__goals">
+                    <td>Objectif (pièces)</td>
+                    {sortedShops.map((shop) => (
+                      <td key={shop.shop_id} className="num">
+                        {fr(readInt(objectiveOf(shop.shop_id)))}
+                      </td>
+                    ))}
+                    <td className="num">
+                      <strong>{fr(objectivesTotal)}</strong>
+                    </td>
+                    {compare ? <td /> : null}
+                    {compare ? <td /> : null}
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          <h3 className="section-label">
+            Objectifs par magasin
+            <span className="section-label__aside">
+              Reprenez l’historique tel quel, ou appliquez-lui une progression
+            </span>
+          </h3>
+
           {/* Rangée d'outils à part : dans les rangées de filtres de
               l'assistant, un champ porte son étiquette au-dessus, ce qui
               décalait ces contrôles d'une demi-hauteur par rapport aux
@@ -507,6 +663,23 @@ export default function ObjectivesStep({
             <button type="button" className="filter" onClick={copyHistory}>
               Reprendre l’historique
             </button>
+            <span className="objectives__sorts">
+              Trier :
+              <button
+                type="button"
+                className={sortKey === 'total' ? 'objectives__sort is-on' : 'objectives__sort'}
+                onClick={() => toggleSort('total')}
+              >
+                Ventes{sortMark('total')}
+              </button>
+              <button
+                type="button"
+                className={sortKey === 'name' ? 'objectives__sort is-on' : 'objectives__sort'}
+                onClick={() => toggleSort('name')}
+              >
+                A-Z{sortMark('name')}
+              </button>
+            </span>
             <span className="objectives__general">
               Progression générale
               <span className="objectives__pct">
@@ -527,28 +700,10 @@ export default function ObjectivesStep({
             >
               Appliquer à tous les produits
             </button>
-            <span className="objectives__sorts">
-              Trier :
-              <button
-                type="button"
-                className={sortKey === 'total' ? 'objectives__sort is-on' : 'objectives__sort'}
-                onClick={() => toggleSort('total')}
-              >
-                Ventes{sortMark('total')}
-              </button>
-              <button
-                type="button"
-                className={sortKey === 'name' ? 'objectives__sort is-on' : 'objectives__sort'}
-                onClick={() => toggleSort('name')}
-              >
-                A-Z{sortMark('name')}
-              </button>
-            </span>
             {sales.loading ? <span className="muted">Actualisation…</span> : null}
           </div>
 
-          <h3 className="section-label">
-            Magasins
+          <h3 className="section-label section-label--legend">
             <span className="shop-legend">
               <span>
                 <i className="shop-legend__mark shop-legend__mark--real" />
@@ -932,159 +1087,6 @@ export default function ObjectivesStep({
             </div>
           ) : null}
 
-          {/* Le détail produit par produit reste accessible : c'est là que se
-              règle la progression d'un produit en particulier, et que se lit
-              le taux de pénétration. Replié, parce qu'on l'ouvre rarement. */}
-          <button
-            type="button"
-            className="filter"
-            aria-expanded={detailOpen}
-            onClick={() => setDetailOpen(!detailOpen)}
-          >
-            {detailOpen ? 'Masquer le détail produit par produit' : 'Voir le détail produit par produit'}
-          </button>
-
-          {detailOpen ? (
-            <div className="table-card">
-              <div className="table-scroll objectives__scroll">
-                {/* Axes inversés : les produits en lignes, les magasins en
-                    colonnes. Les noms de produits — « Bûche cheesecake &
-                    fruits des bois - passion - 4/6 personnes » — tenaient mal
-                    en en-tête de colonne, où ils s'empilaient sur trois lignes
-                    et poussaient le tableau hors du cadre. */}
-                <table className="objectives__table">
-                  <thead>
-                    <tr>
-                      <th className="objectives__corner">Produit</th>
-                      {sortedShops.map((shop) => (
-                        <th key={shop.shop_id} className="num objectives__shop">
-                          {shop.shop_name}
-                          <span className="objectives__tickets">
-                            {shop.tickets.toLocaleString('fr-BE')} ticket
-                            {shop.tickets > 1 ? 's' : ''}
-                          </span>
-                        </th>
-                      ))}
-                      <th className="num objectives__shop">
-                        Total réseau
-                        <span className="objectives__tickets">
-                          {data.network.tickets.toLocaleString('fr-BE')} ticket
-                          {data.network.tickets > 1 ? 's' : ''}
-                        </span>
-                      </th>
-                      {compare ? <th className="num">N-1</th> : null}
-                      {compare ? <th className="num">Évol.</th> : null}
-                      <th className="num">Progression</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.products.map((product) => {
-                      const total = data.network.by_product[product.item_id] ?? 0
-                      const previous = compare
-                        ? (data.network.by_product_previous?.[product.item_id] ?? 0)
-                        : null
-                      const trend = evolution(total, previous)
-
-                      return (
-                        <tr key={product.item_id}>
-                          <td>{product.name}</td>
-                          {sortedShops.map((shop) => (
-                            <td key={shop.shop_id} className="num">
-                              {shop.quantities[product.item_id] ?? 0}
-                              <span className="objectives__rate">
-                                {penetration(
-                                  shop.tickets_by_product[product.item_id] ?? 0,
-                                  shop.tickets,
-                                )}
-                              </span>
-                            </td>
-                          ))}
-                          <td className="num">
-                            <strong>{total}</strong>
-                            <span className="objectives__rate">
-                              {penetration(
-                                data.network.tickets_by_product[product.item_id] ?? 0,
-                                data.network.tickets,
-                              )}
-                            </span>
-                          </td>
-                          {compare ? <td className="num">{previous ?? 0}</td> : null}
-                          {compare ? (
-                            <td className={`num objectives__trend-${trend?.tone ?? 'flat'}`}>
-                              {trend?.text ?? '—'}
-                            </td>
-                          ) : null}
-                          <td className="num">
-                            <span className="objectives__pct">
-                              <input
-                                value={growthOf(product.item_id)}
-                                placeholder={growthPct}
-                                inputMode="numeric"
-                                aria-label={`Progression pour ${product.name}`}
-                                title="Vide : suit la progression générale"
-                                onChange={(e) => setProductGrowth(product.item_id, e.target.value)}
-                              />
-                              %
-                            </span>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr>
-                      <td>Total période</td>
-                      {sortedShops.map((shop) => (
-                        <td key={shop.shop_id} className="num">
-                          <strong>{shop.total}</strong>
-                        </td>
-                      ))}
-                      <td className="num">
-                        <strong>{data.network.total}</strong>
-                      </td>
-                      {compare ? <td className="num">{data.network.total_previous ?? 0}</td> : null}
-                      {compare ? (
-                        <td className="num">
-                          {evolution(data.network.total, data.network.total_previous)?.text ?? '—'}
-                        </td>
-                      ) : null}
-                      <td />
-                    </tr>
-
-                    {compare ? (
-                      <tr>
-                        <td>Total N-1</td>
-                        {sortedShops.map((shop) => (
-                          <td key={shop.shop_id} className="num">
-                            {shop.total_previous ?? 0}
-                          </td>
-                        ))}
-                        <td className="num">{data.network.total_previous ?? 0}</td>
-                        <td />
-                        <td />
-                        <td />
-                      </tr>
-                    ) : null}
-
-                    <tr className="objectives__goals">
-                      <td>Objectif (pièces)</td>
-                      {sortedShops.map((shop) => (
-                        <td key={shop.shop_id} className="num">
-                          {fr(readInt(objectiveOf(shop.shop_id)))}
-                        </td>
-                      ))}
-                      <td className="num">
-                        <strong>{fr(objectivesTotal)}</strong>
-                      </td>
-                      {compare ? <td /> : null}
-                      {compare ? <td /> : null}
-                      <td />
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-          ) : null}
         </div>
       )}
     </>

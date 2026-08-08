@@ -2043,6 +2043,13 @@ select:disabled {
   color: var(--muted);
 }
 
+/* Un titre de section qui ne porte qu'une légende : la section est déjà nommée
+   juste au-dessus, répéter son nom ferait deux titres pour un seul bloc. */
+.section-label--legend {
+  justify-content: flex-end;
+  min-height: 18px;
+}
+
 /* Interrupteur. Un bouton, pas une case : il porte son propre libellé et son
    explication, et `aria-pressed` dit son état sans dépendre de la couleur. */
 .switch {
