@@ -1164,7 +1164,11 @@ function OfferStep({ draft, patch }: StepProps) {
       <div className="offer-compose">
         <section className="offer-col">
           <h3 className="section-label">1 · Saison</h3>
-          <div className="offer-seasons">
+          {/* Même tuile qu'à la colonne des catégories : choisir une gamme et
+              choisir une famille sont le même geste, et deux formes pour un
+              même geste font hésiter. Les pastilles empilaient en outre dix
+              lignes en regard de deux colonnes. */}
+          <div className="season-tiles">
             {seasons.map((item) => {
               const active = chosenSeasonId === item.id
               const image = seasonImage(item.name)
@@ -1172,19 +1176,20 @@ function OfferStep({ draft, patch }: StepProps) {
                 <button
                   key={item.id}
                   type="button"
-                  className={`season-pill${active ? ' is-on' : ''}`}
+                  className={`catalog-tile${active ? ' is-on' : ''}`}
                   aria-pressed={active}
                   title={item.name}
                   onClick={() => pickSeason(item)}
                 >
+                  {active ? <span className="catalog-tile__badge">✓</span> : null}
                   {image !== null ? (
-                    <img className="season-pill__icon" src={image} alt="" />
+                    <img src={image} alt="" />
                   ) : (
-                    <span className="season-pill__icon" aria-hidden="true">
+                    <span className="catalog-tile__letter" aria-hidden="true">
                       {seasonLabel(item.name).charAt(0)}
                     </span>
                   )}
-                  {seasonLabel(item.name)}
+                  <strong>{seasonLabel(item.name)}</strong>
                 </button>
               )
             })}
@@ -1213,15 +1218,15 @@ function OfferStep({ draft, patch }: StepProps) {
                 <button
                   key={name}
                   type="button"
-                  className={`family-tile${active ? ' is-on' : ''}`}
+                  className={`catalog-tile${active ? ' is-on' : ''}`}
                   aria-pressed={active}
                   onClick={() => toggleFamily(name)}
                 >
-                  {active ? <span className="family-tile__badge">✓</span> : null}
+                  {active ? <span className="catalog-tile__badge">✓</span> : null}
                   {image !== null ? (
                     <img src={image} alt="" />
                   ) : (
-                    <span className="family-tile__letter" aria-hidden="true">
+                    <span className="catalog-tile__letter" aria-hidden="true">
                       {name.charAt(0)}
                     </span>
                   )}

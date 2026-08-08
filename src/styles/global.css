@@ -1230,54 +1230,19 @@ select:disabled {
   background: #fff;
 }
 
-.offer-seasons {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-}
-
-.season-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 12px 3px 4px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: #fff;
-  color: var(--ink);
-  font: 500 12.5px 'Gotham', system-ui, sans-serif;
-  cursor: pointer;
-}
-
-.season-pill:hover {
-  border-color: var(--accent);
-}
-
-.season-pill.is-on {
-  border-color: var(--accent);
-  background: var(--chip);
-}
-
-.season-pill__icon {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--paper);
-  object-fit: contain;
-  padding: 3px;
-  font-size: 12px;
-}
-
+/* Saisons et familles partagent la même tuile.
+   Les saisons étaient des pastilles en colonne : dix lignes empilées à côté de
+   deux colonnes de tuiles, pour un choix de même nature — on prend une gamme
+   comme on prend une famille. Deux formes pour un même geste font hésiter, et
+   la colonne des saisons dépassait en hauteur les deux autres réunies. */
+.season-tiles,
 .family-tiles {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 8px;
 }
 
-.family-tile {
+.catalog-tile {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -1293,16 +1258,16 @@ select:disabled {
   cursor: pointer;
 }
 
-.family-tile:hover {
+.catalog-tile:hover {
   border-color: var(--accent);
 }
 
-.family-tile.is-on {
+.catalog-tile.is-on {
   border-color: var(--accent);
   background: var(--chip);
 }
 
-.family-tile img {
+.catalog-tile img {
   width: 44px;
   height: 44px;
   object-fit: contain;
@@ -1311,7 +1276,7 @@ select:disabled {
   padding: 6px;
 }
 
-.family-tile__letter {
+.catalog-tile__letter {
   display: grid;
   place-items: center;
   width: 44px;
@@ -1322,16 +1287,16 @@ select:disabled {
   font-weight: 500;
 }
 
-.family-tile strong {
+.catalog-tile strong {
   font-size: 12.5px;
   font-weight: 500;
 }
 
-.family-tile .muted {
+.catalog-tile .muted {
   font-size: 10.5px;
 }
 
-.family-tile__badge {
+.catalog-tile__badge {
   position: absolute;
   top: 7px;
   right: 7px;
