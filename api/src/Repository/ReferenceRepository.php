@@ -100,9 +100,20 @@ final class ReferenceRepository
     /** @return list<array<string,mixed>> */
     public function b2bSectors(): array
     {
+        // L'effectif réel accompagne le chiffre de cadrage. Les secteurs
+        // viennent maintenant de l'ERP, où rien ne correspond à une intention
+        // de démarchage : `estimated_leads_count` y vaut zéro, et afficher
+        // « Horeca · 0 » à côté d'un secteur qui contient deux cents comptes
+        // ferait renoncer à le cocher.
         return $this->fetch(
-            'SELECT id, code, label, estimated_leads_count, sort_order
-               FROM mar_b2b_sector WHERE is_active = 1 ORDER BY sort_order'
+            'SELECT s.id, s.code, s.label, s.estimated_leads_count, s.sort_order,
+                    (SELECT COUNT(*)
+                       FROM mar_b2b_prospect_sector ps
+                       JOIN mar_b2b_prospect p ON p.id = ps.prospect_id AND p.is_active = 1
+                      WHERE ps.sector_id = s.id) AS available_count
+               FROM mar_b2b_sector s
+              WHERE s.is_active = 1
+              ORDER BY s.sort_order'
         );
     }
 

@@ -104,6 +104,17 @@ final class ErpSyncRepository
     ];
 
     /**
+     * Secteurs visés : les types de compte professionnel de l'ERP.
+     *
+     * @var array<string, list<string>>
+     */
+    private const SECTOR_COLUMNS = [
+        'id'    => ['id', 'id_b2b_client_type', 'id_type'],
+        'name'  => ['name', 'label', 'nom', 'libelle'],
+        'brand' => ['id_brand', 'brand_id', 'id_marque', 'id_enseigne'],
+    ];
+
+    /**
      * Synchronise boutiques et comptes B2B.
      *
      * @return array<string, mixed>
@@ -115,6 +126,18 @@ final class ErpSyncRepository
             'prospects' => $this->syncProspects($auth, $brandId),
         ];
 
+        // Les secteurs viennent en dernier : ils ont besoin des deux précédents
+        // — les comptes pour savoir qui rattacher, les boutiques pour savoir
+        // qui appellera. Leur échec ne remet pas en cause ce qui est déjà en
+        // base : les boutiques et le vivier sont repris et validés, et ce sont
+        // eux dont dépendent tous les écrans hors choix des secteurs.
+        try {
+            $result['sectors'] = $this->syncSectors($brandId);
+            $result['links']   = $this->syncProspectSectors($brandId);
+        } catch (Throwable $failure) {
+            $result['links'] = ['error' => $failure->getMessage()];
+        }
+
         $result['inventory'] = $this->inventory;
 
         return $result;
@@ -124,92 +147,6 @@ final class ErpSyncRepository
     public function inventory(): array
     {
         return $this->inventory;
-    }
-
-    /**
-     * Colonnes d'une table de l'ERP, sans rien en lire ni y écrire.
-     *
-     * Sert à découvrir une table dont on connaît le nom mais pas la structure —
-     * `b2b_client_type`, par exemple — avant d'écrire le code qui l'exploitera.
-     * Deviner ses colonnes coûterait un aller-retour de déploiement par
-     * hypothèse ; les demander en coûte un seul.
-     *
-     * @return list<string>
-     */
-    public function describe(string $table): array
-    {
-        [$schema, $name] = $this->source('MAR_ERP_DESCRIBE_TABLE', $table);
-
-        $statement = Database::connection()->prepare(
-            'SELECT column_name FROM information_schema.columns
-              WHERE table_schema = :schema AND table_name = :table
-              ORDER BY ordinal_position'
-        );
-        $statement->execute(['schema' => $schema, 'table' => $name]);
-
-        return $statement->fetchAll(PDO::FETCH_COLUMN);
-    }
-
-    /**
-     * Clés étrangères d'une table.
-     *
-     * Chercher le lien par le nom des tables revenait à deviner : `client`
-     * porte `department_id`, `company_client_id`, `office_id`, et aucun ne
-     * désigne sa cible. Les contraintes, elles, la nomment. C'est la seule
-     * source qui ne se trompe pas — quand elles existent.
-     *
-     * @return list<string>
-     */
-    public function foreignKeys(string $table): array
-    {
-        $schema = $this->currentSchema();
-
-        $statement = Database::connection()->prepare(
-            'SELECT CONCAT(column_name, \' -> \', referenced_table_name, \'.\', referenced_column_name)
-               FROM information_schema.key_column_usage
-              WHERE table_schema = :schema
-                AND table_name = :table
-                AND referenced_table_name IS NOT NULL
-              ORDER BY column_name'
-        );
-        $statement->execute(['schema' => $schema, 'table' => $table]);
-
-        return $statement->fetchAll(PDO::FETCH_COLUMN);
-    }
-
-    /**
-     * Tables dont le nom contient un fragment, avec leurs colonnes.
-     *
-     * Le lien entre un client et son type professionnel n'apparaît sur aucune
-     * des deux tables : ni clé étrangère sur `client`, ni référence au client
-     * sur `b2b_client_type`. Il passe donc par une table intermédiaire qu'il
-     * faut trouver. La chercher par motif évite d'en essayer les noms un par
-     * un, à un déploiement chacun.
-     *
-     * @param  list<string> $fragments
-     * @return array<string, list<string>>
-     */
-    public function explore(array $fragments): array
-    {
-        $schema = $this->currentSchema();
-        $found  = [];
-
-        foreach ($fragments as $fragment) {
-            $statement = Database::connection()->prepare(
-                'SELECT table_name FROM information_schema.tables
-                  WHERE table_schema = :schema
-                    AND table_name LIKE :pattern
-                    AND table_name NOT LIKE \'mar\\_%\'
-                  ORDER BY table_name'
-            );
-            $statement->execute(['schema' => $schema, 'pattern' => '%' . $fragment . '%']);
-
-            foreach ($statement->fetchAll(PDO::FETCH_COLUMN) as $table) {
-                $found[(string) $table] = $this->describe((string) $table);
-            }
-        }
-
-        return $found;
     }
 
     /**
@@ -348,6 +285,12 @@ final class ErpSyncRepository
             'tinyint', 'smallint', 'mediumint', 'int', 'integer', 'bigint',
             'decimal', 'numeric', 'float', 'double', 'bit',
         ], true);
+    }
+
+    /** Clé de tri alphabétique, accents repliés sur leur lettre de base. */
+    private static function sortKey(string $name): string
+    {
+        return mb_strtolower(iconv('UTF-8', 'ASCII//TRANSLIT', $name) ?: $name);
     }
 
     /** Code de marque dérivé du nom, quand l'ERP n'en fournit pas. */
@@ -588,6 +531,375 @@ final class ErpSyncRepository
             'skipped'   => $skipped,
             'truncated' => $truncated,
         ];
+    }
+
+    /**
+     * Types de compte professionnel de l'ERP → secteurs du vivier.
+     *
+     * Les secteurs étaient jusqu'ici six libellés semés à l'installation, avec
+     * des volumes inventés. L'ERP tient la vraie liste : c'est elle qui est
+     * reprise, sur `erp_type_id` pour que l'opération soit rejouable.
+     *
+     * Les secteurs semés sont désactivés dès que l'ERP en fournit — mais
+     * seulement à ce moment-là. Les retirer d'abord laisserait l'assistant sans
+     * aucun secteur si la reprise échouait ensuite, et une campagne B2B sans
+     * secteur ne cible personne.
+     *
+     * @return array<string, mixed>
+     */
+    public function syncSectors(int $brandId): array
+    {
+        [$schema, $table] = $this->source('MAR_ERP_SECTORS_TABLE', 'b2b_client_type');
+        $columns = $this->resolve($schema, $table, self::SECTOR_COLUMNS, ['id', 'name']);
+
+        $rows = $this->readSource($schema, $table, $columns);
+
+        // Tri sur le libellé : l'ordre d'affichage de l'assistant est celui de
+        // `sort_order`, et l'ordre des identifiants de l'ERP ne veut rien dire
+        // pour qui coche des secteurs. La comparaison se fait sur une forme
+        // sans accent : sur les octets bruts, « Écoles » et « Événementiel »
+        // se retrouvent après « Zurich », loin de leur lettre.
+        usort($rows, static fn (array $a, array $b): int => strcmp(
+            self::sortKey((string) ($a['name'] ?? '')),
+            self::sortKey((string) ($b['name'] ?? ''))
+        ));
+
+        $connection = Database::connection();
+        $connection->beginTransaction();
+
+        try {
+            $upsert = $connection->prepare(
+                'INSERT INTO mar_b2b_sector (code, erp_type_id, label, sort_order)
+                 VALUES (:code, :erp_type_id, :label, :sort_order)
+                 ON DUPLICATE KEY UPDATE
+                    label      = VALUES(label),
+                    sort_order = VALUES(sort_order),
+                    is_active  = 1'
+            );
+
+            $created = 0;
+            $updated = 0;
+            $skipped = 0;
+            $rank    = 0;
+
+            foreach ($rows as $row) {
+                $label = trim((string) ($row['name'] ?? ''));
+                if ($label === '') {
+                    $skipped++;
+                    continue;
+                }
+
+                $upsert->execute([
+                    // Le code dérive de l'identifiant ERP plutôt que du
+                    // libellé : deux types peuvent porter le même nom sur deux
+                    // enseignes, et un code dérivé du nom les confondrait en un
+                    // seul secteur — silencieusement, la clé étant unique.
+                    'code'        => 'erp-' . $row['id'],
+                    'erp_type_id' => (int) $row['id'],
+                    'label'       => mb_substr($label, 0, 120),
+                    'sort_order'  => ++$rank,
+                ]);
+
+                $upsert->rowCount() === 1 ? $created++ : $updated++;
+            }
+
+            // Les secteurs de l'installation initiale sortent de la liste dès
+            // que l'ERP en fournit. Désactivés et non supprimés : les campagnes
+            // déjà cadrées sur eux gardent leur périmètre lisible.
+            $retired = 0;
+            if ($created + $updated > 0) {
+                $retire = $connection->prepare(
+                    'UPDATE mar_b2b_sector SET is_active = 0
+                      WHERE erp_type_id IS NULL AND is_active = 1'
+                );
+                $retire->execute();
+                $retired = $retire->rowCount();
+            }
+
+            $connection->commit();
+        } catch (Throwable $failure) {
+            $connection->rollBack();
+
+            throw $failure;
+        }
+
+        $result = [
+            'source'  => $schema . '.' . $table,
+            'columns' => $columns,
+            'read'    => count($rows),
+            'created' => $created,
+            'updated' => $updated,
+            'skipped' => $skipped,
+            'retired' => $retired,
+        ];
+
+        if (isset($columns['brand'])) {
+            $distinct = array_unique(array_filter(
+                array_column($rows, 'brand'),
+                static fn ($v): bool => $v !== null
+            ));
+
+            if (count($distinct) > 1) {
+                $result['warning'] = sprintf(
+                    'Les types de compte relèvent de %d enseignes différentes : tous ont été '
+                    . 'repris comme secteurs de la marque déclarée.',
+                    count($distinct)
+                );
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Table de liaison client ↔ type de compte → `mar_b2b_prospect_sector`.
+     *
+     * Les deux colonnes ne sont pas devinées à partir de noms plausibles. Elles
+     * sont d'abord cherchées dans les contraintes, qui nomment leur cible sans
+     * ambiguïté ; à défaut, dans la convention de nommage de cet ERP, dérivée du
+     * nom de la table visée. Faute des deux, on s'arrête en nommant les colonnes
+     * réellement présentes.
+     *
+     * Ce refus est la raison d'être de la méthode. Une table nommée
+     * « …_interest_connection » peut désigner les centres d'intérêt et non les
+     * types de compte : les deux référentiels sont numérotés à partir de 1, si
+     * bien qu'une correspondance prise au hasard rattache tous les comptes à des
+     * secteurs faux, sans qu'aucune erreur ne se produise nulle part.
+     *
+     * @return array<string, mixed>
+     */
+    public function syncProspectSectors(int $brandId): array
+    {
+        [$schema, $junction]  = $this->source('MAR_ERP_SECTOR_LINK_TABLE', 'b2b_client_interest_connection');
+        [, $customersTable]   = $this->source('MAR_ERP_CUSTOMERS_TABLE', 'client');
+        [, $sectorsTable]     = $this->source('MAR_ERP_SECTORS_TABLE', 'b2b_client_type');
+
+        $present = $this->columnsOf($schema, $junction);
+
+        if ($present === []) {
+            throw new RuntimeException(sprintf(
+                'Table de liaison « %s.%s » introuvable. Renseignez MAR_ERP_SECTOR_LINK_TABLE.',
+                $schema,
+                $junction
+            ));
+        }
+
+        $clientColumn = $this->columnPointingTo($schema, $junction, $customersTable, $present);
+        $sectorColumn = $this->columnPointingTo($schema, $junction, $sectorsTable, $present);
+
+        if ($clientColumn === null || $sectorColumn === null) {
+            throw new RuntimeException(sprintf(
+                'Dans « %s.%s », impossible de désigner sans ambiguïté la colonne du %s. '
+                . 'Colonnes présentes : %s. Attendu une clé étrangère vers « %s » / « %s », '
+                . 'ou une colonne « id_<table> ». Aucun rattachement effectué.',
+                $schema,
+                $junction,
+                $clientColumn === null ? 'client' : 'type de compte',
+                implode(', ', $present),
+                $customersTable,
+                $sectorsTable
+            ));
+        }
+
+        $this->inventory[$schema . '.' . $junction] = [
+            'non reconnues' => [],
+            'disponibles'   => $present,
+        ];
+
+        $links = Database::connection()->query(sprintf(
+            'SELECT `%s` AS `client`, `%s` AS `sector` FROM `%s`.`%s`
+              WHERE `%s` IS NOT NULL AND `%s` IS NOT NULL',
+            $clientColumn,
+            $sectorColumn,
+            $schema,
+            $junction,
+            $clientColumn,
+            $sectorColumn
+        ))->fetchAll();
+
+        $columns = ['client' => $clientColumn, 'sector' => $sectorColumn];
+
+        // Une table vide ne vaut pas « plus aucun compte n'a de secteur » : ce
+        // serait aussi la conséquence d'un droit de lecture manquant. On ne
+        // détruit pas les rattachements existants sur cette base.
+        if ($links === []) {
+            return [
+                'source'         => $schema . '.' . $junction,
+                'columns'        => $columns,
+                'read'           => 0,
+                'linked'         => 0,
+                'unknown_client' => 0,
+                'unknown_sector' => 0,
+                'removed'        => 0,
+                'warning'        => 'Table de liaison vide : les rattachements en base sont conservés.',
+            ];
+        }
+
+        $connection = Database::connection();
+
+        $prospects = $connection->prepare(
+            'SELECT external_ref, id FROM mar_b2b_prospect
+              WHERE brand_id = :brand_id AND source = \'ERP\' AND external_ref IS NOT NULL'
+        );
+        $prospects->execute(['brand_id' => $brandId]);
+        $prospectByRef = $prospects->fetchAll(PDO::FETCH_KEY_PAIR);
+
+        $sectorByErp = $connection->query(
+            'SELECT erp_type_id, id FROM mar_b2b_sector WHERE erp_type_id IS NOT NULL'
+        )->fetchAll(PDO::FETCH_KEY_PAIR);
+
+        $connection->beginTransaction();
+
+        try {
+            // Les rattachements repris de l'ERP sont refaits en entier : un
+            // client qui change de type verrait sinon son ancien secteur
+            // subsister à côté du nouveau. Seuls ceux-là sont effacés — les
+            // secteurs saisis par import de fichier ne viennent pas de l'ERP et
+            // n'ont pas à disparaître parce que l'ERP ne les connaît pas.
+            $purge = $connection->prepare(
+                'DELETE ps FROM mar_b2b_prospect_sector ps
+                   JOIN mar_b2b_prospect p ON p.id = ps.prospect_id
+                   JOIN mar_b2b_sector   s ON s.id = ps.sector_id
+                  WHERE p.brand_id = :brand_id
+                    AND p.source   = \'ERP\'
+                    AND s.erp_type_id IS NOT NULL'
+            );
+            $purge->execute(['brand_id' => $brandId]);
+            $removed = $purge->rowCount();
+
+            $insert = $connection->prepare(
+                'INSERT IGNORE INTO mar_b2b_prospect_sector (prospect_id, sector_id)
+                 VALUES (:prospect_id, :sector_id)'
+            );
+
+            $linked        = 0;
+            $unknownClient = 0;
+            $unknownSector = 0;
+
+            foreach ($links as $link) {
+                $prospectId = $prospectByRef['erp-' . $link['client']] ?? null;
+                $sectorId   = $sectorByErp[(int) $link['sector']] ?? null;
+
+                if ($prospectId === null) {
+                    // Cas normal : le client existe mais n'est pas
+                    // professionnel, donc pas dans le vivier.
+                    $unknownClient++;
+                    continue;
+                }
+
+                if ($sectorId === null) {
+                    $unknownSector++;
+                    continue;
+                }
+
+                $insert->execute(['prospect_id' => (int) $prospectId, 'sector_id' => (int) $sectorId]);
+                $linked++;
+            }
+
+            $connection->commit();
+        } catch (Throwable $failure) {
+            $connection->rollBack();
+
+            throw $failure;
+        }
+
+        // Un compte du vivier sans aucun secteur ne sortira jamais d'une
+        // génération : elle ne retient que les secteurs de la campagne. Il
+        // existe, se compte dans le vivier, et reste indémarchable — le seul
+        // endroit où cela peut se voir est ici.
+        $orphans = $connection->prepare(
+            'SELECT COUNT(*) FROM mar_b2b_prospect p
+              WHERE p.brand_id = :brand_id
+                AND p.is_active = 1
+                AND NOT EXISTS (
+                      SELECT 1 FROM mar_b2b_prospect_sector ps WHERE ps.prospect_id = p.id
+                )'
+        );
+        $orphans->execute(['brand_id' => $brandId]);
+
+        $result = [
+            'source'         => $schema . '.' . $junction,
+            'columns'        => $columns,
+            'read'           => count($links),
+            'linked'         => $linked,
+            'unknown_client' => $unknownClient,
+            'unknown_sector' => $unknownSector,
+            'removed'        => $removed,
+            'without_sector' => (int) $orphans->fetchColumn(),
+        ];
+
+        // Un identifiant de type que le référentiel des secteurs ne connaît pas
+        // sur *toutes* les lignes ne se rattrape pas : cela veut dire que la
+        // table de liaison ne désigne pas ce référentiel-là. Le dire vaut mieux
+        // que rendre « 0 rattaché » au milieu d'un compte rendu par ailleurs
+        // normal.
+        if ($linked === 0 && $unknownSector > 0) {
+            $result['warning'] = sprintf(
+                'Aucun rattachement : les %d valeurs de « %s » ne correspondent à aucun type '
+                . 'repris de « %s ». La table de liaison désigne vraisemblablement un autre '
+                . 'référentiel — renseignez MAR_ERP_SECTORS_TABLE.',
+                $unknownSector,
+                $sectorColumn,
+                $sectorsTable
+            );
+        }
+
+        return $result;
+    }
+
+    /**
+     * Colonne d'une table qui désigne une autre table.
+     *
+     * D'abord la contrainte, qui l'affirme ; ensuite seulement la convention de
+     * nommage de cet ERP (`id_<table>`), qui la suggère. Rien d'autre : un nom
+     * approchant ne prouve rien.
+     *
+     * @param  list<string> $present
+     */
+    private function columnPointingTo(string $schema, string $table, string $target, array $present): ?string
+    {
+        $statement = Database::connection()->prepare(
+            'SELECT column_name FROM information_schema.key_column_usage
+              WHERE table_schema = :schema
+                AND table_name = :table
+                AND referenced_table_name = :target
+              ORDER BY column_name
+              LIMIT 1'
+        );
+        $statement->execute(['schema' => $schema, 'table' => $table, 'target' => $target]);
+
+        $declared = $statement->fetchColumn();
+        if ($declared !== false) {
+            return (string) $declared;
+        }
+
+        $lower = array_map('strtolower', $present);
+
+        foreach ([$target . '_id', 'id_' . $target] as $candidate) {
+            $index = array_search(strtolower($candidate), $lower, true);
+            if ($index !== false) {
+                return $present[$index];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Colonnes d'une table, sans exiger qu'elle existe.
+     *
+     * @return list<string>
+     */
+    private function columnsOf(string $schema, string $table): array
+    {
+        $statement = Database::connection()->prepare(
+            'SELECT column_name FROM information_schema.columns
+              WHERE table_schema = :schema AND table_name = :table
+              ORDER BY ordinal_position'
+        );
+        $statement->execute(['schema' => $schema, 'table' => $table]);
+
+        return $statement->fetchAll(PDO::FETCH_COLUMN);
     }
 
     /**

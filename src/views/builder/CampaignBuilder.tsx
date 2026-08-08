@@ -693,11 +693,14 @@ function FramingStep({
       {draft.client_target !== 'b2c' ? (
         <>
           <h3 className="section-label">Secteurs visés</h3>
+          {/* Le nombre affiché est celui des comptes réellement présents dans le
+              vivier, et non un objectif de démarchage : c'est lui qui décide si
+              cocher ce secteur produira des leads. */}
           <ChipList
             items={refs.b2bSectors.map((sector) => ({
               id: sector.id,
-              label: `${sector.label} · ${sector.estimated_leads_count}`,
-              hint: `${sector.estimated_leads_count} comptes estimés`,
+              label: `${sector.label} · ${sector.available_count}`,
+              hint: `${sector.available_count} compte${sector.available_count > 1 ? 's' : ''} dans le vivier`,
             }))}
             selected={draft.sector_ids}
             onToggle={(id) => patch({ sector_ids: toggle(draft.sector_ids, id) })}
@@ -1553,6 +1556,15 @@ function ReviewStep({
 function LeadsStep({ draft, patch }: StepProps) {
   const availability = useAsync(() => api.getSectorAvailability(), [])
 
+  // Le total vient de la base et non de la somme des lignes : un compte relevant
+  // de deux secteurs cochés y figure deux fois, et ne produira qu'un lead.
+  // Le crochet est appelé avant la sortie B2C — un rendu qui en appelle moins
+  // que le précédent casse l'ordre des crochets de React.
+  const distinct = useAsync(
+    () => api.countProspects(draft.sector_ids),
+    [draft.sector_ids.join(',')],
+  )
+
   if (draft.client_target === 'b2c') {
     return (
       <>
@@ -1566,8 +1578,14 @@ function LeadsStep({ draft, patch }: StepProps) {
   }
 
   const rows = (availability.data ?? []).filter((sector) => draft.sector_ids.includes(sector.id))
-  const available = rows.reduce((sum, sector) => sum + sector.available, 0)
+  const available = distinct.data?.total ?? 0
+  const summed = rows.reduce((sum, sector) => sum + sector.available, 0)
   const estimated = rows.reduce((sum, sector) => sum + sector.estimated_leads_count, 0)
+
+  // Les secteurs repris de l'ERP n'ont pas de chiffre de cadrage : c'est une
+  // intention de démarchage, que l'ERP n'a aucune raison de porter. Une colonne
+  // entière de zéros n'apprend rien — elle est retirée quand elle est vide.
+  const framed = rows.some((sector) => sector.estimated_leads_count > 0)
 
   return (
     <>
@@ -1594,8 +1612,12 @@ function LeadsStep({ draft, patch }: StepProps) {
         </button>
       </div>
 
-      {availability.error ? <p className="error">{availability.error}</p> : null}
-      {availability.loading ? <p className="muted">Lecture du vivier…</p> : null}
+      {(availability.error ?? distinct.error) ? (
+        <p className="error">{availability.error ?? distinct.error}</p>
+      ) : null}
+      {availability.loading || distinct.loading ? (
+        <p className="muted">Lecture du vivier…</p>
+      ) : null}
 
       {draft.sector_ids.length === 0 ? (
         <p className="muted wizard__hint">
@@ -1608,7 +1630,7 @@ function LeadsStep({ draft, patch }: StepProps) {
               <thead>
                 <tr>
                   <th>Secteur</th>
-                  <th className="num">Cadrage</th>
+                  {framed ? <th className="num">Cadrage</th> : null}
                   <th className="num">Dans le vivier</th>
                 </tr>
               </thead>
@@ -1616,7 +1638,9 @@ function LeadsStep({ draft, patch }: StepProps) {
                 {rows.map((sector) => (
                   <tr key={sector.id}>
                     <td>{sector.label}</td>
-                    <td className="num muted">{sector.estimated_leads_count}</td>
+                    {framed ? (
+                      <td className="num muted">{sector.estimated_leads_count}</td>
+                    ) : null}
                     <td className="num">{sector.available}</td>
                   </tr>
                 ))}
@@ -1624,14 +1648,25 @@ function LeadsStep({ draft, patch }: StepProps) {
               <tfoot>
                 <tr className="ledger__total">
                   <td>Total</td>
-                  <td className="num muted">{estimated}</td>
+                  {framed ? <td className="num muted">{estimated}</td> : null}
                   <td className="num">{available}</td>
                 </tr>
               </tfoot>
             </table>
           </div>
 
-          {!availability.loading && available === 0 ? (
+          {/* Le total est inférieur à la somme des lignes dès qu'un compte
+              relève de deux secteurs cochés. Sans un mot, cela passe pour une
+              erreur d'addition. */}
+          {summed > available ? (
+            <p className="muted wizard__hint">
+              {summed - available} compte{summed - available > 1 ? 's' : ''} relève
+              {summed - available > 1 ? 'nt' : ''} de plusieurs secteurs retenus : le total
+              compte les comptes, pas les lignes. Chacun ne donnera qu’un seul lead.
+            </p>
+          ) : null}
+
+          {!distinct.loading && available === 0 ? (
             <p className="muted wizard__hint">
               Le vivier ne contient aucun compte sur ces secteurs : la génération ne créera rien.
               Importez-le depuis <strong>Fidélité &amp; CRM</strong>, puis relancez la génération
@@ -1640,8 +1675,10 @@ function LeadsStep({ draft, patch }: StepProps) {
           ) : (
             <p className="muted wizard__hint">
               {available} compte{available > 1 ? 's' : ''} sera{available > 1 ? 'ont' : ''} créé
-              {available > 1 ? 's' : ''}. Le chiffre de cadrage ({estimated}) reste l’objectif de
-              démarchage, pas ce qui est disponible.
+              {available > 1 ? 's' : ''}.
+              {framed
+                ? ` Le chiffre de cadrage (${estimated}) reste l’objectif de démarchage, pas ce qui est disponible.`
+                : ''}
             </p>
           )}
         </>

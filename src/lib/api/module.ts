@@ -106,7 +106,10 @@ export interface B2bSector {
   id: number
   code: string
   label: string
+  /** Intention de démarchage. Vaut 0 pour les secteurs repris de l'ERP. */
   estimated_leads_count: number
+  /** Comptes réellement présents dans le vivier pour ce secteur. */
+  available_count: number
 }
 
 export interface Format {
@@ -634,6 +637,18 @@ export interface Prospect {
   sector_label: string | null
 }
 
+/**
+ * Comptes distincts des secteurs retenus.
+ *
+ * Un compte relevant de deux secteurs cochés ne produit qu'un lead : additionner
+ * les effectifs par secteur annoncerait plus de comptes qu'il n'en sera créé.
+ */
+export function countProspects(sectorIds: number[]): Promise<{ total: number }> {
+  return request<{ total: number }>(`${BASE}/b2b/prospects/count`, {
+    query: { sector_ids: sectorIds.join(',') },
+  })
+}
+
 export function listProspects(sectorIds: number[]): Promise<Prospect[]> {
   return request<Prospect[]>(`${BASE}/b2b/prospects`, {
     query: { sector_ids: sectorIds.join(',') },
@@ -680,9 +695,40 @@ export interface SyncReport {
   created: number
   updated: number
   skipped: number
+  /** Secteurs de l'installation initiale sortis de la liste. */
+  retired?: number
+  warning?: string
 }
 
-export function syncErp(): Promise<{ shops: SyncReport; prospects: SyncReport }> {
+/**
+ * Rattachement des comptes à leurs secteurs.
+ *
+ * Compté à part des trois reprises : ce n'est pas un nombre de fiches créées
+ * mais un nombre de liens, et il échoue seul — d'où `error`, qui dit pourquoi
+ * plutôt que de laisser un tableau à zéro.
+ */
+export interface SectorLinkReport {
+  source?: string
+  columns?: Record<string, string>
+  read?: number
+  linked?: number
+  unknown_client?: number
+  unknown_sector?: number
+  removed?: number
+  /** Comptes du vivier sans aucun secteur : aucune génération ne les retiendra. */
+  without_sector?: number
+  warning?: string
+  error?: string
+}
+
+export interface SyncResult {
+  shops: SyncReport
+  prospects: SyncReport
+  sectors?: SyncReport
+  links?: SectorLinkReport
+}
+
+export function syncErp(): Promise<SyncResult> {
   return request(`${BASE}/erp/sync`, { method: 'POST' })
 }
 

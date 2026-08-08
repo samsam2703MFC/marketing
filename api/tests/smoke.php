@@ -808,6 +808,22 @@ $response = call($router, 'POST', '/api/v1/marketing/b2b/prospects/import', [], 
     'rows' => [['external_ref' => 'A1', 'company_name' => 'Deloitte Diegem Belgium', 'sector' => 'offices']],
 ]);
 check('réimporter met à jour', ($response['body']['updated'] ?? null) === 1);
+
+// Rejoué à l'identique : rien ne change en base, et le rattachement au secteur
+// doit malgré tout être en place. C'est le cas où `lastInsertId()` ne renvoie
+// rien sans `id = LAST_INSERT_ID(id)` — le compte existerait alors sans secteur,
+// et resterait invisible de toutes les campagnes.
+call($router, 'POST', '/api/v1/marketing/b2b/prospects/import', [], [
+    'rows' => [['external_ref' => 'A1', 'company_name' => 'Deloitte Diegem Belgium', 'sector' => 'offices']],
+]);
+check(
+    'un réimport sans changement garde le secteur',
+    (int) $pdo->query(
+        "SELECT COUNT(*) FROM mar_b2b_prospect_sector ps
+           JOIN mar_b2b_prospect p ON p.id = ps.prospect_id
+          WHERE p.external_ref = 'A1'"
+    )->fetchColumn() === 1
+);
 check(
     'et ne crée pas de doublon',
     (int) $pdo->query('SELECT COUNT(*) FROM mar_b2b_prospect')->fetchColumn() === 4
@@ -919,11 +935,90 @@ echo "\nComptes visés par secteur\n";
 AuthContext::set(1, 'BRAND_ADMIN', 1);
 
 $officesId = (int) array_column($refs['b2bSectors'], 'id', 'code')['offices'];
-$pdo->exec(sprintf('UPDATE mar_b2b_prospect SET sector_id = %d WHERE sector_id IS NULL', $officesId));
+$horecaId  = (int) array_column($refs['b2bSectors'], 'id', 'code')['horeca'];
+
+$pdo->exec(sprintf(
+    'INSERT IGNORE INTO mar_b2b_prospect_sector (prospect_id, sector_id)
+     SELECT p.id, %d FROM mar_b2b_prospect p
+      WHERE NOT EXISTS (SELECT 1 FROM mar_b2b_prospect_sector ps WHERE ps.prospect_id = p.id)',
+    $officesId
+));
 
 $response = call($router, 'GET', '/api/v1/marketing/b2b/prospects', ['sector_ids' => (string) $officesId]);
 check('les comptes du secteur remontent', $response['status'] === 200 && $response['body'] !== []);
 check('chacun porte sa boutique référente', array_key_exists('shop_name', $response['body'][0] ?? []));
+
+// --- Un compte relève de plusieurs secteurs ---------------------------------
+// Un traiteur est à la fois horeca et événementiel. Tant que le vivier n'en
+// gardait qu'un, il n'existait que pour la moitié des campagnes qui le visent —
+// et son absence de l'autre moitié ne se signalait nulle part.
+$brasserie = (int) $pdo->query(
+    "SELECT id FROM mar_b2b_prospect WHERE external_ref = 'A3'"
+)->fetchColumn();
+$pdo->exec(sprintf(
+    'INSERT IGNORE INTO mar_b2b_prospect_sector (prospect_id, sector_id) VALUES (%d, %d)',
+    $brasserie,
+    $officesId
+));
+
+$response = call($router, 'GET', '/api/v1/marketing/b2b/prospects', [
+    'sector_ids' => $officesId . ',' . $horecaId,
+]);
+$appearances = array_filter($response['body'], static fn (array $p): bool => $p['company_name'] === 'Brasserie Sablon');
+check(
+    'un compte de deux secteurs ne figure qu\'une fois',
+    count($appearances) === 1,
+    count($appearances) . ' occurrence(s)'
+);
+check(
+    'et son libellé énumère ses secteurs',
+    str_contains((string) (array_values($appearances)[0]['sector_label'] ?? ''), 'Horeca')
+        && str_contains((string) (array_values($appearances)[0]['sector_label'] ?? ''), 'Offices'),
+    (string) (array_values($appearances)[0]['sector_label'] ?? '')
+);
+
+$response  = call($router, 'GET', '/api/v1/marketing/references');
+$refSector = array_values(array_filter(
+    $response['body']['b2bSectors'],
+    static fn (array $s): bool => (int) $s['id'] === $horecaId
+))[0];
+check(
+    'le référentiel annonce l\'effectif réel du secteur',
+    (int) $refSector['available_count'] === 1,
+    json_encode($refSector)
+);
+
+// Le total annoncé avant génération doit être celui des comptes, pas celui des
+// lignes : l'assistant promettait un lead de plus qu'il n'en créait.
+$perSector = call($router, 'GET', '/api/v1/marketing/b2b/sectors')['body'];
+$summed    = array_sum(array_map(
+    static fn (array $s): int => in_array((int) $s['id'], [$officesId, $horecaId], true) ? (int) $s['available'] : 0,
+    $perSector
+));
+$response = call($router, 'GET', '/api/v1/marketing/b2b/prospects/count', [
+    'sector_ids' => $officesId . ',' . $horecaId,
+]);
+$total = (int) ($response['body']['total'] ?? -1);
+check('le total ne compte chaque compte qu\'une fois', $total === $summed - 1, "$total vs $summed");
+
+// Et la génération s'y tient : autant de leads que de comptes distincts.
+$response = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name'             => 'Traiteurs multi-secteurs',
+    'client_target'    => 'b2b',
+    'sector_ids'       => [$officesId, $horecaId],
+    'create_crm_leads' => true,
+]);
+check(
+    'la génération crée un lead par compte, pas par secteur',
+    ($response['body']['leads']['created'] ?? null) === $total,
+    json_encode($response['body']['leads'] ?? null)
+);
+
+$pdo->exec(sprintf(
+    'DELETE FROM mar_b2b_prospect_sector WHERE prospect_id = %d AND sector_id = %d',
+    $brasserie,
+    $officesId
+));
 
 $response = call($router, 'GET', '/api/v1/marketing/b2b/prospects', ['sector_ids' => '']);
 check('sans secteur, la liste est vide', $response['body'] === []);

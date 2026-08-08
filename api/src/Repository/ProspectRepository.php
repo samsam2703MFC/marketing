@@ -32,11 +32,15 @@ final class ProspectRepository
      */
     public function summaryBySector(): array
     {
+        // `COUNT(p.id)` et non `COUNT(ps.prospect_id)` : la jonction garde ses
+        // lignes même quand le compte a été désactivé, et les compter
+        // annoncerait un vivier plus fourni qu'il ne l'est.
         $rows = Database::connection()->query(
             'SELECT s.id, s.code, s.label, s.estimated_leads_count,
                     COUNT(p.id) AS available
                FROM mar_b2b_sector s
-               LEFT JOIN mar_b2b_prospect p ON p.sector_id = s.id AND p.is_active = 1
+               LEFT JOIN mar_b2b_prospect_sector ps ON ps.sector_id  = s.id
+               LEFT JOIN mar_b2b_prospect p         ON p.id = ps.prospect_id AND p.is_active = 1
               WHERE s.is_active = 1
               GROUP BY s.id, s.code, s.label, s.estimated_leads_count, s.sort_order
               ORDER BY s.sort_order'
@@ -74,14 +78,26 @@ final class ProspectRepository
         // lié en LIMIT quand l'émulation des requêtes préparées est coupée.
         $limit = max(1, min(500, $limit));
 
+        // Un compte relève de plusieurs secteurs : `EXISTS` plutôt qu'une
+        // jointure, sinon il ressortirait une fois par secteur retenu et le
+        // panneau annoncerait deux cents comptes là où il y en a quatre-vingts.
+        // Le libellé, lui, les énumère tous — y compris ceux que la campagne ne
+        // vise pas : c'est ce qui permet de voir qu'un traiteur coché au titre
+        // de l'événementiel est aussi un client horeca.
         $statement = Database::connection()->prepare(sprintf(
             'SELECT p.id, p.company_name, p.contact_name, p.contact_email, p.city,
-                    p.postal_code, p.shop_id, s.name AS shop_name, sec.label AS sector_label
+                    p.postal_code, p.shop_id, s.name AS shop_name,
+                    (SELECT GROUP_CONCAT(sec.label ORDER BY sec.sort_order SEPARATOR \', \')
+                       FROM mar_b2b_prospect_sector ls
+                       JOIN mar_b2b_sector sec ON sec.id = ls.sector_id
+                      WHERE ls.prospect_id = p.id) AS sector_label
                FROM mar_b2b_prospect p
-               LEFT JOIN mar_shop s       ON s.id = p.shop_id
-               LEFT JOIN mar_b2b_sector sec ON sec.id = p.sector_id
+               LEFT JOIN mar_shop s ON s.id = p.shop_id
               WHERE p.is_active = 1
-                AND p.sector_id IN (%s)
+                AND EXISTS (
+                      SELECT 1 FROM mar_b2b_prospect_sector ps
+                       WHERE ps.prospect_id = p.id AND ps.sector_id IN (%s)
+                )
                 AND (p.shop_id IS NULL OR %s)
               ORDER BY p.company_name
               LIMIT %d',
@@ -98,6 +114,44 @@ final class ProspectRepository
         }
 
         return $rows;
+    }
+
+    /**
+     * Nombre de comptes distincts sur un ensemble de secteurs.
+     *
+     * Additionner les effectifs par secteur donnerait un autre chiffre, et un
+     * chiffre faux : un traiteur qui relève de l'horeca et de l'événementiel
+     * compte une fois dans chacun, mais ne produira qu'un lead. L'assistant
+     * annonçait ainsi trois comptes là où deux allaient être créés — un écart
+     * qui ne se voit qu'après la génération, quand il est trop tard pour se
+     * demander lequel des deux chiffres était le bon.
+     *
+     * @param list<int> $sectorIds
+     */
+    public function countBySectors(AuthContext $auth, array $sectorIds): int
+    {
+        if ($sectorIds === []) {
+            return 0;
+        }
+
+        [$scopeSql, $bindings]           = Scope::shopFilter($auth, 'p.shop_id');
+        [$placeholders, $sectorBindings] = Database::inClause($sectorIds, 'sector');
+
+        $statement = Database::connection()->prepare(sprintf(
+            'SELECT COUNT(*)
+               FROM mar_b2b_prospect p
+              WHERE p.is_active = 1
+                AND EXISTS (
+                      SELECT 1 FROM mar_b2b_prospect_sector ps
+                       WHERE ps.prospect_id = p.id AND ps.sector_id IN (%s)
+                )
+                AND (p.shop_id IS NULL OR %s)',
+            $placeholders,
+            $scopeSql
+        ));
+        $statement->execute($sectorBindings + $bindings);
+
+        return (int) $statement->fetchColumn();
     }
 
     /**
@@ -132,15 +186,19 @@ final class ProspectRepository
         $connection->beginTransaction();
 
         try {
+            // `id = LAST_INSERT_ID(id)` : sans cette affectation, MySQL ne
+            // renseigne `lastInsertId()` que sur une insertion. Un compte déjà
+            // connu repartirait donc sans identifiant, et son secteur ne serait
+            // jamais rattaché — précisément le cas d'un fichier réimporté.
             $insert = $connection->prepare(
                 'INSERT INTO mar_b2b_prospect
-                    (brand_id, sector_id, external_ref, company_name, contact_name, contact_email,
+                    (brand_id, external_ref, company_name, contact_name, contact_email,
                      contact_phone, size_label, potential_amount, city, postal_code, source, created_by)
                  VALUES
-                    (:brand_id, :sector_id, :external_ref, :company_name, :contact_name, :contact_email,
+                    (:brand_id, :external_ref, :company_name, :contact_name, :contact_email,
                      :contact_phone, :size_label, :potential_amount, :city, :postal_code, :source, :created_by)
                  ON DUPLICATE KEY UPDATE
-                    sector_id        = VALUES(sector_id),
+                    id               = LAST_INSERT_ID(id),
                     company_name     = VALUES(company_name),
                     contact_name     = VALUES(contact_name),
                     contact_email    = VALUES(contact_email),
@@ -150,6 +208,11 @@ final class ProspectRepository
                     city             = VALUES(city),
                     postal_code      = VALUES(postal_code),
                     is_active        = 1'
+            );
+
+            $link = $connection->prepare(
+                'INSERT IGNORE INTO mar_b2b_prospect_sector (prospect_id, sector_id)
+                 VALUES (:prospect_id, :sector_id)'
             );
 
             foreach ($rows as $index => $row) {
@@ -176,7 +239,6 @@ final class ProspectRepository
 
                 $insert->execute([
                     'brand_id'         => $brandId,
-                    'sector_id'        => $sectorId,
                     'external_ref'     => $ref !== '' ? $ref : null,
                     'company_name'     => $company,
                     'contact_name'     => self::text($row['contact_name'] ?? null),
@@ -196,6 +258,17 @@ final class ProspectRepository
                     $report['imported']++;
                 } else {
                     $report['updated']++;
+                }
+
+                // Le secteur s'ajoute, il ne remplace pas : un compte en a
+                // plusieurs, et un fichier qui n'en nomme qu'un ne dit rien des
+                // autres. Les effacer retirerait au passage ceux que la reprise
+                // ERP a rattachés, sans que le fichier ait prétendu le faire.
+                if ($sectorId !== null) {
+                    $link->execute([
+                        'prospect_id' => (int) $connection->lastInsertId(),
+                        'sector_id'   => $sectorId,
+                    ]);
                 }
             }
 
@@ -248,25 +321,46 @@ final class ProspectRepository
             return $empty + ['reason' => 'Aucune boutique à qui distribuer les comptes.'];
         }
 
-        [$placeholders, $bindings] = Database::inClause($sectorIds, 'sector');
+        [$placeholders, $bindings]     = Database::inClause($sectorIds, 'sector');
+        [$pickPlaceholders, $pickBind] = Database::inClause($sectorIds, 'pick');
+
+        $bindings                 += $pickBind;
         $bindings['brand_id']      = $campaign['brand_id'];
         $bindings['campaign_id']   = $campaignId;
 
+        // Deux jeux de paramètres pour la même liste : PDO sans émulation
+        // refuse qu'un paramètre nommé serve deux fois dans la requête.
+        //
+        // Le secteur porté par le lead est celui de la campagne, pas tous ceux
+        // du compte : un traiteur relevant de l'horeca et de l'événementiel
+        // apparaît sous le secteur au titre duquel il est démarché, sans quoi
+        // le suivi le classerait sous un secteur que la campagne ne vise pas.
+        //
         // Les comptes déjà transformés pour cette campagne sont écartés ici
         // plutôt que rattrapés par l'erreur d'unicité : on veut un compte
         // rendu juste, pas seulement l'absence de doublon.
         $statement = $connection->prepare(sprintf(
             'SELECT p.id, p.company_name, p.contact_name, p.contact_email, p.contact_phone,
-                    p.size_label, p.potential_amount, p.sector_id, p.shop_id
+                    p.size_label, p.potential_amount, p.shop_id,
+                    (SELECT ps.sector_id
+                       FROM mar_b2b_prospect_sector ps
+                       JOIN mar_b2b_sector sc ON sc.id = ps.sector_id
+                      WHERE ps.prospect_id = p.id AND ps.sector_id IN (%s)
+                      ORDER BY sc.sort_order, sc.id
+                      LIMIT 1) AS sector_id
                FROM mar_b2b_prospect p
               WHERE p.is_active = 1
                 AND p.brand_id  = :brand_id
-                AND p.sector_id IN (%s)
+                AND EXISTS (
+                      SELECT 1 FROM mar_b2b_prospect_sector ps
+                       WHERE ps.prospect_id = p.id AND ps.sector_id IN (%s)
+                )
                 AND NOT EXISTS (
                       SELECT 1 FROM mar_crm_lead ld
                        WHERE ld.campaign_id = :campaign_id AND ld.prospect_id = p.id
                 )
               ORDER BY p.company_name',
+            $pickPlaceholders,
             $placeholders
         ));
         $statement->execute($bindings);

@@ -221,18 +221,22 @@ est rejouable — elle met à jour les fiches connues, n'ajoute que les nouvelle
 
 Les tables lues sont, par défaut, celles de cette installation :
 
-| Notion   | Table              |
-|----------|--------------------|
-| Boutiques| `franchisee_shop`  |
-| Clients  | `client`           |
+| Notion              | Table                            |
+|---------------------|----------------------------------|
+| Boutiques           | `franchisee_shop`                |
+| Clients             | `client`                         |
+| Secteurs visés      | `b2b_client_type`                |
+| Liaison compte ↔ secteur | `b2b_client_interest_connection` |
 
 Elles sont cherchées dans la base du module — ici `atelier_db`, qui héberge
-aussi l'ERP. Deux variables du `.env` permettent d'en désigner d'autres, sous la
-forme `table` ou `schéma.table` :
+aussi l'ERP. Quatre variables du `.env` permettent d'en désigner d'autres, sous
+la forme `table` ou `schéma.table` :
 
 ```
 MAR_ERP_SHOPS_TABLE=franchisee_shop
 MAR_ERP_CUSTOMERS_TABLE=client
+MAR_ERP_SECTORS_TABLE=b2b_client_type
+MAR_ERP_SECTOR_LINK_TABLE=b2b_client_interest_connection
 ```
 
 Il n'y a rien à écrire tant que ces valeurs conviennent.
@@ -244,14 +248,25 @@ affiché à l'écran indique celles qu'elle a retenues — c'est le seul moyen d
 vérifier, sans accès à la base, qu'elle a lu ce qu'on croit. Si une colonne
 obligatoire manque, elle refuse en nommant ce qu'elle a trouvé à la place.
 
-Trois points à connaître :
+Quelques points à connaître :
 
 - Une boutique inactive dans l'ERP est écartée : elle ne doit pas réapparaître
-  dans le choix de périmètre d'une nouvelle campagne.
-- Seuls les clients professionnels rejoignent le vivier. Le marqueur est
-  `b2b_client_type` : un client en a un, un particulier n'en a pas. La reprise
-  ne teste donc pas « égal à 1 » mais « renseigné », sans quoi elle ne
-  ramènerait qu'un seul type de compte sur les trois.
+  dans le choix de périmètre d'une nouvelle campagne. Sur cette installation,
+  `franchisee_shop` ne porte ni `code` ni indicateur d'activité : aucune
+  boutique n'est donc écartée à ce titre.
+- Seuls les clients professionnels rejoignent le vivier. Le marqueur retenu ici
+  est `is_b2b`. La reprise ne teste pas « égal à 1 » mais « renseigné et non
+  nul » : selon les installations la colonne porte un booléen ou un type de
+  compte, et « = 1 » ne ramènerait alors qu'un type sur trois.
+- Les secteurs visés sont les types de compte professionnel
+  (`b2b_client_type`), rattachés aux clients par une table de liaison. Un compte
+  peut relever de plusieurs secteurs. La colonne qui désigne le type y est
+  cherchée d'abord dans les contraintes, puis dans la convention `id_<table>` ;
+  faute des deux, la reprise refuse de rattacher quoi que ce soit et nomme les
+  colonnes trouvées. Deux référentiels numérotés à partir de 1 se confondent
+  sans erreur visible : mieux vaut un refus qu'un rattachement faux.
+- Un compte du vivier sans aucun secteur ne sortira d'aucune génération de
+  leads. Le compte rendu de reprise en donne le nombre.
 - Aucune de ces tables n'est créée ni modifiée par le module : il les lit, un
   point c'est tout. Il n'existe volontairement aucun script qui les recrée —
   lancé par mégarde sur la base réelle, il effacerait l'ERP.

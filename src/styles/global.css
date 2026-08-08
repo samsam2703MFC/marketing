@@ -1286,6 +1286,18 @@ select:disabled {
   gap: 4px;
 }
 
+/* Les tableaux de l'assistant tiennent dans sa carte.
+   `table { min-width: 820px }` vise les listes de données — un suivi de leads,
+   un grand livre — pour qu'elles gardent leurs colonnes lisibles et défilent
+   plutôt que de s'écraser. Dans l'assistant, la carte fait 746 px dès que le
+   panneau des comptes occupe la colonne de droite : la règle y poussait la
+   colonne des chiffres hors du cadre. Le tableau des secteurs n'affichait donc
+   plus que ses libellés, et il fallait deviner qu'on pouvait le faire défiler
+   pour lire les effectifs — c'est-à-dire la seule chose qu'il ait à dire. */
+.wizard-card table {
+  min-width: 0;
+}
+
 /* Champs de saisie — un seul rembourrage pour tous.
    Ils se côtoient dans les mêmes rangées : deux valeurs différentes se voient
    immédiatement sur la hauteur des bordures. */

@@ -53,10 +53,38 @@ final class LeadController
     /** Comptes du vivier pour les secteurs demandés. */
     public function prospects(Request $request): array
     {
-        $raw = $request->queryString('sector_ids') ?? '';
-        $ids = array_values(array_filter(array_map('intval', explode(',', $raw)), static fn (int $v): bool => $v > 0));
+        return Response::data($this->prospects->listBySectors(
+            AuthContext::current(),
+            self::sectorIds($request)
+        ));
+    }
 
-        return Response::data($this->prospects->listBySectors(AuthContext::current(), $ids));
+    /**
+     * Comptes distincts sur les secteurs demandés.
+     *
+     * Séparé de la liste parce que celle-ci est bornée : le panneau en montre
+     * deux cents, le réseau en compte neuf cents, et compter les lignes reçues
+     * annoncerait deux cents comptes à qui va en démarcher neuf cents.
+     */
+    public function prospectCount(Request $request): array
+    {
+        return Response::data([
+            'total' => $this->prospects->countBySectors(
+                AuthContext::current(),
+                self::sectorIds($request)
+            ),
+        ]);
+    }
+
+    /** @return list<int> */
+    private static function sectorIds(Request $request): array
+    {
+        $raw = $request->queryString('sector_ids') ?? '';
+
+        return array_values(array_filter(
+            array_map('intval', explode(',', $raw)),
+            static fn (int $v): bool => $v > 0
+        ));
     }
 
     /**

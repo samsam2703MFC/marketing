@@ -139,12 +139,15 @@ try {
 }
 
 $inventory = $report['inventory'] ?? [];
-unset($report['inventory']);
+$links     = $report['links'] ?? null;
+unset($report['inventory'], $report['links']);
+
+$titles = ['shops' => 'Boutiques', 'prospects' => 'Comptes', 'sectors' => 'Secteurs'];
 
 foreach ($report as $label => $result) {
     printf(
         "%-10s source %s — %d lue(s), %d créée(s), %d mise(s) à jour, %d écartée(s)%s\n",
-        $label === 'shops' ? 'Boutiques' : 'Comptes',
+        $titles[$label] ?? $label,
         $result['source'],
         $result['read'],
         $result['created'],
@@ -156,8 +159,46 @@ foreach ($report as $label => $result) {
     );
     printf("           colonnes retenues : %s\n", json_encode($result['columns'], JSON_UNESCAPED_UNICODE));
 
+    if (($result['retired'] ?? 0) > 0) {
+        printf(
+            "           %d secteur(s) hors ERP désactivé(s) : la liste vient maintenant de l'ERP\n",
+            $result['retired']
+        );
+    }
+
     if (isset($result['warning'])) {
         printf("           ATTENTION : %s\n", $result['warning']);
+    }
+}
+
+// Le rattachement compte des liens, pas des fiches : il a son propre rendu.
+// C'est aussi la seule partie qui peut échouer seule, et son message est alors
+// la réponse à « pourquoi l'assistant ne propose aucun secteur ».
+if (is_array($links)) {
+    if (isset($links['error'])) {
+        printf("Secteurs   ÉCHEC du rattachement : %s\n", $links['error']);
+    } else {
+        printf(
+            "Liaisons   source %s — %d lue(s), %d rattachée(s), %d hors vivier, %d type inconnu, %d remplacée(s)\n",
+            $links['source'],
+            $links['read'],
+            $links['linked'],
+            $links['unknown_client'],
+            $links['unknown_sector'],
+            $links['removed']
+        );
+        printf("           colonnes retenues : %s\n", json_encode($links['columns'], JSON_UNESCAPED_UNICODE));
+
+        if (($links['without_sector'] ?? 0) > 0) {
+            printf(
+                "           %d compte(s) du vivier sans aucun secteur : ils ne sortiront d'aucune génération\n",
+                $links['without_sector']
+            );
+        }
+
+        if (isset($links['warning'])) {
+            printf("           ATTENTION : %s\n", $links['warning']);
+        }
     }
 }
 
@@ -202,24 +243,11 @@ foreach ($inventory as $table => $detail) {
     printf("  colonnes présentes    : %s\n", implode(', ', $detail['disponibles']));
 }
 
-// Tables à inspecter sans les exploiter encore : on demande leur structure
-// plutôt que de la supposer, ce qui coûte un seul aller-retour au lieu d'un
-// par hypothèse. Le préfixe « SONDE » les distingue de l'inventaire des
-// sources, que l'analyse du journal traite différemment.
-foreach ($repository->explore(['b2b', 'company_client', 'client_type']) as $table => $columns) {
-    printf("\nSONDE %s : %s\n", $table, implode(', ', $columns));
-}
-
-// Les contraintes disent ce que les noms de colonnes taisent : quelle colonne
-// de `client` désigne quelle table.
-foreach (['client', 'b2b_client_type'] as $table) {
-    $links = $repository->foreignKeys($table);
-    printf(
-        "\nSONDE liens de %s : %s\n",
-        $table,
-        $links === [] ? 'aucune clé étrangère déclarée' : implode(' ; ', $links)
-    );
-}
+// Les sondes exploratoires ont été retirées : chaque table qui sert est
+// maintenant lue par du code qui rapporte lui-même les colonnes retenues, et
+// qui nomme celles présentes quand il ne s'y retrouve pas. Elles coûtaient
+// surtout des annotations — GitHub n'en garde que dix par étape, et les
+// dernières émises, justement celles qu'on venait ajouter, disparaissaient.
 
 $prospects = (int) $pdo->query(
     "SELECT COUNT(*) FROM mar_b2b_prospect WHERE source = 'ERP'"
@@ -229,6 +257,31 @@ $attached = (int) $pdo->query(
 )->fetchColumn();
 
 printf("\nComptes B2B repris : %d, dont %d rattachés à une boutique\n", $prospects, $attached);
+
+// Ce que l'assistant proposera réellement à l'étape « secteurs visés ». Un
+// secteur sans compte s'affiche « · 0 » : il se coche, et ne génère rien.
+$sectors = $pdo->query(
+    'SELECT s.label,
+            (SELECT COUNT(*)
+               FROM mar_b2b_prospect_sector ps
+               JOIN mar_b2b_prospect p ON p.id = ps.prospect_id AND p.is_active = 1
+              WHERE ps.sector_id = s.id) AS comptes
+       FROM mar_b2b_sector s
+      WHERE s.is_active = 1
+      ORDER BY s.sort_order'
+)->fetchAll();
+
+$withAccounts = count(array_filter($sectors, static fn (array $s): bool => (int) $s['comptes'] > 0));
+
+printf(
+    "Secteurs proposés : %d, dont %d avec au moins un compte\n",
+    count($sectors),
+    $withAccounts
+);
+
+foreach ($sectors as $sector) {
+    printf("  %s %s\n", $pad((string) $sector['label'], 34), $sector['comptes']);
+}
 
 if ($shops === []) {
     fprintf(STDERR, "\nAucune boutique : la reprise n'a rien produit d'exploitable.\n");

@@ -541,30 +541,68 @@ jobs:
             # bouton de l'écran CRM permet de la relancer.
             echo "::warning title=Reprise non effectuée::Les boutiques et le vivier B2B restent dans leur état précédent."
           else
-            # La vérification d'abord, dans sa propre annotation : dans le
-            # résumé complet elle arrive en dernier, c'est-à-dire au-delà de la
-            # longueur qu'une annotation conserve.
-            verif=$(printf '%s\n' "$out" | grep -E '^(Boutiques dans le module|Comptes B2B repris)' | tr '\n' ' | ')
-            [ -n "$verif" ] && echo "::notice title=Vérification::$verif"
+            # GitHub ne retient que dix annotations « notice » par étape, et
+            # abandonne les suivantes sans le dire. Les plus utiles passent donc
+            # d'abord, et le compte est tenu pour signaler ce qui a été perdu :
+            # la fois précédente, ce sont exactement les lignes ajoutées pour
+            # répondre à une question qui ont disparu.
+            budget=10
+            dropped=0
+            notice() {
+              if [ "$budget" -le 0 ]; then dropped=$((dropped + 1)); return; fi
+              budget=$((budget - 1))
+              echo "::notice title=$1::$(printf '%s' "$2" | cut -c1-900)"
+            }
 
-            echo "::notice title=Reprise ERP::$summary"
+            # La vérification d'abord : dans le résumé complet elle arrive en
+            # dernier, c'est-à-dire au-delà de la longueur qu'une annotation
+            # conserve.
+            verif=$(printf '%s\n' "$out" \
+              | grep -E '^(Boutiques dans le module|Comptes B2B repris|Secteurs proposés)' \
+              | tr '\n' ' | ')
+            [ -n "$verif" ] && notice 'Vérification' "$verif"
 
-            # Une annotation par table : la limite de longueur d'une annotation
-            # tronquait la liste au milieu de la seconde, c'est-à-dire
-            # exactement là où se trouvait la réponse cherchée.
-            printf '%s\n' "$out" | awk '
-              /^[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+$/ { t=$0; next }
-              /notions non reconnues|colonnes présentes/ && t { print t "|" $0 }
-            ' | while IFS='|' read -r table line; do
-              echo "::notice title=Colonnes $table::$(printf '%s' "$line" | cut -c1-900)"
-            done
+            # L'échec du seul rattachement aux secteurs ne fait pas échouer la
+            # reprise : il mérite malgré tout d'être vu, sans quoi l'assistant
+            # se retrouve sans secteur et rien ne l'explique.
+            secteurs=$(printf '%s\n' "$out" | grep -E '^(Liaisons|Secteurs) ' | tr '\n' ' | ')
+            [ -n "$secteurs" ] && notice 'Secteurs' "$secteurs"
 
-            # Les sondes portent leur nom de table sur la même ligne : la
-            # première version les rattachait à la table précédente, et leur
-            # résultat s'affichait sous un intitulé faux.
-            printf '%s\n' "$out" | grep '^SONDE ' | while read -r line; do
-              echo "::notice title=Sonde::$(printf '%s' "$line" | cut -c1-900)"
-            done
+            case "$out" in
+              *"ÉCHEC du rattachement"*)
+                echo "::warning title=Secteurs non rattachés::$(printf '%s\n' "$out" | grep 'ÉCHEC du rattachement' | cut -c1-900)"
+                ;;
+            esac
+
+            notice 'Reprise ERP' "$summary"
+
+            # Une annotation par table, ses deux lignes réunies. Une par ligne
+            # en faisait huit à elles seules, et le budget se refermait avant la
+            # dernière table — celle qu'on venait justement de brancher. Ce qui
+            # compte tient en tête de ligne ; la liste complète des colonnes,
+            # plus longue que ce qu'une annotation retient, est dans le résumé.
+            tables=$(printf '%s\n' "$out" | awk '
+              /^[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+$/ {
+                if (t != "") print t "|" acc
+                t = $0; acc = ""; next
+              }
+              /notions non reconnues|colonnes présentes/ && t {
+                gsub(/^ +/, "", $0)
+                acc = (acc == "" ? $0 : acc " — " $0)
+              }
+              END { if (t != "") print t "|" acc }
+            ')
+
+            # Sans redirection depuis un fichier, le `while` tournerait dans un
+            # sous-shell et le budget décrémenté n'y survivrait pas.
+            printf '%s\n' "$tables" > /tmp/mar-tables.txt
+            while IFS='|' read -r table line; do
+              [ -n "$table" ] && notice "Colonnes $table" "$line"
+            done < /tmp/mar-tables.txt
+
+            if [ "$dropped" -gt 0 ]; then
+              echo "::warning title=Annotations tronquées::$dropped annotation(s) non émise(s) — GitHub en garde dix par étape. Le compte rendu complet est dans le résumé du job."
+            fi
           fi
 
       - name: Publier le front

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { module as api } from '../lib/api'
 import { useAsync, formatNumber } from '../lib/useAsync'
-import type { ImportReport, ProspectRow, SyncReport } from '../lib/api/module'
+import type { ImportReport, ProspectRow, SyncReport, SyncResult } from '../lib/api/module'
 import { describeError } from '../state/auth'
 
 /**
@@ -117,7 +117,7 @@ export default function ProspectImport() {
   const [failure, setFailure] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [syncing, setSyncing] = useState(false)
-  const [sync, setSync] = useState<{ shops: SyncReport; prospects: SyncReport } | null>(null)
+  const [sync, setSync] = useState<SyncResult | null>(null)
 
   const parsed = parseCsv(text)
   const named = parsed.rows.filter((row) => (row.company_name ?? '').trim() !== '')
@@ -129,6 +129,17 @@ export default function ProspectImport() {
     }),
     { estimated: 0, available: 0 },
   )
+
+  // Le total vient de la base : un compte relevant de trois secteurs apparaît
+  // sur trois lignes, et additionner les lignes gonflerait le vivier d'autant.
+  const sectorIds = (availability.data ?? []).map((sector) => sector.id)
+  const distinct = useAsync(() => api.countProspects(sectorIds), [sectorIds.join(',')])
+  const available = distinct.data?.total ?? totals.available
+
+  // Les secteurs repris de l'ERP n'ont pas de chiffre de cadrage : l'ERP tient
+  // ses types de compte, pas une intention de démarchage. La colonne disparaît
+  // quand elle ne contiendrait que des zéros.
+  const framed = totals.estimated > 0
 
   /**
    * Reprise depuis l'ERP.
@@ -172,8 +183,10 @@ export default function ProspectImport() {
     <section className="card table-card">
       <h2>Vivier B2B</h2>
       <p className="muted">
-        Ce sont ces comptes que la génération de leads distribue aux boutiques. Le chiffre de
-        cadrage d’un secteur dit combien on vise ; le vivier, combien on a réellement.
+        Ce sont ces comptes que la génération de leads distribue aux boutiques.
+        {framed
+          ? ' Le chiffre de cadrage d’un secteur dit combien on vise ; le vivier, combien on a réellement.'
+          : ' Les secteurs sont les types de compte professionnel de l’ERP, et chaque compte peut en relever de plusieurs.'}
       </p>
 
       {availability.error ? <p className="error">{availability.error}</p> : null}
@@ -183,7 +196,7 @@ export default function ProspectImport() {
           <thead>
             <tr>
               <th>Secteur</th>
-              <th className="num">Cadrage</th>
+              {framed ? <th className="num">Cadrage</th> : null}
               <th className="num">Dans le vivier</th>
             </tr>
           </thead>
@@ -191,7 +204,9 @@ export default function ProspectImport() {
             {(availability.data ?? []).map((sector) => (
               <tr key={sector.id}>
                 <td>{sector.label}</td>
-                <td className="num muted">{formatNumber(sector.estimated_leads_count)}</td>
+                {framed ? (
+                  <td className="num muted">{formatNumber(sector.estimated_leads_count)}</td>
+                ) : null}
                 <td className="num">{formatNumber(sector.available)}</td>
               </tr>
             ))}
@@ -199,12 +214,21 @@ export default function ProspectImport() {
           <tfoot>
             <tr className="ledger__total">
               <td>Total</td>
-              <td className="num muted">{formatNumber(totals.estimated)}</td>
-              <td className="num">{formatNumber(totals.available)}</td>
+              {framed ? <td className="num muted">{formatNumber(totals.estimated)}</td> : null}
+              <td className="num">{formatNumber(available)}</td>
             </tr>
           </tfoot>
         </table>
       </div>
+
+      {totals.available > available ? (
+        <p className="muted">
+          {formatNumber(totals.available - available)} compte
+          {totals.available - available > 1 ? 's' : ''} relève
+          {totals.available - available > 1 ? 'nt' : ''} de plusieurs secteurs : le total compte
+          les comptes, pas les lignes.
+        </p>
+      ) : null}
 
       <h3 className="section-label">Reprendre depuis l’ERP</h3>
       <p className="muted">
@@ -231,24 +255,58 @@ export default function ProspectImport() {
               </tr>
             </thead>
             <tbody>
-              {[
-                ['Boutiques', sync.shops],
-                ['Comptes B2B', sync.prospects],
-              ].map(([label, report]) => (
-                <tr key={label as string}>
-                  <td>{label as string}</td>
-                  <td className="muted">
-                    <code>{(report as SyncReport).source}</code>
-                  </td>
-                  <td className="num">{(report as SyncReport).read}</td>
-                  <td className="num">{(report as SyncReport).created}</td>
-                  <td className="num">{(report as SyncReport).updated}</td>
-                  <td className="num">{(report as SyncReport).skipped}</td>
-                </tr>
-              ))}
+              {(
+                [
+                  ['Boutiques', sync.shops],
+                  ['Comptes B2B', sync.prospects],
+                  ['Secteurs', sync.sectors],
+                ] as Array<[string, SyncReport | undefined]>
+              )
+                .filter((entry): entry is [string, SyncReport] => entry[1] !== undefined)
+                .map(([label, report]) => (
+                  <tr key={label}>
+                    <td>{label}</td>
+                    <td className="muted">
+                      <code>{report.source}</code>
+                    </td>
+                    <td className="num">{report.read}</td>
+                    <td className="num">{report.created}</td>
+                    <td className="num">{report.updated}</td>
+                    <td className="num">{report.skipped}</td>
+                  </tr>
+                ))}
             </tbody>
           </table>
         </div>
+      ) : null}
+
+      {/* Le rattachement aux secteurs se rend à part : il compte des liens, pas
+          des fiches, et c'est la seule partie de la reprise qui peut échouer
+          seule. Un tableau à zéro n'aurait pas dit laquelle des deux. */}
+      {sync?.links?.error ? (
+        <p className="error">Secteurs non rattachés : {sync.links.error}</p>
+      ) : null}
+
+      {sync?.links && !sync.links.error ? (
+        <p className="muted">
+          {sync.links.linked ?? 0} rattachement{(sync.links.linked ?? 0) > 1 ? 's' : ''} compte ↔
+          secteur depuis <code>{sync.links.source}</code>
+          {(sync.links.unknown_client ?? 0) > 0
+            ? `, ${sync.links.unknown_client} ligne(s) sur un client hors vivier`
+            : ''}
+          {(sync.links.unknown_sector ?? 0) > 0
+            ? `, ${sync.links.unknown_sector} sur un type inconnu`
+            : ''}
+          .{sync.links.warning ? ` ${sync.links.warning}` : ''}
+        </p>
+      ) : null}
+
+      {(sync?.links?.without_sector ?? 0) > 0 ? (
+        <p className="muted">
+          {sync?.links?.without_sector} compte
+          {(sync?.links?.without_sector ?? 0) > 1 ? 's' : ''} du vivier ne relève d’aucun secteur :
+          aucune campagne ne les retiendra tant que l’ERP ne leur donne pas de type de compte.
+        </p>
       ) : null}
 
       <h3 className="section-label">Importer un fichier</h3>
