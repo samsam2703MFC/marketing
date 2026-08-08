@@ -388,6 +388,13 @@ $response  = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
         'hour_to'       => '14:00:00',
         'items'         => ['Brochette maison', 'Limonade', '  ', 'Tarte du jour'],
     ],
+    'pos_survey_enabled' => true,
+    'pos_questions'   => [
+        ['label' => 'Comment avez-vous connu l\'offre ?', 'answer_type' => 'choice',
+         'options' => "Affiche\nRéseaux sociaux", 'is_required' => true],
+        ['label' => 'Reviendrez-vous ?', 'answer_type' => 'yes_no'],
+        ['label' => '  ', 'answer_type' => 'text'],
+    ],
     'retroplanning'   => array_map(
         static fn (array $step): array => [
             'label'              => $step['label'],
@@ -414,6 +421,38 @@ check(
     ))->fetchColumn() === 0.0
 );
 check('l\'objectif de levier est écrit', $count('mar_campaign_lever_target') === 1);
+check('les questions de caisse sont écrites', $count('mar_campaign_pos_question') === 2, (string) $count('mar_campaign_pos_question'));
+check(
+    'les propositions ne sont gardées que pour un choix',
+    (int) $pdo->query(sprintf(
+        'SELECT COUNT(*) FROM mar_campaign_pos_question WHERE campaign_id = %d AND options IS NOT NULL',
+        $newId
+    ))->fetchColumn() === 1
+);
+
+// Une forme de réponse inconnue doit être refusée, pas écrite telle quelle :
+// la caisse ne saurait pas quoi afficher.
+$response = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name' => 'Question douteuse', 'pos_survey_enabled' => true,
+    'pos_questions' => [['label' => 'X', 'answer_type' => 'telepathie']],
+]);
+check('une forme de réponse inconnue est refusée', $response['status'] === 422, 'statut ' . $response['status']);
+check(
+    'et la campagne n\'est pas créée',
+    (int) $pdo->query("SELECT COUNT(*) FROM mar_campaign WHERE name = 'Question douteuse'")->fetchColumn() === 0
+);
+
+// Questionnaire décoché : les questions ne partent pas en caisse.
+$response = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name' => 'Sans questionnaire', 'pos_survey_enabled' => false,
+    'pos_questions' => [['label' => 'Ne doit pas être posée', 'answer_type' => 'yes_no']],
+]);
+check(
+    'un questionnaire décoché n\'écrit aucune question',
+    (int) $pdo->query("SELECT COUNT(*) FROM mar_campaign_pos_question q
+                         JOIN mar_campaign c ON c.id = q.campaign_id
+                        WHERE c.name = 'Sans questionnaire'")->fetchColumn() === 0
+);
 check(
     'la marque est déduite du réseau',
     (int) $pdo->query(sprintf('SELECT brand_id FROM mar_campaign WHERE id = %d', $newId))->fetchColumn() === 1
@@ -592,6 +631,8 @@ foreach ([
     'rétroplanning'    => fn (): bool => count($detail['retroplanning'] ?? []) === 5,
     'offre'            => fn (): bool => ($detail['offer']['title'] ?? '') === 'Menu Barbecue',
     'visuel'           => fn (): bool => count($detail['assets'] ?? []) === 1,
+    'questionnaire'    => fn (): bool => count($detail['pos_questions'] ?? []) === 2,
+    'formes de réponse'=> fn (): bool => ($detail['pos_questions'][0]['answer_type_label'] ?? '') !== '',
 ] as $label => $assertion) {
     check(sprintf('la fiche restitue : %s', $label), $assertion());
 }

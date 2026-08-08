@@ -45,6 +45,9 @@ final class ReferenceRepository
             'reviewPlatforms'    => $this->codeLabels('mar_review_platform'),
             'salesChannels'      => $this->codeLabels('mar_sales_channel'),
             'promotionMechanics' => $this->codeLabels('mar_promotion_mechanic'),
+            'posAnswerTypes'     => $this->fetch(
+                'SELECT code, label, hint FROM mar_pos_answer_type ORDER BY sort_order'
+            ),
         ];
     }
 

@@ -215,6 +215,8 @@ export interface References {
   reviewPlatforms: CodeLabel[]
   salesChannels: CodeLabel[]
   promotionMechanics: CodeLabel[]
+  /** Formes de réponse acceptées par la caisse. */
+  posAnswerTypes: Array<CodeLabel & { hint: string | null }>
 }
 
 /**
@@ -293,6 +295,15 @@ export interface CampaignDetail extends Campaign {
   objective_coef_pct: number | null
   agency_note: string | null
   b2b_webshop_enabled: number | boolean
+  pos_survey_enabled: number | boolean
+  pos_questions: Array<{
+    id: number
+    label: string
+    answer_type: string
+    answer_type_label: string | null
+    options: string | null
+    is_required: boolean
+  }>
   agency_asks: string[]
   b2b_options: string[]
   uniforms: string[]
@@ -390,6 +401,15 @@ export interface CampaignDraft {
   objective_coef_pct?: number | null
   agency_note?: string | null
   b2b_webshop_enabled?: boolean
+  /** Un questionnaire est-il posé en caisse pendant la campagne. */
+  pos_survey_enabled?: boolean
+  pos_questions?: Array<{
+    label: string
+    answer_type: string
+    /** Propositions d'un choix, une par ligne. */
+    options?: string | null
+    is_required?: boolean
+  }>
   /** Cadrage vertical du visuel, en pourcentage de la hauteur. */
   focal_point_y?: number | null
   shop_ids?: number[]

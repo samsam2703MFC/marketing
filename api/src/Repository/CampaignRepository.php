@@ -123,6 +123,7 @@ final class CampaignRepository
             $id
         );
         $row['channels']     = $this->campaignChannels($id);
+        $row['pos_questions'] = $this->posQuestions($id);
         $row['assets']       = $this->assets($id);
 
         return $row;
@@ -236,11 +237,13 @@ final class CampaignRepository
             'INSERT INTO mar_campaign
                 (brand_id, type_id, parent_campaign_id, name, scope, client_target, tone,
                  status_code, starts_on, ends_on, budget_amount, objective_coef_pct, agency_note,
-                 b2b_webshop_enabled, owner_user_id, create_crm_leads, image_url, created_by)
+                 b2b_webshop_enabled, pos_survey_enabled, owner_user_id, create_crm_leads,
+                 image_url, created_by)
              VALUES
                 (:brand_id, :type_id, :parent_campaign_id, :name, :scope, :client_target, :tone,
                  :status_code, :starts_on, :ends_on, :budget_amount, :objective_coef_pct, :agency_note,
-                 :b2b_webshop_enabled, :owner_user_id, :create_crm_leads, :image_url, :created_by)'
+                 :b2b_webshop_enabled, :pos_survey_enabled, :owner_user_id, :create_crm_leads,
+                 :image_url, :created_by)'
         );
 
         $statement->execute([
@@ -261,6 +264,7 @@ final class CampaignRepository
                 : $data['objective_coef_pct'],
             'agency_note'        => ($data['agency_note'] ?? null) ?: null,
             'b2b_webshop_enabled'=> !empty($data['b2b_webshop_enabled']) ? 1 : 0,
+            'pos_survey_enabled' => !empty($data['pos_survey_enabled']) ? 1 : 0,
             'create_crm_leads'   => !empty($data['create_crm_leads']) ? 1 : 0,
             'image_url'          => $data['image_url'] ?? null,
             'created_by'         => $auth->userId,
@@ -443,6 +447,7 @@ final class CampaignRepository
         $uniforms = self::intList($data['uniform_ids'] ?? []);
         $formats  = self::intList($data['format_ids'] ?? []);
         $retro    = is_array($data['retroplanning'] ?? null) ? $data['retroplanning'] : [];
+        $questions = is_array($data['pos_questions'] ?? null) ? $data['pos_questions'] : [];
         $offer    = is_array($data['offer'] ?? null) ? $data['offer'] : null;
 
         // Le contrôle de périmètre passe avant l'ouverture de la transaction :
@@ -548,6 +553,7 @@ final class CampaignRepository
 
             $this->insertOffer($campaignId, $auth, $offer);
             $this->insertRetroplanning($campaignId, $auth, $retro);
+            $this->insertPosQuestions($campaignId, $auth, $questions, !empty($data['pos_survey_enabled']));
             $this->insertAsset($campaignId, $auth, $data['image_url'] ?? null, $data['focal_point_y'] ?? null, $formats);
 
             $connection->commit();
@@ -661,6 +667,67 @@ final class CampaignRepository
     }
 
     /**
+     * Questions posées en caisse.
+     *
+     * Écrites seulement si le questionnaire est activé : garder les questions
+     * d'un questionnaire décoché laisserait la caisse en poser que personne
+     * n'a validées.
+     *
+     * @param list<array<string,mixed>> $questions
+     */
+    private function insertPosQuestions(
+        int $campaignId,
+        AuthContext $auth,
+        array $questions,
+        bool $enabled
+    ): void {
+        if (!$enabled || $questions === []) {
+            return;
+        }
+
+        $known = Database::connection()
+            ->query('SELECT code FROM mar_pos_answer_type')
+            ->fetchAll(PDO::FETCH_COLUMN);
+
+        $statement = Database::connection()->prepare(
+            'INSERT INTO mar_campaign_pos_question
+                (campaign_id, label, answer_type, options, is_required, sort_order, created_by)
+             VALUES (:campaign_id, :label, :answer_type, :options, :is_required, :sort_order, :created_by)'
+        );
+
+        $order = 0;
+        foreach ($questions as $question) {
+            $label = trim((string) ($question['label'] ?? ''));
+            if ($label === '') {
+                continue;
+            }
+
+            $type = (string) ($question['answer_type'] ?? 'yes_no');
+            if (!in_array($type, $known, true)) {
+                throw new RuntimeException(sprintf(
+                    'Forme de réponse inconnue : attendu %s.',
+                    implode(', ', $known)
+                ));
+            }
+
+            $options = trim((string) ($question['options'] ?? ''));
+
+            $statement->execute([
+                'campaign_id' => $campaignId,
+                'label'       => mb_substr($label, 0, 300),
+                'answer_type' => $type,
+                // Les propositions n'ont de sens que pour un choix : les garder
+                // ailleurs ferait croire à une liste que la caisse n'affichera
+                // jamais.
+                'options'     => $type === 'choice' && $options !== '' ? $options : null,
+                'is_required' => !empty($question['is_required']) ? 1 : 0,
+                'sort_order'  => ++$order,
+                'created_by'  => $auth->userId ?: null,
+            ]);
+        }
+    }
+
+    /**
      * Visuel maître et déclinaisons à produire.
      *
      * Les rendus partent en `pending` : rien n'est fabriqué à la création. La
@@ -746,7 +813,8 @@ final class CampaignRepository
         $columns = [
             'type_id', 'name', 'scope', 'client_target', 'tone', 'status_code',
             'starts_on', 'ends_on', 'budget_amount', 'objective_coef_pct', 'agency_note',
-            'b2b_webshop_enabled', 'spent_amount', 'approval_status', 'create_crm_leads', 'image_url',
+            'b2b_webshop_enabled', 'pos_survey_enabled', 'spent_amount', 'approval_status',
+            'create_crm_leads', 'image_url',
         ];
 
         $assignments = [];
@@ -814,6 +882,27 @@ final class CampaignRepository
         $statement->execute(['id' => $campaignId]);
 
         return array_map('strval', $statement->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /** @return list<array<string,mixed>> */
+    private function posQuestions(int $campaignId): array
+    {
+        $statement = Database::connection()->prepare(
+            'SELECT q.id, q.label, q.answer_type, q.options, q.is_required, q.sort_order,
+                    t.label AS answer_type_label
+               FROM mar_campaign_pos_question q
+               LEFT JOIN mar_pos_answer_type t ON t.code = q.answer_type
+              WHERE q.campaign_id = :id
+              ORDER BY q.sort_order'
+        );
+        $statement->execute(['id' => $campaignId]);
+
+        $rows = array_map([$this, 'castRow'], $statement->fetchAll());
+        foreach ($rows as &$row) {
+            $row['is_required'] = (bool) $row['is_required'];
+        }
+
+        return $rows;
     }
 
     /** @return list<array<string,mixed>> */

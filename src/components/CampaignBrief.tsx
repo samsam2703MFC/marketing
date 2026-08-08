@@ -179,6 +179,43 @@ export default function CampaignBrief({ campaign }: { campaign: CampaignDetail }
         </>
       ) : null}
 
+      {campaign.pos_questions.length > 0 || Number(campaign.pos_survey_enabled) === 1 ? (
+        <>
+          <h3 className="section-label">Questionnaire en caisse</h3>
+          {campaign.pos_questions.length === 0 ? (
+            <p className="muted">Activé, aucune question saisie.</p>
+          ) : (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Question</th>
+                    <th>Réponse</th>
+                    <th>Obligatoire</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {campaign.pos_questions.map((question) => (
+                    <tr key={question.id}>
+                      <td>
+                        {question.label}
+                        {/* Les propositions comptent autant que la question :
+                            c'est ce que le client entendra réellement. */}
+                        {question.options ? (
+                          <div className="muted">{question.options.split('\n').join(' · ')}</div>
+                        ) : null}
+                      </td>
+                      <td className="muted">{question.answer_type_label ?? question.answer_type}</td>
+                      <td className="muted">{question.is_required ? 'Oui' : 'Non'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      ) : null}
+
       {campaign.b2b_options.length > 0 || Number(campaign.b2b_webshop_enabled) === 1 ? (
         <>
           <h3 className="section-label">Web-shop B2B</h3>

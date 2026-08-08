@@ -24,6 +24,13 @@ import ProspectPanel from './ProspectPanel'
  * une flèche grisée sans explication est la première cause d'abandon.
  */
 
+interface PosQuestion {
+  label: string
+  answer_type: string
+  options: string
+  is_required: boolean
+}
+
 interface RetroStep {
   label: string
   days_before_launch: number
@@ -66,6 +73,8 @@ interface Draft {
   uniform_ids: number[]
   b2b_webshop_enabled: boolean
   b2b_option_ids: number[]
+  pos_survey_enabled: boolean
+  pos_questions: PosQuestion[]
   image_url: string
   focal_point_y: number
   format_ids: number[]
@@ -112,6 +121,8 @@ function emptyDraft(refs: References, role: Role): Draft {
     uniform_ids: [],
     b2b_webshop_enabled: false,
     b2b_option_ids: [],
+    pos_survey_enabled: false,
+    pos_questions: [],
     image_url: '',
     focal_point_y: 50,
     format_ids: refs.formats.map((format) => format.id),
@@ -181,10 +192,23 @@ const STEPS: Step[] = [
   {
     key: 'communication',
     label: 'Communication',
-    blocking: (d) =>
-      d.image_url.trim() !== '' && d.format_ids.length === 0
-        ? 'Choisissez au moins un format à décliner, ou retirez le visuel.'
-        : null,
+    blocking: (d) => {
+      if (d.image_url.trim() !== '' && d.format_ids.length === 0) {
+        return 'Choisissez au moins un format à décliner, ou retirez le visuel.'
+      }
+      // Un questionnaire activé sans question demanderait à la caisse de poser
+      // le vide — et l'équipe s'en apercevrait devant le client.
+      if (d.pos_survey_enabled && d.pos_questions.every((q) => q.label.trim() === '')) {
+        return 'Le questionnaire en caisse est activé : écrivez au moins une question.'
+      }
+      if (
+        d.pos_survey_enabled &&
+        d.pos_questions.some((q) => q.answer_type === 'choice' && q.options.trim() === '')
+      ) {
+        return 'Une question à choix a besoin de ses propositions, une par ligne.'
+      }
+      return null
+    },
   },
   {
     key: 'planning',
@@ -353,6 +377,17 @@ function toPayload(draft: Draft, brandId: number | 'all'): CampaignDraft {
     sector_ids: draft.client_target === 'b2c' ? [] : draft.sector_ids,
     agency_ask_ids: draft.agency_ask_ids,
     b2b_option_ids: draft.b2b_webshop_enabled ? draft.b2b_option_ids : [],
+    pos_survey_enabled: draft.pos_survey_enabled,
+    pos_questions: draft.pos_survey_enabled
+      ? draft.pos_questions
+          .filter((question) => question.label.trim() !== '')
+          .map((question) => ({
+            label: question.label.trim(),
+            answer_type: question.answer_type,
+            options: question.answer_type === 'choice' ? question.options.trim() : null,
+            is_required: question.is_required,
+          }))
+      : [],
     uniform_ids: draft.uniform_ids,
     format_ids: draft.image_url.trim() === '' ? [] : draft.format_ids,
 
@@ -1085,6 +1120,126 @@ function CommunicationStep({
         </>
       ) : null}
 
+      <h3 className="section-label">Questionnaire en caisse</h3>
+      <p className="muted">
+        Quelques questions posées au client au moment de payer. C’est souvent la seule mesure
+        dont dispose une opération sans bon ni canal digital traçable : sans elle, on sait ce
+        qu’on a vendu, pas pourquoi.
+      </p>
+      <div className="filters__row">
+        <button
+          type="button"
+          className={`choice-pill${!draft.pos_survey_enabled ? ' is-on' : ''}`}
+          onClick={() => patch({ pos_survey_enabled: false })}
+        >
+          Pas de questionnaire
+        </button>
+        <button
+          type="button"
+          className={`choice-pill${draft.pos_survey_enabled ? ' is-on' : ''}`}
+          onClick={() =>
+            patch({
+              pos_survey_enabled: true,
+              // Une première question d'emblée : un questionnaire vide oblige
+              // à deviner qu'il faut encore cliquer quelque part.
+              pos_questions: draft.pos_questions.length > 0
+                ? draft.pos_questions
+                : [{ label: '', answer_type: 'yes_no', options: '', is_required: false }],
+            })
+          }
+        >
+          Poser des questions
+        </button>
+      </div>
+
+      {draft.pos_survey_enabled ? (
+        <>
+          <ul className="question-list">
+            {draft.pos_questions.map((question, index) => {
+              const update = (change: Partial<PosQuestion>) => {
+                const questions = [...draft.pos_questions]
+                questions[index] = { ...questions[index], ...change }
+                patch({ pos_questions: questions })
+              }
+
+              return (
+                <li key={index}>
+                  <div className="question-list__row">
+                    <input
+                      type="text"
+                      className="input--grow"
+                      value={question.label}
+                      placeholder="Comment avez-vous connu l’offre ?"
+                      onChange={(e) => update({ label: e.target.value })}
+                    />
+                    <select
+                      value={question.answer_type}
+                      onChange={(e) => update({ answer_type: e.target.value })}
+                    >
+                      {refs.posAnswerTypes.map((type) => (
+                        <option key={type.code} value={type.code} title={type.hint ?? undefined}>
+                          {type.label}
+                        </option>
+                      ))}
+                    </select>
+                    <label className="field">
+                      <input
+                        type="checkbox"
+                        checked={question.is_required}
+                        onChange={(e) => update({ is_required: e.target.checked })}
+                      />
+                      Obligatoire
+                    </label>
+                    <button
+                      type="button"
+                      className="filter"
+                      onClick={() =>
+                        patch({
+                          pos_questions: draft.pos_questions.filter((_, i) => i !== index),
+                        })
+                      }
+                    >
+                      Retirer
+                    </button>
+                  </div>
+
+                  {question.answer_type === 'choice' ? (
+                    <label className="field field--block">
+                      Propositions, une par ligne
+                      <textarea
+                        rows={3}
+                        value={question.options}
+                        placeholder={'Affiche en vitrine\nRéseaux sociaux\nBouche-à-oreille'}
+                        onChange={(e) => update({ options: e.target.value })}
+                      />
+                    </label>
+                  ) : null}
+                </li>
+              )
+            })}
+          </ul>
+
+          <button
+            type="button"
+            className="filter"
+            onClick={() =>
+              patch({
+                pos_questions: [
+                  ...draft.pos_questions,
+                  { label: '', answer_type: 'yes_no', options: '', is_required: false },
+                ],
+              })
+            }
+          >
+            + Ajouter une question
+          </button>
+          <p className="muted wizard__hint">
+            Trois questions au maximum tiennent en caisse sans allonger la file. Au-delà, le
+            vendeur abrège, et la réponse ne vaut plus rien.
+          </p>
+        </>
+      ) : null}
+
       <h3 className="section-label">Visuel & déclinaisons</h3>
       <div className="filters__row">
         <label className="field field--grow">
@@ -1335,6 +1490,12 @@ function ReviewStep({
       draft.image_url.trim() === ''
         ? 'Aucun'
         : `Photo commune · ${draft.format_ids.length} format(s)`,
+    ],
+    [
+      'Questionnaire caisse',
+      draft.pos_survey_enabled
+        ? `${draft.pos_questions.filter((q) => q.label.trim() !== '').length} question(s)`
+        : 'Aucun',
     ],
     ['Rétroplanning', `${draft.retro.filter((s) => s.label.trim() !== '').length} étapes`],
     [
