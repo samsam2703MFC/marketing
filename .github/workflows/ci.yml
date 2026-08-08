@@ -565,7 +565,14 @@ jobs:
             # L'échec du seul rattachement aux secteurs ne fait pas échouer la
             # reprise : il mérite malgré tout d'être vu, sans quoi l'assistant
             # se retrouve sans secteur et rien ne l'explique.
-            secteurs=$(printf '%s\n' "$out" | grep -E '^(Liaisons|Secteurs) ' | tr '\n' ' | ')
+            # La ligne « correspondance » est indentée sous « Liaisons ». Sans
+            # elle, l'annotation affirme quelles colonnes ont été retenues sans
+            # dire ce qu'elles valent — c'est-à-dire sans ce qui distingue un
+            # rattachement juste d'un rattachement seulement plausible.
+            secteurs=$(printf '%s\n' "$out" \
+              | grep -E '^(Liaisons|Secteurs) |^ +correspondance' \
+              | sed 's/^ *//' \
+              | tr '\n' ' | ')
             [ -n "$secteurs" ] && notice 'Secteurs' "$secteurs"
 
             case "$out" in
