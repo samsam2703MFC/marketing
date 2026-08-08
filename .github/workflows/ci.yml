@@ -371,6 +371,12 @@ jobs:
           out=$($SSH_CMD $SSH_OPTS -o BatchMode=yes "$SSH_USER@$SSH_HOST" "
             cd '$DEPLOY_DIR' 2>/dev/null || { echo 'CD_FAIL'; exit 90; }
             command -v php >/dev/null 2>&1 || { echo 'PHP_MISSING'; exit 91; }
+            # Résumé compact : une annotation est courte, et « installez
+            # php-mysql » ne suffit pas quand plusieurs versions de PHP
+            # cohabitent et que le paquet a été posé sur la mauvaise.
+            echo \"DIAG php=\$(php -r 'echo PHP_VERSION;' 2>/dev/null) bin=\$(command -v php) \
+pdo_mysql=\$(php -m 2>/dev/null | grep -qi pdo_mysql && echo oui || echo NON) \
+autres=\$(ls /usr/bin/php* 2>/dev/null | tr '\\n' ',' )\"
             php -m 2>/dev/null | grep -qi pdo_mysql || echo 'PDO_MYSQL_MISSING'
             [ -f db/migrate.php ] || { echo 'MIGRATE_ABSENT'; exit 92; }
             php db/migrate.php 2>&1
@@ -395,7 +401,9 @@ jobs:
               *Access\ denied*)     hint="MySQL refuse les identifiants du .env" ;;
               *)                    hint="voir la sortie ci-dessus" ;;
             esac
-            echo "::error title=Migrations en échec::$hint — $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-350)"
+            diag=$(printf '%s\n' "$out" | grep '^DIAG' | head -1)
+            rest=$(printf '%s\n' "$out" | grep -v '^DIAG' | grep -viE 'permanently added' | tr '\n' ' ' | cut -c1-250)
+            echo "::error title=Migrations en échec::$hint | $diag | $rest"
             exit 1
           fi
 
