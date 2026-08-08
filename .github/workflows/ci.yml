@@ -365,7 +365,39 @@ jobs:
         env:
           SSHPASS: ${{ secrets.SSH_PASSWORD }}
         run: |
-          $SSH_CMD $SSH_OPTS "$SSH_USER@$SSH_HOST" "cd '$DEPLOY_DIR' && php db/migrate.php"
+          # Sortie capturée : sans cela l'étape ne laissait qu'un code de retour,
+          # et un 255 de ssh ne dit rien de ce que la migration a rencontré.
+          set +e
+          out=$($SSH_CMD $SSH_OPTS -o BatchMode=yes "$SSH_USER@$SSH_HOST" "
+            cd '$DEPLOY_DIR' 2>/dev/null || { echo 'CD_FAIL'; exit 90; }
+            command -v php >/dev/null 2>&1 || { echo 'PHP_MISSING'; exit 91; }
+            php -m 2>/dev/null | grep -qi pdo_mysql || echo 'PDO_MYSQL_MISSING'
+            [ -f db/migrate.php ] || { echo 'MIGRATE_ABSENT'; exit 92; }
+            php db/migrate.php 2>&1
+          " 2>&1)
+          rc=$?
+          set -e
+
+          printf '%s\n' "$out"
+          {
+            echo "### Migrations (code $rc)"
+            echo '```'
+            printf '%s\n' "$out"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ $rc -ne 0 ]; then
+            case "$out" in
+              *PHP_MISSING*)        hint="php introuvable pour l'utilisateur SSH : apt-get install -y php-cli php-mysql" ;;
+              *PDO_MYSQL_MISSING*)  hint="extension pdo_mysql absente : apt-get install -y php-mysql" ;;
+              *MIGRATE_ABSENT*)     hint="db/migrate.php n'est pas arrivé sur le serveur" ;;
+              *CD_FAIL*)            hint="$DEPLOY_DIR inaccessible" ;;
+              *Access\ denied*)     hint="MySQL refuse les identifiants du .env" ;;
+              *)                    hint="voir la sortie ci-dessus" ;;
+            esac
+            echo "::error title=Migrations en échec::$hint — $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-350)"
+            exit 1
+          fi
 
       # Le front en dernier : si une migration échoue, les utilisateurs restent
       # sur la version précédente plutôt que sur une interface sans son schéma.
