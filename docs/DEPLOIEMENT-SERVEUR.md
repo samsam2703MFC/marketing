@@ -53,12 +53,17 @@ MAR_DB_NAME="atelier_db"
 MAR_DB_USER="VOTRE_UTILISATEUR"
 MAR_DB_PASSWORD="REMPLACER_PAR_UN_MOT_DE_PASSE"
 EOF
-sudo chmod 600 /var/www/private/marketing/.env
-sudo chown "$USER":www-data /var/www/private/marketing/.env
+# 640 et groupe www-data : le fichier est écrit par le compte de déploiement
+# mais lu par PHP sous www-data. En 600 appartenant à root, l'API ne peut pas
+# l'ouvrir, et rien ne le signale avant le premier appel qui touche la base.
+sudo chown root:www-data /var/www/private/marketing/.env
+sudo chmod 640 /var/www/private/marketing/.env
 
 # Pointeur lu par l'API — ne contient qu'un chemin, aucun secret.
 echo /var/www/private/marketing/.env | sudo tee /var/www/html/marketing/api/.env-path > /dev/null
 ```
+
+Contrôle utile : `sudo -u www-data test -r /var/www/private/marketing/.env && echo lisible`.
 
 Les guillemets ne sont pas décoratifs : un mot de passe contenant des espaces en bordure ou lui-même entouré de guillemets serait tronqué sans eux, et l'authentification MySQL échouerait sans message exploitable.
 

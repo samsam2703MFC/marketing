@@ -351,7 +351,14 @@ jobs:
           } > .env.deploy
           if [ -n "$SSH_KEY" ]; then PRE=""; else PRE="sshpass -e"; fi
           $SSH_CMD $SSH_OPTS "$SSH_USER@$SSH_HOST" "mkdir -p '$CONFIG_DIR' && chmod 750 '$CONFIG_DIR'"
-          $PRE rsync -a --chmod=600 -e "ssh $SSH_OPTS" .env.deploy "$SSH_USER@$SSH_HOST:$CONFIG_DIR/.env"
+          # 640 et groupe www-data, pas 600 : le fichier est écrit par le compte
+          # de déploiement mais lu par PHP sous www-data. En 600 appartenant à
+          # root, l'API ne peut pas l'ouvrir — elle perd les identifiants de base
+          # sans qu'aucune étape n'échoue, puisque rien ne les lit avant le
+          # premier appel qui touche la base.
+          $PRE rsync -a --chmod=640 -e "ssh $SSH_OPTS" .env.deploy "$SSH_USER@$SSH_HOST:$CONFIG_DIR/.env"
+          $SSH_CMD $SSH_OPTS "$SSH_USER@$SSH_HOST" \
+            "chgrp www-data '$CONFIG_DIR/.env' 2>/dev/null || true; chmod 640 '$CONFIG_DIR/.env'; chmod 750 '$CONFIG_DIR'; chgrp www-data '$CONFIG_DIR' 2>/dev/null || true"
           rm -f .env.deploy
           # Pointeur vers la configuration : il ne contient qu'un chemin, aucun
           # secret. Nécessaire parce que le parent de DEPLOY_DIR est ici la racine
