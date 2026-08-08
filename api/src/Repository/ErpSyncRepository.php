@@ -1540,6 +1540,32 @@ final class ErpSyncRepository
                 : sprintf('%s : %s', $table, implode(', ', $colonnes));
         }
 
+        // Le prix d'une matière n'est pas sur `material` : il vit ailleurs,
+        // probablement dans une table d'achat ou de fournisseur. Les noms
+        // d'abord — courts, ils tiennent dans une annotation — puis les
+        // colonnes des seules candidates dont le nom évoque un prix.
+        $familles = Database::connection()->prepare(
+            'SELECT table_name FROM information_schema.tables
+              WHERE table_schema = :schema
+                AND table_name NOT LIKE \'mar\\_%\'
+                AND (table_name LIKE \'material%\' OR table_name LIKE \'%supplier%\'
+                  OR table_name LIKE \'%purchase%\' OR table_name LIKE \'%price%\')
+              ORDER BY table_name
+              LIMIT 25'
+        );
+        $familles->execute(['schema' => $schema]);
+        $noms = $familles->fetchAll(PDO::FETCH_COLUMN);
+
+        $rapport['tables matière'] = $noms === []
+            ? 'aucune table matière, fournisseur, achat ou prix'
+            : implode(', ', $noms);
+
+        foreach ($noms as $nom) {
+            if (preg_match('/price|purchase|cost/i', (string) $nom) === 1) {
+                $rapport['prix ' . $nom] = implode(', ', $this->columnsOf($schema, (string) $nom));
+            }
+        }
+
         // La contrainte, quand elle existe, dit vers quelle table pointe
         // `product.id_recipe` — plus sûrement que la ressemblance des noms.
         $lien = Database::connection()->prepare(
