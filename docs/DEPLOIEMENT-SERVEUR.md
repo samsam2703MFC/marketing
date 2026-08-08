@@ -12,8 +12,20 @@ Deux applications distinctes, donc deux répertoires : la vue Réseau (franchise
 
 | Vue | Répertoire | URL |
 |---|---|---|
-| Réseau (franchiseur) | `/var/www/html/marketing` | `/marketing` |
-| Franchisé | `/var/www/html/marketingc` | `/marketingc` |
+| Réseau (franchiseur) | `/var/www/html/marketing` | `/marketing/?brand=1` |
+| Franchisé | `/var/www/html/marketingc` | `/marketingc/?brand=1` |
+
+L'enseigne du périmètre se lit dans l'adresse : `?brand=1` porte **l'identifiant
+de l'ERP**, pas celui du module. C'est l'ERP qui ouvre le module, et il ne
+connaît que ses propres numéros ; la correspondance est établie par la reprise,
+qui inscrit cet identifiant dans `mar_brand.erp_brand_id`. Le module n'offre
+donc aucun sélecteur de marque — il en offrait un, et travailler une heure sur
+l'enseigne du voisin sans s'en apercevoir y était possible.
+
+Une adresse sans `brand` n'applique aucun filtre, ce qui convient à un réseau
+mono-enseigne. Une adresse qui nomme une enseigne inconnue affiche un message
+et rien d'autre : remplir les écrans d'un périmètre que personne n'a demandé
+serait pire.
 
 ```bash
 sudo mkdir -p /var/www/html/marketing /var/www/html/marketingc

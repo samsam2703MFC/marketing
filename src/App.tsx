@@ -83,16 +83,72 @@ export default function App() {
  */
 const ROLE: Role = import.meta.env.VITE_ROLE === 'FRANCHISEE' ? 'FRANCHISEE' : 'BRAND_ADMIN'
 
+/**
+ * Marque du périmètre, lue dans l'adresse : `/marketing/?brand=1`.
+ *
+ * Ce n'est plus un choix offert à l'écran. La marque vient de l'ERP, qui ouvre
+ * le module sur la sienne ; un menu déroulant laissait croire qu'elle se
+ * choisit, et permettait surtout de travailler une heure sur l'enseigne du
+ * voisin sans s'en apercevoir.
+ *
+ * Sans paramètre, aucun filtre — c'est ce que faisait « Toutes marques », et
+ * c'est le repli sûr pour un réseau mono-enseigne. Un paramètre illisible, en
+ * revanche, n'est pas traité comme une absence : « ?brand=deux » viendrait
+ * d'une adresse fabriquée à la main, et l'ignorer afficherait un périmètre que
+ * personne n'a demandé.
+ */
+function brandFromUrl(): number | 'all' | 'invalide' {
+  const raw = new URLSearchParams(window.location.search).get('brand')
+
+  if (raw === null || raw.trim() === '') {
+    return 'all'
+  }
+
+  const id = Number(raw)
+
+  return Number.isInteger(id) && id > 0 ? id : 'invalide'
+}
+
+/**
+ * Enseigne désignée par l'adresse.
+ *
+ * Le numéro reçu est celui de l'ERP : c'est lui qui ouvre le module, et il ne
+ * connaît que ses propres identifiants. La traduction passe donc par
+ * `erp_brand_id`.
+ *
+ * Le repli sur l'identifiant local ne vaut que si *aucune* enseigne ne porte
+ * encore son numéro d'ERP — cas d'une base qui n'a pas revu la reprise depuis
+ * l'ajout du champ. Dès qu'une seule le porte, la correspondance est établie et
+ * on s'y tient : accepter les deux lectures reviendrait à ouvrir le périmètre
+ * d'une autre enseigne dès que deux numérotations se croisent.
+ */
+function resolveBrand(brands: api.Brand[], requested: number): api.Brand | undefined {
+  const byErp = brands.find((brand) => brand.erp_brand_id === requested)
+  if (byErp !== undefined) {
+    return byErp
+  }
+
+  return brands.some((brand) => brand.erp_brand_id !== null)
+    ? undefined
+    : brands.find((brand) => brand.id === requested)
+}
+
 function Workspace() {
   const role = ROLE
   const [route, setRoute] = useState<Route>('dashboard')
   const [campaignId, setCampaignId] = useState<number | null>(null)
-  const [brandId, setBrandId] = useState<number | 'all'>('all')
+  const requested = brandFromUrl()
 
   // Les référentiels sont chargés une fois et traversent tous les écrans :
   // libellés, couleurs et listes viennent de là, jamais du code.
   const references = useAsync(() => api.getReferences(), [])
   const brands = useAsync(() => api.listBrands(), [])
+
+  const scope =
+    typeof requested === 'number' && brands.data
+      ? resolveBrand(brands.data, requested)
+      : undefined
+  const brandId: number | 'all' = scope?.id ?? 'all'
 
   function openCampaign(id: number) {
     setCampaignId(id)
@@ -126,17 +182,42 @@ function Workspace() {
 
   const refs = references.data
 
+  // Une adresse qui nomme une enseigne inconnue n'affiche pas « tout » : les
+  // écrans se rempliraient d'un périmètre que personne n'a demandé, et
+  // l'erreur ne se verrait qu'au moment de valider une campagne dessus.
+  if (requested === 'invalide' || (typeof requested === 'number' && brands.data && !scope)) {
+    return (
+      <div className="app">
+        <main className="app__body">
+          <section className="card pending">
+            <h2>Enseigne du périmètre introuvable</h2>
+            <p className="muted">
+              L’adresse porte l’identifiant de l’enseigne côté ERP :{' '}
+              <code>?brand=1</code>. Reçu : <code>{String(requested)}</code>.
+            </p>
+            {brands.data && brands.data.length > 0 ? (
+              <p className="muted">
+                Enseignes connues du module :{' '}
+                {brands.data
+                  .map((brand) => `${brand.name} — ERP ${brand.erp_brand_id ?? '—'}`)
+                  .join(', ')}
+                . Une enseigne sans numéro d’ERP attend la prochaine reprise.
+              </p>
+            ) : (
+              <p className="muted">
+                Le module ne connaît aucune enseigne : lancez la reprise depuis l’ERP.
+              </p>
+            )}
+          </section>
+        </main>
+      </div>
+    )
+  }
+
   return (
     <ReferencesProvider value={refs}>
     <div className="workspace">
-      <Sidebar
-        role={role}
-        route={route}
-        brands={brands.data ?? []}
-        brandId={brandId}
-        onNavigate={navigate}
-        onBrandChange={setBrandId}
-      />
+      <Sidebar role={role} route={route} brandName={scope?.name ?? null} onNavigate={navigate} />
 
       <div className="workspace__main">
         <header className="topbar">

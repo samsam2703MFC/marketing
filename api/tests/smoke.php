@@ -570,6 +570,16 @@ check(
 $response = call($router, 'GET', '/api/v1/marketing/shops');
 check('la liste des boutiques est cloisonnée', count($response['body']) === 1, count($response['body']) . ' reçue(s)');
 
+// L'identifiant ERP de l'enseigne est servi : c'est par lui que le module
+// traduit « ?brand=1 » en périmètre, le sélecteur de marque ayant disparu.
+// Sans ce champ, l'adresse d'ouverture ne désigne plus rien.
+$response = call($router, 'GET', '/api/v1/marketing/brands');
+check(
+    'les marques portent leur identifiant ERP',
+    array_key_exists('erp_brand_id', $response['body'][0] ?? []),
+    json_encode($response['body'][0] ?? null)
+);
+
 // --- Contrôles à l'écriture ------------------------------------------------
 // L'assistant impose déjà ces règles, mais il n'est qu'un client parmi
 // d'autres. Deux d'entre elles comptent particulièrement : une portée refusée

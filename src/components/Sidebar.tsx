@@ -1,14 +1,12 @@
 import { navFor } from '../lib/navigation'
 import type { Role, Route } from '../lib/navigation'
-import type { Brand } from '../lib/api/module'
 
 interface SidebarProps {
   role: Role
   route: Route
-  brands: Brand[]
-  brandId: number | 'all'
+  /** Enseigne du périmètre, lue dans l'adresse. Affichée, jamais choisie ici. */
+  brandName: string | null
   onNavigate: (route: Route) => void
-  onBrandChange: (brandId: number | 'all') => void
 }
 
 /** Icône linéaire 16 px, même famille visuelle que le prototype. */
@@ -30,14 +28,7 @@ function Icon({ path }: { path: string }) {
   )
 }
 
-export default function Sidebar({
-  role,
-  route,
-  brands,
-  brandId,
-  onNavigate,
-  onBrandChange,
-}: SidebarProps) {
+export default function Sidebar({ role, route, brandName, onNavigate }: SidebarProps) {
   return (
     <nav className="sidebar" aria-label="Navigation principale">
       <div className="sidebar__head">
@@ -61,26 +52,11 @@ export default function Sidebar({
         </a>
       </div>
 
-      {/* Le sélecteur de marque n'a de sens qu'au niveau réseau : un franchisé
-          n'appartient qu'à une enseigne. */}
-      {role === 'BRAND_ADMIN' && brands.length > 0 ? (
-        <div className="sidebar__brand">
-          <select
-            aria-label="Marque"
-            value={String(brandId)}
-            onChange={(event) =>
-              onBrandChange(event.target.value === 'all' ? 'all' : Number(event.target.value))
-            }
-          >
-            <option value="all">Toutes marques</option>
-            {brands.map((brand) => (
-              <option key={brand.id} value={brand.id}>
-                {brand.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      ) : null}
+      {/* L'enseigne se lit, elle ne se choisit pas : elle vient de l'ERP par
+          l'adresse (`?brand=1`). Elle reste affichée parce qu'on travaille sur
+          un périmètre, et qu'un périmètre qu'aucun écran ne nomme finit par
+          être oublié. */}
+      {brandName !== null ? <div className="sidebar__brand">{brandName}</div> : null}
 
       <div className="sidebar__groups">
         {navFor(role).map((group) => (

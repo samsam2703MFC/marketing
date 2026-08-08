@@ -430,6 +430,7 @@ final class ErpSyncRepository
         // faux — et invisible. On le dit plutôt que de le laisser passer.
         if (isset($columns['brand'])) {
             $distinct = array_unique(array_filter(array_column($rows, 'brand'), static fn ($v): bool => $v !== null));
+
             if (count($distinct) > 1) {
                 $result['warning'] = sprintf(
                     'Les boutiques désignent %d enseignes différentes (%s) : toutes ont été '
@@ -437,6 +438,26 @@ final class ErpSyncRepository
                     count($distinct),
                     implode(', ', $distinct)
                 );
+            }
+
+            // Les boutiques disent sous quel identifiant l'ERP connaît cette
+            // enseigne. C'est ce numéro que l'ERP mettra dans l'adresse
+            // d'ouverture du module (`?brand=1`) : sans lui, le module devrait
+            // parier que son propre auto-incrément lui ressemble.
+            //
+            // Une seule valeur, sinon rien : deux enseignes mêlées ne
+            // désignent plus rien, et un mauvais rattachement ouvrirait le
+            // périmètre du voisin.
+            if (count($distinct) === 1) {
+                $erpBrandId = (int) reset($distinct);
+
+                if ($erpBrandId > 0) {
+                    $link = $connection->prepare(
+                        'UPDATE mar_brand SET erp_brand_id = :erp WHERE id = :id'
+                    );
+                    $link->execute(['erp' => $erpBrandId, 'id' => $brandId]);
+                    $result['erp_brand_id'] = $erpBrandId;
+                }
             }
         }
 

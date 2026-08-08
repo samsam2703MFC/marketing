@@ -241,6 +241,8 @@ export function getReferences(): Promise<References> {
 export interface Brand {
   id: number
   code: string
+  /** Identifiant de l'enseigne côté ERP : celui que porte `?brand=` dans l'adresse. */
+  erp_brand_id: number | null
   name: string
   logo_url: string | null
 }

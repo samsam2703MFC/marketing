@@ -238,9 +238,20 @@ final class ReferenceRepository
     /** @return list<array<string,mixed>> */
     public function brands(): array
     {
-        return $this->fetch(
-            'SELECT id, code, name, logo_url FROM mar_brand WHERE is_active = 1 ORDER BY name'
+        // `erp_brand_id` accompagne l'identifiant local : c'est lui que l'ERP
+        // écrit dans l'adresse d'ouverture du module, et le front n'a pas
+        // d'autre moyen de traduire « ?brand=1 » en périmètre.
+        $brands = $this->fetch(
+            'SELECT id, code, erp_brand_id, name, logo_url
+               FROM mar_brand WHERE is_active = 1 ORDER BY name'
         );
+
+        foreach ($brands as &$brand) {
+            $brand['id']           = (int) $brand['id'];
+            $brand['erp_brand_id'] = $brand['erp_brand_id'] === null ? null : (int) $brand['erp_brand_id'];
+        }
+
+        return $brands;
     }
 
     /**

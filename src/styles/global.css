@@ -309,18 +309,17 @@ tbody td {
   text-decoration: none;
 }
 
+/* L'enseigne du périmètre : un libellé, plus un menu déroulant. Elle garde la
+   place et le gabarit de l'ancien sélecteur — le cadre sans la bordure ni la
+   flèche, qui invitaient à cliquer sur ce qui ne se change plus. */
 .sidebar__brand {
-  padding: 10px 12px 0;
-}
-
-.sidebar__brand select {
-  width: 100%;
-  font: inherit;
-  font-size: 13px;
+  margin: 10px 12px 0;
   padding: 8px 10px;
-  border: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--table-head);
   border-radius: 9px;
-  background: #fff;
 }
 
 .sidebar__groups {
