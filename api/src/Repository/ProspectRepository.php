@@ -22,6 +22,20 @@ use Throwable;
 final class ProspectRepository
 {
     /**
+     * Nombre maximum de comptes rendus en une fois.
+     *
+     * La borne était à deux cents. Le réseau en compte neuf cents : le panneau
+     * de l'assistant en montrait donc moins d'un quart, sans que le chiffre
+     * annoncé et la liste affichée se contredisent nulle part — il fallait
+     * compter les lignes à la main pour s'en apercevoir.
+     *
+     * Deux mille tient dans une page sans la figer, et couvre le réseau tel
+     * qu'il est. Au-delà, la liste est tronquée et le dit : rendre trente mille
+     * lignes ne rendrait service à personne.
+     */
+    private const LIST_MAX = 2000;
+
+    /**
      * Effectif du vivier par secteur, en regard du chiffre de cadrage.
      *
      * Les deux sont affichés côte à côte parce qu'ils ne disent pas la même
@@ -65,7 +79,7 @@ final class ProspectRepository
      * @param  list<int> $sectorIds
      * @return list<array<string,mixed>>
      */
-    public function listBySectors(AuthContext $auth, array $sectorIds, int $limit = 200): array
+    public function listBySectors(AuthContext $auth, array $sectorIds, int $limit = self::LIST_MAX): array
     {
         if ($sectorIds === []) {
             return [];
@@ -76,7 +90,7 @@ final class ProspectRepository
 
         // La limite est interpolée après bornage : MySQL refuse un paramètre
         // lié en LIMIT quand l'émulation des requêtes préparées est coupée.
-        $limit = max(1, min(500, $limit));
+        $limit = max(1, min(self::LIST_MAX, $limit));
 
         // Un compte relève de plusieurs secteurs : `EXISTS` plutôt qu'une
         // jointure, sinon il ressortirait une fois par secteur retenu et le

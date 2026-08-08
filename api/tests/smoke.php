@@ -1036,6 +1036,37 @@ check('sans secteur, la liste est vide', $response['body'] === []);
 $response = call($router, 'GET', '/api/v1/marketing/b2b/prospects', ['sector_ids' => '999999']);
 check('un secteur inconnu ne renvoie rien', $response['body'] === []);
 
+// Un vivier plus grand que la borne d'affichage. Elle était à deux cents, et le
+// réseau en compte neuf cents : le panneau en montrait moins d'un quart sans
+// que rien ne se contredise à l'écran. Deux cent cinquante comptes suffisent à
+// faire échouer ce test si la borne redescend.
+$pdo->exec(sprintf(
+    "INSERT INTO mar_b2b_prospect (brand_id, external_ref, company_name, source)
+     SELECT 1, CONCAT('vol-', seq.n), CONCAT('Société ', LPAD(seq.n, 4, '0')), 'test'
+       FROM (%s) seq",
+    implode(' UNION ALL ', array_map(
+        static fn (int $n): string => sprintf('SELECT %d AS n', $n),
+        range(1, 250)
+    ))
+));
+$pdo->exec(sprintf(
+    'INSERT IGNORE INTO mar_b2b_prospect_sector (prospect_id, sector_id)
+     SELECT id, %d FROM mar_b2b_prospect WHERE source = \'test\'',
+    $officesId
+));
+
+$response = call($router, 'GET', '/api/v1/marketing/b2b/prospects', ['sector_ids' => (string) $officesId]);
+$total    = (int) (call($router, 'GET', '/api/v1/marketing/b2b/prospects/count', [
+    'sector_ids' => (string) $officesId,
+])['body']['total'] ?? 0);
+
+check('le vivier est listé en entier, pas seulement ses deux cents premiers',
+    count($response['body']) === $total && $total > 250,
+    count($response['body']) . ' listés sur ' . $total
+);
+
+$pdo->exec("DELETE FROM mar_b2b_prospect WHERE source = 'test'");
+
 // Le périmètre s'applique : un franchisé ne consulte pas les comptes du voisin.
 AuthContext::set(77, 'FRANCHISEE', 1, [1]);
 $response = call($router, 'GET', '/api/v1/marketing/b2b/prospects', ['sector_ids' => (string) $officesId]);
