@@ -78,6 +78,22 @@ export interface Draft {
   /** Progression par produit, en %. Vide = suit la progression générale. */
   product_growth: Record<number, string>
 
+  /**
+   * Challenge attaché aux objectifs — facultatif : sans lui, chaque magasin
+   * ne joue que contre sa propre cible.
+   */
+  challenge_enabled: boolean
+  challenge_metric: 'attainment' | 'pieces' | 'growth'
+  /** Seuil de participation général, en % de l'objectif de chaque magasin. */
+  challenge_trigger_pct: string
+  /**
+   * Seuil propre à un magasin. Vide = il suit le seuil général — même idiome
+   * que la progression par produit, pour qu'il n'y ait qu'une règle à retenir.
+   */
+  shop_triggers: Record<number, string>
+  /** Dotation de chaque rang, en clair. L'index vaut le rang. */
+  challenge_prizes: string[]
+
   // 3 — Objectifs & budget
   budget_amount: string
   objective_coef_pct: string
@@ -144,6 +160,12 @@ function emptyDraft(refs: References, role: Role): Draft {
     analysis_to: today(),
     analysis_compare: false,
     product_growth: {},
+
+    challenge_enabled: false,
+    challenge_metric: 'attainment',
+    challenge_trigger_pct: '100',
+    shop_triggers: {},
+    challenge_prizes: ['', '', ''],
 
     budget_amount: '',
     objective_coef_pct: '',
@@ -561,6 +583,24 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
     // Aide au calcul, pas une donnée de campagne : elle ne se relit pas.
     product_growth: {},
 
+    challenge_enabled: state.challenge_enabled ?? false,
+    challenge_metric: state.challenge_metric ?? 'attainment',
+    challenge_trigger_pct:
+      state.challenge_trigger_pct === undefined || state.challenge_trigger_pct === null
+        ? '100'
+        : String(Number(state.challenge_trigger_pct)),
+    shop_triggers: Object.fromEntries(
+      (state.shop_targets ?? [])
+        .filter((target) => target.challenge_trigger_pct !== null
+          && target.challenge_trigger_pct !== undefined)
+        .map((target) => [target.shop_id, String(Number(target.challenge_trigger_pct))]),
+    ),
+    // Trois rangs toujours présents à l'écran : un prix relu sur deux rangs ne
+    // doit pas faire disparaître le champ du troisième.
+    challenge_prizes: [0, 1, 2].map(
+      (rank) => (state.challenge_prizes ?? []).find((prize) => prize.rank_position === rank + 1)?.label ?? '',
+    ),
+
     budget_amount: state.budget_amount === undefined || state.budget_amount === null
       ? ''
       : String(state.budget_amount),
@@ -655,10 +695,27 @@ function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): Cam
     shop_ids: draft.scope === 'LOCALE' ? draft.shop_ids : [],
     // Seuls les objectifs réellement posés voyagent : zéro ou vide = aucun.
     shop_targets: Object.entries(draft.shop_objectives)
-      .map(([shopId, value]) => ({ shop_id: Number(shopId), target_pieces: Number(value) }))
+      .map(([shopId, value]) => ({
+        shop_id: Number(shopId),
+        target_pieces: Number(value),
+        // Le seuil voyage avec l'objectif du même magasin : les deux vivent sur
+        // la même ligne en base, les séparer ici obligerait à les recoller là-bas.
+        challenge_trigger_pct: draft.shop_triggers[Number(shopId)]?.trim() || null,
+      }))
       .filter(
         (target) => Number.isInteger(target.target_pieces) && target.target_pieces > 0,
       ),
+
+    challenge_enabled: draft.challenge_enabled,
+    // Sans challenge, on n'envoie ni critère ni seuil : les colonnes restent
+    // nulles et rien n'a besoin d'être nettoyé le jour où on le rallume.
+    challenge_metric: draft.challenge_enabled ? draft.challenge_metric : null,
+    challenge_trigger_pct: draft.challenge_enabled
+      ? (draft.challenge_trigger_pct.trim() || null)
+      : null,
+    challenge_prizes: draft.challenge_enabled
+      ? draft.challenge_prizes.map((label) => ({ label: label.trim() }))
+      : [],
     // Les secteurs ne concernent qu'une cible professionnelle : les envoyer
     // pour une campagne B2C peuplerait un entonnoir que rien n'alimente.
     sector_ids: draft.client_target === 'b2c' ? [] : draft.sector_ids,

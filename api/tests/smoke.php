@@ -739,9 +739,129 @@ $etat = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $br
 check('le nom est repris', $etat['name'] === 'Brouillon repris');
 check(
     'les objectifs de pièces reviennent avec le brouillon',
-    ($etat['shop_targets'] ?? null) === [['shop_id' => 2, 'target_pieces' => 75]],
+    ($etat['shop_targets'] ?? null) === [
+        ['shop_id' => 2, 'target_pieces' => 75, 'challenge_trigger_pct' => null],
+    ],
     json_encode($etat['shop_targets'] ?? null)
 );
+// Sans challenge, le seuil reste nul : c'est ce qui distingue « pas de seuil »
+// d'un seuil à zéro, lequel qualifierait la boutique sans qu'elle vende rien.
+check(
+    'sans challenge, aucun seuil n\'est posé',
+    $etat['challenge_enabled'] === false
+        && $etat['challenge_metric'] === null
+        && $etat['challenge_prizes'] === [],
+    json_encode([
+        'actif'   => $etat['challenge_enabled'] ?? null,
+        'critere' => $etat['challenge_metric'] ?? null,
+        'prix'    => $etat['challenge_prizes'] ?? null,
+    ])
+);
+
+// ── Challenge : classement, seuil général, seuils par boutique ──────────────
+
+call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon), [], [
+    'name'          => 'Brouillon repris',
+    'status_code'   => 'draft',
+    'scope'         => 'RESEAU',
+    'client_target' => 'b2b',
+    'challenge_enabled'     => true,
+    'challenge_metric'      => 'attainment',
+    'challenge_trigger_pct' => 100,
+    'challenge_prizes'      => [['label' => '1 000 € + trophée'], ['label' => ''], ['label' => '300 €']],
+    'shop_targets'  => [
+        ['shop_id' => 2, 'target_pieces' => 75, 'challenge_trigger_pct' => 90],
+        ['shop_id' => 1, 'target_pieces' => 40, 'challenge_trigger_pct' => null],
+    ],
+]);
+$etat = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon))['body'];
+
+check(
+    'le challenge revient avec son critère et son seuil général',
+    $etat['challenge_enabled'] === true
+        && $etat['challenge_metric'] === 'attainment'
+        && (float) $etat['challenge_trigger_pct'] === 100.0,
+    json_encode([
+        'actif'   => $etat['challenge_enabled'] ?? null,
+        'critere' => $etat['challenge_metric'] ?? null,
+        'seuil'   => $etat['challenge_trigger_pct'] ?? null,
+    ])
+);
+
+$seuils = [];
+foreach ($etat['shop_targets'] ?? [] as $cible) {
+    $seuils[$cible['shop_id']] = $cible['challenge_trigger_pct'];
+}
+check(
+    'le seuil propre à une boutique revient, les autres restent nuls',
+    (float) $seuils[2] === 90.0 && array_key_exists(1, $seuils) && $seuils[1] === null,
+    json_encode($seuils)
+);
+
+// Le rang vient de la position, jamais d'un champ transmis : un prix vide ne
+// fait pas remonter le suivant, sinon le troisième deviendrait deuxième et la
+// dotation annoncée ne correspondrait plus au podium affiché.
+check(
+    'un rang sans dotation laisse sa place vide au lieu de décaler les suivants',
+    ($etat['challenge_prizes'] ?? null) === [
+        ['rank_position' => 1, 'label' => '1 000 € + trophée'],
+        ['rank_position' => 3, 'label' => '300 €'],
+    ],
+    json_encode($etat['challenge_prizes'] ?? null)
+);
+
+// Réécriture : les prix se remplacent, ils ne s'ajoutent pas. Sans purge, la
+// clé unique (campagne, rang) ferait échouer la seconde reprise — le défaut se
+// serait vu à la deuxième sauvegarde, pas à la première.
+call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon), [], [
+    'name'        => 'Brouillon repris',
+    'status_code' => 'draft',
+    'scope'       => 'RESEAU',
+    'challenge_enabled' => true,
+    'challenge_metric'  => 'pieces',
+    'challenge_prizes'  => [['label' => 'Week-end équipe']],
+    'shop_targets'      => [['shop_id' => 2, 'target_pieces' => 75]],
+]);
+$etat = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon))['body'];
+check(
+    'les prix sont remplacés et non empilés',
+    ($etat['challenge_prizes'] ?? null) === [['rank_position' => 1, 'label' => 'Week-end équipe']],
+    json_encode($etat['challenge_prizes'] ?? null)
+);
+check(
+    'un seuil retiré redevient nul',
+    array_key_exists('challenge_trigger_pct', $etat['shop_targets'][0])
+        && $etat['shop_targets'][0]['challenge_trigger_pct'] === null,
+    json_encode($etat['shop_targets'] ?? null)
+);
+
+// Un critère inconnu se refuse avec un message, plutôt que d'écrire une valeur
+// que le classement ne saurait pas interpréter.
+$response = call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon), [], [
+    'name'              => 'Brouillon repris',
+    'status_code'       => 'draft',
+    'scope'             => 'RESEAU',
+    'challenge_enabled' => true,
+    'challenge_metric'  => 'au-pif',
+]);
+check(
+    'un critère de classement inconnu est refusé',
+    $response['status'] === 422,
+    'statut ' . $response['status']
+);
+
+// Remise en état pour la suite du scénario, qui reprend ce brouillon.
+call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon), [], [
+    'name'          => 'Brouillon repris',
+    'status_code'   => 'draft',
+    'scope'         => 'RESEAU',
+    'client_target' => 'b2b',
+    'sector_ids'    => [(int) $secteurs['horeca']],
+    'channels'      => [['channel_id' => (int) $refs['channels'][1]['id'], 'budget_amount' => 250]],
+    'retroplanning' => [['label' => 'Brief agence', 'days_before_launch' => 30]],
+    'shop_targets'  => [['shop_id' => 2, 'target_pieces' => 75]],
+]);
+$etat = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon))['body'];
 check(
     'les rattachements sont remplacés et non empilés',
     $etat['sector_ids'] === [(int) $secteurs['horeca']] && count($etat['channels']) === 1,

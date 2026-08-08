@@ -420,8 +420,22 @@ export interface CampaignDraft {
   /** Cadrage vertical du visuel, en pourcentage de la hauteur. */
   focal_point_y?: number | null
   shop_ids?: number[]
-  /** Objectifs de pièces par boutique (étape « Objectifs »), > 0 seulement. */
-  shop_targets?: Array<{ shop_id: number; target_pieces: number }>
+  /**
+   * Objectifs de pièces par boutique (étape « Objectifs »), > 0 seulement.
+   * `challenge_trigger_pct` nul = la boutique suit le seuil général.
+   */
+  shop_targets?: Array<{
+    shop_id: number
+    target_pieces: number
+    challenge_trigger_pct?: number | string | null
+  }>
+  /** Challenge attaché aux objectifs — facultatif. */
+  challenge_enabled?: boolean
+  challenge_metric?: 'attainment' | 'pieces' | 'growth' | null
+  /** Seuil de participation général, en % de l'objectif de chaque boutique. */
+  challenge_trigger_pct?: number | string | null
+  /** Dotation par rang. Le rang vient de la position, pas d'un champ. */
+  challenge_prizes?: Array<{ label: string }>
   sector_ids?: number[]
   agency_ask_ids?: number[]
   b2b_option_ids?: number[]
@@ -464,7 +478,13 @@ export interface CampaignDraftState
   extends Omit<CampaignDraft, 'lever_targets' | 'channels' | 'offer'> {
   id: number
   shop_ids: number[]
-  shop_targets: Array<{ shop_id: number; target_pieces: number }>
+  shop_targets: Array<{
+    shop_id: number
+    target_pieces: number
+    challenge_trigger_pct: number | string | null
+  }>
+  /** Relu avec son rang : l'écran affiche trois rangs, la base peut en porter moins. */
+  challenge_prizes: Array<{ rank_position: number; label: string }>
   sector_ids: number[]
   agency_ask_ids: number[]
   b2b_option_ids: number[]

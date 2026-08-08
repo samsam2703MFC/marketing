@@ -14,6 +14,18 @@ use RuntimeException;
 final class CampaignRepository
 {
     /**
+     * Critères de classement du challenge.
+     *
+     * `attainment` — part de son propre objectif atteinte. C'est le seul qui
+     * mette des boutiques de tailles différentes sur la même ligne de départ.
+     * `pieces` — volume brut : la plus grosse boutique gagne d'avance.
+     * `growth` — écart au N-1 : favorise celle qui partait de bas.
+     *
+     * @var list<string>
+     */
+    private const CHALLENGE_METRICS = ['attainment', 'pieces', 'growth'];
+
+    /**
      * Liste filtrable. Le périmètre s'applique en SQL : un franchisé ne reçoit
      * que les campagnes réseau et celles où l'une de ses boutiques participe.
      *
@@ -238,12 +250,14 @@ final class CampaignRepository
                 (brand_id, type_id, parent_campaign_id, name, scope, client_target, tone,
                  status_code, draft_step, starts_on, ends_on, budget_amount, objective_coef_pct,
                  agency_note, b2b_webshop_enabled, pos_survey_enabled, owner_user_id,
-                 create_crm_leads, image_url, created_by)
+                 create_crm_leads, image_url,
+                 challenge_enabled, challenge_metric, challenge_trigger_pct, created_by)
              VALUES
                 (:brand_id, :type_id, :parent_campaign_id, :name, :scope, :client_target, :tone,
                  :status_code, :draft_step, :starts_on, :ends_on, :budget_amount, :objective_coef_pct,
                  :agency_note, :b2b_webshop_enabled, :pos_survey_enabled, :owner_user_id,
-                 :create_crm_leads, :image_url, :created_by)'
+                 :create_crm_leads, :image_url,
+                 :challenge_enabled, :challenge_metric, :challenge_trigger_pct, :created_by)'
         );
 
         $statement->execute([
@@ -268,6 +282,15 @@ final class CampaignRepository
             'pos_survey_enabled' => !empty($data['pos_survey_enabled']) ? 1 : 0,
             'create_crm_leads'   => !empty($data['create_crm_leads']) ? 1 : 0,
             'image_url'          => $data['image_url'] ?? null,
+            // Le challenge se règle à l'étape « Objectifs », donc bien après la
+            // première écriture. Ces colonnes sont ici pour que le premier
+            // enregistrement d'un assistant déjà rempli ne les perde pas — sans
+            // elles, il fallait sauver deux fois pour que le challenge tienne.
+            'challenge_enabled'  => !empty($data['challenge_enabled']) ? 1 : 0,
+            'challenge_metric'   => $data['challenge_metric'] ?? null,
+            'challenge_trigger_pct' => ($data['challenge_trigger_pct'] ?? '') === ''
+                ? null
+                : $data['challenge_trigger_pct'],
             'created_by'         => $auth->userId,
         ]);
 
@@ -349,6 +372,8 @@ final class CampaignRepository
             throw new RuntimeException('L\'écart au N-1 doit rester entre -999,99 et 999,99 %.');
         }
 
+        $data = $this->validatedChallenge($data);
+
         $connection = Database::connection();
 
         $status = $data['status_code'] ?? 'draft';
@@ -371,6 +396,50 @@ final class CampaignRepository
             $known->execute(['id' => (int) $data['type_id']]);
             if ($known->fetchColumn() === false) {
                 throw new RuntimeException('Type de campagne inconnu.');
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * Réglages du challenge, validés.
+     *
+     * Le challenge est facultatif : sans lui, les objectifs restent des
+     * objectifs et rien de ce qui suit ne s'applique. Trois contrôles, tous
+     * pour la même raison — une valeur refusée ici donne un message lisible,
+     * la même valeur laissée passer donne une erreur MySQL au moment de
+     * l'écriture, quatre appels plus loin, sans dire laquelle.
+     *
+     * @param  array<string,mixed> $data
+     * @return array<string,mixed>
+     */
+    private function validatedChallenge(array $data): array
+    {
+        if (array_key_exists('challenge_metric', $data)) {
+            $metric = (string) ($data['challenge_metric'] ?? '');
+
+            if ($metric !== '' && !in_array($metric, self::CHALLENGE_METRICS, true)) {
+                throw new RuntimeException(sprintf(
+                    'Critère de classement inconnu : attendu %s.',
+                    implode(', ', self::CHALLENGE_METRICS)
+                ));
+            }
+
+            $data['challenge_metric'] = $metric === '' ? null : $metric;
+        }
+
+        // Le seuil s'exprime en pourcentage de l'objectif de la boutique. Un
+        // seuil au-delà de 999,99 % ne tiendrait pas dans DECIMAL(5,2), et un
+        // seuil négatif n'a pas de sens : on est déjà au-dessus avant de
+        // commencer.
+        if (array_key_exists('challenge_trigger_pct', $data)) {
+            $trigger = $data['challenge_trigger_pct'];
+
+            if ($trigger === '' || $trigger === null) {
+                $data['challenge_trigger_pct'] = null;
+            } elseif ((float) $trigger < 0 || (float) $trigger > 999.99) {
+                throw new RuntimeException('Le seuil de participation doit rester entre 0 et 999,99 %.');
             }
         }
 
@@ -548,6 +617,7 @@ final class CampaignRepository
             'mar_campaign_b2b_option',
             'mar_campaign_uniform',
             'mar_campaign_pos_question',
+            'mar_campaign_challenge_prize',
             'mar_retroplanning_step',
             'mar_campaign_offer',
             'mar_campaign_asset',
@@ -587,30 +657,73 @@ final class CampaignRepository
         // Objectifs de pièces par boutique (étape « Objectifs »). Une boutique
         // objectivée participe de fait : une campagne réseau écrit donc aussi
         // ses rattachements, uniquement pour porter les objectifs.
-        $targetsByShop = [];
+        $targetsByShop  = [];
+        $triggersByShop = [];
         foreach (is_array($data['shop_targets'] ?? null) ? $data['shop_targets'] : [] as $target) {
             $shopId = (int) ($target['shop_id'] ?? 0);
             $pieces = (int) ($target['target_pieces'] ?? 0);
             if ($shopId > 0 && $pieces > 0) {
                 $targetsByShop[$shopId] = $pieces;
             }
+
+            // Seuil propre à la boutique. Absent ou vide, il reste NULL : la
+            // boutique suit alors le seuil général, et c'est bien un NULL qu'il
+            // faut écrire — un zéro voudrait dire « qualifiée d'office ».
+            $trigger = $target['challenge_trigger_pct'] ?? null;
+            if ($shopId > 0 && $trigger !== null && $trigger !== '') {
+                $triggersByShop[$shopId] = min(999.99, max(0, (float) $trigger));
+            }
         }
 
-        $shopRows = array_values(array_unique([...$shopIds, ...array_keys($targetsByShop)]));
+        $shopRows = array_values(array_unique(
+            [...$shopIds, ...array_keys($targetsByShop), ...array_keys($triggersByShop)]
+        ));
 
         if ($shopRows !== []) {
             $statement = $connection->prepare(
-                'INSERT INTO mar_campaign_shop (campaign_id, shop_id, target_pieces, created_by)
-                 VALUES (:campaign_id, :shop_id, :target_pieces, :created_by)'
+                'INSERT INTO mar_campaign_shop
+                    (campaign_id, shop_id, target_pieces, challenge_trigger_pct, created_by)
+                 VALUES (:campaign_id, :shop_id, :target_pieces, :challenge_trigger_pct, :created_by)'
             );
             foreach ($shopRows as $shopId) {
                 $statement->execute([
-                    'campaign_id'   => $campaignId,
-                    'shop_id'       => $shopId,
-                    'target_pieces' => $targetsByShop[$shopId] ?? null,
-                    'created_by'    => $auth->userId,
+                    'campaign_id'           => $campaignId,
+                    'shop_id'               => $shopId,
+                    'target_pieces'         => $targetsByShop[$shopId] ?? null,
+                    'challenge_trigger_pct' => $triggersByShop[$shopId] ?? null,
+                    'created_by'            => $auth->userId,
                 ]);
             }
+        }
+
+        // Prix du challenge. Le rang vient de la position dans la liste et non
+        // d'un champ transmis : deux prix au même rang violeraient la clé
+        // unique, et laisser le client décider du rang l'exposerait à ce
+        // conflit sans qu'il puisse le prévoir.
+        $prizes = is_array($data['challenge_prizes'] ?? null) ? $data['challenge_prizes'] : [];
+        $rank   = 0;
+        $insert = $connection->prepare(
+            'INSERT INTO mar_campaign_challenge_prize
+                (campaign_id, rank_position, label, created_by)
+             VALUES (:campaign_id, :rank_position, :label, :created_by)'
+        );
+
+        foreach ($prizes as $prize) {
+            $label = trim((string) (is_array($prize) ? ($prize['label'] ?? '') : $prize));
+            $rank++;
+
+            // Un rang sans dotation reste un rang : le deuxième prix vide ne
+            // fait pas remonter le troisième à sa place.
+            if ($label === '') {
+                continue;
+            }
+
+            $insert->execute([
+                'campaign_id'   => $campaignId,
+                'rank_position' => $rank,
+                'label'         => mb_substr($label, 0, 120),
+                'created_by'    => $auth->userId,
+            ]);
         }
 
         if ($channels !== []) {
@@ -986,13 +1099,16 @@ final class CampaignRepository
             'starts_on', 'ends_on', 'budget_amount', 'objective_coef_pct', 'agency_note',
             'b2b_webshop_enabled', 'pos_survey_enabled', 'spent_amount', 'approval_status',
             'create_crm_leads', 'image_url',
+            'challenge_enabled', 'challenge_metric', 'challenge_trigger_pct',
         ];
 
         // Colonnes TINYINT. PDO lie un `false` PHP comme chaîne vide, que MySQL
         // en mode strict refuse : « Incorrect integer value: '' ». La création
         // les normalisait déjà, la mise à jour non — le défaut ne se voyait pas
         // tant que personne n'envoyait un booléen à cette route.
-        $flags = ['b2b_webshop_enabled', 'pos_survey_enabled', 'create_crm_leads'];
+        $flags = [
+            'b2b_webshop_enabled', 'pos_survey_enabled', 'create_crm_leads', 'challenge_enabled',
+        ];
 
         $assignments = [];
         $bindings    = ['id' => $id];
@@ -1046,11 +1162,22 @@ final class CampaignRepository
         );
         $channels->execute(['id' => $id]);
 
+        // Une ligne compte dès qu'elle porte un objectif *ou* un seuil : une
+        // boutique dont on a réglé le seuil sans encore poser d'objectif ne
+        // doit pas voir son réglage disparaître à la reprise.
         $shopTargets = Database::connection()->prepare(
-            'SELECT shop_id, target_pieces FROM mar_campaign_shop
-              WHERE campaign_id = :id AND target_pieces IS NOT NULL'
+            'SELECT shop_id, target_pieces, challenge_trigger_pct
+               FROM mar_campaign_shop
+              WHERE campaign_id = :id
+                AND (target_pieces IS NOT NULL OR challenge_trigger_pct IS NOT NULL)'
         );
         $shopTargets->execute(['id' => $id]);
+
+        $prizes = Database::connection()->prepare(
+            'SELECT rank_position, label FROM mar_campaign_challenge_prize
+              WHERE campaign_id = :id ORDER BY rank_position'
+        );
+        $prizes->execute(['id' => $id]);
 
         $questions = Database::connection()->prepare(
             'SELECT label, answer_type, options, is_required
@@ -1092,10 +1219,22 @@ final class CampaignRepository
             'focal_point_y'      => $asset === false ? 50 : (int) $asset['focal_point_y'],
 
             'shop_ids'       => $ids('SELECT shop_id FROM mar_campaign_shop WHERE campaign_id = :id'),
+            'challenge_enabled'     => (bool) $campaign['challenge_enabled'],
+            'challenge_metric'      => $campaign['challenge_metric'],
+            'challenge_trigger_pct' => $campaign['challenge_trigger_pct'],
+            'challenge_prizes'      => array_map(
+                static fn (array $row): array => [
+                    'rank_position' => (int) $row['rank_position'],
+                    'label'         => (string) $row['label'],
+                ],
+                $prizes->fetchAll()
+            ),
+
             'shop_targets'   => array_map(
                 static fn (array $row): array => [
-                    'shop_id'       => (int) $row['shop_id'],
-                    'target_pieces' => (int) $row['target_pieces'],
+                    'shop_id'               => (int) $row['shop_id'],
+                    'target_pieces'         => (int) ($row['target_pieces'] ?? 0),
+                    'challenge_trigger_pct' => $row['challenge_trigger_pct'],
                 ],
                 $shopTargets->fetchAll()
             ),
