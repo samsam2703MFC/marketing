@@ -581,6 +581,16 @@ jobs:
                 ;;
             esac
 
+            # Le catalogue produit a rejoint la reprise : sans sa propre
+            # annotation, ses trois lignes ne vivent que dans le résumé
+            # complet, au-delà des neuf cents caractères qu'une annotation
+            # conserve. C'est pourtant lui qui décide si l'étape « Offre »
+            # a quelque chose à proposer.
+            catalogue=$(printf '%s\n' "$out" \
+              | grep -E '^(products|seasons|season_links) ' \
+              | tr '\n' ' | ')
+            [ -n "$catalogue" ] && notice 'Catalogue' "$catalogue"
+
             notice 'Reprise ERP' "$summary"
 
             # Une annotation par table, ses deux lignes réunies. Une par ligne
@@ -600,12 +610,24 @@ jobs:
               END { if (t != "") print t "|" acc }
             ')
 
+            # Une annotation par table seulement là où quelque chose n'a pas
+            # été reconnu : c'est le seul cas actionnable. Les tables résolues
+            # en entier tiennent sur une ligne — huit annotations pour dire
+            # « tout va bien » épuisaient le budget et faisaient tomber celles
+            # qui avaient quelque chose à dire.
+            #
             # Sans redirection depuis un fichier, le `while` tournerait dans un
             # sous-shell et le budget décrémenté n'y survivrait pas.
             printf '%s\n' "$tables" > /tmp/mar-tables.txt
+            resolues=''
             while IFS='|' read -r table line; do
-              [ -n "$table" ] && notice "Colonnes $table" "$line"
+              [ -n "$table" ] || continue
+              case "$line" in
+                *'non reconnues : aucune'*) resolues="$resolues $table" ;;
+                *)                          notice "Colonnes $table" "$line" ;;
+              esac
             done < /tmp/mar-tables.txt
+            [ -n "$resolues" ] && notice 'Tables lues sans réserve' "$resolues"
 
             if [ "$dropped" -gt 0 ]; then
               echo "::warning title=Annotations tronquées::$dropped annotation(s) non émise(s) — GitHub en garde dix par étape. Le compte rendu complet est dans le résumé du job."
