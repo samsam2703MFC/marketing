@@ -219,15 +219,23 @@ Les boutiques et les comptes professionnels ne se saisissent pas dans le module 
 ils appartiennent à l'ERP. La reprise se lance depuis **Fidélité & CRM**, et elle
 est rejouable — elle met à jour les fiches connues, n'ajoute que les nouvelles.
 
-Deux variables du fichier `.env` désignent les tables sources, sous la forme
-`schéma.table` :
+Les tables lues sont, par défaut, celles de cette installation :
+
+| Notion   | Table              |
+|----------|--------------------|
+| Boutiques| `franchisee_shop`  |
+| Clients  | `client`           |
+
+Elles sont cherchées dans la base du module — ici `atelier_db`, qui héberge
+aussi l'ERP. Deux variables du `.env` permettent d'en désigner d'autres, sous la
+forme `table` ou `schéma.table` :
 
 ```
-MAR_ERP_SHOPS_TABLE=franchise.shops
-MAR_ERP_CUSTOMERS_TABLE=franchise.customers
+MAR_ERP_SHOPS_TABLE=franchisee_shop
+MAR_ERP_CUSTOMERS_TABLE=client
 ```
 
-Ce sont les valeurs par défaut ; il n'y a rien à écrire si elles conviennent.
+Il n'y a rien à écrire tant que ces valeurs conviennent.
 
 Les colonnes, elles, ne sont pas configurées : la reprise les découvre dans
 `information_schema` et accepte plusieurs noms courants pour chaque notion
@@ -236,12 +244,17 @@ affiché à l'écran indique celles qu'elle a retenues — c'est le seul moyen d
 vérifier, sans accès à la base, qu'elle a lu ce qu'on croit. Si une colonne
 obligatoire manque, elle refuse en nommant ce qu'elle a trouvé à la place.
 
-Deux points à connaître :
+Trois points à connaître :
 
 - Une boutique inactive dans l'ERP est écartée : elle ne doit pas réapparaître
   dans le choix de périmètre d'une nouvelle campagne.
-- Seuls les clients marqués `is_b2b` rejoignent le vivier. Les autres sont des
-  particuliers, qu'on ne démarche pas au téléphone.
+- Seuls les clients professionnels rejoignent le vivier. Le marqueur est
+  `b2b_client_type` : un client en a un, un particulier n'en a pas. La reprise
+  ne teste donc pas « égal à 1 » mais « renseigné », sans quoi elle ne
+  ramènerait qu'un seul type de compte sur les trois.
+- Aucune de ces tables n'est créée ni modifiée par le module : il les lit, un
+  point c'est tout. Il n'existe volontairement aucun script qui les recrée —
+  lancé par mégarde sur la base réelle, il effacerait l'ERP.
 
 L'utilisateur MySQL du module doit avoir le droit de lecture sur le schéma de
 l'ERP. Sans lui, la reprise s'arrête sur « table introuvable, ou aucun droit de

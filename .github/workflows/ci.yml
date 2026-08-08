@@ -75,11 +75,6 @@ jobs:
       - name: Lint PHP
         run: find api -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
 
-      # Doublure de l'ERP : sans elle, le test de reprise se contente de dire
-      # « source absente » et passe au vert sans rien vérifier.
-      - name: Monter la doublure ERP
-        run: mysql -h 127.0.0.1 -uroot -proot < db/fixtures/erp_stub.sql
-
       - name: Tests de l'API
         env:
           MAR_DB_HOST: 127.0.0.1

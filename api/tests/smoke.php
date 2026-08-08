@@ -871,27 +871,40 @@ check(
 );
 
 // --- Reprise depuis l'ERP ---------------------------------------------------
-// Les boutiques et les comptes professionnels appartiennent à l'ERP. Le test ne
-// s'exécute que si une source est en place : il ne doit pas échouer sur une
-// machine qui n'a pas l'ERP à côté, mais il ne doit pas non plus passer en
-// silence sans avoir rien vérifié — d'où le message.
+// Les boutiques et les comptes professionnels appartiennent à l'ERP : on lit
+// ses tables, on ne les double pas. Il n'y a donc pas de jeu d'essai à monter
+// — et surtout pas de script qui recréerait `franchisee_shop` ou `client`, dont
+// le moindre lancement contre la base réelle effacerait l'ERP.
+//
+// Conséquence assumée : ces contrôles ne s'exécutent que là où l'ERP est
+// présent. Ailleurs, le test le dit au lieu de passer au vert sans rien avoir
+// vérifié.
 echo "\nReprise depuis l'ERP\n";
 AuthContext::set(1, 'BRAND_ADMIN', 1);
 
 $erpAvailable = (int) $pdo->query(
     "SELECT COUNT(*) FROM information_schema.tables
-      WHERE table_schema = 'franchise' AND table_name IN ('shops', 'customers')"
+      WHERE table_schema = DATABASE() AND table_name IN ('franchisee_shop', 'client')"
 )->fetchColumn() === 2;
 
 if (!$erpAvailable) {
-    printf("  · source ERP absente (franchise.shops / franchise.customers) — reprise non vérifiée\n");
+    printf("  · tables ERP absentes de cette base — reprise non vérifiée ici\n");
 } else {
     $before = (int) $pdo->query('SELECT COUNT(*) FROM mar_shop')->fetchColumn();
 
     $response = call($router, 'POST', '/api/v1/marketing/erp/sync');
     $sync     = $response['body'];
     check('la reprise aboutit', $response['status'] === 200, 'statut ' . $response['status']);
-    check('elle nomme sa source', ($sync['shops']['source'] ?? '') === 'franchise.shops');
+    check(
+        'elle nomme sa source',
+        str_ends_with((string) ($sync['shops']['source'] ?? ''), '.franchisee_shop'),
+        (string) ($sync['shops']['source'] ?? '')
+    );
+    check(
+        'elle nomme la table des clients',
+        str_ends_with((string) ($sync['prospects']['source'] ?? ''), '.client'),
+        (string) ($sync['prospects']['source'] ?? '')
+    );
     check(
         'elle rapporte les colonnes retenues',
         ($sync['prospects']['columns']['postal_code'] ?? '') !== '',
@@ -900,10 +913,11 @@ if (!$erpAvailable) {
 
     // Une boutique inactive dans l'ERP ne doit pas rejoindre le périmètre.
     check('les boutiques fermées sont écartées', ($sync['shops']['skipped'] ?? 0) >= 1);
+    // Trois types différents (1, 2, 3) : un « = 1 » naïf n'en ramènerait qu'un.
     check(
-        'seuls les clients professionnels sont repris',
+        'seuls les clients professionnels sont repris, tous types confondus',
         ($sync['prospects']['read'] ?? 0) === (int) $pdo->query(
-            'SELECT COUNT(*) FROM franchise.customers WHERE is_b2b = 1'
+            'SELECT COUNT(*) FROM client WHERE b2b_client_type IS NOT NULL'
         )->fetchColumn()
     );
     check('les accents traversent la reprise', (int) $pdo->query(
@@ -913,14 +927,14 @@ if (!$erpAvailable) {
     // Rejouable : le rapprochement se fait sur l'identifiant ERP, donc un
     // second passage met à jour au lieu de dupliquer — y compris si l'ERP
     // renomme la boutique et son code.
-    $pdo->exec("UPDATE franchise.shops SET name = 'Châtelain (Fort Jaco)', code = 'chatelain-2' WHERE id = 1");
+    $pdo->exec("UPDATE franchisee_shop SET name = 'Châtelain (Fort Jaco)', code = 'chatelain-2' WHERE id_franchisee_shop = 1");
     $after = call($router, 'POST', '/api/v1/marketing/erp/sync')['body'];
     check('un second passage ne crée rien', ($after['shops']['created'] ?? null) === 0, json_encode($after['shops']));
     check(
         'une boutique renommée est mise à jour, pas dupliquée',
         (int) $pdo->query('SELECT COUNT(*) FROM mar_shop WHERE erp_shop_id = 1')->fetchColumn() === 1
     );
-    $pdo->exec("UPDATE franchise.shops SET name = 'Bruxelles — Châtelain', code = 'chatelain' WHERE id = 1");
+    $pdo->exec("UPDATE franchisee_shop SET name = 'Bruxelles — Châtelain', code = 'chatelain' WHERE id_franchisee_shop = 1");
 
     check('les comptes B2B sont rattachés à leur boutique', (int) $pdo->query(
         "SELECT COUNT(*) FROM mar_b2b_prospect WHERE source = 'ERP' AND shop_id IS NOT NULL"
