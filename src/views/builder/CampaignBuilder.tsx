@@ -58,8 +58,6 @@ interface Draft {
   offer_title: string
   offer_mechanic: string
   offer_items: string[]
-  offer_from: string
-  offer_to: string
   offer_all_day: boolean
   offer_hour_from: string
   offer_hour_to: string
@@ -108,8 +106,6 @@ function emptyDraft(refs: References, role: Role): Draft {
     offer_title: '',
     offer_mechanic: '',
     offer_items: [],
-    offer_from: '',
-    offer_to: '',
     offer_all_day: true,
     offer_hour_from: '',
     offer_hour_to: '',
@@ -170,9 +166,6 @@ const STEPS: Step[] = [
     blocking: (d) => {
       // L'offre reste facultative — toutes les campagnes n'en portent pas —
       // mais une fenêtre à l'envers ou un horaire incomplet sont des erreurs.
-      if (d.offer_from !== '' && d.offer_to !== '' && d.offer_to < d.offer_from) {
-        return 'La fin de l’offre précède son début.'
-      }
       if (!d.offer_all_day && (d.offer_hour_from === '' || d.offer_hour_to === '')) {
         return 'Précisez la plage horaire, ou revenez sur « toute la journée ».'
       }
@@ -423,8 +416,12 @@ function toPayload(draft: Draft, brandId: number | 'all'): CampaignDraft {
             title: draft.offer_title.trim(),
             template_id: draft.offer_template_id,
             mechanic_text: draft.offer_mechanic.trim() || null,
-            starts_on: draft.offer_from || null,
-            ends_on: draft.offer_to || null,
+            // L'offre court sur la période de la campagne. Elle avait sa
+            // propre fenêtre — utile en théorie, saisie deux fois en
+            // pratique, et deux dates qu'on ressaisit finissent par
+            // diverger sans que personne ne sache laquelle fait foi.
+            starts_on: draft.starts_on || null,
+            ends_on: draft.ends_on || null,
             all_day: draft.offer_all_day,
             hour_from: draft.offer_all_day ? null : draft.offer_hour_from || null,
             hour_to: draft.offer_all_day ? null : draft.offer_hour_to || null,
@@ -757,8 +754,8 @@ function OfferStep({ refs, draft, patch }: StepProps) {
     <>
       <h2>Offre</h2>
       <p className="muted">
-        Facultative : toutes les campagnes n’en portent pas. Sa fenêtre est distincte de la
-        période de campagne — une promotion peut ne courir que sur une partie de l’opération.
+        Facultative : toutes les campagnes n’en portent pas. Elle court sur la période fixée à
+        l’étape 1 — seul l’horaire se précise ici.
       </p>
 
       <h3 className="section-label">Modèle</h3>
@@ -834,26 +831,6 @@ function OfferStep({ refs, draft, patch }: StepProps) {
       >
         + Ajouter un élément
       </button>
-
-      {/* Même calendrier qu'à l'étape 1 : la fenêtre de l'offre est une période
-          comme l'autre, et deux façons de saisir une date dans le même
-          assistant se paient au premier écart entre les deux. */}
-      <h3 className="section-label">Fenêtre</h3>
-      <div className="filters__row">
-        <button
-          type="button"
-          className="filter"
-          onClick={() => patch({ offer_from: draft.starts_on, offer_to: draft.ends_on })}
-          disabled={draft.starts_on === '' && draft.ends_on === ''}
-        >
-          Reprendre la période de campagne
-        </button>
-      </div>
-      <RangeCalendar
-        from={draft.offer_from}
-        to={draft.offer_to}
-        onChange={(range) => patch({ offer_from: range.starts_on, offer_to: range.ends_on })}
-      />
 
       <h3 className="section-label">Horaire</h3>
       <div className="filters__row">
@@ -1483,12 +1460,6 @@ function ReviewStep({
       draft.offer_title.trim() === ''
         ? 'Aucune'
         : `${draft.offer_title} · ${items.length} élément${items.length > 1 ? 's' : ''}`,
-    ],
-    [
-      'Fenêtre de l’offre',
-      draft.offer_from === '' && draft.offer_to === ''
-        ? '—'
-        : `${formatDate(draft.offer_from || null)} → ${formatDate(draft.offer_to || null)}`,
     ],
     [
       'Horaire',
