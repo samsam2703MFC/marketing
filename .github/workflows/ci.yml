@@ -359,6 +359,18 @@ jobs:
           # et redéployer l'un ne peut pas casser l'autre.
           $PRE $RSYNC --exclude 'tests' -e "ssh $SSH_OPTS" api/ "$SSH_USER@$SSH_HOST:$DEPLOY_DIR_FRANCHISE/api/"
 
+          # Le pointeur indique à l'API où trouver sa configuration. Il vivait
+          # dans l'étape d'écriture du .env, conditionnée aux secrets de base :
+          # sans eux l'étape est sautée, et le pointeur n'était jamais posé — une
+          # installation par ailleurs correcte ne trouvait alors aucune
+          # configuration. Il appartient au déploiement, pas aux identifiants.
+          printf '%s\n' "$CONFIG_DIR/.env" > .env-path
+          $PRE rsync -a --chmod=644 -e "ssh $SSH_OPTS" .env-path "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/api/.env-path"
+          $PRE rsync -a --chmod=644 -e "ssh $SSH_OPTS" .env-path "$SSH_USER@$SSH_HOST:$DEPLOY_DIR_FRANCHISE/api/.env-path"
+          $SSH_CMD $SSH_OPTS "$SSH_USER@$SSH_HOST" \
+            "chmod 644 '$DEPLOY_DIR/api/.env-path' '$DEPLOY_DIR_FRANCHISE/api/.env-path'"
+          rm -f .env-path
+
       # Optionnel : si les secrets de base sont renseignés, le .env est (ré)écrit
       # à chaque déploiement, **au-dessus** de la racine du déploiement — celle-ci
       # est servie par le serveur web, un .env posé dedans serait téléchargeable.
@@ -410,19 +422,6 @@ jobs:
             chgrp www-data '$CONFIG_DIR' 2>/dev/null || true
           "
           rm -f .env.deploy
-          # Pointeur vers la configuration : il ne contient qu'un chemin, aucun
-          # secret. Nécessaire parce que le parent de DEPLOY_DIR est ici la racine
-          # web elle-même — y poser le .env le rendrait téléchargeable.
-          # 644, et non le 600 qu'imposerait l'umask de cette étape : le pointeur
-          # ne contient qu'un chemin, mais PHP tourne sous www-data et doit
-          # pouvoir le lire. En 600 appartenant au compte de déploiement, il
-          # devient illisible — la configuration paraît alors introuvable alors
-          # que le .env lui-même est parfaitement accessible.
-          printf '%s\n' "$CONFIG_DIR/.env" > .env-path
-          $PRE rsync -a --chmod=644 -e "ssh $SSH_OPTS" .env-path "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/api/.env-path"
-          $PRE rsync -a --chmod=644 -e "ssh $SSH_OPTS" .env-path "$SSH_USER@$SSH_HOST:$DEPLOY_DIR_FRANCHISE/api/.env-path"
-          $SSH_CMD $SSH_OPTS "$SSH_USER@$SSH_HOST" "chmod 644 '$DEPLOY_DIR/api/.env-path' '$DEPLOY_DIR_FRANCHISE/api/.env-path'"
-          rm -f .env-path
 
       - name: Appliquer les migrations
         if: steps.check.outputs.configured == 'true'
