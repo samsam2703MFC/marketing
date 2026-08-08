@@ -290,6 +290,14 @@ foreach ($sectors as $sector) {
     printf("  %s %s\n", $pad((string) $sector['label'], 34), $sector['comptes']);
 }
 
+// Sonde tarifaire : coût matière, TVA, chiffre d'affaires par ligne. Trois
+// données que le module n'a pas et sans lesquelles aucune marge ne se calcule.
+// On demande où elles vivent plutôt que d'essayer des noms de tables à un
+// déploiement par hypothèse.
+foreach ($repository->probePricing() as $notion => $detail) {
+    printf("\nPRICING %-16s %s\n", $notion, $detail);
+}
+
 if ($shops === []) {
     fprintf(STDERR, "\nAucune boutique : la reprise n'a rien produit d'exploitable.\n");
     exit(6);

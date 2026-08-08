@@ -591,6 +591,12 @@ jobs:
               | tr '\n' ' | ')
             [ -n "$catalogue" ] && notice 'Catalogue' "$catalogue"
 
+            # Sonde tarifaire : elle ne sert qu'à désigner les sources du food
+            # cost, de la TVA et du CA. Sa place dans le budget est temporaire,
+            # le temps de brancher l'étape « Pricing ».
+            pricing=$(printf '%s\n' "$out" | grep -E '^PRICING ' | tr '\n' ' | ')
+            [ -n "$pricing" ] && notice 'Sonde tarifaire' "$pricing"
+
             notice 'Reprise ERP' "$summary"
 
             # Une annotation par table, ses deux lignes réunies. Une par ligne

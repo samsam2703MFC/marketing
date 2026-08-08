@@ -1490,6 +1490,70 @@ final class ErpSyncRepository
     }
 
     /**
+     * Sonde pour l'étape « Pricing » : où vivent le coût matière, la TVA et le
+     * chiffre d'affaires.
+     *
+     * Trois données manquent au module pour calculer une marge : le food cost,
+     * le taux de TVA et le CA par ligne de caisse. Les chercher en essayant des
+     * noms de tables coûterait un déploiement par hypothèse — et une hypothèse
+     * qui tombe juste par hasard est pire qu'une erreur franche : elle produit
+     * des marges plausibles et fausses.
+     *
+     * Lecture seule, et bornée : la liste des colonnes de trois tables connues,
+     * et le nom des tables dont l'intitulé évoque une recette ou une taxe. Le
+     * schéma entier n'est pas balayé.
+     *
+     * @return array<string, string>
+     */
+    public function probePricing(): array
+    {
+        $schema = $this->currentSchema();
+
+        $rapport = [];
+
+        // Les colonnes des tables déjà lues : c'est là que la TVA doit se
+        // trouver, et peut-être le coût. Elles ne sont plus affichées depuis
+        // que les tables résolues sans réserve tiennent sur une seule ligne.
+        foreach ([
+            'produit'        => $this->source('MAR_ERP_PRODUCTS_TABLE', 'product')[1],
+            'lignes de vente' => $this->source('MAR_ERP_TRANSACTION_LINES_TABLE', 'transaction_product')[1],
+        ] as $notion => $table) {
+            $colonnes = $this->columnsOf($schema, $table);
+            $rapport[$notion] = $colonnes === []
+                ? sprintf('%s : table absente', $table)
+                : sprintf('%s : %s', $table, implode(', ', $colonnes));
+        }
+
+        // Tables dont le nom évoque une recette, un coût ou une taxe. On rend
+        // leur nom et leurs colonnes : c'est ce qui permet de désigner la
+        // source sans la deviner.
+        $statement = Database::connection()->prepare(
+            'SELECT table_name FROM information_schema.tables
+              WHERE table_schema = :schema
+                AND table_name NOT LIKE \'mar\\_%\'
+                AND (table_name LIKE \'%recip%\' OR table_name LIKE \'%recett%\'
+                  OR table_name LIKE \'%ingredient%\' OR table_name LIKE \'%cost%\'
+                  OR table_name LIKE \'%cout%\'      OR table_name LIKE \'%vat%\'
+                  OR table_name LIKE \'%tva%\'       OR table_name LIKE \'%tax%\'
+                  OR table_name LIKE \'%composition%\')
+              ORDER BY table_name
+              LIMIT 15'
+        );
+        $statement->execute(['schema' => $schema]);
+
+        $trouvees = [];
+        foreach ($statement->fetchAll(PDO::FETCH_COLUMN) as $table) {
+            $trouvees[] = sprintf('%s (%s)', $table, implode(', ', $this->columnsOf($schema, (string) $table)));
+        }
+
+        $rapport['recette / taxe'] = $trouvees === []
+            ? 'aucune table dont le nom évoque une recette, un coût ou une taxe'
+            : implode(' ; ', $trouvees);
+
+        return $rapport;
+    }
+
+    /**
      * Colonnes d'une table, sans exiger qu'elle existe.
      *
      * @return list<string>
