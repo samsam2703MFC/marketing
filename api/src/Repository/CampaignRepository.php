@@ -236,14 +236,14 @@ final class CampaignRepository
         $statement  = $connection->prepare(
             'INSERT INTO mar_campaign
                 (brand_id, type_id, parent_campaign_id, name, scope, client_target, tone,
-                 status_code, starts_on, ends_on, budget_amount, objective_coef_pct, agency_note,
-                 b2b_webshop_enabled, pos_survey_enabled, owner_user_id, create_crm_leads,
-                 image_url, created_by)
+                 status_code, draft_step, starts_on, ends_on, budget_amount, objective_coef_pct,
+                 agency_note, b2b_webshop_enabled, pos_survey_enabled, owner_user_id,
+                 create_crm_leads, image_url, created_by)
              VALUES
                 (:brand_id, :type_id, :parent_campaign_id, :name, :scope, :client_target, :tone,
-                 :status_code, :starts_on, :ends_on, :budget_amount, :objective_coef_pct, :agency_note,
-                 :b2b_webshop_enabled, :pos_survey_enabled, :owner_user_id, :create_crm_leads,
-                 :image_url, :created_by)'
+                 :status_code, :draft_step, :starts_on, :ends_on, :budget_amount, :objective_coef_pct,
+                 :agency_note, :b2b_webshop_enabled, :pos_survey_enabled, :owner_user_id,
+                 :create_crm_leads, :image_url, :created_by)'
         );
 
         $statement->execute([
@@ -254,6 +254,7 @@ final class CampaignRepository
             'name'               => $data['name'],
             'scope'              => $data['scope'],
             'status_code'        => $data['status_code'] ?? 'draft',
+            'draft_step'         => ($data['draft_step'] ?? null) ?: null,
             'starts_on'          => $data['starts_on'] ?? null,
             'ends_on'            => $data['ends_on'] ?? null,
             'budget_amount'      => $data['budget_amount'] ?? 0,
@@ -936,7 +937,7 @@ final class CampaignRepository
         ]);
 
         $columns = [
-            'type_id', 'name', 'scope', 'client_target', 'tone', 'status_code',
+            'type_id', 'name', 'scope', 'client_target', 'tone', 'status_code', 'draft_step',
             'starts_on', 'ends_on', 'budget_amount', 'objective_coef_pct', 'agency_note',
             'b2b_webshop_enabled', 'pos_survey_enabled', 'spent_amount', 'approval_status',
             'create_crm_leads', 'image_url',
@@ -1025,6 +1026,7 @@ final class CampaignRepository
             'type_id'            => $campaign['type_id'],
             'scope'              => $campaign['scope'],
             'status_code'        => $campaign['status_code'],
+            'draft_step'         => $campaign['draft_step'] ?? null,
             'starts_on'          => $campaign['starts_on'],
             'ends_on'            => $campaign['ends_on'],
             'tone'               => $campaign['tone'],

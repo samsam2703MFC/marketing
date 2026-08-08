@@ -264,7 +264,7 @@ export default function CampaignBuilder({
   if (!restored && loaded.data) {
     const next = fromState(loaded.data, refs, role)
     setDraft(next)
-    setStep(firstIncomplete(next))
+    setStep(resumeStep(loaded.data.draft_step ?? null, next))
     setRestored(true)
   }
 
@@ -283,7 +283,7 @@ export default function CampaignBuilder({
     setFailure(null)
 
     try {
-      const payload = toPayload(draft, brandId)
+      const payload = toPayload(draft, brandId, STEPS[step].key)
 
       if (savedId === null) {
         const { inserted_id } = await api.createCampaign({ ...payload, status_code: 'draft' })
@@ -555,19 +555,30 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
 }
 
 /**
- * Première étape qu'il reste à compléter.
+ * Étape sur laquelle rouvrir un brouillon.
  *
- * On ne rouvre pas un brouillon à l'étape 1 : ce serait faire retraverser ce
- * qui est déjà fait. Chaque étape sait déjà dire ce qui lui manque — c'est
- * exactement l'information cherchée. Tout complet, on ouvre le récapitulatif.
+ * D'abord celle qu'on a quittée : c'est la seule qui soit juste. La déduire de
+ * ce qui manque paraissait élégant et ne marche pas — l'offre, le budget et la
+ * communication sont facultatifs, donc un brouillon laissé à l'étape 2 n'a rien
+ * d'« incomplet » et rouvrait au récapitulatif, c'est-à-dire à la fin d'un
+ * travail qu'on venait de commencer.
+ *
+ * La déduction ne sert plus que de repli, pour les brouillons créés avant que
+ * l'étape ne soit enregistrée, et pour une clé devenue inconnue après un
+ * remaniement de l'assistant.
  */
-function firstIncomplete(draft: Draft): number {
-  const index = STEPS.findIndex((entry) => entry.blocking(draft) !== null)
+function resumeStep(key: string | null, draft: Draft): number {
+  const saved = key === null ? -1 : STEPS.findIndex((entry) => entry.key === key)
+  if (saved !== -1) {
+    return saved
+  }
 
-  return index === -1 ? STEPS.length - 2 : index
+  const incomplete = STEPS.findIndex((entry) => entry.blocking(draft) !== null)
+
+  return incomplete === -1 ? STEPS.length - 2 : incomplete
 }
 
-function toPayload(draft: Draft, brandId: number | 'all'): CampaignDraft {
+function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): CampaignDraft {
   const items = draft.offer_items.map((item) => item.trim()).filter((item) => item !== '')
 
   return {
@@ -575,6 +586,11 @@ function toPayload(draft: Draft, brandId: number | 'all'): CampaignDraft {
     // déduit, et refuse explicitement si plusieurs enseignes sont actives.
     brand_id: brandId === 'all' ? null : brandId,
     name: draft.name.trim(),
+    // L'étape où l'on s'arrête voyage avec le brouillon. La déduire de ce qui
+    // manque ne marche pas : l'offre, le budget et la communication sont
+    // facultatifs, donc un brouillon quitté à l'étape 2 n'a rien d'incomplet
+    // et se rouvrait au récapitulatif — à la fin d'un travail à peine commencé.
+    draft_step: stepKey ?? null,
     type_id: draft.type_id,
     scope: draft.scope,
     client_target: draft.client_target,

@@ -72,7 +72,7 @@ final class CampaignController
         // de la campagne, pas d'une seconde étape que l'on pourrait rater.
         $payload = $request->only([
             'brand_id', 'type_id', 'parent_campaign_id', 'name', 'scope', 'client_target', 'tone',
-            'status_code', 'starts_on', 'ends_on', 'budget_amount', 'objective_coef_pct',
+            'status_code', 'draft_step', 'starts_on', 'ends_on', 'budget_amount', 'objective_coef_pct',
             'agency_note', 'b2b_webshop_enabled', 'pos_survey_enabled', 'pos_questions',
             'owner_user_id', 'create_crm_leads',
             'image_url', 'focal_point_y', 'shop_ids', 'channels', 'lever_targets',
@@ -134,7 +134,7 @@ final class CampaignController
         }
 
         $payload = $request->only([
-            'type_id', 'name', 'scope', 'client_target', 'tone', 'status_code',
+            'type_id', 'name', 'scope', 'client_target', 'tone', 'status_code', 'draft_step',
             'starts_on', 'ends_on', 'budget_amount', 'objective_coef_pct',
             'agency_note', 'b2b_webshop_enabled', 'pos_survey_enabled', 'pos_questions',
             'create_crm_leads', 'image_url', 'focal_point_y', 'shop_ids', 'channels',

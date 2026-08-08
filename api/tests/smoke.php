@@ -650,6 +650,27 @@ check(
     ))->fetchColumn() === 1
 );
 
+// L'étape où l'on s'arrête est enregistrée avec le brouillon. La déduire de ce
+// qui manque ne marche pas : offre, budget et communication sont facultatifs,
+// donc un brouillon quitté à l'étape 2 n'a rien d'incomplet — il rouvrait au
+// récapitulatif, à la fin d'un travail à peine commencé.
+// Les rattachements sont renvoyés tels quels : ce PUT remplace tout, et les
+// omettre les effacerait — ce que la suite du scénario vérifie justement.
+call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon), [], [
+    'name'        => 'Brouillon repris',
+    'status_code' => 'draft',
+    'draft_step'  => 'offer',
+    'scope'       => 'RESEAU',
+    'sector_ids'  => [(int) $secteurs['horeca']],
+    'channels'    => [['channel_id' => (int) $refs['channels'][1]['id'], 'budget_amount' => 250]],
+]);
+$etat = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon))['body'];
+check(
+    'le brouillon retient l\'étape où on l\'a laissé',
+    ($etat['draft_step'] ?? null) === 'offer',
+    json_encode($etat['draft_step'] ?? null)
+);
+
 // Une campagne lancée porte des choses que l'assistant ne connaît pas —
 // l'adhésion d'un franchisé, un jalon déjà coché. Les reconstruire à neuf les
 // effacerait : la réécriture en bloc s'arrête au brouillon.

@@ -396,6 +396,8 @@ export interface CampaignDraft {
   scope?: 'RESEAU' | 'LOCALE'
   client_target?: ClientTarget
   status_code?: string
+  /** Clé de l'étape où l'assistant a été quitté, pour y revenir. */
+  draft_step?: string | null
   starts_on?: string | null
   ends_on?: string | null
   budget_amount?: number
