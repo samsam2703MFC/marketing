@@ -7,15 +7,21 @@ interface SeasonPickerProps {
   onChange: (id: number | null) => void
   /** Gammes proposées — celles de l'ERP par défaut. */
   seasons?: Season[]
+  /** Empile les boutons verticalement (colonne de l'écran Offre). */
+  column?: boolean
 }
 
 /**
  * Barre de filtres par gamme saisonnière : un bouton illustré par saison,
  * recliquer la saison active désélectionne.
  */
-export default function SeasonPicker({ value, onChange, seasons = SEASONS }: SeasonPickerProps) {
+export default function SeasonPicker({ value, onChange, seasons = SEASONS, column }: SeasonPickerProps) {
   return (
-    <div className="seasons" role="group" aria-label="Filtrer par saison">
+    <div
+      className={column ? 'seasons seasons--column' : 'seasons'}
+      role="group"
+      aria-label="Filtrer par saison"
+    >
       {seasons.map((season) => {
         const active = season.id === value
         return (
