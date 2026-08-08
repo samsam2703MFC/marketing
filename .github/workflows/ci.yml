@@ -144,11 +144,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Récupérer le build
+      - name: Récupérer les builds
         uses: actions/download-artifact@v4
         with:
           name: dist
-          path: dist
+          # À la racine : l'artefact contient deux dossiers, `dist-reseau` et
+          # `dist-franchise`, et conserve leur nom. Le déposer dans `dist/` les
+          # imbriquerait en `dist/dist-reseau`, où rien ne va les chercher.
+          path: .
+
+      - name: Vérifier les builds récupérés
+        run: |
+          for d in dist-reseau dist-franchise; do
+            [ -f "$d/index.html" ] || { echo "::error title=Build manquant::$d/index.html absent"; exit 1; }
+            echo "  $d : $(find "$d" -type f | wc -l) fichiers"
+          done
 
       # Non configuré = on saute, en restant vert. Un dépôt pas encore branché
       # ne doit pas afficher un échec permanent qui finit par être ignoré —
