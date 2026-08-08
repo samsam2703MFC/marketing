@@ -15,6 +15,7 @@ declare(strict_types=1);
  */
 
 use Marketing\Controller\CampaignController;
+use Marketing\Controller\CatalogController;
 use Marketing\Controller\FundController;
 use Marketing\Controller\LeadController;
 use Marketing\Controller\ReferenceController;
@@ -27,6 +28,7 @@ return static function (Router $router): void {
     $funds      = new FundController();
     $leads      = new LeadController();
     $session    = new SessionController();
+    $catalog    = new CatalogController();
 
     // Session — publique : elle ne dit que si l'appelant est authentifié.
     // Le front s'en sert pour savoir s'il est embarqué dans l'ERP, auquel cas
@@ -45,6 +47,11 @@ return static function (Router $router): void {
     $router->post('/api/v1/marketing/campaigns',                [$campaigns, 'store']);
     $router->patch('/api/v1/marketing/campaigns/{id}',          [$campaigns, 'update']);
     $router->delete('/api/v1/marketing/campaigns/{id}',         [$campaigns, 'destroy']);
+
+    // Outils de campagne
+    $router->get('/api/v1/marketing/promotions', [$catalog, 'promotions']);
+    $router->get('/api/v1/marketing/bundles',    [$catalog, 'bundles']);
+    $router->get('/api/v1/marketing/vouchers',   [$catalog, 'vouchers']);
 
     // Leads B2B
     $router->get('/api/v1/marketing/campaigns/{id}/leads',      [$leads, 'index']);

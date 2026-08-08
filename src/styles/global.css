@@ -767,3 +767,31 @@ tbody td {
   padding: 1px 5px;
   font-size: 12px;
 }
+
+/* Outils de campagne */
+.chip--inline {
+  margin-left: 8px;
+}
+
+.bundle {
+  padding: 0;
+  overflow: hidden;
+}
+
+.bundle__body {
+  padding: 16px 18px 18px;
+}
+
+.bundle__price {
+  font-size: 18px;
+  white-space: nowrap;
+}
+
+.bundle__items {
+  margin-top: 10px;
+}
+
+.voucher__code {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}

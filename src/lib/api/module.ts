@@ -243,6 +243,69 @@ export function getMonitor(id: number): Promise<{ kpis: MonitorKpi[]; shops: Mon
 }
 
 // ---------------------------------------------------------------------------
+// Outils de campagne
+// ---------------------------------------------------------------------------
+
+export interface Promotion {
+  id: number
+  name: string
+  mechanic_type: string
+  value_label: string | null
+  scope_label: string | null
+  availability_label: string | null
+  campaign_id: number | null
+  campaign_name: string | null
+  campaign_status_label: string | null
+  campaign_status_text_hex: string | null
+  campaign_status_bg_rgba: string | null
+}
+
+export function listPromotions(): Promise<Promotion[]> {
+  return request<Promotion[]>(`${BASE}/promotions`)
+}
+
+export interface BundleItem {
+  name: string
+  detail: string | null
+  quantity: number
+  price_amount: number | null
+}
+
+export interface Bundle {
+  id: number
+  name: string
+  price_amount: number | null
+  margin_pct: number | null
+  image_url: string | null
+  items: BundleItem[]
+}
+
+export function listBundles(): Promise<Bundle[]> {
+  return request<Bundle[]>(`${BASE}/bundles`)
+}
+
+export interface Voucher {
+  id: number
+  code: string
+  mechanic_label: string | null
+  scope_label: string | null
+  usage_limit_label: string | null
+  status: string
+  source: string | null
+  partner_name: string | null
+  campaign_id: number | null
+  campaign_name: string | null
+  /** Compté sur les utilisations réelles, et cloisonné au périmètre de l'appelant. */
+  redemptions: number
+  discount_total: number
+  channels: string[]
+}
+
+export function listVouchers(): Promise<Voucher[]> {
+  return request<Voucher[]>(`${BASE}/vouchers`)
+}
+
+// ---------------------------------------------------------------------------
 // Leads B2B
 // ---------------------------------------------------------------------------
 

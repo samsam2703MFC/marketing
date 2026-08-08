@@ -9,6 +9,9 @@ import CampaignsView from './views/CampaignsView'
 import CalendarView from './views/CalendarView'
 import FundsView from './views/FundsView'
 import CampaignMonitorView from './views/CampaignMonitorView'
+import PromotionsView from './views/PromotionsView'
+import BundlesView from './views/BundlesView'
+import VouchersView from './views/VouchersView'
 import PendingView from './views/PendingView'
 
 export default function App() {
@@ -158,6 +161,10 @@ function Workspace() {
 
           {route === 'funds' ? <FundsView /> : null}
 
+          {route === 'promotions' ? <PromotionsView /> : null}
+          {route === 'bundles' ? <BundlesView /> : null}
+          {route === 'vouchers' ? <VouchersView /> : null}
+
           {route === 'campaign' && campaignId !== null ? (
             <CampaignMonitorView
               campaignId={campaignId}
@@ -166,7 +173,7 @@ function Workspace() {
             />
           ) : null}
 
-          {['promotions', 'bundles', 'vouchers', 'physical', 'digital', 'agencies', 'analysis', 'roi', 'crm', 'local', 'dam'].includes(
+          {['physical', 'digital', 'agencies', 'analysis', 'roi', 'crm', 'local', 'dam'].includes(
             route,
           ) ? (
             <PendingView title={titleFor(role, route)} />
