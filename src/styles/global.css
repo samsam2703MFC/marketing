@@ -1699,8 +1699,47 @@ table select,
 
 /* Le nom de la campagne se relit dans les listes, les calendriers et les
    briefs : il se compose en pleine largeur, à la taille d'un titre. */
-.input--title {
+/* Sélecteur descendant, et non `.input--title` seul : le champ est dans un
+   `.field`, et la règle commune `.field input` — une classe et un élément —
+   l'emportait sur une classe unique. La première version de ce champ n'a donc
+   jamais grossi, elle s'est seulement élargie ; la largeur, elle, passait
+   parce qu'aucune autre règle ne la fixait. Rien ne le signalait à l'écran. */
+.field .input--title {
   width: 100%;
-  font-size: 15px;
-  padding: 9px 12px;
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  padding: 12px 14px;
+  line-height: 1.3;
+}
+
+/* L'exemple ne doit pas se lire comme un nom déjà saisi : à cette taille, un
+   texte de substitution en poids normal passe pour le contenu du champ. */
+.field .input--title::placeholder {
+  font-weight: 400;
+  color: var(--faint);
+}
+
+/* Pied de l'assistant : les deux actions, détachées du formulaire.
+   Elles empruntaient `.filters__row`, dont l'écart de 8 px convient à des
+   pastilles qui se lisent en bloc, pas à deux boutons qu'on doit distinguer
+   avant de cliquer — et la rangée démarrait au ras du bord bas de la carte. */
+.wizard-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 1.1rem;
+  padding-bottom: 0.35rem;
+}
+
+/* L'action qui avance est plus large que celle qui recule : à taille égale et
+   à 8 px d'écart, le geste juste ne se distingue plus du retour en arrière. */
+.wizard-actions .filter {
+  padding: 9px 18px;
+  font-size: 13px;
+}
+
+.wizard-actions .filter.is-on {
+  padding: 9px 26px;
 }

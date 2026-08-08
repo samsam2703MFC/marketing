@@ -319,7 +319,12 @@ export default function CampaignBuilder({
       {blocking ? <p className="muted wizard__hint">{blocking}</p> : null}
       {failure ? <p className="error">{failure}</p> : null}
 
-      <div className="filters__row">
+      {/* Classe propre, et non la rangée de filtres générique : ces deux-là
+          sont des actions, pas des pastilles. Elles héritaient d'un écart de
+          8 px et démarraient au ras du bord bas de la carte — « Précédent » et
+          « Étape suivante » se touchaient presque, et rien ne séparait la
+          décision du formulaire qui la précède. */}
+      <div className="wizard-actions">
         <button
           type="button"
           className="filter"
@@ -733,21 +738,6 @@ function FramingStep({
         </>
       ) : null}
 
-      <h3 className="section-label">Demandes à l’agence</h3>
-      <ChipList
-        items={refs.agencyAsks.map((ask) => ({ id: ask.id, label: ask.label }))}
-        selected={draft.agency_ask_ids}
-        onToggle={(id) => patch({ agency_ask_ids: toggle(draft.agency_ask_ids, id) })}
-      />
-      <label className="field field--block">
-        Complément au brief
-        <textarea
-          rows={3}
-          value={draft.agency_note}
-          placeholder="Contexte, contraintes, références…"
-          onChange={(e) => patch({ agency_note: e.target.value })}
-        />
-      </label>
     </>
   )
 }
@@ -1085,6 +1075,26 @@ function CommunicationStep({
           </div>
         </div>
       ))}
+
+      {/* L'agence était à l'étape « Type & cadrage », entre la cible client et
+          la portée. On y décide ce que la campagne est ; ce qu'on demande à
+          l'agence relève de la manière dont on la fera savoir. Le bloc rejoint
+          donc les canaux, où le prestataire de chacun se choisit déjà. */}
+      <h3 className="section-label">Demandes à l’agence</h3>
+      <ChipList
+        items={refs.agencyAsks.map((ask) => ({ id: ask.id, label: ask.label }))}
+        selected={draft.agency_ask_ids}
+        onToggle={(id) => patch({ agency_ask_ids: toggle(draft.agency_ask_ids, id) })}
+      />
+      <label className="field field--block">
+        Complément au brief
+        <textarea
+          rows={3}
+          value={draft.agency_note}
+          placeholder="Contexte, contraintes, références…"
+          onChange={(e) => patch({ agency_note: e.target.value })}
+        />
+      </label>
 
       <h3 className="section-label">Tenues & accessoires terrain</h3>
       <ChipList
