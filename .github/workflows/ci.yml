@@ -474,6 +474,57 @@ jobs:
 
       # Le front en dernier : si une migration échoue, les utilisateurs restent
       # sur la version précédente plutôt que sur une interface sans son schéma.
+      # La reprise ERP suit les migrations : elle a besoin des tables `mar_`
+      # à jour, et les écrans qui l'utilisent — choix du périmètre d'une
+      # campagne, vivier B2B — sont vides tant qu'elle n'a pas tourné.
+      #
+      # Lecture seule côté ERP : le script n'écrit que dans les tables du
+      # module. Il est rejouable, donc l'enchaîner à chaque déploiement ne
+      # coûte que le temps de lecture.
+      - name: Reprendre les données ERP
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          set +e
+          out=$($SSH_CMD $SSH_OPTS -o BatchMode=yes "$SSH_USER@$SSH_HOST" "
+            cd '$DEPLOY_DIR' 2>/dev/null || { echo 'CD_FAIL'; exit 90; }
+            P=''; for c in php php8.3 php8.2 php8.1 php8.0; do command -v \$c >/dev/null 2>&1 || continue; \$c -m 2>/dev/null | grep -qi pdo_mysql && { P=\$c; break; }; done
+            [ -n \"\$P\" ] || { echo 'PDO_MYSQL_MISSING'; exit 93; }
+            [ -f db/sync-erp.php ] || { echo 'SYNC_ABSENT'; exit 92; }
+            \$P db/sync-erp.php 2>&1
+          " 2>&1)
+          rc=$?
+          set -e
+
+          printf '%s\n' "$out"
+          {
+            echo "### Reprise ERP (code $rc)"
+            echo '```'
+            printf '%s\n' "$out"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Le résumé part aussi en annotation : c'est la seule sortie lisible
+          # sans ouvrir le journal complet du job.
+          summary=$(printf '%s\n' "$out" | grep -E '^(Base|Marque|Boutiques|Comptes|  #)' | tr '\n' ' | ' | cut -c1-900)
+
+          if [ $rc -ne 0 ]; then
+            case "$out" in
+              *SYNC_ABSENT*)       hint="db/sync-erp.php n'est pas arrivé sur le serveur" ;;
+              *Table*introuvable*) hint="table ERP absente ou sans droit de lecture — voir MAR_ERP_SHOPS_TABLE / MAR_ERP_CUSTOMERS_TABLE" ;;
+              *Colonnes*)          hint="colonnes attendues absentes — la sortie nomme celles trouvées" ;;
+              *)                   hint="voir la sortie ci-dessus" ;;
+            esac
+            echo "::error title=Reprise ERP en échec::$hint — $summary"
+            # Une reprise ratée ne doit pas faire échouer un déploiement par
+            # ailleurs valide : le front et l'API sont déjà en place, et le
+            # bouton de l'écran CRM permet de la relancer.
+            echo "::warning title=Reprise non effectuée::Les boutiques et le vivier B2B restent dans leur état précédent."
+          else
+            echo "::notice title=Reprise ERP::$summary"
+          fi
+
       - name: Publier le front
         if: steps.check.outputs.configured == 'true'
         env:

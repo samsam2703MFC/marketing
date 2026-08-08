@@ -939,6 +939,30 @@ if (!$erpAvailable) {
     check('les comptes B2B sont rattachés à leur boutique', (int) $pdo->query(
         "SELECT COUNT(*) FROM mar_b2b_prospect WHERE source = 'ERP' AND shop_id IS NOT NULL"
     )->fetchColumn() >= 1);
+
+    // Une boutique déjà présente sous le même code doit adopter l'identifiant
+    // ERP. Sans cela elle reste hors du rapprochement, définitivement : les
+    // comptes qui la désignent ne lui sont jamais rattachés, et rien ne le dit.
+    check(
+        'une boutique préexistante adopte son identifiant ERP',
+        (int) $pdo->query(
+            'SELECT COUNT(*) FROM mar_shop s
+               JOIN franchisee_shop f ON f.code = s.code
+              WHERE s.erp_shop_id IS NULL'
+        )->fetchColumn() === 0
+    );
+
+    // Le rattachement se juge sur son résultat, pas sur l'intention : tout
+    // compte désignant une boutique reprise doit être rattaché.
+    check(
+        'aucun compte ne reste orphelin d\'une boutique connue',
+        (int) $pdo->query(
+            "SELECT COUNT(*) FROM mar_b2b_prospect p
+               JOIN client c ON CONCAT('erp-', c.id_client) = p.external_ref
+               JOIN mar_shop s ON s.erp_shop_id = c.id_mainshop
+              WHERE p.shop_id IS NULL"
+        )->fetchColumn() === 0
+    );
     check('la reprise a bien ajouté des boutiques', (int) $pdo->query('SELECT COUNT(*) FROM mar_shop')->fetchColumn() > $before);
 
     // Réservée au réseau.

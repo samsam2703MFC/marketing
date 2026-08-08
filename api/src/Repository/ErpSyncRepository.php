@@ -101,11 +101,20 @@ final class ErpSyncRepository
         $connection->beginTransaction();
 
         try {
+            // `erp_shop_id` figure dans la clause de mise à jour, et pas
+            // seulement dans l'insertion. Deux clés uniques couvrent cette
+            // table : l'identifiant ERP et le code. Quand c'est le code qui
+            // entre en conflit — une boutique saisie à la main avant la
+            // première reprise — la ligne restait sans identifiant ERP, donc
+            // hors de portée du rattachement des comptes B2B, définitivement.
             $upsert = $connection->prepare(
                 'INSERT INTO mar_shop (brand_id, erp_shop_id, code, name, city, created_by)
                  VALUES (:brand_id, :erp_shop_id, :code, :name, :city, :created_by)
                  ON DUPLICATE KEY UPDATE
-                    name = VALUES(name), city = VALUES(city), code = VALUES(code)'
+                    erp_shop_id = VALUES(erp_shop_id),
+                    name        = VALUES(name),
+                    city        = VALUES(city),
+                    code        = VALUES(code)'
             );
 
             $created = 0;
