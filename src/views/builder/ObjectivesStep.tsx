@@ -71,6 +71,7 @@ export default function ObjectivesStep({
   const [sortAsc, setSortAsc] = useState(true)
   const [growthPct, setGrowthPct] = useState('5')
   const [attempt, setAttempt] = useState(0)
+  const [chartMode, setChartMode] = useState<'shops' | 'products'>('shops')
 
   const itemIds = draft.offer_items
     .map((element) => element.offer_item_id)
@@ -160,10 +161,26 @@ export default function ObjectivesStep({
   )
 
   const compare = data?.compare ?? draft.analysis_compare
-  const chartMax =
+
+  // Deux lectures du même agrégat : les magasins qui vendent, les produits qui
+  // partent. Chaque vue norme ses barres sur son propre maximum.
+  const shopChartMax =
     data === null
       ? 0
       : Math.max(0, ...data.shops.map((shop) => Math.max(shop.total, shop.total_previous ?? 0)))
+  const productChartMax =
+    data === null
+      ? 0
+      : Math.max(
+          0,
+          ...data.products.map((product) =>
+            Math.max(
+              data.network.by_product[product.item_id] ?? 0,
+              data.network.by_product_previous?.[product.item_id] ?? 0,
+            ),
+          ),
+        )
+  const chartMax = chartMode === 'shops' ? shopChartMax : productChartMax
 
   return (
     <>
@@ -357,37 +374,86 @@ export default function ObjectivesStep({
             </div>
           </div>
 
-          {chartMax > 0 ? (
+          {shopChartMax > 0 || productChartMax > 0 ? (
             <>
               <h3 className="section-label">
-                Pièces vendues par magasin{compare ? ' — période vs N-1' : ''}
+                Pièces vendues{compare ? ' — période vs N-1' : ''}
+                <span className="sales-chart__modes">
+                  <button
+                    type="button"
+                    className={`filter${chartMode === 'shops' ? ' is-on' : ''}`}
+                    aria-pressed={chartMode === 'shops'}
+                    onClick={() => setChartMode('shops')}
+                  >
+                    Par magasin
+                  </button>
+                  <button
+                    type="button"
+                    className={`filter${chartMode === 'products' ? ' is-on' : ''}`}
+                    aria-pressed={chartMode === 'products'}
+                    onClick={() => setChartMode('products')}
+                  >
+                    Par produit
+                  </button>
+                </span>
               </h3>
               <div className="sales-chart">
-                {sortedShops.map((shop) => (
-                  <div
-                    key={shop.shop_id}
-                    className="sales-chart__group"
-                    title={`${shop.shop_name} — ${shop.total} pièce${shop.total > 1 ? 's' : ''}${
-                      shop.total_previous !== null ? ` (N-1 : ${shop.total_previous})` : ''
-                    }`}
-                  >
-                    <div className="sales-chart__bars">
-                      <span
-                        className="sales-chart__bar"
-                        style={{ height: `${Math.round((shop.total / chartMax) * 100)}%` }}
-                      />
-                      {compare ? (
-                        <span
-                          className="sales-chart__bar sales-chart__bar--previous"
-                          style={{
-                            height: `${Math.round(((shop.total_previous ?? 0) / chartMax) * 100)}%`,
-                          }}
-                        />
-                      ) : null}
-                    </div>
-                    <span className="sales-chart__label">{shop.shop_name}</span>
-                  </div>
-                ))}
+                {chartMode === 'shops'
+                  ? sortedShops.map((shop) => (
+                      <div
+                        key={shop.shop_id}
+                        className="sales-chart__group"
+                        title={`${shop.shop_name} — ${shop.total} pièce${shop.total > 1 ? 's' : ''}${
+                          shop.total_previous !== null ? ` (N-1 : ${shop.total_previous})` : ''
+                        }`}
+                      >
+                        <div className="sales-chart__bars">
+                          <span
+                            className="sales-chart__bar"
+                            style={{ height: `${Math.round((shop.total / (chartMax || 1)) * 100)}%` }}
+                          />
+                          {compare ? (
+                            <span
+                              className="sales-chart__bar sales-chart__bar--previous"
+                              style={{
+                                height: `${Math.round(((shop.total_previous ?? 0) / (chartMax || 1)) * 100)}%`,
+                              }}
+                            />
+                          ) : null}
+                        </div>
+                        <span className="sales-chart__label">{shop.shop_name}</span>
+                      </div>
+                    ))
+                  : data.products.map((product) => {
+                      const total = data.network.by_product[product.item_id] ?? 0
+                      const previous = data.network.by_product_previous?.[product.item_id] ?? null
+
+                      return (
+                        <div
+                          key={product.item_id}
+                          className="sales-chart__group"
+                          title={`${product.name} — ${total} pièce${total > 1 ? 's' : ''}${
+                            previous !== null ? ` (N-1 : ${previous})` : ''
+                          }`}
+                        >
+                          <div className="sales-chart__bars">
+                            <span
+                              className="sales-chart__bar"
+                              style={{ height: `${Math.round((total / (chartMax || 1)) * 100)}%` }}
+                            />
+                            {compare ? (
+                              <span
+                                className="sales-chart__bar sales-chart__bar--previous"
+                                style={{
+                                  height: `${Math.round(((previous ?? 0) / (chartMax || 1)) * 100)}%`,
+                                }}
+                              />
+                            ) : null}
+                          </div>
+                          <span className="sales-chart__label">{product.name}</span>
+                        </div>
+                      )
+                    })}
               </div>
             </>
           ) : null}

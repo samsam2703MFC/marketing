@@ -1516,7 +1516,16 @@ select:disabled {
   border-radius: 7px;
 }
 
-/* Histogramme des ventes par magasin */
+/* Histogramme des ventes : deux lectures, par magasin ou par produit */
+.sales-chart__modes {
+  float: right;
+  display: inline-flex;
+  gap: 6px;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+}
+
 .sales-chart {
   display: flex;
   align-items: flex-end;

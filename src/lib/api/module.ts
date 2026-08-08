@@ -571,6 +571,8 @@ export interface SalesQuantities {
   shops: ShopSalesRow[]
   network: {
     by_product: Record<number, number>
+    /** N-1 par produit, seulement quand le comparatif est demandé. */
+    by_product_previous: Record<number, number> | null
     total: number
     total_previous: number | null
   }

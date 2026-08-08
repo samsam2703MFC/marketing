@@ -95,7 +95,12 @@ final class SalesRepository
                 $products
             ),
             'shops'    => [],
-            'network'  => ['by_product' => (object) [], 'total' => 0, 'total_previous' => null],
+            'network'  => [
+                'by_product'          => (object) [],
+                'by_product_previous' => null,
+                'total'               => 0,
+                'total_previous'      => null,
+            ],
             'source'   => null,
             'warning'  => null,
         ];
@@ -156,10 +161,25 @@ final class SalesRepository
         // Recomposition par boutique du module. Les quantités de la caisse sont
         // décimales (produits divisibles) : l'objectif se pense en pièces, on
         // arrondit à l'entier le plus proche.
-        $rows            = [];
-        $networkByItem   = [];
-        $networkTotal    = 0;
-        $networkPrevious = $compare ? 0 : null;
+        $rows                  = [];
+        $networkByItem         = [];
+        $networkByItemPrevious = [];
+        $networkTotal          = 0;
+        $networkPrevious       = $compare ? 0 : null;
+
+        // Le N-1 par produit alimente le graphique « par produit » : il se
+        // déduit du même agrégat, sommé sur toutes les boutiques.
+        if ($compare) {
+            foreach ($previous as $byProduct) {
+                foreach ($byProduct as $erpProductId => $quantity) {
+                    $itemId = $itemByErpProduct[$erpProductId] ?? null;
+                    if ($itemId !== null) {
+                        $networkByItemPrevious[$itemId] =
+                            ($networkByItemPrevious[$itemId] ?? 0) + (int) round((float) $quantity);
+                    }
+                }
+            }
+        }
 
         foreach ($shops as $shop) {
             $erpShopId  = $shop['erp_shop_id'] === null ? null : (int) $shop['erp_shop_id'];
@@ -199,7 +219,10 @@ final class SalesRepository
             'products' => $empty['products'],
             'shops'    => $rows,
             'network'  => [
-                'by_product'     => $networkByItem === [] ? (object) [] : $networkByItem,
+                'by_product'          => $networkByItem === [] ? (object) [] : $networkByItem,
+                'by_product_previous' => $compare
+                    ? ($networkByItemPrevious === [] ? (object) [] : $networkByItemPrevious)
+                    : null,
                 'total'          => $networkTotal,
                 'total_previous' => $networkPrevious,
             ],
