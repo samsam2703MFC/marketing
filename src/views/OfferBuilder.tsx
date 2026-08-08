@@ -99,9 +99,9 @@ export default function OfferBuilder() {
     const categories = CATEGORIES.filter((category) => categoryIds.has(category.id))
     const products = PRODUCTS.filter((product) => productIds.has(product.id))
     const { dateFrom, dateTo } = seasonOccurrence(season)
-    const name = `Offre ${season.emoji} ${season.label}`
+    const name = `Offre ${season.label}`
     const description = [
-      `Saison : ${season.emoji} ${season.label}`,
+      `Saison : ${season.label}`,
       `Catégories (${categories.length}) : ${categories.map((category) => category.name).join(', ')}`,
       `Produits (${products.length}) : ${products.map((product) => product.name).join(', ')}`,
       '',
@@ -236,8 +236,15 @@ export default function OfferBuilder() {
         <div className="card summary">
           <strong>Votre offre :</strong>
           <span>
-            {season ? `${season.emoji} ${season.label}` : 'aucune saison'} · {categoryIds.size}{' '}
-            catégories · {productIds.size} produits
+            {season ? (
+              <>
+                {season.image ? <img className="season-mini" src={season.image} alt="" /> : season.emoji}{' '}
+                {season.label}
+              </>
+            ) : (
+              'aucune saison'
+            )}{' '}
+            · {categoryIds.size} catégories · {productIds.size} produits
           </span>
           <span className="summary__spacer" />
           <button type="button" className="ghost" onClick={reset}>

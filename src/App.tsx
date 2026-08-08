@@ -19,32 +19,41 @@ export default function App() {
         <img className="app__logo" src="/img/logo.png" alt="L’Atelier By" />
         <div>
           <h1>Module Marketing</h1>
-          <p className="muted">{view === 'network' ? 'Vue Réseau' : 'Offres'}</p>
+          <p className="muted">{view === 'network' ? 'Pilotage — Campagnes' : 'Offres — Nouvelle offre'}</p>
         </div>
-        <nav className="tabs" aria-label="Navigation">
-          <button
-            type="button"
-            className={view === 'network' ? 'tab tab--active' : 'tab'}
-            onClick={() => setView('network')}
-          >
-            Réseau
-          </button>
-          <button
-            type="button"
-            className={view === 'offers' ? 'tab tab--active' : 'tab'}
-            onClick={() => setView('offers')}
-          >
-            Offres
-          </button>
-        </nav>
         <button type="button" className="ghost" onClick={() => void signOut()}>
           Déconnexion
         </button>
       </header>
 
-      <main className="app__body">
-        {view === 'network' ? <NetworkOverview /> : <OfferBuilder />}
-      </main>
+      <div className="app__frame">
+        <nav className="rail" aria-label="Navigation">
+          <div className="rail__group">
+            <span className="rail__label">Pilotage</span>
+            <button
+              type="button"
+              className={view === 'network' ? 'rail__item rail__item--active' : 'rail__item'}
+              onClick={() => setView('network')}
+            >
+              Campagnes
+            </button>
+          </div>
+          <div className="rail__group">
+            <span className="rail__label">Offres</span>
+            <button
+              type="button"
+              className={view === 'offers' ? 'rail__item rail__item--active' : 'rail__item'}
+              onClick={() => setView('offers')}
+            >
+              Nouvelle offre
+            </button>
+          </div>
+        </nav>
+
+        <main className="app__body">
+          {view === 'network' ? <NetworkOverview /> : <OfferBuilder />}
+        </main>
+      </div>
     </div>
   )
 }

@@ -27,20 +27,20 @@ export interface Season {
 
 /** Gammes actives, dans l'ordre du calendrier. */
 export const SEASONS: Season[] = [
-  { id: 14, emoji: '🥖', label: 'Standard', dbName: '🥖 Gamme Standard', fromMd: 101, toMd: 1231 },
-  { id: 17, emoji: '🍦', label: 'Glace', dbName: '🍦 Icône - Gamme Glace (Avril - Septembre)', fromMd: 104, toMd: 930 },
-  { id: 15, emoji: '🥞', label: 'Chandeleur', dbName: '🥞 Chandeleur – Fête des crêpes', fromMd: 124, toMd: 208 },
-  { id: 13, emoji: '🎉', label: 'Saint-Valentin', dbName: '🎉 Gamme Saint-Valentin (14 Février)', fromMd: 214, toMd: 216 },
-  { id: 4, emoji: '🌸', label: 'Printanière', dbName: '🌸 Gamme Printanière (Mars à Mai)', fromMd: 301, toMd: 501 },
-  { id: 12, emoji: '🐣', label: 'Pascale', dbName: '🐣 Gamme Pascale (Mars-Avril)', fromMd: 315, toMd: 415 },
-  { id: 16, emoji: '📦', label: 'B2B', dbName: '📦 Gamme B.-2-B.', fromMd: 317, toMd: 317 },
-  { id: 11, emoji: '🌷', label: 'Fête des Mères', dbName: '🌷 Gamme Fête des Mères (2e dimanche de Mai)', fromMd: 507, toMd: 514 },
-  { id: 5, emoji: '☀️', label: 'Estivale', dbName: '☀️ Gamme Estivale (Juin à Août)', fromMd: 601, toMd: 901 },
-  { id: 6, emoji: '🍂', label: 'Automnale', dbName: '🍂 Gamme Automnale (Septembre à Novembre)', fromMd: 901, toMd: 1101 },
-  { id: 8, emoji: '🎄', label: 'Noël & Nouvel An', dbName: '🎄 Gamme Noël & Nouvel An (Décembre-Janvier)', fromMd: 1101, toMd: 115 },
-  { id: 9, emoji: '🎅', label: 'Saint-Nicolas', dbName: '🎅 Gamme Saint-Nicolas (6 Décembre)', fromMd: 1115, toMd: 1206 },
-  { id: 7, emoji: '❄️', label: 'Hivernale', dbName: '❄️ Gamme Hivernale (Décembre à Février)', fromMd: 1201, toMd: 201 },
-  { id: 10, emoji: '👑', label: 'Épiphanie', dbName: '👑 Gamme Épiphanie (6 Janvier)', fromMd: 1231, toMd: 115 },
+  { id: 14, emoji: '🥖', label: 'Standard', dbName: '🥖 Gamme Standard', fromMd: 101, toMd: 1231, image: '/img/seasons/standard.png' },
+  { id: 17, emoji: '🍦', label: 'Glace', dbName: '🍦 Icône - Gamme Glace (Avril - Septembre)', fromMd: 104, toMd: 930, image: '/img/seasons/glace.png' },
+  { id: 15, emoji: '🥞', label: 'Chandeleur', dbName: '🥞 Chandeleur – Fête des crêpes', fromMd: 124, toMd: 208, image: '/img/seasons/chandeleur.png' },
+  { id: 13, emoji: '🎉', label: 'Saint-Valentin', dbName: '🎉 Gamme Saint-Valentin (14 Février)', fromMd: 214, toMd: 216, image: '/img/seasons/saint-valentin.png' },
+  { id: 4, emoji: '🌸', label: 'Printanière', dbName: '🌸 Gamme Printanière (Mars à Mai)', fromMd: 301, toMd: 501, image: '/img/seasons/printemps.png' },
+  { id: 12, emoji: '🐣', label: 'Pascale', dbName: '🐣 Gamme Pascale (Mars-Avril)', fromMd: 315, toMd: 415, image: '/img/seasons/paques.png' },
+  { id: 16, emoji: '📦', label: 'B2B', dbName: '📦 Gamme B.-2-B.', fromMd: 317, toMd: 317, image: '/img/seasons/b2b.png' },
+  { id: 11, emoji: '🌷', label: 'Fête des Mères', dbName: '🌷 Gamme Fête des Mères (2e dimanche de Mai)', fromMd: 507, toMd: 514, image: '/img/seasons/fete-des-meres.png' },
+  { id: 5, emoji: '☀️', label: 'Estivale', dbName: '☀️ Gamme Estivale (Juin à Août)', fromMd: 601, toMd: 901, image: '/img/seasons/ete.png' },
+  { id: 6, emoji: '🍂', label: 'Automnale', dbName: '🍂 Gamme Automnale (Septembre à Novembre)', fromMd: 901, toMd: 1101, image: '/img/seasons/automne.png' },
+  { id: 8, emoji: '🎄', label: 'Noël & Nouvel An', dbName: '🎄 Gamme Noël & Nouvel An (Décembre-Janvier)', fromMd: 1101, toMd: 115, image: '/img/seasons/noel.png' },
+  { id: 9, emoji: '🎅', label: 'Saint-Nicolas', dbName: '🎅 Gamme Saint-Nicolas (6 Décembre)', fromMd: 1115, toMd: 1206, image: '/img/seasons/saint-nicolas.png' },
+  { id: 7, emoji: '❄️', label: 'Hivernale', dbName: '❄️ Gamme Hivernale (Décembre à Février)', fromMd: 1201, toMd: 201, image: '/img/seasons/hiver.png' },
+  { id: 10, emoji: '👑', label: 'Épiphanie', dbName: '👑 Gamme Épiphanie (6 Janvier)', fromMd: 1231, toMd: 115, image: '/img/seasons/epiphanie.png' },
 ]
 
 /** `MMDD` d'une date ISO (`YYYY-MM-DD…`), ou `null` si le format est inconnu. */
