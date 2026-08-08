@@ -543,11 +543,15 @@ jobs:
           else
             echo "::notice title=Reprise ERP::$summary"
 
-            # Inventaire des colonnes sources, en annotation séparée : il ne
-            # tient pas dans la précédente, et c'est lui qui dit si une notion
-            # manque vraiment ou porte simplement un autre nom.
-            inv=$(printf '%s\n' "$out" | sed -n '/notions non reconnues/,$p' | tr '\n' ' | ' | cut -c1-900)
-            [ -n "$inv" ] && echo "::notice title=Colonnes ERP::$inv"
+            # Une annotation par table : la limite de longueur d'une annotation
+            # tronquait la liste au milieu de la seconde, c'est-à-dire
+            # exactement là où se trouvait la réponse cherchée.
+            printf '%s\n' "$out" | awk '
+              /^[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+$/ { t=$0; next }
+              /notions non reconnues|colonnes présentes/ && t { print t "|" $0 }
+            ' | while IFS='|' read -r table line; do
+              echo "::notice title=Colonnes $table::$(printf '%s' "$line" | cut -c1-900)"
+            done
           fi
 
       - name: Publier le front
