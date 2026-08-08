@@ -112,3 +112,15 @@ INSERT INTO mar_channel (code, label, family, sort_order) VALUES
   ('plv',         'PLV boutique',        'PHYSIQUE', 6),
   ('affichage',   'Affichage extérieur', 'PHYSIQUE', 7),
   ('flyer',       'Flyer / toutes-boîtes','PHYSIQUE',8);
+
+-- Segments RFM.
+-- ⚠️ Le prototype n'en fournit pas la liste : elle reprend celle nommée dans le
+-- schéma (006_crm_client.sql, « nouveaux, réguliers, VIP, dormants… »). Les
+-- règles restent à écrire — `rule_json` NULL signifie « segment non calculé »,
+-- et l'effectif affiché reste donc à zéro tant que le calcul n'existe pas.
+INSERT INTO mar_crm_segment (code, label, color_hex, sort_order) VALUES
+  ('nouveaux',  'Nouveaux clients',  '#4A6D8C', 1),
+  ('reguliers', 'Clients réguliers', '#6B8E5A', 2),
+  ('vip',       'VIP',               '#8D1D2C', 3),
+  ('dormants',  'Dormants',          '#b26a00', 4),
+  ('perdus',    'Perdus',            '#8A847C', 5);

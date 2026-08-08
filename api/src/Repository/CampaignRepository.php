@@ -228,6 +228,128 @@ final class CampaignRepository
         return (int) $connection->lastInsertId();
     }
 
+    /**
+     * Création complète, telle que l'assistant en sept étapes la produit.
+     *
+     * Une campagne n'est pas qu'une ligne : elle porte ses boutiques, ses
+     * canaux de diffusion et ses objectifs par levier. Les écrire séparément
+     * laisserait, à la première erreur, une campagne à moitié montée —
+     * visible, budgétée, mais sans périmètre ni canal. D'où la transaction.
+     *
+     * @param  array<string,mixed> $data  Champs de campagne, plus les clés
+     *                                    `shop_ids`, `channels`, `lever_targets`.
+     * @throws RuntimeException si une boutique est hors périmètre.
+     */
+    public function createWithRelations(AuthContext $auth, array $data): int
+    {
+        $shopIds  = self::intList($data['shop_ids'] ?? []);
+        $channels = is_array($data['channels'] ?? null) ? $data['channels'] : [];
+        $targets  = is_array($data['lever_targets'] ?? null) ? $data['lever_targets'] : [];
+
+        // Le contrôle de périmètre passe avant l'ouverture de la transaction :
+        // inutile d'écrire quoi que ce soit pour l'annuler ensuite.
+        foreach ($shopIds as $shopId) {
+            if (!Scope::allowsShop($auth, $shopId)) {
+                throw new RuntimeException('Boutique hors périmètre : ' . $shopId);
+            }
+        }
+
+        $connection = Database::connection();
+        $connection->beginTransaction();
+
+        try {
+            $campaignId = $this->create($auth, $data);
+
+            if ($shopIds !== []) {
+                $statement = $connection->prepare(
+                    'INSERT INTO mar_campaign_shop (campaign_id, shop_id, created_by)
+                     VALUES (:campaign_id, :shop_id, :created_by)'
+                );
+                foreach ($shopIds as $shopId) {
+                    $statement->execute([
+                        'campaign_id' => $campaignId,
+                        'shop_id'     => $shopId,
+                        'created_by'  => $auth->userId,
+                    ]);
+                }
+            }
+
+            if ($channels !== []) {
+                $statement = $connection->prepare(
+                    'INSERT INTO mar_campaign_channel
+                        (campaign_id, channel_id, agency_id, budget_amount, is_enabled, created_by)
+                     VALUES (:campaign_id, :channel_id, :agency_id, :budget_amount, 1, :created_by)'
+                );
+                foreach ($channels as $channel) {
+                    $channelId = (int) ($channel['channel_id'] ?? 0);
+                    if ($channelId === 0) {
+                        continue;
+                    }
+
+                    // `budget_amount` est NOT NULL DEFAULT 0. Activer un canal
+                    // sans lui donner de budget est légitime — le montant se
+                    // décide plus tard — et doit valoir zéro, pas une 500.
+                    $budget = $channel['budget_amount'] ?? null;
+
+                    $statement->execute([
+                        'campaign_id'   => $campaignId,
+                        'channel_id'    => $channelId,
+                        'agency_id'     => isset($channel['agency_id']) && $channel['agency_id'] !== ''
+                            ? (int) $channel['agency_id']
+                            : null,
+                        'budget_amount' => $budget === null || $budget === '' ? 0 : $budget,
+                        'created_by'    => $auth->userId,
+                    ]);
+                }
+            }
+
+            if ($targets !== []) {
+                $statement = $connection->prepare(
+                    'INSERT INTO mar_campaign_lever_target
+                        (campaign_id, lever_id, target_value, target_unit, created_by)
+                     VALUES (:campaign_id, :lever_id, :target_value, :target_unit, :created_by)'
+                );
+                foreach ($targets as $target) {
+                    $leverId = (int) ($target['lever_id'] ?? 0);
+                    if ($leverId === 0) {
+                        continue;
+                    }
+
+                    $statement->execute([
+                        'campaign_id'  => $campaignId,
+                        'lever_id'     => $leverId,
+                        'target_value' => $target['target_value'] ?? 0,
+                        'target_unit'  => $target['target_unit'] ?? null,
+                        'created_by'   => $auth->userId,
+                    ]);
+                }
+            }
+
+            $connection->commit();
+
+            return $campaignId;
+        } catch (\Throwable $failure) {
+            $connection->rollBack();
+
+            throw $failure;
+        }
+    }
+
+    /**
+     * @param  mixed $values
+     * @return list<int>
+     */
+    private static function intList(mixed $values): array
+    {
+        if (!is_array($values)) {
+            return [];
+        }
+
+        $ints = array_map('intval', $values);
+
+        return array_values(array_unique(array_filter($ints, static fn (int $v): bool => $v > 0)));
+    }
+
     /** @param array<string,mixed> $data */
     public function update(AuthContext $auth, int $id, array $data): bool
     {

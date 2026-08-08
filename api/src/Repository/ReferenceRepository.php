@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Marketing\Repository;
 
+use Marketing\Support\AuthContext;
 use Marketing\Support\Database;
+use Marketing\Support\Scope;
 
 /**
  * Référentiels.
@@ -145,6 +147,38 @@ final class ReferenceRepository
         return $this->fetch(
             'SELECT id, code, name, logo_url FROM mar_brand WHERE is_active = 1 ORDER BY name'
         );
+    }
+
+    /**
+     * Boutiques du réseau, restreintes au périmètre de l'appelant.
+     *
+     * L'assistant de campagne s'en sert pour l'étape « périmètre ». Le filtre
+     * est en SQL : un franchisé ne doit pas pouvoir rattacher une campagne à la
+     * boutique d'un confrère, même en forgeant la requête.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function shops(AuthContext $auth): array
+    {
+        [$scopeSql, $bindings] = Scope::shopFilter($auth, 's.id');
+
+        $statement = Database::connection()->prepare(sprintf(
+            'SELECT s.id, s.code, s.name, s.city, s.brand_id, b.name AS brand_name
+               FROM mar_shop s
+               LEFT JOIN mar_brand b ON b.id = s.brand_id
+              WHERE %s
+              ORDER BY b.name, s.name',
+            $scopeSql
+        ));
+        $statement->execute($bindings);
+
+        $shops = $statement->fetchAll();
+        foreach ($shops as &$shop) {
+            $shop['id']       = (int) $shop['id'];
+            $shop['brand_id'] = $shop['brand_id'] === null ? null : (int) $shop['brand_id'];
+        }
+
+        return $shops;
     }
 
     /** @return list<array<string,mixed>> */

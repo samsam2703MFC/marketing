@@ -79,6 +79,14 @@ $pdo->exec('DELETE FROM mar_crm_lead_event');
 $pdo->exec('DELETE FROM mar_crm_lead');
 $pdo->exec('DELETE FROM mar_campaign_kpi_snapshot');
 $pdo->exec('DELETE FROM mar_fund_movement');
+$pdo->exec('DELETE FROM mar_roi_cost');
+$pdo->exec('DELETE FROM mar_campaign_channel');
+$pdo->exec('DELETE FROM mar_kit_activation');
+$pdo->exec('DELETE FROM mar_kit');
+$pdo->exec('DELETE FROM mar_review');
+$pdo->exec('DELETE FROM mar_shop_presence');
+$pdo->exec('DELETE FROM mar_agency_campaign');
+$pdo->exec('DELETE FROM mar_agency');
 $pdo->exec('DELETE FROM mar_campaign_shop');
 $pdo->exec('DELETE FROM mar_campaign');
 $pdo->exec('DELETE FROM mar_shop_user');
@@ -94,7 +102,9 @@ $pdo->exec("INSERT INTO mar_shop_user (user_id, shop_id, role) VALUES (77, 1, 'F
 $pdo->exec("INSERT INTO mar_campaign (id, brand_id, type_id, name, scope, status_code, starts_on, ends_on, budget_amount)
     VALUES
     (10, 1, 1, 'Barbecue été', 'RESEAU', 'live', '2026-07-01', '2026-08-31', 12000),
-    (11, 1, 7, 'Portes ouvertes Uccle', 'LOCALE', 'planned', '2026-09-01', '2026-09-15', 2500)");
+    -- Volontairement au quatrième trimestre : le ROI trimestriel doit produire
+    -- deux lignes, sinon son regroupement n'est pas réellement exercé.
+    (11, 1, 7, 'Portes ouvertes Uccle', 'LOCALE', 'planned', '2026-10-01', '2026-10-15', 2500)");
 $pdo->exec('INSERT INTO mar_campaign_shop (campaign_id, shop_id) VALUES (11, 2)');
 
 $pdo->exec("INSERT INTO mar_campaign_kpi_snapshot (campaign_id, shop_id, kpi_code, kpi_label, value, target_value, measured_at)
@@ -109,6 +119,32 @@ $pdo->exec("INSERT INTO mar_crm_lead (id, campaign_id, sector_id, shop_id, compa
 $pdo->exec("INSERT INTO mar_fund_movement (direction, shop_id, campaign_id, lever_id, movement_date, label, amount, source) VALUES
     ('IN',  1, NULL, NULL, '2026-07-05', 'Royalties juillet Namur', 4200, 'ROYALTY'),
     ('OUT', 1, 10,   1,    '2026-07-12', 'Honoraires agence',       3100, 'AGENCE')");
+
+// Diffusion, agences, ROI et écrans réseau. Le jeu reste minimal : ce qui est
+// vérifié ici, c'est que ces lectures — toutes agrégées — aboutissent, et que
+// le périmètre du franchisé les traverse.
+$pdo->exec("INSERT INTO mar_agency (id, name, speciality, main_lever_id, avg_roi, hit_rate_pct, avg_cost_amount, campaigns_count)
+    VALUES (5, 'Studio Vertigo', 'Affichage & PLV', 1, 3.40, 62.00, 4800, 2)");
+$pdo->exec("INSERT INTO mar_agency_campaign (agency_id, campaign_id, channel_id, fee_amount, roi_value)
+    VALUES (5, 10, 1, 3100, 3.80)");
+
+$pdo->exec("INSERT INTO mar_campaign_channel (campaign_id, channel_id, agency_id, budget_amount, is_enabled)
+    SELECT 10, ch.id, 5, 1500, 1 FROM mar_channel ch");
+
+$pdo->exec("INSERT INTO mar_roi_cost (campaign_id, label, source_label, amount, cost_kind) VALUES
+    (10, 'Achat média', 'Grand livre — sorties', 3100, 'MEDIA'),
+    (11, 'Impression PLV', 'Factures fournisseurs', 900, 'PRODUCTION')");
+
+$pdo->exec("INSERT INTO mar_shop_presence (id, shop_id, platform, rating_avg, reviews_count, completeness_pct) VALUES
+    (20, 1, 'GOOGLE', 4.60, 218, 92.00),
+    (21, 2, 'GOOGLE', 4.20, 87,  71.00)");
+$pdo->exec("INSERT INTO mar_review (shop_presence_id, author_name, rating, body, published_at, reply_status) VALUES
+    (20, 'Claire D.', 5, 'Pain excellent.',  '2026-07-20 10:00:00', 'pending'),
+    (21, 'Marc V.',   3, 'File d\'attente.', '2026-07-21 10:00:00', 'pending')");
+
+$pdo->exec("INSERT INTO mar_kit (id, brand_id, campaign_type_id, name, description, default_budget_amount, is_published)
+    VALUES (30, 1, 7, 'Portes ouvertes', 'Kit clé-en-main portes ouvertes', 1200, 1)");
+$pdo->exec("INSERT INTO mar_kit_activation (kit_id, shop_id, campaign_id) VALUES (30, 1, 10), (30, 2, 11)");
 
 // --- Fermeture par défaut -------------------------------------------------
 echo "\nAuthentification\n";
@@ -201,6 +237,161 @@ check('un état inconnu est rejeté', $response['status'] === 422, 'statut ' . $
 
 $response = call($router, 'GET', '/api/v1/marketing/campaigns/10/leads');
 check('l\'entonnoir se recalcule après le changement', ($response['body']['funnel'][1]['leads_count'] ?? null) === 1);
+
+// --- Diffusion, agences, performance, réseau ------------------------------
+// Ces huit lectures sont toutes agrégées, et deux d'entre elles passent par des
+// vues. C'est exactement la classe de requête que MySQL 8 refuse en
+// ONLY_FULL_GROUP_BY là où MariaDB l'acceptait : mar_v_roi_quarterly rendait
+// 500 en production sans qu'aucun test ne s'en aperçoive. On exige donc un 200
+// sur chacune, sous les deux rôles.
+echo "\nDiffusion, agences, performance, réseau\n";
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+/** @var array<string, array<string,string>> */
+$aggregateRoutes = [
+    'pub physique'      => ['/api/v1/marketing/diffusion', ['family' => 'PHYSIQUE']],
+    'pub digitale'      => ['/api/v1/marketing/diffusion', ['family' => 'DIGITAL']],
+    'agences'           => ['/api/v1/marketing/agencies', []],
+    'marketing analyse' => ['/api/v1/marketing/analysis', []],
+    'roi & rentabilité' => ['/api/v1/marketing/roi', []],
+    'fidélité & crm'    => ['/api/v1/marketing/crm', []],
+    'présence locale'   => ['/api/v1/marketing/presence', []],
+    'kit local & dam'   => ['/api/v1/marketing/kits', []],
+];
+
+foreach ($aggregateRoutes as $label => [$path, $query]) {
+    $response = call($router, 'GET', $path, $query);
+    check(sprintf('%s répond', $label), $response['status'] === 200, 'statut ' . $response['status']);
+}
+
+$response = call($router, 'GET', '/api/v1/marketing/roi');
+$quarters = $response['body']['quarterly'] ?? [];
+check('le ROI trimestriel sépare les deux trimestres', count($quarters) === 2, count($quarters) . ' trimestre(s)');
+check(
+    'les libellés de trimestre sont formés',
+    array_column($quarters, 'period_label') === ['2026-T3', '2026-T4'],
+    implode(', ', array_column($quarters, 'period_label'))
+);
+check('les coûts sont numériques', is_float($quarters[0]['total_cost_amount'] ?? null));
+check('les postes de coût sont ventilés par nature', count($response['body']['costs'] ?? []) === 2);
+check('chaque poste cite sa source', ($response['body']['costs'][0]['sources'] ?? '') !== '');
+
+$response = call($router, 'GET', '/api/v1/marketing/agencies');
+$agency   = $response['body'][0] ?? [];
+check('l\'agence porte son levier', ($agency['lever_label'] ?? '') !== '');
+check('les interventions sont comptées réellement', ($agency['interventions'] ?? null) === 1);
+
+$response = call($router, 'GET', '/api/v1/marketing/agencies/5/campaigns');
+check('la fiche agence liste ses interventions', count($response['body']) === 1, count($response['body']) . ' reçue(s)');
+
+$response = call($router, 'GET', '/api/v1/marketing/diffusion', ['family' => 'PHYSIQUE']);
+$physical = $response['body']['channels'] ?? [];
+check('seuls les canaux physiques remontent', $physical !== [] && !array_filter($physical, static fn (array $c): bool => $c['family'] !== 'PHYSIQUE'));
+check('le canal porte son agence', ($physical[0]['agency_name'] ?? '') === 'Studio Vertigo');
+
+$response = call($router, 'GET', '/api/v1/marketing/diffusion', ['family' => 'INCONNUE']);
+check('une famille inconnue retombe sur PHYSIQUE', ($response['body']['channels'][0]['family'] ?? '') === 'PHYSIQUE');
+
+$response = call($router, 'GET', '/api/v1/marketing/presence');
+check('les deux boutiques sont présentes', count($response['body']['shops']) === 2);
+check('la note moyenne est numérique', is_float($response['body']['shops'][0]['rating_avg'] ?? null));
+check('les avis en attente sont comptés', ($response['body']['shops'][0]['pending_replies'] ?? null) === 1);
+check('les derniers avis remontent', count($response['body']['reviews']) === 2);
+
+// --- Périmètre des écrans réseau ------------------------------------------
+// Le cloisonnement doit tenir ici aussi : ces écrans sont ceux où un franchisé
+// verrait le plus facilement les chiffres d'un confrère.
+echo "\nPérimètre des écrans réseau (FRANCHISEE)\n";
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+
+foreach ($aggregateRoutes as $label => [$path, $query]) {
+    $response = call($router, 'GET', $path, $query);
+    check(sprintf('%s répond au franchisé', $label), $response['status'] === 200, 'statut ' . $response['status']);
+}
+
+$response = call($router, 'GET', '/api/v1/marketing/presence');
+check('seule sa boutique remonte', count($response['body']['shops']) === 1, count($response['body']['shops']) . ' reçue(s)');
+check('c\'est bien Namur', ($response['body']['shops'][0]['shop_name'] ?? '') === 'Namur');
+check('les avis d\'Uccle sont masqués', count($response['body']['reviews']) === 1);
+
+$response = call($router, 'GET', '/api/v1/marketing/kits');
+check('le kit reste visible', count($response['body']) === 1);
+check('seule son activation est comptée', ($response['body'][0]['activations'] ?? null) === 1, var_export($response['body'][0]['activations'] ?? null, true));
+
+$response = call($router, 'GET', '/api/v1/marketing/diffusion', ['family' => 'PHYSIQUE']);
+$campaignIds = array_unique(array_column($response['body']['channels'], 'campaign_id'));
+check('la diffusion ne montre que ses campagnes', $campaignIds === [10], implode(',', $campaignIds));
+
+// --- Assistant de création -------------------------------------------------
+// L'assistant envoie la campagne et ses rattachements en un seul appel. Deux
+// choses comptent : que tout soit écrit, et qu'en cas d'échec rien ne le soit —
+// une campagne budgétée sans périmètre ni canal est pire qu'aucune campagne.
+echo "\nAssistant de création\n";
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+$channelId = (int) $pdo->query("SELECT id FROM mar_channel WHERE code = 'plv'")->fetchColumn();
+$response  = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'brand_id'   => 1,
+    'name'       => 'Campagne assistant',
+    'type_id'    => 1,
+    'scope'      => 'LOCALE',
+    'starts_on'  => '2026-12-01',
+    'ends_on'    => '2026-12-24',
+    'budget_amount' => 5000,
+    'shop_ids'   => [1, 2],
+    // Budget nul volontairement : la colonne est NOT NULL, et activer un canal
+    // sans montant est un geste courant de l'assistant.
+    'channels'   => [['channel_id' => $channelId, 'budget_amount' => null]],
+    'lever_targets' => [['lever_id' => 1, 'target_value' => 20000, 'target_unit' => 'EUR']],
+]);
+check('la campagne complète est créée', $response['status'] === 201, 'statut ' . $response['status']);
+
+$newId = (int) ($response['body']['inserted_id'] ?? 0);
+$count = static fn (string $table): int => (int) $pdo->query(
+    sprintf('SELECT COUNT(*) FROM %s WHERE campaign_id = %d', $table, $newId)
+)->fetchColumn();
+
+check('les deux boutiques sont rattachées', $count('mar_campaign_shop') === 2);
+check('le canal est activé sans budget', $count('mar_campaign_channel') === 1);
+check(
+    'un canal sans budget vaut zéro',
+    (float) $pdo->query(sprintf(
+        'SELECT budget_amount FROM mar_campaign_channel WHERE campaign_id = %d',
+        $newId
+    ))->fetchColumn() === 0.0
+);
+check('l\'objectif de levier est écrit', $count('mar_campaign_lever_target') === 1);
+
+// Rattachement invalide : rien ne doit subsister, pas même l'en-tête.
+$before   = (int) $pdo->query('SELECT COUNT(*) FROM mar_campaign')->fetchColumn();
+$response = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'brand_id' => 1,
+    'name'     => 'Doit être annulée',
+    'channels' => [['channel_id' => 999999]],
+]);
+check('un rattachement invalide fait échouer la création', $response['status'] === 500, 'statut ' . $response['status']);
+check(
+    'la transaction est annulée en entier',
+    (int) $pdo->query('SELECT COUNT(*) FROM mar_campaign')->fetchColumn() === $before
+);
+
+// Un franchisé ne rattache pas la campagne d'un confrère.
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+$response = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'brand_id' => 1,
+    'name'     => 'Tentative hors périmètre',
+    'scope'    => 'LOCALE',
+    'shop_ids' => [2],
+]);
+check('rattacher une boutique hors périmètre est refusé', $response['status'] === 422, 'statut ' . $response['status']);
+check(
+    'et la campagne n\'est pas créée',
+    (int) $pdo->query("SELECT COUNT(*) FROM mar_campaign WHERE name = 'Tentative hors périmètre'")->fetchColumn() === 0
+);
+
+// Le périmètre s'applique aussi en lecture des boutiques.
+$response = call($router, 'GET', '/api/v1/marketing/shops');
+check('la liste des boutiques est cloisonnée', count($response['body']) === 1, count($response['body']) . ' reçue(s)');
 
 // --- Installation en sous-répertoire --------------------------------------
 // Les routes sont absolues mais l'application est servie sous /marketing : sans

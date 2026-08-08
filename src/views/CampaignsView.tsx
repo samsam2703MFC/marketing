@@ -7,6 +7,7 @@ interface CampaignsViewProps {
   statuses: CampaignStatus[]
   brandId: number | 'all'
   onOpen: (campaignId: number) => void
+  onCreate: () => void
 }
 
 /**
@@ -15,7 +16,7 @@ interface CampaignsViewProps {
  * Les filtres de statut sont construits depuis le référentiel, pas depuis une
  * liste figée : leurs libellés et leurs couleurs viennent de la base.
  */
-export default function CampaignsView({ statuses, brandId, onOpen }: CampaignsViewProps) {
+export default function CampaignsView({ statuses, brandId, onOpen, onCreate }: CampaignsViewProps) {
   const [status, setStatus] = useState<string | null>(null)
   const [scope, setScope] = useState<'RESEAU' | 'LOCALE' | null>(null)
 
@@ -78,6 +79,10 @@ export default function CampaignsView({ statuses, brandId, onOpen }: CampaignsVi
             onClick={() => setScope('LOCALE')}
           >
             Locale
+          </button>
+
+          <button type="button" className="filter is-on" onClick={onCreate}>
+            + Nouvelle campagne
           </button>
         </div>
       </div>

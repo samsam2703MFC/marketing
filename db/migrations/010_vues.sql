@@ -163,4 +163,10 @@ LEFT JOIN (
   GROUP BY campaign_id
 ) clt ON clt.campaign_id = c.id
 WHERE c.starts_on IS NOT NULL
-GROUP BY YEAR(c.starts_on), QUARTER(c.starts_on);
+-- L'expression du libellé figure dans le GROUP BY : MySQL en mode
+-- ONLY_FULL_GROUP_BY — actif par défaut depuis la 5.7 — ne reconnaît pas
+-- qu'un CONCAT des mêmes fonctions dépend des colonnes groupées, et rejette
+-- la vue à l'exécution. MariaDB l'acceptait, d'où un défaut invisible en
+-- développement.
+GROUP BY YEAR(c.starts_on), QUARTER(c.starts_on),
+         CONCAT(YEAR(c.starts_on), '-T', QUARTER(c.starts_on));

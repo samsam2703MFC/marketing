@@ -18,6 +18,7 @@ use Marketing\Controller\CampaignController;
 use Marketing\Controller\CatalogController;
 use Marketing\Controller\FundController;
 use Marketing\Controller\LeadController;
+use Marketing\Controller\NetworkController;
 use Marketing\Controller\ReferenceController;
 use Marketing\Controller\SessionController;
 use Marketing\Support\Router;
@@ -29,6 +30,7 @@ return static function (Router $router): void {
     $leads      = new LeadController();
     $session    = new SessionController();
     $catalog    = new CatalogController();
+    $network    = new NetworkController();
 
     // Session — publique : elle ne dit que si l'appelant est authentifié.
     // Le front s'en sert pour savoir s'il est embarqué dans l'ERP, auquel cas
@@ -37,6 +39,7 @@ return static function (Router $router): void {
 
     // Référentiels
     $router->get('/api/v1/marketing/references', [$references, 'index']);
+    $router->get('/api/v1/marketing/shops',      [$references, 'shops']);
     $router->get('/api/v1/marketing/brands',     [$references, 'brands']);
 
     // Campagnes
@@ -57,6 +60,20 @@ return static function (Router $router): void {
     $router->get('/api/v1/marketing/campaigns/{id}/leads',      [$leads, 'index']);
     $router->patch('/api/v1/marketing/leads/{id}/status',       [$leads, 'updateStatus']);
     $router->get('/api/v1/marketing/leads/{id}/history',        [$leads, 'history']);
+
+    // Diffusion
+    $router->get('/api/v1/marketing/diffusion',   [$network, 'diffusion']);
+
+    // Agences et performance
+    $router->get('/api/v1/marketing/agencies',            [$network, 'agencies']);
+    $router->get('/api/v1/marketing/agencies/{id}/campaigns', [$network, 'interventions']);
+    $router->get('/api/v1/marketing/analysis',            [$network, 'analysis']);
+    $router->get('/api/v1/marketing/roi',                 [$network, 'roi']);
+
+    // Réseau
+    $router->get('/api/v1/marketing/crm',      [$network, 'crm']);
+    $router->get('/api/v1/marketing/presence', [$network, 'presence']);
+    $router->get('/api/v1/marketing/kits',     [$network, 'kits']);
 
     // Fonds, leviers et ROI
     $router->get('/api/v1/marketing/funds/ledger',              [$funds, 'ledger']);

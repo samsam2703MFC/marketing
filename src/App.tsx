@@ -12,7 +12,14 @@ import CampaignMonitorView from './views/CampaignMonitorView'
 import PromotionsView from './views/PromotionsView'
 import BundlesView from './views/BundlesView'
 import VouchersView from './views/VouchersView'
-import PendingView from './views/PendingView'
+import DiffusionView from './views/DiffusionView'
+import AgenciesView from './views/AgenciesView'
+import AnalysisView from './views/AnalysisView'
+import RoiView from './views/RoiView'
+import CrmView from './views/CrmView'
+import LocalPresenceView from './views/LocalPresenceView'
+import DamView from './views/DamView'
+import CampaignBuilder from './views/builder/CampaignBuilder'
 
 export default function App() {
   // Le module n'a pas d'écran de connexion : embarqué dans l'ERP, l'identité
@@ -154,6 +161,7 @@ function Workspace() {
               statuses={refs.campaignStatuses}
               brandId={brandId}
               onOpen={openCampaign}
+              onCreate={() => navigate('builder')}
             />
           ) : null}
 
@@ -165,18 +173,32 @@ function Workspace() {
           {route === 'bundles' ? <BundlesView /> : null}
           {route === 'vouchers' ? <VouchersView /> : null}
 
+          {/* La famille de canal distingue les deux écrans de diffusion. */}
+          {route === 'physical' ? <DiffusionView family="PHYSIQUE" /> : null}
+          {route === 'digital' ? <DiffusionView family="DIGITAL" /> : null}
+
+          {route === 'agencies' ? <AgenciesView /> : null}
+          {route === 'analysis' ? <AnalysisView /> : null}
+          {route === 'roi' ? <RoiView /> : null}
+          {route === 'crm' ? <CrmView /> : null}
+          {route === 'local' ? <LocalPresenceView /> : null}
+          {route === 'dam' ? <DamView role={role} /> : null}
+
+          {route === 'builder' ? (
+            <CampaignBuilder
+              refs={refs}
+              role={role}
+              onCreated={openCampaign}
+              onCancel={() => navigate('campaigns')}
+            />
+          ) : null}
+
           {route === 'campaign' && campaignId !== null ? (
             <CampaignMonitorView
               campaignId={campaignId}
               leadStatuses={refs.leadStatuses}
               onBack={() => navigate('campaigns')}
             />
-          ) : null}
-
-          {['physical', 'digital', 'agencies', 'analysis', 'roi', 'crm', 'local', 'dam'].includes(
-            route,
-          ) ? (
-            <PendingView title={titleFor(role, route)} />
           ) : null}
         </main>
       </div>

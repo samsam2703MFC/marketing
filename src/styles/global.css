@@ -795,3 +795,137 @@ tbody td {
   font-weight: 600;
   letter-spacing: 0.02em;
 }
+
+/* Assistant de création de campagne */
+.wizard__steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  counter-reset: none;
+}
+
+/* La règle `button` globale pose fond bordeaux, texte blanc et marge haute :
+   sans remise à zéro, les libellés des étapes disparaissent sur fond blanc. */
+.wizard__step button {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted-2);
+  border-radius: 999px;
+  padding: 0.35rem 0.8rem 0.35rem 0.35rem;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+/* Une étape à venir n'est pas cliquable : le curseur doit le dire avant le clic. */
+.wizard__step button:disabled {
+  cursor: default;
+  color: var(--faint);
+}
+
+.wizard__num {
+  display: inline-grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  background: var(--chip);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.wizard__step.is-on button {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.wizard__step.is-on .wizard__num {
+  background: var(--accent);
+  color: #fff;
+}
+
+.wizard__step.is-done .wizard__num {
+  background: var(--green);
+  color: #fff;
+}
+
+.wizard__cards {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.wizard__card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  margin: 0;
+  padding: 0.8rem;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wizard__card:hover {
+  border-color: var(--faint);
+}
+
+.wizard__card.is-on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--accent);
+}
+
+.wizard__card .muted {
+  font-size: 0.8rem;
+}
+
+.wizard__hint {
+  margin: 0.6rem 0 0;
+}
+
+/* `.field` ne stylait que les input : les listes déroulantes de l'assistant
+   doivent suivre la même règle, sinon elles gardent l'aspect natif du système. */
+.field select,
+.wizard__cards select,
+table select {
+  padding: 5px 9px;
+  font-size: 12.5px;
+  font-family: inherit;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+table input[type='number'] {
+  width: 7rem;
+  padding: 5px 9px;
+  font-size: 12.5px;
+  font-family: inherit;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  text-align: right;
+}
+
+table input[type='number']:disabled {
+  background: var(--table-head);
+  color: var(--faint);
+}

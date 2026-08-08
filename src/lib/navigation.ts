@@ -14,6 +14,8 @@ export type Route =
   | 'calendar'
   | 'campaigns'
   | 'campaign'
+  /** Assistant de création — ouvert depuis « Campagnes », pas depuis le menu. */
+  | 'builder'
   | 'promotions'
   | 'bundles'
   | 'vouchers'
@@ -105,5 +107,8 @@ export function titleFor(role: Role, route: Route): string {
     }
   }
 
-  return route === 'campaign' ? 'Suivi de campagne' : ''
+  if (route === 'campaign') return 'Suivi de campagne'
+  if (route === 'builder') return 'Nouvelle campagne'
+
+  return ''
 }

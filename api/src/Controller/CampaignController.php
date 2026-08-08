@@ -62,12 +62,16 @@ final class CampaignController
             return Response::error('Champs obligatoires manquants.', 422, $missing);
         }
 
+        // L'assistant en sept étapes envoie la campagne et ses rattachements en
+        // un seul appel : le périmètre, les canaux et les objectifs font partie
+        // de la campagne, pas d'une seconde étape que l'on pourrait rater.
         $payload = $request->only([
             'brand_id', 'type_id', 'parent_campaign_id', 'name', 'scope', 'status_code',
             'starts_on', 'ends_on', 'budget_amount', 'owner_user_id', 'create_crm_leads', 'image_url',
+            'shop_ids', 'channels', 'lever_targets',
         ]);
 
-        $id = $this->campaigns->create(AuthContext::current(), $payload);
+        $id = $this->campaigns->createWithRelations(AuthContext::current(), $payload);
 
         return Response::created('Campagne créée.', $id);
     }

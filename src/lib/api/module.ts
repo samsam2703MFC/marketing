@@ -214,6 +214,47 @@ export function getCampaign(id: number): Promise<Campaign & Record<string, unkno
   return request(`${BASE}/campaigns/${id}`)
 }
 
+export interface Shop {
+  id: number
+  code: string
+  name: string
+  city: string | null
+  brand_id: number | null
+  brand_name: string | null
+}
+
+/** Déjà restreinte au périmètre de l'appelant par le serveur. */
+export function listShops(): Promise<Shop[]> {
+  return request<Shop[]>(`${BASE}/shops`)
+}
+
+/**
+ * Création d'une campagne et de ses rattachements.
+ *
+ * Un seul appel, une seule transaction : boutiques, canaux et objectifs font
+ * partie de la campagne. Les envoyer séparément laisserait, en cas d'échec, une
+ * campagne budgétée mais sans périmètre.
+ */
+export interface CampaignDraft {
+  brand_id: number
+  name: string
+  type_id?: number | null
+  scope?: 'RESEAU' | 'LOCALE'
+  status_code?: string
+  starts_on?: string | null
+  ends_on?: string | null
+  budget_amount?: number
+  image_url?: string | null
+  create_crm_leads?: boolean
+  shop_ids?: number[]
+  channels?: Array<{ channel_id: number; agency_id?: number | null; budget_amount?: number | null }>
+  lever_targets?: Array<{ lever_id: number; target_value: number; target_unit?: string | null }>
+}
+
+export function createCampaign(draft: CampaignDraft): Promise<{ inserted_id: number }> {
+  return request(`${BASE}/campaigns`, { method: 'POST', body: draft })
+}
+
 /** Barre de calendrier : le mois de départ et la portée viennent du serveur. */
 export interface CalendarBar extends Campaign {
   start_month: number
@@ -397,6 +438,7 @@ export interface LeverPerformance {
   lever_label: string
   color_hex: string
   spent_amount: number
+  target_value: number
   actual_value: number
   roi_value: number | null
   penetration_pct: number | null
@@ -418,6 +460,179 @@ export interface RoiQuarter {
 
 export function getRoiQuarterly(): Promise<RoiQuarter[]> {
   return request<RoiQuarter[]>(`${BASE}/roi/quarterly`)
+}
+
+// ---------------------------------------------------------------------------
+// Diffusion : supports physiques et déclinaisons digitales
+// ---------------------------------------------------------------------------
+
+export interface CampaignChannel {
+  id: number
+  channel_code: string
+  channel_label: string
+  family: 'PHYSIQUE' | 'DIGITAL'
+  budget_amount: number | null
+  is_enabled: boolean
+  campaign_id: number
+  campaign_name: string
+  status_label: string
+  status_text_hex: string
+  status_bg_rgba: string
+  agency_name: string | null
+}
+
+export interface AssetRender {
+  id: number
+  format_code: string
+  format_name: string
+  width_px: number
+  height_px: number
+  note: string | null
+  /** Le recadrage manuel prime sur le rendu automatique quand il existe. */
+  file_url: string | null
+  override_file_url: string | null
+  master_file_url: string | null
+  focal_point_y: number | null
+  status: string
+  campaign_id: number
+  campaign_name: string
+}
+
+export interface CampaignUniform extends Uniform {
+  campaign_id: number | null
+  campaign_name: string | null
+}
+
+export interface Diffusion {
+  channels: CampaignChannel[]
+  renders: AssetRender[]
+  uniforms: CampaignUniform[]
+}
+
+/** Un seul point d'entrée pour les deux écrans : seule la famille change. */
+export function getDiffusion(family: 'PHYSIQUE' | 'DIGITAL'): Promise<Diffusion> {
+  return request<Diffusion>(`${BASE}/diffusion`, { query: { family } })
+}
+
+// ---------------------------------------------------------------------------
+// Agences et prestataires
+// ---------------------------------------------------------------------------
+
+export interface Agency {
+  id: number
+  name: string
+  speciality: string | null
+  lever_code: string | null
+  lever_label: string | null
+  lever_color_hex: string | null
+  avg_roi: number | null
+  hit_rate_pct: number | null
+  avg_cost_amount: number | null
+  /** Colonne dénormalisée, conservée pour qu'un écart avec le compte réel se voie. */
+  campaigns_count: number
+  interventions: number
+  fees_total: number
+  roi_measured: number | null
+}
+
+export function listAgencies(): Promise<Agency[]> {
+  return request<Agency[]>(`${BASE}/agencies`)
+}
+
+export interface AgencyIntervention {
+  id: number
+  campaign_name: string
+  channel_label: string | null
+  fee_amount: number | null
+  roi_value: number | null
+}
+
+export function getAgencyInterventions(agencyId: number): Promise<AgencyIntervention[]> {
+  return request<AgencyIntervention[]>(`${BASE}/agencies/${agencyId}/campaigns`)
+}
+
+// ---------------------------------------------------------------------------
+// Performance
+// ---------------------------------------------------------------------------
+
+export interface CostKind {
+  cost_kind: string
+  lines_count: number
+  total_amount: number
+  /** Les sources de calcul, concaténées : c'est ce qui rend un chiffre contestable. */
+  sources: string | null
+}
+
+export function getAnalysis(): Promise<{ levers: LeverPerformance[]; costs: CostKind[] }> {
+  return request(`${BASE}/analysis`)
+}
+
+export function getRoi(): Promise<{ quarterly: RoiQuarter[]; costs: CostKind[] }> {
+  return request(`${BASE}/roi`)
+}
+
+// ---------------------------------------------------------------------------
+// Réseau : CRM, présence locale, kits
+// ---------------------------------------------------------------------------
+
+export interface CrmSegment {
+  id: number
+  code: string
+  label: string
+  color_hex: string | null
+  customers_count: number
+}
+
+export interface CrmSummary {
+  customers: number
+  opted_in: number
+  total_spent: number
+  avg_orders: number
+}
+
+export function getCrm(): Promise<{ segments: CrmSegment[]; summary: CrmSummary }> {
+  return request(`${BASE}/crm`)
+}
+
+export interface ShopPresence {
+  id: number
+  shop_name: string
+  platform: string
+  rating_avg: number | null
+  reviews_count: number
+  completeness_pct: number | null
+  last_synced_at: string | null
+  pending_replies: number
+}
+
+export interface Review {
+  id: number
+  author_name: string | null
+  rating: number | null
+  body: string | null
+  published_at: string | null
+  reply_status: string
+  shop_name: string
+  platform: string
+}
+
+export function getPresence(): Promise<{ shops: ShopPresence[]; reviews: Review[] }> {
+  return request(`${BASE}/presence`)
+}
+
+export interface Kit {
+  id: number
+  name: string
+  description: string | null
+  type_label: string | null
+  default_budget_amount: number | null
+  is_published: boolean
+  activations: number
+  assets_count: number
+}
+
+export function listKits(): Promise<Kit[]> {
+  return request<Kit[]>(`${BASE}/kits`)
 }
 
 // Réexport pour les écrans d'alias, qui restent servis par l'ERP.
