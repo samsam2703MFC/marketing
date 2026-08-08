@@ -115,6 +115,11 @@ jobs:
           path: |
             dist-reseau/
             dist-franchise/
+          # Sans cela, `.htaccess` est écarté : la v4 exclut les fichiers cachés
+          # par défaut. Or c'est lui qui porte la réécriture vers le contrôleur
+          # frontal — sans lui, toute l'API répond 404 alors que les fichiers
+          # sont bien en place.
+          include-hidden-files: true
           retention-days: 7
 
   deploy:
@@ -157,7 +162,10 @@ jobs:
         run: |
           for d in dist-reseau dist-franchise; do
             [ -f "$d/index.html" ] || { echo "::error title=Build manquant::$d/index.html absent"; exit 1; }
-            echo "  $d : $(find "$d" -type f | wc -l) fichiers"
+            # Le .htaccess porte la réécriture vers l'API : absent, tout répond
+            # 404 alors que les fichiers sont bien déployés.
+            [ -f "$d/.htaccess" ] || { echo "::error title=Réécriture manquante::$d/.htaccess absent — les fichiers cachés ont été écartés de l'artefact"; exit 1; }
+            echo "  $d : $(find "$d" -type f | wc -l) fichiers, .htaccess présent"
           done
 
       # Non configuré = on saute, en restant vert. Un dépôt pas encore branché
