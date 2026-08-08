@@ -594,8 +594,13 @@ jobs:
             # Sonde tarifaire : elle ne sert qu'à désigner les sources du food
             # cost, de la TVA et du CA. Sa place dans le budget est temporaire,
             # le temps de brancher l'étape « Pricing ».
-            pricing=$(printf '%s\n' "$out" | grep -E '^PRICING ' | tr '\n' ' | ')
-            [ -n "$pricing" ] && notice 'Sonde tarifaire' "$pricing"
+            # Une annotation par notion : jointes, les trois dépassaient les neuf
+            # cents caractères et la liste des tables de recette — la seule
+            # qu'on ne connaissait pas — se coupait au milieu d'un nom.
+            printf '%s\n' "$out" | grep -E '^PRICING ' > /tmp/mar-pricing.txt || true
+            while read -r ligne; do
+              [ -n "$ligne" ] && notice 'Sonde tarifaire' "$ligne"
+            done < /tmp/mar-pricing.txt
 
             notice 'Reprise ERP' "$summary"
 

@@ -1550,6 +1550,27 @@ final class ErpSyncRepository
             ? 'aucune table dont le nom évoque une recette, un coût ou une taxe'
             : implode(' ; ', $trouvees);
 
+        // `product.id_recipe` prouve qu'une table de recettes existe : on suit
+        // la contrainte plutôt que le nom, et on rend ses colonnes. C'est là
+        // que doit se trouver le coût matière d'un produit — le module de food
+        // cost fourni, lui, ne le connaît qu'à l'échelle d'une boutique.
+        $recette = $this->columnPointingTo($schema, 'product', 'recipe', $this->columnsOf($schema, 'product'));
+        $lien = Database::connection()->prepare(
+            'SELECT referenced_table_name FROM information_schema.key_column_usage
+              WHERE table_schema = :schema AND table_name = \'product\'
+                AND column_name = \'id_recipe\' AND referenced_table_name IS NOT NULL
+              LIMIT 1'
+        );
+        $lien->execute(['schema' => $schema]);
+        $cible = $lien->fetchColumn();
+
+        $rapport['recette du produit'] = $cible === false
+            ? sprintf(
+                'product.id_recipe sans contrainte déclarée%s',
+                $recette === null ? '' : ' (colonne ' . $recette . ')'
+            )
+            : sprintf('%s : %s', $cible, implode(', ', $this->columnsOf($schema, (string) $cible)));
+
         return $rapport;
     }
 
