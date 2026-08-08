@@ -374,10 +374,14 @@ jobs:
             # Résumé compact : une annotation est courte, et « installez
             # php-mysql » ne suffit pas quand plusieurs versions de PHP
             # cohabitent et que le paquet a été posé sur la mauvaise.
-            v=\$(php -r 'echo PHP_VERSION;' 2>/dev/null); b=\$(command -v php); m=\$(php -m 2>/dev/null | grep -qi pdo_mysql && echo oui || echo NON); a=\$(ls /usr/bin/php* 2>/dev/null | tr '\\n' ','); echo \"DIAG php=\$v bin=\$b pdo_mysql=\$m autres=\$a\"
-            php -m 2>/dev/null | grep -qi pdo_mysql || echo 'PDO_MYSQL_MISSING'
+            # Plusieurs versions de PHP peuvent cohabiter et le pilote MySQL n'être
+            # posé que sur l'une d'elles. On retient la première qui sait réellement
+            # se connecter, au lieu de supposer que `php` est la bonne.
+            P=''; for c in php php8.3 php8.2 php8.1 php8.0; do command -v \$c >/dev/null 2>&1 || continue; \$c -m 2>/dev/null | grep -qi pdo_mysql && { P=\$c; break; }; done
+            a=\$(ls /usr/bin/php* 2>/dev/null | tr '\\n' ','); echo \"DIAG php=\$(php -r 'echo PHP_VERSION;' 2>/dev/null) retenu=\${P:-aucun} autres=\$a\"
+            [ -n "\$P" ] || { echo 'PDO_MYSQL_MISSING'; exit 93; }
             [ -f db/migrate.php ] || { echo 'MIGRATE_ABSENT'; exit 92; }
-            php db/migrate.php 2>&1
+            \$P db/migrate.php 2>&1
           " 2>&1)
           rc=$?
           set -e
@@ -393,7 +397,7 @@ jobs:
           if [ $rc -ne 0 ]; then
             case "$out" in
               *PHP_MISSING*)        hint="php introuvable pour l'utilisateur SSH : apt-get install -y php-cli php-mysql" ;;
-              *PDO_MYSQL_MISSING*)  hint="extension pdo_mysql absente : apt-get install -y php-mysql" ;;
+              *PDO_MYSQL_MISSING*)  hint="aucun interpréteur PHP n'a pdo_mysql. Installez-le pour la version voulue, ex. apt-get install -y php8.3-mysql" ;;
               *MIGRATE_ABSENT*)     hint="db/migrate.php n'est pas arrivé sur le serveur" ;;
               *CD_FAIL*)            hint="$DEPLOY_DIR inaccessible" ;;
               *Access\ denied*)     hint="MySQL refuse les identifiants du .env" ;;
