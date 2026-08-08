@@ -688,16 +688,19 @@ final class ErpSyncRepository
         $sectorColumn = $this->columnPointingTo($schema, $junction, $sectorsTable, $present);
 
         if ($clientColumn === null || $sectorColumn === null) {
+            // Message tenu court et sur une seule ligne : il ressort tel quel
+            // dans une annotation de déploiement, tronquée à neuf cents
+            // caractères. La mesure passe avant le rappel de la règle — c'est
+            // elle qui dit quoi configurer.
             throw new RuntimeException(sprintf(
-                'Dans « %s.%s », impossible de désigner sans ambiguïté la colonne du %s. '
-                . 'Colonnes présentes : %s. Attendu une clé étrangère vers « %s » / « %s », '
-                . 'ou une colonne « id_<table> ». Aucun rattachement effectué.',
+                'Dans « %s.%s », la colonne du %s n\'est désignée ni par une contrainte ni par '
+                . 'la convention « id_<table> ». Colonnes : %s. Correspondance des valeurs : %s. '
+                . 'Aucun rattachement effectué — voir MAR_ERP_SECTOR_LINK_TABLE / MAR_ERP_SECTORS_TABLE.',
                 $schema,
                 $junction,
                 $clientColumn === null ? 'client' : 'type de compte',
                 implode(', ', $present),
-                $customersTable,
-                $sectorsTable
+                $this->coverage($schema, $junction, $present, [$customersTable, $sectorsTable])
             ));
         }
 
@@ -845,6 +848,79 @@ final class ErpSyncRepository
         }
 
         return $result;
+    }
+
+    /**
+     * Où atterrissent réellement les valeurs d'une table de liaison.
+     *
+     * Quand ni les contraintes ni les noms ne disent vers quoi pointe une
+     * colonne, les données le disent : `id_interest` qui retrouve ses six
+     * valeurs dans `b2b_client_type` et aucune dans `b2b_client_interest` ne
+     * laisse plus de doute sur ce qu'il désigne, quel que soit son nom.
+     *
+     * C'est une mesure, pas une déduction : elle est rendue dans le message
+     * d'échec pour que la personne qui renseigne la configuration décide, au
+     * lieu de refaire la même enquête à chaque installation. Lecture seule, et
+     * bornée aux tables candidates — on ne balaie pas le schéma entier.
+     *
+     * @param  list<string> $columns
+     * @param  list<string> $tables
+     */
+    private function coverage(string $schema, string $junction, array $columns, array $tables): string
+    {
+        $safe = static fn (string $name): bool => preg_match('/^[A-Za-z0-9_]+$/', $name) === 1;
+
+        // Les tables que les noms de colonnes suggèrent, en plus des deux
+        // configurées : `id_interest` propose `interest`, `id_b2b_client`
+        // propose `b2b_client`. Une colonne qui nomme sa cible mérite qu'on
+        // vérifie si cette cible existe.
+        foreach ($columns as $column) {
+            $stripped = preg_replace('/^id_|_id$/', '', $column);
+            if ($stripped !== null && $stripped !== '' && $stripped !== $column) {
+                $tables[] = $stripped;
+            }
+        }
+
+        // Et le référentiel que le nom de la table de liaison désigne :
+        // `b2b_client_interest_connection` renvoie à `b2b_client_interest`.
+        // C'est le candidat le plus probable quand la liaison ne pointe pas où
+        // la configuration le croit — donc celui qu'il faut mesurer.
+        $named = preg_replace('/_(connection|link|rel|assoc|mapping)$/', '', $junction);
+        if ($named !== null && $named !== $junction) {
+            $tables[] = $named;
+        }
+
+        $report = [];
+
+        foreach (array_unique($tables) as $table) {
+            if (!$safe($table) || !in_array('id', array_map('strtolower', $this->columnsOf($schema, $table)), true)) {
+                continue;
+            }
+
+            foreach ($columns as $column) {
+                if (!$safe($column) || strtolower($column) === 'id') {
+                    continue;
+                }
+
+                $row = Database::connection()->query(sprintf(
+                    'SELECT COUNT(*) AS total, COUNT(t.id) AS trouves
+                       FROM (SELECT DISTINCT `%s` AS v FROM `%s`.`%s` WHERE `%s` IS NOT NULL) j
+                       LEFT JOIN `%s`.`%s` t ON t.id = j.v',
+                    $column,
+                    $schema,
+                    $junction,
+                    $column,
+                    $schema,
+                    $table
+                ))->fetch();
+
+                if ((int) $row['total'] > 0) {
+                    $report[] = sprintf('%s → %s %d/%d', $column, $table, $row['trouves'], $row['total']);
+                }
+            }
+        }
+
+        return $report === [] ? 'aucune table candidate lisible' : implode(' ; ', $report);
     }
 
     /**
