@@ -75,7 +75,7 @@ final class CampaignController
             'status_code', 'draft_step', 'starts_on', 'ends_on', 'budget_amount', 'objective_coef_pct',
             'agency_note', 'b2b_webshop_enabled', 'pos_survey_enabled', 'pos_questions',
             'owner_user_id', 'create_crm_leads',
-            'image_url', 'focal_point_y', 'shop_ids', 'channels', 'lever_targets',
+            'image_url', 'focal_point_y', 'shop_ids', 'shop_targets', 'channels', 'lever_targets',
             'sector_ids', 'agency_ask_ids', 'b2b_option_ids', 'uniform_ids', 'format_ids',
             'retroplanning', 'offer',
         ]);
@@ -137,7 +137,7 @@ final class CampaignController
             'type_id', 'name', 'scope', 'client_target', 'tone', 'status_code', 'draft_step',
             'starts_on', 'ends_on', 'budget_amount', 'objective_coef_pct',
             'agency_note', 'b2b_webshop_enabled', 'pos_survey_enabled', 'pos_questions',
-            'create_crm_leads', 'image_url', 'focal_point_y', 'shop_ids', 'channels',
+            'create_crm_leads', 'image_url', 'focal_point_y', 'shop_ids', 'shop_targets', 'channels',
             'lever_targets', 'sector_ids', 'agency_ask_ids', 'b2b_option_ids',
             'uniform_ids', 'format_ids', 'retroplanning', 'offer',
         ]);
