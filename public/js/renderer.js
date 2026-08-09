@@ -56,7 +56,8 @@ export const MO = {
 
 export const newTag = () => ({ enabled: false, label: 'Nouveauté', img: 'assets/cherry.png' });
 export const newSched = () => ({ days: [true, true, true, true, true, true, true], from: '00:00', to: '23:59' });
-export const newPos = () => ({ titleY: 0, listX: 0, listY: 0, illoX: 0, illoY: 0, illoScale: 1 });
+// vidX / vidY / vidZoom : cadrage d'une vidéo qui n'a pas le format de l'écran.
+export const newPos = () => ({ titleY: 0, listX: 0, listY: 0, illoX: 0, illoY: 0, illoScale: 1, vidX: 0, vidY: 0, vidZoom: 1 });
 
 export const activeItems = (m) => ((m && m.items) ? m.items : []).filter((x) => x.active);
 // Une liste de prix sans produit actif est sautée à la lecture du film.
@@ -215,14 +216,25 @@ function renderModuleInner(h, m, lt, opts) {
   }
 
   // ---- Film : vidéo importée, plein écran (cover) ou letterbox (contain) ----
+  // Le cadrage se règle en régie : « remplir » recadre les bords, « adapter »
+  // montre toute l'image ; la position et le zoom permettent de choisir ce
+  // qu'on garde quand la vidéo n'a pas le format de l'écran.
   if (m.type === 'film') {
     if (m.video) {
+      const p = m.pos || {};
+      const vz = p.vidZoom == null ? 1 : p.vidZoom;
+      const vx = p.vidX || 0, vy = p.vidY || 0;
       kids.push(h('div', { key: 'vbg', style: { position: 'absolute', inset: 0, background: '#000' } }));
       kids.push(h('video', {
         key: 'vid' + m.id,
         src: m.video,
         autoplay: true, muted: true, loop: true, playsinline: true,
-        style: { position: 'absolute', inset: 0, width: W, height: H, objectFit: m.layout === 'contain' ? 'contain' : 'cover' },
+        style: {
+          position: 'absolute', inset: 0, width: W, height: H,
+          objectFit: m.layout === 'contain' ? 'contain' : 'cover',
+          transform: (vx || vy || vz !== 1) ? `translate(${vx}px, ${vy}px) scale(${vz})` : undefined,
+          transformOrigin: 'center',
+        },
       }));
     } else if (m.surprise) {
       const n = m.surpriseCount || (m.surpriseVideos || []).length;

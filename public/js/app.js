@@ -1718,7 +1718,10 @@ class App extends Component {
     m.schedule = { ...m.schedule, days };
     this.setLib(lib);
   }
-  setPos(f, v) { const lib = this.cloneLib(); const m = lib.find((x) => x.id === this.state.selId); m.pos = { ...(m.pos || newPos()), [f]: v }; this.setLib(lib); }
+  setPos(f, v) { this.setPosMany({ [f]: v }); }
+  // Plusieurs champs d'un coup : setState étant différé, trois setPos enchaînés
+  // repartiraient chacun de l'état d'AVANT et s'écraseraient l'un l'autre.
+  setPosMany(patch) { const lib = this.cloneLib(); const m = lib.find((x) => x.id === this.state.selId); m.pos = { ...(m.pos || newPos()), ...patch }; this.setLib(lib); }
   resetPos() { const lib = this.cloneLib(); lib.find((x) => x.id === this.state.selId).pos = newPos(); this.setLib(lib); }
 
   updItem(i, f, v) { const lib = this.cloneLib(); const m = lib.find((x) => x.id === this.state.selId); m.items[i] = { ...m.items[i], [f]: v }; this.setLib(lib); }
@@ -3426,6 +3429,21 @@ class App extends Component {
       videoPreview: m.video || '',
       onVideoFile: (e) => this.onVideo(e),
       clearVideo: () => this.setSelField('video', ''),
+      // Cadrage de la vidéo : remplir / adapter, puis position et zoom — pour
+      // choisir ce qu'on garde quand la vidéo n'a pas le format de l'écran.
+      vidFit: m.layout === 'contain' ? 'contain' : 'cover',
+      setVidFit: (fit) => this.setSelField('layout', fit),
+      vidX: pos.vidX || 0, vidY: pos.vidY || 0,
+      vidZoom: pos.vidZoom == null ? 1 : pos.vidZoom,
+      // Un pas franc : 120 px sur un écran virtuel de 6480 × 3840.
+      nudgeVid: (dx, dy) => this.setPosMany({
+        vidX: clx((pos.vidX || 0) + dx * 120, -3000, 3000),
+        vidY: clx((pos.vidY || 0) + dy * 120, -2000, 2000),
+      }),
+      zoomVid: (d) => this.setPos('vidZoom', Math.round(clx((pos.vidZoom == null ? 1 : pos.vidZoom) + d * 0.1, 0.5, 4) * 100) / 100),
+      onVidZoom: (e) => this.setPos('vidZoom', parseFloat(e.target.value)),
+      resetVid: () => this.setPosMany({ vidX: 0, vidY: 0, vidZoom: 1 }),
+      vidMoved: !!(pos.vidX || pos.vidY || (pos.vidZoom != null && pos.vidZoom !== 1)),
       // -- film en mode « surprise » (dossier serveur, piochée au hasard) --
       isSurprise: !!m.surprise,
       toggleSurprise: () => this.toggleSurprise(),
@@ -5483,7 +5501,8 @@ class App extends Component {
             ${!v.isSurprise && html`
               <p style="margin:0 0 12px;font-size:12px;color:#8A847C;line-height:1.5;">mp4 ou webm, <strong>8 Mo max</strong> (compresse en 1080p/H.264). Lue en boucle, sans le son, pendant la durée choisie.</p>
               ${v.hasVideo && html`
-                <video src=${v.videoPreview} muted autoplay loop playsinline style="width:100%;border-radius:12px;background:#000;margin-bottom:10px;"></video>
+                <!-- La vignette montre le MÊME cadrage que l'écran, sinon elle ment. -->
+                <video src=${v.videoPreview} muted autoplay loop playsinline style="width:100%;aspect-ratio:${W} / ${H};object-fit:${v.vidFit};border-radius:12px;background:#000;margin-bottom:10px;"></video>
               `}
               <div style="display:flex;gap:10px;">
                 <label style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 12px;font-size:13px;font-weight:600;color:#8D1D2C;border:1px dashed rgba(141,29,44,0.4);border-radius:10px;background:rgba(141,29,44,0.04);cursor:pointer;">
@@ -5492,6 +5511,44 @@ class App extends Component {
                 </label>
                 ${v.hasVideo && html`<button onClick=${v.clearVideo} style="padding:11px 16px;font-size:13px;font-weight:600;color:#8D1D2C;background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:10px;cursor:pointer;">Retirer</button>`}
               </div>
+
+              <!-- Cadrage : remplir/adapter, puis déplacer et zoomer -->
+              ${v.hasVideo && html`
+                <div style="margin-top:14px;padding-top:13px;border-top:1px dashed rgba(35,34,32,0.14);">
+                  <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px;">
+                    <span style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">Cadrage à l'écran</span>
+                    ${infoTip('« Adapter » montre TOUTE la vidéo, avec des bandes noires si son format diffère de l’écran. « Remplir » couvre l’écran et recadre les bords — les flèches choisissent alors la partie visible, et le zoom règle la taille.')}
+                  </div>
+                  <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+                    <span style="display:inline-flex;background:#EFE9E0;border-radius:9px;padding:3px;height:fit-content;">
+                      ${[['contain', '▭ Adapter (tout voir)'], ['cover', '◼ Remplir (recadrer)']].map(([id, lab]) => html`
+                        <button onClick=${() => v.setVidFit(id)} style="padding:7px 13px;font-size:12.5px;font-weight:600;border:none;border-radius:7px;cursor:pointer;${v.vidFit === id ? 'background:#fff;color:#232220;box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'}">${lab}</button>
+                      `)}
+                    </span>
+                    <!-- pavé de flèches -->
+                    <div style="display:grid;grid-template-columns:repeat(3,30px);grid-template-rows:repeat(3,30px);gap:3px;">
+                      <span></span>
+                      <button onClick=${() => v.nudgeVid(0, -1)} title="Monter la vidéo" style="border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;font-size:12px;">↑</button>
+                      <span></span>
+                      <button onClick=${() => v.nudgeVid(-1, 0)} title="Décaler à gauche" style="border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;font-size:12px;">←</button>
+                      <button onClick=${v.resetVid} title="Recentrer et remettre le zoom à 1×" style="border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:${v.vidMoved ? 'rgba(141,29,44,0.10)' : '#FBF8F2'};color:${v.vidMoved ? '#8D1D2C' : '#8A847C'};cursor:pointer;font-size:11px;">⌖</button>
+                      <button onClick=${() => v.nudgeVid(1, 0)} title="Décaler à droite" style="border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;font-size:12px;">→</button>
+                      <span></span>
+                      <button onClick=${() => v.nudgeVid(0, 1)} title="Descendre la vidéo" style="border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;font-size:12px;">↓</button>
+                      <span></span>
+                    </div>
+                    <label style="display:flex;flex-direction:column;gap:6px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">
+                      <span>Zoom · ${v.vidZoom.toFixed(2)}×</span>
+                      <span style="display:inline-flex;align-items:center;gap:7px;">
+                        <button onClick=${() => v.zoomVid(-1)} title="Réduire" style="width:28px;height:28px;border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;font-size:13px;">−</button>
+                        <input type="range" min="0.5" max="4" step="0.05" value=${v.vidZoom} onInput=${v.onVidZoom} style="width:150px;" />
+                        <button onClick=${() => v.zoomVid(1)} title="Agrandir" style="width:28px;height:28px;border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;font-size:13px;">+</button>
+                      </span>
+                    </label>
+                  </div>
+                  ${v.vidMoved ? html`<p style="margin:9px 0 0;font-size:11.5px;color:#8A847C;">Décalage ${v.vidX > 0 ? '+' : ''}${v.vidX} px · ${v.vidY > 0 ? '+' : ''}${v.vidY} px — ⌖ pour recentrer.</p>` : ''}
+                </div>
+              `}
             `}
 
             ${v.isSurprise && html`

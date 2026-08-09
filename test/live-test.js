@@ -518,6 +518,26 @@ async function main() {
         await call('DELETE', `/api/v1/groups/${b.group.id}`);
       }
     });
+    await step('Vidéo — cadrage (adapter/remplir) + position et zoom', async () => {
+      const st = await call('GET', '/api/v1/state');
+      const mods = [...st.modules, {
+        id: 'mVidLT', type: 'film', name: 'Vidéo LT', orient: 'paysage', layout: 'contain', dur: 10,
+        video: 'media/lt.mp4', items: [], pos: { vidX: 240, vidY: -120, vidZoom: 1.4 },
+      }];
+      try {
+        await call('PUT', '/api/v1/draft', { modules: mods, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+        const back = (await call('GET', '/api/v1/state')).modules.find((m) => m.id === 'mVidLT');
+        if (!back) throw new Error('élément vidéo non enregistré');
+        if (back.layout !== 'contain') throw new Error('cadrage « adapter » non conservé : ' + back.layout);
+        const p = back.pos || {};
+        if (p.vidX !== 240 || p.vidY !== -120 || Math.abs(p.vidZoom - 1.4) > 0.001) {
+          throw new Error('position/zoom non conservés : ' + JSON.stringify(p));
+        }
+        return `cadrage « adapter » · décalage +240 / −120 px · zoom 1.40× conservés`;
+      } finally {
+        await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      }
+    });
     await step('Suites — intro / clôture / toutes les N, montées à la main', async () => {
       const st = await call('GET', '/api/v1/state');
       const before = await call('GET', '/api/v1/sequences');

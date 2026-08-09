@@ -251,6 +251,20 @@ un **sous-type**.
   neutre « Offre » jusqu'à réassignation. Ces sous-types pourront être **alimentés depuis l'ERP**
   (menu Promotions) dans un second temps. API : `GET /promo-types`, `PUT /promo-types`.
 
+### Vidéo — cadrage à l'écran
+Une vidéo n'a presque jamais le format exact du mur d'écrans. Le volet **Vidéo** d'un élément
+« film » porte donc son **cadrage** :
+
+- **▭ Adapter (tout voir)** — toute la vidéo est visible, avec des bandes noires si le format
+  diffère (`object-fit: contain`).
+- **◼ Remplir (recadrer)** — la vidéo couvre l'écran et les bords sont rognés
+  (`object-fit: cover`).
+
+Un **pavé de flèches** (← ↑ ↓ →, pas de 120 px sur le canevas 6480 × 3840) choisit la partie
+visible, un **zoom** de 0,5× à 4× règle la taille, et **⌖** recentre. Stocké dans
+`sig_modules.pos` (`vidX`, `vidY`, `vidZoom`) — aucune migration. La vignette de l'éditeur
+applique le même cadrage que l'écran, pour ne pas donner une fausse idée du rendu.
+
 ### Animation — texte animé **ou** fichier importé
 L'élément **Animation** travaille de deux façons, choisies dans son volet **Visuel** :
 
@@ -371,7 +385,7 @@ qui la portent restent visibles ; la liste ne peut pas être vidée.
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + cycle complet — 64 tests
+npm test              # serveur jetable (BDD temporaire) + cycle complet — 65 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
 node test/live-test.js http://185.180.206.46/signage --password=… --mutate
