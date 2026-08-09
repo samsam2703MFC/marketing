@@ -123,8 +123,20 @@ export default function PricingStep({
   draft: Draft
   patch: (change: Partial<Draft>) => void
 }) {
-  const itemIds = draft.offer_items
-    .map((element) => element.offer_item_id)
+  /**
+   * Seuls les produits ont un prix.
+   *
+   * Une gamme saisonnière entre dans l'offre au même titre qu'un produit —
+   * « Gamme Épiphanie » — mais elle ne se vend pas à l'unité : lui demander une
+   * marge et un volume à compenser n'a pas de sens, et la ligne restait vide en
+   * salissant le tableau. La famille vient du catalogue, jamais du libellé.
+   */
+  const produits = draft.offer_items
+    .map((element, index) => ({ element, index }))
+    .filter(({ element }) => element.category === 'produit')
+
+  const itemIds = produits
+    .map(({ element }) => element.offer_item_id)
     .filter((id): id is number => id !== null)
 
   // Volumes de référence : ceux de la période d'analyse de l'étape Objectifs.
@@ -175,7 +187,7 @@ export default function PricingStep({
   }
 
   // Une ligne par produit de l'offre, avec sa simulation.
-  const lignes = draft.offer_items.map((element, index) => {
+  const lignes = produits.map(({ element, index }) => {
     const prix = read(element.baseline_price)
       ?? (sales.data?.products.find((p) => p.item_id === element.offer_item_id) ? null : null)
     const ttc0 = prix ?? 0
@@ -217,13 +229,14 @@ export default function PricingStep({
   const parts = [q0Total, supplement, Math.max(0, gain)]
   const echelle = Math.max(objectif, q1Total, 1)
 
-  if (draft.offer_items.length === 0) {
+  if (produits.length === 0) {
     return (
       <>
         <h2>Prix</h2>
         <p className="muted">
-          Aucun produit dans l’offre : retournez à l’étape « Offre » pour en sélectionner — les
-          promotions et leurs marges portent sur eux.
+          {draft.offer_items.length === 0
+            ? 'Aucun produit dans l’offre : retournez à l’étape « Offre » pour en sélectionner — les promotions et leurs marges portent sur eux.'
+            : 'L’offre ne contient que des gammes. Choisissez des produits à l’étape « Offre » : une promotion se pose sur ce qui se vend à l’unité.'}
         </p>
       </>
     )

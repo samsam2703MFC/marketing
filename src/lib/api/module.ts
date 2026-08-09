@@ -389,6 +389,8 @@ export function listShops(): Promise<Shop[]> {
 export interface OfferItemPayload {
   label: string
   offer_item_id?: number | null
+  /** Famille de catalogue relue avec l'élément : `produit`, `saison`… */
+  category?: string | null
   mechanic_type?: string | null
   discount_pct?: number | string | null
   fixed_price?: number | string | null

@@ -50,6 +50,14 @@ interface OfferElement {
   label: string
 
   /**
+   * Famille de catalogue : `produit`, `saison`… Une gamme entre dans l'offre
+   * comme un produit, mais elle n'a ni prix ni volume — l'étape « Prix » ne
+   * doit donc pas lui demander de marge. Vide pour une saisie libre, qui n'est
+   * dans aucun catalogue.
+   */
+  category: string
+
+  /**
    * Promotion posée à l'étape « Prix ». Vide = ce produit n'est pas en
    * promotion, ce qui est le cas par défaut : entrer dans l'offre ne veut pas
    * dire être bradé.
@@ -77,7 +85,7 @@ export type MechanicCode =
   | 'FREE_DELIVERY'
 
 /** Ligne d'offre neuve : dans l'offre, hors promotion. */
-export function blankPricing(): Omit<OfferElement, 'offer_item_id' | 'label'> {
+export function blankPricing(): Omit<OfferElement, 'offer_item_id' | 'label' | 'category'> {
   return {
     mechanic_type: '',
     discount_pct: '',
@@ -281,7 +289,8 @@ const STEPS: Step[] = [
     blocking: (d) => {
       const casse = d.offer_items.find(
         (item) =>
-          item.mechanic_type === 'PERCENT'
+          item.category === 'produit'
+          && item.mechanic_type === 'PERCENT'
           && item.discount_pct.trim() !== ''
           && item.margin_pct.trim() !== ''
           && Number(item.discount_pct) >= Number(item.margin_pct),
@@ -647,6 +656,7 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
     offer_items: (state.offer?.items ?? []).map((item) => ({
       offer_item_id: item.offer_item_id ?? null,
       label: item.label,
+      category: item.category ?? '',
       mechanic_type: (item.mechanic_type ?? '') as MechanicCode | '',
       discount_pct: numberOrBlank(item.discount_pct),
       fixed_price: numberOrBlank(item.fixed_price),
@@ -1438,7 +1448,7 @@ function OfferStep({ draft, patch }: StepProps) {
       offer_items:
         nextSeasonId === null
           ? keep
-          : [...keep, { offer_item_id: item.id, label: `Gamme ${seasonLabel(item.name)}`, ...blankPricing() }],
+          : [...keep, { offer_item_id: item.id, label: `Gamme ${seasonLabel(item.name)}`, category: 'saison', ...blankPricing() }],
       // Le titre de l'offre suit la gamme : il n'est plus saisi à la main.
       offer_title: nextSeasonId === null ? '' : `Offre ${seasonLabel(item.name)}`,
     })
@@ -1455,7 +1465,7 @@ function OfferStep({ draft, patch }: StepProps) {
         ? others
         : [
             ...others,
-            ...familyProducts.map((item) => ({ offer_item_id: item.id, label: item.name, ...blankPricing() })),
+            ...familyProducts.map((item) => ({ offer_item_id: item.id, label: item.name, category: 'produit', ...blankPricing() })),
           ],
     })
   }
@@ -1464,14 +1474,14 @@ function OfferStep({ draft, patch }: StepProps) {
     patch({
       offer_items: checkedIds.has(item.id)
         ? draft.offer_items.filter((element) => element.offer_item_id !== item.id)
-        : [...draft.offer_items, { offer_item_id: item.id, label: item.name, ...blankPricing() }],
+        : [...draft.offer_items, { offer_item_id: item.id, label: item.name, category: 'produit', ...blankPricing() }],
     })
   }
 
   const selectAllVisible = () => {
     const additions = visibleProducts
       .filter((item) => !checkedIds.has(item.id))
-      .map((item) => ({ offer_item_id: item.id, label: item.name, ...blankPricing() }))
+      .map((item) => ({ offer_item_id: item.id, label: item.name, category: 'produit', ...blankPricing() }))
     if (additions.length > 0) patch({ offer_items: [...draft.offer_items, ...additions] })
   }
 

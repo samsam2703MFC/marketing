@@ -681,6 +681,18 @@ check(
     json_encode($lignes[1] ?? null)
 );
 
+// La famille vient du catalogue : l'étape « Prix » n'affiche que les produits,
+// et une gamme saisonnière n'a ni prix unitaire ni volume à compenser. La
+// déduire du libellé casserait au premier produit nommé « Gamme du chef ».
+check(
+    'la ligne d\'offre revient avec sa famille de catalogue',
+    $lignes[0]['category'] === 'produit' && $lignes[2]['category'] === null,
+    json_encode([
+        'catalogue'   => $lignes[0]['category'] ?? 'absent',
+        'saisie libre' => $lignes[2]['category'] ?? 'absent',
+    ])
+);
+
 check(
     'un produit sans promotion reste sans mécanique',
     $lignes[2]['mechanic_type'] === null

@@ -1551,12 +1551,18 @@ final class CampaignRepository
         }
 
         $items = Database::connection()->prepare(
-            'SELECT label, offer_item_id, sort_order,
-                    mechanic_type, discount_pct, fixed_price, buy_qty, get_qty,
-                    baseline_price, margin_pct
-               FROM mar_campaign_offer_item
-              WHERE campaign_offer_id = :id
-              ORDER BY sort_order'
+            // La famille vient du catalogue et non du libellé : « Gamme
+            // Épiphanie » est une saison, mais rien dans son texte ne
+            // l'affirme, et un produit nommé « Gamme du chef » tromperait
+            // n'importe quelle règle sur le préfixe.
+            'SELECT ci.label, ci.offer_item_id, ci.sort_order,
+                    ci.mechanic_type, ci.discount_pct, ci.fixed_price,
+                    ci.buy_qty, ci.get_qty, ci.baseline_price, ci.margin_pct,
+                    oi.category
+               FROM mar_campaign_offer_item ci
+               LEFT JOIN mar_offer_item oi ON oi.id = ci.offer_item_id
+              WHERE ci.campaign_offer_id = :id
+              ORDER BY ci.sort_order'
         );
         $items->execute(['id' => (int) $offer['id']]);
 
