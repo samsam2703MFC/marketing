@@ -904,6 +904,54 @@ function FramingStep({
         onChange={(range) => patch(range)}
       />
 
+      {/* Le visuel appartient à l'identité, au même titre que le nom : c'est
+          lui qu'on reconnaît dans la liste et le calendrier avant d'avoir lu
+          la ligne. Il se choisit donc ici ; ses déclinaisons par format
+          restent à l'étape « Communication », qui les produit. */}
+      <label className="field field--grow">
+        Photo ou illustration — adresse
+        <input
+          type="url"
+          value={draft.image_url}
+          placeholder="https://…"
+          onChange={(e) => patch({ image_url: e.target.value })}
+        />
+      </label>
+
+      {draft.image_url.trim() === '' ? (
+        <p className="muted">
+          Facultative. Collez l’adresse d’une image déjà en ligne — celle du kit de la marque,
+          d’une photo produit ou d’une illustration. Elle se déclinera ensuite dans les formats
+          d’affichage à l’étape « Communication ».
+        </p>
+      ) : (
+        <div className="visual-pick">
+          <span className="visual-pick__frame">
+            <img
+              src={draft.image_url}
+              alt=""
+              style={{ objectPosition: `50% ${draft.focal_point_y}%` }}
+            />
+          </span>
+          <div className="visual-pick__setting">
+            <label className="field field--grow">
+              Cadrage vertical — {Math.round(draft.focal_point_y)} %
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={draft.focal_point_y}
+                onChange={(e) => patch({ focal_point_y: Number(e.target.value) })}
+              />
+            </label>
+            <p className="muted">
+              Le point focal décide de ce qui reste dans le cadre quand l’image est recoupée en
+              bandeau ou en carré. Rien ne s’affiche ? L’adresse ne pointe pas sur une image.
+            </p>
+          </div>
+        </div>
+      )}
+
       <h3 className="section-label">Portée</h3>
       {role === 'BRAND_ADMIN' ? (
         <div className="choice-row">
@@ -1738,34 +1786,18 @@ function CommunicationStep({
         </>
       ) : null}
 
-      <h3 className="section-label">Visuel & déclinaisons</h3>
-      <div className="filters__row">
-        <label className="field field--grow">
-          Visuel (URL)
-          <input
-            type="url"
-            value={draft.image_url}
-            placeholder="https://…"
-            onChange={(e) => patch({ image_url: e.target.value })}
-          />
-        </label>
-      </div>
+      <h3 className="section-label">Déclinaisons du visuel</h3>
 
-      {draft.image_url.trim() !== '' ? (
+      {draft.image_url.trim() === '' ? (
+        <p className="muted">
+          Aucun visuel : la photo ou l’illustration de la campagne se choisit à l’étape « Type &
+          cadrage », avec son cadrage. Les formats se déclinent ensuite ici.
+        </p>
+      ) : (
         <>
-          <label className="field field--grow">
-            Cadrage vertical — {Math.round(draft.focal_point_y)} %
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={draft.focal_point_y}
-              onChange={(e) => patch({ focal_point_y: Number(e.target.value) })}
-            />
-          </label>
           <p className="muted">
-            Un seul visuel, recadré par format. Le point focal évite que le sujet sorte du cadre
-            dans les formats les plus étroits.
+            Un seul visuel, recadré par format selon le point focal réglé à l’étape « Type &
+            cadrage ». Retirez un format que vous ne produirez pas.
           </p>
 
           <ul className="format-grid">
@@ -1803,7 +1835,7 @@ function CommunicationStep({
             Les déclinaisons sont créées en attente : rien n’est fabriqué maintenant.
           </p>
         </>
-      ) : null}
+      )}
     </>
   )
 }
