@@ -3815,55 +3815,6 @@ class App extends Component {
             ${cField('Ordre', cChoice('order', [['catalogue', 'Catalogue'], ['aleatoire', 'Aléatoire']]), 'Ordre de passage. « Catalogue » = l’ordre du catalogue. « Aléatoire » = mélangé (stable pendant une fenêtre, re-mélangé au changement de moment/saison).')}
           </div>
           ${cont.source === 'categories' ? html`<div><div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:8px;">Catégories exclues (exceptions) — tout le reste passe</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${catChips}</div></div>` : ''}
-          <div style="display:flex;gap:20px;flex-wrap:wrap;">
-            ${cField('Durée fiche (s)', cNum('prodDur', cont.prodDur, 2, 60), 'Combien de secondes une fiche produit reste à l’écran.')}
-            ${cField('Durée vidéo (s)', cNum('clipDur', cont.clipDur, 2, 120), 'Durée d’un clip vidéo/photo ciblé (et de la vidéo surprise).')}
-            ${cField('Max fiches / boucle', cNum('maxItems', cont.maxItems, 4, 40), 'Nombre maximum de fiches produit dans une boucle (borne de sécurité pour éviter une boucle trop longue).')}
-          </div>
-          <div>
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:9px;">
-              <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Ratios par type d'élément · 1 : N (0 = jamais)</span>
-              ${infoTip('Dose le mélange de la boucle. « 1 : N » = un élément de ce type tous les N slots. Ex. Liaison 1:5 = un logo de transition toutes les 5 fiches ; Produit seul 1:6 = une fiche plein écran toutes les 6. 0 = ce type n’apparaît jamais.')}
-            </div>
-            <div style="display:flex;flex-direction:column;gap:8px;max-width:360px;">
-              ${cRatio('liaison', 'Liaison (logo)')}
-              ${cRatio('produitSeul', 'Produit seul')}
-              ${cRatio('media', 'Vidéo/photo ciblée')}
-              ${cRatio('animation', 'Animation promo')}
-              ${cRatio('surprise', 'Vidéo surprise')}
-            </div>
-            <!-- Parcours de la bibliothèque : actif/inactif + ratio de passage -->
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:16px 0 8px;">
-              <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Parcours de la bibliothèque · ${cont.orient === 'portrait' ? '9:16 portrait' : '16:9 paysage'}</span>
-              ${infoTip('Créer une boucle, c’est passer en revue TOUS les éléments de la bibliothèque : coche ceux qui doivent passer et donne à chacun son ratio « 1 : N » (un passage tous les N slots). Seuls les éléments au format d’écran de cette boucle sont listés, et un élément tagué par moment ne passera qu’à ces moments-là. Décocher garde le ratio en mémoire.')}
-              <span style="font-size:11.5px;font-weight:600;color:${v.contLoopOn ? '#6E4A2B' : '#8A847C'};">${v.contLoopOn} / ${v.contItemRatios.length} actif(s)</span>
-              ${v.contItemRatios.length ? html`<span style="display:inline-flex;gap:5px;">
-                <button onClick=${v.contLoopAll} style="padding:4px 10px;font-size:11.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid rgba(35,34,32,0.16);background:#fff;color:#232220;">Tout activer</button>
-                <button onClick=${v.contLoopNone} style="padding:4px 10px;font-size:11.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid rgba(35,34,32,0.16);background:#fff;color:#232220;">Tout désactiver</button>
-              </span>` : ''}
-            </div>
-            <div style="display:flex;flex-direction:column;gap:4px;max-width:470px;max-height:290px;overflow:auto;padding-right:4px;">
-              ${v.contItemRatios.length ? v.contItemRatios.map((it) => html`
-                <div key=${it.id} style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:9px;border:1px solid ${it.on ? 'rgba(141,29,44,0.28)' : 'rgba(35,34,32,0.10)'};background:${it.on ? 'rgba(141,29,44,0.05)' : '#FBF8F2'};">
-                  <button onClick=${it.toggle} title=${it.on ? 'Actif dans la boucle — cliquer pour retirer' : 'Inactif — cliquer pour ajouter à la boucle'} style="flex:0 0 auto;width:19px;height:19px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;line-height:1;border-radius:5px;cursor:pointer;border:1px solid ${it.on ? '#8D1D2C' : 'rgba(35,34,32,0.28)'};background:${it.on ? '#8D1D2C' : '#fff'};color:#fff;">${it.on ? '✓' : ''}</button>
-                  <span style="flex:0 0 auto;font-size:13px;">${it.icon}</span>
-                  <span style="flex:1 1 auto;min-width:0;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${it.on ? '#232220' : '#8A847C'};">${it.name}<span style="color:#8A847C;"> · ${it.moments}</span></span>
-                  <span style="flex:0 0 auto;font-size:12px;color:#8A847C;">1 :</span>
-                  <input type="number" min="0" max="99" value=${it.n} onInput=${it.onN} title="Un passage tous les N slots de la boucle" style="width:62px;padding:5px 8px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;text-align:right;" />
-                  <button onClick=${it.edit} title="Éditer cet élément dans la bibliothèque" style="flex:0 0 auto;padding:4px 7px;font-size:12px;border-radius:7px;cursor:pointer;border:1px solid rgba(35,34,32,0.14);background:#fff;color:#6E4A2B;">✎</button>
-                </div>
-              `) : html`<span style="font-size:12px;color:#8A847C;">Aucun élément de bibliothèque à ce format.</span>`}
-            </div>
-          </div>
-          <div style="display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start;">
-            ${cField('Rafraîchissement', cChoice('refresh', [['moment', 'Au moment/saison'], ['minutes', 'Toutes les N min']]), 'Quand la boucle est recomposée. « Au moment/saison » = à chaque changement de créneau (matin→midi) ou de période. « Toutes les N min » = aussi rafraîchie périodiquement.')}
-            ${cont.refresh === 'minutes' ? cField('N minutes', cNum('refreshMin', cont.refreshMin, 1, 240), 'Intervalle de recomposition de la boucle, en minutes.') : ''}
-            ${cField('Si rien en saison', cChoice('fallback', [['tout', 'Tout le catalogue'], ['aucun', 'Rien (attente)']]), 'Repli quand aucun produit n’est éligible (hors saison / rien au bon moment) : jouer tout le catalogue, ou afficher l’écran d’attente.')}
-          </div>
-          ${excFilms.length ? html`<div>
-            ${cField('Playlists d\'exception (jouées EN PLUS à chaque boucle · plusieurs possibles)', html`<div style="display:flex;gap:6px;flex-wrap:wrap;">${excChips}</div>`,
-              'Anciens films « playlist » montés à la main, ajoutés à la fin de CHAQUE boucle. Les nouveaux montages se font désormais dans les Suites ci-dessous.')}
-          </div>` : ''}
 
           <!-- Suites : mini éditeur de montage (intro · outro · gamme…) -->
           <div style="border-top:1px dashed rgba(35,34,32,0.14);padding-top:16px;">
@@ -3938,6 +3889,56 @@ class App extends Component {
               </div>
             ` : html`<p style="margin:0;font-size:12.5px;color:#8A847C;">Aucune suite. « + Suite » pour monter une intro, un outro ou une présentation de gamme.</p>`}
           </div>
+          <div style="display:flex;gap:20px;flex-wrap:wrap;">
+            ${cField('Durée fiche (s)', cNum('prodDur', cont.prodDur, 2, 60), 'Combien de secondes une fiche produit reste à l’écran.')}
+            ${cField('Durée vidéo (s)', cNum('clipDur', cont.clipDur, 2, 120), 'Durée d’un clip vidéo/photo ciblé (et de la vidéo surprise).')}
+            ${cField('Max fiches / boucle', cNum('maxItems', cont.maxItems, 4, 40), 'Nombre maximum de fiches produit dans une boucle (borne de sécurité pour éviter une boucle trop longue).')}
+          </div>
+          <div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:9px;">
+              <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Ratios par type d'élément · 1 : N (0 = jamais)</span>
+              ${infoTip('Dose le mélange de la boucle. « 1 : N » = un élément de ce type tous les N slots. Ex. Liaison 1:5 = un logo de transition toutes les 5 fiches ; Produit seul 1:6 = une fiche plein écran toutes les 6. 0 = ce type n’apparaît jamais.')}
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;max-width:360px;">
+              ${cRatio('liaison', 'Liaison (logo)')}
+              ${cRatio('produitSeul', 'Produit seul')}
+              ${cRatio('media', 'Vidéo/photo ciblée')}
+              ${cRatio('animation', 'Animation promo')}
+              ${cRatio('surprise', 'Vidéo surprise')}
+            </div>
+            <!-- Parcours de la bibliothèque : actif/inactif + ratio de passage -->
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:16px 0 8px;">
+              <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Parcours de la bibliothèque · ${cont.orient === 'portrait' ? '9:16 portrait' : '16:9 paysage'}</span>
+              ${infoTip('Créer une boucle, c’est passer en revue TOUS les éléments de la bibliothèque : coche ceux qui doivent passer et donne à chacun son ratio « 1 : N » (un passage tous les N slots). Seuls les éléments au format d’écran de cette boucle sont listés, et un élément tagué par moment ne passera qu’à ces moments-là. Décocher garde le ratio en mémoire.')}
+              <span style="font-size:11.5px;font-weight:600;color:${v.contLoopOn ? '#6E4A2B' : '#8A847C'};">${v.contLoopOn} / ${v.contItemRatios.length} actif(s)</span>
+              ${v.contItemRatios.length ? html`<span style="display:inline-flex;gap:5px;">
+                <button onClick=${v.contLoopAll} style="padding:4px 10px;font-size:11.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid rgba(35,34,32,0.16);background:#fff;color:#232220;">Tout activer</button>
+                <button onClick=${v.contLoopNone} style="padding:4px 10px;font-size:11.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid rgba(35,34,32,0.16);background:#fff;color:#232220;">Tout désactiver</button>
+              </span>` : ''}
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;max-width:470px;max-height:290px;overflow:auto;padding-right:4px;">
+              ${v.contItemRatios.length ? v.contItemRatios.map((it) => html`
+                <div key=${it.id} style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:9px;border:1px solid ${it.on ? 'rgba(141,29,44,0.28)' : 'rgba(35,34,32,0.10)'};background:${it.on ? 'rgba(141,29,44,0.05)' : '#FBF8F2'};">
+                  <button onClick=${it.toggle} title=${it.on ? 'Actif dans la boucle — cliquer pour retirer' : 'Inactif — cliquer pour ajouter à la boucle'} style="flex:0 0 auto;width:19px;height:19px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;line-height:1;border-radius:5px;cursor:pointer;border:1px solid ${it.on ? '#8D1D2C' : 'rgba(35,34,32,0.28)'};background:${it.on ? '#8D1D2C' : '#fff'};color:#fff;">${it.on ? '✓' : ''}</button>
+                  <span style="flex:0 0 auto;font-size:13px;">${it.icon}</span>
+                  <span style="flex:1 1 auto;min-width:0;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${it.on ? '#232220' : '#8A847C'};">${it.name}<span style="color:#8A847C;"> · ${it.moments}</span></span>
+                  <span style="flex:0 0 auto;font-size:12px;color:#8A847C;">1 :</span>
+                  <input type="number" min="0" max="99" value=${it.n} onInput=${it.onN} title="Un passage tous les N slots de la boucle" style="width:62px;padding:5px 8px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;text-align:right;" />
+                  <button onClick=${it.edit} title="Éditer cet élément dans la bibliothèque" style="flex:0 0 auto;padding:4px 7px;font-size:12px;border-radius:7px;cursor:pointer;border:1px solid rgba(35,34,32,0.14);background:#fff;color:#6E4A2B;">✎</button>
+                </div>
+              `) : html`<span style="font-size:12px;color:#8A847C;">Aucun élément de bibliothèque à ce format.</span>`}
+            </div>
+          </div>
+          <div style="display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start;">
+            ${cField('Rafraîchissement', cChoice('refresh', [['moment', 'Au moment/saison'], ['minutes', 'Toutes les N min']]), 'Quand la boucle est recomposée. « Au moment/saison » = à chaque changement de créneau (matin→midi) ou de période. « Toutes les N min » = aussi rafraîchie périodiquement.')}
+            ${cont.refresh === 'minutes' ? cField('N minutes', cNum('refreshMin', cont.refreshMin, 1, 240), 'Intervalle de recomposition de la boucle, en minutes.') : ''}
+            ${cField('Si rien en saison', cChoice('fallback', [['tout', 'Tout le catalogue'], ['aucun', 'Rien (attente)']]), 'Repli quand aucun produit n’est éligible (hors saison / rien au bon moment) : jouer tout le catalogue, ou afficher l’écran d’attente.')}
+          </div>
+          ${excFilms.length ? html`<div>
+            ${cField('Playlists d\'exception (jouées EN PLUS à chaque boucle · plusieurs possibles)', html`<div style="display:flex;gap:6px;flex-wrap:wrap;">${excChips}</div>`,
+              'Anciens films « playlist » montés à la main, ajoutés à la fin de CHAQUE boucle. Les nouveaux montages se font désormais dans les Suites ci-dessous.')}
+          </div>` : ''}
+
         </div>
       </div>`;
 
