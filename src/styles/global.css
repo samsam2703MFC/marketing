@@ -2690,77 +2690,98 @@ table select,
   align-items: start;
 }
 
-.wizard-layout.has-panel {
-  grid-template-columns: minmax(0, 1fr) 20rem;
+/* Comptes visés : groupés par boutique référente, coulés sur trois colonnes.
+   Le vivier compte des centaines de comptes — une colonne unique en faisait
+   une liste sans fin, et la colonne latérale où ils vivaient les serrait dans
+   un filet de deux cents pixels. */
+.prospects__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 0.4rem;
 }
 
-/* Sous 1100 px, la colonne passe dessous : à côté, elle réduirait le
-   formulaire au point de faire déborder les grilles de cartes. */
-@media (max-width: 1100px) {
-  .wizard-layout.has-panel {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.prospects__head .muted {
+  font-size: 12.5px;
 }
 
-.side-panel {
+.prospects__search {
+  margin-left: auto;
+  width: 15rem;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
   background: #fff;
+}
+
+.prospects {
+  column-count: 3;
+  column-gap: 26px;
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 1.1rem 1.25rem;
-  position: sticky;
-  top: 1rem;
-  max-height: calc(100vh - 3rem);
+  background: #fff;
+  max-height: 22rem;
   overflow: auto;
 }
 
-.side-panel h3 {
-  margin: 0 0 0.4rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
+/* Sous 1100 px, deux colonnes puis une : à trois, les raisons sociales se
+   coupent plus qu'elles ne se lisent. */
+@media (max-width: 1100px) {
+  .prospects {
+    column-count: 2;
+  }
 }
 
-.side-panel p {
-  margin: 0.4rem 0 0;
-  font-size: 0.85rem;
+@media (max-width: 760px) {
+  .prospects {
+    column-count: 1;
+  }
 }
 
-.side-panel__list {
+/* Un groupe ne se coupe jamais entre deux colonnes : la boutique et ses
+   comptes se lisent ensemble, ou pas du tout. */
+.prospects__group {
+  break-inside: avoid;
+  margin-bottom: 14px;
+}
+
+.prospects__shop {
+  margin: 0 0 5px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.prospects__group ul {
   list-style: none;
-  margin: 0.7rem 0 0;
+  margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
 }
 
-.side-panel__list li {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding-bottom: 0.55rem;
-  border-bottom: 1px solid var(--row-line);
+.prospects__group li {
+  padding: 3px 0;
+  font-size: 12.5px;
 }
 
-.side-panel__list li:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-/* Raison sociale et enseigne peuvent être longues : on tronque à l'affichage,
-   le nom entier restant dans l'infobulle. Laisser filer casserait la colonne. */
-.side-panel__list strong,
-.side-panel__list .muted {
-  font-size: 0.85rem;
+/* Raison sociale longue : tronquée à l'affichage, entière dans l'infobulle. */
+.prospects__group strong {
+  display: inline-block;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  vertical-align: bottom;
 }
 
-.side-panel__list .muted {
-  font-size: 0.76rem;
+.prospects__group .muted {
+  font-size: 10.5px;
 }
 
 /* Noms de boutique longs.

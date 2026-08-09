@@ -6,7 +6,7 @@ import type { Role } from '../../lib/navigation'
 import { describeError } from '../../state/auth'
 import ObjectivesStep from './ObjectivesStep'
 import PricingStep from './PricingStep'
-import ProspectPanel from './ProspectPanel'
+import ProspectList from './ProspectList'
 import RangeCalendar from './RangeCalendar'
 
 /**
@@ -494,11 +494,6 @@ export default function CampaignBuilder({
   // du voisin sans qu'aucun type ne s'en plaigne.
   const here = STEPS[step].key
 
-  // Le panneau des comptes n'a de sens que là où l'on choisit les secteurs, et
-  // à la dernière étape où l'on décide de générer les leads.
-  const showPanel =
-    draft.client_target !== 'b2c' && (here === 'framing' || here === 'leads')
-
   return (
     <>
       <button type="button" className="filter back" onClick={onCancel}>
@@ -542,7 +537,7 @@ export default function CampaignBuilder({
           arrière pour vérifier un choix, et rend visible ce qui est acquis. */}
       {step > 0 ? <RunningRecap {...shared} shops={shops.data ?? []} /> : null}
 
-      <div className={`wizard-layout${showPanel ? ' has-panel' : ''}`}>
+      <div className="wizard-layout">
       <section className="card wizard-card">
         {here === 'framing' ? <FramingStep {...shared} role={role} shops={shops.data ?? []} /> : null}
         {here === 'offer' ? <OfferStep {...shared} /> : null}
@@ -555,7 +550,6 @@ export default function CampaignBuilder({
         {here === 'leads' ? <LeadsStep {...shared} /> : null}
       </section>
 
-      {showPanel ? <ProspectPanel sectorIds={draft.sector_ids} /> : null}
       </div>
 
       {blocking ? <p className="muted wizard__hint">{blocking}</p> : null}
@@ -1299,6 +1293,12 @@ function FramingStep({
               </button>
             ))}
           </div>
+
+          {/* Les comptes suivent les secteurs, dans le fil du formulaire : ils
+              répondent à la question que les pastilles posent — qui va-t-on
+              réellement démarcher, et depuis quelle boutique. */}
+          <h3 className="section-label">Comptes visés</h3>
+          <ProspectList sectorIds={draft.sector_ids} />
         </>
       ) : null}
 
@@ -2435,6 +2435,11 @@ function LeadsStep({ draft, patch }: StepProps) {
                 : ''}
             </p>
           )}
+
+          {/* Les comptes eux-mêmes, comme à l'étape 1 : on décide de générer en
+              voyant qui sera appelé, et par quelle boutique. */}
+          <h3 className="section-label">Comptes concernés</h3>
+          <ProspectList sectorIds={draft.sector_ids} />
         </>
       )}
     </>
