@@ -1020,11 +1020,13 @@ function FramingStep({
 
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [uploadNote, setUploadNote] = useState<string | null>(null)
 
   /** Envoie le fichier choisi, puis retient l'adresse rendue par le serveur. */
   async function sendVisual(file: File): Promise<void> {
     setUploading(true)
     setUploadError(null)
+    setUploadNote(null)
 
     try {
       const content = await new Promise<string>((resolve, reject) => {
@@ -1034,12 +1036,31 @@ function FramingStep({
         reader.readAsDataURL(file)
       })
 
-      const { path } = await api.uploadImage(content)
+      const image = await api.uploadImage(content)
 
       // `BASE_URL` porte le sous-répertoire d'installation : le chemin rendu
       // par le serveur est relatif à la racine de l'application, pas à celle
       // du domaine.
-      patch({ image_url: `${import.meta.env.BASE_URL}${path}` })
+      patch({ image_url: `${import.meta.env.BASE_URL}${image.path}` })
+
+      // Ce que le serveur a fait de l'image se dit : une réduction silencieuse
+      // ferait douter du fichier envoyé le jour où l'imprimeur pose la question.
+      const size =
+        image.width !== null && image.height !== null ? `${image.width} × ${image.height} px` : ''
+
+      if (image.resized && image.original_width !== null) {
+        setUploadNote(
+          `Réduite de ${image.original_width} × ${image.original_height} px à ${size} — le maximum` +
+            ' utile à 300 dpi pour un 100 × 150 mm avec 3 mm de fond perdu.',
+        )
+      } else if (image.below_print) {
+        setUploadNote(
+          `${size} : en dessous de 1 182 × 1 772 px, l’impression à 300 dpi manquera de netteté.` +
+            ' Le visuel reste utilisable à l’écran.',
+        )
+      } else if (size !== '') {
+        setUploadNote(`${size} — bon pour l’impression à 300 dpi.`)
+      }
     } catch (cause: unknown) {
       setUploadError(describeError(cause))
     } finally {
@@ -1150,12 +1171,15 @@ function FramingStep({
       </div>
 
       {uploadError !== null ? <p className="error">{uploadError}</p> : null}
+      {uploadNote !== null ? <p className="muted">{uploadNote}</p> : null}
 
       {draft.image_url.trim() === '' ? (
         <p className="muted">
           Facultative. Envoyez un fichier depuis votre poste — PNG, JPEG, GIF, WebP ou AVIF,
-          3 Mo au plus — ou collez l’adresse d’une image déjà en ligne. Elle se déclinera
-          ensuite dans les formats d’affichage à l’étape « Communication ».
+          3 Mo au plus — ou collez l’adresse d’une image déjà en ligne. Une image plus grande
+          que le format d’impression (1 252 × 1 843 px, soit 100 × 150 mm à 300 dpi avec 3 mm de
+          fond perdu) est réduite automatiquement. Elle se déclinera ensuite dans les formats
+          d’affichage à l’étape « Communication ».
         </p>
       ) : (
         <div className="visual-pick">

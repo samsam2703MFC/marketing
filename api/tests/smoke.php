@@ -1851,6 +1851,51 @@ check('un fichier trop lourd est refusé', $response['status'] === 400);
 $response = call($router, 'POST', '/api/v1/marketing/uploads', [], ['content' => '']);
 check('un corps vide est refusé', $response['status'] === 400);
 
+// Réduction au format d'impression : 100 × 150 mm à 300 dpi, 3 mm de fond
+// perdu — soit 1 252 × 1 843 px. Sans GD, l'image part telle quelle et il n'y
+// a rien à vérifier : le serveur ne doit pas refuser l'envoi pour autant.
+if (function_exists('imagecreatetruecolor')) {
+    $canvas = imagecreatetruecolor(3000, 4500);
+    imagefilledrectangle($canvas, 0, 0, 3000, 4500, imagecolorallocate($canvas, 200, 40, 60));
+    ob_start();
+    imagepng($canvas, null, 1);
+    $large = (string) ob_get_clean();
+    imagedestroy($canvas);
+
+    $response = call($router, 'POST', '/api/v1/marketing/uploads', [], [
+        'content' => base64_encode($large),
+    ]);
+    $image = $response['body'];
+
+    check('une image trop grande est réduite', ($image['resized'] ?? false) === true);
+    check(
+        'le côté long tombe au format avec fond perdu',
+        ($image['height'] ?? 0) === 1843,
+        json_encode([$image['width'] ?? null, $image['height'] ?? null])
+    );
+    check('le côté court reste dans le format', ($image['width'] ?? 9999) <= 1252);
+    check(
+        'les proportions sont gardées',
+        abs((($image['width'] ?? 0) / ($image['height'] ?? 1)) - (3000 / 4500)) < 0.01
+    );
+    check('le fichier écrit pèse moins que l\'original', ($image['bytes'] ?? PHP_INT_MAX) < strlen($large));
+
+    // Une petite image n'est jamais agrandie : ajouter des pixels n'ajoute pas
+    // de détail. Elle est signalée, pas refusée.
+    $small = imagecreatetruecolor(600, 900);
+    ob_start();
+    imagepng($small, null, 1);
+    $smallPng = (string) ob_get_clean();
+    imagedestroy($small);
+
+    $image = call($router, 'POST', '/api/v1/marketing/uploads', [], [
+        'content' => base64_encode($smallPng),
+    ])['body'];
+
+    check('une petite image n\'est pas agrandie', ($image['resized'] ?? true) === false);
+    check('elle est signalée sous le format d\'impression', ($image['below_print'] ?? false) === true);
+}
+
 array_map('unlink', glob($uploadDir . '/*') ?: []);
 @rmdir($uploadDir);
 

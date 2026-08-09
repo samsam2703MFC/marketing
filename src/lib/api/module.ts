@@ -607,6 +607,13 @@ export interface UploadedImage {
   bytes: number
   width: number | null
   height: number | null
+  /** Dimensions avant réduction au format d'impression. */
+  original_width: number | null
+  original_height: number | null
+  /** Vrai si le serveur a réduit l'image à l'envoi. */
+  resized: boolean
+  /** Vrai si l'image reste sous le format d'impression 300 dpi. */
+  below_print: boolean
 }
 
 /**
