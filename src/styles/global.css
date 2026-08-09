@@ -1644,6 +1644,42 @@ select:disabled {
   color: var(--muted);
 }
 
+/* Deux façons d'apporter le visuel, sur une même ligne : le fichier depuis le
+   poste, ou l'adresse d'une image déjà en ligne. */
+.visual-source {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.visual-source .field--grow {
+  margin-top: 0.6rem;
+}
+
+.visual-source .filter {
+  margin-bottom: 1px;
+  cursor: pointer;
+}
+
+.visual-source .filter.is-busy {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Le champ natif reste dans le libellé pour garder le clavier et le clic,
+   sans imposer son bouton « Parcourir » au reste de la barre. */
+.visual-source__file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
 /* Visuel de la campagne, choisi avec son identité : l'aperçu à gauche, le
    réglage de cadrage à droite — on voit ce qu'on règle. */
 .visual-pick {

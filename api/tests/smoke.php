@@ -1791,6 +1791,57 @@ putenv('MAR_TEST_PRIORITY=depuis_l_environnement');
 check("l'environnement réel prime sur le fichier", getenv('MAR_TEST_PRIORITY') === 'depuis_l_environnement');
 unlink($file);
 
+// --- Visuels envoyés ------------------------------------------------------
+// Ce qui compte ici n'est pas qu'un PNG passe, mais que le reste soit refusé :
+// le dossier est servi par le serveur web, un fichier écrit sous un nom choisi
+// par l'appelant y serait exécutable.
+echo "\nVisuels\n";
+$uploadDir = sys_get_temp_dir() . '/mar_uploads_' . getmypid();
+putenv('MAR_UPLOAD_DIR=' . $uploadDir);
+
+$png = base64_decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+);
+
+$response = call($router, 'POST', '/api/v1/marketing/uploads', [], [
+    'content' => 'data:image/png;base64,' . base64_encode($png),
+]);
+check('un PNG est accepté', $response['status'] === 200, 'statut ' . $response['status']);
+check(
+    'le chemin rendu est relatif et sous le dossier public',
+    str_starts_with((string) ($response['body']['path'] ?? ''), 'uploads/'),
+    (string) ($response['body']['path'] ?? '')
+);
+check(
+    'le fichier est réellement écrit',
+    is_file($uploadDir . '/' . basename((string) ($response['body']['path'] ?? 'absent')))
+);
+check(
+    'l\'extension vient des octets lus',
+    str_ends_with((string) ($response['body']['path'] ?? ''), '.png')
+);
+
+$response = call($router, 'POST', '/api/v1/marketing/uploads', [], [
+    'content' => base64_encode('<?php system($_GET["c"]); ?>'),
+]);
+check('un script PHP est refusé', $response['status'] === 400, 'statut ' . $response['status']);
+
+$response = call($router, 'POST', '/api/v1/marketing/uploads', [], [
+    'content' => base64_encode('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'),
+]);
+check('un SVG est refusé — il peut porter du script', $response['status'] === 400);
+
+$response = call($router, 'POST', '/api/v1/marketing/uploads', [], [
+    'content' => base64_encode($png . str_repeat('x', 4 * 1024 * 1024)),
+]);
+check('un fichier trop lourd est refusé', $response['status'] === 400);
+
+$response = call($router, 'POST', '/api/v1/marketing/uploads', [], ['content' => '']);
+check('un corps vide est refusé', $response['status'] === 400);
+
+array_map('unlink', glob($uploadDir . '/*') ?: []);
+@rmdir($uploadDir);
+
 // --- Résultat -------------------------------------------------------------
 printf("\n%d réussis, %d échoués\n", $passed, $failed);
 exit($failed === 0 ? 0 : 1);

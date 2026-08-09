@@ -1014,6 +1014,35 @@ function FramingStep({
     refs.b2bSectors.length > 0 &&
     refs.b2bSectors.every((sector) => draft.sector_ids.includes(sector.id))
 
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+
+  /** Envoie le fichier choisi, puis retient l'adresse rendue par le serveur. */
+  async function sendVisual(file: File): Promise<void> {
+    setUploading(true)
+    setUploadError(null)
+
+    try {
+      const content = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result))
+        reader.onerror = () => reject(new Error('Fichier illisible.'))
+        reader.readAsDataURL(file)
+      })
+
+      const { path } = await api.uploadImage(content)
+
+      // `BASE_URL` porte le sous-répertoire d'installation : le chemin rendu
+      // par le serveur est relatif à la racine de l'application, pas à celle
+      // du domaine.
+      patch({ image_url: `${import.meta.env.BASE_URL}${path}` })
+    } catch (cause: unknown) {
+      setUploadError(describeError(cause))
+    } finally {
+      setUploading(false)
+    }
+  }
+
   return (
     <>
       <h2>Quel type de campagne ?</h2>
@@ -1083,21 +1112,46 @@ function FramingStep({
           lui qu'on reconnaît dans la liste et le calendrier avant d'avoir lu
           la ligne. Il se choisit donc ici ; ses déclinaisons par format
           restent à l'étape « Communication », qui les produit. */}
-      <label className="field field--grow">
-        Photo ou illustration — adresse
-        <input
-          type="url"
-          value={draft.image_url}
-          placeholder="https://…"
-          onChange={(e) => patch({ image_url: e.target.value })}
-        />
-      </label>
+      <div className="visual-source">
+        <label className="field field--grow">
+          Photo ou illustration — adresse
+          <input
+            type="url"
+            value={draft.image_url}
+            placeholder="https://…"
+            onChange={(e) => patch({ image_url: e.target.value })}
+          />
+        </label>
+
+        {/* Le fichier passe par le même champ : une fois écrit sur le serveur,
+            c'est son adresse qui est enregistrée avec la campagne. Rien de
+            particulier à relire ensuite — un visuel envoyé et un visuel lié
+            se comportent pareil. */}
+        <label className={uploading ? 'filter is-busy' : 'filter'}>
+          {uploading ? 'Envoi…' : 'Envoyer un fichier'}
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp,image/avif"
+            disabled={uploading}
+            className="visual-source__file"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              // Le champ est vidé aussitôt : sans cela, renvoyer le même
+              // fichier après une erreur ne déclencherait aucun événement.
+              e.target.value = ''
+              if (file) void sendVisual(file)
+            }}
+          />
+        </label>
+      </div>
+
+      {uploadError !== null ? <p className="error">{uploadError}</p> : null}
 
       {draft.image_url.trim() === '' ? (
         <p className="muted">
-          Facultative. Collez l’adresse d’une image déjà en ligne — celle du kit de la marque,
-          d’une photo produit ou d’une illustration. Elle se déclinera ensuite dans les formats
-          d’affichage à l’étape « Communication ».
+          Facultative. Envoyez un fichier depuis votre poste — PNG, JPEG, GIF, WebP ou AVIF,
+          3 Mo au plus — ou collez l’adresse d’une image déjà en ligne. Elle se déclinera
+          ensuite dans les formats d’affichage à l’étape « Communication ».
         </p>
       ) : (
         <div className="visual-pick">

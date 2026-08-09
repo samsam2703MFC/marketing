@@ -595,6 +595,30 @@ export function listOfferItems(): Promise<OfferItem[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Visuels
+// ---------------------------------------------------------------------------
+
+/** Image écrite sur le serveur, rendue par son chemin public. */
+export interface UploadedImage {
+  /** Chemin relatif à la racine de l'application (`uploads/…`). */
+  path: string
+  bytes: number
+  width: number | null
+  height: number | null
+}
+
+/**
+ * Envoie une image et rend son chemin.
+ *
+ * Le contenu voyage en base64 dans le corps JSON, comme le reste du module :
+ * un envoi multipart obligerait le routeur à porter les fichiers pour un seul
+ * appel.
+ */
+export function uploadImage(content: string): Promise<UploadedImage> {
+  return request<UploadedImage>(`${BASE}/uploads`, { method: 'POST', body: { content } })
+}
+
+// ---------------------------------------------------------------------------
 // Ventes réelles — l'historique qui éclaire l'étape « Objectifs »
 // ---------------------------------------------------------------------------
 

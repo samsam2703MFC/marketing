@@ -22,6 +22,7 @@ use Marketing\Controller\NetworkController;
 use Marketing\Controller\ReferenceController;
 use Marketing\Controller\SalesController;
 use Marketing\Controller\SessionController;
+use Marketing\Controller\UploadController;
 use Marketing\Support\Router;
 
 return static function (Router $router): void {
@@ -33,6 +34,7 @@ return static function (Router $router): void {
     $catalog    = new CatalogController();
     $network    = new NetworkController();
     $sales      = new SalesController();
+    $uploads    = new UploadController();
 
     // Session — publique : elle ne dit que si l'appelant est authentifié.
     // Le front s'en sert pour savoir s'il est embarqué dans l'ERP, auquel cas
@@ -58,6 +60,9 @@ return static function (Router $router): void {
 
     // Ventes réelles — l'historique qui éclaire l'étape « Objectifs »
     $router->get('/api/v1/marketing/sales/quantities', [$sales, 'quantities']);
+
+    // Visuels de campagne envoyés depuis l'assistant
+    $router->post('/api/v1/marketing/uploads', [$uploads, 'store']);
 
     // Outils de campagne
     $router->get('/api/v1/marketing/offer-items',     [$catalog, 'offerItems']);
