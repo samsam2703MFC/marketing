@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { module as api } from '../../lib/api'
 import { useAsync, formatDate, formatEur } from '../../lib/useAsync'
-import type { CampaignDraft, ClientTarget, OfferItem, References } from '../../lib/api/module'
+import type { CampaignDraft, ClientTarget, ImageFit, OfferItem, References } from '../../lib/api/module'
 import type { Role } from '../../lib/navigation'
 import { describeError } from '../../state/auth'
 import ObjectivesStep from './ObjectivesStep'
@@ -163,6 +163,8 @@ export interface Draft {
   pos_questions: PosQuestion[]
   image_url: string
   focal_point_y: number
+  /** Rempli et recoupé au point focal, ou contenu entier dans le cadre. */
+  image_fit: ImageFit
   format_ids: number[]
 
   // 5 — Planning
@@ -238,6 +240,7 @@ function emptyDraft(refs: References, role: Role): Draft {
     pos_questions: [],
     image_url: '',
     focal_point_y: 50,
+    image_fit: 'cover',
     format_ids: refs.formats.map((format) => format.id),
 
     // Le rétroplanning type vient de la base et reste modifiable : ce sont des
@@ -715,6 +718,7 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
     })),
     image_url: state.image_url ?? '',
     focal_point_y: state.focal_point_y ?? 50,
+    image_fit: state.image_fit ?? 'cover',
     // Le rétroplanning enregistré remplace le modèle : reprendre un brouillon
     // ne doit pas y réinjecter les jalons types qu'on venait d'en retirer.
     format_ids: state.format_ids.length > 0 ? state.format_ids : base.format_ids,
@@ -808,6 +812,7 @@ function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): Cam
     b2b_webshop_enabled: draft.b2b_webshop_enabled,
     image_url: draft.image_url.trim() || null,
     focal_point_y: draft.image_url.trim() === '' ? null : draft.focal_point_y,
+    image_fit: draft.image_fit,
     create_crm_leads: draft.create_crm_leads,
     margin_pct_default: draft.margin_pct_default.trim() === ''
       ? null
@@ -1188,26 +1193,64 @@ function FramingStep({
         <div className="visual-pick">
           <span className="visual-pick__frame">
             <img
+              className={draft.image_fit === 'contain' ? 'is-contain' : undefined}
               src={draft.image_url}
               alt=""
-              style={{ objectPosition: `50% ${draft.focal_point_y}%` }}
+              style={
+                draft.image_fit === 'cover'
+                  ? { objectPosition: `50% ${draft.focal_point_y}%` }
+                  : undefined
+              }
             />
           </span>
           <div className="visual-pick__setting">
-            <label className="field field--grow">
-              Cadrage vertical — {Math.round(draft.focal_point_y)} %
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={draft.focal_point_y}
-                onChange={(e) => patch({ focal_point_y: Number(e.target.value) })}
-              />
-            </label>
-            <p className="muted">
-              Le point focal décide de ce qui reste dans le cadre quand l’image est recoupée en
-              bandeau ou en carré. Rien ne s’affiche ? L’adresse ne pointe pas sur une image.
-            </p>
+            {/* Deux façons d'occuper un format : le remplir, ou y tenir. Une
+                photo se recoupe sans dommage ; une affiche déjà composée, avec
+                son texte au bord, perd son message dès qu'on la rogne. */}
+            <span className="section-label">Cadrage</span>
+            <div className="filters__row">
+              <button
+                type="button"
+                className={`choice-pill${draft.image_fit === 'cover' ? ' is-on' : ''}`}
+                aria-pressed={draft.image_fit === 'cover'}
+                onClick={() => patch({ image_fit: 'cover' })}
+              >
+                Remplir le cadre
+              </button>
+              <button
+                type="button"
+                className={`choice-pill${draft.image_fit === 'contain' ? ' is-on' : ''}`}
+                aria-pressed={draft.image_fit === 'contain'}
+                onClick={() => patch({ image_fit: 'contain' })}
+              >
+                Image entière
+              </button>
+            </div>
+
+            {draft.image_fit === 'cover' ? (
+              <>
+                <label className="field field--grow">
+                  Point focal vertical — {Math.round(draft.focal_point_y)} %
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={draft.focal_point_y}
+                    onChange={(e) => patch({ focal_point_y: Number(e.target.value) })}
+                  />
+                </label>
+                <p className="muted">
+                  L’image remplit chaque format et déborde ; le point focal décide de ce qui
+                  reste dans le cadre en bandeau ou en carré. Rien ne s’affiche ? L’adresse ne
+                  pointe pas sur une image.
+                </p>
+              </>
+            ) : (
+              <p className="muted">
+                L’image tient entière dans chaque format, marges comprises — rien n’est rogné.
+                Le point focal n’a plus d’objet.
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -2062,8 +2105,12 @@ function CommunicationStep({
       ) : (
         <>
           <p className="muted">
-            Un seul visuel, recadré par format selon le point focal réglé à l’étape « Type &
-            cadrage ». Retirez un format que vous ne produirez pas.
+            Un seul visuel, décliné par format selon le cadrage réglé à l’étape « Type &
+            cadrage » —{' '}
+            {draft.image_fit === 'cover'
+              ? 'rempli et recoupé au point focal'
+              : 'contenu entier, marges comprises'}
+            . Retirez un format que vous ne produirez pas.
           </p>
 
           <ul className="format-grid">
@@ -2081,10 +2128,18 @@ function CommunicationStep({
                       className="format-card__preview"
                       style={{ aspectRatio: `${format.width_px} / ${format.height_px}` }}
                     >
+                      {/* Le format montre le cadrage retenu à l'étape 1 :
+                          c'est là qu'on voit ce qu'une bannière très large
+                          fait perdre à une image qu'on remplit. */}
                       <img
+                        className={draft.image_fit === 'contain' ? 'is-contain' : undefined}
                         src={draft.image_url}
                         alt=""
-                        style={{ objectPosition: `50% ${draft.focal_point_y}%` }}
+                        style={
+                          draft.image_fit === 'cover'
+                            ? { objectPosition: `50% ${draft.focal_point_y}%` }
+                            : undefined
+                        }
                       />
                     </span>
                     <strong>{format.name}</strong>

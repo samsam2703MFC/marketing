@@ -887,7 +887,14 @@ final class CampaignRepository
         $this->insertOffer($campaignId, $auth, $offer);
         $this->insertRetroplanning($campaignId, $auth, $retro);
         $this->insertPosQuestions($campaignId, $auth, $questions, !empty($data['pos_survey_enabled']));
-        $this->insertAsset($campaignId, $auth, $data['image_url'] ?? null, $data['focal_point_y'] ?? null, $formats);
+        $this->insertAsset(
+            $campaignId,
+            $auth,
+            $data['image_url'] ?? null,
+            $data['focal_point_y'] ?? null,
+            $data['image_fit'] ?? null,
+            $formats
+        );
     }
 
     /**
@@ -1109,6 +1116,7 @@ final class CampaignRepository
         AuthContext $auth,
         mixed $imageUrl,
         mixed $focalPointY,
+        mixed $fit,
         array $formatIds
     ): void {
         $imageUrl = is_string($imageUrl) ? trim($imageUrl) : '';
@@ -1118,13 +1126,16 @@ final class CampaignRepository
 
         $connection = Database::connection();
         $statement  = $connection->prepare(
-            'INSERT INTO mar_campaign_asset (campaign_id, file_url, focal_point_y, is_master, created_by)
-             VALUES (:campaign_id, :file_url, :focal_point_y, 1, :created_by)'
+            'INSERT INTO mar_campaign_asset (campaign_id, file_url, focal_point_y, fit, is_master, created_by)
+             VALUES (:campaign_id, :file_url, :focal_point_y, :fit, 1, :created_by)'
         );
         $statement->execute([
             'campaign_id'   => $campaignId,
             'file_url'      => $imageUrl,
             'focal_point_y' => $focalPointY === null || $focalPointY === '' ? null : (float) $focalPointY,
+            // Toute autre valeur retombe sur « cover » : c'est le cadrage
+            // d'origine, celui de tous les visuels déjà enregistrés.
+            'fit'           => $fit === 'contain' ? 'contain' : 'cover',
             'created_by'    => $auth->userId,
         ]);
 
@@ -1292,7 +1303,7 @@ final class CampaignRepository
         );
 
         $master = Database::connection()->prepare(
-            'SELECT file_url, focal_point_y FROM mar_campaign_asset
+            'SELECT file_url, focal_point_y, fit FROM mar_campaign_asset
               WHERE campaign_id = :id ORDER BY is_master DESC, id LIMIT 1'
         );
         $master->execute(['id' => $id]);
@@ -1317,6 +1328,7 @@ final class CampaignRepository
             'create_crm_leads'   => (bool) $campaign['create_crm_leads'],
             'image_url'          => $asset === false ? '' : (string) $asset['file_url'],
             'focal_point_y'      => $asset === false ? 50 : (int) $asset['focal_point_y'],
+            'image_fit'          => $asset === false ? 'cover' : (string) $asset['fit'],
 
             'shop_ids'       => $ids('SELECT shop_id FROM mar_campaign_shop WHERE campaign_id = :id'),
             'margin_pct_default'    => $campaign['margin_pct_default'],
@@ -1462,13 +1474,13 @@ final class CampaignRepository
     private function assets(int $campaignId): array
     {
         $statement = Database::connection()->prepare(
-            'SELECT ca.id, ca.file_url, ca.focal_point_y, ca.is_master,
+            'SELECT ca.id, ca.file_url, ca.focal_point_y, ca.fit, ca.is_master,
                     COUNT(ar.id)                                          AS renders_count,
                     SUM(CASE WHEN ar.status = \'pending\' THEN 1 ELSE 0 END) AS pending_count
                FROM mar_campaign_asset ca
                LEFT JOIN mar_asset_render ar ON ar.campaign_asset_id = ca.id
               WHERE ca.campaign_id = :id
-              GROUP BY ca.id, ca.file_url, ca.focal_point_y, ca.is_master
+              GROUP BY ca.id, ca.file_url, ca.focal_point_y, ca.fit, ca.is_master
               ORDER BY ca.is_master DESC, ca.id'
         );
         $statement->execute(['id' => $campaignId]);

@@ -1711,6 +1711,14 @@ select:disabled {
   display: block;
 }
 
+/* Image entière : elle tient dans le cadre, et le fond montre ce qui restera
+   en marge une fois le format produit. */
+.visual-pick__frame img.is-contain,
+.format-card__preview img.is-contain {
+  object-fit: contain;
+  background: var(--table-head);
+}
+
 .visual-pick__setting {
   flex: 1 1 16rem;
   min-width: 14rem;

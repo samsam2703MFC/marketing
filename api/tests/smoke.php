@@ -401,6 +401,7 @@ $response  = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
     'uniform_ids'     => [(int) $refs['uniforms'][0]['id']],
     'image_url'       => 'https://exemple.test/visuel.jpg',
     'focal_point_y'   => 42.5,
+    'image_fit'       => 'contain',
     'format_ids'      => array_column($refs['formats'], 'id'),
     'offer'           => [
         'title'         => 'Menu Barbecue',
@@ -599,6 +600,10 @@ check('le visuel maître est créé', $assetId > 0);
 check(
     'le point focal est conservé',
     (float) $pdo->query(sprintf('SELECT focal_point_y FROM mar_campaign_asset WHERE id = %d', $assetId))->fetchColumn() === 42.5
+);
+check(
+    'le mode de cadrage est conservé',
+    $pdo->query(sprintf('SELECT fit FROM mar_campaign_asset WHERE id = %d', $assetId))->fetchColumn() === 'contain'
 );
 check(
     'une déclinaison est attendue par format',
@@ -1013,12 +1018,20 @@ call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon)
     'scope'       => 'RESEAU',
     'sector_ids'  => [(int) $secteurs['horeca']],
     'channels'    => [['channel_id' => (int) $refs['channels'][1]['id'], 'budget_amount' => 250]],
+    'image_url'   => 'https://exemple.test/affiche.png',
+    'image_fit'   => 'contain',
+    'format_ids'  => array_column($refs['formats'], 'id'),
 ]);
 $etat = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon))['body'];
 check(
     'le brouillon retient l\'étape où on l\'a laissé',
     ($etat['draft_step'] ?? null) === 'offer',
     json_encode($etat['draft_step'] ?? null)
+);
+check(
+    'le cadrage du visuel revient avec le brouillon',
+    ($etat['image_fit'] ?? null) === 'contain',
+    json_encode($etat['image_fit'] ?? null)
 );
 
 // Une campagne lancée porte des choses que l'assistant ne connaît pas —

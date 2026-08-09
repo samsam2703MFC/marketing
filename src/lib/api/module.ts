@@ -90,6 +90,12 @@ export interface CampaignType {
   lever_color_hex: string | null
 }
 
+/**
+ * Cadrage du visuel dans un format : rempli et recoupé au point focal, ou
+ * contenu entier avec ses marges.
+ */
+export type ImageFit = 'cover' | 'contain'
+
 /** Cible client d'une campagne — pilote l'entonnoir de leads B2B. */
 export type ClientTarget = 'b2c' | 'b2b' | 'mixte'
 
@@ -337,6 +343,7 @@ export interface CampaignDetail extends Campaign {
     id: number
     file_url: string | null
     focal_point_y: number | null
+    fit: ImageFit
     is_master: boolean
     renders_count: number
     /** Déclinaisons encore à produire. */
@@ -436,6 +443,8 @@ export interface CampaignDraft {
   }>
   /** Cadrage vertical du visuel, en pourcentage de la hauteur. */
   focal_point_y?: number | null
+  /** Rempli et recoupé, ou contenu entier dans le cadre. */
+  image_fit?: ImageFit
   shop_ids?: number[]
   /**
    * Objectifs de pièces par boutique (étape « Objectifs »), > 0 seulement.
