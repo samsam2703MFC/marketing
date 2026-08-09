@@ -79,6 +79,7 @@ final class CampaignController
             'sector_ids', 'agency_ask_ids', 'b2b_option_ids', 'uniform_ids', 'format_ids',
             'retroplanning', 'offer',
             'challenge_enabled', 'challenge_metric', 'challenge_trigger_pct', 'challenge_prizes',
+            'margin_pct_default',
         ]);
 
         $auth = AuthContext::current();
@@ -142,6 +143,7 @@ final class CampaignController
             'lever_targets', 'sector_ids', 'agency_ask_ids', 'b2b_option_ids',
             'uniform_ids', 'format_ids', 'retroplanning', 'offer',
             'challenge_enabled', 'challenge_metric', 'challenge_trigger_pct', 'challenge_prizes',
+            'margin_pct_default',
         ]);
 
         return $this->campaigns->updateWithRelations(AuthContext::current(), $id, $payload)

@@ -385,6 +385,21 @@ export function listShops(): Promise<Shop[]> {
  * partie de la campagne. Les envoyer séparément laisserait, en cas d'échec, une
  * campagne budgétée mais sans périmètre.
  */
+/** Une ligne d'offre : le produit, et la promotion qu'il porte s'il en porte une. */
+export interface OfferItemPayload {
+  label: string
+  offer_item_id?: number | null
+  mechanic_type?: string | null
+  discount_pct?: number | string | null
+  fixed_price?: number | string | null
+  buy_qty?: number | string | null
+  get_qty?: number | string | null
+  /** Prix TTC de référence, figé au moment de la saisie. */
+  baseline_price?: number | string | null
+  /** Taux de marge du produit ; nul = suit le taux réseau. */
+  margin_pct?: number | string | null
+}
+
 export interface CampaignDraft {
   name: string
   /**
@@ -454,12 +469,21 @@ export interface CampaignDraft {
     all_day?: boolean
     hour_from?: string | null
     hour_to?: string | null
+    /** Plafond de pièces en promotion par ticket ; nul = sans limite. */
+    max_qty_per_ticket?: number | string | null
+    /** La promotion se cumule avec les autres avantages. */
+    is_cumulative?: boolean
     /**
      * Élément choisi au catalogue (libellé + référence) ou saisi en clair.
      * Le serveur accepte aussi la chaîne nue, forme historique des brouillons.
+     *
+     * Les champs de promotion viennent de l'étape « Prix » : nuls, le produit
+     * est dans l'offre sans être bradé.
      */
-    items?: Array<{ label: string; offer_item_id?: number | null } | string>
+    items?: Array<OfferItemPayload | string>
   }
+  /** Taux de marge appliqué aux produits qui n'ont pas le leur, en %. */
+  margin_pct_default?: number | string | null
 }
 
 export function createCampaign(
@@ -500,7 +524,9 @@ export interface CampaignDraftState
     mechanic_text: string | null
     hour_from: string | null
     hour_to: string | null
-    items: Array<{ label: string; offer_item_id: number | null }>
+    max_qty_per_ticket: number | string | null
+    is_cumulative: boolean
+    items: OfferItemPayload[]
   } | null
 }
 

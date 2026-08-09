@@ -2191,6 +2191,201 @@ select:disabled {
 .shop-card__challenge strong { font-weight: 600; }
 .shop-card__challenge-gap { font-size: 11.5px; }
 
+/* ── Étape « Prix » ─────────────────────────────────────────────────────────
+
+   Une quatrième couleur entre ici, et elle a un rôle qu'aucune autre ne peut
+   tenir : le rouge de l'arrêt. Il ne sert qu'à une chose — une marge devenue
+   négative — et jamais à décorer une ligne importante. Le bordeaux de la
+   marque en est assez proche pour qu'on les confonde de loin, d'où un rouge
+   nettement plus vif et un fond qui l'accompagne toujours.                   */
+
+:root {
+  --stop: #A32014;
+  --stop-soft: #F7E0DC;
+}
+
+.margin-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 11px 16px;
+  margin-bottom: 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.margin-bar__label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.margin-bar__hint { font-size: 12.5px; color: var(--muted); }
+.margin-bar__spacer { flex: 1; }
+
+/* Deuxième ligne d'une cellule : la valeur au-dessus, sa précision en dessous.
+   Sans `display: block` les deux se collent — « 14,08 €68 % de marge ». */
+.sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted);
+}
+
+.tag-warn,
+.tag-stop {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.tag-warn { background: var(--prize-soft); color: var(--prize-ink); }
+.tag-stop { background: var(--stop-soft); color: var(--stop); }
+
+/* Tableau des promotions */
+.pricing { min-width: 1080px; }
+.pricing tbody td { vertical-align: top; }
+.pricing__sep { border-left: 1px solid var(--line); }
+.pricing__stop { color: var(--stop); font-weight: 600; }
+
+.pricing tr.is-stop td { background: var(--stop-soft); }
+
+.pricing__mecanique {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pricing__mecanique select {
+  padding: 5px 8px;
+  font: 400 12.5px 'Gotham', system-ui, sans-serif;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+/* Un champ de prix est plus large qu'un pourcentage : « 21,90 » ne tient pas
+   dans la boîte prévue pour « 20 ». */
+.pricing td .objectives__pct { justify-content: flex-end; }
+.pricing td .objectives__pct input { width: 64px; }
+
+.pricing__flag {
+  margin: 10px 0 0;
+  padding: 10px 13px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  max-width: 112ch;
+}
+
+.pricing__flag--stop { background: var(--stop-soft); color: var(--stop); }
+.pricing__flag--warn { background: var(--prize-soft); color: var(--prize-ink); }
+
+/* Conditions */
+.cond-card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 32px;
+  padding: 14px 18px;
+}
+
+.cond-card__field { display: flex; flex-direction: column; gap: 6px; }
+
+.cond-card__label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.cond-card__value { font-size: 13px; }
+.cond-card__note { display: block; font-size: 11.5px; color: var(--faint); }
+
+/* Bilan */
+.kpi-row {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 4px 0;
+}
+
+.kpi {
+  flex: 1;
+  min-width: 176px;
+  padding: 13px 18px;
+  border-left: 3px solid var(--line);
+}
+
+/* Chiffres proportionnels sur une valeur isolée : à cette taille des chasses
+   égales feraient flotter « 4 983 ». */
+.kpi__value {
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.kpi__label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-top: 5px;
+}
+
+.kpi__note { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+.pricing__gauge { margin-top: 10px; padding: 15px 18px; }
+
+.pricing__bar {
+  display: flex;
+  gap: 2px;
+  height: 22px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--total-line);
+}
+
+.pricing__part { display: block; }
+.pricing__part--1 { background: var(--chart-real); }
+.pricing__part--2 { background: var(--prize); }
+.pricing__part--3 { background: var(--chart-goal); }
+
+.pricing__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin-top: 9px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.pricing__mark {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 6px;
+  vertical-align: -1px;
+}
+
+.pricing__mark--1 { background: var(--chart-real); }
+.pricing__mark--2 { background: var(--prize); }
+.pricing__mark--3 { background: var(--chart-goal); }
+
 /* Champ occupant la largeur, pour les zones de texte et les curseurs */
 .field--block,
 .field--grow {

@@ -623,6 +623,114 @@ check(
                   WHERE c.name = 'Offre toute la journée'")->fetchColumn() === null
 );
 
+// ── Étape « Prix » : promotion chiffrée par produit ────────────────────────
+//
+// La promotion n'était que du texte : « −20 % » se lisait, ne se calculait
+// pas. Ces contrôles portent sur les nombres, parce que c'est d'eux que dépend
+// le volume à vendre pour compenser.
+
+$refProduit = (int) $pdo->query(
+    "SELECT id FROM mar_offer_item WHERE category = 'produit' ORDER BY id LIMIT 1"
+)->fetchColumn();
+
+$response = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name'               => 'Campagne avec prix',
+    'margin_pct_default' => 68,
+    'offer' => [
+        'title'              => 'Offre chiffrée',
+        'max_qty_per_ticket' => 4,
+        'is_cumulative'      => true,
+        'items' => [
+            [
+                'label' => 'Produit remisé', 'offer_item_id' => $refProduit,
+                'mechanic_type' => 'PERCENT', 'discount_pct' => 20,
+                'baseline_price' => 19.90, 'margin_pct' => 68,
+            ],
+            [
+                'label' => 'Produit à prix barré',
+                'mechanic_type' => 'CROSSED_PRICE', 'fixed_price' => 21.90,
+                'baseline_price' => 24.90,
+            ],
+            ['label' => 'Produit sans promotion'],
+        ],
+    ],
+]);
+$avecPrix = (int) $response['body']['inserted_id'];
+check('la campagne avec prix est créée', $response['status'] === 201, 'statut ' . $response['status']);
+
+$etat = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $avecPrix))['body'];
+$lignes = $etat['offer']['items'] ?? [];
+
+check(
+    'la remise revient comme un nombre, pas comme un libellé',
+    count($lignes) === 3
+        && $lignes[0]['mechanic_type'] === 'PERCENT'
+        && (float) $lignes[0]['discount_pct'] === 20.0
+        && (float) $lignes[0]['baseline_price'] === 19.90,
+    json_encode($lignes[0] ?? null)
+);
+
+// Une mécanique ne remplit que ses propres champs : garder la remise en
+// passant au prix barré laisserait deux promotions sur la même ligne, et le
+// calcul de marge en choisirait une sans le dire.
+check(
+    'un prix barré n\'écrit pas de pourcentage',
+    $lignes[1]['mechanic_type'] === 'CROSSED_PRICE'
+        && $lignes[1]['discount_pct'] === null
+        && (float) $lignes[1]['fixed_price'] === 21.90,
+    json_encode($lignes[1] ?? null)
+);
+
+check(
+    'un produit sans promotion reste sans mécanique',
+    $lignes[2]['mechanic_type'] === null
+        && $lignes[2]['discount_pct'] === null
+        && $lignes[2]['fixed_price'] === null,
+    json_encode($lignes[2] ?? null)
+);
+
+check(
+    'le taux de marge réseau et les conditions reviennent',
+    (float) $etat['margin_pct_default'] === 68.0
+        && (int) $etat['offer']['max_qty_per_ticket'] === 4
+        && $etat['offer']['is_cumulative'] === true,
+    json_encode([
+        'marge'   => $etat['margin_pct_default'] ?? null,
+        'plafond' => $etat['offer']['max_qty_per_ticket'] ?? null,
+        'cumul'   => $etat['offer']['is_cumulative'] ?? null,
+    ])
+);
+
+// Le plafond vide n'est pas un plafond à zéro : sans limite d'un côté, aucune
+// pièce en promotion de l'autre.
+call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $avecPrix), [], [
+    'name'  => 'Campagne avec prix',
+    'offer' => [
+        'title' => 'Offre chiffrée',
+        'max_qty_per_ticket' => '',
+        'items' => [['label' => 'Produit remisé', 'mechanic_type' => 'PERCENT', 'discount_pct' => 15]],
+    ],
+]);
+$etat = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $avecPrix))['body'];
+check(
+    'un plafond vidé redevient nul, pas zéro',
+    array_key_exists('max_qty_per_ticket', $etat['offer'])
+        && $etat['offer']['max_qty_per_ticket'] === null,
+    json_encode($etat['offer']['max_qty_per_ticket'] ?? 'absent')
+);
+
+$response = call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $avecPrix), [], [
+    'name'  => 'Campagne avec prix',
+    'offer' => ['title' => 'Offre chiffrée', 'items' => [
+        ['label' => 'Produit', 'mechanic_type' => 'AU_PIF'],
+    ]],
+]);
+check(
+    'une mécanique de promotion inconnue est refusée',
+    $response['status'] === 422,
+    'statut ' . $response['status']
+);
+
 // Une tenue choisie doit apparaître sur l'écran « Pub physique », sinon le
 // choix de l'assistant ne va nulle part.
 $response = call($router, 'GET', '/api/v1/marketing/diffusion', ['family' => 'PHYSIQUE']);
