@@ -141,7 +141,7 @@ export interface Draft {
   /** Dotation de chaque rang, en clair. L'index vaut le rang. */
   challenge_prizes: string[]
 
-  // 3 — Objectifs & budget
+  // 5 — Budget & leviers
   budget_amount: string
   objective_coef_pct: string
   targets: Record<number, string>
@@ -295,7 +295,7 @@ const STEPS: Step[] = [
   },
   {
     key: 'objectives',
-    label: 'Objectifs',
+    label: 'Objectifs de vente',
     // Jamais bloquante : les objectifs éclairent, ils n'obligent pas. Une
     // campagne sans objectif de pièces reste légitime (offre facultative,
     // budget facultatif — même logique), et la saisie ne laisse passer que
@@ -304,7 +304,7 @@ const STEPS: Step[] = [
   },
   {
     key: 'budget',
-    label: 'Objectifs & budget',
+    label: 'Budget & leviers',
     blocking: (d) =>
       d.budget_amount !== '' && Number(d.budget_amount) < 0
         ? 'Le budget ne peut pas être négatif.'
@@ -1574,13 +1574,13 @@ function OfferStep({ draft, patch }: StepProps) {
 }
 
 // ---------------------------------------------------------------------------
-// 3 — Objectifs & budget
+// 5 — Budget & leviers
 // ---------------------------------------------------------------------------
 
 function BudgetStep({ refs, draft, patch }: StepProps) {
   return (
     <>
-      <h2>Objectifs & budget</h2>
+      <h2>Budget & leviers</h2>
       <p className="muted">
         L’engagé se remplit ensuite depuis le grand livre du fonds, il ne se saisit pas ici.
       </p>
