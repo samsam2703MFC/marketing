@@ -464,12 +464,15 @@ tbody td {
   gap: 8px;
 }
 
+/* Badges rectangulaires, comme les cartes de choix de l'assistant. Le rayon
+   est proportionné à la hauteur : 11 px sur une carte de 60 px de haut donne
+   8 px sur une pastille de 28 px, sinon la forme retombe sur l'ovale. */
 .filter {
   margin: 0;
   padding: 6px 13px;
   font-size: 12.5px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 8px;
   background: #fff;
   color: var(--muted-2);
 }
