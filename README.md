@@ -233,6 +233,25 @@ un **sous-type**.
   neutre « Offre » jusqu'à réassignation. Ces sous-types pourront être **alimentés depuis l'ERP**
   (menu Promotions) dans un second temps. API : `GET /promo-types`, `PUT /promo-types`.
 
+### Animation — texte animé **ou** fichier importé
+L'élément **Animation** travaille de deux façons, choisies dans son volet **Visuel** :
+
+- **Texte animé** (défaut) — titre + accroche générés aux couleurs de la marque, jetons
+  `{{magasin}}` & co. compris. On peut y poser un **visuel de fond** (image ou vidéo), avec un
+  **voile** réglable (0–90 %) qui garde le texte lisible.
+- **Fichier d'animation** — le fichier importé **remplace** le rendu généré : l'élément devient
+  un conteneur. Formats : **GIF**, PNG, WebP, **SVG animé**, **MP4 / WebM**, et **Lottie
+  (`.json`)**. 18 Mo max par l'upload ; au-delà, déposer dans `public/anim/` sur le serveur.
+
+Dans les deux cas, le **cadrage** est au choix : *Remplir* (couvre l'écran, rogne les bords) ou
+*Adapter* (montre tout le fichier). Un fichier peut aussi être désigné par son adresse
+(`anim/…`, `media/…`, `https://…`) au lieu d'être importé.
+
+Le lecteur **Lottie** (`public/js/vendor/lottie.js`, lottie-web *light*, MIT) est vendorisé comme
+Preact/HTM/QR — aucune dépendance npm — et **chargé à la demande** : tant qu'aucun élément ne
+diffuse de `.json`, il n'est pas téléchargé. Un `.json` illisible est refusé à l'upload plutôt que
+de laisser un écran vide en magasin. API : `POST /api/v1/anim-assets`, `GET /api/v1/anim-assets`.
+
 ### Gabarit HTML (coller du code) + variables
 Type d'élément **`html`** : dans la bibliothèque, **＋ Élément → « Gabarit HTML — coller du
 code »**. On y colle du HTML (document complet avec `<head><style>` ou simple fragment) ; il est
@@ -334,7 +353,7 @@ qui la portent restent visibles ; la liste ne peut pas être vidée.
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + cycle complet — 62 tests
+npm test              # serveur jetable (BDD temporaire) + cycle complet — 63 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
 node test/live-test.js http://185.180.206.46/signage --password=… --mutate
@@ -360,6 +379,7 @@ session admin  : POST /api/v1/login · /logout · GET /me
                  GET /campaigns · PUT /campaigns (campagnes marketing)
                  GET /lib-categories · PUT /lib-categories (classement + table liée)
                  GET /ingredients · PUT /ingredients (matière première ↔ animation)
+                 POST /anim-assets · GET /anim-assets (fichiers d'animation)
                  GET /product-moments · PUT /product-moments (tags de période,
                    kind = produit | categorie | promotion | campagne)
                  GET /appearance?product={id} (Régie → Apparition…, lecture ERP)

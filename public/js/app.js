@@ -4,7 +4,7 @@ import { html, h, render, Component } from './vendor/preact-htm.js';
 import {
   RUBY, INK, FUI, W, H, LIAISON_DUR, LAYOUTS, MOTIONS,
   clx, fmtTime, newTag, newSched, newPos,
-  activeItems as rActiveItems, moduleDur as rModuleDur, renderModule, playable,
+  activeItems as rActiveItems, moduleDur as rModuleDur, renderModule, playable, animAssetKind,
 } from './renderer.js';
 // Config du mode « continu » : source unique partagée avec le serveur.
 import { continuousDefaults, normContinuous } from './continuous.js';
@@ -135,6 +135,7 @@ class App extends Component {
     fleet: [],
     library: [],
     elementTypes: [], addPicker: false, openSec: ['items'],
+    animBusy: false,   // upload d'un fichier d'animation en cours
     htmlVarSel: '', filmMomentSel: '',
     promoTypes: [], promoDraft: null, promoDirty: false, promoBusy: false, promoSavedAt: 0,
     // Catégories de la bibliothèque : éditables dans les Paramètres (nom,
@@ -821,7 +822,7 @@ class App extends Component {
     if (mm.type === 'produit') return 'produit';
     if (mm.type === 'film') return 'video';
     if (mm.type === 'media') return 'media';
-    if (mm.type === 'animation') return 'layout';
+    if (mm.type === 'animation') return 'anim';
     if (mm.type === 'category') return 'items';
     return 'tag';
   }
@@ -953,6 +954,21 @@ class App extends Component {
       this.showToast('Vidéo(s) surprise ajoutée(s) ✓');
     } catch (e) { this.showToast(`Erreur : ${e.message}`); }
     finally { this.setState({ surpriseBusy: false }); }
+  }
+  // ---- fichiers d'animation (fond ou animation autonome) -------------------
+  // Un seul chemin d'upload pour les deux usages ; `field` dit lequel du champ
+  // « fond » ou « fichier » reçoit l'URL.
+  async uploadAnimAsset(field, file) {
+    if (!file || this.state.animBusy) return;
+    if (file.size > 18 * 1024 * 1024) { this.showToast(`${file.name} : trop lourd (max 18 Mo) — dépose-le dans public/anim/ sur le serveur`); return; }
+    this.setState({ animBusy: true });
+    try {
+      const dataUrl = await new Promise((res, rej) => { const rd = new FileReader(); rd.onload = () => res(rd.result); rd.onerror = rej; rd.readAsDataURL(file); });
+      const out = await api('POST', '/anim-assets', { name: file.name, dataUrl });
+      this.setSelField(field, out.url);
+      this.showToast(`« ${out.name} » importé ✓`);
+    } catch (e) { this.showToast(`Erreur : ${e.message}`); }
+    finally { this.setState({ animBusy: false }); }
   }
   async deleteSurprise(name) {
     if (!window.confirm(`Supprimer « ${name} » du dossier surprise ?`)) return;
@@ -3284,6 +3300,25 @@ class App extends Component {
       onSurpriseFiles: (e) => { this.uploadSurprise(e.target.files); e.target.value = ''; },
       refreshSurprise: () => this.loadSurprise(),
       delSurprise: (name) => this.deleteSurprise(name),
+      // -- animation : texte animé (avec fond) ou fichier autonome --
+      animMode: m.animMode === 'fichier' ? 'fichier' : 'texte',
+      setAnimMode: (mode) => this.setSelField('animMode', mode),
+      animBg: m.animBg || '', animFile: m.animFile || '',
+      animBgKind: animAssetKind(m.animBg || ''), animFileKind: animAssetKind(m.animFile || ''),
+      animDim: m.animDim == null ? 45 : m.animDim,
+      animFit: m.animFit === 'contain' ? 'contain' : 'cover',
+      animBusy: st.animBusy,
+      onAnimBgUrl: (e) => this.setSelField('animBg', e.target.value),
+      onAnimFileUrl: (e) => this.setSelField('animFile', e.target.value),
+      onAnimBgPick: (e) => { this.uploadAnimAsset('animBg', e.target.files[0]); e.target.value = ''; },
+      onAnimFilePick: (e) => { this.uploadAnimAsset('animFile', e.target.files[0]); e.target.value = ''; },
+      clearAnimBg: () => this.setSelField('animBg', ''),
+      clearAnimFile: () => this.setSelField('animFile', ''),
+      onAnimDim: (e) => this.setSelField('animDim', Math.max(0, Math.min(90, parseInt(e.target.value, 10) || 0))),
+      setAnimFit: (fit) => this.setSelField('animFit', fit),
+      animSummary: m.animMode === 'fichier'
+        ? (m.animFile ? `fichier · ${({ video: 'vidéo', lottie: 'Lottie', image: 'image' })[animAssetKind(m.animFile)] || ''}` : 'fichier — aucun')
+        : (m.animBg ? 'texte animé · avec fond' : 'texte animé'),
       // -- résumés des volets repliés --
       layoutSummary: ((layoutList.find((o) => o.id === m.layout) || {}).label) || m.layout || '',
       motionSummary: ({ m1: 'Doux', m2: 'Ample', m3: 'Pulsé', none: 'Aucun' })[m.motion || 'm1'] || '',
@@ -5275,6 +5310,68 @@ class App extends Component {
                 <input type="file" accept="video/mp4,video/webm,video/*" multiple onChange=${v.onSurpriseFiles} style="display:none;" />
               </label>
             `}
+            </div>`}
+          </div>
+        `}
+
+        ${v.isAnim && html`
+          <div style=${secCard}>
+            ${secHead('anim', 'Visuel', v.animSummary)}
+            ${secOpen('anim') && html`<div style=${secBody}>
+            <div style="display:inline-flex;background:#EFE9E0;border-radius:9px;padding:3px;margin-bottom:14px;">
+              ${[['texte', '✦ Texte animé'], ['fichier', '🎞 Fichier d\'animation']].map(([id, lab]) => html`
+                <button onClick=${() => v.setAnimMode(id)} style="padding:7px 14px;font-size:12.5px;font-weight:600;border:none;border-radius:7px;cursor:pointer;${v.animMode === id ? 'background:#fff;color:#232220;box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'}">${lab}</button>
+              `)}
+            </div>
+            <p style="margin:0 0 12px;font-size:12px;color:#8A847C;line-height:1.5;">
+              ${v.animMode === 'fichier'
+                ? html`Le fichier importé <strong>remplace</strong> le rendu généré : l'élément devient un conteneur. Formats acceptés : <strong>GIF</strong>, PNG, WebP, <strong>SVG animé</strong>, <strong>MP4 / WebM</strong> et <strong>Lottie (.json)</strong> — 18 Mo max.`
+                : html`Le titre et l'accroche restent générés (jetons <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">{{magasin}}</code> compris). Tu peux poser un <strong>visuel de fond</strong> derrière — image ou vidéo — avec un voile qui garde le texte lisible.`}
+            </p>
+            ${(() => {
+              const isFile = v.animMode === 'fichier';
+              const url = isFile ? v.animFile : v.animBg;
+              const kind = isFile ? v.animFileKind : v.animBgKind;
+              const onPick = isFile ? v.onAnimFilePick : v.onAnimBgPick;
+              const onUrl = isFile ? v.onAnimFileUrl : v.onAnimBgUrl;
+              const clear = isFile ? v.clearAnimFile : v.clearAnimBg;
+              const label = isFile ? 'fichier d\'animation' : 'visuel de fond';
+              return html`
+                ${url && html`<div style="margin-bottom:10px;border-radius:12px;overflow:hidden;background:#EFE9E0;border:1px solid rgba(35,34,32,0.1);">
+                  ${kind === 'video'
+                    ? html`<video src=${url} muted autoplay loop playsinline style="width:100%;display:block;max-height:200px;object-fit:contain;background:#000;"></video>`
+                    : (kind === 'lottie'
+                      ? html`<div style="padding:16px 14px;font-size:12.5px;color:#6E4A2B;">🅛 Animation Lottie — aperçu dans l'écran ci-dessus (le lecteur se charge à la demande).</div>`
+                      : html`<img src=${url} alt="" style="width:100%;display:block;max-height:200px;object-fit:contain;" />`)}
+                </div>`}
+                <div style="display:flex;gap:10px;margin-bottom:10px;">
+                  <label style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 12px;font-size:13px;font-weight:600;color:#8D1D2C;border:1px dashed rgba(141,29,44,0.4);border-radius:10px;background:rgba(141,29,44,0.04);cursor:${v.animBusy ? 'wait' : 'pointer'};">
+                    <span style="font-size:16px;">⬆</span><span>${v.animBusy ? 'Envoi…' : (url ? `Remplacer le ${label}` : `Importer un ${label}`)}</span>
+                    <input type="file" accept=".gif,.png,.webp,.svg,.jpg,.jpeg,.avif,.mp4,.webm,.mov,.m4v,.json,image/*,video/*,application/json" onChange=${onPick} style="display:none;" />
+                  </label>
+                  ${url && html`<button onClick=${clear} style="padding:11px 16px;font-size:13px;font-weight:600;color:#8D1D2C;background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:10px;cursor:pointer;">Retirer</button>`}
+                </div>
+                <label style="display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;margin-bottom:12px;">
+                  <span>…ou une adresse (fichier déjà sur le serveur)</span>
+                  <input key=${'au-' + (isFile ? 'f' : 'b') + v.selId} defaultValue=${url} onChange=${onUrl} placeholder="anim/mon-animation.gif · media/clip.mp4 · https://…" spellcheck="false" style="padding:9px 11px;font-size:12.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.14);border-radius:9px;background:#FBF8F2;" />
+                </label>`;
+            })()}
+            <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;">
+              <label style="display:flex;flex-direction:column;gap:6px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">
+                <span style="display:inline-flex;align-items:center;gap:5px;">Cadrage${infoTip('« Remplir » couvre tout l’écran, quitte à rogner les bords. « Adapter » montre le fichier en entier, avec des bandes si le format diffère.')}</span>
+                <span style="display:inline-flex;background:#EFE9E0;border-radius:8px;padding:3px;">
+                  ${[['cover', 'Remplir'], ['contain', 'Adapter']].map(([id, lab]) => html`
+                    <button onClick=${() => v.setAnimFit(id)} style="padding:6px 12px;font-size:12px;font-weight:600;border:none;border-radius:6px;cursor:pointer;${v.animFit === id ? 'background:#fff;color:#232220;box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'}">${lab}</button>
+                  `)}
+                </span>
+              </label>
+              ${v.animMode !== 'fichier' && v.animBg && html`
+                <label style="display:flex;flex-direction:column;gap:6px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">
+                  <span style="display:inline-flex;align-items:center;gap:5px;">Voile sur le fond · ${v.animDim} %${infoTip('Assombrit le visuel de fond pour que le titre reste lisible. 0 % = fond brut.')}</span>
+                  <input type="range" min="0" max="90" value=${v.animDim} onInput=${v.onAnimDim} style="width:200px;" />
+                </label>
+              `}
+            </div>
             </div>`}
           </div>
         `}

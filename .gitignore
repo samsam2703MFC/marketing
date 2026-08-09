@@ -6,3 +6,8 @@ data/
 *.db-shm
 .DS_Store
 npm-debug.log*
+
+# Fichiers d'animation importés en régie (le dossier est suivi, pas son contenu)
+public/anim/*
+!public/anim/.gitkeep
+!public/anim/README.txt

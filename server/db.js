@@ -317,6 +317,16 @@ function migrate(db) {
   if (!modCols2.includes('html_vars')) db.exec(`ALTER TABLE sig_modules ADD COLUMN html_vars TEXT NOT NULL DEFAULT '{}'`);
   if (!modCols2.includes('html_w')) db.exec(`ALTER TABLE sig_modules ADD COLUMN html_w INTEGER NOT NULL DEFAULT 1920`);
   if (!modCols2.includes('html_h')) db.exec(`ALTER TABLE sig_modules ADD COLUMN html_h INTEGER NOT NULL DEFAULT 1080`);
+  // Élément « animation » : deux façons de travailler.
+  //  · anim_mode = 'texte'   → titre + accroche générés, avec un VISUEL DE FOND
+  //    facultatif (image ou vidéo) et un voile qui garde le texte lisible ;
+  //  · anim_mode = 'fichier' → un FICHIER D'ANIMATION autonome (GIF, vidéo, SVG
+  //    animé, Lottie .json) remplace entièrement le rendu généré.
+  if (!modCols2.includes('anim_mode')) db.exec(`ALTER TABLE sig_modules ADD COLUMN anim_mode TEXT NOT NULL DEFAULT 'texte'`);
+  if (!modCols2.includes('anim_bg')) db.exec(`ALTER TABLE sig_modules ADD COLUMN anim_bg TEXT NOT NULL DEFAULT ''`);
+  if (!modCols2.includes('anim_dim')) db.exec(`ALTER TABLE sig_modules ADD COLUMN anim_dim INTEGER NOT NULL DEFAULT 45`);
+  if (!modCols2.includes('anim_file')) db.exec(`ALTER TABLE sig_modules ADD COLUMN anim_file TEXT NOT NULL DEFAULT ''`);
+  if (!modCols2.includes('anim_fit')) db.exec(`ALTER TABLE sig_modules ADD COLUMN anim_fit TEXT NOT NULL DEFAULT 'cover'`);
   // Reprise unique de l'ancien état « auto » (tous formats) : un écran est
   // portrait OU paysage. Un gabarit HTML retombe sur la forme de sa maquette,
   // le reste sur paysage (16:9, le format d'écran courant).
@@ -370,7 +380,12 @@ function migrate(db) {
         html         TEXT NOT NULL DEFAULT '',
         html_vars    TEXT NOT NULL DEFAULT '{}',
         html_w       INTEGER NOT NULL DEFAULT 1920,
-        html_h       INTEGER NOT NULL DEFAULT 1080
+        html_h       INTEGER NOT NULL DEFAULT 1080,
+        anim_mode    TEXT NOT NULL DEFAULT 'texte',
+        anim_bg      TEXT NOT NULL DEFAULT '',
+        anim_dim     INTEGER NOT NULL DEFAULT 45,
+        anim_file    TEXT NOT NULL DEFAULT '',
+        anim_fit     TEXT NOT NULL DEFAULT 'cover'
       );
       INSERT INTO sig_modules_new (${cols}) SELECT ${cols} FROM sig_modules;
       DROP TABLE sig_modules;
@@ -661,8 +676,16 @@ function ensureElementTypes(db) {
         htmlLayouts, 0, 8);
     }
   };
+  // L'élément « animation » sait désormais aussi diffuser un FICHIER importé :
+  // sur une base existante, son libellé date d'avant. On le remet à jour sans
+  // toucher aux bases déjà renommées (idempotent).
+  const ensureAnimFile = () => {
+    db.prepare(`UPDATE sig_element_types SET label = ?, descr = ? WHERE id = 'animation' AND label = 'Animation — texte animé'`)
+      .run('Animation — texte animé ou fichier',
+        'Titre + accroche animés (avec un visuel de fond au besoin), ou un fichier d\'animation importé : GIF, vidéo, SVG animé, Lottie.');
+  };
   const n = db.prepare('SELECT COUNT(*) AS n FROM sig_element_types').get().n;
-  if (n > 0) { ensureMedia(); ensurePromotion(); ensureCampaign(); ensureHtml(); return; }
+  if (n > 0) { ensureMedia(); ensurePromotion(); ensureCampaign(); ensureHtml(); ensureAnimFile(); return; }
   const catLayouts = [
     { id: 'illo-right', icon: '▤', label: 'Texte à gauche · illustration à droite' },
     { id: 'illo-left', icon: '▤', label: 'Texte à droite · illustration à gauche' },
@@ -685,7 +708,7 @@ function ensureElementTypes(db) {
       { id: 'cover', icon: '◼', label: 'Plein écran (remplir)' },
       { id: 'contain', icon: '▭', label: 'Adapter (letterbox)' },
     ], hasItems: 0, sort: 3 },
-    { id: 'animation', label: 'Animation — texte animé', icon: '✦', descr: 'Titre + accroche animés, aux couleurs de la marque.', layouts: [
+    { id: 'animation', label: 'Animation — texte animé ou fichier', icon: '✦', descr: 'Titre + accroche animés (avec un visuel de fond au besoin), ou un fichier d’animation importé : GIF, vidéo, SVG animé, Lottie.', layouts: [
       { id: 'center', icon: '▣', label: 'Fond crème · texte encre' },
       { id: 'band', icon: '▬', label: 'Fond rubis · texte blanc' },
     ], hasItems: 0, sort: 4 },
@@ -1975,6 +1998,12 @@ export function loadModules() {
       htmlVars: (() => { try { return JSON.parse(m.html_vars || '{}') || {}; } catch { return {}; } })(),
       htmlW: m.html_w || 1920,
       htmlH: m.html_h || 1080,
+      // Élément « animation » : texte généré (+ fond éventuel) ou fichier autonome.
+      animMode: m.anim_mode === 'fichier' ? 'fichier' : 'texte',
+      animBg: m.anim_bg || '',
+      animDim: m.anim_dim == null ? 45 : m.anim_dim,
+      animFile: m.anim_file || '',
+      animFit: m.anim_fit === 'contain' ? 'contain' : 'cover',
       // Campagne résolue pour l'affichage (nom · portée · visuel · thème · dates).
       campaign: m.type === 'campagne'
         ? (campaign || { id: m.campaign_ref || '', name: 'Campagne', scope: 'produit', productRef: '', theme: '', image: '', message: '', dateFrom: '', dateTo: '', color: '#8D1D2C', active: true })
@@ -2042,8 +2071,9 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
       (id, type, name, sub, layout, motion, motion_title, motion_list, motion_illo,
        tag_enabled, tag_label, tag_img, sched_days, sched_from, sched_to, pos, sort_order, lib_tag,
        cat_ref, product_ref, video, surprise, watermark, dur, promo_type, campaign_ref,
-       orient, moments, html, html_vars, html_w, html_h, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
+       orient, moments, html, html_vars, html_w, html_h,
+       anim_mode, anim_bg, anim_dim, anim_file, anim_fit, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
     const insItem = db.prepare(`INSERT INTO sig_module_items
       (module_id, position, name, price, img, src, active) VALUES (?, ?, ?, ?, ?, ?, ?)`);
     // Les types valides viennent de la table sig_element_types (rien en dur).
@@ -2069,7 +2099,12 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
         String(m.html || ''),
         JSON.stringify(m.htmlVars && typeof m.htmlVars === 'object' ? m.htmlVars : {}),
         Math.max(64, Math.min(20000, parseInt(m.htmlW, 10) || 1920)),
-        Math.max(64, Math.min(20000, parseInt(m.htmlH, 10) || 1080))
+        Math.max(64, Math.min(20000, parseInt(m.htmlH, 10) || 1080)),
+        m.animMode === 'fichier' ? 'fichier' : 'texte',
+        String(m.animBg || ''),
+        Math.max(0, Math.min(90, parseInt(m.animDim, 10) || 0)),
+        String(m.animFile || ''),
+        m.animFit === 'contain' ? 'contain' : 'cover'
       );
       // Un élément lié au catalogue (ou une campagne) ne stocke pas d'items propres.
       if (!m.catRef && !m.productRef && m.type !== 'campagne') {

@@ -34,6 +34,10 @@ const ONLINE_WINDOW_S = 30; // heartbeat attendu toutes les ~5 s
 const API_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SURPRISE_DIR = join(API_ROOT, 'public', 'surprise');
 const MEDIA_DIR = join(API_ROOT, 'public', 'media');
+// Fichiers d'animation : fonds et animations autonomes des éléments « animation ».
+const ANIM_DIR = join(API_ROOT, 'public', 'anim');
+const ANIM_EXT = new Set(['.gif', '.png', '.webp', '.svg', '.jpg', '.jpeg', '.avif',
+  '.mp4', '.webm', '.mov', '.m4v', '.ogv', '.json']);
 const VIDEO_EXT = new Set(['.mp4', '.webm', '.mov', '.m4v', '.ogv', '.ogg']);
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
 
@@ -966,6 +970,37 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
         return send(200, { ok: false, error: String(e.message || e) });
       }
     }
+    // ---- fichiers d'animation (fond ou animation autonome) ------------------
+    // Servis depuis public/anim/ ; séparés de la médiathèque agence, qui a sa
+    // propre logique de tags (moment · produit · saison).
+    if (req.method === 'POST' && path === '/anim-assets') {
+      const body = await readBody();
+      const rawName = String(body.name || '').replace(/[^\w.\- ]+/g, '_').slice(0, 120);
+      const mData = /^data:[\w/+.-]+;base64,(.+)$/s.exec(String(body.dataUrl || ''));
+      if (!rawName || !mData) return send(400, { error: 'nom ou fichier manquant' });
+      const ext = extname(rawName).toLowerCase();
+      if (!ANIM_EXT.has(ext)) return send(400, { error: 'format non supporté (.gif, .png, .webp, .svg, .mp4, .webm, .json Lottie…)' });
+      const buf = Buffer.from(mData[1], 'base64');
+      if (buf.length > 18 * 1024 * 1024) return send(413, { error: 'fichier trop lourd pour l’upload (max 18 Mo) — dépose-le dans public/anim/ sur le serveur' });
+      // Un Lottie doit être un JSON lisible : mieux vaut le refuser ici que
+      // laisser un écran vide en magasin.
+      if (ext === '.json') {
+        try { JSON.parse(buf.toString('utf8')); }
+        catch { return send(400, { error: 'ce .json n’est pas lisible — export Lottie/Bodymovin attendu' }); }
+      }
+      try { mkdirSync(ANIM_DIR, { recursive: true }); } catch { /* déjà là */ }
+      writeFileSync(join(ANIM_DIR, rawName), buf);
+      return send(200, { ok: true, url: 'anim/' + encodeURIComponent(rawName), name: rawName, size: buf.length });
+    }
+    if (req.method === 'GET' && path === '/anim-assets') {
+      let files = [];
+      try {
+        files = readdirSync(ANIM_DIR).filter((n) => ANIM_EXT.has(extname(n).toLowerCase())).sort()
+          .map((n) => ({ name: n, url: 'anim/' + encodeURIComponent(n), size: statSync(join(ANIM_DIR, n)).size }));
+      } catch { /* dossier absent : liste vide */ }
+      return send(200, { dir: 'public/anim', assets: files });
+    }
+
     // ---- matières premières : ingrédient ↔ animation -----------------------
     // Le lien se règle en régie ; le module produit du franchiseur ne fait que
     // le lire. Le diagnostic cherche la table des ingrédients côté ERP.

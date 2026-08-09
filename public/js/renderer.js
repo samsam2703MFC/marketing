@@ -1,5 +1,6 @@
 // Rendu signage partagé — utilisé par l'aperçu du back office ET par le player.
 // Port fidèle du moteur de la maquette (écran virtuel 6480 × 3840, 3 dalles).
+import { mountLottie } from './lottie-host.js';
 export const RUBY = '#8D1D2C';
 export const INK = '#232220';
 export const FVANK = "'Vank','Gotham'";
@@ -82,6 +83,41 @@ export function layoutCfg(L, n) {
   else if (L === 'illo-top') { c.rowTop = 2180; c.illoCX = W / 2; c.illoSize = 1400; c.illoCY = 1180; }
   else if (L === 'hero') { c.mode = 'hero'; }
   return c;
+}
+
+// Nature d'un fichier d'animation, d'après son extension : c'est elle qui
+// décide du lecteur (balise vidéo, image, ou lecteur Lottie).
+export function animAssetKind(url) {
+  const u = String(url || '').split(/[?#]/)[0].toLowerCase();
+  if (!u) return '';
+  if (/\.(mp4|webm|mov|m4v|ogv|ogg)$/.test(u)) return 'video';
+  if (/\.json$/.test(u)) return 'lottie';
+  return 'image'; // gif, png, webp, svg animé, jpg…
+}
+
+// Élément DOM qui joue un fichier d'animation en plein cadre. `fit` vaut
+// 'cover' (remplir, quitte à rogner) ou 'contain' (tout montrer).
+export function animAssetEl(h, url, fit, key) {
+  if (!url) return null;
+  const cover = fit !== 'contain';
+  const box = { position: 'absolute', inset: 0, width: '100%', height: '100%' };
+  const kind = animAssetKind(url);
+  if (kind === 'video') {
+    return h('video', {
+      key, src: url, autoPlay: true, muted: true, loop: true, playsInline: true,
+      style: { ...box, objectFit: cover ? 'cover' : 'contain', background: '#000' },
+    });
+  }
+  if (kind === 'lottie') {
+    // Le lecteur est chargé à la demande ; le ref est rappelé à chaque rendu,
+    // mountLottie ne refait le travail que si l'URL a changé.
+    return h('div', {
+      key,
+      ref: (el) => { if (el) mountLottie(el, url, fit); },
+      style: { ...box, display: 'block' },
+    });
+  }
+  return h('img', { key, src: url, alt: '', style: { ...box, objectFit: cover ? 'cover' : 'contain' } });
 }
 
 // Rendu d'un module à l'instant lt (secondes locales au module).
@@ -224,7 +260,7 @@ function renderModuleInner(h, m, lt, opts) {
     return kids;
   }
 
-  // ---- Animation : titre + accroche animés (crème/encre ou rubis/blanc) ----
+  // ---- Animation : texte animé (avec fond éventuel) OU fichier autonome ----
   if (m.type === 'animation') {
     const dur = moduleDur(m, secPerLine);
     const band = m.layout === 'band';
@@ -232,7 +268,24 @@ function renderModuleInner(h, m, lt, opts) {
     const a = Math.min(easeIO(clx(lt / 0.5, 0, 1)), easeIO(clx((dur - lt) / 0.5, 0, 1)));
     const drift = mo.w * 2 * Math.sin(lt * Math.PI * (mo.fspd || 1) * 0.5);
     const zoom = 1 + 0.05 * (lt / dur) + (mo.pulse ? 0.015 * Math.sin(lt * Math.PI * 3) : 0);
+    // Mode « fichier » : l'animation importée REMPLACE le rendu généré.
+    if (m.animMode === 'fichier') {
+      const el = animAssetEl(h, m.animFile, m.animFit, 'anim-file');
+      kids.push(el || h('div', {
+        key: 'anim-none',
+        style: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#EFE9E0', fontFamily: FUI, fontWeight: 500, fontSize: 110, color: '#8A847C' },
+      }, 'Aucun fichier d’animation'));
+      const te0 = tagEl(); if (te0) kids.push(te0);
+      return kids;
+    }
     if (band) kids.push(h('div', { key: 'abg', style: { position: 'absolute', inset: 0, background: RUBY } }));
+    // Visuel de fond facultatif, sous un voile qui garde le texte lisible.
+    if (m.animBg) {
+      const bg = animAssetEl(h, m.animBg, m.animFit, 'anim-bg');
+      if (bg) kids.push(bg);
+      const dim = Math.max(0, Math.min(90, m.animDim == null ? 45 : m.animDim)) / 100;
+      if (dim > 0) kids.push(h('div', { key: 'anim-dim', style: { position: 'absolute', inset: 0, background: band ? `rgba(141,29,44,${dim})` : `rgba(35,34,32,${dim})` } }));
+    }
     kids.push(h('div', {
       key: 'anim',
       style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 90, opacity: a, transform: `translateY(${drift}px) scale(${zoom})`, transformOrigin: 'center' },

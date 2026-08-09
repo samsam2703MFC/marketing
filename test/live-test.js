@@ -518,6 +518,43 @@ async function main() {
         await call('DELETE', `/api/v1/groups/${b.group.id}`);
       }
     });
+    await step('Animation — import d\'un fichier (fond + animation autonome)', async () => {
+      const st = await call('GET', '/api/v1/state');
+      // 1 × 1 px GIF : le plus petit fichier valide pour l'aller-retour.
+      const gif = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+      const up = await call('POST', '/api/v1/anim-assets', { name: 'lt-anim.gif', dataUrl: gif });
+      if (!up.ok || !/^anim\//.test(up.url)) throw new Error('upload refusé : ' + JSON.stringify(up));
+      // Le fichier est réellement servi.
+      const got = await fetch(BASE + '/' + up.url);
+      if (!got.ok) throw new Error(`le fichier importé n'est pas servi (HTTP ${got.status})`);
+      // Un .json illisible est refusé plutôt que de vider un écran en magasin.
+      let refused = false;
+      try { await call('POST', '/api/v1/anim-assets', { name: 'ko.json', dataUrl: 'data:application/json;base64,' + Buffer.from('pas du json').toString('base64') }); }
+      catch { refused = true; }
+      if (!refused) throw new Error('un .json illisible a été accepté');
+      // Format inconnu refusé aussi.
+      let refused2 = false;
+      try { await call('POST', '/api/v1/anim-assets', { name: 'x.exe', dataUrl: gif }); } catch { refused2 = true; }
+      if (!refused2) throw new Error('une extension non supportée a été acceptée');
+      // Aller-retour des champs sur un élément « animation ».
+      const mods = [...st.modules, {
+        id: 'mAnimLT', type: 'animation', name: 'Anim LT', sub: '', orient: 'paysage', items: [],
+        animMode: 'fichier', animFile: up.url, animBg: up.url, animDim: 70, animFit: 'contain',
+      }];
+      try {
+        await call('PUT', '/api/v1/draft', { modules: mods, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+        const back = (await call('GET', '/api/v1/state')).modules.find((m) => m.id === 'mAnimLT');
+        if (!back) throw new Error('élément animation non enregistré');
+        if (back.animMode !== 'fichier' || back.animFile !== up.url || back.animBg !== up.url) throw new Error('champs non conservés : ' + JSON.stringify(back));
+        if (back.animDim !== 70 || back.animFit !== 'contain') throw new Error('voile/cadrage non conservés : ' + JSON.stringify({ d: back.animDim, f: back.animFit }));
+        // Le type d'élément annonce bien la double possibilité.
+        const t = (await call('GET', '/api/v1/element-types')).types.find((x) => x.id === 'animation');
+        if (!/fichier/i.test(t.label)) throw new Error('le libellé du type n\'annonce pas le fichier : ' + t.label);
+        return `« ${up.name} » servi · mode fichier + fond + voile 70 % + cadrage conservés · .json et .exe refusés`;
+      } finally {
+        await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      }
+    });
     await step('Matières premières — ingrédient lié à une animation', async () => {
       const before = await call('GET', '/api/v1/ingredients');
       const st = await call('GET', '/api/v1/state');
