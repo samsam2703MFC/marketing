@@ -300,6 +300,19 @@ jobs:
               echo MKDIR_FAIL
             fi
             if [ -w '$DEPLOY_DIR' ]; then echo WRITABLE; else echo NOT_WRITABLE; fi
+
+            # Dossier des visuels envoyés depuis l'assistant. Créé ici, et non
+            # à la première image : c'est le compte du déploiement qui peut
+            # créer un dossier à la racine, tandis que le serveur web doit
+            # pouvoir y écrire ensuite. rsync publiant sans --delete, les
+            # visuels déjà en place y survivent aux mises à jour.
+            if mkdir -p '$DEPLOY_DIR/uploads' 2>&1; then
+              chgrp www-data '$DEPLOY_DIR/uploads' 2>/dev/null && chmod 2775 '$DEPLOY_DIR/uploads' 2>/dev/null || chmod 0777 '$DEPLOY_DIR/uploads' 2>/dev/null
+              echo \"UPLOADS=\$(ls -ld '$DEPLOY_DIR/uploads' 2>/dev/null | awk '{print \\\$1, \\\$3, \\\$4}')\"
+            else
+              echo UPLOADS_FAIL
+            fi
+
             r=\$(command -v rsync 2>/dev/null || which rsync 2>/dev/null || echo '')
             if [ -n \"\$r\" ]; then echo \"RSYNC=\$r\"; else echo RSYNC_MISSING; fi
             p=\$(command -v php 2>/dev/null || which php 2>/dev/null || echo '')

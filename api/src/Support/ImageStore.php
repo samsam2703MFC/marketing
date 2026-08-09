@@ -89,12 +89,27 @@ final class ImageStore
         $extension = self::sniff($binary);
         $directory = self::directory();
 
-        if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
-            throw new RuntimeException('Dossier des visuels impossible à créer sur le serveur.');
+        // Le dossier est normalement créé au déploiement, par le compte qui a
+        // le droit d'écrire à la racine — le serveur web ne l'a pas toujours.
+        // La création reste tentée pour l'installation locale, et l'échec dit
+        // quel dossier et quel réglage, faute de quoi il ne reste que « le
+        // serveur a refusé » à porter à l'hébergeur.
+        if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
+            throw new RuntimeException(sprintf(
+                'Dossier des visuels absent et impossible à créer : %s. Créez-le sur le serveur '
+                . 'et donnez-en l\'écriture au compte du serveur web, ou renseignez MAR_UPLOAD_DIR '
+                . 'vers un dossier inscriptible.',
+                $directory
+            ));
         }
 
         if (!is_writable($directory)) {
-            throw new RuntimeException('Dossier des visuels non inscriptible sur le serveur.');
+            throw new RuntimeException(sprintf(
+                'Dossier des visuels non inscriptible : %s. Le serveur web tourne sous « %s » : '
+                . 'donnez-lui l\'écriture sur ce dossier, ou renseignez MAR_UPLOAD_DIR.',
+                $directory,
+                self::serverUser()
+            ));
         }
 
         [$originalWidth, $originalHeight] = self::dimensions($binary);
@@ -306,6 +321,19 @@ final class ImageStore
         return is_dir($root . '/public')
             ? $root . '/public/' . self::folder()
             : $root . '/' . self::folder();
+    }
+
+    /** Compte sous lequel tourne le serveur web, pour nommer le bon coupable. */
+    private static function serverUser(): string
+    {
+        if (function_exists('posix_getpwuid') && function_exists('posix_geteuid')) {
+            $user = @posix_getpwuid(posix_geteuid());
+            if (is_array($user) && isset($user['name'])) {
+                return (string) $user['name'];
+            }
+        }
+
+        return (string) (getenv('USER') ?: getenv('USERNAME') ?: 'inconnu');
     }
 
     private static function humanBytes(int $bytes): string
