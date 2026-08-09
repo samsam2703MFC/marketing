@@ -26,6 +26,20 @@ final class CampaignRepository
     private const CHALLENGE_METRICS = ['attainment', 'pieces', 'growth'];
 
     /**
+     * Mécaniques de promotion reconnues — les codes de `mar_promotion_mechanic`.
+     *
+     * Recopiés plutôt que relus : une mécanique inconnue doit être refusée avec
+     * un message, et une table de référence vide ne doit pas laisser passer
+     * n'importe quoi. Le jour où une sixième arrive, elle s'ajoute ici et dans
+     * la table — le décalage se voit au premier test.
+     *
+     * @var list<string>
+     */
+    private const MECHANICS = [
+        'PERCENT', 'CROSSED_PRICE', 'BUY_X_GET_Y', 'BUNDLE_FIXED', 'FREE_DELIVERY',
+    ];
+
+    /**
      * Liste filtrable. Le périmètre s'applique en SQL : un franchisé ne reçoit
      * que les campagnes réseau et celles où l'une de ses boutiques participe.
      *
@@ -251,13 +265,15 @@ final class CampaignRepository
                  status_code, draft_step, starts_on, ends_on, budget_amount, objective_coef_pct,
                  agency_note, b2b_webshop_enabled, pos_survey_enabled, owner_user_id,
                  create_crm_leads, image_url,
-                 challenge_enabled, challenge_metric, challenge_trigger_pct, created_by)
+                 challenge_enabled, challenge_metric, challenge_trigger_pct,
+                 margin_pct_default, created_by)
              VALUES
                 (:brand_id, :type_id, :parent_campaign_id, :name, :scope, :client_target, :tone,
                  :status_code, :draft_step, :starts_on, :ends_on, :budget_amount, :objective_coef_pct,
                  :agency_note, :b2b_webshop_enabled, :pos_survey_enabled, :owner_user_id,
                  :create_crm_leads, :image_url,
-                 :challenge_enabled, :challenge_metric, :challenge_trigger_pct, :created_by)'
+                 :challenge_enabled, :challenge_metric, :challenge_trigger_pct,
+                 :margin_pct_default, :created_by)'
         );
 
         $statement->execute([
@@ -291,6 +307,9 @@ final class CampaignRepository
             'challenge_trigger_pct' => ($data['challenge_trigger_pct'] ?? '') === ''
                 ? null
                 : $data['challenge_trigger_pct'],
+            'margin_pct_default' => ($data['margin_pct_default'] ?? '') === ''
+                ? null
+                : $data['margin_pct_default'],
             'created_by'         => $auth->userId,
         ]);
 
@@ -400,6 +419,72 @@ final class CampaignRepository
         }
 
         return $data;
+    }
+
+    /**
+     * Promotion d'une ligne d'offre, normalisée pour l'écriture.
+     *
+     * Seuls les champs de la mécanique retenue sont conservés : passer de
+     * « −20 % » à « prix barré 15,90 € » sans effacer le pourcentage laisserait
+     * deux promotions écrites sur la même ligne, et le calcul de marge
+     * choisirait la mauvaise sans jamais s'en plaindre.
+     *
+     * @param  array<string,mixed> $item
+     * @return array<string,mixed>
+     */
+    private function pricingOf(array $item): array
+    {
+        $mechanic = trim((string) ($item['mechanic_type'] ?? ''));
+
+        if ($mechanic !== '' && !in_array($mechanic, self::MECHANICS, true)) {
+            throw new RuntimeException(sprintf(
+                'Mécanique de promotion inconnue : attendu %s.',
+                implode(', ', self::MECHANICS)
+            ));
+        }
+
+        $number = static function (mixed $value, float $max): ?float {
+            if ($value === null || $value === '') {
+                return null;
+            }
+
+            return min($max, max(0, (float) $value));
+        };
+
+        $count = static function (mixed $value): ?int {
+            if ($value === null || $value === '') {
+                return null;
+            }
+
+            return min(999, max(0, (int) $value));
+        };
+
+        // Le prix de référence et le taux de marge survivent au changement de
+        // mécanique : ils décrivent le produit, pas la promotion.
+        $pricing = [
+            'mechanic_type'  => $mechanic === '' ? null : $mechanic,
+            'discount_pct'   => null,
+            'fixed_price'    => null,
+            'buy_qty'        => null,
+            'get_qty'        => null,
+            'baseline_price' => $number($item['baseline_price'] ?? null, 999999.99),
+            'margin_pct'     => $number($item['margin_pct'] ?? null, 100),
+        ];
+
+        if ($mechanic === 'PERCENT') {
+            $pricing['discount_pct'] = $number($item['discount_pct'] ?? null, 100);
+        }
+
+        if ($mechanic === 'CROSSED_PRICE' || $mechanic === 'BUNDLE_FIXED') {
+            $pricing['fixed_price'] = $number($item['fixed_price'] ?? null, 999999.99);
+        }
+
+        if ($mechanic === 'BUY_X_GET_Y') {
+            $pricing['buy_qty'] = $count($item['buy_qty'] ?? null);
+            $pricing['get_qty'] = $count($item['get_qty'] ?? null);
+        }
+
+        return $pricing;
     }
 
     /**
@@ -824,10 +909,10 @@ final class CampaignRepository
         $statement  = $connection->prepare(
             'INSERT INTO mar_campaign_offer
                 (campaign_id, template_id, title, mechanic_text, starts_on, ends_on,
-                 hour_from, hour_to, created_by)
+                 hour_from, hour_to, max_qty_per_ticket, is_cumulative, created_by)
              VALUES
                 (:campaign_id, :template_id, :title, :mechanic_text, :starts_on, :ends_on,
-                 :hour_from, :hour_to, :created_by)'
+                 :hour_from, :hour_to, :max_qty_per_ticket, :is_cumulative, :created_by)'
         );
 
         // « Toute la journée » n'est pas une plage 00:00–23:59 : c'est l'absence
@@ -844,6 +929,12 @@ final class CampaignRepository
             'ends_on'       => ($offer['ends_on'] ?? null) ?: null,
             'hour_from'     => $allDay ? null : (($offer['hour_from'] ?? null) ?: null),
             'hour_to'       => $allDay ? null : (($offer['hour_to'] ?? null) ?: null),
+            // Un plafond vide n'est pas un plafond à zéro : NULL veut dire
+            // « sans limite », 0 voudrait dire « aucune pièce en promotion ».
+            'max_qty_per_ticket' => ($offer['max_qty_per_ticket'] ?? '') === '' || ($offer['max_qty_per_ticket'] ?? null) === null
+                ? null
+                : max(0, (int) $offer['max_qty_per_ticket']),
+            'is_cumulative' => !empty($offer['is_cumulative']) ? 1 : 0,
             'created_by'    => $auth->userId,
         ]);
 
@@ -876,8 +967,14 @@ final class CampaignRepository
         }
 
         $statement = $connection->prepare(
-            'INSERT INTO mar_campaign_offer_item (campaign_offer_id, offer_item_id, label, sort_order)
-             VALUES (:offer_id, :offer_item_id, :label, :sort_order)'
+            'INSERT INTO mar_campaign_offer_item
+                (campaign_offer_id, offer_item_id, label, sort_order,
+                 mechanic_type, discount_pct, fixed_price, buy_qty, get_qty,
+                 baseline_price, margin_pct)
+             VALUES
+                (:offer_id, :offer_item_id, :label, :sort_order,
+                 :mechanic_type, :discount_pct, :fixed_price, :buy_qty, :get_qty,
+                 :baseline_price, :margin_pct)'
         );
 
         $order = 0;
@@ -891,12 +988,14 @@ final class CampaignRepository
                 continue;
             }
 
+            $pricing = $this->pricingOf(is_array($item) ? $item : []);
+
             $statement->execute([
                 'offer_id'      => $offerId,
                 'offer_item_id' => in_array($itemId, $knownIds, true) ? $itemId : null,
                 'label'         => $label,
                 'sort_order'    => ++$order,
-            ]);
+            ] + $pricing);
         }
     }
 
@@ -1100,6 +1199,7 @@ final class CampaignRepository
             'b2b_webshop_enabled', 'pos_survey_enabled', 'spent_amount', 'approval_status',
             'create_crm_leads', 'image_url',
             'challenge_enabled', 'challenge_metric', 'challenge_trigger_pct',
+            'margin_pct_default',
         ];
 
         // Colonnes TINYINT. PDO lie un `false` PHP comme chaîne vide, que MySQL
@@ -1219,6 +1319,7 @@ final class CampaignRepository
             'focal_point_y'      => $asset === false ? 50 : (int) $asset['focal_point_y'],
 
             'shop_ids'       => $ids('SELECT shop_id FROM mar_campaign_shop WHERE campaign_id = :id'),
+            'margin_pct_default'    => $campaign['margin_pct_default'],
             'challenge_enabled'     => (bool) $campaign['challenge_enabled'],
             'challenge_metric'      => $campaign['challenge_metric'],
             'challenge_trigger_pct' => $campaign['challenge_trigger_pct'],
@@ -1450,7 +1551,9 @@ final class CampaignRepository
         }
 
         $items = Database::connection()->prepare(
-            'SELECT label, offer_item_id, sort_order
+            'SELECT label, offer_item_id, sort_order,
+                    mechanic_type, discount_pct, fixed_price, buy_qty, get_qty,
+                    baseline_price, margin_pct
                FROM mar_campaign_offer_item
               WHERE campaign_offer_id = :id
               ORDER BY sort_order'
@@ -1458,6 +1561,10 @@ final class CampaignRepository
         $items->execute(['id' => (int) $offer['id']]);
 
         $offer          = $this->castRow($offer);
+        // Colonne TINYINT : `castRow` en fait un entier, or le front la lit
+        // comme un booléen. Un `1` marche par hasard ; `0` marcherait aussi,
+        // et c'est précisément le genre de hasard qui casse un jour.
+        $offer['is_cumulative'] = (bool) $offer['is_cumulative'];
         $offer['items'] = $items->fetchAll();
 
         return $offer;

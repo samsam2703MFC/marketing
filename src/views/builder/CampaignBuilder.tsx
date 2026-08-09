@@ -5,6 +5,7 @@ import type { CampaignDraft, ClientTarget, OfferItem, References } from '../../l
 import type { Role } from '../../lib/navigation'
 import { describeError } from '../../state/auth'
 import ObjectivesStep from './ObjectivesStep'
+import PricingStep from './PricingStep'
 import ProspectPanel from './ProspectPanel'
 import RangeCalendar from './RangeCalendar'
 
@@ -47,6 +48,45 @@ interface RetroStep {
 interface OfferElement {
   offer_item_id: number | null
   label: string
+
+  /**
+   * Promotion posée à l'étape « Prix ». Vide = ce produit n'est pas en
+   * promotion, ce qui est le cas par défaut : entrer dans l'offre ne veut pas
+   * dire être bradé.
+   *
+   * Les nombres restent des chaînes tant qu'on tape, comme partout ailleurs
+   * dans le brouillon.
+   */
+  mechanic_type: MechanicCode | ''
+  discount_pct: string
+  fixed_price: string
+  buy_qty: string
+  get_qty: string
+  /** Prix TTC de référence, figé à la saisie plutôt que relu du catalogue. */
+  baseline_price: string
+  /** Taux de marge du produit. Vide = suit le taux réseau. */
+  margin_pct: string
+}
+
+/** Codes de `mar_promotion_mechanic`. */
+export type MechanicCode =
+  | 'PERCENT'
+  | 'CROSSED_PRICE'
+  | 'BUY_X_GET_Y'
+  | 'BUNDLE_FIXED'
+  | 'FREE_DELIVERY'
+
+/** Ligne d'offre neuve : dans l'offre, hors promotion. */
+export function blankPricing(): Omit<OfferElement, 'offer_item_id' | 'label'> {
+  return {
+    mechanic_type: '',
+    discount_pct: '',
+    fixed_price: '',
+    buy_qty: '',
+    get_qty: '',
+    baseline_price: '',
+    margin_pct: '',
+  }
 }
 
 /** Brouillon en cours de saisie. Les nombres restent des chaînes tant qu'on tape. */
@@ -82,6 +122,13 @@ export interface Draft {
    * Challenge attaché aux objectifs — facultatif : sans lui, chaque magasin
    * ne joue que contre sa propre cible.
    */
+  // 3 — Prix
+  /** Taux de marge appliqué aux produits qui n'ont pas le leur, en %. */
+  margin_pct_default: string
+  /** Plafond de pièces en promotion par ticket. Vide = sans limite. */
+  max_qty_per_ticket: string
+  promo_cumulative: boolean
+
   challenge_enabled: boolean
   challenge_metric: 'attainment' | 'pieces' | 'growth'
   /** Seuil de participation général, en % de l'objectif de chaque magasin. */
@@ -161,6 +208,10 @@ function emptyDraft(refs: References, role: Role): Draft {
     analysis_compare: false,
     product_growth: {},
 
+    margin_pct_default: '68',
+    max_qty_per_ticket: '',
+    promo_cumulative: false,
+
     challenge_enabled: false,
     challenge_metric: 'attainment',
     challenge_trigger_pct: '100',
@@ -223,6 +274,24 @@ const STEPS: Step[] = [
     // L'offre reste facultative — toutes les campagnes n'en portent pas — et
     // n'a plus rien à valider : la composition est libre, l'horaire a disparu.
     blocking: () => null,
+  },
+  {
+    key: 'pricing',
+    label: 'Prix',
+    blocking: (d) => {
+      const casse = d.offer_items.find(
+        (item) =>
+          item.mechanic_type === 'PERCENT'
+          && item.discount_pct.trim() !== ''
+          && item.margin_pct.trim() !== ''
+          && Number(item.discount_pct) >= Number(item.margin_pct),
+      )
+
+      return casse === undefined
+        ? null
+        : `« ${casse.label} » : une remise de ${casse.discount_pct} % sur une marge de `
+          + `${casse.margin_pct} % détruit la marge — aucun volume ne la compense.`
+    },
   },
   {
     key: 'objectives',
@@ -411,10 +480,15 @@ export default function CampaignBuilder({
 
   const shared = { draft, patch, refs }
 
+  // Les étapes se désignent par leur clé et non par leur rang : insérer une
+  // étape au milieu décalait tous les numéros, et le rendu affichait l'écran
+  // du voisin sans qu'aucun type ne s'en plaigne.
+  const here = STEPS[step].key
+
   // Le panneau des comptes n'a de sens que là où l'on choisit les secteurs, et
   // à la dernière étape où l'on décide de générer les leads.
   const showPanel =
-    draft.client_target !== 'b2c' && (step === 0 || step === 7)
+    draft.client_target !== 'b2c' && (here === 'framing' || here === 'leads')
 
   return (
     <>
@@ -461,14 +535,15 @@ export default function CampaignBuilder({
 
       <div className={`wizard-layout${showPanel ? ' has-panel' : ''}`}>
       <section className="card wizard-card">
-        {step === 0 ? <FramingStep {...shared} role={role} shops={shops.data ?? []} /> : null}
-        {step === 1 ? <OfferStep {...shared} /> : null}
-        {step === 2 ? <ObjectivesStep {...shared} /> : null}
-        {step === 3 ? <BudgetStep {...shared} /> : null}
-        {step === 4 ? <CommunicationStep {...shared} agencies={agencies.data ?? []} /> : null}
-        {step === 5 ? <PlanningStep {...shared} /> : null}
-        {step === 6 ? <ReviewStep {...shared} shops={shops.data ?? []} /> : null}
-        {step === 7 ? <LeadsStep {...shared} /> : null}
+        {here === 'framing' ? <FramingStep {...shared} role={role} shops={shops.data ?? []} /> : null}
+        {here === 'offer' ? <OfferStep {...shared} /> : null}
+        {here === 'pricing' ? <PricingStep {...shared} /> : null}
+        {here === 'objectives' ? <ObjectivesStep {...shared} /> : null}
+        {here === 'budget' ? <BudgetStep {...shared} /> : null}
+        {here === 'communication' ? <CommunicationStep {...shared} agencies={agencies.data ?? []} /> : null}
+        {here === 'planning' ? <PlanningStep {...shared} /> : null}
+        {here === 'review' ? <ReviewStep {...shared} shops={shops.data ?? []} /> : null}
+        {here === 'leads' ? <LeadsStep {...shared} /> : null}
       </section>
 
       {showPanel ? <ProspectPanel sectorIds={draft.sector_ids} /> : null}
@@ -572,6 +647,13 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
     offer_items: (state.offer?.items ?? []).map((item) => ({
       offer_item_id: item.offer_item_id ?? null,
       label: item.label,
+      mechanic_type: (item.mechanic_type ?? '') as MechanicCode | '',
+      discount_pct: numberOrBlank(item.discount_pct),
+      fixed_price: numberOrBlank(item.fixed_price),
+      buy_qty: numberOrBlank(item.buy_qty),
+      get_qty: numberOrBlank(item.get_qty),
+      baseline_price: numberOrBlank(item.baseline_price),
+      margin_pct: numberOrBlank(item.margin_pct),
     })),
 
     shop_objectives: Object.fromEntries(
@@ -582,6 +664,10 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
     analysis_compare: base.analysis_compare,
     // Aide au calcul, pas une donnée de campagne : elle ne se relit pas.
     product_growth: {},
+
+    margin_pct_default: numberOrBlank(state.margin_pct_default) || '68',
+    max_qty_per_ticket: numberOrBlank(state.offer?.max_qty_per_ticket),
+    promo_cumulative: state.offer?.is_cumulative ?? false,
 
     challenge_enabled: state.challenge_enabled ?? false,
     challenge_metric: state.challenge_metric ?? 'attainment',
@@ -662,9 +748,34 @@ function resumeStep(key: string | null, draft: Draft): number {
   return incomplete === -1 ? STEPS.length - 2 : incomplete
 }
 
+/**
+ * Nombre relu depuis l'API, rendu à la forme du brouillon.
+ *
+ * MySQL rend un DECIMAL comme chaîne (« 68.00 ») : le réafficher tel quel
+ * mettrait « 68.00 » dans un champ où l'on avait tapé « 68 », et la première
+ * sauvegarde suivante renverrait cette forme au serveur.
+ */
+function numberOrBlank(value: number | string | null | undefined): string {
+  return value === null || value === undefined || value === '' ? '' : String(Number(value))
+}
+
 function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): CampaignDraft {
+  // Un champ vide voyage en `null` : « pas de remise » et « remise de 0 % »
+  // sont deux choses différentes, et seule la seconde se saisit.
+  const num = (value: string): number | null => (value.trim() === '' ? null : Number(value.trim()))
+
   const items = draft.offer_items
-    .map((item) => ({ label: item.label.trim(), offer_item_id: item.offer_item_id }))
+    .map((item) => ({
+      label: item.label.trim(),
+      offer_item_id: item.offer_item_id,
+      mechanic_type: item.mechanic_type || null,
+      discount_pct: num(item.discount_pct),
+      fixed_price: num(item.fixed_price),
+      buy_qty: num(item.buy_qty),
+      get_qty: num(item.get_qty),
+      baseline_price: num(item.baseline_price),
+      margin_pct: num(item.margin_pct),
+    }))
     .filter((item) => item.label !== '')
 
   return {
@@ -691,6 +802,9 @@ function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): Cam
     image_url: draft.image_url.trim() || null,
     focal_point_y: draft.image_url.trim() === '' ? null : draft.focal_point_y,
     create_crm_leads: draft.create_crm_leads,
+    margin_pct_default: draft.margin_pct_default.trim() === ''
+      ? null
+      : Number(draft.margin_pct_default.trim()),
 
     shop_ids: draft.scope === 'LOCALE' ? draft.shop_ids : [],
     // Seuls les objectifs réellement posés voyagent : zéro ou vide = aucun.
@@ -773,6 +887,10 @@ function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): Cam
             all_day: true,
             hour_from: null,
             hour_to: null,
+            max_qty_per_ticket: draft.max_qty_per_ticket.trim() === ''
+              ? null
+              : Number(draft.max_qty_per_ticket.trim()),
+            is_cumulative: draft.promo_cumulative,
             items,
           },
   }
@@ -1266,7 +1384,7 @@ function OfferStep({ draft, patch }: StepProps) {
       offer_items:
         nextSeasonId === null
           ? keep
-          : [...keep, { offer_item_id: item.id, label: `Gamme ${seasonLabel(item.name)}` }],
+          : [...keep, { offer_item_id: item.id, label: `Gamme ${seasonLabel(item.name)}`, ...blankPricing() }],
       // Le titre de l'offre suit la gamme : il n'est plus saisi à la main.
       offer_title: nextSeasonId === null ? '' : `Offre ${seasonLabel(item.name)}`,
     })
@@ -1283,7 +1401,7 @@ function OfferStep({ draft, patch }: StepProps) {
         ? others
         : [
             ...others,
-            ...familyProducts.map((item) => ({ offer_item_id: item.id, label: item.name })),
+            ...familyProducts.map((item) => ({ offer_item_id: item.id, label: item.name, ...blankPricing() })),
           ],
     })
   }
@@ -1292,14 +1410,14 @@ function OfferStep({ draft, patch }: StepProps) {
     patch({
       offer_items: checkedIds.has(item.id)
         ? draft.offer_items.filter((element) => element.offer_item_id !== item.id)
-        : [...draft.offer_items, { offer_item_id: item.id, label: item.name }],
+        : [...draft.offer_items, { offer_item_id: item.id, label: item.name, ...blankPricing() }],
     })
   }
 
   const selectAllVisible = () => {
     const additions = visibleProducts
       .filter((item) => !checkedIds.has(item.id))
-      .map((item) => ({ offer_item_id: item.id, label: item.name }))
+      .map((item) => ({ offer_item_id: item.id, label: item.name, ...blankPricing() }))
     if (additions.length > 0) patch({ offer_items: [...draft.offer_items, ...additions] })
   }
 

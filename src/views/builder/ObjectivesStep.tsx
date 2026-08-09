@@ -3,7 +3,7 @@ import { module as api } from '../../lib/api'
 import { useAsync } from '../../lib/useAsync'
 import type { SalesQuantities, ShopSalesRow } from '../../lib/api/module'
 import type { Draft } from './CampaignBuilder'
-import RangeCalendar from './RangeCalendar'
+import AnalysisPeriod from './AnalysisPeriod'
 
 /**
  * Étape « Objectifs » : un objectif de pièces par boutique, éclairé par les
@@ -17,57 +17,6 @@ import RangeCalendar from './RangeCalendar'
  * permanence : c'est la donnée de départ, et la masquer obligeait à la rouvrir
  * à chaque passage.
  */
-
-/** `AAAA-MM-JJ` local. */
-function iso(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
-
-/** `01/11/2025`, l'ordre français — celui du reste de l'assistant. */
-function human(value: string): string {
-  const [year, month, day] = value.split('-')
-
-  return year === undefined || month === undefined || day === undefined
-    ? value
-    : `${day}/${month}/${year}`
-}
-
-/** Nombre de jours couverts, bornes comprises. */
-function span(from: string, to: string): number {
-  const start = Date.parse(`${from}T00:00:00`)
-  const end = Date.parse(`${to}T00:00:00`)
-
-  return Number.isNaN(start) || Number.isNaN(end)
-    ? 0
-    : Math.round((end - start) / 86_400_000) + 1
-}
-
-/** Raccourcis de période : libellé → bornes. */
-function shortcuts(): Array<{ label: string; from: string; to: string }> {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = now.getMonth()
-
-  return [
-    { label: 'Mois en cours', from: iso(new Date(year, month, 1)), to: iso(now) },
-    {
-      label: 'Mois dernier',
-      from: iso(new Date(year, month - 1, 1)),
-      to: iso(new Date(year, month, 0)),
-    },
-    {
-      label: 'Trimestre en cours',
-      from: iso(new Date(year, month - (month % 3), 1)),
-      to: iso(now),
-    },
-    { label: 'Année en cours', from: iso(new Date(year, 0, 1)), to: iso(now) },
-    {
-      label: '12 derniers mois',
-      from: iso(new Date(year - 1, month, now.getDate())),
-      to: iso(now),
-    },
-  ]
-}
 
 /** `+12 %` / `−8 %`, ou `—` quand N-1 est nul : pas de division par zéro. */
 function evolution(total: number, previous: number | null): { text: string; tone: 'up' | 'down' | 'flat' } | null {
@@ -159,7 +108,6 @@ export default function ObjectivesStep({
   const [sortAsc, setSortAsc] = useState(false)
   const [growthPct, setGrowthPct] = useState('5')
   const [attempt, setAttempt] = useState(0)
-  const [periodOpen, setPeriodOpen] = useState(false)
 
   const itemIds = draft.offer_items
     .map((element) => element.offer_item_id)
@@ -304,9 +252,6 @@ export default function ObjectivesStep({
       ? 0
       : Math.min(100, (data.network.total / objectivesTotal) * 100)
 
-  const activeShortcut = shortcuts().find(
-    (shortcut) => draft.analysis_from === shortcut.from && draft.analysis_to === shortcut.to,
-  )
 
   /* ── Challenge ───────────────────────────────────────────────────────── */
 
@@ -382,63 +327,16 @@ export default function ObjectivesStep({
         qu’il vendait l’an dernier, ce qu’on lui demande. Deux fiches se comparent à l’œil.
       </p>
 
-      {/* Période : une ligne repliée plutôt que deux mois de calendrier en
-          permanence. Le réglage se fait une fois, les raccourcis couvrent le
-          cas courant, et le calendrier ne s'ouvre que si on le demande. */}
-      <div className="period-bar">
-        <strong>
-          Du {human(draft.analysis_from)} au {human(draft.analysis_to)}
-        </strong>
-        <span className="period-bar__meta">
-          {span(draft.analysis_from, draft.analysis_to)} jours
-          {data === null ? null : ` · ${fr(data.network.tickets)} tickets`}
-          {activeShortcut === undefined ? null : ` · ${activeShortcut.label.toLowerCase()}`}
-        </span>
-        <span className="period-bar__spacer" />
-        <div className="period-bar__actions">
-          {shortcuts().map((shortcut) => (
-            <button
-              key={shortcut.label}
-              type="button"
-              className={`filter${activeShortcut?.label === shortcut.label ? ' is-on' : ''}`}
-              onClick={() => patch({ analysis_from: shortcut.from, analysis_to: shortcut.to })}
-            >
-              {shortcut.label}
-            </button>
-          ))}
-          <button
-            type="button"
-            className={`filter${draft.analysis_compare ? ' is-on' : ''}`}
-            aria-pressed={draft.analysis_compare}
-            onClick={() => patch({ analysis_compare: !draft.analysis_compare })}
-          >
-            Comparer à N-1
-          </button>
-          <button
-            type="button"
-            className={`filter${periodOpen ? ' is-on' : ''}`}
-            aria-expanded={periodOpen}
-            onClick={() => setPeriodOpen(!periodOpen)}
-          >
-            {periodOpen ? 'Fermer le calendrier' : 'Modifier la période'}
-          </button>
-        </div>
-      </div>
-
-      {/* Les deux champs natifs affichaient `mm/dd/yyyy` — l'ordre américain —
-          parce qu'un `input[type=date]` suit la locale du navigateur et non
-          celle de l'application. Le calendrier maison règle la question. */}
-      {periodOpen ? (
-        <RangeCalendar
-          from={draft.analysis_from}
-          to={draft.analysis_to}
-          onChange={(range) =>
-            patch({ analysis_from: range.starts_on, analysis_to: range.ends_on })
-          }
-        />
-      ) : null}
-
-      {periodInvalid ? <p className="error">La date de fin précède la date de début.</p> : null}
+      {/* Même réglage qu'à l'étape « Prix » : une seule période d'analyse
+          pour toute la campagne, un seul composant pour la régler. */}
+      <AnalysisPeriod
+        from={draft.analysis_from}
+        to={draft.analysis_to}
+        compare={draft.analysis_compare}
+        tickets={data?.network.tickets ?? null}
+        onChange={(range) => patch({ analysis_from: range.from, analysis_to: range.to })}
+        onCompare={(next) => patch({ analysis_compare: next })}
+      />
 
       {itemIds.length === 0 ? (
         <p className="muted">
