@@ -284,6 +284,18 @@ const STEPS: Step[] = [
     blocking: () => null,
   },
   {
+    key: 'objectives',
+    label: 'Objectifs de vente',
+    // Jamais bloquante : les objectifs éclairent, ils n'obligent pas. Une
+    // campagne sans objectif de pièces reste légitime (offre facultative,
+    // budget facultatif — même logique), et la saisie ne laisse passer que
+    // des entiers positifs, il n'y a donc rien d'invalide à retenir.
+    blocking: () => null,
+  },
+  {
+    // Le prix vient après les objectifs, et non l'inverse : une remise se juge
+    // au volume qu'elle doit faire vendre pour se payer, et ce volume est
+    // justement ce que l'étape précédente vient de fixer.
     key: 'pricing',
     label: 'Prix',
     blocking: (d) => {
@@ -301,15 +313,6 @@ const STEPS: Step[] = [
         : `« ${casse.label} » : une remise de ${casse.discount_pct} % sur une marge de `
           + `${casse.margin_pct} % détruit la marge — aucun volume ne la compense.`
     },
-  },
-  {
-    key: 'objectives',
-    label: 'Objectifs de vente',
-    // Jamais bloquante : les objectifs éclairent, ils n'obligent pas. Une
-    // campagne sans objectif de pièces reste légitime (offre facultative,
-    // budget facultatif — même logique), et la saisie ne laisse passer que
-    // des entiers positifs, il n'y a donc rien d'invalide à retenir.
-    blocking: () => null,
   },
   {
     key: 'budget',
@@ -541,8 +544,8 @@ export default function CampaignBuilder({
       <section className="card wizard-card">
         {here === 'framing' ? <FramingStep {...shared} role={role} shops={shops.data ?? []} /> : null}
         {here === 'offer' ? <OfferStep {...shared} /> : null}
-        {here === 'pricing' ? <PricingStep {...shared} /> : null}
         {here === 'objectives' ? <ObjectivesStep {...shared} /> : null}
+        {here === 'pricing' ? <PricingStep {...shared} /> : null}
         {here === 'budget' ? <BudgetStep {...shared} /> : null}
         {here === 'communication' ? <CommunicationStep {...shared} agencies={agencies.data ?? []} /> : null}
         {here === 'planning' ? <PlanningStep {...shared} /> : null}

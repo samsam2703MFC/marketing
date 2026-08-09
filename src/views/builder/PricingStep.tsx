@@ -247,13 +247,14 @@ export default function PricingStep({
       <h2>Prix</h2>
       <p className="muted">
         Choisissez la mécanique de promotion produit par produit. La colonne « à vendre » dit ce
-        qu’il faudra écouler pour retrouver la marge d’avant — c’est elle qui éclaire l’objectif de
-        l’étape suivante.
+        qu’il faudra écouler pour retrouver la marge d’avant — à confronter à l’objectif posé à
+        l’étape précédente.
       </p>
 
       {/* Les volumes de référence viennent d'une période d'analyse — la même
-          qu'à l'étape « Objectifs ». Elle se règle ici parce que c'est le
-          premier écran qui en a besoin, et l'autre la retrouve telle quelle. */}
+          qu'à l'étape « Objectifs de vente », où elle est réglée en premier.
+          Elle reste modifiable ici, et l'autre écran la retrouve telle quelle :
+          une seule période vaut pour toute la campagne. */}
       <AnalysisPeriod
         from={draft.analysis_from}
         to={draft.analysis_to}
@@ -560,8 +561,8 @@ export default function PricingStep({
       </div>
 
       {/* ── Bilan ──────────────────────────────────────────────────────────
-          La question que l'étape suivante posera : l'objectif couvre-t-il ce
-          que la promotion coûte ? Le poser ici évite de découvrir à l'arrivée
+          La question posée à l'objectif de l'étape précédente : couvre-t-il ce
+          que la promotion coûte ? La poser ici évite de découvrir à l'arrivée
           qu'une hausse de 45 % ne laissait rien une fois la remise payée. */}
       {enPromo.length > 0 ? (
         <>
@@ -637,9 +638,9 @@ export default function PricingStep({
           >
             {objectif === 0 ? (
               <>
-                Aucun objectif posé pour l’instant. Retenez ce seuil : il faudra{' '}
-                <strong>{fr(q1Total)} pièces</strong> à l’étape suivante rien que pour retrouver la
-                marge d’aujourd’hui.
+                Aucun objectif posé à l’étape précédente. Il en faudrait{' '}
+                <strong>{fr(q1Total)} pièces</strong> rien que pour retrouver la marge
+                d’aujourd’hui : revenez le poser, ou assumez la promotion sans cible.
               </>
             ) : gain >= 0 ? (
               <>
