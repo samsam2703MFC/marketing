@@ -518,6 +518,54 @@ async function main() {
         await call('DELETE', `/api/v1/groups/${b.group.id}`);
       }
     });
+    await step('Suites — intro / clôture / toutes les N, montées à la main', async () => {
+      const st = await call('GET', '/api/v1/state');
+      const before = await call('GET', '/api/v1/sequences');
+      // Trois éléments repérables, au format paysage.
+      const mk = (id, name) => ({ id, type: 'liaison', name, sub: '', orient: 'paysage', items: [] });
+      const mods = [...st.modules, mk('mSeqA', 'INTRO-LT'), mk('mSeqB', 'GAMME-LT'), mk('mSeqC', 'OUTRO-LT')];
+      const film = { id: 'pl-seqLT', name: 'Suites LT', items: [], mode: 'continu',
+        continuous: { source: 'tout', perMoment: false, order: 'catalogue', maxItems: 12, orient: 'paysage',
+          ratios: { liaison: 0, produitSeul: 1, media: 0, animation: 0, surprise: 0 },
+          sequences: ['sqIntroLT', 'sqGammeLT', 'sqOutroLT'] } };
+      const seqs = [
+        { id: 'sqIntroLT', name: 'Intro LT', placement: 'debut', orient: 'paysage', active: true, items: ['mSeqA'] },
+        { id: 'sqGammeLT', name: 'Gamme LT', placement: 'boucle', ratio: 3, orient: 'paysage', active: true, items: ['mSeqB'] },
+        { id: 'sqOutroLT', name: 'Outro LT', placement: 'fin', orient: 'paysage', active: true, items: ['mSeqC'] },
+        // Une suite au MAUVAIS format ne doit pas passer sur une boucle paysage.
+        { id: 'sqPortLT', name: 'Portrait LT', placement: 'debut', orient: 'portrait', active: true, items: ['mSeqA'] },
+      ];
+      const names = async () => {
+        const f = await (await fetch(BASE + '/api/v1/film?film=pl-seqLT')).json();
+        return (f.modules || []).map((m) => m.name || '');
+      };
+      try {
+        await call('PUT', '/api/v1/sequences', { sequences: seqs });
+        const back = (await call('GET', '/api/v1/sequences')).sequences;
+        const intro = back.find((s) => s.id === 'sqIntroLT');
+        if (!intro || intro.placement !== 'debut' || intro.items.join() !== 'mSeqA') throw new Error('aller-retour de la suite incorrect : ' + JSON.stringify(intro));
+        await call('PUT', '/api/v1/draft', { modules: mods, playlists: [...st.playlists, { ...film, continuous: { ...film.continuous, sequences: [...film.continuous.sequences, 'sqPortLT'] } }], activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+        const out = await names();
+        if (out[0] !== 'INTRO-LT') throw new Error(`l'ouverture n'est pas en tête : ${out.slice(0, 3).join(' | ')}`);
+        if (out[out.length - 1] !== 'OUTRO-LT') throw new Error(`la clôture n'est pas en fin : ${out.slice(-3).join(' | ')}`);
+        const gamme = out.filter((n) => n === 'GAMME-LT').length;
+        if (gamme < 1) throw new Error('la suite « toutes les N » ne passe jamais');
+        if (out.filter((n) => n === 'INTRO-LT').length !== 1) throw new Error('la suite portrait est passée sur une boucle paysage');
+        // Une suite désactivée disparaît de la boucle.
+        await call('PUT', '/api/v1/sequences', { sequences: seqs.map((s) => (s.id === 'sqIntroLT' ? { ...s, active: false } : s)) });
+        const off = await names();
+        if (off.includes('INTRO-LT')) throw new Error('une suite inactive passe encore');
+        // Une suite non retenue par le film ne passe pas non plus.
+        await call('PUT', '/api/v1/sequences', { sequences: seqs });
+        await call('PUT', '/api/v1/draft', { modules: mods, playlists: [...st.playlists, { ...film, continuous: { ...film.continuous, sequences: [] } }], activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+        const none = await names();
+        if (none.includes('INTRO-LT') || none.includes('OUTRO-LT')) throw new Error('une suite non retenue par le film passe quand même');
+        return `ouverture en tête · ${gamme} passage(s) de la suite « 1:3 » · clôture en fin · format et sélection respectés`;
+      } finally {
+        await call('PUT', '/api/v1/sequences', { sequences: before.sequences });
+        await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      }
+    });
     await step('Animation — import d\'un fichier (fond + animation autonome)', async () => {
       const st = await call('GET', '/api/v1/state');
       // 1 × 1 px GIF : le plus petit fichier valide pour l'aller-retour.

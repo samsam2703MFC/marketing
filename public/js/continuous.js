@@ -23,6 +23,8 @@ export function continuousDefaults() {
     // Parcours de la bibliothèque : une ligne par élément, avec sa case
     // actif/inactif et son ratio de passage : [{ id, on, n }].
     itemRatios: [],
+    // Suites montées à la main retenues par ce film : [idSuite, …].
+    sequences: [],
     // Format d'écran visé par la boucle : 'paysage' (16:9) ou 'portrait' (9:16).
     orient: 'paysage',
     refresh: 'moment',       // 'moment' (au changement moment/saison) | 'minutes'
@@ -72,6 +74,7 @@ export function normContinuous(c) {
         return { id: String((r && r.id) || ''), on, n: on ? Math.max(1, n) : n };
       })
       .filter((r) => r.id && (r.on || r.n > 0)),
+    sequences: Array.isArray(c.sequences) ? [...new Set(c.sequences.map(String).filter(Boolean))] : [],
     orient: c.orient === 'portrait' ? 'portrait' : 'paysage',
     refresh: c.refresh === 'minutes' ? 'minutes' : 'moment',
     refreshMin: num(c.refreshMin, d.refreshMin, 1, 240),

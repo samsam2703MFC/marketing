@@ -8,6 +8,7 @@ import {
   loadElementTypes, loadCatalog, saveCatalog, applyStorePrices, applyStoreLang, applyStoreTokens, loadLangs,
   loadPromoTypes, savePromoTypes, loadCampaigns, saveCampaigns, applyHtmlVars,
   loadLibCategories, saveLibCategories, LIB_SOURCES, loadIngredients, saveIngredients,
+  loadSequences, saveSequences, SEQ_PLACEMENTS,
   loadSeasons, saveSeasons, currentSeasons, currentMoment,
   loadMedia, addMediaRow, getMediaRow, delMediaRow,
   loadProductMoments, saveProductMoments, SALE_MOMENTS, currentSaleMoment, momentTagFilters,
@@ -970,6 +971,16 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
         return send(200, { ok: false, error: String(e.message || e) });
       }
     }
+    // ---- suites montées à la main (intro, outro, présentation de gamme…) ----
+    if (req.method === 'GET' && path === '/sequences') return send(200, { sequences: loadSequences(), placements: SEQ_PLACEMENTS });
+    if (req.method === 'PUT' && path === '/sequences') {
+      const body = await readBody();
+      if (!Array.isArray(body.sequences)) return send(400, { error: 'sequences requis' });
+      const sequences = saveSequences(body.sequences);
+      scheduleMirror();
+      return send(200, { ok: true, sequences, savedAt: nowIso() });
+    }
+
     // ---- fichiers d'animation (fond ou animation autonome) ------------------
     // Servis depuis public/anim/ ; séparés de la médiathèque agence, qui a sa
     // propre logique de tags (moment · produit · saison).

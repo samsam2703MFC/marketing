@@ -188,6 +188,24 @@ désactiver » ne touche qu'au format affiché : les réglages de l'autre orient
 Stocké dans `continuous.itemRatios` = `[{ id, on, n }]` (l'ancien format `{ id, n }` reste lu :
 il vaut « actif si n > 0 »). Un élément tagué par moment ne passe qu'à ces moments-là.
 
+### Suites — le montage à la main dans un film automatique
+Le film se compose tout seul, mais certains passages se **montent à la main** : une **intro**,
+un **outro**, une **présentation de gamme**… C'est le rôle des **suites** (`sig_sequences`),
+éditées dans un mini éditeur au bas du panneau de la boucle.
+
+Une suite est une liste **ordonnée** d'éléments de la bibliothèque (↑ / ↓ pour l'ordre, ✎ pour
+éditer l'élément, ✕ pour le retirer). Elle porte :
+
+- son **format d'écran** (16:9 / 9:16) — un élément d'un autre format est signalé sur place,
+  il ne passerait pas ;
+- sa **place dans la boucle** : **⤒ Ouverture** (en tête de chaque boucle), **⤓ Clôture**
+  (en fin), ou **↻ Toutes les N** positions ;
+- un état **actif / inactif**.
+
+Chaque film **coche les suites qu'il utilise** (case à gauche de son nom) : une suite est un
+objet partagé, mais chaque boucle décide de la jouer ou non. Une suite créée est d'emblée cochée
+pour le film en cours d'édition. Les slots générés sont préfixés `k-seq-…` dans la boucle.
+
 ### Tags de période — la régie est la seule source
 **Tous les paramètres de tag se font dans le back office de la régie.** Quatre familles sont
 taguables sur les périodes de la journée (matin / midi / après-midi), avec les mêmes règles et
@@ -353,7 +371,7 @@ qui la portent restent visibles ; la liste ne peut pas être vidée.
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + cycle complet — 63 tests
+npm test              # serveur jetable (BDD temporaire) + cycle complet — 64 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
 node test/live-test.js http://185.180.206.46/signage --password=… --mutate
@@ -380,6 +398,7 @@ session admin  : POST /api/v1/login · /logout · GET /me
                  GET /lib-categories · PUT /lib-categories (classement + table liée)
                  GET /ingredients · PUT /ingredients (matière première ↔ animation)
                  POST /anim-assets · GET /anim-assets (fichiers d'animation)
+                 GET /sequences · PUT /sequences (suites : intro · outro · gamme)
                  GET /product-moments · PUT /product-moments (tags de période,
                    kind = produit | categorie | promotion | campagne)
                  GET /appearance?product={id} (Régie → Apparition…, lecture ERP)

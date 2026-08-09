@@ -468,6 +468,28 @@ function migrate(db) {
   -- (produits, catégories produit, promotions, campagnes, périodes, médias) —
   -- c'est ce qui alimente ses éléments. Un élément pointe vers sa catégorie via
   -- sig_modules.lib_tag.
+  -- Suites (séquences) montées à la main : une intro, un outro, une
+  -- présentation de gamme… Une suite est une liste ORDONNÉE d'éléments de la
+  -- bibliothèque, avec sa place dans la boucle :
+  --   'debut'  → jouée en ouverture de chaque boucle ;
+  --   'fin'    → jouée en clôture ;
+  --   'boucle' → insérée périodiquement, un passage tous les "ratio" slots.
+  CREATE TABLE IF NOT EXISTS sig_sequences (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL DEFAULT '',
+    placement  TEXT NOT NULL DEFAULT 'debut',
+    ratio      INTEGER NOT NULL DEFAULT 8,
+    orient     TEXT NOT NULL DEFAULT 'paysage',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    active     INTEGER NOT NULL DEFAULT 1
+  );
+  CREATE TABLE IF NOT EXISTS sig_sequence_items (
+    sequence_id TEXT NOT NULL REFERENCES sig_sequences(id) ON DELETE CASCADE,
+    position    INTEGER NOT NULL,
+    module_id   TEXT NOT NULL,
+    PRIMARY KEY (sequence_id, position)
+  );
+
   -- Matières premières : un ingrédient peut être LIÉ À UNE ANIMATION de la
   -- bibliothèque (ex. « beurre AOP » → l'animation qui la met en avant). Le
   -- lien se règle en régie ; le module produit du franchiseur ne fait que le
@@ -779,6 +801,54 @@ export function savePromoTypes(list) {
     throw e;
   }
   return loadPromoTypes();
+}
+
+// ---------------------------------------------------------------------------
+// Suites — des séquences montées à la main (intro, outro, présentation d'une
+// gamme…) qui viennent se poser dans la boucle continue. Le film reste composé
+// automatiquement ; la suite est le morceau qu'on écrit soi-même.
+export const SEQ_PLACEMENTS = ['debut', 'fin', 'boucle'];
+export function loadSequences() {
+  const db = getDb();
+  const items = db.prepare('SELECT sequence_id, module_id FROM sig_sequence_items ORDER BY sequence_id, position').all();
+  const by = new Map();
+  for (const it of items) {
+    if (!by.has(it.sequence_id)) by.set(it.sequence_id, []);
+    by.get(it.sequence_id).push(it.module_id);
+  }
+  return db.prepare('SELECT * FROM sig_sequences ORDER BY sort_order, name').all().map((s) => ({
+    id: s.id, name: s.name,
+    placement: SEQ_PLACEMENTS.includes(s.placement) ? s.placement : 'debut',
+    ratio: s.ratio, orient: s.orient === 'portrait' ? 'portrait' : 'paysage',
+    active: !!s.active, items: by.get(s.id) || [],
+  }));
+}
+export function saveSequences(list) {
+  const db = getDb();
+  const rows = (Array.isArray(list) ? list : [])
+    .map((s) => ({
+      id: String((s && s.id) || '').trim(),
+      name: String((s && s.name) || '').trim(),
+      placement: SEQ_PLACEMENTS.includes(s && s.placement) ? s.placement : 'debut',
+      ratio: Math.max(1, Math.min(99, parseInt(s && s.ratio, 10) || 8)),
+      orient: (s && s.orient) === 'portrait' ? 'portrait' : 'paysage',
+      active: (s && s.active) === false ? 0 : 1,
+      items: (Array.isArray(s && s.items) ? s.items : []).map(String).filter(Boolean),
+    }))
+    .filter((s) => s.id && s.name);
+  db.exec('BEGIN');
+  try {
+    db.exec('DELETE FROM sig_sequence_items');
+    db.exec('DELETE FROM sig_sequences');
+    const insSeq = db.prepare('INSERT OR REPLACE INTO sig_sequences(id, name, placement, ratio, orient, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    const insIt = db.prepare('INSERT OR REPLACE INTO sig_sequence_items(sequence_id, position, module_id) VALUES (?, ?, ?)');
+    rows.forEach((s, i) => {
+      insSeq.run(s.id, s.name, s.placement, s.ratio, s.orient, i, s.active);
+      s.items.forEach((mid, j) => insIt.run(s.id, j, mid));
+    });
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  return loadSequences();
 }
 
 // ---------------------------------------------------------------------------
@@ -1241,14 +1311,31 @@ export function buildContinuous(cfg, date = new Date(), ctx = {}) {
     .map((r) => ({ n: r.n, mm: lib.find((x) => x.id === r.id) }))
     .filter((r) => r.mm && libOk(r.mm));
 
+  // 3ter) Suites montées à la main (intro, outro, présentation de gamme…) :
+  // seules celles retenues par CE film, au bon format, et dont il reste au
+  // moins un élément diffusable au moment courant.
+  const useSeq = new Set(cfg.sequences || []);
+  const byLibId = new Map(lib.map((mm) => [mm.id, mm]));
+  const seqs = loadSequences()
+    .filter((s) => s.active && useSeq.has(s.id) && s.orient === cfg.orient)
+    .map((s) => ({ ...s, mods: s.items.map((id) => byLibId.get(id)).filter((mm) => mm && libOk(mm)) }))
+    .filter((s) => s.mods.length);
+  const seqModules = (s, tag) => s.mods.map((mm, k) => ({ ...mm, id: `k-seq-${tag}-${s.id}-${k}` }));
+
   // 4) Composition : slots avec ratios « 1 : N » par type d'élément.
   const modules = [];
   const R = cfg.ratios;
   const hit = (n, i) => n > 0 && (i % n === 0);
+  // Ouverture : les suites placées « au début », dans leur ordre.
+  for (const s of seqs.filter((x) => x.placement === 'debut')) modules.push(...seqModules(s, 'in'));
   const L = Math.max(4, Math.min(cfg.maxItems, (Math.max(catLists.length, pool.length) || 2) * 2));
   let catI = 0, prodI = 0;
+  const seqLoop = seqs.filter((x) => x.placement === 'boucle');
   for (let i = 1; i <= L; i++) {
-    // Un item précis passe en premier : c'est un choix explicite de la régie.
+    // Une suite passe avant tout : c'est un morceau écrit à la main.
+    const sq = seqLoop.find((s) => hit(s.ratio, i));
+    if (sq) { modules.push(...seqModules(sq, `m${i}`)); continue; }
+    // Un item précis passe ensuite : c'est un choix explicite de la régie.
     const pick = picked.find((r) => hit(r.n, i));
     if (pick) { modules.push({ ...pick.mm, id: `k-item-${i}-${pick.mm.id}` }); continue; }
     if (hit(R.promotion, i) && promos.length) { const pm = promos[Math.floor(rng() * promos.length)]; modules.push({ ...pm, id: `k-promo-${i}` }); continue; }
@@ -1270,6 +1357,8 @@ export function buildContinuous(cfg, date = new Date(), ctx = {}) {
       for (const id of exf.items) { const mm = byId.get(id); if (mm) modules.push({ ...mm, id: `k-exc-${fid}-${id}` }); }
     }
   }
+  // 5bis) Clôture : les suites placées « à la fin », dans leur ordre.
+  for (const s of seqs.filter((x) => x.placement === 'fin')) modules.push(...seqModules(s, 'out'));
   // 6) Vidéo surprise en clôture (si ratio > 0 et dossier non vide).
   if (R.surprise > 0 && surprise.length) modules.push({ id: 'k-surprise', type: 'film', video: surprise[Math.floor(rng() * surprise.length)], dur: cfg.clipDur, items: [], tag: { enabled: false } });
   // 7) Boucle vide : slide d'attente.

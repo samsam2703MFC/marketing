@@ -145,6 +145,8 @@ class App extends Component {
     appearance: null, appearanceBusy: false,
     // Matières premières : ingrédient ↔ animation de la bibliothèque.
     ingredients: [], ingDraft: null, ingDirty: false, ingBusy: false, ingDiag: null,
+    // Suites montées à la main (intro, outro, présentation de gamme…).
+    sequences: [], seqDraft: null, seqDirty: false, seqBusy: false, seqSel: null,
     campaigns: [], campaignDraft: null, campaignDirty: false, campaignBusy: false, campaignSavedAt: 0,
     catalog: { categories: [], products: [] },
     catDraft: null, catDirty: false, catSel: '', catSaving: false, langs: [], catLang: 'fr',
@@ -235,6 +237,8 @@ class App extends Component {
       const lc = await api('GET', '/lib-categories').catch(() => ({ libCategories: [], libSources: [] }));
       // Matières premières : ingrédient ↔ animation.
       const ing = await api('GET', '/ingredients').catch(() => ({ ingredients: [] }));
+      // Suites montées à la main (intro, outro, présentation de gamme…).
+      const sq = await api('GET', '/sequences').catch(() => ({ sequences: [] }));
       const pwa = await api('GET', '/pwa-config').catch(() => null);
       const plan = await api('GET', '/plan').catch(() => ({ windows: [], byStore: {} }));
       const playlists = ((Array.isArray(st.playlists) && st.playlists.length)
@@ -252,6 +256,7 @@ class App extends Component {
         campaigns: cmp.campaigns || [],
         libCats: lc.libCategories || [], libSources: lc.libSources || [],
         ingredients: ing.ingredients || [],
+        sequences: sq.sequences || [],
         pwaForm: pwa ? {
           host: pwa.host, port: pwa.port, db: pwa.db, user: pwa.user,
           password: '', hasPassword: !!pwa.hasPassword,
@@ -1070,6 +1075,78 @@ class App extends Component {
       this.setState({ promoBusy: false, promoTypes: r.promoTypes || [], promoDraft: JSON.parse(JSON.stringify(r.promoTypes || [])), promoDirty: false, promoSavedAt: Date.now() });
       this.showToast('Promotions enregistrées ✓');
     } catch (e) { this.setState({ promoBusy: false }); this.showToast(`Erreur : ${e.message}`); }
+  }
+
+  // ---- suites : de petits montages à la main dans un film automatique ------
+  // Une suite est une liste ORDONNÉE d'éléments (intro, outro, présentation
+  // d'une gamme…) qui vient se poser dans la boucle, à la place qu'on lui donne.
+  seqList() { return this.state.seqDraft || this.state.sequences || []; }
+  seqCurrent() {
+    const l = this.seqList();
+    return l.find((s) => s.id === this.state.seqSel) || l[0] || null;
+  }
+  setSeqDraft(mut) {
+    const arr = JSON.parse(JSON.stringify(this.seqList()));
+    mut(arr);
+    this.setState({ seqDraft: arr, seqDirty: true });
+  }
+  addSequence() {
+    const id = 'sq' + uid();
+    // Une suite neuve suit le format d'écran de la boucle en cours d'édition :
+    // c'est celui qu'on a sous les yeux.
+    const orient = (this.activeFilm().continuous || {}).orient === 'portrait' ? 'portrait' : 'paysage';
+    this.setSeqDraft((a) => a.push({ id, name: 'Nouvelle suite', placement: 'debut', ratio: 8, orient, active: true, items: [] }));
+    // Et elle est d'emblée retenue par le film courant : sinon on la monte
+    // sans rien voir passer à l'écran.
+    const cur = (this.activeFilm().continuous || {}).sequences || [];
+    this.updateContinuous({ sequences: [...cur, id] });
+    this.setState({ seqSel: id });
+  }
+  updateSequence(id, patch) { this.setSeqDraft((a) => { const s = a.find((x) => x.id === id); if (s) Object.assign(s, patch); }); }
+  delSequence(id) {
+    this.setSeqDraft((a) => { const i = a.findIndex((x) => x.id === id); if (i >= 0) a.splice(i, 1); });
+    const cur = (this.activeFilm().continuous || {}).sequences || [];
+    if (cur.includes(id)) this.updateContinuous({ sequences: cur.filter((x) => x !== id) });
+    if (this.state.seqSel === id) this.setState({ seqSel: null });
+  }
+  moveSequence(id, dir) {
+    this.setSeqDraft((a) => {
+      const i = a.findIndex((x) => x.id === id); const j = i + dir;
+      if (i < 0 || j < 0 || j >= a.length) return;
+      const [row] = a.splice(i, 1); a.splice(j, 0, row);
+    });
+  }
+  // --- contenu d'une suite : ajouter / déplacer / retirer un élément ---
+  seqAddItem(id, moduleId) {
+    if (!moduleId) return;
+    this.setSeqDraft((a) => { const s = a.find((x) => x.id === id); if (s) s.items = [...(s.items || []), moduleId]; });
+  }
+  seqMoveItem(id, i, dir) {
+    this.setSeqDraft((a) => {
+      const s = a.find((x) => x.id === id); if (!s) return;
+      const j = i + dir;
+      if (j < 0 || j >= s.items.length) return;
+      const it = [...s.items]; const [row] = it.splice(i, 1); it.splice(j, 0, row); s.items = it;
+    });
+  }
+  seqDelItem(id, i) {
+    this.setSeqDraft((a) => { const s = a.find((x) => x.id === id); if (s) s.items = s.items.filter((_, k) => k !== i); });
+  }
+  async loadSequencesList() {
+    try { const r = await api('GET', '/sequences'); this.setState({ sequences: r.sequences || [], seqDraft: null, seqDirty: false }); }
+    catch { /* indisponible : garde l'état courant */ }
+  }
+  async saveSequences() {
+    if (this.state.seqBusy) return;
+    const list = this.seqList();
+    if (list.some((s) => !String(s.name || '').trim())) { this.showToast('Chaque suite a besoin d\'un nom'); return; }
+    this.setState({ seqBusy: true });
+    try {
+      const r = await api('PUT', '/sequences', { sequences: list });
+      this.setState({ seqBusy: false, sequences: r.sequences || [], seqDraft: null, seqDirty: false });
+      this.showToast('Suites enregistrées ✓');
+      this.loadContPreview();   // la boucle affichée reflète tout de suite la suite
+    } catch (e) { this.setState({ seqBusy: false }); this.showToast(`Erreur : ${e.message}`); }
   }
 
   // ---- matières premières : ingrédient ↔ animation --------------------------
@@ -2935,6 +3012,63 @@ class App extends Component {
           del: () => { if (used === 0 || window.confirm(`${used} élément(s) utilisent « ${t.name} ». Supprimer quand même ce sous-type ?`)) this.delPromoType(t.id); },
         };
       }),
+      // -- suites : mini montage à la main dans un film automatique --
+      seqDirty: st.seqDirty, seqBusy: st.seqBusy,
+      addSequence: () => this.addSequence(), saveSequences: () => this.saveSequences(),
+      seqRows: this.seqList().map((s, i, arr) => {
+        const used = (this.activeFilm().continuous || {}).sequences || [];
+        return {
+          id: s.id, name: s.name, count: (s.items || []).length,
+          placement: s.placement || 'debut', ratio: s.ratio || 8,
+          orient: s.orient === 'portrait' ? 'portrait' : 'paysage',
+          active: s.active !== false, inFilm: used.includes(s.id),
+          selected: (this.seqCurrent() || {}).id === s.id,
+          isFirst: i === 0, isLast: i === arr.length - 1,
+          pick: () => this.setState({ seqSel: s.id }),
+          toggleInFilm: () => this.updateContinuous({ sequences: used.includes(s.id) ? used.filter((x) => x !== s.id) : [...used, s.id] }),
+          up: () => this.moveSequence(s.id, -1),
+          down: () => this.moveSequence(s.id, 1),
+        };
+      }),
+      seqCur: (() => {
+        const s = this.seqCurrent();
+        if (!s) return null;
+        const byId = new Map((st.library || []).map((mm) => [mm.id, mm]));
+        return {
+          id: s.id, name: s.name, placement: s.placement || 'debut', ratio: s.ratio || 8,
+          orient: s.orient === 'portrait' ? 'portrait' : 'paysage',
+          active: s.active !== false,
+          onName: (e) => this.updateSequence(s.id, { name: e.target.value }),
+          setPlacement: (p) => this.updateSequence(s.id, { placement: p }),
+          onRatio: (e) => this.updateSequence(s.id, { ratio: Math.max(1, Math.min(99, parseInt(e.target.value, 10) || 1)) }),
+          setOrient: (o) => this.updateSequence(s.id, { orient: o }),
+          toggleActive: () => this.updateSequence(s.id, { active: s.active === false }),
+          del: () => { if ((s.items || []).length === 0 || window.confirm(`Supprimer la suite « ${s.name} » et ses ${s.items.length} élément(s) ?`)) this.delSequence(s.id); },
+          // Les éléments de la suite, dans l'ordre de passage.
+          items: (s.items || []).map((mid, i, arr) => {
+            const mm = byId.get(mid);
+            return {
+              key: mid + '-' + i, i, n: i + 1,
+              name: mm ? (mm.name || 'Élément') : 'élément supprimé',
+              missing: !mm,
+              icon: mm ? ((this.elementTypeOf(mm) || {}).icon || '▤') : '⚠',
+              meta: mm ? this.modMeta(mm) : 'retiré de la bibliothèque',
+              // Un élément d'un autre format ne passera pas : autant le dire ici.
+              wrongOrient: !!mm && this.orientOf(mm) !== (s.orient === 'portrait' ? 'portrait' : 'paysage'),
+              isFirst: i === 0, isLast: i === arr.length - 1,
+              up: () => this.seqMoveItem(s.id, i, -1),
+              down: () => this.seqMoveItem(s.id, i, 1),
+              del: () => this.seqDelItem(s.id, i),
+              edit: () => { if (mm) { this.setComposerTab('lib'); this.selectMod(mm.id); } },
+            };
+          }),
+          // Éléments ajoutables : ceux au format de la suite.
+          addable: (st.library || [])
+            .filter((mm) => this.orientOf(mm) === (s.orient === 'portrait' ? 'portrait' : 'paysage'))
+            .map((mm) => ({ id: mm.id, label: `${(this.elementTypeOf(mm) || {}).icon || '▤'} ${mm.name || 'Élément'}` })),
+          onAdd: (e) => { const v = e.target.value; e.target.value = ''; this.seqAddItem(s.id, v); },
+        };
+      })(),
       // -- matières premières : ingrédient ↔ animation --
       ingDirty: st.ingDirty, ingBusy: st.ingBusy, ingDiag: st.ingDiag,
       addIngredient: () => this.addIngredient(), saveIngredients: () => this.saveIngredients(),
@@ -3726,10 +3860,83 @@ class App extends Component {
             ${cont.refresh === 'minutes' ? cField('N minutes', cNum('refreshMin', cont.refreshMin, 1, 240), 'Intervalle de recomposition de la boucle, en minutes.') : ''}
             ${cField('Si rien en saison', cChoice('fallback', [['tout', 'Tout le catalogue'], ['aucun', 'Rien (attente)']]), 'Repli quand aucun produit n’est éligible (hors saison / rien au bon moment) : jouer tout le catalogue, ou afficher l’écran d’attente.')}
           </div>
-          <div>
-            ${cField('Playlists d\'exception (jouées EN PLUS à chaque boucle · plusieurs possibles)', html`<div style="display:flex;gap:6px;flex-wrap:wrap;">
-              ${excFilms.length ? excChips : html`<span style="font-size:12px;color:#8A847C;">Aucun autre film « playlist » à ajouter.</span>`}
-            </div>`, 'Ces films « playlist » (montés à la main) sont ajoutés à la fin de CHAQUE boucle, en plus du contenu auto. Pratique pour épingler une promo ou un message qui doit toujours passer. Clique un tag pour l’ajouter/retirer.')}
+          ${excFilms.length ? html`<div>
+            ${cField('Playlists d\'exception (jouées EN PLUS à chaque boucle · plusieurs possibles)', html`<div style="display:flex;gap:6px;flex-wrap:wrap;">${excChips}</div>`,
+              'Anciens films « playlist » montés à la main, ajoutés à la fin de CHAQUE boucle. Les nouveaux montages se font désormais dans les Suites ci-dessous.')}
+          </div>` : ''}
+
+          <!-- Suites : mini éditeur de montage (intro · outro · gamme…) -->
+          <div style="border-top:1px dashed rgba(35,34,32,0.14);padding-top:16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+              <div style="display:flex;align-items:center;gap:7px;">
+                <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Suites — montage à la main</span>
+                ${infoTip('Une suite est une petite séquence que tu montes toi-même : intro, outro, présentation d’une gamme… Tu choisis son ordre, sa place dans la boucle (ouverture, clôture, ou toutes les N positions) et son format d’écran. Le reste du film continue à se composer tout seul autour.')}
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                ${v.seqDirty ? html`<span style="font-size:11.5px;font-weight:600;color:#B8860B;">non enregistré</span>` : ''}
+                <button onClick=${v.addSequence} style="padding:6px 13px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">+ Suite</button>
+                <button onClick=${v.saveSequences} disabled=${v.seqBusy || !v.seqDirty} style="padding:6px 14px;font-size:12px;font-weight:600;color:#fff;background:${v.seqDirty ? '#8D1D2C' : 'rgba(141,29,44,0.35)'};border:none;border-radius:999px;cursor:${v.seqBusy ? 'wait' : (v.seqDirty ? 'pointer' : 'default')};">${v.seqBusy ? 'Enregistrement…' : 'Enregistrer'}</button>
+              </div>
+            </div>
+            ${v.seqRows.length ? html`
+              <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+                <!-- colonne gauche : les suites -->
+                <div style="flex:0 0 250px;display:flex;flex-direction:column;gap:5px;">
+                  ${v.seqRows.map((s) => html`
+                    <div key=${s.id} style="display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:10px;cursor:pointer;border:1px solid ${s.selected ? 'rgba(141,29,44,0.45)' : 'rgba(35,34,32,0.10)'};background:${s.selected ? 'rgba(141,29,44,0.06)' : '#FBF8F2'};" onClick=${s.pick}>
+                      <button onClick=${(e) => { e.stopPropagation(); s.toggleInFilm(); }} title=${s.inFilm ? 'Utilisée dans ce film — cliquer pour retirer' : 'Non utilisée dans ce film'} style="flex:0 0 auto;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;line-height:1;border-radius:5px;cursor:pointer;border:1px solid ${s.inFilm ? '#8D1D2C' : 'rgba(35,34,32,0.28)'};background:${s.inFilm ? '#8D1D2C' : '#fff'};color:#fff;">${s.inFilm ? '✓' : ''}</button>
+                      <span style="flex:1 1 auto;min-width:0;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${s.active ? '#232220' : '#8A847C'};">${s.name}</span>
+                      <span style="flex:0 0 auto;font-size:10.5px;color:#8A847C;">${({ debut: '⤒ début', fin: '⤓ fin', boucle: '↻ 1:' + s.ratio })[s.placement]} · ${s.count}</span>
+                    </div>
+                  `)}
+                </div>
+                <!-- colonne droite : la suite sélectionnée -->
+                ${v.seqCur && html`
+                  <div style="flex:1 1 380px;min-width:0;background:#FBF8F2;border:1px solid rgba(35,34,32,0.10);border-radius:12px;padding:12px 14px;">
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+                      <input key=${'sqn-' + v.seqCur.id} defaultValue=${v.seqCur.name} onChange=${v.seqCur.onName} placeholder="Nom de la suite (ex. Intro)" style="flex:1 1 160px;min-width:0;padding:7px 10px;font-size:13px;font-weight:600;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
+                      <span style="display:inline-flex;background:#EFE9E0;border-radius:8px;padding:2px;">
+                        ${[['paysage', '▭ 16:9'], ['portrait', '▯ 9:16']].map(([id, lab]) => html`
+                          <button onClick=${() => v.seqCur.setOrient(id)} style="padding:5px 10px;font-size:11.5px;font-weight:600;border:none;border-radius:6px;cursor:pointer;${v.seqCur.orient === id ? 'background:#fff;color:#232220;box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'}">${lab}</button>
+                        `)}
+                      </span>
+                      <button onClick=${v.seqCur.toggleActive} title=${v.seqCur.active ? 'Active' : 'Inactive'} style="padding:5px 11px;font-size:11.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${v.seqCur.active ? '#2E6E4E' : 'rgba(35,34,32,0.18)'};background:${v.seqCur.active ? 'rgba(46,110,78,0.10)' : '#fff'};color:${v.seqCur.active ? '#2E6E4E' : '#8A847C'};">${v.seqCur.active ? '✓ Active' : 'Inactive'}</button>
+                      <button onClick=${v.seqCur.del} title="Supprimer la suite" style="width:28px;height:28px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;color:#8D1D2C;cursor:pointer;">✕</button>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:12px;">
+                      <span style="font-size:10.5px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#8A847C;">Place dans la boucle</span>
+                      ${[['debut', '⤒ Ouverture'], ['fin', '⤓ Clôture'], ['boucle', '↻ Toutes les N']].map(([id, lab]) => html`
+                        <button onClick=${() => v.seqCur.setPlacement(id)} style="padding:5px 11px;font-size:11.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${v.seqCur.placement === id ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${v.seqCur.placement === id ? '#8D1D2C' : '#fff'};color:${v.seqCur.placement === id ? '#fff' : '#232220'};">${lab}</button>
+                      `)}
+                      ${v.seqCur.placement === 'boucle' ? html`<span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:#8A847C;">1 :
+                        <input type="number" min="1" max="99" value=${v.seqCur.ratio} onInput=${v.seqCur.onRatio} style="width:60px;padding:5px 8px;font-size:12px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;text-align:right;" />
+                      </span>` : ''}
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:4px;max-height:240px;overflow:auto;padding-right:4px;">
+                      ${v.seqCur.items.length ? v.seqCur.items.map((it) => html`
+                        <div key=${it.key} style="display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:9px;background:#fff;border:1px solid ${it.missing || it.wrongOrient ? 'rgba(184,134,11,0.5)' : 'rgba(35,34,32,0.10)'};">
+                          <span style="flex:0 0 auto;width:20px;font-size:11px;font-weight:700;color:#8A847C;text-align:right;">${it.n}</span>
+                          <span style="flex:0 0 auto;font-size:13px;">${it.icon}</span>
+                          <span style="flex:1 1 auto;min-width:0;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${it.name}<span style="color:#8A847C;"> · ${it.meta}</span>${it.wrongOrient ? html`<span style="color:#B8860B;"> · autre format, ne passera pas</span>` : ''}</span>
+                          <span style="flex:0 0 auto;display:inline-flex;gap:3px;">
+                            <button onClick=${it.up} disabled=${it.isFirst} title="Monter" style="width:24px;height:24px;border-radius:6px;border:1px solid rgba(35,34,32,0.12);background:#FBF8F2;cursor:${it.isFirst ? 'default' : 'pointer'};opacity:${it.isFirst ? 0.35 : 1};font-size:11px;">↑</button>
+                            <button onClick=${it.down} disabled=${it.isLast} title="Descendre" style="width:24px;height:24px;border-radius:6px;border:1px solid rgba(35,34,32,0.12);background:#FBF8F2;cursor:${it.isLast ? 'default' : 'pointer'};opacity:${it.isLast ? 0.35 : 1};font-size:11px;">↓</button>
+                            ${it.missing ? '' : html`<button onClick=${it.edit} title="Éditer dans la bibliothèque" style="width:24px;height:24px;border-radius:6px;border:1px solid rgba(35,34,32,0.12);background:#FBF8F2;color:#6E4A2B;cursor:pointer;font-size:11px;">✎</button>`}
+                            <button onClick=${it.del} title="Retirer de la suite" style="width:24px;height:24px;border-radius:6px;border:1px solid rgba(35,34,32,0.12);background:#FBF8F2;color:#8D1D2C;cursor:pointer;font-size:11px;">✕</button>
+                          </span>
+                        </div>
+                      `) : html`<span style="font-size:12px;color:#8A847C;padding:4px 0;">Suite vide — ajoute un élément ci-dessous.</span>`}
+                    </div>
+                    ${v.seqCur.addable.length ? html`
+                      <select onChange=${v.seqCur.onAdd} style="margin-top:10px;width:100%;box-sizing:border-box;padding:8px 10px;font-size:12.5px;border:1px dashed rgba(141,29,44,0.4);border-radius:9px;background:rgba(141,29,44,0.04);color:#8D1D2C;font-weight:600;cursor:pointer;">
+                        <option value="">＋ Ajouter un élément à la suite…</option>
+                        ${v.seqCur.addable.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
+                      </select>
+                    ` : html`<p style="margin:10px 0 0;font-size:12px;color:#B8860B;">Aucun élément de bibliothèque au format ${v.seqCur.orient === 'portrait' ? '9:16' : '16:9'}.</p>`}
+                  </div>
+                `}
+              </div>
+            ` : html`<p style="margin:0;font-size:12.5px;color:#8A847C;">Aucune suite. « + Suite » pour monter une intro, un outro ou une présentation de gamme.</p>`}
           </div>
         </div>
       </div>`;
