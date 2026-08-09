@@ -2720,67 +2720,72 @@ table select,
 }
 
 .prospects {
-  column-count: 3;
-  column-gap: 26px;
   list-style: none;
   margin: 10px 0 0;
-  padding: 14px 16px;
+  padding: 12px 16px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: #fff;
-  max-height: 22rem;
-  overflow: auto;
+  max-height: 26rem;
+  /* Défilement vertical seulement. En colonnes CSS, une boutique de six cents
+     comptes ne tient pas dans la hauteur : le contenu repart alors en largeur,
+     et la liste se lisait à la barre horizontale. */
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
-/* Sous 1100 px, deux colonnes puis une : à trois, les raisons sociales se
-   coupent plus qu'elles ne se lisent. */
-@media (max-width: 1100px) {
-  .prospects {
-    column-count: 2;
-  }
-}
-
-@media (max-width: 760px) {
-  .prospects {
-    column-count: 1;
-  }
-}
-
-/* Un groupe ne se coupe jamais entre deux colonnes : la boutique et ses
-   comptes se lisent ensemble, ou pas du tout. */
-.prospects__group {
-  break-inside: avoid;
-  margin-bottom: 14px;
-}
-
-.prospects__shop {
-  margin: 0 0 5px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid var(--line);
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--accent);
+/* Les comptes d'une boutique sur trois colonnes ; les boutiques, elles,
+   s'empilent. L'inverse — les boutiques en colonnes — laissait un vide de la
+   hauteur du plus gros groupe dès qu'il dépassait le cadre. */
+.prospects__group + .prospects__group {
+  margin-top: 14px;
 }
 
 .prospects__group ul {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 16px;
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
+@media (max-width: 1100px) {
+  .prospects__group ul {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .prospects__group ul {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Le nom de la boutique reste visible pendant qu'on parcourt ses comptes :
+   six cents lignes plus bas, on ne sait plus qui passe l'appel. */
+.prospects__shop {
+  position: sticky;
+  top: -12px;
+  z-index: 1;
+  margin: 0 0 5px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+/* Une ligne par compte, coupée net s'il le faut : à deux lignes, les colonnes
+   se décalent les unes des autres et la grille cesse de se lire en lignes.
+   Le nom entier reste dans l'infobulle. */
 .prospects__group li {
   padding: 3px 0;
   font-size: 12.5px;
-}
-
-/* Raison sociale longue : tronquée à l'affichage, entière dans l'infobulle. */
-.prospects__group strong {
-  display: inline-block;
-  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  vertical-align: bottom;
 }
 
 .prospects__group .muted {
