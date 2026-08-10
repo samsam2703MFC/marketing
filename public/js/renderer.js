@@ -3,6 +3,26 @@
 import { mountLottie } from './lottie-host.js';
 export const RUBY = '#8D1D2C';
 export const INK = '#232220';
+
+// Palette de la marque — SOURCE UNIQUE des couleurs proposées en régie (fonds
+// d'écran, listes de choix…). Les valeurs sont celles déjà utilisées partout
+// dans le rendu et dans le back office : ajouter une teinte ici la rend
+// disponible d'un coup dans toutes les listes de couleurs.
+export const BRAND_COLORS = [
+  { id: 'noir', name: 'Noir', hex: '#000000' },
+  { id: 'encre', name: 'Encre', hex: '#232220' },
+  { id: 'rubis', name: 'Rubis', hex: '#8D1D2C' },
+  { id: 'terre', name: 'Terre', hex: '#6E4A2B' },
+  { id: 'caramel', name: 'Caramel', hex: '#C97B4A' },
+  { id: 'or', name: 'Or', hex: '#B8860B' },
+  { id: 'vert', name: 'Vert', hex: '#2E6E4E' },
+  { id: 'gris', name: 'Gris', hex: '#8A847C' },
+  { id: 'lin', name: 'Lin', hex: '#E7E1D8' },
+  { id: 'sable', name: 'Sable', hex: '#EFE9E0' },
+  { id: 'creme', name: 'Crème', hex: '#FBF8F2' },
+  { id: 'blanc', name: 'Blanc', hex: '#FFFFFF' },
+];
+export const brandColorName = (hex) => (BRAND_COLORS.find((c) => c.hex.toLowerCase() === String(hex || '').toLowerCase()) || {}).name || '';
 export const FVANK = "'Vank','Gotham'";
 export const FUI = "'Gotham'";
 export const W = 6480;
@@ -224,7 +244,9 @@ function renderModuleInner(h, m, lt, opts) {
       const p = m.pos || {};
       const vz = p.vidZoom == null ? 1 : p.vidZoom;
       const vx = p.vidX || 0, vy = p.vidY || 0;
-      kids.push(h('div', { key: 'vbg', style: { position: 'absolute', inset: 0, background: '#000' } }));
+      // Fond visible quand la vidéo n'occupe pas tout l'écran (mode « adapter »
+      // ou zoom réduit) : noir par défaut, ou une couleur de la marque.
+      kids.push(h('div', { key: 'vbg', style: { position: 'absolute', inset: 0, background: m.bgColor || '#000' } }));
       kids.push(h('video', {
         key: 'vid' + m.id,
         src: m.video,
@@ -282,6 +304,9 @@ function renderModuleInner(h, m, lt, opts) {
     const zoom = 1 + 0.05 * (lt / dur) + (mo.pulse ? 0.015 * Math.sin(lt * Math.PI * 3) : 0);
     // Mode « fichier » : l'animation importée REMPLACE le rendu généré.
     if (m.animMode === 'fichier') {
+      // Même règle que la vidéo : le fond se voit dès que le fichier ne remplit
+      // pas l'écran.
+      if (m.bgColor) kids.push(h('div', { key: 'anim-bgc', style: { position: 'absolute', inset: 0, background: m.bgColor } }));
       const el = animAssetEl(h, m.animFile, m.animFit, 'anim-file');
       kids.push(el || h('div', {
         key: 'anim-none',

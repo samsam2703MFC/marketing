@@ -265,6 +265,14 @@ visible, un **zoom** de 0,5× à 4× règle la taille, et **⌖** recentre. Stoc
 `sig_modules.pos` (`vidX`, `vidY`, `vidZoom`) — aucune migration. La vignette de l'éditeur
 applique le même cadrage que l'écran, pour ne pas donner une fausse idée du rendu.
 
+La **couleur de fond** — ce qu'on voit autour de la vidéo quand elle ne remplit pas l'écran — se
+choisit dans une liste alimentée par la **palette de la marque** (`BRAND_COLORS`, exportée par
+`public/js/renderer.js` : rubis, encre, terre, caramel, or, vert, gris, lin, sable, crème,
+blanc). Ajouter une teinte à cette constante la rend disponible partout d'un coup. Un nuancier
+« libre » reste là pour un cas particulier ; toute valeur qui n'est pas une couleur est refusée
+à l'enregistrement et retombe sur le noir. Champ `sig_modules.bg_color`, appliqué aussi au mode
+« fichier » de l'élément Animation, qui a le même besoin.
+
 ### Animation — texte animé **ou** fichier importé
 L'élément **Animation** travaille de deux façons, choisies dans son volet **Visuel** :
 

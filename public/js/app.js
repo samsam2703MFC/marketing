@@ -5,6 +5,7 @@ import {
   RUBY, INK, FUI, W, H, LIAISON_DUR, LAYOUTS, MOTIONS,
   clx, fmtTime, newTag, newSched, newPos,
   activeItems as rActiveItems, moduleDur as rModuleDur, renderModule, playable, animAssetKind,
+  BRAND_COLORS, brandColorName,
 } from './renderer.js';
 // Config du mode « continu » : source unique partagée avec le serveur.
 import { continuousDefaults, normContinuous } from './continuous.js';
@@ -3443,6 +3444,15 @@ class App extends Component {
       zoomVid: (d) => this.setPos('vidZoom', Math.round(clx((pos.vidZoom == null ? 1 : pos.vidZoom) + d * 0.1, 0.5, 4) * 100) / 100),
       onVidZoom: (e) => this.setPos('vidZoom', parseFloat(e.target.value)),
       resetVid: () => this.setPosMany({ vidX: 0, vidY: 0, vidZoom: 1 }),
+      // Couleur de fond : ce qu'on voit autour de la vidéo quand elle ne
+      // remplit pas l'écran. Liste de la palette de marque + teinte libre.
+      bgColor: m.bgColor || '',
+      bgSwatch: m.bgColor || '#000000',
+      bgName: m.bgColor ? (brandColorName(m.bgColor) || 'teinte libre') : 'Noir (défaut)',
+      bgOptions: [{ id: '', name: 'Noir (défaut)', hex: '#000000' }, ...BRAND_COLORS.filter((c) => c.id !== 'noir')],
+      bgIsCustom: !!m.bgColor && !brandColorName(m.bgColor),
+      onBgPick: (e) => this.setSelField('bgColor', e.target.value),
+      onBgCustom: (e) => this.setSelField('bgColor', e.target.value),
       vidMoved: !!(pos.vidX || pos.vidY || (pos.vidZoom != null && pos.vidZoom !== 1)),
       // -- film en mode « surprise » (dossier serveur, piochée au hasard) --
       isSurprise: !!m.surprise,
@@ -5502,7 +5512,7 @@ class App extends Component {
               <p style="margin:0 0 12px;font-size:12px;color:#8A847C;line-height:1.5;">mp4 ou webm, <strong>8 Mo max</strong> (compresse en 1080p/H.264). Lue en boucle, sans le son, pendant la durée choisie.</p>
               ${v.hasVideo && html`
                 <!-- La vignette montre le MÊME cadrage que l'écran, sinon elle ment. -->
-                <video src=${v.videoPreview} muted autoplay loop playsinline style="width:100%;aspect-ratio:${W} / ${H};object-fit:${v.vidFit};border-radius:12px;background:#000;margin-bottom:10px;"></video>
+                <video src=${v.videoPreview} muted autoplay loop playsinline style="width:100%;aspect-ratio:${W} / ${H};object-fit:${v.vidFit};border-radius:12px;background:${v.bgSwatch};margin-bottom:10px;"></video>
               `}
               <div style="display:flex;gap:10px;">
                 <label style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 12px;font-size:13px;font-weight:600;color:#8D1D2C;border:1px dashed rgba(141,29,44,0.4);border-radius:10px;background:rgba(141,29,44,0.04);cursor:pointer;">
@@ -5547,6 +5557,22 @@ class App extends Component {
                     </label>
                   </div>
                   ${v.vidMoved ? html`<p style="margin:9px 0 0;font-size:11.5px;color:#8A847C;">Décalage ${v.vidX > 0 ? '+' : ''}${v.vidX} px · ${v.vidY > 0 ? '+' : ''}${v.vidY} px — ⌖ pour recentrer.</p>` : ''}
+
+                  <!-- Couleur de fond : palette de la marque + teinte libre -->
+                  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:13px;">
+                    <span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">
+                      Couleur de fond${infoTip('Ce qu’on voit AUTOUR de la vidéo quand elle ne remplit pas l’écran (mode « adapter », ou zoom réduit). La liste reprend la palette de la marque ; « teinte libre » ouvre le nuancier pour un cas particulier.')}
+                    </span>
+                    <span title=${v.bgName} style="width:26px;height:26px;flex:0 0 auto;border-radius:7px;border:1px solid rgba(35,34,32,0.22);background:${v.bgSwatch};"></span>
+                    <select value=${v.bgColor} onChange=${v.onBgPick} style="flex:1 1 190px;min-width:0;padding:8px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;cursor:pointer;">
+                      ${v.bgOptions.map((c) => html`<option value=${c.id ? c.hex : ''}>${c.name}</option>`)}
+                      ${v.bgIsCustom ? html`<option value=${v.bgColor}>Teinte libre (${v.bgColor})</option>` : ''}
+                    </select>
+                    <label title="Teinte libre" style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#8A847C;cursor:pointer;">
+                      <input type="color" value=${v.bgSwatch} onChange=${v.onBgCustom} style="width:32px;height:28px;padding:0;border:1px solid rgba(35,34,32,0.16);border-radius:7px;background:#fff;cursor:pointer;" />
+                      libre
+                    </label>
+                  </div>
                 </div>
               `}
             `}

@@ -522,7 +522,7 @@ async function main() {
       const st = await call('GET', '/api/v1/state');
       const mods = [...st.modules, {
         id: 'mVidLT', type: 'film', name: 'Vidéo LT', orient: 'paysage', layout: 'contain', dur: 10,
-        video: 'media/lt.mp4', items: [], pos: { vidX: 240, vidY: -120, vidZoom: 1.4 },
+        video: 'media/lt.mp4', items: [], bgColor: '#8D1D2C', pos: { vidX: 240, vidY: -120, vidZoom: 1.4 },
       }];
       try {
         await call('PUT', '/api/v1/draft', { modules: mods, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
@@ -533,7 +533,15 @@ async function main() {
         if (p.vidX !== 240 || p.vidY !== -120 || Math.abs(p.vidZoom - 1.4) > 0.001) {
           throw new Error('position/zoom non conservés : ' + JSON.stringify(p));
         }
-        return `cadrage « adapter » · décalage +240 / −120 px · zoom 1.40× conservés`;
+        if (back.bgColor !== '#8D1D2C') throw new Error('couleur de fond non conservée : ' + back.bgColor);
+        // Une valeur qui n'est pas une couleur est refusée (retour au noir).
+        await call('PUT', '/api/v1/draft', {
+          modules: mods.map((m) => (m.id === 'mVidLT' ? { ...m, bgColor: 'rouge; drop table' } : m)),
+          playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop,
+        });
+        const bad = (await call('GET', '/api/v1/state')).modules.find((m) => m.id === 'mVidLT');
+        if (bad.bgColor !== '') throw new Error('couleur invalide acceptée : ' + JSON.stringify(bad.bgColor));
+        return `cadrage « adapter » · décalage +240 / −120 px · zoom 1.40× · fond rubis conservés · couleur invalide refusée`;
       } finally {
         await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
       }

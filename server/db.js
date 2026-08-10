@@ -327,6 +327,9 @@ function migrate(db) {
   if (!modCols2.includes('anim_dim')) db.exec(`ALTER TABLE sig_modules ADD COLUMN anim_dim INTEGER NOT NULL DEFAULT 45`);
   if (!modCols2.includes('anim_file')) db.exec(`ALTER TABLE sig_modules ADD COLUMN anim_file TEXT NOT NULL DEFAULT ''`);
   if (!modCols2.includes('anim_fit')) db.exec(`ALTER TABLE sig_modules ADD COLUMN anim_fit TEXT NOT NULL DEFAULT 'cover'`);
+  // Couleur de fond d'un élément (vidéo, fichier d'animation) : ce qu'on voit
+  // autour du média quand il ne remplit pas l'écran. Vide = noir.
+  if (!modCols2.includes('bg_color')) db.exec(`ALTER TABLE sig_modules ADD COLUMN bg_color TEXT NOT NULL DEFAULT ''`);
   // Reprise unique de l'ancien état « auto » (tous formats) : un écran est
   // portrait OU paysage. Un gabarit HTML retombe sur la forme de sa maquette,
   // le reste sur paysage (16:9, le format d'écran courant).
@@ -385,7 +388,8 @@ function migrate(db) {
         anim_bg      TEXT NOT NULL DEFAULT '',
         anim_dim     INTEGER NOT NULL DEFAULT 45,
         anim_file    TEXT NOT NULL DEFAULT '',
-        anim_fit     TEXT NOT NULL DEFAULT 'cover'
+        anim_fit     TEXT NOT NULL DEFAULT 'cover',
+        bg_color     TEXT NOT NULL DEFAULT ''
       );
       INSERT INTO sig_modules_new (${cols}) SELECT ${cols} FROM sig_modules;
       DROP TABLE sig_modules;
@@ -2093,6 +2097,7 @@ export function loadModules() {
       animDim: m.anim_dim == null ? 45 : m.anim_dim,
       animFile: m.anim_file || '',
       animFit: m.anim_fit === 'contain' ? 'contain' : 'cover',
+      bgColor: m.bg_color || '',
       // Campagne résolue pour l'affichage (nom · portée · visuel · thème · dates).
       campaign: m.type === 'campagne'
         ? (campaign || { id: m.campaign_ref || '', name: 'Campagne', scope: 'produit', productRef: '', theme: '', image: '', message: '', dateFrom: '', dateTo: '', color: '#8D1D2C', active: true })
@@ -2161,8 +2166,8 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
        tag_enabled, tag_label, tag_img, sched_days, sched_from, sched_to, pos, sort_order, lib_tag,
        cat_ref, product_ref, video, surprise, watermark, dur, promo_type, campaign_ref,
        orient, moments, html, html_vars, html_w, html_h,
-       anim_mode, anim_bg, anim_dim, anim_file, anim_fit, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
+       anim_mode, anim_bg, anim_dim, anim_file, anim_fit, bg_color, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
     const insItem = db.prepare(`INSERT INTO sig_module_items
       (module_id, position, name, price, img, src, active) VALUES (?, ?, ?, ?, ?, ?, ?)`);
     // Les types valides viennent de la table sig_element_types (rien en dur).
@@ -2193,7 +2198,8 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
         String(m.animBg || ''),
         Math.max(0, Math.min(90, parseInt(m.animDim, 10) || 0)),
         String(m.animFile || ''),
-        m.animFit === 'contain' ? 'contain' : 'cover'
+        m.animFit === 'contain' ? 'contain' : 'cover',
+        /^#[0-9a-fA-F]{3,8}$/.test(String(m.bgColor || '')) ? m.bgColor : ''
       );
       // Un élément lié au catalogue (ou une campagne) ne stocke pas d'items propres.
       if (!m.catRef && !m.productRef && m.type !== 'campagne') {
