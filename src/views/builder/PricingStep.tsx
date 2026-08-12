@@ -1,6 +1,7 @@
 import { module as api } from '../../lib/api'
 import { useAsync } from '../../lib/useAsync'
 import type { SalesQuantities } from '../../lib/api/module'
+import { Fragment } from 'react'
 import type { Draft, MechanicCode } from './CampaignBuilder'
 import AnalysisPeriod from './AnalysisPeriod'
 
@@ -211,13 +212,86 @@ export default function PricingStep({
     return { element, index, ttc0, marge, q0, sim, q1, prixManquant: prix === null }
   })
 
-  const enPromo = lignes.filter((l) => l.element.mechanic_type !== '' && !l.sim.neutre)
-  const cassees = lignes.filter((l) => l.element.mechanic_type !== '' && !l.sim.neutre && !l.sim.viable)
+  /**
+   * Lignes rangées par famille de catalogue, dans l'ordre où l'API rend les
+   * produits — elle trie déjà par famille puis par nom, il suffit de découper.
+   */
+  const familleDe = (ligne: (typeof lignes)[number]): string =>
+    sales.data?.products.find((p) => p.item_id === ligne.element.offer_item_id)?.family ?? 'Autres'
+
+  // Les lignes suivent l'ordre de l'offre, qui est celui où l'on a coché les
+  // produits — deux cougnous séparés par une galette y sont possibles, et le
+  // découpage en aurait fait deux catégories « Cougnou ». On regroupe donc
+  // avant de découper, en gardant l'ordre des produits dans chaque famille.
+  const familles = [...lignes]
+    .sort((gauche, droite) => familleDe(gauche).localeCompare(familleDe(droite), 'fr'))
+    .reduce<Array<{
+    nom: string
+    lignes: typeof lignes
+    q0: number
+    q1: number
+  }>>((groupes, ligne) => {
+    const nom = familleDe(ligne)
+    const dernier = groupes[groupes.length - 1]
+    const q1 = ligne.q1 ?? ligne.q0
+
+    if (dernier !== undefined && dernier.nom === nom) {
+      dernier.lignes.push(ligne)
+      dernier.q0 += ligne.q0
+      dernier.q1 += q1
+    } else {
+      groupes.push({ nom, lignes: [ligne], q0: ligne.q0, q1 })
+    }
+
+    return groupes
+  }, [])
+
+  /** Écrit le même changement sur plusieurs lignes d'un coup. */
+  const patchMany = (indexes: number[], change: Partial<Draft['offer_items'][number]>) => {
+    patch({
+      offer_items: draft.offer_items.map((element, position) =>
+        indexes.includes(position) ? { ...element, ...change } : element,
+      ),
+    })
+  }
+
+  /**
+   * Valeur commune à toute une famille, ou chaîne vide si ses produits ne
+   * s'accordent pas. Afficher la valeur du premier laisserait croire que la
+   * famille entière est réglée dessus alors qu'un seul l'est.
+   */
+  const commun = (
+    famille: { lignes: typeof lignes },
+    champ: 'mechanic_type' | 'discount_pct' | 'fixed_price' | 'margin_pct',
+  ): string => {
+    const valeurs = new Set(famille.lignes.map((ligne) => ligne.element[champ]))
+
+    return valeurs.size === 1 ? [...valeurs][0] : ''
+  }
+
+  /** La mécanique de la famille s'impose à tous ses produits. */
+  const setFamilyMecanique = (famille: { lignes: typeof lignes }, code: MechanicCode | '') => {
+    patchMany(famille.lignes.map((ligne) => ligne.index), {
+      mechanic_type: code,
+      discount_pct: '',
+      fixed_price: '',
+      buy_qty: code === 'BUY_X_GET_Y' ? '2' : '',
+      get_qty: code === 'BUY_X_GET_Y' ? '1' : '',
+    })
+  }
+
+  const enPromo = lignes.filter(
+    (l) => l.element.mechanic_type !== '' && !l.sim.neutre && !l.prixManquant,
+  )
+  const cassees = lignes.filter(
+    (l) => l.element.mechanic_type !== '' && !l.sim.neutre && !l.prixManquant && !l.sim.viable,
+  )
+  const sansPrix = lignes.filter((l) => l.prixManquant && l.element.mechanic_type !== '')
 
   const q0Total = lignes.reduce((sum, l) => sum + l.q0, 0)
   // Un produit dont la promotion détruit la marge ne contribue pas à la
   // compensation : on garde son volume actuel plutôt que d'inventer un chiffre.
-  const q1Total = lignes.reduce((sum, l) => sum + (l.q1 ?? l.q0), 0)
+  const q1Total = lignes.reduce((sum, l) => sum + (l.prixManquant ? l.q0 : (l.q1 ?? l.q0)), 0)
   const supplement = q1Total - q0Total
 
   const objectif = Object.values(draft.shop_objectives).reduce(
@@ -308,14 +382,92 @@ export default function PricingStep({
               </tr>
             </thead>
             <tbody>
-              {lignes.map((ligne) => {
+              {familles.map((famille) => (
+              <Fragment key={famille.nom}>
+              {/* Ligne de catégorie : elle règle la mécanique de tous ses
+                  produits d'un coup. Les lignes en dessous corrigent ce qui
+                  doit l'être — un parfum moins remisé que les autres. */}
+              <tr className="pricing__family">
+                <td>
+                  {famille.nom}
+                  <span className="sub">
+                    {famille.lignes.length} produit{famille.lignes.length > 1 ? 's' : ''} ·{' '}
+                    {fr(famille.q0)} pièces sur la période
+                  </span>
+                </td>
+                <td className="num"><span className="muted">—</span></td>
+                <td className="num">
+                  <span className="objectives__pct">
+                    <input
+                      value={commun(famille, 'margin_pct')}
+                      placeholder={draft.margin_pct_default}
+                      inputMode="numeric"
+                      aria-label={`Taux de marge pour la catégorie ${famille.nom}`}
+                      title="S’applique à tous les produits de la catégorie"
+                      onChange={(e) =>
+                        patchMany(famille.lignes.map((l) => l.index), { margin_pct: e.target.value })
+                      }
+                    />
+                    %
+                  </span>
+                </td>
+                <td className="pricing__sep">
+                  <div className="pricing__mecanique">
+                    <select
+                      value={commun(famille, 'mechanic_type')}
+                      aria-label={`Mécanique pour la catégorie ${famille.nom}`}
+                      onChange={(e) =>
+                        setFamilyMecanique(famille, e.target.value as MechanicCode | '')
+                      }
+                    >
+                      <option value="">Aucune promotion</option>
+                      {MECANIQUES.map((m) => (
+                        <option key={m.code} value={m.code}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+
+                    {commun(famille, 'mechanic_type') === 'PERCENT' ? (
+                      <span className="objectives__pct">
+                        <input
+                          value={commun(famille, 'discount_pct')}
+                          inputMode="numeric"
+                          aria-label={`Remise pour la catégorie ${famille.nom}`}
+                          onChange={(e) =>
+                            patchMany(famille.lignes.map((l) => l.index), {
+                              discount_pct: e.target.value,
+                            })
+                          }
+                        />
+                        %
+                      </span>
+                    ) : null}
+                  </div>
+                </td>
+                <td className="num"><span className="muted">—</span></td>
+                <td className="num"><span className="muted">—</span></td>
+                <td className="num pricing__sep">
+                  <strong>{fr(famille.q1)}</strong>
+                </td>
+                <td className="num">
+                  {famille.q1 > famille.q0 ? `+${fr(famille.q1 - famille.q0)}` : '—'}
+                </td>
+              </tr>
+
+              {famille.lignes.map((ligne) => {
                 const { element, index, sim } = ligne
                 const mecanique = MECANIQUES.find((m) => m.code === element.mechanic_type)
                 const inactive = element.mechanic_type === ''
 
                 return (
-                  <tr key={index} className={ligne.sim.viable || inactive ? undefined : 'is-stop'}>
-                    <td>
+                  <tr
+                    key={index}
+                    className={
+                      inactive || ligne.prixManquant || ligne.sim.viable ? undefined : 'is-stop'
+                    }
+                  >
+                    <td className="objectives__child">
                       {element.label}
                       <span className="sub">
                         {ligne.q0 === 0
@@ -417,7 +569,7 @@ export default function PricingStep({
                     </td>
 
                     <td className="num">
-                      {inactive || sim.neutre ? (
+                      {ligne.prixManquant || inactive || sim.neutre ? (
                         <span className="muted">—</span>
                       ) : (
                         <>
@@ -428,7 +580,9 @@ export default function PricingStep({
                     </td>
 
                     <td className="num">
-                      {inactive || sim.neutre ? (
+                      {ligne.prixManquant && !inactive ? (
+                        <span className="tag-warn">prix manquant</span>
+                      ) : ligne.prixManquant || inactive || sim.neutre ? (
                         <span className="muted">—</span>
                       ) : (
                         <>
@@ -445,7 +599,7 @@ export default function PricingStep({
                     </td>
 
                     <td className="num pricing__sep">
-                      {inactive || sim.neutre ? (
+                      {ligne.prixManquant || inactive || sim.neutre ? (
                         <span className="muted">{fr(ligne.q0)}</span>
                       ) : sim.viable && ligne.q1 !== null ? (
                         <>
@@ -458,10 +612,10 @@ export default function PricingStep({
                     </td>
 
                     <td className="num">
-                      {inactive || sim.neutre || ligne.q1 === null ? (
-                        <span className="muted">
-                          {sim.viable ? '—' : 'aucun volume ne compense'}
-                        </span>
+                      {ligne.prixManquant || inactive || sim.neutre ? (
+                        <span className="muted">—</span>
+                      ) : ligne.q1 === null ? (
+                        <span className="pricing__stop">aucun volume ne compense</span>
                       ) : (
                         <>
                           +{fr(ligne.q1 - ligne.q0)}
@@ -472,6 +626,8 @@ export default function PricingStep({
                   </tr>
                 )
               })}
+              </Fragment>
+              ))}
             </tbody>
             <tfoot>
               <tr>
@@ -490,6 +646,15 @@ export default function PricingStep({
           </table>
         </div>
       </div>
+
+      {sansPrix.length > 0 ? (
+        <p className="pricing__flag pricing__flag--warn">
+          {sansPrix.length === 1 ? 'Un produit est en promotion' : `${sansPrix.length} produits sont en promotion`}{' '}
+          sans prix de référence : {sansPrix.map((l) => l.element.label).join(', ')}. Leur marge ne
+          se calcule pas, et le total ci-dessous les compte à leur volume actuel — renseignez leur
+          prix pour qu’ils entrent dans la compensation.
+        </p>
+      ) : null}
 
       {cassees.map((ligne) => (
         <p key={ligne.index} className="pricing__flag pricing__flag--stop">

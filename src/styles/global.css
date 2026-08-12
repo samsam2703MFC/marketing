@@ -2375,6 +2375,17 @@ select:disabled {
 
 .pricing tr.is-stop td { background: var(--stop-soft); }
 
+/* Ligne de catégorie du tableau des prix — même traitement que celle des
+   quantités : un fond, pas un trait de plus dans un tableau déjà chargé. */
+.pricing__family td {
+  background: var(--total-line);
+  font-weight: 500;
+}
+
+.pricing__family td:first-child {
+  font-weight: 600;
+}
+
 .pricing__mecanique {
   display: flex;
   align-items: center;
