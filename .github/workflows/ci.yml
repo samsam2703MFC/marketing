@@ -72,6 +72,44 @@ jobs:
           echo "Objets hors préfixe : $stray"
           test "$stray" -eq 0
 
+      - name: Vérifier la numérotation des migrations
+        run: |
+          # Deux migrations ont porté le même numéro deux fois — 020 puis 023 —
+          # écrites en parallèle sans que l'une sache de l'autre. Le runner les
+          # suit par leur nom de fichier, donc rien n'échoue : elles s'appliquent
+          # toutes les deux, dans l'ordre alphabétique. C'est précisément ce qui
+          # rend la collision indétectable, et qui la fera revenir.
+          #
+          # Renuméroter après coup n'est pas une option : un fichier renommé est
+          # inconnu du registre, donc rejoué, et son ADD COLUMN échoue sur une
+          # colonne déjà là — le déploiement s'arrête au milieu. Les deux
+          # doublons existants restent donc en place, nommés ici pour qu'on
+          # sache qu'ils sont connus et non oubliés. Tout nouveau doublon est
+          # refusé à l'entrée, quand il ne coûte encore qu'un renommage.
+          connus="020 023"
+
+          doublons=$(ls db/migrations/*.sql \
+            | sed 's#.*/##; s/^\([0-9]\{3\}\).*/\1/' \
+            | sort | uniq -d)
+
+          nouveaux=""
+          for numero in $doublons; do
+            case " $connus " in
+              *" $numero "*) ;;
+              *) nouveaux="$nouveaux $numero" ;;
+            esac
+          done
+
+          if [ -n "$nouveaux" ]; then
+            echo "::error::Numéro de migration en double :$nouveaux"
+            echo "Prenez le premier numéro libre : un fichier déjà appliqué ne se renomme pas,"
+            echo "le registre le suit par son nom et le rejouerait au déploiement suivant."
+            ls db/migrations/*.sql | sed 's#.*/##'
+            exit 1
+          fi
+
+          echo "Numérotation des migrations : aucun doublon nouveau (connus :$connus)"
+
       - name: Lint PHP
         run: find api -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
 
