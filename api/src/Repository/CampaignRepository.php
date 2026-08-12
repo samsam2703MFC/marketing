@@ -699,6 +699,9 @@ final class CampaignRepository
         $connection = Database::connection();
 
         foreach ([
+            // Avant `mar_campaign_shop` : elle référence les mêmes boutiques et
+            // la cascade ne joue que sur la campagne, pas sur la ligne fille.
+            'mar_campaign_shop_item_target',
             'mar_campaign_shop',
             'mar_campaign_channel',
             'mar_campaign_lever_target',
@@ -782,6 +785,69 @@ final class CampaignRepository
                     'target_pieces'         => $targetsByShop[$shopId] ?? null,
                     'challenge_trigger_pct' => $triggersByShop[$shopId] ?? null,
                     'created_by'            => $auth->userId,
+                ]);
+            }
+        }
+
+        // Objectifs croisés boutique × produit — « ici, 900 cougnous ».
+        //
+        // Une ligne n'est écrite que pour une boutique réellement rattachée à la
+        // campagne : sans ce filtre, une boutique retirée du périmètre laisserait
+        // derrière elle des objectifs que plus aucun écran ne montre, et que le
+        // total du réseau continuerait pourtant de compter.
+        $rattachees = array_flip($shopRows);
+        $crossed    = is_array($data['shop_item_targets'] ?? null) ? $data['shop_item_targets'] : [];
+
+        if ($crossed !== []) {
+            // Références encore au catalogue. Une référence disparue depuis la
+            // dernière ouverture du brouillon ferait échouer la contrainte, et
+            // c'est l'enregistrement entier de la campagne qui tomberait pour un
+            // objectif de produit.
+            $connus = [];
+            $sent   = array_values(array_unique(array_filter(array_map(
+                static fn ($entry): int => is_array($entry) ? (int) ($entry['offer_item_id'] ?? 0) : 0,
+                $crossed
+            ))));
+
+            if ($sent !== []) {
+                [$inSql, $inBindings] = Database::inClause($sent, 'item');
+                $lookup = $connection->prepare(
+                    sprintf('SELECT id FROM mar_offer_item WHERE id IN (%s)', $inSql)
+                );
+                $lookup->execute($inBindings);
+                $connus = array_flip(array_map('intval', $lookup->fetchAll(PDO::FETCH_COLUMN)));
+            }
+
+            $insertCrossed = $connection->prepare(
+                'INSERT INTO mar_campaign_shop_item_target
+                    (campaign_id, shop_id, offer_item_id, target_pieces, created_by)
+                 VALUES (:campaign_id, :shop_id, :offer_item_id, :target_pieces, :created_by)
+                 ON DUPLICATE KEY UPDATE target_pieces = VALUES(target_pieces)'
+            );
+
+            foreach ($crossed as $entry) {
+                if (!is_array($entry)) {
+                    continue;
+                }
+
+                $shopId = (int) ($entry['shop_id'] ?? 0);
+                $itemId = (int) ($entry['offer_item_id'] ?? 0);
+                $pieces = (int) ($entry['target_pieces'] ?? 0);
+
+                // Zéro compte : « n'en vendez pas » est un objectif, c'est
+                // l'absence de ligne qui veut dire « aucun objectif ».
+                if ($shopId <= 0 || $itemId <= 0 || $pieces < 0
+                    || !array_key_exists($shopId, $rattachees)
+                    || !array_key_exists($itemId, $connus)) {
+                    continue;
+                }
+
+                $insertCrossed->execute([
+                    'campaign_id'   => $campaignId,
+                    'shop_id'       => $shopId,
+                    'offer_item_id' => $itemId,
+                    'target_pieces' => $pieces,
+                    'created_by'    => $auth->userId,
                 ]);
             }
         }
@@ -1289,6 +1355,16 @@ final class CampaignRepository
         );
         $shopTargets->execute(['id' => $id]);
 
+        // Objectifs croisés boutique × produit. Ils font foi : les objectifs par
+        // boutique et par produit lus plus haut en sont les sommes.
+        $shopItemTargets = Database::connection()->prepare(
+            'SELECT shop_id, offer_item_id, target_pieces
+               FROM mar_campaign_shop_item_target
+              WHERE campaign_id = :id
+              ORDER BY shop_id, offer_item_id'
+        );
+        $shopItemTargets->execute(['id' => $id]);
+
         $prizes = Database::connection()->prepare(
             'SELECT rank_position, label FROM mar_campaign_challenge_prize
               WHERE campaign_id = :id ORDER BY rank_position'
@@ -1355,6 +1431,14 @@ final class CampaignRepository
                     'challenge_trigger_pct' => $row['challenge_trigger_pct'],
                 ],
                 $shopTargets->fetchAll()
+            ),
+            'shop_item_targets' => array_map(
+                static fn (array $row): array => [
+                    'shop_id'       => (int) $row['shop_id'],
+                    'offer_item_id' => (int) $row['offer_item_id'],
+                    'target_pieces' => (int) $row['target_pieces'],
+                ],
+                $shopItemTargets->fetchAll()
             ),
             'sector_ids'     => $ids('SELECT sector_id FROM mar_campaign_b2b_sector WHERE campaign_id = :id'),
             'agency_ask_ids' => $ids('SELECT ask_id FROM mar_campaign_agency_ask WHERE campaign_id = :id'),

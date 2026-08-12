@@ -3132,3 +3132,133 @@ table select,
   color: var(--muted);
   opacity: 0.85;
 }
+
+/* ── Détail d'objectif dans une fiche magasin ────────────────────────────
+   Replié par défaut : cinq fiches ouvertes en même temps rempliraient l'écran
+   de champs alors qu'on ne détaille en général qu'une boutique à la fois. */
+.shop-card__goal input:disabled {
+  color: var(--muted);
+  background: var(--total-line);
+}
+
+.shop-detail {
+  margin-top: 8px;
+}
+
+.shop-detail__toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 4px 0;
+  font: 500 12px 'Gotham', system-ui, sans-serif;
+  color: var(--muted);
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.shop-detail__toggle:hover {
+  color: var(--ink);
+}
+
+.shop-detail__flag {
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #125A88;
+  background: var(--chart-goal-soft);
+  border-radius: 4px;
+}
+
+.shop-detail__body {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.shop-detail__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.shop-detail__row--family {
+  border-bottom: 1px solid var(--line-soft, rgba(0, 0, 0, 0.05));
+}
+
+.shop-detail__name {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  font: 600 12px 'Gotham', system-ui, sans-serif;
+  color: var(--ink);
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shop-detail__name--child {
+  padding-left: 14px;
+  font-weight: 400;
+  cursor: default;
+}
+
+.shop-detail__hist {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.shop-detail__row input {
+  width: 66px;
+  padding: 4px 7px;
+  font: 500 12px 'Gotham', system-ui, sans-serif;
+  text-align: right;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.shop-detail__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 7px;
+  margin-top: 3px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.shop-detail__note {
+  flex: 1;
+}
+
+.shop-detail__clear {
+  padding: 2px 7px;
+  font: 500 11px 'Gotham', system-ui, sans-serif;
+  color: var(--muted);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.shop-detail__clear:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.shop-detail__foot strong {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}

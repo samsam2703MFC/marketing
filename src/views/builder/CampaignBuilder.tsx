@@ -127,6 +127,19 @@ export interface Draft {
 
   // 3 — Objectifs (pièces par boutique ; la période n'est qu'une aide d'analyse)
   shop_objectives: Record<number, string>
+  /**
+   * Objectif croisé boutique × produit : `shop_item_targets[shopId][itemId]`.
+   *
+   * C'est la donnée qui fait foi. `shop_objectives` en est la somme par
+   * boutique et `offer_items[].target_pieces` la somme par produit ; les deux
+   * restent calculées et enregistrées parce que le reste du module les lit,
+   * mais aucune des deux ne se saisit plus dès qu'un détail existe.
+   *
+   * Une catégorie n'y apparaît pas : son objectif se répartit sur ses produits
+   * au prorata de l'historique de la boutique, et c'est la répartition qui est
+   * gardée — sinon le même chiffre aurait deux vérités.
+   */
+  shop_item_targets: Record<number, Record<number, string>>
   analysis_from: string
   analysis_to: string
   analysis_compare: boolean
@@ -226,6 +239,7 @@ function emptyDraft(refs: References, role: Role): Draft {
     offer_items: [],
 
     shop_objectives: {},
+    shop_item_targets: {},
     // Période d'analyse par défaut : le mois en cours.
     analysis_from: monthStart(),
     analysis_to: today(),
@@ -685,6 +699,17 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
     shop_objectives: Object.fromEntries(
       (state.shop_targets ?? []).map((target) => [target.shop_id, String(target.target_pieces)]),
     ),
+    shop_item_targets: (state.shop_item_targets ?? []).reduce<Record<number, Record<number, string>>>(
+      (matrice, cible) => {
+        matrice[cible.shop_id] = {
+          ...matrice[cible.shop_id],
+          [cible.offer_item_id]: String(cible.target_pieces),
+        }
+
+        return matrice
+      },
+      {},
+    ),
     analysis_from: base.analysis_from,
     analysis_to: base.analysis_to,
     analysis_compare: base.analysis_compare,
@@ -849,6 +874,22 @@ function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): Cam
       .filter(
         (target) => Number.isInteger(target.target_pieces) && target.target_pieces > 0,
       ),
+
+    // Le détail boutique × produit. Une combinaison sans objectif ne voyage
+    // pas — c'est l'absence qui dit « aucun objectif » — mais un zéro voyage :
+    // il dit « n'en vendez pas », et le perdre ferait remonter l'historique du
+    // produit au rechargement, donc changerait le total de la boutique.
+    shop_item_targets: Object.entries(draft.shop_item_targets).flatMap(([shopId, produits]) =>
+      Object.entries(produits)
+        .map(([itemId, value]) => ({
+          shop_id: Number(shopId),
+          offer_item_id: Number(itemId),
+          target_pieces: Number(value.trim()),
+        }))
+        .filter(
+          (cible) => Number.isInteger(cible.target_pieces) && cible.target_pieces >= 0,
+        ),
+    ),
 
     challenge_enabled: draft.challenge_enabled,
     // Sans challenge, on n'envoie ni critère ni seuil : les colonnes restent

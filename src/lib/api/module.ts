@@ -457,6 +457,18 @@ export interface CampaignDraft {
     target_pieces: number
     challenge_trigger_pct?: number | string | null
   }>
+  /**
+   * Objectifs croisés boutique × produit — « ici, 900 cougnous ».
+   *
+   * Ce sont eux qui font foi : `shop_targets` en est la somme par boutique et
+   * `offer.items[].target_pieces` la somme par produit. Une combinaison sans
+   * objectif n'est pas envoyée, plutôt qu'envoyée à zéro.
+   */
+  shop_item_targets?: Array<{
+    shop_id: number
+    offer_item_id: number
+    target_pieces: number
+  }>
   /** Challenge attaché aux objectifs — facultatif. */
   challenge_enabled?: boolean
   challenge_metric?: 'attainment' | 'pieces' | 'growth' | null
@@ -519,6 +531,11 @@ export interface CampaignDraftState
     shop_id: number
     target_pieces: number
     challenge_trigger_pct: number | string | null
+  }>
+  shop_item_targets: Array<{
+    shop_id: number
+    offer_item_id: number
+    target_pieces: number
   }>
   /** Relu avec son rang : l'écran affiche trois rangs, la base peut en porter moins. */
   challenge_prizes: Array<{ rank_position: number; label: string }>

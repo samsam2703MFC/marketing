@@ -107,6 +107,9 @@ export default function ObjectivesStep({
   const [sortKey, setSortKey] = useState<SortKey>('total')
   const [sortAsc, setSortAsc] = useState(false)
   const [growthPct, setGrowthPct] = useState('5')
+  /** Fiches dont le détail par catégorie est déplié, et catégories ouvertes. */
+  const [openShops, setOpenShops] = useState<Record<number, boolean>>({})
+  const [openFamilies, setOpenFamilies] = useState<Record<string, boolean>>({})
   const [attempt, setAttempt] = useState(0)
 
   const itemIds = draft.offer_items
@@ -196,29 +199,40 @@ export default function ObjectivesStep({
   }
 
   /**
-   * Objectif de chaque boutique : son historique produit par produit, chacun
-   * majoré de la progression qui le concerne. L'arrondi vient à la fin, sur le
-   * total de la boutique : arrondir chaque produit d'abord accumulerait sept
-   * erreurs sur sept lignes.
+   * Objectif de chaque boutique produit par produit : son historique majoré de
+   * la progression qui le concerne.
+   *
+   * Le total de la boutique s'arrondit d'abord, puis se répartit sur ses
+   * produits — arrondir chaque produit séparément accumulerait sept erreurs sur
+   * sept lignes, et le total affiché ne serait plus celui qu'on annonce.
    */
-  const computeObjectives = (
+  const computeMatrix = (
     growths: Record<number, string>,
     families: Record<string, string>,
     general: string,
-  ): Record<number, string> => {
-    if (data === null) return draft.shop_objectives
+  ): Matrice => {
+    if (data === null) return draft.shop_item_targets
 
-    return Object.fromEntries(
-      data.shops.map((shop) => {
-        const total = data.products.reduce((sum, product) => {
-          const pct = growthFor(product.item_id, growths, families, general)
+    const matrice: Matrice = {}
 
-          return sum + (shop.quantities[product.item_id] ?? 0) * (1 + pct / 100)
-        }, 0)
+    data.shops.forEach((shop) => {
+      const poids = data.products.map((produit) => ({
+        key: produit.item_id,
+        poids: Math.max(
+          0,
+          (shop.quantities[produit.item_id] ?? 0)
+            * (1 + growthFor(produit.item_id, growths, families, general) / 100),
+        ),
+      }))
 
-        return [shop.shop_id, String(Math.max(0, Math.round(total)))]
-      }),
-    )
+      const total = Math.max(0, Math.round(poids.reduce((sum, part) => sum + part.poids, 0)))
+
+      matrice[shop.shop_id] = Object.fromEntries(
+        repartir(total, poids).map((part) => [part.key, String(part.valeur)]),
+      )
+    })
+
+    return matrice
   }
 
   /** Progression du produit : la sienne, ou rien — le champ montre l'héritée. */
@@ -231,7 +245,7 @@ export default function ObjectivesStep({
     const next = { ...draft.product_growth, [itemId]: value }
     patch({
       product_growth: next,
-      shop_objectives: computeObjectives(next, draft.family_growth, growthPct),
+      ...derive(computeMatrix(next, draft.family_growth, growthPct)),
     })
   }
 
@@ -249,7 +263,7 @@ export default function ObjectivesStep({
     patch({
       family_growth: families,
       product_growth: products,
-      shop_objectives: computeObjectives(products, families, growthPct),
+      ...derive(computeMatrix(products, families, growthPct)),
     })
   }
 
@@ -264,7 +278,7 @@ export default function ObjectivesStep({
   const copyHistory = () => {
     if (data === null) return
     setGrowthPct('0')
-    patch({ product_growth: {}, family_growth: {}, shop_objectives: computeObjectives({}, {}, '0') })
+    patch({ product_growth: {}, family_growth: {}, ...derive(computeMatrix({}, {}, '0')) })
   }
 
   /** La progression générale s'applique partout : les réglages fins cèdent. */
@@ -273,7 +287,7 @@ export default function ObjectivesStep({
     patch({
       product_growth: {},
       family_growth: {},
-      shop_objectives: computeObjectives({}, {}, growthPct),
+      ...derive(computeMatrix({}, {}, growthPct)),
     })
   }
 
@@ -406,6 +420,212 @@ export default function ObjectivesStep({
           return groupes
         }, [])
 
+  /* ── Objectifs croisés boutique × produit ────────────────────────────── */
+
+  /**
+   * La matrice fait foi.
+   *
+   * Trois écrans écrivent des objectifs — le tableau réseau, la fiche magasin,
+   * la progression en pourcentage — et tous trois écrivent au même endroit :
+   * la case boutique × produit. Les deux totaux affichés ailleurs, « Gosselies
+   * 2 400 » et « 3 000 cougnous », en sont des sommes recalculées. Tant qu'ils
+   * étaient saisis séparément, poser l'un effaçait l'autre sans le dire.
+   */
+  type Matrice = Record<number, Record<number, string>>
+
+  /** Objectif posé sur ce produit dans cette boutique, ou chaîne vide. */
+  const crossOf = (shopId: number, itemId: number): string =>
+    draft.shop_item_targets[shopId]?.[itemId] ?? ''
+
+  const crossValue = (shopId: number, itemId: number): number | null => {
+    const brut = crossOf(shopId, itemId).trim()
+
+    return /^\d+$/.test(brut) ? Number(brut) : null
+  }
+
+  /** Vrai dès qu'une boutique porte au moins un objectif produit. */
+  const hasDetail = (shopId: number): boolean =>
+    Object.values(draft.shop_item_targets[shopId] ?? {}).some((v) => /^\d+$/.test(v.trim()))
+
+  /**
+   * Répartition d'un total sur des parts, au prorata d'un historique.
+   *
+   * Reste attribué par plus forte décimale, faute de quoi la somme des parts
+   * ne retombe pas sur le total demandé — et c'est ce total-là que l'écran
+   * affiche juste au-dessus.
+   */
+  function repartir(
+    total: number,
+    poids: Array<{ key: number; poids: number }>,
+  ): Array<{ key: number; valeur: number }> {
+    if (poids.length === 0) return []
+
+    const somme = poids.reduce((sum, part) => sum + part.poids, 0)
+    const exacts = poids.map((part) => ({
+      key: part.key,
+      // Personne n'a vendu : la cible se partage également plutôt que de se
+      // perdre entièrement dans un zéro.
+      exact: somme === 0 ? total / poids.length : (total * part.poids) / somme,
+    }))
+
+    const valeurs = exacts.map((part) => ({ ...part, valeur: Math.floor(part.exact) }))
+    let reste = total - valeurs.reduce((sum, part) => sum + part.valeur, 0)
+
+    valeurs
+      .slice()
+      .sort((gauche, droite) => droite.exact - droite.valeur - (gauche.exact - gauche.valeur))
+      .forEach((part) => {
+        if (reste > 0) {
+          part.valeur += 1
+          reste -= 1
+        }
+      })
+
+    return valeurs.map((part) => ({ key: part.key, valeur: part.valeur }))
+  }
+
+  /**
+   * Totaux recalculés depuis la matrice : par boutique, et par produit.
+   *
+   * Un produit sans objectif garde son historique dans le total du magasin —
+   * sinon poser une cible sur un seul produit ferait tomber la boutique à cette
+   * seule cible, comme si le reste de l'offre cessait de se vendre.
+   */
+  const derive = (matrice: Matrice): Partial<Draft> => {
+    if (data === null) return { shop_item_targets: matrice }
+
+    const objectifs: Record<number, string> = { ...draft.shop_objectives }
+
+    data.shops.forEach((shop) => {
+      const cases = matrice[shop.shop_id] ?? {}
+      const posees = data.products.filter((p) => /^\d+$/.test((cases[p.item_id] ?? '').trim()))
+
+      // Aucune case posée : la boutique garde l'objectif saisi en direct.
+      if (posees.length === 0) return
+
+      objectifs[shop.shop_id] = String(
+        data.products.reduce((sum, produit) => {
+          const brut = (cases[produit.item_id] ?? '').trim()
+
+          return sum + (/^\d+$/.test(brut)
+            ? Number(brut)
+            : (shop.quantities[produit.item_id] ?? 0))
+        }, 0),
+      )
+    })
+
+    const items = draft.offer_items.map((element) => {
+      if (element.offer_item_id === null) return element
+
+      const total = data.shops.reduce<number | null>((sum, shop) => {
+        const brut = (matrice[shop.shop_id]?.[element.offer_item_id ?? 0] ?? '').trim()
+
+        return /^\d+$/.test(brut) ? (sum ?? 0) + Number(brut) : sum
+      }, null)
+
+      return { ...element, target_pieces: total === null ? '' : String(total) }
+    })
+
+    return { shop_item_targets: matrice, shop_objectives: objectifs, offer_items: items }
+  }
+
+  /** Écrit des cases puis répercute les deux sommes. */
+  const writeCross = (changes: Array<{ shopId: number; itemId: number; value: string }>) => {
+    const matrice: Matrice = Object.fromEntries(
+      Object.entries(draft.shop_item_targets).map(([shopId, produits]) => [
+        Number(shopId),
+        { ...produits },
+      ]),
+    )
+
+    changes.forEach(({ shopId, itemId, value }) => {
+      const brut = value.trim()
+      const cases = { ...(matrice[shopId] ?? {}) }
+
+      // Effacer plutôt qu'écrire une chaîne vide : une case absente et une case
+      // vide se liraient pareil à l'écran, mais seule l'absence dit « aucun
+      // objectif » au moment de compter.
+      if (brut === '') delete cases[itemId]
+      else cases[itemId] = brut
+
+      matrice[shopId] = cases
+    })
+
+    patch(derive(matrice))
+  }
+
+  /** Objectif d'un produit dans une boutique. */
+  const setShopProductTarget = (shopId: number, itemId: number, value: string) => {
+    writeCross([{ shopId, itemId, value }])
+  }
+
+  /**
+   * Objectif d'une catégorie dans une boutique : réparti sur ses produits au
+   * prorata de ce que cette boutique en vend. Une catégorie ne se stocke pas —
+   * deux vérités pour le même chiffre divergeraient au premier arrondi.
+   */
+  const setShopFamilyTarget = (
+    shopId: number,
+    famille: { produits: Array<{ item_id: number }> },
+    value: string,
+    quantities: Record<number, number>,
+  ) => {
+    const brut = value.trim()
+
+    if (brut === '' || !/^\d+$/.test(brut)) {
+      writeCross(famille.produits.map((p) => ({ shopId, itemId: p.item_id, value: '' })))
+
+      return
+    }
+
+    const parts = repartir(
+      Number(brut),
+      famille.produits.map((p) => ({ key: p.item_id, poids: quantities[p.item_id] ?? 0 })),
+    )
+
+    writeCross(parts.map((part) => ({ shopId, itemId: part.key, value: String(part.valeur) })))
+  }
+
+  /** Objectif détaillé d'une boutique : somme de ses cases et de son historique. */
+  const detailTotalOf = (shop: ShopSalesRow): number =>
+    data === null
+      ? 0
+      : data.products.reduce(
+          (sum, produit) =>
+            sum + (crossValue(shop.shop_id, produit.item_id) ?? (shop.quantities[produit.item_id] ?? 0)),
+          0,
+        )
+
+  /**
+   * Objectif d'une catégorie dans une boutique : la somme de ses produits, et
+   * seulement si tous en portent un.
+   *
+   * Sinon le champ reste vide. Afficher la somme partielle — « 1 100 » alors que
+   * la catégorie en apporte 2 100 avec les produits restés à leur historique —
+   * donnerait à lire un objectif de catégorie qui n'en est pas un, et le total
+   * du bas ne retomberait pas dessus.
+   */
+  const shopFamilyTargetOf = (shopId: number, produits: Array<{ item_id: number }>): string => {
+    const poses = produits
+      .map((p) => crossValue(shopId, p.item_id))
+      .filter((v): v is number => v !== null)
+
+    return poses.length === produits.length && poses.length > 0
+      ? String(poses.reduce((sum, v) => sum + v, 0))
+      : ''
+  }
+
+  /** Ce qu'une catégorie apporte réellement : objectifs posés, historique sinon. */
+  const shopFamilyEffective = (
+    produits: Array<{ item_id: number }>,
+    shop: ShopSalesRow,
+  ): number =>
+    produits.reduce(
+      (sum, produit) =>
+        sum + (crossValue(shop.shop_id, produit.item_id) ?? (shop.quantities[produit.item_id] ?? 0)),
+      0,
+    )
+
   /* ── Objectifs par produit et par catégorie ──────────────────────────── */
 
   /** Position d'un produit dans `offer_items`, pour l'écrire sans le chercher deux fois. */
@@ -418,58 +638,44 @@ export default function ObjectivesStep({
     return position === -1 ? '' : draft.offer_items[position].target_pieces
   }
 
-  /** Objectifs produits écrits en bloc, puis répercutés sur les boutiques. */
-  const writeTargets = (valeurs: Record<number, string>) => {
-    const items = draft.offer_items.map((element) => {
-      const cible = element.offer_item_id === null ? undefined : valeurs[element.offer_item_id]
-
-      return cible === undefined ? element : { ...element, target_pieces: cible }
-    })
-
-    patch({ offer_items: items, shop_objectives: spreadToShops(items) })
-  }
-
   /**
-   * Objectifs produits redescendus sur les boutiques, au prorata de ce que
-   * chacune a vendu de ce produit.
+   * Objectifs produits écrits en bloc, redescendus sur les boutiques au prorata
+   * de ce que chacune a vendu de ce produit.
    *
    * Un objectif réseau de 3 000 cougnous ne dit rien à une boutique tant qu'il
    * n'est pas devenu « 900 pour vous ». La clé de répartition est l'historique
    * du produit lui-même, et non le poids global de la boutique : celle qui ne
    * vend pas de cougnou n'en reçoit pas parce qu'elle est grosse.
    */
-  const spreadToShops = (items: Draft['offer_items']): Record<number, string> => {
-    if (data === null) return draft.shop_objectives
+  const writeTargets = (valeurs: Record<number, string>) => {
+    if (data === null) return
 
-    const cibles = new Map<number, number>()
-    items.forEach((element) => {
-      if (element.offer_item_id === null) return
-      const valeur = element.target_pieces.trim()
-      if (valeur !== '' && /^\d+$/.test(valeur)) cibles.set(element.offer_item_id, Number(valeur))
+    const changes: Array<{ shopId: number; itemId: number; value: string }> = []
+
+    Object.entries(valeurs).forEach(([id, valeur]) => {
+      const itemId = Number(id)
+      const brut = valeur.trim()
+
+      if (brut === '' || !/^\d+$/.test(brut)) {
+        data.shops.forEach((shop) =>
+          changes.push({ shopId: shop.shop_id, itemId, value: '' }),
+        )
+
+        return
+      }
+
+      repartir(
+        Number(brut),
+        data.shops.map((shop) => ({
+          key: shop.shop_id,
+          poids: shop.quantities[itemId] ?? 0,
+        })),
+      ).forEach((part) =>
+        changes.push({ shopId: part.key, itemId, value: String(part.valeur) }),
+      )
     })
 
-    if (cibles.size === 0) return draft.shop_objectives
-
-    return Object.fromEntries(
-      data.shops.map((shop) => {
-        const total = data.products.reduce((sum, product) => {
-          const cible = cibles.get(product.item_id)
-          const vendu = shop.quantities[product.item_id] ?? 0
-
-          // Produit sans objectif : la boutique garde son historique, sinon
-          // poser un objectif sur un seul produit effacerait tous les autres.
-          if (cible === undefined) return sum + vendu
-
-          const reseau = data.network.by_product[product.item_id] ?? 0
-
-          // Personne n'a vendu ce produit : la cible se partage également,
-          // faute de quoi elle se perdrait entièrement dans un zéro.
-          return sum + (reseau === 0 ? cible / data.shops.length : (cible * vendu) / reseau)
-        }, 0)
-
-        return [shop.shop_id, String(Math.max(0, Math.round(total)))]
-      }),
-    )
+    writeCross(changes)
   }
 
   const setProductTarget = (itemId: number, value: string) => {
@@ -932,8 +1138,10 @@ export default function ObjectivesStep({
 
           <div className="shop-cards">
             {sortedShops.map((shop) => {
-              const goal = readInt(objectiveOf(shop.shop_id))
+              const detaille = hasDetail(shop.shop_id)
+              const ouvert = openShops[shop.shop_id] === true
               const raw = objectiveOf(shop.shop_id)
+              const goal = detaille ? detailTotalOf(shop) : readInt(raw)
               const valid = objectiveValid(raw)
               const previous = compare ? (shop.total_previous ?? 0) : null
               const trend = compare ? evolution(shop.total, previous) : null
@@ -1073,9 +1281,13 @@ export default function ObjectivesStep({
                   <div className="shop-card__goal">
                     <span className="shop-card__goal-label">Objectif</span>
                     <input
-                      value={raw}
+                      value={detaille ? String(detailTotalOf(shop)) : raw}
                       inputMode="numeric"
                       placeholder="0"
+                      disabled={detaille}
+                      title={detaille
+                        ? 'Somme du détail ci-dessous — effacez le détail pour saisir un total'
+                        : undefined}
                       aria-label={`Objectif ${shop.shop_name}`}
                       aria-invalid={!valid}
                       className={valid ? undefined : 'is-invalid'}
@@ -1093,6 +1305,124 @@ export default function ObjectivesStep({
                         {Math.abs(effort)} %
                       </span>
                     )}
+                  </div>
+
+                  {/* Le détail : le même objectif, mais par catégorie puis par
+                      produit. « 2 400 pièces » ne se pilote pas un lundi matin ;
+                      « 900 cougnous, 700 galettes » se pilote. */}
+                  <div className="shop-detail">
+                    <button
+                      type="button"
+                      className="shop-detail__toggle"
+                      aria-expanded={ouvert}
+                      onClick={() =>
+                        setOpenShops({ ...openShops, [shop.shop_id]: !ouvert })
+                      }
+                    >
+                      {ouvert ? '▾' : '▸'} Par catégorie ou produit
+                      {detaille ? <span className="shop-detail__flag">détaillé</span> : null}
+                    </button>
+
+                    {ouvert ? (
+                      <div className="shop-detail__body">
+                        {familles.map((famille) => {
+                          const cle = `${shop.shop_id}:${famille.nom}`
+                          const produitsOuverts = openFamilies[cle] === true
+                          const venduFamille = famille.produits.reduce(
+                            (sum, produit) => sum + (shop.quantities[produit.item_id] ?? 0),
+                            0,
+                          )
+
+                          return (
+                            <Fragment key={famille.nom}>
+                              <div className="shop-detail__row shop-detail__row--family">
+                                <button
+                                  type="button"
+                                  className="shop-detail__name"
+                                  aria-expanded={produitsOuverts}
+                                  onClick={() =>
+                                    setOpenFamilies({
+                                      ...openFamilies,
+                                      [cle]: !produitsOuverts,
+                                    })
+                                  }
+                                >
+                                  {produitsOuverts ? '▾' : '▸'} {famille.nom}
+                                </button>
+                                <span className="shop-detail__hist">{fr(venduFamille)} vendues</span>
+                                <input
+                                  value={shopFamilyTargetOf(shop.shop_id, famille.produits)}
+                                  inputMode="numeric"
+                                  placeholder={String(shopFamilyEffective(famille.produits, shop))}
+                                  aria-label={`Objectif ${famille.nom} pour ${shop.shop_name}`}
+                                  onChange={(e) =>
+                                    setShopFamilyTarget(
+                                      shop.shop_id,
+                                      famille,
+                                      e.target.value,
+                                      shop.quantities,
+                                    )
+                                  }
+                                />
+                              </div>
+
+                              {produitsOuverts
+                                ? famille.produits.map((produit) => (
+                                    <div key={produit.item_id} className="shop-detail__row">
+                                      <span className="shop-detail__name shop-detail__name--child">
+                                        {produit.name}
+                                      </span>
+                                      <span className="shop-detail__hist">
+                                        {fr(shop.quantities[produit.item_id] ?? 0)} vendues
+                                      </span>
+                                      <input
+                                        value={crossOf(shop.shop_id, produit.item_id)}
+                                        inputMode="numeric"
+                                        placeholder={String(shop.quantities[produit.item_id] ?? 0)}
+                                        aria-label={`Objectif ${produit.name} pour ${shop.shop_name}`}
+                                        onChange={(e) =>
+                                          setShopProductTarget(
+                                            shop.shop_id,
+                                            produit.item_id,
+                                            e.target.value,
+                                          )
+                                        }
+                                      />
+                                    </div>
+                                  ))
+                                : null}
+                            </Fragment>
+                          )
+                        })}
+
+                        <div className="shop-detail__foot">
+                          {/* Un champ vide n'est pas un zéro : le produit garde
+                              son historique dans le total, sinon détailler une
+                              seule catégorie ferait tomber la boutique à elle. */}
+                          <span className="shop-detail__note">
+                            Champ vide = historique conservé
+                          </span>
+                          {detaille ? (
+                            <button
+                              type="button"
+                              className="shop-detail__clear"
+                              onClick={() =>
+                                writeCross(
+                                  data.products.map((produit) => ({
+                                    shopId: shop.shop_id,
+                                    itemId: produit.item_id,
+                                    value: '',
+                                  })),
+                                )
+                              }
+                            >
+                              Effacer le détail
+                            </button>
+                          ) : null}
+                          <strong>{fr(detailTotalOf(shop))} pièces</strong>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               )

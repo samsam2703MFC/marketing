@@ -88,8 +88,14 @@ $pdo->exec('DELETE FROM mar_review');
 $pdo->exec('DELETE FROM mar_shop_presence');
 $pdo->exec('DELETE FROM mar_agency_campaign');
 $pdo->exec('DELETE FROM mar_agency');
+$pdo->exec('DELETE FROM mar_campaign_shop_item_target');
 $pdo->exec('DELETE FROM mar_campaign_shop');
 $pdo->exec('DELETE FROM mar_campaign');
+// Les références de catalogue que ce test insère portent une clé unique de SKU.
+// Sans purge, un deuxième lancement sur la même base s'arrête sur un doublon —
+// et le message parle de SKU, pas de nettoyage, ce qui envoie chercher loin.
+$pdo->exec('DELETE FROM mar_offer_item_season');
+$pdo->exec("DELETE FROM mar_offer_item WHERE sku_ref LIKE 'erp-%99%'");
 $pdo->exec('DELETE FROM mar_shop_user');
 $pdo->exec('DELETE FROM mar_shop');
 $pdo->exec('DELETE FROM mar_brand');
@@ -1031,6 +1037,79 @@ check(
     array_key_exists('challenge_trigger_pct', $etat['shop_targets'][0])
         && $etat['shop_targets'][0]['challenge_trigger_pct'] === null,
     json_encode($etat['shop_targets'] ?? null)
+);
+
+// ── Objectifs croisés boutique × produit ───────────────────────────────────
+//
+// « Gosselies : 256 pièces » ne dit pas de quoi, « 3 000 cougnous » ne dit pas
+// par qui. Le croisement des deux est ce qu'un chef d'équipe peut suivre.
+call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon), [], [
+    'name'        => 'Brouillon repris',
+    'status_code' => 'draft',
+    'scope'       => 'RESEAU',
+    'shop_targets' => [
+        ['shop_id' => 1, 'target_pieces' => 300],
+        ['shop_id' => 2, 'target_pieces' => 120],
+    ],
+    'shop_item_targets' => [
+        ['shop_id' => 1, 'offer_item_id' => $catalogItemId, 'target_pieces' => 180],
+        ['shop_id' => 2, 'offer_item_id' => $catalogItemId, 'target_pieces' => 90],
+        // Boutique hors campagne : elle n'a pas d'objectif de son côté, sa
+        // ligne ne doit donc pas s'écrire — sinon le total réseau compterait
+        // des pièces qu'aucun écran ne montre.
+        ['shop_id' => 3, 'offer_item_id' => $catalogItemId, 'target_pieces' => 50],
+        // Zéro est un objectif — « n'en vendez pas ». Le perdre ferait remonter
+        // l'historique du produit à la relecture, et le total de la boutique
+        // changerait sans que personne n'y ait touché.
+        ['shop_id' => 1, 'offer_item_id' => $seasonItemId, 'target_pieces' => 0],
+    ],
+]);
+$etat = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon))['body'];
+check(
+    'l\'objectif croisé boutique × produit revient avec le brouillon',
+    ($etat['shop_item_targets'] ?? null) === [
+        ['shop_id' => 1, 'offer_item_id' => min($catalogItemId, $seasonItemId), 'target_pieces' => $catalogItemId < $seasonItemId ? 180 : 0],
+        ['shop_id' => 1, 'offer_item_id' => max($catalogItemId, $seasonItemId), 'target_pieces' => $catalogItemId < $seasonItemId ? 0 : 180],
+        ['shop_id' => 2, 'offer_item_id' => $catalogItemId, 'target_pieces' => 90],
+    ],
+    json_encode($etat['shop_item_targets'] ?? null)
+);
+
+// Réécriture : le détail se remplace, il ne s'empile pas. Sans purge, la clé
+// primaire (campagne, boutique, produit) ferait échouer la seconde reprise.
+call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon), [], [
+    'name'        => 'Brouillon repris',
+    'status_code' => 'draft',
+    'scope'       => 'RESEAU',
+    'shop_targets' => [['shop_id' => 1, 'target_pieces' => 300]],
+    'shop_item_targets' => [
+        ['shop_id' => 1, 'offer_item_id' => $catalogItemId, 'target_pieces' => 200],
+    ],
+]);
+$etat = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon))['body'];
+check(
+    'le détail est remplacé et non empilé',
+    ($etat['shop_item_targets'] ?? null) === [
+        ['shop_id' => 1, 'offer_item_id' => $catalogItemId, 'target_pieces' => 200],
+    ],
+    json_encode($etat['shop_item_targets'] ?? null)
+);
+
+// Une référence disparue du catalogue ne doit pas faire tomber toute la
+// campagne sur une contrainte de clé étrangère.
+$response = call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $brouillon), [], [
+    'name'        => 'Brouillon repris',
+    'status_code' => 'draft',
+    'scope'       => 'RESEAU',
+    'shop_targets' => [['shop_id' => 1, 'target_pieces' => 300]],
+    'shop_item_targets' => [
+        ['shop_id' => 1, 'offer_item_id' => 999_999, 'target_pieces' => 40],
+    ],
+]);
+check(
+    'un objectif sur une référence disparue est ignoré, pas fatal',
+    $response['status'] === 200,
+    'statut ' . $response['status']
 );
 
 // Un critère inconnu se refuse avec un message, plutôt que d'écrire une valeur
