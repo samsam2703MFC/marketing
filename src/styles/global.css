@@ -1666,6 +1666,17 @@ select:disabled {
   font-weight: 400 !important;
 }
 
+/* La colonne des objectifs se sépare de celles qui constatent : à gauche ce
+   qui a été vendu, à droite ce qu'on demande. Un trait suffit — la colonne est
+   la seule où l'on tape des pièces plutôt que des pourcentages. */
+.objectives__sep {
+  border-left: 1px solid var(--line);
+}
+
+.objectives__table .objectives__sep input {
+  width: 70px;
+}
+
 /* Deux façons d'apporter le visuel, sur une même ligne : le fichier depuis le
    poste, ou l'adresse d'une image déjà en ligne. */
 .visual-source {

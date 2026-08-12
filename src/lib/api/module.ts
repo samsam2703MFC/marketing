@@ -407,6 +407,8 @@ export interface OfferItemPayload {
   baseline_price?: number | string | null
   /** Taux de marge du produit ; nul = suit le taux réseau. */
   margin_pct?: number | string | null
+  /** Objectif réseau de pièces sur ce produit ; nul = aucun objectif posé. */
+  target_pieces?: number | string | null
 }
 
 export interface CampaignDraft {

@@ -74,6 +74,12 @@ interface OfferElement {
   baseline_price: string
   /** Taux de marge du produit. Vide = suit le taux réseau. */
   margin_pct: string
+  /**
+   * Objectif réseau de pièces sur ce produit, posé à l'étape « Objectifs de
+   * vente ». Vide = aucun objectif sur ce produit : la boutique répond alors
+   * du total, sans qu'on lui dise de quoi il est fait.
+   */
+  target_pieces: string
 }
 
 /** Codes de `mar_promotion_mechanic`. */
@@ -94,6 +100,7 @@ export function blankPricing(): Omit<OfferElement, 'offer_item_id' | 'label' | '
     get_qty: '',
     baseline_price: '',
     margin_pct: '',
+    target_pieces: '',
   }
 }
 
@@ -672,6 +679,7 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
       get_qty: numberOrBlank(item.get_qty),
       baseline_price: numberOrBlank(item.baseline_price),
       margin_pct: numberOrBlank(item.margin_pct),
+      target_pieces: numberOrBlank(item.target_pieces),
     })),
 
     shop_objectives: Object.fromEntries(
@@ -795,6 +803,7 @@ function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): Cam
       get_qty: num(item.get_qty),
       baseline_price: num(item.baseline_price),
       margin_pct: num(item.margin_pct),
+      target_pieces: num(item.target_pieces),
     }))
     .filter((item) => item.label !== '')
 

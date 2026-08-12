@@ -663,7 +663,7 @@ $response = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
             [
                 'label' => 'Produit remisé', 'offer_item_id' => $refProduit,
                 'mechanic_type' => 'PERCENT', 'discount_pct' => 20,
-                'baseline_price' => 19.90, 'margin_pct' => 68,
+                'baseline_price' => 19.90, 'margin_pct' => 68, 'target_pieces' => 900,
             ],
             [
                 'label' => 'Produit à prix barré',
@@ -709,6 +709,17 @@ check(
     json_encode([
         'catalogue'   => $lignes[0]['category'] ?? 'absent',
         'saisie libre' => $lignes[2]['category'] ?? 'absent',
+    ])
+);
+
+// L'objectif se pose aussi produit par produit, pas seulement par boutique :
+// « 2 000 pièces » ne dit pas de quoi, et c'est la question du lundi matin.
+check(
+    'l\'objectif produit revient avec le brouillon',
+    (int) $lignes[0]['target_pieces'] === 900 && $lignes[1]['target_pieces'] === null,
+    json_encode([
+        'posé'   => $lignes[0]['target_pieces'] ?? 'absent',
+        'absent' => $lignes[1]['target_pieces'] ?? 'absent',
     ])
 );
 

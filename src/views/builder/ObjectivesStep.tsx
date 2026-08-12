@@ -406,6 +406,141 @@ export default function ObjectivesStep({
           return groupes
         }, [])
 
+  /* ── Objectifs par produit et par catégorie ──────────────────────────── */
+
+  /** Position d'un produit dans `offer_items`, pour l'écrire sans le chercher deux fois. */
+  const positionOf = (itemId: number): number =>
+    draft.offer_items.findIndex((element) => element.offer_item_id === itemId)
+
+  const targetOf = (itemId: number): string => {
+    const position = positionOf(itemId)
+
+    return position === -1 ? '' : draft.offer_items[position].target_pieces
+  }
+
+  /** Objectifs produits écrits en bloc, puis répercutés sur les boutiques. */
+  const writeTargets = (valeurs: Record<number, string>) => {
+    const items = draft.offer_items.map((element) => {
+      const cible = element.offer_item_id === null ? undefined : valeurs[element.offer_item_id]
+
+      return cible === undefined ? element : { ...element, target_pieces: cible }
+    })
+
+    patch({ offer_items: items, shop_objectives: spreadToShops(items) })
+  }
+
+  /**
+   * Objectifs produits redescendus sur les boutiques, au prorata de ce que
+   * chacune a vendu de ce produit.
+   *
+   * Un objectif réseau de 3 000 cougnous ne dit rien à une boutique tant qu'il
+   * n'est pas devenu « 900 pour vous ». La clé de répartition est l'historique
+   * du produit lui-même, et non le poids global de la boutique : celle qui ne
+   * vend pas de cougnou n'en reçoit pas parce qu'elle est grosse.
+   */
+  const spreadToShops = (items: Draft['offer_items']): Record<number, string> => {
+    if (data === null) return draft.shop_objectives
+
+    const cibles = new Map<number, number>()
+    items.forEach((element) => {
+      if (element.offer_item_id === null) return
+      const valeur = element.target_pieces.trim()
+      if (valeur !== '' && /^\d+$/.test(valeur)) cibles.set(element.offer_item_id, Number(valeur))
+    })
+
+    if (cibles.size === 0) return draft.shop_objectives
+
+    return Object.fromEntries(
+      data.shops.map((shop) => {
+        const total = data.products.reduce((sum, product) => {
+          const cible = cibles.get(product.item_id)
+          const vendu = shop.quantities[product.item_id] ?? 0
+
+          // Produit sans objectif : la boutique garde son historique, sinon
+          // poser un objectif sur un seul produit effacerait tous les autres.
+          if (cible === undefined) return sum + vendu
+
+          const reseau = data.network.by_product[product.item_id] ?? 0
+
+          // Personne n'a vendu ce produit : la cible se partage également,
+          // faute de quoi elle se perdrait entièrement dans un zéro.
+          return sum + (reseau === 0 ? cible / data.shops.length : (cible * vendu) / reseau)
+        }, 0)
+
+        return [shop.shop_id, String(Math.max(0, Math.round(total)))]
+      }),
+    )
+  }
+
+  const setProductTarget = (itemId: number, value: string) => {
+    writeTargets({ [itemId]: value })
+  }
+
+  /**
+   * Objectif de catégorie : il se répartit sur ses produits au prorata de leur
+   * historique, et ce sont eux qu'on enregistre. Garder les deux ferait deux
+   * vérités pour le même chiffre, et la question de laquelle fait foi se
+   * poserait au premier écart d'arrondi.
+   *
+   * Le reste de la division va au plus gros produit — quelque part il faut bien
+   * qu'il aille, et c'est là qu'il se remarque le moins.
+   */
+  const setFamilyTarget = (famille: { nom: string; produits: Array<{ item_id: number }>; total: number }, value: string) => {
+    const brut = value.trim()
+
+    if (brut === '' || !/^\d+$/.test(brut)) {
+      writeTargets(Object.fromEntries(famille.produits.map((p) => [p.item_id, ''])))
+
+      return
+    }
+
+    const cible = Number(brut)
+    const parts = famille.produits.map((produit) => {
+      const vendu = data?.network.by_product[produit.item_id] ?? 0
+
+      return {
+        itemId: produit.item_id,
+        exact:
+          famille.total === 0
+            ? cible / famille.produits.length
+            : (cible * vendu) / famille.total,
+      }
+    })
+
+    const valeurs = parts.map((part) => ({ ...part, valeur: Math.floor(part.exact) }))
+    let reste = cible - valeurs.reduce((sum, part) => sum + part.valeur, 0)
+
+    valeurs
+      .slice()
+      .sort((left, right) => right.exact - right.valeur - (left.exact - left.valeur))
+      .forEach((part) => {
+        if (reste > 0) {
+          part.valeur += 1
+          reste -= 1
+        }
+      })
+
+    writeTargets(Object.fromEntries(valeurs.map((part) => [part.itemId, String(part.valeur)])))
+  }
+
+  /** Somme des objectifs produits d'une famille, ou vide si aucun n'est posé. */
+  const familyTargetOf = (produits: Array<{ item_id: number }>): string => {
+    const poses = produits.map((p) => targetOf(p.item_id)).filter((v) => v.trim() !== '')
+
+    return poses.length === 0
+      ? ''
+      : String(poses.reduce((sum, v) => sum + (/^\d+$/.test(v.trim()) ? Number(v.trim()) : 0), 0))
+  }
+
+  /** Somme des objectifs posés produit par produit — zéro si aucun. */
+  const objectifProduitsTotal = draft.offer_items.reduce(
+    (sum, element) =>
+      /^\d+$/.test(element.target_pieces.trim())
+        ? sum + Number(element.target_pieces.trim())
+        : sum,
+    0,
+  )
+
   const prizeCount = draft.challenge_prizes.filter((label) => label.trim() !== '').length
   const activeMetric = METRICS.find((entry) => entry.key === draft.challenge_metric)
 
@@ -526,6 +661,7 @@ export default function ObjectivesStep({
                     {compare ? <th className="num">N-1</th> : null}
                     {compare ? <th className="num">Évol.</th> : null}
                     <th className="num">Progression</th>
+                    <th className="num objectives__sep">Objectif</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -574,6 +710,18 @@ export default function ObjectivesStep({
                           onChange={(e) => setFamilyGrowth(famille.nom, e.target.value)}
                         />
                         %
+                      </span>
+                    </td>
+                    <td className="num objectives__sep">
+                      <span className="objectives__pct">
+                        <input
+                          value={familyTargetOf(famille.produits)}
+                          placeholder="—"
+                          inputMode="numeric"
+                          aria-label={`Objectif pour la catégorie ${famille.nom}`}
+                          title="Se répartit sur les produits de la catégorie"
+                          onChange={(e) => setFamilyTarget(famille, e.target.value)}
+                        />
                       </span>
                     </td>
                   </tr>
@@ -631,6 +779,17 @@ export default function ObjectivesStep({
                             %
                           </span>
                         </td>
+                        <td className="num objectives__sep">
+                          <span className="objectives__pct">
+                            <input
+                              value={targetOf(product.item_id)}
+                              placeholder="—"
+                              inputMode="numeric"
+                              aria-label={`Objectif pour ${product.name}`}
+                              onChange={(e) => setProductTarget(product.item_id, e.target.value)}
+                            />
+                          </span>
+                        </td>
                       </tr>
                     )
                   })}
@@ -655,6 +814,9 @@ export default function ObjectivesStep({
                       </td>
                     ) : null}
                     <td />
+                    <td className="num objectives__sep">
+                      <strong>{fr(objectifProduitsTotal)}</strong>
+                    </td>
                   </tr>
 
                   {compare ? (

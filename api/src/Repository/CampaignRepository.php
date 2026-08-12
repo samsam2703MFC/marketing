@@ -469,6 +469,11 @@ final class CampaignRepository
             'get_qty'        => null,
             'baseline_price' => $number($item['baseline_price'] ?? null, 999999.99),
             'margin_pct'     => $number($item['margin_pct'] ?? null, 100),
+            // Un objectif vide n'est pas un objectif à zéro : le premier veut
+            // dire « non posé », le second « ne vendez rien ».
+            'target_pieces'  => ($item['target_pieces'] ?? '') === '' || ($item['target_pieces'] ?? null) === null
+                ? null
+                : max(0, (int) $item['target_pieces']),
         ];
 
         if ($mechanic === 'PERCENT') {
@@ -977,11 +982,11 @@ final class CampaignRepository
             'INSERT INTO mar_campaign_offer_item
                 (campaign_offer_id, offer_item_id, label, sort_order,
                  mechanic_type, discount_pct, fixed_price, buy_qty, get_qty,
-                 baseline_price, margin_pct)
+                 baseline_price, margin_pct, target_pieces)
              VALUES
                 (:offer_id, :offer_item_id, :label, :sort_order,
                  :mechanic_type, :discount_pct, :fixed_price, :buy_qty, :get_qty,
-                 :baseline_price, :margin_pct)'
+                 :baseline_price, :margin_pct, :target_pieces)'
         );
 
         $order = 0;
@@ -1570,7 +1575,7 @@ final class CampaignRepository
             'SELECT ci.label, ci.offer_item_id, ci.sort_order,
                     ci.mechanic_type, ci.discount_pct, ci.fixed_price,
                     ci.buy_qty, ci.get_qty, ci.baseline_price, ci.margin_pct,
-                    oi.category
+                    ci.target_pieces, oi.category
                FROM mar_campaign_offer_item ci
                LEFT JOIN mar_offer_item oi ON oi.id = ci.offer_item_id
               WHERE ci.campaign_offer_id = :id
