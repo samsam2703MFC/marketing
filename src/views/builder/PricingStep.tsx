@@ -282,11 +282,32 @@ export default function PricingStep({
    */
   const commun = (
     famille: { lignes: typeof lignes },
-    champ: 'mechanic_type' | 'discount_pct' | 'fixed_price' | 'margin_pct',
+    champ: 'mechanic_type' | 'discount_pct' | 'fixed_price' | 'margin_pct'
+      | 'baseline_price' | 'buy_qty' | 'get_qty',
   ): string => {
     const valeurs = new Set(famille.lignes.map((ligne) => ligne.element[champ]))
 
     return valeurs.size === 1 ? [...valeurs][0] : ''
+  }
+
+  /**
+   * Chiffre partagé par toutes les lignes d'une catégorie, ou `null`.
+   *
+   * Sert aux colonnes calculées — prix, prix après, marge après. Un prix moyen
+   * de catégorie n'existe pas : deux galettes à 19,90 € et 24,90 € ne font pas
+   * une galette à 22,40 €, et l'écran ne doit pas laisser croire le contraire.
+   * Soit les produits s'accordent et le chiffre a un sens, soit il n'en a pas.
+   */
+  const partage = (
+    famille: { lignes: typeof lignes },
+    lire: (ligne: (typeof lignes)[number]) => number | null,
+  ): number | null => {
+    const valeurs = famille.lignes.map(lire)
+
+    return valeurs.length > 0
+      && valeurs.every((valeur) => valeur !== null && valeur === valeurs[0])
+      ? valeurs[0]
+      : null
   }
 
   /** La mécanique de la famille s'impose à tous ses produits. */
@@ -412,10 +433,19 @@ export default function PricingStep({
               </tr>
             </thead>
             <tbody>
-              {familles.map((famille) => (
+              {familles.map((famille) => {
+              const prixFamille = partage(famille, (ligne) =>
+                ligne.prixManquant ? null : ligne.ttc0)
+              const apresFamille = partage(famille, (ligne) =>
+                ligne.prixManquant || ligne.sim.neutre ? null : ligne.sim.ttc1)
+              const margeFamille = partage(famille, (ligne) =>
+                ligne.prixManquant || ligne.sim.neutre ? null : ligne.sim.m1)
+              const mecaniqueFamille = commun(famille, 'mechanic_type')
+
+              return (
               <Fragment key={famille.nom}>
-              {/* Ligne de catégorie : elle règle la mécanique de tous ses
-                  produits d'un coup. Les lignes en dessous corrigent ce qui
+              {/* Ligne de catégorie : elle règle la mécanique et le prix de tous
+                  ses produits d'un coup. Les lignes en dessous corrigent ce qui
                   doit l'être — un parfum moins remisé que les autres. */}
               <tr className="pricing__family">
                 <td>
@@ -425,7 +455,31 @@ export default function PricingStep({
                     {fr(famille.q0)} pièces sur la période
                   </span>
                 </td>
-                <td className="num"><span className="muted">—</span></td>
+                <td className="num">
+                  {/* Placeholder vide quand les produits ne s'accordent pas :
+                      un « 0,00 » se lirait comme un prix, et la ligne du dessous
+                      dit déjà qu'il y en a plusieurs. */}
+                  <span className="objectives__pct">
+                    <input
+                      value={commun(famille, 'baseline_price')}
+                      placeholder={prixFamille === null ? '' : dec(prixFamille)}
+                      inputMode="decimal"
+                      aria-label={`Prix pour la catégorie ${famille.nom}`}
+                      title="S’applique à tous les produits de la catégorie ; vide, chacun garde le sien"
+                      onChange={(e) =>
+                        patchMany(famille.lignes.map((l) => l.index), {
+                          baseline_price: e.target.value,
+                        })
+                      }
+                    />
+                    €
+                  </span>
+                  <span className="sub">
+                    {prixFamille === null
+                      ? `${famille.lignes.length} prix différents`
+                      : `${eur(ht(prixFamille))} HT`}
+                  </span>
+                </td>
                 <td className="num">
                   <span className="objectives__pct">
                     <input
@@ -458,7 +512,7 @@ export default function PricingStep({
                       ))}
                     </select>
 
-                    {commun(famille, 'mechanic_type') === 'PERCENT' ? (
+                    {mecaniqueFamille === 'PERCENT' ? (
                       <span className="objectives__pct">
                         <input
                           value={commun(famille, 'discount_pct')}
@@ -473,10 +527,72 @@ export default function PricingStep({
                         %
                       </span>
                     ) : null}
+
+                    {/* Le prix imposé et l'offre liée manquaient ici : choisir
+                        « Prix barré » sur une catégorie ouvrait un champ qui
+                        n'existait que sur les lignes produit, et la mécanique
+                        restait sans valeur. */}
+                    {mecaniqueFamille === 'CROSSED_PRICE' || mecaniqueFamille === 'BUNDLE_FIXED' ? (
+                      <span className="objectives__pct">
+                        <input
+                          value={commun(famille, 'fixed_price')}
+                          inputMode="decimal"
+                          aria-label={`Prix imposé pour la catégorie ${famille.nom}`}
+                          onChange={(e) =>
+                            patchMany(famille.lignes.map((l) => l.index), {
+                              fixed_price: e.target.value,
+                            })
+                          }
+                        />
+                        {MECANIQUES.find((m) => m.code === mecaniqueFamille)?.unite}
+                      </span>
+                    ) : null}
+
+                    {mecaniqueFamille === 'BUY_X_GET_Y' ? (
+                      <span className="objectives__pct">
+                        <input
+                          value={commun(famille, 'buy_qty')}
+                          inputMode="numeric"
+                          aria-label={`Quantité achetée pour la catégorie ${famille.nom}`}
+                          onChange={(e) =>
+                            patchMany(famille.lignes.map((l) => l.index), {
+                              buy_qty: e.target.value,
+                            })
+                          }
+                        />
+                        achetés,
+                        <input
+                          value={commun(famille, 'get_qty')}
+                          inputMode="numeric"
+                          aria-label={`Quantité offerte pour la catégorie ${famille.nom}`}
+                          onChange={(e) =>
+                            patchMany(famille.lignes.map((l) => l.index), {
+                              get_qty: e.target.value,
+                            })
+                          }
+                        />
+                        offert
+                      </span>
+                    ) : null}
                   </div>
                 </td>
-                <td className="num"><span className="muted">—</span></td>
-                <td className="num"><span className="muted">—</span></td>
+                <td className="num">
+                  {apresFamille === null ? (
+                    <span className="muted">—</span>
+                  ) : (
+                    <>
+                      <strong>{eur(apresFamille)}</strong>
+                      <span className="sub">{eur(ht(apresFamille))} HT</span>
+                    </>
+                  )}
+                </td>
+                <td className="num">
+                  {margeFamille === null ? (
+                    <span className="muted">—</span>
+                  ) : (
+                    <strong>{eur(margeFamille)}</strong>
+                  )}
+                </td>
                 <td className="num pricing__sep">
                   <strong>{fr(famille.q1)}</strong>
                 </td>
@@ -673,7 +789,8 @@ export default function PricingStep({
                 )
               })}
               </Fragment>
-              ))}
+              )
+              })}
             </tbody>
             <tfoot>
               <tr>
