@@ -1,6 +1,6 @@
 import { module as api } from '../../lib/api'
 import { useAsync } from '../../lib/useAsync'
-import type { SalesQuantities } from '../../lib/api/module'
+import type { PriceList, PriceListItem, SalesQuantities } from '../../lib/api/module'
 import { Fragment } from 'react'
 import type { Draft, MechanicCode } from './CampaignBuilder'
 import AnalysisPeriod from './AnalysisPeriod'
@@ -156,6 +156,23 @@ export default function PricingStep({
     [draft.analysis_from, draft.analysis_to, itemIds.join(',')],
   )
 
+  /**
+   * Prix de départ : le tarif de la boutique lu sur l'ERP, le prix catalogue
+   * sinon. Saisir sept prix à la main à chaque campagne alors qu'ils sont en
+   * base était le principal reproche fait à cet écran.
+   *
+   * La saisie reste possible et prime — un prix de campagne peut légitimement
+   * différer du tarif — mais le champ laissé vide suit désormais le catalogue,
+   * et suivra donc ses mises à jour au lieu de figer la valeur du jour.
+   */
+  const prices = useAsync<PriceList | null>(
+    () => (itemIds.length === 0 ? Promise.resolve(null) : api.getPriceList(itemIds)),
+    [itemIds.join(',')],
+  )
+
+  const tarifDe = (itemId: number | null): PriceListItem | null =>
+    itemId === null ? null : prices.data?.items.find((p) => p.item_id === itemId) ?? null
+
   const margeReseau = read(draft.margin_pct_default) ?? 0
 
   const patchItem = (index: number, change: Partial<Draft['offer_items'][number]>) => {
@@ -189,8 +206,11 @@ export default function PricingStep({
 
   // Une ligne par produit de l'offre, avec sa simulation.
   const lignes = produits.map(({ element, index }) => {
-    const prix = read(element.baseline_price)
-      ?? (sales.data?.products.find((p) => p.item_id === element.offer_item_id) ? null : null)
+    const saisi = read(element.baseline_price)
+    const tarif = tarifDe(element.offer_item_id)
+    const prix = saisi ?? tarif?.price ?? null
+    const origine: 'saisi' | 'boutiques' | 'catalogue' | null =
+      saisi !== null ? 'saisi' : prix === null ? null : tarif?.source ?? null
     const ttc0 = prix ?? 0
     const marge = read(element.margin_pct) ?? margeReseau
     const q0 = volumeOf(element.offer_item_id)
@@ -209,7 +229,7 @@ export default function PricingStep({
 
     const q1 = sim.k === null ? null : Math.ceil(q0 * sim.k)
 
-    return { element, index, ttc0, marge, q0, sim, q1, prixManquant: prix === null }
+    return { element, index, ttc0, marge, q0, sim, q1, tarif, origine, prixManquant: prix === null }
   })
 
   /**
@@ -359,9 +379,19 @@ export default function PricingStep({
         <p className="error">Volumes indisponibles : {sales.error}</p>
       ) : null}
 
+      {prices.error !== null ? (
+        <p className="error">Prix indisponibles : {prices.error}</p>
+      ) : null}
+
       <h3 className="section-label">
         Promotions
         <span className="section-label__aside">
+          {/* D'où viennent les prix affichés. Un écran qui préremplit sans
+              dire d'où doit être vérifié à la main, ce qui annule le gain. */}
+          {prices.data === null || prices.data.erp.shops_read === 0
+            ? 'Prix catalogue du réseau'
+            : `Tarifs de ${prices.data.erp.shops_read} boutique${prices.data.erp.shops_read > 1 ? 's' : ''}`}
+          {' · '}
           Prix TTC · marges et compensation calculées en HT
         </span>
       </h3>
@@ -480,8 +510,13 @@ export default function PricingStep({
                       <span className="objectives__pct">
                         <input
                           value={element.baseline_price}
-                          placeholder="0,00"
+                          placeholder={ligne.tarif?.price === null || ligne.tarif?.price === undefined
+                            ? '0,00'
+                            : dec(ligne.tarif.price)}
                           inputMode="decimal"
+                          title={ligne.origine === 'saisi'
+                            ? 'Vider le champ pour revenir au prix du catalogue'
+                            : 'Vide : suit le prix du catalogue'}
                           aria-label={`Prix de ${element.label}`}
                           onChange={(e) => patchItem(index, { baseline_price: e.target.value })}
                         />
@@ -489,6 +524,17 @@ export default function PricingStep({
                       </span>
                       <span className="sub">
                         {ligne.prixManquant ? 'à renseigner' : `${eur(sim.p0)} HT`}
+                        {/* D'où vient le prix : un chiffre repris de l'ERP et un
+                            chiffre saisi ne se corrigent pas de la même façon. */}
+                        {ligne.origine === null || ligne.origine === 'saisi' ? null : (
+                          <em className="pricing__from">
+                            {ligne.origine === 'catalogue'
+                              ? 'catalogue'
+                              : ligne.tarif !== null && ligne.tarif.distinct > 1
+                                ? `${ligne.tarif.distinct} prix boutique`
+                                : 'tarif boutique'}
+                          </em>
+                        )}
                       </span>
                     </td>
 
@@ -653,6 +699,9 @@ export default function PricingStep({
           sans prix de référence : {sansPrix.map((l) => l.element.label).join(', ')}. Leur marge ne
           se calcule pas, et le total ci-dessous les compte à leur volume actuel — renseignez leur
           prix pour qu’ils entrent dans la compensation.
+          {prices.data !== null && prices.data.erp.configured && prices.data.erp.errors.length > 0
+            ? ` L’ERP n’a pas rendu son tarif : ${prices.data.erp.errors[0]}.`
+            : null}
         </p>
       ) : null}
 

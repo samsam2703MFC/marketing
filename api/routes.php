@@ -66,6 +66,8 @@ return static function (Router $router): void {
 
     // Outils de campagne
     $router->get('/api/v1/marketing/offer-items',     [$catalog, 'offerItems']);
+    // Prix de vente : tarif de la boutique lu sur l'ERP, prix catalogue sinon.
+    $router->get('/api/v1/marketing/price-list',      [$catalog, 'priceList']);
     $router->get('/api/v1/marketing/promotions',      [$catalog, 'promotions']);
     $router->get('/api/v1/marketing/campaign-offers', [$catalog, 'campaignOffers']);
     $router->get('/api/v1/marketing/bundles',    [$catalog, 'bundles']);

@@ -303,3 +303,44 @@ Quelques points à connaître :
 L'utilisateur MySQL du module doit avoir le droit de lecture sur le schéma de
 l'ERP. Sans lui, la reprise s'arrête sur « table introuvable, ou aucun droit de
 lecture dessus » — les deux cas se ressemblent vus du client MySQL.
+
+### Tarif des boutiques (étape « Prix »)
+
+Tout ce qui précède passe par la base. Le **tarif d'une boutique** fait
+exception : il se lit sur l'API de l'ERP.
+
+```
+GET {MAR_ERP_API_BASE}/api/v1/shops/{shop}/products/price-list/document
+```
+
+`{shop}` est l'identifiant ERP de la boutique — `mar_shop.erp_shop_id`, posé par
+la reprise. Trois variables suffisent :
+
+```
+MAR_ERP_API_BASE=http://127.0.0.1
+MAR_ERP_API_TOKEN=…            # envoyé en « Authorization: Bearer »
+MAR_ERP_API_TIMEOUT=5          # secondes ; l'appel se fait pendant une saisie
+```
+
+Variable absente, aucun appel n'est tenté : l'étape « Prix » part alors du
+**prix catalogue réseau** (`mar_offer_item.price_amount`, repris de
+`product.suggested_sale_price`). Les deux marchent ; l'écran affiche laquelle a
+servi — « Tarifs de 5 boutiques » ou « Prix catalogue du réseau », et sous
+chaque prix sa provenance.
+
+La **forme** de la réponse n'a pas pu être observée depuis l'environnement de
+développement, dont la sortie réseau est fermée. Elle n'est donc pas supposée :
+la lecture parcourt le JSON et retient toute ligne portant à la fois un
+identifiant de produit (`id_product`, `product_id`, `sku`, `product.id`…) et un
+prix (`sale_price`, `price`, `unit_price`…). Les clés retenues sont rapportées
+dans la réponse de `/api/v1/marketing/price-list`, sous `erp.keys` — un curl
+depuis le serveur suffit à vérifier qu'elle a lu ce qu'on croit :
+
+```bash
+curl -s "http://localhost/marketing/api/v1/marketing/price-list?item_ids=101,102" \
+  | python3 -m json.tool | head -40
+```
+
+Si `erp.errors` mentionne « réponse illisible en JSON », c'est que la route rend
+un document binaire (PDF) et non des lignes : il faudra alors une variante JSON
+côté ERP, ou `MAR_ERP_PRICE_LIST_PATH` pointant vers elle.

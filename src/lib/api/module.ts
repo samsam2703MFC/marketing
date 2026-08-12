@@ -695,6 +695,52 @@ export function getSalesQuantities(params: {
   })
 }
 
+/**
+ * Prix de vente d'un produit, tel que l'assistant doit le prendre pour départ.
+ *
+ * `source` dit d'où vient `price` : `boutiques` quand l'ERP a répondu son
+ * tarif, `catalogue` quand c'est le prix réseau repris de `product.
+ * suggested_sale_price`, `null` quand aucune des deux sources ne le connaît.
+ * L'écran l'affiche : un prix sans provenance est un prix qu'on n'ose pas
+ * corriger.
+ */
+export interface PriceListItem {
+  item_id: number
+  sku_ref: string | null
+  name: string
+  catalog_price: number | null
+  shop_prices: Array<{
+    shop_id: number
+    shop_name: string
+    price: number
+    includes_tax: boolean | null
+  }>
+  /** Nombre de prix différents pratiqués dans le périmètre. */
+  distinct: number
+  price: number | null
+  source: 'boutiques' | 'catalogue' | null
+}
+
+export interface PriceList {
+  items: PriceListItem[]
+  shops: Array<{ id: number; name: string; erp_shop_id: number | null }>
+  /** Ce que l'appel à l'ERP a donné — pour ne pas deviner un silence. */
+  erp: {
+    configured: boolean
+    endpoint: string
+    shops_read: number
+    rows_read: number
+    keys: { product: string; price: string } | null
+    errors: string[]
+  }
+}
+
+export function getPriceList(itemIds: number[]): Promise<PriceList> {
+  return request<PriceList>(`${BASE}/price-list`, {
+    query: { item_ids: itemIds.join(',') },
+  })
+}
+
 export interface Promotion {
   id: number
   name: string

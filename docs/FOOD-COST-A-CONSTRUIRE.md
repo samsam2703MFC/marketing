@@ -7,7 +7,9 @@ calculer le volume supplémentaire nécessaire pour compenser la marge perdue :
 1. le **coût matière unitaire d'un produit** ;
 2. le **prix de vente d'un produit dans une boutique donnée**.
 
-Rien de tout cela n'existe encore. Ce document dit ce qui est déjà en base
+Le second est réglé depuis : `GET /api/v1/shops/{shop}/products/price-list/document`
+existe et le module l'appelle — voir §4. Le premier, le coût matière, reste à
+construire, et c'est l'essentiel de ce mémo. Il dit ce qui est déjà en base
 (vérifié, pas supposé), ce qui manque, et ce qu'il faut exposer.
 
 ---
@@ -131,7 +133,31 @@ personne ne s'en aperçoive.
 
 ---
 
-## 4. Ce qui manque aussi : le prix de vente par boutique
+## 4. Le prix de vente par boutique — répondu
+
+> **Mise à jour.** Cette section demandait un endpoint. Il existe :
+>
+> ```
+> GET /api/v1/shops/{shop}/products/price-list/document
+> ```
+>
+> Le module l'appelle désormais pour les boutiques du périmètre, et se rabat
+> sur le prix catalogue réseau quand il ne répond pas. Deux points restent à
+> confirmer de votre côté, et ils sont écrits ici parce qu'ils changent un
+> chiffre affiché :
+>
+> 1. **Le prix rendu est-il TTC ?** Le module calcule ses marges en HT et
+>    affiche en TTC. Il lit `includes_tax` si la réponse le porte ; sinon il
+>    suppose TTC, ce qui est le bon défaut pour de la vente en boutique mais
+>    reste une supposition.
+> 2. **La route rend-elle du JSON ?** Son nom — `document` — laisse la place à
+>    un PDF. Dans ce cas il nous faut une variante JSON : un tarif imprimé ne
+>    se relit pas.
+>
+> La suite de la section reste valable : elle décrit ce que le module fait des
+> prix une fois lus, et ce qu'il ne peut pas déduire seul.
+
+## 4 bis. Pourquoi le prix par boutique
 
 `product.suggested_sale_price` est un prix de référence réseau. Une boutique
 peut vendre à un autre prix, et l'écran doit le montrer : afficher un prix
@@ -142,7 +168,14 @@ Nous savons lire le prix **réellement encaissé** (`transaction_product.
 unit_gross_price`) — moyenne, min et max par boutique. Mais un prix constaté
 n'est pas un prix affiché : il porte les remises, les portions, les opérations
 passées. Pour une simulation tarifaire, il faut le **prix de vente en vigueur**,
-et nous n'avons identifié aucune table qui le porte par boutique.
+que la route ci-dessus rend boutique par boutique.
+
+Ce que nous en faisons : quand les boutiques du périmètre ne s'accordent pas,
+c'est le prix **le plus répandu** qui sert de départ, et l'écart reste affiché
+(« 2 prix boutique »). Une moyenne inventerait un prix que personne ne pratique.
+
+La forme ci-dessous reste celle que nous appellerions idéalement — un appel
+pour N produits × M boutiques plutôt qu'un appel par boutique :
 
 ```
 GET /api/v1/products/prices?product_ids=101,102&shop_ids=2,4,10
@@ -169,7 +202,9 @@ Règles attendues :
   C'est ce qui permet d'écrire « 3 boutiques sur 5 appliquent le prix réseau »
   plutôt que de laisser croire à une dispersion qui n'existe pas.
 - **Par lot**, produits × boutiques en un appel. Cinq boutiques et quarante
-  produits ne doivent pas faire deux cents requêtes.
+  produits ne doivent pas faire deux cents requêtes. En attendant, le module
+  appelle `price-list/document` une fois par boutique du périmètre — cinq
+  appels pour cinq boutiques, ce qui tient tant que le réseau reste petit.
 - Si aucune boutique ne fixe son prix aujourd'hui, dites-le : le module
   travaillera au niveau réseau et la structure restera prête pour le jour où
   ce ne sera plus vrai.

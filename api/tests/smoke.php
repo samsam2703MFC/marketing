@@ -14,6 +14,7 @@ declare(strict_types=1);
  *   MAR_DB_SOCKET=/tmp/mar.sock MAR_DB_NAME=marketing php api/tests/smoke.php
  */
 
+use Marketing\Repository\PriceListRepository;
 use Marketing\Support\AuthContext;
 use Marketing\Support\Database;
 use Marketing\Support\Request;
@@ -600,6 +601,53 @@ check(
     'la référence porte ses gammes saisonnières',
     $tarteRow !== null && in_array($seasonItemId, $tarteRow['season_ids'] ?? [], true)
 );
+// Prix de vente : l'étape « Prix » part du tarif plutôt que d'une saisie.
+$response = call($router, 'GET', '/api/v1/marketing/price-list', [
+    'item_ids' => (string) $catalogItemId,
+]);
+$prixTarte = $response['body']['items'][0] ?? null;
+check(
+    'le prix catalogue sert de prix de départ',
+    $prixTarte !== null && $prixTarte['price'] === 14.90 && $prixTarte['source'] === 'catalogue',
+    json_encode($prixTarte)
+);
+check(
+    'sans configuration ERP, l\'écran sait que le tarif boutique n\'a pas été lu',
+    $response['body']['erp']['configured'] === false
+        && $response['body']['erp']['shops_read'] === 0
+);
+
+// La forme du tarif rendu par l'ERP n'a pas pu être observée : la lecture
+// cherche ses clés. Ces cas fixent ce qu'elle doit reconnaître — et une
+// réponse qui ne parle pas de prix ne doit rien produire du tout.
+$formes = [
+    'liste nue'      => [['id_product' => 101, 'sale_price' => 2.90]],
+    'enveloppe data' => ['data' => [['product_id' => 101, 'price' => 2.90]]],
+    'document niché' => ['document' => ['lines' => [['sku' => 101, 'unit_price' => 2.90]]]],
+    'produit imbriqué' => ['items' => [['product' => ['id' => 101], 'price_ttc' => 2.90]]],
+];
+foreach ($formes as $nom => $charge) {
+    $lu = PriceListRepository::extract($charge);
+    check(
+        sprintf('le tarif se lit en forme « %s »', $nom),
+        count($lu['rows']) === 1
+            && $lu['rows'][0]['product'] === '101'
+            && $lu['rows'][0]['price'] === 2.90,
+        json_encode($lu)
+    );
+}
+$vide = PriceListRepository::extract(['status' => 'success', 'shop' => ['id' => 3, 'name' => 'Corbais']]);
+check(
+    'une réponse sans ligne de tarif ne produit aucun prix',
+    $vide['rows'] === [] && $vide['error'] !== null
+);
+$ttc = PriceListRepository::extract([['id_product' => 7, 'price' => 3.10, 'includes_tax' => true]]);
+check(
+    'le drapeau TTC est repris quand l\'ERP le donne',
+    $ttc['rows'][0]['includes_tax'] === true
+        && $ttc['keys'] === ['product' => 'id_product', 'price' => 'price']
+);
+
 check(
     'la fenêtre de l\'offre est distincte de la campagne',
     $pdo->query(sprintf('SELECT starts_on FROM mar_campaign_offer WHERE id = %d', $offerId))->fetchColumn() === '2026-12-05'

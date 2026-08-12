@@ -3121,3 +3121,14 @@ table select,
   margin-left: auto;
   font-size: 12px;
 }
+
+/* Provenance d'un prix : discrète, mais toujours visible — un chiffre repris
+   et un chiffre saisi ne se corrigent pas de la même façon. */
+.pricing__from {
+  display: block;
+  font-style: normal;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  opacity: 0.85;
+}
