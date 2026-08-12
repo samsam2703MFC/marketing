@@ -778,6 +778,16 @@ export default function PricingStep({
                     style={{ width: `${(part / echelle) * 100}%` }}
                   />
                 ))}
+                {/* Objectif sous le seuil : il n'y a pas de troisième segment à
+                    dessiner, le manque est un espace et non une quantité. Un
+                    repère posé à la hauteur de l'objectif le dit sans prétendre
+                    ajouter des pièces qui n'existent pas. */}
+                {gain < 0 ? (
+                  <span
+                    className="pricing__tick"
+                    style={{ left: `${(objectif / echelle) * 100}%` }}
+                  />
+                ) : null}
               </div>
               <div className="pricing__legend">
                 <span>
@@ -789,8 +799,17 @@ export default function PricingStep({
                   +{fr(supplement)} pour compenser les promotions
                 </span>
                 <span>
-                  <i className="pricing__mark pricing__mark--3" />
-                  {gain >= 0 ? `+${fr(gain)} de gain réel` : `${fr(-gain)} manquantes`}
+                  {gain >= 0 ? (
+                    <>
+                      <i className="pricing__mark pricing__mark--3" />
+                      {`+${fr(gain)} de gain réel`}
+                    </>
+                  ) : (
+                    <>
+                      <i className="pricing__mark pricing__mark--tick" />
+                      {`objectif à ${fr(objectif)} — ${fr(-gain)} pièces trop bas`}
+                    </>
+                  )}
                 </span>
               </div>
             </div>

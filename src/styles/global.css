@@ -2476,12 +2476,24 @@ select:disabled {
 .pricing__gauge { margin-top: 10px; padding: 15px 18px; }
 
 .pricing__bar {
+  position: relative;
   display: flex;
   gap: 2px;
   height: 22px;
   border-radius: 5px;
   overflow: hidden;
   background: var(--total-line);
+}
+
+/* Repère d'objectif : un trait, pas un segment — il marque une hauteur
+   atteinte, il ne représente aucune quantité en propre. */
+.pricing__tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  margin-left: -1px;
+  background: var(--chart-goal);
 }
 
 .pricing__part { display: block; }
@@ -2510,6 +2522,15 @@ select:disabled {
 .pricing__mark--1 { background: var(--chart-real); }
 .pricing__mark--2 { background: var(--prize); }
 .pricing__mark--3 { background: var(--chart-goal); }
+
+/* Même signe que le repère de la barre : un trait fin, pas un carré plein. */
+.pricing__mark--tick {
+  width: 3px;
+  border-radius: 1px;
+  margin-right: 9px;
+  margin-left: 3px;
+  background: var(--chart-goal);
+}
 
 /* Champ occupant la largeur, pour les zones de texte et les curseurs */
 .field--block,
