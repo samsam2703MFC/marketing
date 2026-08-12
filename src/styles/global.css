@@ -1647,6 +1647,25 @@ select:disabled {
   color: var(--muted);
 }
 
+/* Ligne de catégorie : elle porte le total de ses produits et le champ qui les
+   règle tous. Le fond la sort du lot sans ajouter de trait — un tableau qui
+   compte déjà six colonnes de magasins n'a pas besoin d'une bordure de plus. */
+.objectives__family td {
+  background: var(--total-line);
+  font-weight: 500;
+}
+
+.objectives__family td:first-child {
+  font-weight: 600;
+}
+
+/* Le produit se lit comme un enfant de sa catégorie : un retrait suffit, et il
+   survit au défilement horizontal contrairement à une bordure gauche. */
+.objectives__child {
+  padding-left: 28px !important;
+  font-weight: 400 !important;
+}
+
 /* Deux façons d'apporter le visuel, sur une même ligne : le fichier depuis le
    poste, ou l'adresse d'une image déjà en ligne. */
 .visual-source {

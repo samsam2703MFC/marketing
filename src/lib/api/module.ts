@@ -659,7 +659,8 @@ export interface SalesQuantities {
   from: string
   to: string
   compare: boolean
-  products: Array<{ item_id: number; name: string }>
+  /** `family` vient de `mar_offer_item.detail` : « Cougnou », « Bûche ». */
+  products: Array<{ item_id: number; name: string; family: string | null }>
   shops: ShopSalesRow[]
   network: {
     by_product: Record<number, number>

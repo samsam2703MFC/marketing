@@ -74,7 +74,11 @@ final class SalesRepository
         if ($itemIds !== []) {
             [$inSql, $inBindings] = Database::inClause($itemIds, 'item');
             $lookup = $connection->prepare(sprintf(
-                "SELECT id, sku_ref, name FROM mar_offer_item
+                // `detail` porte la famille du catalogue — « Cougnou »,
+                // « Bûche ». Le tri l'utilisait déjà ; il manquait de la
+                // rendre, faute de quoi l'écran ne pouvait pas grouper ce que
+                // la requête avait pourtant ordonné.
+                "SELECT id, sku_ref, name, detail FROM mar_offer_item
                   WHERE id IN (%s) AND category = 'produit'
                   ORDER BY detail IS NULL, detail, name",
                 $inSql
@@ -91,6 +95,9 @@ final class SalesRepository
                 static fn (array $product): array => [
                     'item_id' => (int) $product['id'],
                     'name'    => (string) $product['name'],
+                    // Sans famille au catalogue, le produit n'est pas rangé
+                    // ailleurs : c'est à l'écran de le nommer, pas ici.
+                    'family'  => $product['detail'] === null ? null : (string) $product['detail'],
                 ],
                 $products
             ),

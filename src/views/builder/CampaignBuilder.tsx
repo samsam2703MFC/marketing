@@ -123,8 +123,15 @@ export interface Draft {
   analysis_from: string
   analysis_to: string
   analysis_compare: boolean
-  /** Progression par produit, en %. Vide = suit la progression générale. */
+  /** Progression par produit, en %. Vide = suit sa famille. */
   product_growth: Record<number, string>
+  /**
+   * Progression par famille de catalogue — « Cougnou », « Bûche » —, en %.
+   * Vide = suit la progression générale. Trois niveaux plutôt que deux :
+   * régler sept produits un par un pour la même décision est un travail que
+   * la famille fait en une fois.
+   */
+  family_growth: Record<string, string>
 
   /**
    * Challenge attaché aux objectifs — facultatif : sans lui, chaque magasin
@@ -217,6 +224,7 @@ function emptyDraft(refs: References, role: Role): Draft {
     analysis_to: today(),
     analysis_compare: false,
     product_growth: {},
+    family_growth: {},
 
     margin_pct_default: '68',
     max_qty_per_ticket: '',
@@ -672,8 +680,9 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
     analysis_from: base.analysis_from,
     analysis_to: base.analysis_to,
     analysis_compare: base.analysis_compare,
-    // Aide au calcul, pas une donnée de campagne : elle ne se relit pas.
+    // Aides au calcul, pas des données de campagne : elles ne se relisent pas.
     product_growth: {},
+    family_growth: {},
 
     margin_pct_default: numberOrBlank(state.margin_pct_default) || '68',
     max_qty_per_ticket: numberOrBlank(state.offer?.max_qty_per_ticket),

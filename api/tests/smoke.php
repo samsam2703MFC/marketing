@@ -482,6 +482,20 @@ check(
     'l\'absence d\'historique est expliquée',
     is_string($response['body']['warning'] ?? null) && $response['body']['warning'] !== ''
 );
+
+// La famille du catalogue voyage avec le produit : c'est elle qui groupe le
+// tableau de l'étape « Objectifs » et qui permet de régler une progression
+// pour toute une catégorie d'un coup. Sans elle, l'écran ne pouvait pas
+// grouper ce que la requête triait pourtant déjà.
+check(
+    'chaque produit porte sa famille de catalogue',
+    array_reduce(
+        $response['body']['products'] ?? [],
+        static fn (bool $ok, array $product): bool => $ok && array_key_exists('family', $product),
+        true
+    ),
+    json_encode($response['body']['products'] ?? null)
+);
 check('le canal est activé sans budget', $count('mar_campaign_channel') === 1);
 check(
     'un canal sans budget vaut zéro',

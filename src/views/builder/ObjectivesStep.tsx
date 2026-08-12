@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { module as api } from '../../lib/api'
 import { useAsync } from '../../lib/useAsync'
 import type { SalesQuantities, ShopSalesRow } from '../../lib/api/module'
@@ -171,14 +171,39 @@ export default function ObjectivesStep({
   const readPct = (value: string): number =>
     /^-?\d+$/.test(value.trim()) ? Number(value.trim()) : 0
 
+  /** Famille du catalogue, ou le fourre-tout de ceux qui n'en ont pas. */
+  const familyOf = (itemId: number): string =>
+    data?.products.find((product) => product.item_id === itemId)?.family ?? 'Autres'
+
+  /**
+   * Progression appliquée à un produit : la sienne, sinon celle de sa famille,
+   * sinon la générale. Le premier niveau rempli l'emporte — c'est ce qui permet
+   * de régler « Cougnou » d'un coup puis de corriger un seul de ses parfums.
+   */
+  const growthFor = (
+    itemId: number,
+    products: Record<number, string>,
+    families: Record<string, string>,
+    general: string,
+  ): number => {
+    const own = products[itemId]
+    if (own !== undefined && own.trim() !== '') return readPct(own)
+
+    const family = families[familyOf(itemId)]
+    if (family !== undefined && family.trim() !== '') return readPct(family)
+
+    return readPct(general)
+  }
+
   /**
    * Objectif de chaque boutique : son historique produit par produit, chacun
-   * majoré de sa propre progression — celle du produit s'il en porte une, la
-   * générale sinon. L'arrondi vient à la fin, sur le total de la boutique :
-   * arrondir chaque produit d'abord accumulerait sept erreurs sur sept lignes.
+   * majoré de la progression qui le concerne. L'arrondi vient à la fin, sur le
+   * total de la boutique : arrondir chaque produit d'abord accumulerait sept
+   * erreurs sur sept lignes.
    */
   const computeObjectives = (
     growths: Record<number, string>,
+    families: Record<string, string>,
     general: string,
   ): Record<number, string> => {
     if (data === null) return draft.shop_objectives
@@ -186,8 +211,7 @@ export default function ObjectivesStep({
     return Object.fromEntries(
       data.shops.map((shop) => {
         const total = data.products.reduce((sum, product) => {
-          const own = growths[product.item_id]
-          const pct = readPct(own !== undefined && own.trim() !== '' ? own : general)
+          const pct = growthFor(product.item_id, growths, families, general)
 
           return sum + (shop.quantities[product.item_id] ?? 0) * (1 + pct / 100)
         }, 0)
@@ -197,24 +221,60 @@ export default function ObjectivesStep({
     )
   }
 
-  /** Progression du produit : la sienne, ou rien — le champ montre la générale. */
+  /** Progression du produit : la sienne, ou rien — le champ montre l'héritée. */
   const growthOf = (itemId: number): string => draft.product_growth[itemId] ?? ''
+
+  /** Progression de la famille : la sienne, ou rien — le champ montre la générale. */
+  const familyGrowthOf = (family: string): string => draft.family_growth[family] ?? ''
 
   const setProductGrowth = (itemId: number, value: string) => {
     const next = { ...draft.product_growth, [itemId]: value }
-    patch({ product_growth: next, shop_objectives: computeObjectives(next, growthPct) })
+    patch({
+      product_growth: next,
+      shop_objectives: computeObjectives(next, draft.family_growth, growthPct),
+    })
   }
 
-  /** Pré-remplit chaque objectif avec les pièces réellement vendues. */
+  /**
+   * Régler une famille efface les réglages de ses produits : sans cela, taper
+   * « 10 » sur « Cougnou » laisserait le parfum réglé à 30 % la veille à 30 %,
+   * et l'écran afficherait une famille à 10 qui n'en fait pas 10.
+   */
+  const setFamilyGrowth = (family: string, value: string) => {
+    const families = { ...draft.family_growth, [family]: value }
+    const products = Object.fromEntries(
+      Object.entries(draft.product_growth).filter(([itemId]) => familyOf(Number(itemId)) !== family),
+    )
+
+    patch({
+      family_growth: families,
+      product_growth: products,
+      shop_objectives: computeObjectives(products, families, growthPct),
+    })
+  }
+
+  /**
+   * Pré-remplit chaque objectif avec les pièces réellement vendues.
+   *
+   * La progression générale retombe à zéro en même temps. Sans cela, l'écran
+   * affichait « 5 % » dans un champ qui n'avait servi à rien : la première
+   * catégorie réglée ensuite ajoutait ces 5 % à tout le reste, alors qu'on
+   * venait justement de demander l'historique tel quel.
+   */
   const copyHistory = () => {
     if (data === null) return
-    patch({ product_growth: {}, shop_objectives: computeObjectives({}, '0') })
+    setGrowthPct('0')
+    patch({ product_growth: {}, family_growth: {}, shop_objectives: computeObjectives({}, {}, '0') })
   }
 
-  /** La progression générale s'applique partout : les réglages produit cèdent. */
+  /** La progression générale s'applique partout : les réglages fins cèdent. */
   const applyGrowth = () => {
     if (data === null || !/^-?\d+$/.test(growthPct.trim())) return
-    patch({ product_growth: {}, shop_objectives: computeObjectives({}, growthPct) })
+    patch({
+      product_growth: {},
+      family_growth: {},
+      shop_objectives: computeObjectives({}, {}, growthPct),
+    })
   }
 
   const objectivesTotal = Object.values(draft.shop_objectives).reduce(
@@ -315,6 +375,36 @@ export default function ObjectivesStep({
   /** Magasins hors course : sans objectif, il n'y a rien à franchir. */
   const outOfRace =
     data === null ? [] : data.shops.filter((shop) => readInt(objectiveOf(shop.shop_id)) === 0)
+
+  /**
+   * Produits rangés par famille, dans l'ordre où l'API les rend — elle trie
+   * déjà par `detail` puis par nom, donc les familles sortent groupées et il
+   * suffit de les découper.
+   */
+  const familles =
+    data === null
+      ? []
+      : data.products.reduce<Array<{
+          nom: string
+          produits: typeof data.products
+          total: number
+          precedent: number
+        }>>((groupes, produit) => {
+          const nom = produit.family ?? 'Autres'
+          const total = data.network.by_product[produit.item_id] ?? 0
+          const precedent = data.network.by_product_previous?.[produit.item_id] ?? 0
+          const dernier = groupes[groupes.length - 1]
+
+          if (dernier !== undefined && dernier.nom === nom) {
+            dernier.produits.push(produit)
+            dernier.total += total
+            dernier.precedent += precedent
+          } else {
+            groupes.push({ nom, produits: [produit], total, precedent })
+          }
+
+          return groupes
+        }, [])
 
   const prizeCount = draft.challenge_prizes.filter((label) => label.trim() !== '').length
   const activeMetric = METRICS.find((entry) => entry.key === draft.challenge_metric)
@@ -439,7 +529,56 @@ export default function ObjectivesStep({
                   </tr>
                 </thead>
                 <tbody>
-                  {data.products.map((product) => {
+                  {familles.map((famille) => (
+                  <Fragment key={famille.nom}>
+                  {/* Ligne de famille : le total de ses produits, et le champ
+                      qui règle toute la famille d'un coup. Les produits
+                      restent en dessous pour corriger ce qui doit l'être. */}
+                  <tr className="objectives__family">
+                    <td>
+                      {famille.nom}
+                      <span className="objectives__rate">
+                        {famille.produits.length} produit
+                        {famille.produits.length > 1 ? 's' : ''}
+                      </span>
+                    </td>
+                    {sortedShops.map((shop) => (
+                      <td key={shop.shop_id} className="num">
+                        {fr(
+                          famille.produits.reduce(
+                            (sum, produit) => sum + (shop.quantities[produit.item_id] ?? 0),
+                            0,
+                          ),
+                        )}
+                      </td>
+                    ))}
+                    <td className="num">
+                      <strong>{fr(famille.total)}</strong>
+                    </td>
+                    {compare ? <td className="num">{fr(famille.precedent)}</td> : null}
+                    {compare ? (
+                      <td className={`num objectives__trend-${
+                        evolution(famille.total, famille.precedent)?.tone ?? 'flat'
+                      }`}>
+                        {evolution(famille.total, famille.precedent)?.text ?? '—'}
+                      </td>
+                    ) : null}
+                    <td className="num">
+                      <span className="objectives__pct">
+                        <input
+                          value={familyGrowthOf(famille.nom)}
+                          placeholder={growthPct}
+                          inputMode="numeric"
+                          aria-label={`Progression pour la catégorie ${famille.nom}`}
+                          title="Vide : suit la progression générale"
+                          onChange={(e) => setFamilyGrowth(famille.nom, e.target.value)}
+                        />
+                        %
+                      </span>
+                    </td>
+                  </tr>
+
+                  {famille.produits.map((product) => {
                     const total = data.network.by_product[product.item_id] ?? 0
                     const previous = compare
                       ? (data.network.by_product_previous?.[product.item_id] ?? 0)
@@ -448,7 +587,7 @@ export default function ObjectivesStep({
 
                     return (
                       <tr key={product.item_id}>
-                        <td>{product.name}</td>
+                        <td className="objectives__child">{product.name}</td>
                         {sortedShops.map((shop) => (
                           <td key={shop.shop_id} className="num">
                             {shop.quantities[product.item_id] ?? 0}
@@ -479,10 +618,14 @@ export default function ObjectivesStep({
                           <span className="objectives__pct">
                             <input
                               value={growthOf(product.item_id)}
-                              placeholder={growthPct}
+                              placeholder={familyGrowthOf(famille.nom) || growthPct}
                               inputMode="numeric"
                               aria-label={`Progression pour ${product.name}`}
-                              title="Vide : suit la progression générale"
+                              title={`Vide : suit ${
+                                familyGrowthOf(famille.nom) === ''
+                                  ? 'la progression générale'
+                                  : `la catégorie ${famille.nom}`
+                              }`}
                               onChange={(e) => setProductGrowth(product.item_id, e.target.value)}
                             />
                             %
@@ -491,6 +634,8 @@ export default function ObjectivesStep({
                       </tr>
                     )
                   })}
+                  </Fragment>
+                  ))}
                 </tbody>
                 <tfoot>
                   <tr>
