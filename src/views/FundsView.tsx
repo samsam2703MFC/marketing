@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { module as api } from '../lib/api'
 import { useAsync, formatDate, formatEur, formatPeriod } from '../lib/useAsync'
-import type { Granularity, LedgerPeriod, LedgerRow } from '../lib/api/module'
+import type { Granularity, LedgerPeriod, LedgerRow, MovementDraft } from '../lib/api/module'
 import LinkBadge from '../components/LinkBadge'
-import { useLabel } from '../state/references'
+import { useLabel, useReferences } from '../state/references'
+import { describeError } from '../state/auth'
 
 const GRANULARITIES: Array<{ value: Granularity; label: string }> = [
   { value: 'month', label: 'Mois' },
@@ -23,10 +24,12 @@ export default function FundsView() {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [saisie, setSaisie] = useState(false)
+  const [rechargement, setRechargement] = useState(0)
 
   const { data, error, loading } = useAsync(
     () => api.getLedger(granularity, from || undefined, to || undefined),
-    [granularity, from, to],
+    [granularity, from, to, rechargement],
   )
 
   const periods = data?.periods ?? []
@@ -71,8 +74,27 @@ export default function FundsView() {
           >
             Tout replier
           </button>
+
+          <button
+            type="button"
+            className={`filter${saisie ? ' is-on' : ''}`}
+            aria-expanded={saisie}
+            onClick={() => setSaisie(!saisie)}
+          >
+            {saisie ? 'Fermer la saisie' : '+ Entrée ou sortie'}
+          </button>
         </div>
       </div>
+
+      {saisie ? (
+        <MovementForm
+          onDone={() => {
+            setSaisie(false)
+            setRechargement((tour) => tour + 1)
+          }}
+          onCancel={() => setSaisie(false)}
+        />
+      ) : null}
 
       {error ? <p className="error">{error}</p> : null}
       {loading ? <p className="muted">Chargement…</p> : null}
@@ -167,6 +189,14 @@ function Block({
             ) : null}
             {row.label}
             {row.shop_name ? <span className="muted"> — {row.shop_name}</span> : null}
+            {/* La période couverte sous le libellé : « 12 000 € le 14 avril »
+                ne dit pas si l'on paie un trimestre ou une année, et deux
+                lecteurs qui n'ouvrent pas la pièce comptent deux choses. */}
+            {row.period_from !== null && row.period_to !== null ? (
+              <span className="ledger__periode">
+                période du {formatDate(row.period_from)} au {formatDate(row.period_to)}
+              </span>
+            ) : null}
           </td>
           {/* Sans référentiel, cette colonne affichait « ROYALTY » tel quel. */}
           <td className="muted">{row.supplier_name ?? sourceLabel(row.source)}</td>
@@ -180,5 +210,225 @@ function Block({
         </td>
       </tr>
     </>
+  )
+}
+
+/**
+ * Saisie d'une entrée ou d'une sortie du fonds.
+ *
+ * Le sens d'abord, parce qu'il change la lecture de tout le reste : un montant
+ * n'est ni positif ni négatif ici, c'est le sens qui porte le signe — et le
+ * serveur refuse un montant signé pour cette raison.
+ *
+ * La période est distincte de la date : « 12 000 € le 14 avril » ne dit pas si
+ * l'on paie un trimestre ou une année, et il faut ouvrir la pièce pour le
+ * savoir. Elle reste facultative — un achat de PLV n'en couvre aucune.
+ */
+function MovementForm({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
+  const references = useReferences()
+  const campaigns = useAsync(() => api.listCampaigns({}), [])
+
+  const [sens, setSens] = useState<'IN' | 'OUT'>('OUT')
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [debut, setDebut] = useState('')
+  const [fin, setFin] = useState('')
+  const [libelle, setLibelle] = useState('')
+  const [montant, setMontant] = useState('')
+  const [levier, setLevier] = useState('')
+  const [fournisseur, setFournisseur] = useState('')
+  const [campagne, setCampagne] = useState('')
+  const [source, setSource] = useState('')
+  const [piece, setPiece] = useState('')
+  const [erreur, setErreur] = useState<string | null>(null)
+  const [envoi, setEnvoi] = useState(false)
+
+  const somme = Number(montant.trim().replace(',', '.'))
+  const montantValide = montant.trim() !== '' && Number.isFinite(somme) && somme > 0
+  // Les deux bornes, ou aucune : une période ouverte d'un côté ne se totalise
+  // pas, et le serveur la refuserait après coup.
+  const periodeValide = (debut === '') === (fin === '') && (fin === '' || fin >= debut)
+  const complet = libelle.trim() !== '' && montantValide && date !== '' && periodeValide
+
+  const enregistrer = async () => {
+    setEnvoi(true)
+    setErreur(null)
+
+    const mouvement: MovementDraft = {
+      direction: sens,
+      movement_date: date,
+      label: libelle.trim(),
+      amount: somme,
+      period_from: debut || null,
+      period_to: fin || null,
+      lever_id: levier === '' ? null : Number(levier),
+      supplier_name: fournisseur.trim() || null,
+      campaign_id: campagne === '' ? null : Number(campagne),
+      source: source || null,
+      document_ref: piece.trim() || null,
+    }
+
+    try {
+      await api.addMovement(mouvement)
+      onDone()
+    } catch (echec) {
+      setErreur(describeError(echec))
+    } finally {
+      setEnvoi(false)
+    }
+  }
+
+  return (
+    <section className="card movement">
+      <h2 className="movement__title">Nouveau mouvement</h2>
+
+      <div className="movement__sens">
+        {([
+          ['IN', 'Entrée', 'Ce qui alimente le fonds'],
+          ['OUT', 'Sortie', 'Ce que le fonds dépense'],
+        ] as const).map(([code, label, note]) => (
+          <button
+            key={code}
+            type="button"
+            className={`choice${sens === code ? ' is-on' : ''}`}
+            aria-pressed={sens === code}
+            onClick={() => setSens(code)}
+          >
+            <strong>{label}</strong>
+            <span className="muted">{note}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="movement__grid">
+        <label className="field field--block">
+          Libellé
+          <input
+            value={libelle}
+            placeholder={sens === 'IN' ? 'Redevance marketing T1' : 'Impression dépliants Épiphanie'}
+            onChange={(e) => setLibelle(e.target.value)}
+          />
+        </label>
+
+        <label className="field">
+          Montant
+          <span className="objectives__pct">
+            <input
+              value={montant}
+              inputMode="decimal"
+              placeholder="0,00"
+              aria-invalid={montant.trim() !== '' && !montantValide}
+              onChange={(e) => setMontant(e.target.value)}
+            />
+            €
+          </span>
+        </label>
+
+        <label className="field">
+          Date d’écriture
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </label>
+
+        <label className="field">
+          Levier
+          <select value={levier} onChange={(e) => setLevier(e.target.value)}>
+            <option value="">Aucun</option>
+            {references.levers.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field">
+          Fournisseur
+          <input
+            value={fournisseur}
+            placeholder={sens === 'IN' ? 'Franchisé, marque…' : 'Imprimeur, agence…'}
+            onChange={(e) => setFournisseur(e.target.value)}
+          />
+        </label>
+
+        {/* Les deux bornes sous une seule étiquette : « du » et « au » séparés
+            se retrouvaient sur deux lignes de la grille, et le second champ
+            n'avait plus l'air d'appartenir au premier. */}
+        <div className="field movement__periode">
+          <span>Période couverte</span>
+          <div className="movement__bornes">
+            <label>
+              du
+              <input type="date" value={debut} onChange={(e) => setDebut(e.target.value)} />
+            </label>
+            <label>
+              au
+              <input type="date" value={fin} onChange={(e) => setFin(e.target.value)} />
+            </label>
+          </div>
+        </div>
+
+        <label className="field">
+          Campagne
+          <select value={campagne} onChange={(e) => setCampagne(e.target.value)}>
+            <option value="">Aucune</option>
+            {(campaigns.data ?? []).map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field">
+          Origine
+          <select value={source} onChange={(e) => setSource(e.target.value)}>
+            <option value="">Autre</option>
+            {references.fundSources.map((entry) => (
+              <option key={entry.code} value={entry.code}>
+                {entry.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field">
+          Pièce
+          <input
+            value={piece}
+            placeholder="N° de facture"
+            onChange={(e) => setPiece(e.target.value)}
+          />
+        </label>
+      </div>
+
+      {!periodeValide ? (
+        <p className="error">
+          {(debut === '') !== (fin === '')
+            ? 'Donnez le début et la fin de la période, ou aucun des deux.'
+            : 'La fin de période précède son début.'}
+        </p>
+      ) : null}
+
+      {erreur === null ? null : <p className="error">{erreur}</p>}
+
+      <p className="muted movement__apercu">
+        {montantValide
+          ? `${sens === 'IN' ? '+' : '−'} ${formatEur(somme, 2)} sur le solde du fonds`
+          : 'Le montant se saisit sans signe : c’est le sens qui le porte.'}
+      </p>
+
+      <div className="movement__actions">
+        <button type="button" className="filter" onClick={onCancel} disabled={envoi}>
+          Annuler
+        </button>
+        <button
+          type="button"
+          className="filter is-on"
+          disabled={!complet || envoi}
+          onClick={enregistrer}
+        >
+          {envoi ? 'Enregistrement…' : 'Enregistrer le mouvement'}
+        </button>
+      </div>
+    </section>
   )
 }

@@ -3458,3 +3458,105 @@ table select,
   border-radius: 999px;
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Saisie d'un mouvement de fonds ──────────────────────────────────────
+   Le sens en premier : il change la lecture de tout le reste, et un montant
+   ne porte jamais son signe ici. */
+.movement { display: flex; flex-direction: column; gap: 16px; padding: 20px 22px; }
+
+.movement__title { margin: 0; font-size: 15px; font-weight: 600; }
+
+.movement__sens {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.movement__sens .choice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 11px 14px;
+  font-size: 14px;
+  text-align: left;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.movement__sens .choice.is-on {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft, rgba(141, 29, 44, 0.06));
+}
+
+.movement__sens .choice span { font-size: 12px; }
+
+.movement__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+/* Étiquette au-dessus du champ, et non à côté : « Période couverte — du »
+   posé en ligne recouvrait le champ voisin, et le formulaire se lisait en
+   diagonale. */
+.movement__grid .field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  margin-top: 0;
+}
+
+.movement__grid .field input,
+.movement__grid .field select {
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 13px;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.movement__grid .objectives__pct { display: flex; align-items: center; gap: 6px; }
+
+/* Le libellé prend toute la largeur : c'est lui qu'on relit dans le grand
+   livre, et un champ de 190 px le tronque à la saisie. */
+.movement__grid .field--block { grid-column: 1 / -1; }
+
+.movement__apercu { font-size: 13px; }
+
+.movement__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.ledger__periode {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Les deux bornes d'une période : une étiquette, deux champs qui se lisent
+   ensemble. Séparées, la grille les renvoyait sur deux lignes différentes. */
+.movement__periode { grid-column: span 2; }
+
+.movement__bornes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.movement__bornes label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}

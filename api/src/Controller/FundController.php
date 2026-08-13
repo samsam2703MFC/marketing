@@ -65,6 +65,7 @@ final class FundController
 
         $id = $this->funds->addMovement($auth, $request->only([
             'direction', 'shop_id', 'campaign_id', 'lever_id', 'movement_date',
+            'period_from', 'period_to',
             'label', 'amount', 'source', 'supplier_name', 'document_ref',
         ]));
 

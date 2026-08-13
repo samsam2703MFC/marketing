@@ -52,7 +52,8 @@ final class FundRepository
         };
 
         $statement = Database::connection()->prepare(sprintf(
-            'SELECT %s AS period_key, id, movement_date, direction, label, amount, signed_amount,
+            'SELECT %s AS period_key, id, movement_date, period_from, period_to,
+                    direction, label, amount, signed_amount,
                     source, supplier_name, document_ref, shop_id, shop_name,
                     campaign_id, campaign_name, lever_code, lever_label, lever_color_hex
                FROM mar_v_fund_ledger_by_period
@@ -233,6 +234,37 @@ final class FundRepository
             throw new RuntimeException('Le libellé du mouvement est obligatoire.');
         }
 
+        // Période couverte : les deux bornes, ou aucune. Une période ouverte
+        // d'un côté ne se totalise pas, et laisser passer « du 1er avril à
+        // jamais » donnerait un grand livre qu'aucun trimestre ne referme.
+        $periode = [];
+        foreach (['period_from', 'period_to'] as $borne) {
+            $valeur = trim((string) ($data[$borne] ?? ''));
+            if ($valeur === '') {
+                continue;
+            }
+
+            $lue = \DateTimeImmutable::createFromFormat('!Y-m-d', $valeur);
+            if ($lue === false || $lue->format('Y-m-d') !== $valeur) {
+                throw new RuntimeException(sprintf(
+                    'Date de période invalide (%s) : format attendu AAAA-MM-JJ.',
+                    $borne
+                ));
+            }
+
+            $periode[$borne] = $valeur;
+        }
+
+        if (count($periode) === 1) {
+            throw new RuntimeException(
+                'Période incomplète : donnez le début et la fin, ou aucun des deux.'
+            );
+        }
+
+        if ($periode !== [] && $periode['period_to'] < $periode['period_from']) {
+            throw new RuntimeException('La fin de période précède son début.');
+        }
+
         // Les rattachements sont vérifiés ici plutôt que laissés aux clés
         // étrangères : une violation de contrainte remonte en erreur interne,
         // là où l'utilisateur a seulement désigné une campagne supprimée.
@@ -257,10 +289,12 @@ final class FundRepository
 
         $statement = $connection->prepare(
             'INSERT INTO mar_fund_movement
-                (direction, shop_id, campaign_id, lever_id, movement_date, label, amount, source,
+                (direction, shop_id, campaign_id, lever_id, movement_date,
+                 period_from, period_to, label, amount, source,
                  supplier_name, document_ref, created_by)
              VALUES
-                (:direction, :shop_id, :campaign_id, :lever_id, :movement_date, :label, :amount, :source,
+                (:direction, :shop_id, :campaign_id, :lever_id, :movement_date,
+                 :period_from, :period_to, :label, :amount, :source,
                  :supplier_name, :document_ref, :created_by)'
         );
 
@@ -270,6 +304,8 @@ final class FundRepository
             'campaign_id'   => $data['campaign_id'] ?: null,
             'lever_id'      => $data['lever_id'] ?: null,
             'movement_date' => $date,
+            'period_from'   => $periode['period_from'] ?? null,
+            'period_to'     => $periode['period_to'] ?? null,
             'label'         => $label,
             'amount'        => (float) $amount,
             'source'        => $data['source'] ?: 'AUTRE',

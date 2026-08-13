@@ -1356,6 +1356,51 @@ check('une campagne inexistante est refusée', $movement(['campaign_id' => 99999
 check('un levier inexistant est refusé', $movement(['lever_id' => 999999])['status'] === 422);
 check('un mouvement valide passe', $movement(['label' => 'Achat média'])['status'] === 201);
 
+// La période couverte : les deux bornes, ou aucune. Une redevance
+// trimestrielle et une contribution annuelle ne se distinguent pas d'une simple
+// date d'écriture, et deux lecteurs qui n'ouvrent pas la pièce comptent deux
+// choses différentes.
+check(
+    'une période incomplète est refusée',
+    $movement(['period_from' => '2026-01-01'])['status'] === 422
+);
+check(
+    'une période inversée est refusée',
+    $movement(['period_from' => '2026-04-01', 'period_to' => '2026-01-01'])['status'] === 422
+);
+
+$reponse = $movement([
+    'label'       => 'Redevance marketing T1',
+    'direction'   => 'IN',
+    'amount'      => 12000,
+    'period_from' => '2026-01-01',
+    'period_to'   => '2026-03-31',
+    'lever_id'    => (int) $pdo->query("SELECT id FROM mar_lever WHERE code = 'TRAFIC'")->fetchColumn(),
+    'supplier_name' => 'Franchisé Corbais',
+]);
+check('un mouvement avec période, levier et fournisseur passe', $reponse['status'] === 201,
+    json_encode($reponse['body']));
+
+$livre = call($router, 'GET', '/api/v1/marketing/funds/ledger', ['granularity' => 'quarter'])['body'];
+$redevance = null;
+foreach ($livre['periods'] as $periode) {
+    foreach ([...$periode['entries'], ...$periode['exits']] as $ligne) {
+        if ($ligne['label'] === 'Redevance marketing T1') {
+            $redevance = $ligne;
+        }
+    }
+}
+check(
+    'le grand livre rend la période, le levier et le fournisseur',
+    $redevance !== null
+        && $redevance['period_from'] === '2026-01-01'
+        && $redevance['period_to'] === '2026-03-31'
+        && $redevance['lever_label'] === 'Trafic'
+        && $redevance['supplier_name'] === 'Franchisé Corbais'
+        && $redevance['signed_amount'] === 12000.0,
+    json_encode($redevance)
+);
+
 // Le solde ne doit contenir que des mouvements acceptés.
 check(
     'aucun mouvement douteux n\'a été écrit',

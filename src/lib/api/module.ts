@@ -1107,6 +1107,9 @@ export function generateLeads(campaignId: number): Promise<LeadGenerationReport>
 export interface LedgerRow {
   id: number
   movement_date: string
+  /** Période couverte, quand le mouvement en couvre une. Les deux, ou aucune. */
+  period_from: string | null
+  period_to: string | null
   direction: 'IN' | 'OUT'
   label: string
   amount: number
@@ -1140,6 +1143,32 @@ export function getLedger(
   to?: string,
 ): Promise<{ granularity: Granularity; periods: LedgerPeriod[]; closing_balance: number }> {
   return request(`${BASE}/funds/ledger`, { query: { granularity, from, to } })
+}
+
+/**
+ * Un mouvement du fonds, tel que l'écran le saisit.
+ *
+ * Le montant est toujours positif : c'est `direction` qui porte le signe, et
+ * un « −100 € » en sortie créditerait le fonds au lieu de le débiter.
+ */
+export interface MovementDraft {
+  direction: 'IN' | 'OUT'
+  movement_date: string
+  label: string
+  amount: number
+  /** Période couverte — les deux bornes, ou aucune. */
+  period_from?: string | null
+  period_to?: string | null
+  lever_id?: number | null
+  supplier_name?: string | null
+  campaign_id?: number | null
+  shop_id?: number | null
+  source?: string | null
+  document_ref?: string | null
+}
+
+export function addMovement(movement: MovementDraft): Promise<{ inserted_id: number }> {
+  return request(`${BASE}/funds/movements`, { method: 'POST', body: movement })
 }
 
 export interface LeverPerformance {
