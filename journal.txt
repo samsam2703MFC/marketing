@@ -3,4 +3,7 @@ accueil : HTTP 200 · Module Marketing — L'Atelier By
   → 01-campagnes.png
   → 02-assistant.png
   → 03-objectifs.png
+  → 03b-magasins.png
+  → 03c-detail-objectifs.png
   → 04-prix.png
+  → 04b-compensation.png
