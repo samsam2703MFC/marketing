@@ -51,6 +51,9 @@ return static function (Router $router): void {
     $router->get('/api/v1/marketing/campaigns/calendar',        [$campaigns, 'calendar']);
     $router->get('/api/v1/marketing/campaigns/{id}',            [$campaigns, 'show']);
     $router->get('/api/v1/marketing/campaigns/{id}/monitor',    [$campaigns, 'monitor']);
+    // Dossier d'impression : le fichier général, celui d'une boutique avec sa
+    // page objectif, ou la série entière.
+    $router->get('/api/v1/marketing/campaigns/{id}/print',      [$campaigns, 'printFile']);
     // Reprise d'un brouillon : lecture par identifiants, réécriture en bloc.
     $router->get('/api/v1/marketing/campaigns/{id}/draft',      [$campaigns, 'draft']);
     $router->put('/api/v1/marketing/campaigns/{id}/draft',      [$campaigns, 'replace']);

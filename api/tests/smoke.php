@@ -1475,6 +1475,185 @@ check(
 
 call($router, 'DELETE', sprintf('/api/v1/marketing/campaigns/%d', $aPeindre));
 
+// --- Dossier d'impression --------------------------------------------------
+//
+// Un gabarit lisait trois routes et recollait lui-même le prix après promotion,
+// que rien ne stocke. Deux gabarits écrivaient donc deux fois la même règle,
+// sans garantie de tomber sur le même prix.
+echo "\nDossier d'impression\n";
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+$aImprimer = (int) call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name'          => 'Galettes 2027',
+    'status_code'   => 'draft',
+    'scope'         => 'LOCALE',
+    'client_target' => 'b2c',
+    'type_id'       => (int) $types['ouverture']['id'],
+    'starts_on'     => '2027-01-02',
+    'ends_on'       => '2027-01-31',
+    'shop_ids'      => [1, 2],
+    'color_primary_hex' => '#6E1023',
+    'challenge_enabled' => true,
+    'challenge_metric'  => 'attainment',
+    'challenge_trigger_pct' => 100,
+    'challenge_prizes'  => [['label' => 'Week-end équipe']],
+    'shop_targets'  => [
+        ['shop_id' => 1, 'target_pieces' => 500],
+        ['shop_id' => 2, 'target_pieces' => 300, 'challenge_trigger_pct' => 90],
+    ],
+    'shop_item_targets' => [
+        ['shop_id' => 1, 'offer_item_id' => $catalogItemId, 'target_pieces' => 500],
+    ],
+    'offer' => [
+        'title'         => 'La galette des rois',
+        'mechanic_text' => 'La deuxième à moitié prix',
+        'max_qty_per_ticket' => 2,
+        'is_cumulative' => false,
+        'items' => [[
+            'label'          => 'Tarte du jour',
+            'offer_item_id'  => $catalogItemId,
+            'mechanic_type'  => 'PERCENT',
+            'discount_pct'   => 20,
+            'baseline_price' => 20.00,
+        ]],
+    ],
+])['body']['inserted_id'];
+
+$dossier = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/print', $aImprimer))['body'];
+
+check(
+    'le fichier général porte la campagne, sa palette et son offre',
+    ($dossier['campaign']['name'] ?? null) === 'Galettes 2027'
+        && ($dossier['campaign']['colors']['primary'] ?? null) === '#6E1023'
+        // Couleur non choisie : le dossier reçoit quand même la valeur par défaut.
+        && ($dossier['campaign']['colors']['accent'] ?? null) === '#B0821A'
+        && ($dossier['offer']['title'] ?? null) === 'La galette des rois',
+    json_encode($dossier['campaign'] ?? null)
+);
+
+// Le prix après promotion se calcule ici, une fois pour tous les gabarits.
+$produit = $dossier['products'][0] ?? [];
+check(
+    'le prix après promotion est calculé et rendu',
+    ($produit['price_before'] ?? null) === 20.00
+        && ($produit['price_after'] ?? null) === 16.00
+        && ($produit['mechanic']['text'] ?? null) === '−20 %',
+    json_encode($produit)
+);
+check(
+    'la photo absente vaut null, pas une image de remplacement',
+    array_key_exists('image_url', $produit) && $produit['image_url'] === null
+);
+check(
+    'les mentions de validité sont rédigées',
+    ($dossier['legal']['period_text'] ?? null) === 'Du 2 janvier 2027 au 31 janvier 2027'
+        && str_contains((string) ($dossier['legal']['conditions_text'] ?? ''), 'Non cumulable')
+        && str_contains((string) ($dossier['legal']['conditions_text'] ?? ''), '2 par ticket'),
+    json_encode($dossier['legal'] ?? null)
+);
+check(
+    'la géométrie d\'impression accompagne le dossier',
+    ($dossier['print']['width_px'] ?? null) === 1252
+        && ($dossier['print']['height_px'] ?? null) === 1843
+        && ($dossier['print']['bleed_mm'] ?? null) === 3,
+    json_encode($dossier['print'] ?? null)
+);
+check(
+    'le fichier général ne porte ni boutique ni objectif',
+    !array_key_exists('shop', $dossier) && !array_key_exists('objective', $dossier)
+);
+
+// La géométrie est écrite à deux endroits — `ImageStore` réduit les fichiers,
+// `PrintRepository` la déclare aux gabarits. Les deux doivent dire la même
+// chose : un gabarit dessiné pour 1 252 px sur des images réduites à 1 000
+// sortirait flou sans que rien ne le signale.
+$reflet = new ReflectionClass(\Marketing\Support\ImageStore::class);
+check(
+    'la géométrie annoncée est celle que l\'envoi applique',
+    $reflet->getConstant('PRINT_MAX_SHORT') === ($dossier['print']['width_px'] ?? null)
+        && $reflet->getConstant('PRINT_MAX_LONG') === ($dossier['print']['height_px'] ?? null),
+    sprintf(
+        'ImageStore %s × %s, dossier %s × %s',
+        $reflet->getConstant('PRINT_MAX_SHORT'),
+        $reflet->getConstant('PRINT_MAX_LONG'),
+        $dossier['print']['width_px'] ?? '—',
+        $dossier['print']['height_px'] ?? '—'
+    )
+);
+
+// La version d'une boutique : la même chose, plus sa page objectif.
+$local = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/print', $aImprimer), [
+    'shop_id' => '1',
+])['body'];
+
+check(
+    'le fichier d\'une boutique ajoute son identité et son objectif',
+    ($local['shop']['id'] ?? null) === 1
+        && ($local['objective']['total_pieces'] ?? null) === 500
+        && ($local['offer']['title'] ?? null) === 'La galette des rois',
+    json_encode(['shop' => $local['shop'] ?? null, 'objectif' => $local['objective'] ?? null])
+);
+check(
+    'l\'objectif descend jusqu\'au produit',
+    ($local['objective']['by_category'][0]['products'][0]['target'] ?? null) === 500,
+    json_encode($local['objective']['by_category'] ?? null)
+);
+check(
+    'le seuil du challenge est traduit en pièces',
+    ($local['objective']['challenge']['trigger_pct'] ?? null) === 100.0
+        && ($local['objective']['challenge']['bar_pieces'] ?? null) === 500,
+    json_encode($local['objective']['challenge'] ?? null)
+);
+check(
+    'l\'adresse manquante est franche plutôt que devinée',
+    array_key_exists('address', $local['shop']) && $local['shop']['address'] === null
+);
+
+// Le seuil propre à une boutique l'emporte sur celui de la campagne.
+$autre = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/print', $aImprimer), [
+    'shop_id' => '2',
+])['body'];
+check(
+    'le seuil propre à la boutique prime sur le général',
+    ($autre['objective']['challenge']['trigger_pct'] ?? null) === 90.0
+        && ($autre['objective']['challenge']['bar_pieces'] ?? null) === 270,
+    json_encode($autre['objective']['challenge'] ?? null)
+);
+
+// La série entière, pour générer les fichiers d'un coup.
+$serie = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/print', $aImprimer), [
+    'shop_id' => 'all',
+])['body'];
+check(
+    'la série rend le général et un objet par boutique',
+    array_key_exists('general', $serie)
+        && count($serie['by_shop'] ?? []) === 2
+        && !array_key_exists('shop', $serie['general']),
+    json_encode(array_keys($serie))
+);
+
+// Une boutique hors campagne n'a pas de fichier : sa demander en produirait un
+// avec l'offre d'une campagne à laquelle elle ne participe pas.
+$reponse = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/print', $aImprimer), [
+    'shop_id' => '3',
+]);
+check(
+    'une boutique hors campagne n\'a pas de fichier',
+    $reponse['status'] === 404,
+    'statut ' . $reponse['status']
+);
+
+$reponse = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/print', $aImprimer), [
+    'shop_id' => 'toutes',
+]);
+check(
+    'un « shop_id » qui n\'est ni un identifiant ni « all » est refusé',
+    $reponse['status'] === 422,
+    'statut ' . $reponse['status']
+);
+
+call($router, 'DELETE', sprintf('/api/v1/marketing/campaigns/%d', $aImprimer));
+
 // --- Suppression : ce qui pendait à la campagne part avec elle --------------
 //
 // Une campagne effacée qui laisserait ses objectifs derrière elle donnerait des

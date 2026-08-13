@@ -168,20 +168,26 @@ Existant, et directement utilisable :
 | Levier | `lever_color_hex` | `#6366f1` Trafic · `#ec4899` Récurrence · `#f59e0b` Expérience · `#10b981` Food-Cost · `#4A6D8C` Panier |
 | État | `status_text_hex` / `status_bg_rgba` | `#8D1D2C` sur `rgba(141,29,44,.10)` |
 
-**À construire — la palette propre à la campagne.** Une campagne n'a pas ses
-couleurs : elle emprunte celle de son levier, qui dit un objectif commercial et
-non une identité visuelle. Deux campagnes « Trafic » sortiraient donc du même
-violet, et une opération Épiphanie ne peut pas être bordeaux et or.
+**La palette propre à la campagne** — *en base depuis `027_couleurs_campagne.sql`*.
 
-Ce que j'ajouterais, décidé à la construction de la campagne et rendu au
-gabarit :
+Une campagne n'avait pas ses couleurs : elle empruntait celle de son levier, qui
+dit un objectif commercial et non une identité visuelle. Deux campagnes
+« Trafic » sortaient donc du même violet, et une opération Épiphanie ne pouvait
+être ni bordeaux ni or.
+
+Elle se pose à l'étape « Type & cadrage », à côté du nom et du visuel :
 
 ```
-mar_campaign.color_primary_hex     #8D1D2C   couleur dominante
+mar_campaign.color_primary_hex     #8D1D2C   dominante — titres, traits
 mar_campaign.color_secondary_hex   #E8D9C0   aplats, fonds
 mar_campaign.color_accent_hex      #B0821A   prix, pastilles, appels
 mar_campaign.color_ink_hex         #241C1A   texte sur les aplats clairs
 ```
+
+`NULL` = la campagne suit la palette par défaut, qui vit côté serveur et voyage
+avec les référentiels (`references.campaignColors`). Le dossier d'impression rend
+toujours les quatre : `campaign.colors` y est déjà résolu. Une couleur mal
+écrite est refusée en la nommant, jamais rattrapée en silence.
 
 Quatre valeurs plutôt qu'une : un imprimé a besoin d'un fond, d'un texte lisible
 dessus et d'un accent pour le prix. Une seule couleur obligerait le gabarit à en
@@ -216,7 +222,7 @@ afficher la mécanique      oui / non   (« 2+1 offert »)
 
 ---
 
-## 9. Deux sorties : un fichier général, un fichier par franchise
+## 9. Deux sorties : un fichier général, un fichier par franchise — *en base*
 
 Un support de campagne se décline en deux jeux, et ils ne portent pas la même
 chose :
@@ -253,9 +259,17 @@ même appel sert les deux sorties, selon qu'on lui donne une boutique ou non :
 ```
 GET /api/v1/marketing/campaigns/{id}/print              → le fichier général
 GET /api/v1/marketing/campaigns/{id}/print?shop_id=2    → le fichier de Corbais
-GET /api/v1/marketing/campaigns/{id}/print?shop_id=all  → un objet par boutique,
+GET /api/v1/marketing/campaigns/{id}/print?shop_id=all  → { general, by_shop[] },
                                                           pour générer la série
 ```
+
+Deux paramètres facultatifs, `from` et `to` : la fenêtre des volumes vendus de la
+page objectif. Par défaut les douze derniers mois — la période d'analyse de
+l'assistant est une aide de saisie, elle ne se conserve pas d'une session à
+l'autre.
+
+Le prix après promotion est calculé **là**, une fois. Les règles restent écrites
+au §5 pour qu'on puisse les vérifier, mais un gabarit n'a plus à les appliquer.
 
 ```json
 {
@@ -326,12 +340,12 @@ produit, adresse, téléphone, horaires.
 
 | Manque | Effort | Qui décide |
 |---|---|---|
-| Palette de campagne (4 couleurs) | court | vous, sur les valeurs par défaut |
+| ~~Palette de campagne (4 couleurs)~~ | **fait** | — |
 | Photos produits — source ERP | court si la colonne existe | l'ERP |
 | Photos produits — options par support | moyen | vous, sur la liste ci-dessus |
 | Adresse, téléphone, horaires des boutiques | court | l'ERP, sur les noms de colonnes |
 | Formats imprimés dans `mar_format` | une ligne par format | vous, sur les formats voulus |
-| Route `/print` unique, générale et par boutique | moyen | — |
+| ~~Route `/print`, générale et par boutique~~ | **fait** | — |
 
 Rien de tout cela n'est bloquant pour dessiner le gabarit : les manques sont
 identifiés, et un gabarit qui les prévoit n'aura pas à être redessiné quand ils

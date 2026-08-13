@@ -5,16 +5,19 @@ declare(strict_types=1);
 namespace Marketing\Controller;
 
 use Marketing\Repository\CampaignRepository;
+use Marketing\Repository\PrintRepository;
 use Marketing\Repository\ProspectRepository;
 use Marketing\Support\AuthContext;
 use Marketing\Support\Request;
 use Marketing\Support\Response;
+use RuntimeException;
 
 final class CampaignController
 {
     public function __construct(
         private readonly CampaignRepository $campaigns = new CampaignRepository(),
         private readonly ProspectRepository $prospects = new ProspectRepository(),
+        private readonly PrintRepository $print = new PrintRepository(),
     ) {
     }
 
@@ -170,6 +173,59 @@ final class CampaignController
         return $this->campaigns->update(AuthContext::current(), $id, $payload)
             ? Response::mutated('Campagne mise à jour.')
             : Response::notFound('Campagne introuvable.');
+    }
+
+    /**
+     * Dossier d'impression : un fichier général, ou un par franchise.
+     *
+     * `shop_id` absent rend le général ; un identifiant rend celui d'une
+     * boutique, page objectif comprise ; `all` rend les deux formes, pour
+     * générer la série d'un coup.
+     */
+    public function printFile(Request $request): array
+    {
+        $id = $request->intParam('id');
+        if ($id === null) {
+            return Response::error('Identifiant de campagne invalide.');
+        }
+
+        $shop = $request->queryString('shop_id');
+        // 422 comme le reste du module pour une donnée mal formée : un 400
+        // générique ne se distinguerait pas d'une route inconnue.
+        if ($shop !== null && $shop !== 'all' && preg_match('/^\d+$/', $shop) !== 1) {
+            return Response::error('« shop_id » attendu : un identifiant, ou « all ».', 422);
+        }
+
+        // Fenêtre des volumes vendus, pour la page objectif. Par défaut les
+        // douze derniers mois : la période d'analyse de l'assistant est une
+        // aide de saisie et ne se conserve pas d'une session à l'autre.
+        $window = [];
+        foreach (['from', 'to'] as $borne) {
+            $valeur = $request->queryString($borne);
+            if ($valeur === null || $valeur === '') {
+                continue;
+            }
+
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $valeur) !== 1) {
+                return Response::error(
+                    sprintf('Date « %s » invalide : attendu AAAA-MM-JJ.', $borne),
+                    422
+                );
+            }
+
+            $window[$borne] = $valeur;
+        }
+
+        try {
+            return Response::data($this->print->forCampaign(
+                AuthContext::current(),
+                $id,
+                $shop === null || $shop === 'all' ? $shop : (int) $shop,
+                $window
+            ));
+        } catch (RuntimeException $failure) {
+            return Response::error($failure->getMessage(), 404);
+        }
     }
 
     public function destroy(Request $request): array
