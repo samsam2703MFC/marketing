@@ -80,6 +80,10 @@ $pdo->exec('DELETE FROM mar_crm_lead_event');
 $pdo->exec('DELETE FROM mar_crm_lead');
 $pdo->exec('DELETE FROM mar_campaign_kpi_snapshot');
 $pdo->exec('DELETE FROM mar_fund_movement');
+// Après les mouvements : la clé étrangère est en cascade, mais l'ordre inverse
+// laisserait un deuxième lancement compter les échéances du premier — le modèle
+// survit à la purge des lignes, et « 12 échéances » deviendrait « 24 ».
+$pdo->exec('DELETE FROM mar_fund_recurrence');
 $pdo->exec('DELETE FROM mar_roi_cost');
 $pdo->exec('DELETE FROM mar_campaign_channel');
 $pdo->exec('DELETE FROM mar_kit_activation');
@@ -1406,6 +1410,182 @@ check(
     'aucun mouvement douteux n\'a été écrit',
     (int) $pdo->query("SELECT COUNT(*) FROM mar_fund_movement WHERE label = 'Contrôle' OR amount <= 0")->fetchColumn() === 0
 );
+
+// --- Correction et suppression d'une écriture -------------------------------
+// Une ligne du grand livre se corrige. La ressaisir changerait son identifiant,
+// et ce qui pointe dessus le perdrait — d'où une mise à jour, soumise aux mêmes
+// contrôles que la création : ce sont les mêmes euros dans le même solde.
+$corrigible = (int) $pdo->query(
+    "SELECT id FROM mar_fund_movement WHERE label = 'Redevance marketing T1' ORDER BY id DESC LIMIT 1"
+)->fetchColumn();
+
+$correction = static fn (array $extra): array => call(
+    $router,
+    'PATCH',
+    sprintf('/api/v1/marketing/funds/movements/%d', $corrigible),
+    [],
+    $extra + [
+        'direction' => 'IN', 'movement_date' => '2026-01-15',
+        'label' => 'Redevance marketing T1', 'amount' => 12000,
+    ]
+);
+
+check('une correction au sens inconnu est refusée', $correction(['direction' => 'DIAGONAL'])['status'] === 422);
+check('une correction à montant négatif est refusée', $correction(['amount' => -1])['status'] === 422);
+check('une correction à période inversée est refusée',
+    $correction(['period_from' => '2026-06-01', 'period_to' => '2026-01-01'])['status'] === 422);
+check('une correction sur une ligne inexistante est introuvable',
+    call($router, 'PATCH', '/api/v1/marketing/funds/movements/999999', [], [
+        'direction' => 'IN', 'movement_date' => '2026-01-15', 'label' => 'X', 'amount' => 1,
+    ])['status'] === 404);
+
+check('une correction valide passe', $correction(['amount' => 12500, 'supplier_name' => 'Franchisé Wavre'])['status'] === 200);
+
+$relu = $pdo->query(sprintf(
+    'SELECT amount, supplier_name, period_from FROM mar_fund_movement WHERE id = %d',
+    $corrigible
+))->fetch();
+check(
+    'la correction est écrite, et vide ce qui n\'est plus renseigné',
+    (float) $relu['amount'] === 12500.0
+        && $relu['supplier_name'] === 'Franchisé Wavre'
+        // La période n'était pas dans le corps : la corriger sans elle la
+        // retire, sinon on ne pourrait jamais détacher une période posée par
+        // erreur.
+        && $relu['period_from'] === null,
+    json_encode($relu)
+);
+
+// --- Frais récurrents -------------------------------------------------------
+// Un abonnement écrit de vraies échéances : le solde d'avril doit valoir la
+// même chose qu'on l'ouvre en mai ou dans deux ans, et une ligne calculée à la
+// lecture ne se corrigerait pas.
+$recurrent = static fn (array $extra): array => call($router, 'POST', '/api/v1/marketing/funds/recurrences', [], $extra + [
+    'direction' => 'OUT', 'frequency' => 'month', 'label' => 'Agence',
+    'amount' => 2000, 'starts_on' => '2026-01-01', 'ends_on' => '2026-12-31',
+]);
+
+check('un rythme inconnu est refusé', $recurrent(['frequency' => 'fortnight'])['status'] === 422);
+check('une fin avant le début est refusée', $recurrent(['ends_on' => '2025-01-01'])['status'] === 422);
+check(
+    'un rythme qui donnerait des milliers d\'échéances est refusé',
+    $recurrent(['ends_on' => '2060-12-31'])['status'] === 422
+);
+
+$mensuel = $recurrent(['label' => 'Agence — honoraires']);
+check('un frais mensuel sur douze mois écrit douze échéances',
+    $mensuel['status'] === 201 && ($mensuel['body']['occurrences'] ?? null) === 12,
+    json_encode($mensuel['body']));
+check('le total annoncé est celui des échéances',
+    ($mensuel['body']['total_amount'] ?? null) === 24000.0);
+
+$echeances = $pdo->query(sprintf(
+    'SELECT movement_date, period_from, period_to, amount FROM mar_fund_movement
+      WHERE recurrence_id = %d ORDER BY movement_date',
+    (int) $mensuel['body']['inserted_id']
+))->fetchAll();
+
+check(
+    'chaque échéance couvre son mois, la dernière s\'arrêtant à la fin déclarée',
+    count($echeances) === 12
+        && $echeances[0]['period_from'] === '2026-01-01' && $echeances[0]['period_to'] === '2026-01-31'
+        && $echeances[1]['period_from'] === '2026-02-01' && $echeances[1]['period_to'] === '2026-02-28'
+        && $echeances[11]['period_from'] === '2026-12-01' && $echeances[11]['period_to'] === '2026-12-31',
+    json_encode([$echeances[0] ?? null, $echeances[11] ?? null])
+);
+
+// Un 31 janvier répété ne doit pas déborder sur le 3 mars, ni glisser d'un jour
+// à chaque mois court : chaque échéance se compte depuis le début.
+$fin_de_mois = $recurrent([
+    'label' => 'Loyer PLV', 'starts_on' => '2026-01-31', 'ends_on' => '2026-05-31',
+]);
+$jours = $pdo->query(sprintf(
+    'SELECT movement_date FROM mar_fund_movement WHERE recurrence_id = %d ORDER BY movement_date',
+    (int) $fin_de_mois['body']['inserted_id']
+))->fetchAll(PDO::FETCH_COLUMN);
+check(
+    'un 31 répété tombe au dernier jour des mois courts, sans glisser',
+    $jours === ['2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30', '2026-05-31'],
+    json_encode($jours)
+);
+
+$trimestriel = $recurrent([
+    'label' => 'Redevance', 'direction' => 'IN', 'frequency' => 'quarter',
+    'amount' => 5000, 'starts_on' => '2026-01-01', 'ends_on' => '2026-12-31',
+]);
+check('un rythme trimestriel écrit quatre échéances',
+    ($trimestriel['body']['occurrences'] ?? null) === 4, json_encode($trimestriel['body']));
+
+// Les échéances pèsent sur le solde comme n'importe quelle écriture — c'est
+// tout l'intérêt de les écrire plutôt que de les calculer.
+$avant = call($router, 'GET', '/api/v1/marketing/funds/ledger')['body']['closing_balance'];
+$annuel = $recurrent(['label' => 'Hébergement', 'frequency' => 'year', 'amount' => 900,
+    'starts_on' => '2026-03-01', 'ends_on' => '2028-03-01']);
+$apres = call($router, 'GET', '/api/v1/marketing/funds/ledger')['body']['closing_balance'];
+check('un rythme annuel couvre les bornes incluses',
+    ($annuel['body']['occurrences'] ?? null) === 3, json_encode($annuel['body']));
+check('les échéances pèsent sur le solde', round($avant - $apres, 2) === 2700.0,
+    sprintf('%s → %s', $avant, $apres));
+
+$liste = call($router, 'GET', '/api/v1/marketing/funds/recurrences')['body'];
+$agence = null;
+foreach ($liste as $entree) {
+    if ($entree['label'] === 'Agence — honoraires') {
+        $agence = $entree;
+    }
+}
+check('la liste rend le rythme, le compte et le total',
+    $agence !== null && $agence['frequency'] === 'month'
+        && $agence['occurrences'] === 12 && $agence['total_amount'] === 24000.0,
+    json_encode($agence));
+
+// Corriger une échéance ne détache pas le mois de son abonnement : une facture
+// d'agence arrive rarement à l'euro près sur douze mois.
+$uneEcheance = (int) $pdo->query(sprintf(
+    'SELECT id FROM mar_fund_movement WHERE recurrence_id = %d ORDER BY movement_date LIMIT 1',
+    $agence['id']
+))->fetchColumn();
+call($router, 'PATCH', sprintf('/api/v1/marketing/funds/movements/%d', $uneEcheance), [], [
+    'direction' => 'OUT', 'movement_date' => '2026-01-01', 'label' => 'Agence — honoraires', 'amount' => 2150,
+]);
+check(
+    'une échéance corrigée reste rattachée à son frais récurrent',
+    (int) $pdo->query(sprintf('SELECT recurrence_id FROM mar_fund_movement WHERE id = %d', $uneEcheance))->fetchColumn()
+        === $agence['id']
+);
+
+// Supprimer l'abonnement emporte ses échéances : douze lignes laissées au grand
+// livre continueraient de peser sur le solde d'un contrat résilié.
+check('un frais récurrent se supprime',
+    call($router, 'DELETE', sprintf('/api/v1/marketing/funds/recurrences/%d', $agence['id']))['status'] === 200);
+check(
+    'ses échéances partent avec lui',
+    (int) $pdo->query(sprintf(
+        'SELECT COUNT(*) FROM mar_fund_movement WHERE recurrence_id = %d',
+        $agence['id']
+    ))->fetchColumn() === 0
+);
+
+// Le fonds commun se lit par tout le réseau — c'est le pot commun — mais il ne
+// se corrige qu'au niveau de la marque : un franchisé qui rectifierait la
+// redevance d'un autre déplacerait un solde qui n'est pas le sien.
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+check(
+    'un franchisé ne corrige pas une écriture du fonds commun',
+    call($router, 'PATCH', sprintf('/api/v1/marketing/funds/movements/%d', $corrigible), [], [
+        'direction' => 'IN', 'movement_date' => '2026-01-15', 'label' => 'Détournement', 'amount' => 1,
+    ])['status'] === 422
+);
+check(
+    'ni ne la supprime',
+    call($router, 'DELETE', sprintf('/api/v1/marketing/funds/movements/%d', $corrigible))['status'] === 422
+);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+check('une écriture se supprime',
+    call($router, 'DELETE', sprintf('/api/v1/marketing/funds/movements/%d', $corrigible))['status'] === 200);
+check('une écriture déjà supprimée est introuvable',
+    call($router, 'DELETE', sprintf('/api/v1/marketing/funds/movements/%d', $corrigible))['status'] === 404);
 
 // Les contrôles de la création s'appliquent aussi à la mise à jour.
 $target = (int) $pdo->query("SELECT id FROM mar_campaign WHERE scope = 'RESEAU' ORDER BY id LIMIT 1")->fetchColumn();

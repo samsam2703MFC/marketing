@@ -3459,6 +3459,29 @@ table select,
   font-variant-numeric: tabular-nums;
 }
 
+/* Une action, pas un filtre. Les pastilles de filtrage restreignent ce qu'on
+   regarde ; celle-ci écrit dans le grand livre. Au milieu des autres, en gris
+   sur blanc, on ne la trouvait qu'en la cherchant. */
+.action {
+  margin: 0;
+  padding: 6px 15px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.action:hover { filter: brightness(1.08); }
+
+/* Ouverte, elle ne fait plus qu'annuler : elle cesse donc d'attirer l'œil. */
+.action.is-open {
+  color: var(--accent);
+  background: #fff;
+}
+
 /* ── Saisie d'un mouvement de fonds ──────────────────────────────────────
    Le sens en premier : il change la lecture de tout le reste, et un montant
    ne porte jamais son signe ici. */
@@ -3531,11 +3554,68 @@ table select,
 
 .movement__apercu { font-size: 13px; }
 
+/* Le rythme au-dessus des champs qu'il commande : choisir « tous les mois »
+   change la question posée juste en dessous. */
+.movement__rythme { display: flex; flex-direction: column; gap: 7px; }
+
+.field__legend { font-size: 12px; color: var(--muted-2); }
+
 .movement__actions {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
 }
+
+/* La suppression à l'opposé de l'enregistrement : côte à côte, on clique la
+   mauvaise une fois sur dix, et celle-ci ne se rattrape pas. */
+.movement__supprimer { margin-right: auto; }
+
+/* ── Frais récurrents ────────────────────────────────────────────────────
+   Ils n'ajoutent rien au solde : leurs échéances sont déjà dans le grand
+   livre. Cette carte dit d'où viennent douze lignes identiques. */
+.recurrences { display: flex; flex-direction: column; gap: 12px; padding: 18px 22px; }
+
+.recurrences h2 { margin: 0; font-size: 15px; font-weight: 600; }
+
+.recurrences__list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+
+.recurrences__item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.recurrences__label { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.recurrences__label strong { font-size: 13.5px; font-weight: 600; }
+.recurrences__label span { font-size: 11.5px; }
+
+.recurrences__chiffres { display: flex; flex-direction: column; gap: 2px; text-align: right; }
+.recurrences__chiffres span { font-size: 12px; }
+
+/* Le rappel qu'une ligne vient d'un abonnement, discret : c'est une précision,
+   pas une alerte. */
+.ledger__recurrent { margin-left: 6px; color: var(--muted); }
+
+/* La colonne de correction ne doit pas peser autant que les montants : on la
+   cherche quand on en a besoin, on ne la lit pas en parcourant. */
+.ledger__edit { width: 1%; white-space: nowrap; text-align: right; }
+
+.linklike {
+  padding: 2px 4px;
+  font-size: 12px;
+  color: var(--muted-2);
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.linklike:hover { color: var(--accent); }
 
 .ledger__periode {
   display: block;

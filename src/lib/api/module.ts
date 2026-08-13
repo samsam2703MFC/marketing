@@ -1116,11 +1116,16 @@ export interface LedgerRow {
   signed_amount: number
   source: string
   supplier_name: string | null
+  document_ref: string | null
+  shop_id: number | null
   shop_name: string | null
   campaign_id: number | null
   campaign_name: string | null
+  lever_id: number | null
   lever_label: string | null
   lever_color_hex: string | null
+  /** Non nul : la ligne est une échéance écrite par un frais récurrent. */
+  recurrence_id: number | null
   /** Vrai si la ligne est rattachée à une campagne (badge de liaison). */
   is_linked: boolean
 }
@@ -1169,6 +1174,64 @@ export interface MovementDraft {
 
 export function addMovement(movement: MovementDraft): Promise<{ inserted_id: number }> {
   return request(`${BASE}/funds/movements`, { method: 'POST', body: movement })
+}
+
+/** Correction d'une écriture : le même contrat qu'à la saisie, sur une ligne. */
+export function updateMovement(id: number, movement: MovementDraft): Promise<{ message: string }> {
+  return request(`${BASE}/funds/movements/${id}`, { method: 'PATCH', body: movement })
+}
+
+export function deleteMovement(id: number): Promise<{ message: string }> {
+  return request(`${BASE}/funds/movements/${id}`, { method: 'DELETE' })
+}
+
+/** Le rythme d'un frais récurrent. Trois cadences : le fonds n'en paie pas d'autres. */
+export type Frequency = 'month' | 'quarter' | 'year'
+
+/**
+ * Un frais récurrent : un modèle, qui écrit de vraies échéances au grand livre.
+ *
+ * `amount` est le montant d'une échéance, jamais le total — c'est la question
+ * que pose un abonnement (« combien par mois ? »), et le total s'en déduit.
+ */
+export interface RecurrenceDraft {
+  direction: 'IN' | 'OUT'
+  frequency: Frequency
+  label: string
+  amount: number
+  starts_on: string
+  ends_on: string
+  lever_id?: number | null
+  supplier_name?: string | null
+  campaign_id?: number | null
+  shop_id?: number | null
+  source?: string | null
+  document_ref?: string | null
+}
+
+export interface Recurrence extends RecurrenceDraft {
+  id: number
+  shop_name: string | null
+  campaign_name: string | null
+  lever_label: string | null
+  lever_color_hex: string | null
+  /** Nombre d'échéances déjà écrites, et leur somme. */
+  occurrences: number
+  total_amount: number
+}
+
+export function listRecurrences(): Promise<Recurrence[]> {
+  return request<Recurrence[]>(`${BASE}/funds/recurrences`)
+}
+
+export function addRecurrence(
+  recurrence: RecurrenceDraft,
+): Promise<{ inserted_id: number; occurrences: number; total_amount: number }> {
+  return request(`${BASE}/funds/recurrences`, { method: 'POST', body: recurrence })
+}
+
+export function deleteRecurrence(id: number): Promise<{ message: string }> {
+  return request(`${BASE}/funds/recurrences/${id}`, { method: 'DELETE' })
 }
 
 export interface LeverPerformance {

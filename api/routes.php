@@ -109,6 +109,13 @@ return static function (Router $router): void {
     $router->get('/api/v1/marketing/funds/ledger',              [$funds, 'ledger']);
     $router->get('/api/v1/marketing/funds/levers',              [$funds, 'leverSummary']);
     $router->post('/api/v1/marketing/funds/movements',          [$funds, 'storeMovement']);
+    // Une ligne du grand livre se corrige : la ressaisir changerait son
+    // identifiant, et ce qui pointe dessus perdrait son ancrage.
+    $router->patch('/api/v1/marketing/funds/movements/{id}',    [$funds, 'updateMovement']);
+    $router->delete('/api/v1/marketing/funds/movements/{id}',   [$funds, 'destroyMovement']);
+    $router->get('/api/v1/marketing/funds/recurrences',         [$funds, 'recurrences']);
+    $router->post('/api/v1/marketing/funds/recurrences',        [$funds, 'storeRecurrence']);
+    $router->delete('/api/v1/marketing/funds/recurrences/{id}', [$funds, 'destroyRecurrence']);
     $router->get('/api/v1/marketing/roi/quarterly',             [$funds, 'roiQuarterly']);
     $router->get('/api/v1/marketing/campaigns/{id}/roi-costs',  [$funds, 'roiCosts']);
 };
