@@ -1396,6 +1396,65 @@ check(
     $pdo->query(sprintf('SELECT name FROM mar_campaign WHERE id = %d', $target))->fetchColumn() !== 'Détournée'
 );
 
+// --- Suppression : ce qui pendait à la campagne part avec elle --------------
+//
+// Une campagne effacée qui laisserait ses objectifs derrière elle donnerait des
+// lignes que plus aucun écran ne montre et qu'aucune requête ne pense à
+// exclure. Le nettoyage tient aux cascades déclarées en base ; ce test le
+// vérifie plutôt que de le supposer, parce qu'une table ajoutée plus tard sans
+// cascade ne se signalerait autrement qu'au premier ménage.
+echo "\nSuppression d'une campagne\n";
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+$response = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name'          => 'Campagne à effacer',
+    'status_code'   => 'draft',
+    'scope'         => 'RESEAU',
+    'client_target' => 'b2c',
+    'type_id'       => (int) $types['ouverture']['id'],
+    'shop_targets'  => [['shop_id' => 1, 'target_pieces' => 400]],
+    'shop_item_targets' => [
+        ['shop_id' => 1, 'offer_item_id' => $catalogItemId, 'target_pieces' => 400],
+    ],
+    'offer' => [
+        'title' => 'Offre à effacer',
+        'items' => [['label' => 'Tarte du jour', 'offer_item_id' => $catalogItemId]],
+    ],
+]);
+$aEffacer = (int) ($response['body']['inserted_id'] ?? 0);
+$compte = static fn (string $table): int => (int) $GLOBALS['pdo']->query(sprintf(
+    'SELECT COUNT(*) FROM %s WHERE campaign_id = %d',
+    $table,
+    $GLOBALS['aEffacer']
+))->fetchColumn();
+
+check(
+    'la campagne part avec ses objectifs croisés',
+    $aEffacer > 0 && $compte('mar_campaign_shop_item_target') === 1,
+    'lignes : ' . ($aEffacer > 0 ? $compte('mar_campaign_shop_item_target') : 'campagne non créée')
+);
+
+$response = call($router, 'DELETE', sprintf('/api/v1/marketing/campaigns/%d', $aEffacer));
+check('la suppression aboutit', $response['status'] === 200, 'statut ' . $response['status']);
+
+foreach ([
+    'mar_campaign_shop_item_target' => 'les objectifs par boutique et par produit sont effacés',
+    'mar_campaign_shop'             => 'les objectifs par boutique sont effacés',
+    'mar_campaign_offer'            => 'l\'offre est effacée',
+] as $table => $constat) {
+    check($constat, $compte($table) === 0);
+}
+
+check(
+    'et la campagne elle-même a disparu',
+    (int) $pdo->query(sprintf('SELECT COUNT(*) FROM mar_campaign WHERE id = %d', $aEffacer))->fetchColumn() === 0
+);
+
+// Supprimer deux fois n'est pas une erreur serveur : c'est une campagne
+// introuvable, et l'écran doit pouvoir le dire sans paniquer.
+$response = call($router, 'DELETE', sprintf('/api/v1/marketing/campaigns/%d', $aEffacer));
+check('une seconde suppression répond « introuvable »', $response['status'] === 404, 'statut ' . $response['status']);
+
 // --- Offres de campagne visibles depuis « Promotions » ----------------------
 // `mar_promotion` (import catalogue) et `mar_campaign_offer` (assistant) sont
 // deux tables distinctes, et rien ne les reliait : une offre montée à l'étape 2

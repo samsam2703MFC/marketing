@@ -430,6 +430,13 @@ tbody td {
   max-width: 1180px;
 }
 
+/* Sauf un voile de confirmation : il couvre la fenêtre, pas la colonne de
+   lecture. Plafonné à 1180 px il s'arrêtait net au bord du contenu et laissait
+   une bande claire à droite, où le clic passait encore. */
+.app__body > .confirm {
+  max-width: none;
+}
+
 /* L'assistant est une surface de travail, pas un document : il prend toute la
    largeur disponible.
    1180 px est une largeur de lecture — bonne pour un tableau de bord ou une
@@ -3261,4 +3268,80 @@ table select,
 .shop-detail__foot strong {
   color: var(--ink);
   font-variant-numeric: tabular-nums;
+}
+
+/* ── Suppression d'une campagne ──────────────────────────────────────────
+   La croix reste discrète tant qu'on ne survole pas la carte : une action
+   irréversible n'a pas à se proposer avant qu'on s'approche d'elle. */
+.campaign__delete {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.campaign:hover .campaign__delete,
+.campaign__delete:focus-visible {
+  opacity: 1;
+}
+
+.campaign__delete:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(24, 18, 20, 0.42);
+}
+
+.confirm__box {
+  width: min(460px, 100%);
+  padding: 22px 24px;
+}
+
+.confirm__box h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.confirm__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+/* Le bouton destructeur porte la couleur d'alerte : c'est le seul de la paire
+   dont le clic ne se rattrape pas. */
+.confirm__danger {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.confirm__danger:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+.confirm__danger:disabled,
+.confirm__actions .filter:disabled {
+  opacity: 0.6;
+  cursor: default;
 }

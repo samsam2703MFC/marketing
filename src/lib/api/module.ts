@@ -574,6 +574,19 @@ export function updateCampaign(id: number, change: Partial<CampaignDraft>): Prom
   return request(`${BASE}/campaigns/${id}`, { method: 'PATCH', body: change })
 }
 
+/**
+ * Suppression d'une campagne, et de tout ce qui lui est rattaché.
+ *
+ * Les objectifs par boutique et par produit, l'offre, le planning, les leads et
+ * les demandes d'agence partent avec elle : leurs tables sont en cascade sur
+ * `mar_campaign`. Sans cela, une campagne effacée laisserait des objectifs
+ * derrière elle, que plus aucun écran ne montre et qu'aucune requête ne pense à
+ * exclure.
+ */
+export function deleteCampaign(id: number): Promise<{ status: string; message: string }> {
+  return request(`${BASE}/campaigns/${id}`, { method: 'DELETE' })
+}
+
 /** Barre de calendrier : le mois de départ et la portée viennent du serveur. */
 export interface CalendarBar extends Campaign {
   start_month: number

@@ -27,6 +27,11 @@ export default function CampaignsView({
 }: CampaignsViewProps) {
   const [status, setStatus] = useState<string | null>(null)
   const [scope, setScope] = useState<'RESEAU' | 'LOCALE' | null>(null)
+  /** Campagne dont la suppression est proposée, tant qu'elle n'est pas confirmée. */
+  const [aSupprimer, setASupprimer] = useState<Campaign | null>(null)
+  const [suppression, setSuppression] = useState<string | null>(null)
+  const [occupe, setOccupe] = useState(false)
+  const [rechargement, setRechargement] = useState(0)
 
   const { data, error, loading } = useAsync(
     () =>
@@ -35,8 +40,27 @@ export default function CampaignsView({
         scope: scope ?? undefined,
         brand_id: brandId === 'all' ? undefined : brandId,
       }),
-    [status, scope, brandId],
+    [status, scope, brandId, rechargement],
   )
+
+  const supprimer = async () => {
+    if (aSupprimer === null) return
+
+    setOccupe(true)
+    setSuppression(null)
+
+    try {
+      await api.deleteCampaign(aSupprimer.id)
+      setASupprimer(null)
+      setRechargement((tour) => tour + 1)
+    } catch (echec) {
+      // Le refus le plus probable est un périmètre : un franchisé ne supprime
+      // pas une campagne réseau. Le message du serveur le dit mieux que nous.
+      setSuppression(echec instanceof Error ? echec.message : 'Suppression impossible.')
+    } finally {
+      setOccupe(false)
+    }
+  }
 
   return (
     <>
@@ -109,9 +133,53 @@ export default function CampaignsView({
             campaign={campaign}
             onOpen={onOpen}
             onResume={onResume}
+            onDelete={setASupprimer}
           />
         ))}
       </div>
+
+      {/* Confirmation : la suppression emporte les objectifs, l'offre et les
+          leads, et rien ne les rend. Elle nomme la campagne plutôt que de
+          demander « êtes-vous sûr ? » dans le vide — on ne relit pas ce qu'on
+          s'apprête à perdre si l'écran ne le dit pas. */}
+      {aSupprimer === null ? null : (
+        <div
+          className="confirm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="confirm-titre"
+          onClick={() => (occupe ? null : setASupprimer(null))}
+        >
+          <div className="confirm__box card" onClick={(evenement) => evenement.stopPropagation()}>
+            <h3 id="confirm-titre">Supprimer « {aSupprimer.name} » ?</h3>
+            <p className="muted">
+              Ses objectifs par boutique et par produit, son offre, son budget, son planning
+              et ses leads seront effacés avec elle. C’est définitif.
+            </p>
+
+            {suppression === null ? null : <p className="error">{suppression}</p>}
+
+            <div className="confirm__actions">
+              <button
+                type="button"
+                className="filter"
+                disabled={occupe}
+                onClick={() => setASupprimer(null)}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                className="filter confirm__danger"
+                disabled={occupe}
+                onClick={supprimer}
+              >
+                {occupe ? 'Suppression…' : 'Supprimer définitivement'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
@@ -120,10 +188,12 @@ function CampaignCard({
   campaign,
   onOpen,
   onResume,
+  onDelete,
 }: {
   campaign: Campaign
   onOpen: (campaignId: number) => void
   onResume: (campaignId: number) => void
+  onDelete: (campaign: Campaign) => void
 }) {
   // Un brouillon est une campagne qu'on n'a pas fini d'écrire : elle n'a rien à
   // piloter — ni KPI, ni lead, ni dépense — et tout à terminer. Le clic la
@@ -157,6 +227,21 @@ function CampaignCard({
           >
             {campaign.status_label}
           </span>
+          {/* La carte entière ouvre la campagne : sans cet arrêt, demander la
+              suppression l'ouvrirait aussi, et la confirmation s'afficherait
+              par-dessus l'assistant. */}
+          <button
+            type="button"
+            className="campaign__delete"
+            title={`Supprimer ${campaign.name}`}
+            aria-label={`Supprimer ${campaign.name}`}
+            onClick={(evenement) => {
+              evenement.stopPropagation()
+              onDelete(campaign)
+            }}
+          >
+            ✕
+          </button>
         </div>
 
         <p className="muted campaign__meta">
