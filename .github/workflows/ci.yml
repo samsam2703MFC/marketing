@@ -120,7 +120,22 @@ jobs:
           MAR_DB_NAME: marketing_test
           MAR_DB_USER: root
           MAR_DB_PASSWORD: root
-        run: php api/tests/smoke.php
+        run: |
+          set -o pipefail
+          # La sortie va aussi dans le résumé du run : le téléchargement des
+          # logs passe par un hôte que tout le monde n'atteint pas, et un échec
+          # qu'on ne peut pas lire oblige à deviner ce qui a cassé.
+          php api/tests/smoke.php 2>&1 | tee /tmp/tests.txt || echec=1
+
+          {
+            echo '### Tests de l'"'"'API'
+            echo
+            echo '```'
+            grep -E '✗|Fatal error|Uncaught|réussis' /tmp/tests.txt | head -40 || tail -20 /tmp/tests.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit "${echec:-0}"
 
       - name: Installer les dépendances front
         run: npm ci
