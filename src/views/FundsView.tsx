@@ -11,6 +11,7 @@ import type {
   RecurrenceDraft,
 } from '../lib/api/module'
 import LinkBadge from '../components/LinkBadge'
+import RoyaltiesPanel from './RoyaltiesPanel'
 import { useLabel, useReferences } from '../state/references'
 import { describeError } from '../state/auth'
 import RangeCalendar, { DayCalendar } from '../components/RangeCalendar'
@@ -38,6 +39,7 @@ export default function FundsView() {
   const [rechargement, setRechargement] = useState(0)
   /** Écriture en cours de correction, tant qu'elle n'est pas enregistrée. */
   const [aCorriger, setACorriger] = useState<LedgerRow | null>(null)
+  const [redevances, setRedevances] = useState(false)
 
   const { data, error, loading } = useAsync(
     () => api.getLedger(granularity, from || undefined, to || undefined),
@@ -103,6 +105,14 @@ export default function FundsView() {
               milieu des autres. */}
           <button
             type="button"
+            className={`filter${redevances ? ' is-on' : ''}`}
+            aria-expanded={redevances}
+            onClick={() => setRedevances(!redevances)}
+          >
+            Redevances
+          </button>
+          <button
+            type="button"
             className={`action${saisie ? ' is-open' : ''}`}
             aria-expanded={saisie}
             onClick={() => setSaisie(!saisie)}
@@ -147,6 +157,8 @@ export default function FundsView() {
           onCancel={() => setACorriger(null)}
         />
       )}
+
+      {redevances ? <RoyaltiesPanel onWritten={relire} /> : null}
 
       {error ? <p className="error">{error}</p> : null}
       {loading ? <p className="muted">Chargement…</p> : null}
@@ -477,6 +489,12 @@ function MovementForm({
   const [source, setSource] = useState(initial?.source ?? '')
   const [piece, setPiece] = useState(initial?.document_ref ?? '')
   /**
+   * Publique par défaut : le fonds marketing se rend des comptes au réseau qui
+   * l'alimente. Ce sont les redevances d'assistance et de marque qui demandent
+   * le silence, et elles le demandent explicitement.
+   */
+  const [publique, setPublique] = useState(initial === null ? true : initial.is_public)
+  /**
    * Rythme de répétition. « Ponctuel » écrit une ligne ; les trois autres
    * écrivent un frais récurrent, c'est-à-dire une échéance par période.
    * Une correction ne le propose pas : rectifier mars ne redéfinit pas
@@ -521,6 +539,7 @@ function MovementForm({
     shop_id: shopId,
     source: source || null,
     document_ref: piece.trim() || null,
+    is_public: publique,
   }
 
   const enregistrer = async () => {
@@ -778,6 +797,20 @@ function MovementForm({
             placeholder="N° de facture"
             onChange={(e) => setPiece(e.target.value)}
           />
+        </label>
+
+        {/* Une ligne muette par accident vaut moins qu'une ligne visible par
+            accident : la case se décoche, elle ne se coche pas. */}
+        <label className="field field--inline">
+          <input
+            type="checkbox"
+            checked={publique}
+            onChange={(e) => setPublique(e.target.checked)}
+          />
+          <span>
+            Visible par le réseau
+            <span className="muted"> — décochez pour réserver à la marque</span>
+          </span>
         </label>
       </div>
 

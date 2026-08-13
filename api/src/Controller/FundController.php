@@ -5,14 +5,17 @@ declare(strict_types=1);
 namespace Marketing\Controller;
 
 use Marketing\Repository\FundRepository;
+use Marketing\Repository\RoyaltyRepository;
 use Marketing\Support\AuthContext;
 use Marketing\Support\Request;
 use Marketing\Support\Response;
 
 final class FundController
 {
-    public function __construct(private readonly FundRepository $funds = new FundRepository())
-    {
+    public function __construct(
+        private readonly FundRepository $funds = new FundRepository(),
+        private readonly RoyaltyRepository $royalties = new RoyaltyRepository(),
+    ) {
     }
 
     public function ledger(Request $request): array
@@ -147,6 +150,49 @@ final class FundController
             'occurrences'  => $resultat['occurrences'],
             'total_amount' => $resultat['total_amount'],
         ], 201);
+    }
+
+    // -------------------------------------------------------------------------
+    // Redevances
+    // -------------------------------------------------------------------------
+
+    public function royalties(Request $request): array
+    {
+        $mois = $request->queryString('month') ?? date('Y-m');
+
+        return Response::data($this->royalties->board(AuthContext::current(), $mois));
+    }
+
+    public function saveRoyalties(Request $request): array
+    {
+        $mois = (string) ($request->input('month') ?? '');
+        $auth = AuthContext::current();
+
+        // Les taux et les CA partent ensemble depuis l'écran : les séparer en
+        // deux appels laisserait l'un enregistré et l'autre perdu si la page se
+        // ferme entre les deux, et la génération lirait une grille à moitié à
+        // jour sans que rien ne le dise.
+        $taux = $this->royalties->saveRates($auth, $mois, $request->input('rates') ?? []);
+        $ca   = $this->royalties->saveRevenues($auth, $mois, $request->input('revenues') ?? []);
+
+        return Response::data([
+            'message'         => 'Grille enregistrée.',
+            'rates_changed'   => $taux['changed'],
+            'rates_unchanged' => $taux['unchanged'],
+            'revenues_saved'  => $ca['saved'],
+            'revenues_cleared' => $ca['cleared'],
+        ]);
+    }
+
+    public function generateRoyalties(Request $request): array
+    {
+        $mois   = (string) ($request->input('month') ?? '');
+        $kinds  = $request->input('kinds') ?? [];
+
+        return Response::data(
+            $this->royalties->generate(AuthContext::current(), $mois, is_array($kinds) ? $kinds : []),
+            201
+        );
     }
 
     public function destroyRecurrence(Request $request): array

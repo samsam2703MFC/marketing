@@ -116,6 +116,11 @@ return static function (Router $router): void {
     $router->get('/api/v1/marketing/funds/recurrences',         [$funds, 'recurrences']);
     $router->post('/api/v1/marketing/funds/recurrences',        [$funds, 'storeRecurrence']);
     $router->delete('/api/v1/marketing/funds/recurrences/{id}', [$funds, 'destroyRecurrence']);
+    // Redevances : la grille d'un mois, son enregistrement, et l'écriture des
+    // entrées qu'elle produit.
+    $router->get('/api/v1/marketing/funds/royalties',           [$funds, 'royalties']);
+    $router->put('/api/v1/marketing/funds/royalties',           [$funds, 'saveRoyalties']);
+    $router->post('/api/v1/marketing/funds/royalties/generate', [$funds, 'generateRoyalties']);
     $router->get('/api/v1/marketing/roi/quarterly',             [$funds, 'roiQuarterly']);
     $router->get('/api/v1/marketing/campaigns/{id}/roi-costs',  [$funds, 'roiCosts']);
 };

@@ -37,6 +37,14 @@ final class FundRepository
         [$scopeSql, $bindings] = Scope::shopFilter($auth, 'v.shop_id');
         $where                 = [sprintf('(v.shop_id IS NULL OR %s)', $scopeSql)];
 
+        // Le fonds marketing se rend des comptes au réseau qui l'alimente : ce
+        // qui l'alimente est donc lisible. Les redevances d'assistance et de
+        // marque ne le sont pas — ce sont les revenus de la marque, et le solde
+        // d'un franchisé n'est pas l'affaire de son voisin.
+        if (Scope::shopIds($auth) !== null) {
+            $where[] = 'm.is_public = 1';
+        }
+
         if (!empty($filters['from'])) {
             $where[]          = 'v.movement_date >= :from';
             $bindings['from'] = $filters['from'];
@@ -60,6 +68,7 @@ final class FundRepository
             // suivant. La jointure porte sur la clé primaire.
             'SELECT %s AS period_key, v.id, v.movement_date,
                     m.period_from, m.period_to, m.lever_id, m.recurrence_id,
+                    m.is_public, m.base_amount, m.rate_pct,
                     v.direction, v.label, v.amount, v.signed_amount,
                     v.source, v.supplier_name, v.document_ref, v.shop_id, v.shop_name,
                     v.campaign_id, v.campaign_name, v.lever_code, v.lever_label,
@@ -85,6 +94,11 @@ final class FundRepository
             // corriger une échéance et corriger l'abonnement ne sont pas la
             // même chose.
             $row['recurrence_id'] = $row['recurrence_id'] !== null ? (int) $row['recurrence_id'] : null;
+            $row['is_public']     = (bool) $row['is_public'];
+            // La base et le taux d'une redevance : « 1 240,50 € » ne se
+            // recalcule pas sans eux, et une contestation n'a rien à examiner.
+            $row['base_amount']   = $row['base_amount'] !== null ? (float) $row['base_amount'] : null;
+            $row['rate_pct']      = $row['rate_pct'] !== null ? (float) $row['rate_pct'] : null;
             // Le badge ⛓ de la maquette : la ligne est rattachée à une campagne.
             $row['is_linked']     = $row['campaign_id'] !== null;
 
@@ -237,15 +251,16 @@ final class FundRepository
         $statement  = $connection->prepare(
             'INSERT INTO mar_fund_movement
                 (direction, shop_id, campaign_id, lever_id, movement_date,
-                 period_from, period_to, label, amount, source,
+                 period_from, period_to, label, amount, source, is_public,
                  supplier_name, document_ref, created_by)
              VALUES
                 (:direction, :shop_id, :campaign_id, :lever_id, :movement_date,
-                 :period_from, :period_to, :label, :amount, :source,
+                 :period_from, :period_to, :label, :amount, :source, :is_public,
                  :supplier_name, :document_ref, :created_by)'
         );
 
         $statement->execute([
+            'is_public'     => $this->readVisibility($data),
             'direction'     => $direction,
             'shop_id'       => $data['shop_id'] ?: null,
             'campaign_id'   => $data['campaign_id'] ?: null,
@@ -307,6 +322,7 @@ final class FundRepository
                     lever_id = :lever_id, movement_date = :movement_date,
                     period_from = :period_from, period_to = :period_to,
                     label = :label, amount = :amount, source = :source,
+                    is_public = :is_public,
                     supplier_name = :supplier_name, document_ref = :document_ref
               WHERE id = :id'
         );
@@ -323,6 +339,7 @@ final class FundRepository
             'label'         => $label,
             'amount'        => $amount,
             'source'        => $data['source'] ?: 'AUTRE',
+            'is_public'     => $this->readVisibility($data),
             'supplier_name' => $data['supplier_name'] ?: null,
             'document_ref'  => $data['document_ref'] ?: null,
         ]);
@@ -644,6 +661,25 @@ final class FundRepository
         }
 
         return (float) $amount;
+    }
+
+    /**
+     * Visibilité de l'écriture, publique par défaut.
+     *
+     * Le défaut n'est pas neutre : le fonds marketing se rend des comptes au
+     * réseau qui l'alimente, et une ligne muette par accident vaut moins qu'une
+     * ligne visible par accident. Ce sont les redevances d'assistance et de
+     * marque qui demandent le silence, et elles le demandent explicitement.
+     *
+     * @param array<string,mixed> $data
+     */
+    private function readVisibility(array $data): int
+    {
+        if (!array_key_exists('is_public', $data) || $data['is_public'] === null) {
+            return 1;
+        }
+
+        return filter_var($data['is_public'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
     }
 
     /** @param array<string,mixed> $data */

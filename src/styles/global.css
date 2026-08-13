@@ -3570,6 +3570,50 @@ table select,
    mauvaise une fois sur dix, et celle-ci ne se rattrape pas. */
 .movement__supprimer { margin-right: auto; }
 
+/* ── Redevances ──────────────────────────────────────────────────────────
+   Trois taux et un CA par magasin : une grille, parce que l'œil compare une
+   colonne bien plus vite qu'il ne compare vingt fiches. */
+.royalties { display: flex; flex-direction: column; gap: 14px; padding: 18px 22px; }
+
+.royalties__head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.royalties__head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+
+.royalties__mois { display: flex; align-items: center; gap: 8px; }
+.royalties__mois .filter { padding: 4px 10px; font-size: 14px; line-height: 1; }
+.royalties__moisnom { min-width: 8.5rem; text-align: center; font-size: 13.5px; font-weight: 600; }
+
+.royalties__note { font-size: 12px; }
+.royalties__bilan { margin: 0; font-size: 13px; color: var(--accent); }
+
+.royalties__grille td { vertical-align: top; }
+
+.royalties__champ {
+  width: 100%;
+  max-width: 9rem;
+  padding: 5px 8px;
+  font: 500 13px 'Gotham', system-ui, sans-serif;
+  text-align: right;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.royalties__champ--pct { max-width: 4.5rem; }
+
+.royalties__taux { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Ce que le taux produirait, sous le taux : c'est le chiffre qu'on ne calcule
+   pas de tête, et celui qu'on relit avant de facturer. */
+.royalties__calcul { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); }
+
+.royalties__prive { font-size: 11px; }
+
+/* Une case à cocher se lit avec son étiquette, pas au-dessus d'elle. */
+.movement__grid .field--inline { flex-direction: row; align-items: flex-start; gap: 8px; }
+.movement__grid .field--inline input { width: auto; }
+.movement__grid .field--inline span { font-size: 12px; }
+
 /* ── Frais récurrents ────────────────────────────────────────────────────
    Ils n'ajoutent rien au solde : leurs échéances sont déjà dans le grand
    livre. Cette carte dit d'où viennent douze lignes identiques. */

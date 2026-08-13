@@ -1587,6 +1587,204 @@ check('une écriture se supprime',
 check('une écriture déjà supprimée est introuvable',
     call($router, 'DELETE', sprintf('/api/v1/marketing/funds/movements/%d', $corrigible))['status'] === 404);
 
+// --- Redevances -------------------------------------------------------------
+// Trois natures, un taux par magasin, un CA net par mois : les entrées du fonds
+// se calculent. Vingt magasins font soixante écritures mensuelles, que personne
+// ne tape et que personne ne relit pour vérifier qu'aucune ne manque.
+echo "\nRedevances\n";
+
+check(
+    'un mois mal formé est refusé',
+    call($router, 'GET', '/api/v1/marketing/funds/royalties', ['month' => 'juin'])['status'] === 422
+);
+
+$grille = static fn (array $corps): array => call($router, 'PUT', '/api/v1/marketing/funds/royalties', [], $corps);
+
+check(
+    'un taux au-delà de cent pour cent est refusé',
+    $grille([
+        'month' => '2026-04',
+        'rates' => [['shop_id' => 1, 'kind' => 'MARKETING', 'rate_pct' => 140]],
+    ])['status'] === 422
+);
+check(
+    'une nature de redevance inconnue est refusée',
+    $grille([
+        'month' => '2026-04',
+        'rates' => [['shop_id' => 1, 'kind' => 'PARKING', 'rate_pct' => 2]],
+    ])['status'] === 422
+);
+check(
+    'un chiffre d\'affaires négatif est refusé',
+    $grille([
+        'month'    => '2026-04',
+        'revenues' => [['shop_id' => 1, 'revenue_amount' => -3000]],
+    ])['status'] === 422
+);
+
+$enregistrement = $grille([
+    'month' => '2026-04',
+    'rates' => [
+        ['shop_id' => 1, 'kind' => 'MARKETING',  'rate_pct' => 2],
+        ['shop_id' => 1, 'kind' => 'ASSISTANCE', 'rate_pct' => 4],
+        ['shop_id' => 1, 'kind' => 'MARQUE',     'rate_pct' => 1.5],
+        ['shop_id' => 2, 'kind' => 'MARKETING',  'rate_pct' => 2],
+    ],
+    'revenues' => [
+        ['shop_id' => 1, 'revenue_amount' => 80000],
+        // Uccle n'a pas encore déclaré : rien ne doit être facturé pour lui.
+        ['shop_id' => 2, 'revenue_amount' => null],
+    ],
+]);
+check('la grille du mois s\'enregistre', $enregistrement['status'] === 200
+    && $enregistrement['body']['rates_changed'] === 4, json_encode($enregistrement['body']));
+
+// Réenregistrer la même grille ne doit rien versionner : sinon l'historique des
+// taux, qui sert à savoir quand le contrat a bougé, se remplit de doublons à
+// chaque ouverture de l'écran.
+$rejeu = $grille([
+    'month' => '2026-04',
+    'rates' => [['shop_id' => 1, 'kind' => 'MARKETING', 'rate_pct' => 2]],
+]);
+check('un taux inchangé ne crée pas de version', $rejeu['body']['rates_unchanged'] === 1
+    && $rejeu['body']['rates_changed'] === 0, json_encode($rejeu['body']));
+
+$tableau = call($router, 'GET', '/api/v1/marketing/funds/royalties', ['month' => '2026-04'])['body'];
+$namur = null;
+foreach ($tableau['shops'] as $boutique) {
+    if ($boutique['shop_id'] === 1) {
+        $namur = $boutique;
+    }
+}
+check(
+    'le tableau rend le CA et les trois taux',
+    $namur !== null && $namur['revenue_amount'] === 80000.0
+        && $namur['rates']['MARKETING']['rate_pct'] === 2.0
+        && $namur['rates']['ASSISTANCE']['rate_pct'] === 4.0
+        && $namur['rates']['MARQUE']['rate_pct'] === 1.5,
+    json_encode($namur)
+);
+
+$generation = call($router, 'POST', '/api/v1/marketing/funds/royalties/generate', [], ['month' => '2026-04']);
+check(
+    'la génération écrit une entrée par nature et par magasin déclaré',
+    $generation['status'] === 201 && $generation['body']['created'] === 3
+        // Uccle a un taux marketing mais pas de CA : rien n'est écrit pour lui,
+        // et le bilan le dit plutôt que de le passer sous silence.
+        && $generation['body']['without_revenue'] === 1
+        // Uccle n'a ni taux d'assistance ni taux de marque.
+        && $generation['body']['without_rate'] === 2,
+    json_encode($generation['body'])
+);
+check(
+    'le total écrit vaut le CA fois les taux',
+    $generation['body']['total_amount'] === 6000.0,
+    json_encode($generation['body']['total_amount'])
+);
+
+$ecrites = $pdo->query(
+    "SELECT source, amount, base_amount, rate_pct, is_public, movement_date, period_from, period_to
+       FROM mar_fund_movement WHERE period_from = '2026-04-01' AND source LIKE 'ROYALTY\_%'
+      ORDER BY source"
+)->fetchAll();
+check(
+    'chaque redevance garde sa base et son taux',
+    count($ecrites) === 3
+        && (float) $ecrites[0]['base_amount'] === 80000.0
+        && (float) $ecrites[0]['rate_pct'] === 4.0
+        && (float) $ecrites[0]['amount'] === 3200.0,
+    json_encode($ecrites[0] ?? null)
+);
+check(
+    'elle est datée de la clôture du mois qu\'elle couvre',
+    $ecrites[0]['movement_date'] === '2026-04-30'
+        && $ecrites[0]['period_from'] === '2026-04-01'
+        && $ecrites[0]['period_to'] === '2026-04-30'
+);
+
+$visibilite = [];
+foreach ($ecrites as $ligne) {
+    $visibilite[$ligne['source']] = (int) $ligne['is_public'];
+}
+check(
+    'le marketing est public, l\'assistance et la marque ne le sont pas',
+    $visibilite['ROYALTY_MARKETING'] === 1
+        && $visibilite['ROYALTY_ASSISTANCE'] === 0
+        && $visibilite['ROYALTY_MARQUE'] === 0,
+    json_encode($visibilite)
+);
+
+// Relancer ne double pas la facture : une redevance corrigée à la main — remise
+// accordée, mois partiel négocié — serait sinon écrasée sans trace.
+$relance = call($router, 'POST', '/api/v1/marketing/funds/royalties/generate', [], ['month' => '2026-04']);
+check('relancer la génération ne facture pas deux fois',
+    $relance['body']['created'] === 0 && $relance['body']['skipped'] === 3,
+    json_encode($relance['body']));
+
+// Un taux renégocié en juin ne réécrit pas avril : c'est tout l'objet des
+// périodes de validité.
+$grille([
+    'month' => '2026-06',
+    'rates' => [['shop_id' => 1, 'kind' => 'MARKETING', 'rate_pct' => 3]],
+    'revenues' => [['shop_id' => 1, 'revenue_amount' => 80000]],
+]);
+$avril = call($router, 'GET', '/api/v1/marketing/funds/royalties', ['month' => '2026-04'])['body'];
+$juin  = call($router, 'GET', '/api/v1/marketing/funds/royalties', ['month' => '2026-06'])['body'];
+$tauxDe = static function (array $tableau, string $kind): ?float {
+    foreach ($tableau['shops'] as $boutique) {
+        if ($boutique['shop_id'] === 1) {
+            return $boutique['rates'][$kind]['rate_pct'] ?? null;
+        }
+    }
+
+    return null;
+};
+check('un taux renégocié en juin laisse avril à son taux',
+    $tauxDe($avril, 'MARKETING') === 2.0 && $tauxDe($juin, 'MARKETING') === 3.0,
+    sprintf('avril %s / juin %s', json_encode($tauxDe($avril, 'MARKETING')), json_encode($tauxDe($juin, 'MARKETING'))));
+
+check(
+    'la redevance d\'avril déjà écrite garde son montant',
+    (float) $pdo->query(
+        "SELECT amount FROM mar_fund_movement
+          WHERE period_from = '2026-04-01' AND source = 'ROYALTY_MARKETING'"
+    )->fetchColumn() === 1600.0
+);
+
+// Le franchisé voit ce qui alimente le fonds marketing — c'est le sien — mais
+// pas les revenus de la marque.
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+$vuFranchise = call($router, 'GET', '/api/v1/marketing/funds/ledger')['body'];
+$sourcesVues = [];
+foreach ($vuFranchise['periods'] as $periode) {
+    foreach ([...$periode['entries'], ...$periode['exits']] as $ligne) {
+        $sourcesVues[$ligne['source']] = true;
+    }
+}
+check(
+    'le franchisé voit la redevance marketing',
+    isset($sourcesVues['ROYALTY_MARKETING']),
+    json_encode(array_keys($sourcesVues))
+);
+check(
+    'il ne voit ni l\'assistance ni la marque',
+    !isset($sourcesVues['ROYALTY_ASSISTANCE']) && !isset($sourcesVues['ROYALTY_MARQUE']),
+    json_encode(array_keys($sourcesVues))
+);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+$vuMarque = call($router, 'GET', '/api/v1/marketing/funds/ledger')['body'];
+$sourcesMarque = [];
+foreach ($vuMarque['periods'] as $periode) {
+    foreach ([...$periode['entries'], ...$periode['exits']] as $ligne) {
+        $sourcesMarque[$ligne['source']] = true;
+    }
+}
+check(
+    'la marque voit les trois',
+    isset($sourcesMarque['ROYALTY_MARKETING'], $sourcesMarque['ROYALTY_ASSISTANCE'], $sourcesMarque['ROYALTY_MARQUE'])
+);
+
 // Les contrôles de la création s'appliquent aussi à la mise à jour.
 $target = (int) $pdo->query("SELECT id FROM mar_campaign WHERE scope = 'RESEAU' ORDER BY id LIMIT 1")->fetchColumn();
 foreach ([

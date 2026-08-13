@@ -1126,6 +1126,11 @@ export interface LedgerRow {
   lever_color_hex: string | null
   /** Non nul : la ligne est une échéance écrite par un frais récurrent. */
   recurrence_id: number | null
+  /** Faux : ligne réservée à la marque, invisible pour le réseau. */
+  is_public: boolean
+  /** Base et taux, quand le montant a été calculé — une redevance. */
+  base_amount: number | null
+  rate_pct: number | null
   /** Vrai si la ligne est rattachée à une campagne (badge de liaison). */
   is_linked: boolean
 }
@@ -1170,6 +1175,8 @@ export interface MovementDraft {
   shop_id?: number | null
   source?: string | null
   document_ref?: string | null
+  /** Absent = publique. Le fonds se rend des comptes ; le silence se demande. */
+  is_public?: boolean
 }
 
 export function addMovement(movement: MovementDraft): Promise<{ inserted_id: number }> {
@@ -1232,6 +1239,67 @@ export function addRecurrence(
 
 export function deleteRecurrence(id: number): Promise<{ message: string }> {
   return request(`${BASE}/funds/recurrences/${id}`, { method: 'DELETE' })
+}
+
+/**
+ * Les trois redevances. `MARKETING` alimente le fonds et se lit par le réseau ;
+ * les deux autres sont les revenus de la marque et ne sortent pas de chez elle.
+ */
+export type RoyaltyKind = 'MARKETING' | 'ASSISTANCE' | 'MARQUE'
+
+export const ROYALTY_KINDS: Array<{ kind: RoyaltyKind; label: string; public: boolean }> = [
+  { kind: 'MARKETING', label: 'Marketing', public: true },
+  { kind: 'ASSISTANCE', label: 'Assistance', public: false },
+  { kind: 'MARQUE', label: 'Marque', public: false },
+]
+
+export interface RoyaltyRate {
+  rate_pct: number
+  /** Date d'effet du taux : c'est elle qui protège les mois déjà facturés. */
+  valid_from: string
+  /** Vrai quand le taux vient de la grille de marque, faute d'un taux propre. */
+  from_default: boolean
+}
+
+export interface RoyaltyShop {
+  shop_id: number
+  shop_name: string
+  city: string | null
+  /** `null` = pas encore déclaré, ce qui n'est pas « zéro euro ». */
+  revenue_amount: number | null
+  rates: Partial<Record<RoyaltyKind, RoyaltyRate>>
+  /** Ce qui est déjà au grand livre pour ce mois, nature par nature. */
+  movements: Partial<Record<RoyaltyKind, { id: number; amount: number; base_amount: number | null; rate_pct: number | null }>>
+}
+
+export function getRoyalties(month: string): Promise<{ month: string; shops: RoyaltyShop[] }> {
+  return request(`${BASE}/funds/royalties`, { query: { month } })
+}
+
+export function saveRoyalties(payload: {
+  month: string
+  rates: Array<{ shop_id: number; kind: RoyaltyKind; rate_pct: number }>
+  revenues: Array<{ shop_id: number; revenue_amount: number | null }>
+}): Promise<{
+  rates_changed: number
+  rates_unchanged: number
+  revenues_saved: number
+  revenues_cleared: number
+}> {
+  return request(`${BASE}/funds/royalties`, { method: 'PUT', body: payload })
+}
+
+export function generateRoyalties(
+  month: string,
+  kinds: RoyaltyKind[] = [],
+): Promise<{
+  created: number
+  skipped: number
+  without_rate: number
+  without_revenue: number
+  total_amount: number
+}> {
+  return request(`${BASE}/funds/royalties/generate`, { method: 'POST', body: { month, kinds } })
 }
 
 export interface LeverPerformance {
