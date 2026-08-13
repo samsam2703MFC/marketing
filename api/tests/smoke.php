@@ -1333,6 +1333,207 @@ check(
     ($detail['assets'][0]['pending_count'] ?? null) === count($refs['formats'])
 );
 
+// --- Types de campagne ------------------------------------------------------
+// Neuf types posés par un jeu de données, immuables : une carte traiteur ou une
+// opération anniversaire demandait de réécrire un fichier SQL. Ils s'éditent
+// maintenant — sous conditions, parce qu'un type structure le réseau entier.
+echo "\nTypes de campagne\n";
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+$typesInitiaux = call($router, 'GET', '/api/v1/marketing/campaign-types')['body'];
+check(
+    'la liste rend les types et la bibliothèque d\'icônes',
+    count($typesInitiaux['types']) >= 9 && count($typesInitiaux['icons']) >= 20
+        && isset($typesInitiaux['icons'][0]['key'], $typesInitiaux['icons'][0]['path']),
+    sprintf('%d types, %d icônes', count($typesInitiaux['types']), count($typesInitiaux['icons']))
+);
+check(
+    'elle dit combien de campagnes utilisent chaque type',
+    array_key_exists('campaigns', $typesInitiaux['types'][0])
+);
+
+$creation = static fn (array $corps): array => call($router, 'POST', '/api/v1/marketing/campaign-types', [], $corps);
+
+check('un type sans nom est refusé', $creation(['label' => '  '])['status'] === 422);
+check(
+    'une icône hors bibliothèque est refusée',
+    $creation(['label' => 'Test', 'icon_key' => '<svg onload=alert(1)>'])['status'] === 422
+);
+check(
+    'une couleur mal formée est refusée',
+    $creation(['label' => 'Test', 'color_hex' => 'rouge'])['status'] === 422
+);
+check(
+    'un levier inexistant est refusé',
+    $creation(['label' => 'Test', 'lever_id' => 999999])['status'] === 422
+);
+
+$nouveau = $creation([
+    'label'             => 'Carte traiteur',
+    'description'       => 'Commandes d’entreprise et plateaux',
+    'color_hex'         => '#B0821A',
+    'icon_key'          => 'plat',
+    'default_kpi_label' => 'Commandes B2B, panier moyen',
+]);
+check('un type valide est créé', $nouveau['status'] === 201, json_encode($nouveau['body']));
+
+$typeId = (int) $nouveau['body']['inserted_id'];
+$relu = $pdo->query(sprintf(
+    'SELECT code, label, color_hex, icon_key, icon_path, sort_order FROM mar_campaign_type WHERE id = %d',
+    $typeId
+))->fetch();
+
+check('le code se dérive du nom, accents ramenés à leur lettre',
+    $relu['code'] === 'carte_traiteur', $relu['code']);
+check(
+    'le tracé de l\'icône est recopié depuis la bibliothèque',
+    $relu['icon_key'] === 'plat'
+        && $relu['icon_path'] === \Marketing\Repository\CampaignTypeRepository::ICONS['plat']['path'],
+    $relu['icon_path']
+);
+check('le nouveau type se range en fin de liste',
+    (int) $relu['sort_order'] === (int) $pdo->query('SELECT MAX(sort_order) FROM mar_campaign_type')->fetchColumn());
+
+check(
+    'un code déjà pris est refusé',
+    $creation(['label' => 'Carte traiteur'])['status'] === 422
+);
+
+// La couleur courte est développée plutôt que refusée : « #abc » est une
+// écriture valide, et la refuser au motif qu'elle est brève serait pédant.
+$court = $creation(['label' => 'Test couleur courte', 'color_hex' => '#ABC']);
+check('une couleur en trois chiffres est développée',
+    $pdo->query(sprintf('SELECT color_hex FROM mar_campaign_type WHERE id = %d',
+        (int) $court['body']['inserted_id']))->fetchColumn() === '#aabbcc');
+
+$modification = call($router, 'PATCH', '/api/v1/marketing/campaign-types/' . $typeId, [], [
+    'label' => 'Traiteur & plateaux', 'icon_key' => 'camion', 'color_hex' => '#3f7a52',
+]);
+check('un type se modifie', $modification['status'] === 200, json_encode($modification['body']));
+$apres = $pdo->query(sprintf(
+    'SELECT label, code, icon_key, icon_path FROM mar_campaign_type WHERE id = %d',
+    $typeId
+))->fetch();
+check(
+    'le code ne bouge pas quand le nom change',
+    $apres['code'] === 'carte_traiteur' && $apres['label'] === 'Traiteur & plateaux',
+    json_encode($apres)
+);
+check(
+    'changer d\'icône remplace aussi son tracé',
+    $apres['icon_path'] === \Marketing\Repository\CampaignTypeRepository::ICONS['camion']['path']
+);
+
+// Une mise à jour partielle ne doit rien effacer au passage : un appel qui ne
+// porte que le nom laissait la carte sans icône, sans couleur et sans levier,
+// et rien ne le signalait.
+call($router, 'PATCH', '/api/v1/marketing/campaign-types/' . $typeId, [], ['label' => 'Traiteur']);
+$partiel = $pdo->query(sprintf(
+    'SELECT label, icon_key, color_hex, default_kpi_label FROM mar_campaign_type WHERE id = %d',
+    $typeId
+))->fetch();
+check(
+    'une mise à jour partielle garde ce qu\'elle ne mentionne pas',
+    $partiel['label'] === 'Traiteur'
+        && $partiel['icon_key'] === 'camion'
+        && $partiel['color_hex'] === '#3f7a52'
+        && $partiel['default_kpi_label'] === 'Commandes B2B, panier moyen',
+    json_encode($partiel)
+);
+
+// Vider reste possible, mais explicitement : c'est la chaîne vide qui le dit.
+call($router, 'PATCH', '/api/v1/marketing/campaign-types/' . $typeId, [], ['icon_key' => '']);
+check(
+    'une valeur vide efface bien le champ',
+    $pdo->query(sprintf('SELECT icon_key FROM mar_campaign_type WHERE id = %d', $typeId))
+        ->fetchColumn() === null
+);
+
+// Un type inutilisé se supprime ; un type qui porte des campagnes ne se
+// supprime pas — les délier rendrait muettes des campagnes qui existent.
+check('un type inutilisé se supprime',
+    call($router, 'DELETE', '/api/v1/marketing/campaign-types/'
+        . (int) $court['body']['inserted_id'])['status'] === 200);
+
+$typeUtilise = (int) $pdo->query(
+    'SELECT type_id FROM mar_campaign WHERE type_id IS NOT NULL LIMIT 1'
+)->fetchColumn();
+// Son état d'origine, pour le rendre tel qu'il était : ce bloc va le renommer et
+// le désactiver, et un test qui laisse un type livré sous un autre nom fait
+// échouer les contrôles suivants sans rapport avec ce qu'il vérifiait.
+$avantEssai = $pdo->query(sprintf(
+    'SELECT label, icon_path FROM mar_campaign_type WHERE id = %d',
+    $typeUtilise
+))->fetch();
+$refus = call($router, 'DELETE', '/api/v1/marketing/campaign-types/' . $typeUtilise);
+check('un type utilisé ne se supprime pas', $refus['status'] === 409, json_encode($refus['body']));
+check(
+    'le refus dit combien de campagnes s\'y opposent',
+    (bool) preg_match('/\d+ campagne/', (string) ($refus['body']['description'] ?? '')),
+    (string) ($refus['body']['description'] ?? '')
+);
+
+// Désactiver retire des choix sans toucher à l'histoire.
+call($router, 'PATCH', '/api/v1/marketing/campaign-types/' . $typeUtilise, [], [
+    'is_active' => false,
+]);
+$actifs = call($router, 'GET', '/api/v1/marketing/references')['body']['campaignTypes'];
+check(
+    'un type désactivé disparaît des choix mais reste en base',
+    !in_array($typeUtilise, array_column($actifs, 'id'), true)
+        && (int) $pdo->query(sprintf('SELECT COUNT(*) FROM mar_campaign_type WHERE id = %d', $typeUtilise))
+            ->fetchColumn() === 1
+);
+call($router, 'PATCH', '/api/v1/marketing/campaign-types/' . $typeUtilise, [], ['is_active' => true]);
+
+// Un type livré porte un tracé sans clé : il est antérieur à la bibliothèque.
+// Le renommer ne doit pas effacer son icône de la carte.
+call($router, 'PATCH', '/api/v1/marketing/campaign-types/' . $typeUtilise, [], [
+    'label' => 'Ouverture (essai)',
+]);
+check(
+    'renommer un type livré ne lui retire pas son icône',
+    $pdo->query(sprintf('SELECT icon_path FROM mar_campaign_type WHERE id = %d', $typeUtilise))
+        ->fetchColumn() === $avantEssai['icon_path']
+);
+call($router, 'PATCH', '/api/v1/marketing/campaign-types/' . $typeUtilise, [], [
+    'label' => $avantEssai['label'],
+]);
+
+$ordre = array_reverse(array_column($typesInitiaux['types'], 'id'));
+check('l\'ordre d\'affichage se réenregistre',
+    call($router, 'PUT', '/api/v1/marketing/campaign-types/order', [], ['ids' => $ordre])['status'] === 200);
+check(
+    'le premier de la liste réordonnée est bien en tête',
+    (int) $pdo->query('SELECT id FROM mar_campaign_type ORDER BY sort_order, id LIMIT 1')->fetchColumn()
+        === $ordre[0]
+);
+
+// Remise en état : ce bloc a créé un type et bousculé l'ordre. Les autres
+// contrôles comptent les neuf types livrés, et un deuxième lancement buterait
+// sur le code déjà pris — un test qui ne se rejoue pas ne vaut qu'une fois.
+call($router, 'DELETE', '/api/v1/marketing/campaign-types/' . $typeId);
+call($router, 'PUT', '/api/v1/marketing/campaign-types/order', [], [
+    'ids' => array_column($typesInitiaux['types'], 'id'),
+]);
+check(
+    'le bloc se referme sur les types livrés',
+    (int) $pdo->query('SELECT COUNT(*) FROM mar_campaign_type')->fetchColumn()
+        === count($typesInitiaux['types'])
+);
+
+// Un type structure le réseau : le franchisé le lit, il ne le change pas.
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+check('un franchisé lit les types',
+    call($router, 'GET', '/api/v1/marketing/campaign-types')['status'] === 200);
+check('un franchisé n\'en crée pas',
+    call($router, 'POST', '/api/v1/marketing/campaign-types', [], ['label' => 'Le mien'])['status'] === 403);
+check('un franchisé n\'en modifie pas',
+    call($router, 'PATCH', '/api/v1/marketing/campaign-types/' . $typeId, [], ['label' => 'X'])['status'] === 403);
+check('un franchisé n\'en supprime pas',
+    call($router, 'DELETE', '/api/v1/marketing/campaign-types/' . $typeId)['status'] === 403);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
 // --- Écritures hors assistant ----------------------------------------------
 // Même audit que sur le constructeur, appliqué aux autres écrans. Deux points
 // pesaient plus que les autres : le solde du fonds, qu'une saisie pouvait

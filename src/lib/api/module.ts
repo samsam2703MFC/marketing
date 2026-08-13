@@ -80,6 +80,12 @@ export interface CampaignType {
   id: number
   code: string
   label: string
+  /** Ce que le type recouvre, en une phrase. Distinct du KPI attendu. */
+  description: string | null
+  /** Couleur de l'icône et de l'accent de la carte. */
+  color_hex: string | null
+  /** Entrée de la bibliothèque retenue ; `icon_path` en porte le tracé. */
+  icon_key: string | null
   /** Formulation d'origine du handoff, conservée pour retrouver l'intention. */
   default_lever_code: string | null
   default_kpi_label: string | null
@@ -1103,6 +1109,59 @@ export function generateLeads(campaignId: number): Promise<LeadGenerationReport>
 // ---------------------------------------------------------------------------
 // Fonds & ROI
 // ---------------------------------------------------------------------------
+
+/**
+ * Un type de campagne tel que l'éditeur le manipule : la version complète, avec
+ * ce qui est masqué ailleurs — l'ordre, l'activation, et le nombre de campagnes
+ * qui s'en réclament, qui décide si la suppression a un sens.
+ */
+export interface CampaignTypeAdmin extends CampaignType {
+  lever_badge_label: string | null
+  sort_order: number
+  is_active: boolean
+  campaigns: number
+}
+
+export interface IconChoice {
+  key: string
+  label: string
+  path: string
+}
+
+export function listCampaignTypes(): Promise<{ types: CampaignTypeAdmin[]; icons: IconChoice[] }> {
+  return request(`${BASE}/campaign-types`)
+}
+
+/** Le code n'est pas modifiable : il ancre les jeux de données et les reprises. */
+export interface CampaignTypeDraft {
+  label: string
+  description?: string | null
+  color_hex?: string | null
+  icon_key?: string | null
+  lever_id?: number | null
+  lever_badge_label?: string | null
+  default_kpi_label?: string | null
+  is_active?: boolean
+}
+
+export function addCampaignType(type: CampaignTypeDraft): Promise<{ inserted_id: number }> {
+  return request(`${BASE}/campaign-types`, { method: 'POST', body: type })
+}
+
+export function updateCampaignType(
+  id: number,
+  type: CampaignTypeDraft,
+): Promise<{ message: string }> {
+  return request(`${BASE}/campaign-types/${id}`, { method: 'PATCH', body: type })
+}
+
+export function deleteCampaignType(id: number): Promise<{ message: string }> {
+  return request(`${BASE}/campaign-types/${id}`, { method: 'DELETE' })
+}
+
+export function reorderCampaignTypes(ids: number[]): Promise<{ reordered: number }> {
+  return request(`${BASE}/campaign-types/order`, { method: 'PUT', body: { ids } })
+}
 
 export interface LedgerRow {
   id: number

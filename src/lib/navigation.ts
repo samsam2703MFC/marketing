@@ -14,6 +14,8 @@ export type Route =
   | 'calendar'
   | 'campaigns'
   | 'campaign'
+  /** Éditeur des types de campagne — réseau seul, absent du menu franchisé. */
+  | 'campaign-types'
   /** Assistant de création — ouvert depuis « Campagnes », pas depuis le menu. */
   | 'builder'
   | 'promotions'
@@ -46,6 +48,7 @@ const ICONS: Record<string, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
   calendar: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
   campaigns: 'M3 11l14-7v16L3 13zM7 14v5',
+  'campaign-types': 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7zM8 8h0M17 8h0',
   promotions: 'M19 5L5 19M7 7a1.5 1.5 0 1 0 .01 0M17 17a1.5 1.5 0 1 0 .01 0',
   bundles: 'M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8M12 13v8',
   vouchers: 'M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4zM13 6v12',
@@ -66,7 +69,13 @@ function item(route: Route, label: string): NavItem {
 
 const NETWORK: NavGroup[] = [
   { label: 'Pilotage', items: [item('dashboard', 'Tableau de bord'), item('calendar', 'Calendrier marketing')] },
-  { label: 'Campagnes', items: [item('campaigns', 'Campagnes')] },
+  {
+    label: 'Campagnes',
+    // L'éditeur des types vit à côté des campagnes, et non dans un réglage à
+    // part : c'est la grille qu'on voit à la première étape de l'assistant, et
+    // on y revient en pensant « campagnes », pas « paramètres ».
+    items: [item('campaigns', 'Campagnes'), item('campaign-types', 'Types de campagne')],
+  },
   {
     label: 'Outils de campagne',
     items: [item('promotions', 'Promotions'), item('bundles', 'Bundles & Menus'), item('vouchers', 'Vouchers / Bons')],

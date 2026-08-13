@@ -45,6 +45,13 @@ return static function (Router $router): void {
     $router->get('/api/v1/marketing/references', [$references, 'index']);
     $router->get('/api/v1/marketing/shops',      [$references, 'shops']);
     $router->get('/api/v1/marketing/brands',     [$references, 'brands']);
+    // Types de campagne : la grille de cartes de la première étape. Lisibles par
+    // tous, modifiables par la marque seule — un type structure le réseau.
+    $router->get('/api/v1/marketing/campaign-types',           [$references, 'campaignTypes']);
+    $router->post('/api/v1/marketing/campaign-types',          [$references, 'storeCampaignType']);
+    $router->patch('/api/v1/marketing/campaign-types/{id}',    [$references, 'updateCampaignType']);
+    $router->delete('/api/v1/marketing/campaign-types/{id}',   [$references, 'destroyCampaignType']);
+    $router->put('/api/v1/marketing/campaign-types/order',     [$references, 'reorderCampaignTypes']);
 
     // Campagnes
     $router->get('/api/v1/marketing/campaigns',                 [$campaigns, 'index']);

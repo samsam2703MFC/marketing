@@ -17,6 +17,7 @@ import AgenciesView from './views/AgenciesView'
 import AnalysisView from './views/AnalysisView'
 import RoiView from './views/RoiView'
 import CrmView from './views/CrmView'
+import CampaignTypesView from './views/CampaignTypesView'
 import LocalPresenceView from './views/LocalPresenceView'
 import DamView from './views/DamView'
 import CampaignBuilder from './views/builder/CampaignBuilder'
@@ -276,6 +277,7 @@ function Workspace() {
           {route === 'analysis' ? <AnalysisView /> : null}
           {route === 'roi' ? <RoiView /> : null}
           {route === 'crm' ? <CrmView /> : null}
+          {route === 'campaign-types' ? <CampaignTypesView /> : null}
           {route === 'local' ? <LocalPresenceView /> : null}
           {route === 'dam' ? <DamView role={role} /> : null}
 

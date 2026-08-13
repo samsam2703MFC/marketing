@@ -3570,6 +3570,69 @@ table select,
    mauvaise une fois sur dix, et celle-ci ne se rattrape pas. */
 .movement__supprimer { margin-right: auto; }
 
+/* ── Éditeur des types de campagne ───────────────────────────────────────
+   Les cartes sont celles de l'assistant, à l'identique : régler une couleur
+   ici pour découvrir le résultat trois écrans plus loin fait recommencer. */
+.type-grid--admin .type-card { cursor: pointer; text-align: left; }
+
+/* Un type désactivé reste visible mais s'efface : il ne sera plus proposé, et
+   le masquer ferait croire qu'il a disparu. */
+.type-card.is-off { opacity: 0.55; border-style: dashed; }
+
+.type-card__etat { margin-top: 2px; font-size: 11px; }
+
+.typeform__apercu {
+  display: flex;
+  padding: 12px;
+  border: 1px dashed var(--line);
+  border-radius: 11px;
+  background: var(--paper, #fbf9f6);
+}
+
+/* L'aperçu emprunte la carte sans en être une : pas de survol, pas de clic. */
+.typeform__apercu .type-card { max-width: 22rem; cursor: default; }
+
+.typeform__couleur { display: flex; align-items: center; gap: 8px; }
+.typeform__couleur input[type='color'] {
+  width: 38px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.typeform__icones { display: flex; flex-direction: column; gap: 7px; }
+
+/* Une grille, pas une liste déroulante : trente icônes se comparent d'un coup
+   d'œil, et se cherchent une par une dans un menu. */
+.typeform__grille {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 6px;
+}
+
+.typeform__icone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px;
+  color: var(--muted-2);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.typeform__icone:hover { border-color: var(--muted); color: var(--ink); }
+
+.typeform__icone.is-on {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(141, 29, 44, 0.06);
+}
+
 /* ── Redevances ──────────────────────────────────────────────────────────
    Trois taux et un CA par magasin : une grille, parce que l'œil compare une
    colonne bien plus vite qu'il ne compare vingt fiches. */

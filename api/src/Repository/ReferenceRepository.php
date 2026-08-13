@@ -84,7 +84,8 @@ final class ReferenceRepository
         // propre (« Trafic / notoriété ») sans dupliquer le levier.
         return $this->fetch(
             'SELECT t.id, t.code, t.label, t.default_lever_code, t.default_kpi_label,
-                    t.icon_path, t.sort_order, t.lever_id,
+                    t.description, t.color_hex, t.icon_path, t.icon_key,
+                    t.sort_order, t.lever_id,
                     COALESCE(t.lever_badge_label, l.label) AS lever_label,
                     l.color_hex                            AS lever_color_hex
                FROM mar_campaign_type t
