@@ -57,10 +57,13 @@ final class ErpRoyaltyRepository
         'label'   => ['line_label', 'label', 'designation', 'description', 'name', 'wording', 'libelle'],
         'kind'    => ['type', 'kind', 'royalty_type', 'category', 'code', 'nature'],
         'rate'    => ['rate_pct', 'rate', 'percent', 'percentage', 'pct', 'taux'],
-        // Le chiffre d'affaires net est porté par la ligne, dans `net_amount` :
-        // c'est l'assiette de la redevance, pas le montant dû.
-        'base'    => ['net_amount', 'base_amount', 'base', 'net_revenue', 'revenue', 'ca_net', 'turnover'],
-        'amount'  => ['amount', 'total_amount', 'amount_ht', 'line_total', 'total', 'montant'],
+        // L'assiette, si elle est stockée. Surtout pas `net_amount` : c'est le
+        // montant dû, et le lire aussi comme assiette afficherait un chiffre
+        // d'affaires égal à la redevance — un chiffre faux, mais plausible, donc
+        // le pire des deux.
+        'base'    => ['base_amount', 'base', 'net_revenue', 'revenue_amount', 'ca_net', 'turnover'],
+        // Le montant dû, hors taxe : `net_amount` sur la ligne.
+        'amount'  => ['net_amount', 'amount', 'total_amount', 'amount_ht', 'line_total', 'total', 'montant'],
     ];
 
     /**
@@ -350,12 +353,27 @@ final class ErpRoyaltyRepository
 
         $parFacture = [];
         foreach ($lignes->fetchAll() as $l) {
+            $taux    = isset($l['rate']) && $l['rate'] !== null ? (float) $l['rate'] : null;
+            $montant = round((float) $l['amount'], 2);
+            $assiette = isset($l['base']) && $l['base'] !== null ? (float) $l['base'] : null;
+
+            // L'assiette déduite quand l'ERP ne la stocke pas : un montant et un
+            // pourcentage suffisent à la retrouver, c'est la définition même
+            // d'un pourcentage. Elle est marquée comme déduite — un chiffre
+            // calculé ne se présente pas comme un chiffre lu.
+            $deduite = false;
+            if ($assiette === null && $taux !== null && $taux > 0) {
+                $assiette = round($montant * 100 / $taux, 2);
+                $deduite  = true;
+            }
+
             $parFacture[(string) $l['erp_invoice']][] = [
-                'label'  => $l['label'] ?? null,
-                'kind'   => $this->recognise((string) (($l['kind'] ?? '') . ' ' . ($l['label'] ?? ''))),
-                'rate'   => isset($l['rate']) && $l['rate'] !== null ? (float) $l['rate'] : null,
-                'base'   => isset($l['base']) && $l['base'] !== null ? (float) $l['base'] : null,
-                'amount' => round((float) $l['amount'], 2),
+                'label'        => $l['label'] ?? null,
+                'kind'         => $this->recognise((string) (($l['kind'] ?? '') . ' ' . ($l['label'] ?? ''))),
+                'rate'         => $taux,
+                'base'         => $assiette,
+                'base_derived' => $deduite,
+                'amount'       => $montant,
             ];
         }
 

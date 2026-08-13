@@ -219,8 +219,18 @@ export default function RoyaltiesPanel({ onWritten }: { onWritten: () => void })
                       {/* D'où vient le chiffre affiché : une valeur reprise de
                           la facture ne se relit pas comme une valeur tapée. */}
                       {vientDeLErp(boutique, 'ca') ? (
-                        <span className="royalties__origine" title={boutique.erp?.document_ref}>
-                          ERP
+                        <span
+                          className="royalties__origine"
+                          title={
+                            // Un chiffre calculé ne se présente pas comme un
+                            // chiffre lu : la facture ne porte pas toujours son
+                            // assiette, et on la retrouve alors par le taux.
+                            deduite(boutique)
+                              ? `${boutique.erp?.document_ref} — assiette déduite du taux et du montant`
+                              : boutique.erp?.document_ref
+                          }
+                        >
+                          {deduite(boutique) ? 'ERP ≈' : 'ERP'}
                         </span>
                       ) : null}
                     </td>
@@ -425,6 +435,17 @@ function lire(boutique: RoyaltyShop): Saisie {
     ca: ca === null ? '' : String(ca).replace('.', ','),
     taux,
   }
+}
+
+/**
+ * Vrai quand le CA affiché a été retrouvé par le calcul plutôt que lu.
+ *
+ * L'ERP ne stocke pas toujours l'assiette : un montant et un pourcentage
+ * suffisent à la retrouver, mais le chiffre obtenu n'a pas le même statut que
+ * celui qu'on lit sur la facture, et l'écran doit le dire.
+ */
+function deduite(boutique: RoyaltyShop): boolean {
+  return ROYALTY_KINDS.some(({ kind }) => boutique.erp?.lines[kind]?.base_derived === true)
 }
 
 /** Vrai quand la valeur affichée vient de la facture ERP et non de la saisie. */

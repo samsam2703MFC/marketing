@@ -166,16 +166,24 @@ final class RoyaltyRepository
                 }
 
                 $lignes[$ligne['kind']] = [
-                    'amount' => $ligne['amount'],
-                    'rate'   => $ligne['rate'],
-                    'base'   => $ligne['base'],
-                    'label'  => $ligne['label'],
+                    'amount'       => $ligne['amount'],
+                    'rate'         => $ligne['rate'],
+                    'base'         => $ligne['base'],
+                    // Vrai quand l'assiette a été retrouvée à partir du montant
+                    // et du taux, faute d'être stockée par l'ERP.
+                    'base_derived' => $ligne['base_derived'],
+                    'label'        => $ligne['label'],
                 ];
             }
 
             $shops[$facture['shop_id']]['erp'] = [
                 'document_ref'   => $facture['document_ref'],
-                'revenue'        => $facture['revenue'],
+                // Le CA du mois : celui de la facture si l'ERP le porte, sinon
+                // l'assiette des lignes — les trois redevances portent sur le
+                // même chiffre d'affaires. Si elles divergent, on n'en retient
+                // aucun : une colonne « CA net » qui affiche l'un des trois sans
+                // dire lequel vaut moins qu'une colonne vide.
+                'revenue'        => $facture['revenue'] ?? $this->assietteCommune($lignes),
                 'total'          => $facture['total'],
                 'lines'          => $lignes,
                 'unknown_lines'  => $inconnues,
@@ -198,6 +206,28 @@ final class RoyaltyRepository
                 'unknown_labels' => array_keys($libellesInconnus),
             ],
         ];
+    }
+
+    /**
+     * L'assiette partagée par les lignes d'une facture, ou rien.
+     *
+     * Les trois redevances portent sur le même chiffre d'affaires : quand elles
+     * s'accordent, ce chiffre est le CA du mois. Quand elles divergent, il n'y a
+     * pas de « le » CA — en afficher un sans dire lequel serait pire que de
+     * n'en afficher aucun.
+     *
+     * @param array<string, array{base:?float}> $lignes
+     */
+    private function assietteCommune(array $lignes): ?float
+    {
+        $assiettes = [];
+        foreach ($lignes as $ligne) {
+            if ($ligne['base'] !== null) {
+                $assiettes[(string) round($ligne['base'], 2)] = round($ligne['base'], 2);
+            }
+        }
+
+        return count($assiettes) === 1 ? array_values($assiettes)[0] : null;
     }
 
     /**

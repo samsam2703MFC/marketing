@@ -1275,7 +1275,19 @@ export interface RoyaltyShop {
     document_ref: string
     revenue: number | null
     total: number | null
-    lines: Partial<Record<RoyaltyKind, { amount: number; rate: number | null; base: number | null; label: string | null }>>
+    lines: Partial<
+      Record<
+        RoyaltyKind,
+        {
+          amount: number
+          rate: number | null
+          base: number | null
+          /** L'assiette a été retrouvée depuis le montant et le taux, faute d'être stockée. */
+          base_derived: boolean
+          label: string | null
+        }
+      >
+    >
     unknown_lines: number
   } | null
 }
