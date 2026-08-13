@@ -1,0 +1,103 @@
+name: Captures du déployé
+
+# Pourquoi ce workflow existe : l'environnement de développement n'a pas de
+# route réseau vers le serveur, alors que le runner GitHub en a une — c'est lui
+# qui déploie. Il photographie donc l'application en ligne et pousse les images
+# sur la branche `captures`, où un simple `git fetch` les met à portée de qui
+# ne peut pas ouvrir le site.
+#
+# Les captures ne vont pas sur `main` : ce sont des observations, pas du code.
+# Une branche à part garde l'historique du dépôt lisible, et son poids
+# n'encombre aucun clone qui ne la demande pas.
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Adresse de l''application déployée'
+        default: 'http://185.180.206.46/marketing'
+        required: false
+  # Après un déploiement réussi : la capture montre alors ce qui vient d'être
+  # publié, sans avoir à y penser.
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+    branches: [main]
+
+jobs:
+  capture:
+    name: Photographier l'application en ligne
+    runs-on: ubuntu-latest
+    # Un CI en échec n'a rien déployé : photographier reviendrait à montrer la
+    # version précédente en la faisant passer pour la nouvelle.
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || github.event.workflow_run.conclusion == 'success'
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Playwright s'installe hors du dépôt : l'ajouter aux dépendances du
+      # projet pour un usage qui ne concerne que ce workflow salirait
+      # package.json, et le commit des captures embarquerait la modification.
+      - name: Installer Playwright
+        run: |
+          mkdir -p /tmp/playwright && cd /tmp/playwright
+          npm init -y > /dev/null
+          npm install --no-fund --no-audit playwright@1.56.0
+          npx playwright install --with-deps chromium
+
+      - name: Photographier
+        env:
+          CIBLE: ${{ github.event.inputs.url || 'http://185.180.206.46/marketing' }}
+        run: |
+          echo "Cible : $CIBLE"
+          # Le script est copié à côté de node_modules : un import ESM résout
+          # ses dépendances depuis le dossier du fichier, pas depuis le dossier
+          # courant, et `NODE_PATH` ne s'applique qu'à `require`.
+          cp .github/scripts/capture-deploiement.mjs /tmp/playwright/
+          node /tmp/playwright/capture-deploiement.mjs "$CIBLE" /tmp/captures
+          ls -la /tmp/captures
+
+      - name: Publier sur la branche `captures`
+        run: |
+          set -euo pipefail
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          # La branche n'a aucun ancêtre commun avec `main` : elle ne porte que
+          # des images, et un historique orphelin évite de traîner tout le code
+          # derrière chaque capture.
+          if git ls-remote --exit-code --heads origin captures > /dev/null 2>&1; then
+            git fetch origin captures:captures
+            git worktree add /tmp/branche captures
+          else
+            git worktree add --detach /tmp/branche
+            git -C /tmp/branche checkout --orphan captures
+            git -C /tmp/branche rm -rf . > /dev/null 2>&1 || true
+          fi
+
+          # Les captures se remplacent : c'est l'état du serveur maintenant qui
+          # intéresse, et l'historique de la branche garde les précédentes.
+          rm -f /tmp/branche/*.png /tmp/branche/journal.txt
+          cp /tmp/captures/* /tmp/branche/
+
+          cp "$GITHUB_WORKSPACE/.github/captures-README.md" /tmp/branche/README.md
+
+          cd /tmp/branche
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo 'Aucun changement : le serveur rend la même chose que la dernière fois.'
+            exit 0
+          fi
+
+          git commit -m "Captures de ${GITHUB_SHA:0:7} — $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push origin captures
