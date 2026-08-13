@@ -132,10 +132,20 @@ if (repris) {
   await page.waitForTimeout(1500)
   await photographier('02-assistant')
 
-  // Le vivier de l'étape 1 : les comptes que le périmètre retient. Il vit sous
-  // le pli, comme tout ce qui compte sur cet écran.
-  await descendre('.prospects__head')
-  await photographier('02b-comptes-vises')
+  // L'assistant rouvre la campagne là où elle s'était arrêtée — souvent la
+  // dernière étape. L'étape 1 se demande donc explicitement, sans quoi la
+  // capture montre l'écran de fin en le prenant pour le cadrage.
+  if (await cliquer(page.getByRole('button', { name: /Type & cadrage$/ }), 'Type & cadrage')) {
+    await photographier('02a-cadrage')
+
+    // Le vivier vit sous le pli. Sans secteur retenu sur la campagne, le
+    // panneau invite à en cocher un : on en coche un pour montrer ce que le
+    // périmètre retient. Rien n'est enregistré — la capture ne clique jamais
+    // « Enregistrer », et quitter la page abandonne le brouillon modifié.
+    await cliquer(page.locator('.filters__row .filter').nth(1), 'un secteur')
+    await descendre('.prospects__head')
+    await photographier('02b-comptes-vises')
+  }
 
   for (const [nom, motif] of [
     ['03-objectifs', /Objectifs de vente$/],
