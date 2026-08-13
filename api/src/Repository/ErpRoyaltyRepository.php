@@ -36,7 +36,10 @@ final class ErpRoyaltyRepository
      */
     private const INVOICE_COLUMNS = [
         'id'          => ['id', 'royalty_invoice_id', 'invoice_id'],
-        'shop'        => ['franchisee_shop_id', 'shop_id', 'id_shop', 'id_franchisee_shop', 'magasin_id'],
+        // `shop_id` d'abord : la facture désigne `shops.id`, pas le magasin
+        // franchisé. Si les deux colonnes coexistaient, l'ordre trancherait au
+        // profit de la mauvaise.
+        'shop'        => ['shop_id', 'id_shop', 'franchisee_shop_id', 'id_franchisee_shop', 'magasin_id'],
         'number'      => ['invoice_number', 'number', 'reference', 'ref', 'code', 'num'],
         'date'        => ['invoice_date', 'date', 'issued_at', 'billing_date', 'created_at'],
         'period_from' => ['period_from', 'period_start', 'date_from', 'start_date', 'period_month', 'month'],
@@ -52,7 +55,9 @@ final class ErpRoyaltyRepository
         'label'   => ['label', 'designation', 'description', 'name', 'wording', 'libelle'],
         'kind'    => ['type', 'kind', 'royalty_type', 'category', 'code', 'nature'],
         'rate'    => ['rate_pct', 'rate', 'percent', 'percentage', 'pct', 'taux'],
-        'base'    => ['base_amount', 'base', 'net_revenue', 'revenue', 'ca_net', 'turnover'],
+        // Le chiffre d'affaires net est porté par la ligne, dans `net_amount` :
+        // c'est l'assiette de la redevance, pas le montant dû.
+        'base'    => ['net_amount', 'base_amount', 'base', 'net_revenue', 'revenue', 'ca_net', 'turnover'],
         'amount'  => ['amount', 'total_amount', 'amount_ht', 'line_total', 'total', 'montant'],
     ];
 
@@ -266,6 +271,22 @@ final class ErpRoyaltyRepository
             }
         }
 
+        // La facture porte sur le mois précédent celui où elle est émise : la
+        // redevance d'avril est facturée en mai. Chercher avril dans les dates
+        // d'émission ne trouverait donc rien — ou pire, trouverait mars.
+        // Une colonne de période, quand elle existe, dit le mois couvert et
+        // n'a pas besoin de ce décalage.
+        $surPeriode = isset($facture['period_from']) && $colonneMois === $facture['period_from'];
+        $fenetre    = $surPeriode
+            ? ['depuis' => $premier, 'jusqu' => $dernier]
+            : [
+                'depuis' => (new \DateTimeImmutable($premier))->modify('+1 month')->format('Y-m-d'),
+                'jusqu'  => (new \DateTimeImmutable($premier))
+                    ->modify('+1 month')
+                    ->modify('last day of this month')
+                    ->format('Y-m-d'),
+            ];
+
         $lecture = Database::connection()->prepare(sprintf(
             'SELECT %s FROM `%s`.`%s` f WHERE f.`%s` BETWEEN :depuis AND :jusqu ORDER BY f.`%s`',
             implode(', ', $selection),
@@ -274,7 +295,10 @@ final class ErpRoyaltyRepository
             $colonneMois,
             $facture['id']
         ));
-        $lecture->execute(['depuis' => $premier, 'jusqu' => $dernier . ' 23:59:59']);
+        $lecture->execute([
+            'depuis' => $fenetre['depuis'],
+            'jusqu'  => $fenetre['jusqu'] . ' 23:59:59',
+        ]);
 
         $factures = $lecture->fetchAll();
         if ($factures === []) {
