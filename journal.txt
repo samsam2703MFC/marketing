@@ -3,6 +3,7 @@ accueil : HTTP 200 · Module Marketing — L'Atelier By
   → 01-campagnes.png
   → 02-assistant.png
   → 02a-cadrage.png
+  « un secteur » introuvable — capture prise en l'état
   → 02b-comptes-vises.png
   → 03-objectifs.png
   → 03b-magasins.png
