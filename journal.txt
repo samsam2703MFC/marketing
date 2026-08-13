@@ -9,3 +9,5 @@ accueil : HTTP 200 · Module Marketing — L'Atelier By
   → 03c-detail-objectifs.png
   → 04-prix.png
   → 04b-compensation.png
+  → 05-fonds.png
+  → 05b-mouvement.png
