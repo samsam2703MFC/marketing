@@ -132,6 +132,11 @@ if (repris) {
   await page.waitForTimeout(1500)
   await photographier('02-assistant')
 
+  // Le vivier de l'étape 1 : les comptes que le périmètre retient. Il vit sous
+  // le pli, comme tout ce qui compte sur cet écran.
+  await descendre('.prospects__head')
+  await photographier('02b-comptes-vises')
+
   for (const [nom, motif] of [
     ['03-objectifs', /Objectifs de vente$/],
     ['04-prix', /Prix$/],
