@@ -10,4 +10,4 @@ accueil : HTTP 200 · Module Marketing — L'Atelier By
   → 04-prix.png
   → 04b-compensation.png
   → 05-fonds.png
-  → 05b-mouvement.png
+  « Nouveau mouvement » introuvable — capture prise en l'état
