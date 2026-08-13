@@ -135,6 +135,14 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+          # Une annotation en plus du résumé : elle est servie par l'API des
+          # check-runs, là où le résumé ne l'est pas. C'est ce qui rend un échec
+          # lisible sans télécharger les logs.
+          if [ -n "${echec:-}" ]; then
+            details=$(grep -E '✗|Fatal error|Uncaught|réussis' /tmp/tests.txt | head -20 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error title=Tests de l'API::${details}"
+          fi
+
           exit "${echec:-0}"
 
       - name: Installer les dépendances front
