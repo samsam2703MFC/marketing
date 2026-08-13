@@ -1,0 +1,123 @@
+# Sonde ERP — lire l'ERP depuis le serveur, sans rien y écrire.
+#
+# Le poste de développement n'a pas accès au réseau du serveur : toute question
+# posée à l'ERP (« cette route répond-elle ? », « cette colonne existe-t-elle ? »)
+# ne peut recevoir de réponse que depuis une machine qui le joint. Le runner s'y
+# connecte déjà pour déployer ; il sert donc aussi à demander.
+#
+# Deux règles tiennent ce fichier :
+#   — lecture seule. Aucune requête autre qu'un SELECT ou un SHOW, aucune
+#     méthode HTTP autre que GET. L'ERP n'est pas à nous.
+#   — le résultat part en annotation. Les journaux de job ne sont pas lisibles
+#     depuis l'environnement de développement, les annotations le sont.
+name: Sonde ERP
+
+on:
+  workflow_dispatch:
+    inputs:
+      recherche:
+        description: 'Nom de produit à chercher (LIKE %…%)'
+        required: true
+        default: 'cougnou'
+      route:
+        description: 'Route ERP à interroger, {id} remplacé par l''identifiant trouvé'
+        required: false
+        default: '/api/v1/recipes/{id}'
+
+jobs:
+  sonde:
+    name: Interroger l'ERP
+    runs-on: ubuntu-latest
+
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST || secrets.DEPLOY_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER || secrets.DEPLOY_USER }}
+      SSH_PASSWORD: ${{ secrets.SSH_PASSWORD || secrets.DEPLOY_PASSWORD }}
+      SSH_KEY: ${{ secrets.SSH_KEY || secrets.DEPLOY_SSH_KEY }}
+      SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+      CONFIG_DIR: ${{ vars.CONFIG_DIR || '/var/www/private/marketing' }}
+
+    steps:
+      - name: Préparer l'accès SSH
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD || secrets.DEPLOY_PASSWORD }}
+        run: |
+          install -m 700 -d ~/.ssh
+          sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+          HOST_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+          if [ -n "$SSH_KEY" ]; then
+            printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+            chmod 600 ~/.ssh/id_deploy
+            if ssh -p "$SSH_PORT" -i ~/.ssh/id_deploy $HOST_OPTS -o BatchMode=yes \
+                 -o ConnectTimeout=15 "$SSH_USER@$SSH_HOST" 'echo OK' 2>/dev/null | grep -q OK; then
+              echo "SSH_OPTS=-p $SSH_PORT -i $HOME/.ssh/id_deploy $HOST_OPTS" >> "$GITHUB_ENV"
+              echo "SSH_CMD=ssh" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          fi
+
+          if [ -z "$SSH_PASSWORD" ]; then
+            echo "::error title=Sonde impossible::Ni clé exploitable ni SSH_PASSWORD."
+            exit 1
+          fi
+          echo "SSH_OPTS=-p $SSH_PORT $HOST_OPTS" >> "$GITHUB_ENV"
+          echo "SSH_CMD=sshpass -e ssh" >> "$GITHUB_ENV"
+
+      - name: Chercher le produit et interroger la route
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD || secrets.DEPLOY_PASSWORD }}
+          RECHERCHE: ${{ inputs.recherche }}
+          ROUTE: ${{ inputs.route }}
+        run: |
+          # Le script distant lit la configuration écrite par le déploiement :
+          # les identifiants ne transitent donc pas par ce fichier ni par les
+          # journaux. `mysql --defaults-file` plutôt que -p en ligne de commande,
+          # qui expose le mot de passe dans la table des processus du serveur.
+          rapport=$($SSH_CMD $SSH_OPTS -o BatchMode=yes -o ConnectTimeout=20 \
+            "$SSH_USER@$SSH_HOST" "
+              set -u
+              . '$CONFIG_DIR/.env.db'
+
+              cnf=\$(mktemp)
+              chmod 600 \"\$cnf\"
+              printf '[client]\nhost=%s\nport=%s\nuser=%s\npassword=%s\n' \
+                \"\$MAR_DB_HOST\" \"\$MAR_DB_PORT\" \"\$MAR_DB_USER\" \"\$MAR_DB_PASSWORD\" > \"\$cnf\"
+              q() { mysql --defaults-file=\"\$cnf\" -N -B \"\$MAR_DB_NAME\" -e \"\$1\" 2>&1; }
+
+              echo '### Tables candidates'
+              q \"SHOW TABLES LIKE '%recipe%'\"
+              q \"SHOW TABLES LIKE '%ingredient%'\"
+              q \"SHOW TABLES LIKE '%material%'\"
+
+              echo '### Produits trouvés'
+              q \"SELECT id, name FROM product WHERE name LIKE '%$RECHERCHE%' ORDER BY id LIMIT 10\"
+
+              id=\$(q \"SELECT id FROM product WHERE name LIKE '%$RECHERCHE%' ORDER BY id LIMIT 1\" | head -1)
+              echo \"### Identifiant retenu : \$id\"
+
+              if [ -n \"\$id\" ]; then
+                route=\$(printf '%s' '$ROUTE' | sed \"s/{id}/\$id/\")
+                echo \"### GET \$route\"
+                curl -s -m 20 -o /tmp/sonde.json -w 'HTTP %{http_code} — %{size_download} octets\n' \
+                  -H 'Accept: application/json' \"http://127.0.0.1\$route\" 2>&1
+                head -c 2500 /tmp/sonde.json
+                echo
+                rm -f /tmp/sonde.json
+              fi
+
+              rm -f \"\$cnf\"
+            " 2>&1)
+
+          printf '%s\n' "$rapport"
+          {
+            echo '## Sonde ERP'
+            echo '```'
+            printf '%s\n' "$rapport"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # En annotation aussi : c'est la seule sortie lisible par l'API depuis
+          # l'environnement de développement.
+          resume=$(printf '%s' "$rapport" | head -c 8000 | sed ':a;N;$!ba;s/\n/%0A/g')
+          echo "::notice title=Sonde ERP::$resume"
