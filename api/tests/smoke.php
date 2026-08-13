@@ -1817,17 +1817,73 @@ if (!$facturesErp) {
         json_encode($apercu['body']['mapping'] ?? null)
     );
 
-    $reprise = call($router, 'POST', '/api/v1/marketing/funds/royalties/erp/import', [], ['month' => '2026-04']);
-    check('la reprise écrit les redevances facturées', $reprise['status'] === 201,
-        json_encode($reprise['body']));
+    // Sans rapprochement, la reprise ne trouve aucune boutique et le test
+    // passerait au vert sans rien avoir écrit. On raccroche donc une boutique du
+    // module à la première facture trouvée — côté `mar_shop`, jamais côté ERP.
+    $premiereFacture = $apercu['body']['invoices'][0] ?? null;
 
-    $rejeuErp = call($router, 'POST', '/api/v1/marketing/funds/royalties/erp/import', [], ['month' => '2026-04']);
-    check(
-        'relancer la reprise ne double pas les pièces',
-        ($rejeuErp['body']['created'] ?? -1) === 0
-            && ($rejeuErp['body']['skipped'] ?? 0) === ($reprise['body']['created'] ?? -1),
-        json_encode($rejeuErp['body'])
-    );
+    if ($premiereFacture === null) {
+        printf("  · aucune facture ERP sur ce mois — reprise non vérifiée ici\n");
+    } else {
+        $rattachement = $pdo->prepare('UPDATE mar_shop SET erp_shop_id = :erp WHERE id = 1');
+        $rattachement->execute(['erp' => $premiereFacture['erp_shop_id']]);
+
+        $apercu = call($router, 'GET', '/api/v1/marketing/funds/royalties/erp', ['month' => '2026-04'])['body'];
+        $facture = $apercu['invoices'][0];
+        $facturees = array_values(array_filter(
+            $facture['lines'],
+            static fn (array $ligne): bool => $ligne['kind'] !== null
+        ));
+
+        check('la facture est rapprochée d\'une boutique du module',
+            $facture['shop_id'] === 1, json_encode($facture['shop_id']));
+
+        // Le tableau porte la facture sur la ligne du magasin : c'est là qu'on
+        // répond à « ce magasin est-il à jour ? », pas dans une liste à côté.
+        $tableauErp = call($router, 'GET', '/api/v1/marketing/funds/royalties', ['month' => '2026-04'])['body'];
+        $ligneErp = null;
+        foreach ($tableauErp['shops'] as $boutique) {
+            if ($boutique['shop_id'] === 1) {
+                $ligneErp = $boutique;
+            }
+        }
+        check(
+            'le tableau montre la facture ERP sur la ligne du magasin',
+            ($ligneErp['erp']['document_ref'] ?? null) === $facture['document_ref']
+                && count($ligneErp['erp']['lines'] ?? []) === count($facturees),
+            json_encode($ligneErp['erp'] ?? null)
+        );
+
+        // Les redevances calculées d'avril occupent déjà la place : on les retire
+        // pour que la facture ERP puisse s'écrire à leur place.
+        $pdo->exec("DELETE FROM mar_fund_movement WHERE period_from = '2026-04-01' AND source LIKE 'ROYALTY\_%'");
+
+        $repriseErp = call($router, 'POST', '/api/v1/marketing/funds/royalties/generate', [], ['month' => '2026-04']);
+        check(
+            'la génération reprend les montants facturés plutôt que de les recalculer',
+            ($repriseErp['body']['from_erp'] ?? 0) === count($facturees),
+            json_encode($repriseErp['body'])
+        );
+
+        $montantEcrit = (float) $pdo->query(sprintf(
+            "SELECT amount FROM mar_fund_movement
+              WHERE document_ref = %s AND source = 'ROYALTY_%s'",
+            $pdo->quote($facture['document_ref']),
+            $facturees[0]['kind']
+        ))->fetchColumn();
+        check(
+            'le montant écrit est celui de la ligne de facture',
+            abs($montantEcrit - $facturees[0]['amount']) < 0.005,
+            sprintf('%s vs %s', $montantEcrit, $facturees[0]['amount'])
+        );
+
+        $rejeuErp = call($router, 'POST', '/api/v1/marketing/funds/royalties/generate', [], ['month' => '2026-04']);
+        check(
+            'relancer ne reprend pas deux fois la même pièce',
+            ($rejeuErp['body']['created'] ?? -1) === 0,
+            json_encode($rejeuErp['body'])
+        );
+    }
 }
 
 // Les contrôles de la création s'appliquent aussi à la mise à jour.

@@ -3609,6 +3609,21 @@ table select,
 
 .royalties__prive { font-size: 11px; }
 
+/* D'où vient le chiffre affiché. Une valeur reprise de la facture ne se relit
+   pas comme une valeur tapée, et rien dans une case ne le dit. */
+.royalties__origine {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 0 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
 /* La source qui fait foi, au-dessus de la grille manuelle : ce que l'ERP a
    facturé se reprend, il ne se recalcule pas. Grisée quand la lecture échoue,
    parce qu'un bloc muet laisse croire qu'il n'y a rien à reprendre. */

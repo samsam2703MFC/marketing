@@ -1270,9 +1270,26 @@ export interface RoyaltyShop {
   rates: Partial<Record<RoyaltyKind, RoyaltyRate>>
   /** Ce qui est déjà au grand livre pour ce mois, nature par nature. */
   movements: Partial<Record<RoyaltyKind, { id: number; amount: number; base_amount: number | null; rate_pct: number | null }>>
+  /** La facture de l'ERP pour ce magasin et ce mois, quand il y en a une. */
+  erp: {
+    document_ref: string
+    revenue: number | null
+    total: number | null
+    lines: Partial<Record<RoyaltyKind, { amount: number; rate: number | null; base: number | null; label: string | null }>>
+    unknown_lines: number
+  } | null
 }
 
-export function getRoyalties(month: string): Promise<{ month: string; shops: RoyaltyShop[] }> {
+export function getRoyalties(month: string): Promise<{
+  month: string
+  shops: RoyaltyShop[]
+  erp: {
+    available: boolean
+    reason: string | null
+    invoices: number
+    inventory: Record<string, { 'non reconnues': string[]; disponibles: string[] }>
+  } | null
+}> {
   return request(`${BASE}/funds/royalties`, { query: { month } })
 }
 
@@ -1349,6 +1366,8 @@ export function generateRoyalties(
   skipped: number
   without_rate: number
   without_revenue: number
+  /** Combien viennent d'une facture ERP plutôt que d'un calcul local. */
+  from_erp: number
   total_amount: number
 }> {
   return request(`${BASE}/funds/royalties/generate`, { method: 'POST', body: { month, kinds } })

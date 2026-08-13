@@ -53,6 +53,11 @@ final class RoyaltyRepository
      *
      * @return array{month:string, shops:list<array<string,mixed>>}
      */
+    public function __construct(
+        private readonly ErpRoyaltyRepository $erp = new ErpRoyaltyRepository(),
+    ) {
+    }
+
     public function board(AuthContext $auth, string $month): array
     {
         $premier = $this->firstDay($month);
@@ -81,11 +86,12 @@ final class RoyaltyRepository
                 'revenue_amount' => $row['revenue_amount'] !== null ? (float) $row['revenue_amount'] : null,
                 'rates'          => [],
                 'movements'      => [],
+                'erp'            => null,
             ];
         }
 
         if ($shops === []) {
-            return ['month' => substr($premier, 0, 7), 'shops' => []];
+            return ['month' => substr($premier, 0, 7), 'shops' => [], 'erp' => null];
         }
 
         foreach ($this->effectiveRates(array_keys($shops), $premier) as $shopId => $rates) {
@@ -125,7 +131,56 @@ final class RoyaltyRepository
 
         unset($dernier);
 
-        return ['month' => substr($premier, 0, 7), 'shops' => array_values($shops)];
+        // Ce que l'ERP a facturé vient s'asseoir dans le même tableau, sur la
+        // ligne de la boutique concernée. Le tenir dans un bloc à part obligeait
+        // à comparer deux listes de l'œil pour répondre à « ce magasin est-il à
+        // jour ? » — c'est justement la question que le tableau doit trancher.
+        $erp = $this->erp->preview($auth, $month);
+
+        foreach ($erp['invoices'] as $facture) {
+            if ($facture['shop_id'] === null || !isset($shops[$facture['shop_id']])) {
+                continue;
+            }
+
+            $lignes    = [];
+            $inconnues = 0;
+            foreach ($facture['lines'] as $ligne) {
+                if ($ligne['kind'] === null) {
+                    $inconnues++;
+
+                    continue;
+                }
+
+                $lignes[$ligne['kind']] = [
+                    'amount' => $ligne['amount'],
+                    'rate'   => $ligne['rate'],
+                    'base'   => $ligne['base'],
+                    'label'  => $ligne['label'],
+                ];
+            }
+
+            $shops[$facture['shop_id']]['erp'] = [
+                'document_ref'   => $facture['document_ref'],
+                'revenue'        => $facture['revenue'],
+                'total'          => $facture['total'],
+                'lines'          => $lignes,
+                'unknown_lines'  => $inconnues,
+            ];
+        }
+
+        return [
+            'month' => substr($premier, 0, 7),
+            'shops' => array_values($shops),
+            // L'état de la lecture ERP voyage avec le tableau : « aucune facture
+            // ce mois-ci » et « la table n'a pas pu être lue » ne se corrigent
+            // pas de la même façon, et un tableau vide ne dit ni l'un ni l'autre.
+            'erp'   => [
+                'available' => $erp['available'],
+                'reason'    => $erp['reason'],
+                'invoices'  => count($erp['invoices']),
+                'inventory' => $erp['inventory'],
+            ],
+        ];
     }
 
     /**
@@ -335,6 +390,10 @@ final class RoyaltyRepository
 
         $bilan = [
             'created' => 0, 'skipped' => 0, 'without_rate' => 0, 'without_revenue' => 0,
+            // Combien viennent d'une facture ERP plutôt que d'un calcul local :
+            // les deux origines n'appellent pas la même confiance, et le bilan
+            // doit permettre de les distinguer sans rouvrir le grand livre.
+            'from_erp' => 0,
             'total_amount' => 0.0, 'lines' => [],
         ];
 
@@ -344,23 +403,36 @@ final class RoyaltyRepository
             $insertion = $connection->prepare(
                 'INSERT INTO mar_fund_movement
                     (direction, shop_id, movement_date, period_from, period_to,
-                     label, amount, base_amount, rate_pct, source, is_public, created_by)
+                     label, amount, base_amount, rate_pct, source, is_public,
+                     document_ref, created_by)
                  VALUES
                     (\'IN\', :shop, :date, :depuis, :jusqu,
-                     :label, :montant, :base, :taux, :source, :publique, :par)'
+                     :label, :montant, :base, :taux, :source, :publique,
+                     :piece, :par)'
+            );
+
+            // La pièce reconnaît une facture ERP déjà reprise, même si sa
+            // période ne tombe pas exactement sur le mois affiché.
+            $dejaReprise = $connection->prepare(
+                'SELECT 1 FROM mar_fund_movement
+                  WHERE document_ref = :piece AND source = :source AND shop_id = :shop'
             );
 
             foreach ($tableau['shops'] as $boutique) {
                 foreach ($natures as $kind) {
-                    $taux = $boutique['rates'][$kind]['rate_pct'] ?? null;
+                    // La facture de l'ERP fait foi quand elle existe : c'est le
+                    // montant réellement dû, et le recalculer à partir d'un taux
+                    // tenu à part donnerait un second chiffre pour le même fait.
+                    $facturee = $boutique['erp']['lines'][$kind] ?? null;
+                    $taux     = $facturee['rate'] ?? $boutique['rates'][$kind]['rate_pct'] ?? null;
 
-                    if ($taux === null) {
+                    if ($facturee === null && $taux === null) {
                         $bilan['without_rate']++;
 
                         continue;
                     }
 
-                    if ($boutique['revenue_amount'] === null) {
+                    if ($facturee === null && $boutique['revenue_amount'] === null) {
                         $bilan['without_revenue']++;
 
                         continue;
@@ -372,9 +444,28 @@ final class RoyaltyRepository
                         continue;
                     }
 
-                    $montant = round($boutique['revenue_amount'] * $taux / 100, 2);
+                    $piece = $facturee === null ? null : $boutique['erp']['document_ref'];
+
+                    if ($piece !== null) {
+                        $dejaReprise->execute([
+                            'piece'  => $piece,
+                            'source' => self::KINDS[$kind]['source'],
+                            'shop'   => $boutique['shop_id'],
+                        ]);
+
+                        if ($dejaReprise->fetchColumn() !== false) {
+                            $bilan['skipped']++;
+
+                            continue;
+                        }
+                    }
+
+                    $montant = $facturee !== null
+                        ? $facturee['amount']
+                        : round($boutique['revenue_amount'] * $taux / 100, 2);
 
                     $insertion->execute([
+                        'piece'    => $piece,
                         'shop'     => $boutique['shop_id'],
                         // Facturée à la clôture du mois qu'elle couvre : la
                         // dater du premier ferait tomber la redevance de mars
@@ -388,7 +479,10 @@ final class RoyaltyRepository
                             $boutique['shop_name']
                         ),
                         'montant'  => $montant,
-                        'base'     => $boutique['revenue_amount'],
+                        // La base facturée, ou celle déclarée à défaut : c'est
+                        // elle qui rend le montant recalculable des années plus
+                        // tard, quand le contrat aura changé deux fois.
+                        'base'     => $facturee['base'] ?? $boutique['revenue_amount'],
                         'taux'     => $taux,
                         'source'   => self::KINDS[$kind]['source'],
                         'publique' => self::KINDS[$kind]['public'] ? 1 : 0,
@@ -397,11 +491,13 @@ final class RoyaltyRepository
 
                     $bilan['created']++;
                     $bilan['total_amount'] += $montant;
+                    $bilan['from_erp']     += $facturee !== null ? 1 : 0;
                     $bilan['lines'][] = [
                         'shop_id'   => $boutique['shop_id'],
                         'shop_name' => $boutique['shop_name'],
                         'kind'      => $kind,
                         'amount'    => $montant,
+                        'from_erp'  => $facturee !== null,
                     ];
                 }
             }
