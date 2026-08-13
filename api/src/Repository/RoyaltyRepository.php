@@ -137,6 +137,20 @@ final class RoyaltyRepository
         // jour ? » — c'est justement la question que le tableau doit trancher.
         $erp = $this->erp->preview($auth, $month);
 
+        // Les libellés que la lecture n'a pas su classer, relevés sur toutes les
+        // factures — y compris celles dont la boutique n'est pas rapprochée.
+        // C'est le seul endroit d'où l'on peut apprendre comment l'ERP nomme
+        // réellement ses redevances : les deviner est ce qui s'est déjà mal
+        // passé une fois.
+        $libellesInconnus = [];
+        foreach ($erp['invoices'] as $facture) {
+            foreach ($facture['lines'] as $ligne) {
+                if ($ligne['kind'] === null && $ligne['label'] !== null) {
+                    $libellesInconnus[(string) $ligne['label']] = true;
+                }
+            }
+        }
+
         foreach ($erp['invoices'] as $facture) {
             if ($facture['shop_id'] === null || !isset($shops[$facture['shop_id']])) {
                 continue;
@@ -179,6 +193,9 @@ final class RoyaltyRepository
                 'reason'    => $erp['reason'],
                 'invoices'  => count($erp['invoices']),
                 'inventory' => $erp['inventory'],
+                // Affichés tels quels : c'est ainsi qu'on apprend comment l'ERP
+                // nomme ses redevances, sans avoir à interroger la base.
+                'unknown_labels' => array_keys($libellesInconnus),
             ],
         ];
     }

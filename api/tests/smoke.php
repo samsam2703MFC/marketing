@@ -1796,6 +1796,33 @@ $facturesErp = (int) $pdo->query(
       WHERE table_schema = DATABASE() AND table_name = 'royalty_invoice'"
 )->fetchColumn() === 1;
 
+// La nature d'une ligne se lit dans son libellé. La règle se vérifie sans base :
+// c'est une lecture de texte, et les tables de l'ERP n'ont pas à être imitées
+// pour l'éprouver.
+foreach ([
+    'Redevance marketing'      => 'MARKETING',
+    'REDEVANCE MKT'            => 'MARKETING',
+    'Redevance d\'assistance'  => 'ASSISTANCE',
+    'Assistance technique'     => 'ASSISTANCE',
+    'Redevance de marque'      => 'MARQUE',
+    'Licence enseigne'         => 'MARQUE',
+] as $libelle => $attendu) {
+    check(
+        sprintf('« %s » se lit comme une redevance %s', $libelle, strtolower($attendu)),
+        \Marketing\Repository\ErpRoyaltyRepository::kindFromLabel($libelle) === $attendu
+    );
+}
+
+// Un libellé vague s'applique aux trois natures. Mal classée, une ligne s'écrit
+// aussi bien qu'une autre et personne ne s'en aperçoit : une nature manquante se
+// corrige, une nature fausse se découvre au contrôle.
+foreach (['Redevance', 'Royalties', 'Frais de service', 'Livraison', ''] as $vague) {
+    check(
+        sprintf('« %s » n\'est rattaché à aucune redevance', $vague),
+        \Marketing\Repository\ErpRoyaltyRepository::kindFromLabel($vague) === null
+    );
+}
+
 $apercu = call($router, 'GET', '/api/v1/marketing/funds/royalties/erp', ['month' => '2026-04']);
 check('la lecture ERP répond toujours, même sans les tables', $apercu['status'] === 200);
 

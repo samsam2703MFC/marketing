@@ -316,6 +316,7 @@ function ErpState({
     reason: string | null
     invoices: number
     inventory: Record<string, { 'non reconnues': string[]; disponibles: string[] }>
+    unknown_labels: string[]
   } | null
 }) {
   const [detail, setDetail] = useState(false)
@@ -339,6 +340,21 @@ function ErpState({
       </div>
 
       {etat.available ? null : <p className="error">{etat.reason}</p>}
+
+      {/* Une ligne dont la nature n'est pas reconnue n'est pas importée : mal
+          classée, elle s'écrirait aussi bien qu'une autre et personne ne le
+          verrait. Son libellé exact est donc affiché — c'est ce qu'il faut
+          savoir pour la rattacher. */}
+      {etat.unknown_labels.length === 0 ? null : (
+        <p className="muted erpinvoices__inconnus">
+          Non rattaché à une redevance, donc non repris :{' '}
+          {etat.unknown_labels.map((libelle) => (
+            <span key={libelle} className="erpinvoices__libelle">
+              {libelle}
+            </span>
+          ))}
+        </p>
+      )}
 
       {detail ? (
         <div className="erpinvoices__detail">

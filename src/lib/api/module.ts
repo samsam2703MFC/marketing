@@ -1288,6 +1288,8 @@ export function getRoyalties(month: string): Promise<{
     reason: string | null
     invoices: number
     inventory: Record<string, { 'non reconnues': string[]; disponibles: string[] }>
+    /** Libellés de ligne que la lecture n'a pas su classer, tels quels. */
+    unknown_labels: string[]
   } | null
 }> {
   return request(`${BASE}/funds/royalties`, { query: { month } })

@@ -3644,6 +3644,19 @@ table select,
 .erpinvoices__head span { font-size: 12px; }
 .erpinvoices__head .action { margin-left: auto; }
 
+.erpinvoices__inconnus { margin: 0; font-size: 12px; }
+
+.erpinvoices__libelle {
+  display: inline-block;
+  margin: 0 4px 2px 0;
+  padding: 1px 6px;
+  font-size: 11.5px;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+
 .erpinvoices__detail { display: flex; flex-direction: column; gap: 6px; }
 .erpinvoices__detail p { margin: 0; font-size: 11.5px; line-height: 1.5; word-break: break-word; }
 

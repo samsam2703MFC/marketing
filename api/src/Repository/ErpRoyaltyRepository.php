@@ -52,7 +52,9 @@ final class ErpRoyaltyRepository
     /** @var array<string, list<string>> */
     private const LINE_COLUMNS = [
         'invoice' => ['royalty_invoice_id', 'invoice_id', 'id_royalty_invoice', 'id_invoice', 'header_id'],
-        'label'   => ['label', 'designation', 'description', 'name', 'wording', 'libelle'],
+        // `line_label` porte la nature de la ligne : c'est lui qui distingue les
+        // trois redevances, et il passe donc avant tout autre libellé.
+        'label'   => ['line_label', 'label', 'designation', 'description', 'name', 'wording', 'libelle'],
         'kind'    => ['type', 'kind', 'royalty_type', 'category', 'code', 'nature'],
         'rate'    => ['rate_pct', 'rate', 'percent', 'percentage', 'pct', 'taux'],
         // Le chiffre d'affaires net est porté par la ligne, dans `net_amount` :
@@ -70,17 +72,25 @@ final class ErpRoyaltyRepository
     private const LINE_REQUIRED    = ['invoice', 'amount'];
 
     /**
-     * Reconnaissance de la nature d'une ligne, par ce qu'elle dit d'elle-même.
+     * Reconnaissance de la nature d'une ligne, par son libellé.
      *
-     * L'ordre compte : « redevance marketing » contient aussi « redevance », et
-     * la marque serait reconnue à tort si on la cherchait en premier.
+     * Volontairement étroite. Un mot vague — « redevance », « royalties »,
+     * « service » — s'applique aux trois natures : le retenir ferait classer
+     * « Redevance » tout court en redevance de marque, et personne ne verrait
+     * jamais l'erreur, parce qu'une ligne mal classée s'écrit aussi bien qu'une
+     * ligne bien classée. Ce qui n'est pas reconnu est compté, affiché avec son
+     * libellé exact, et non importé : une nature manquante se corrige, une
+     * nature fausse se découvre au contrôle fiscal.
+     *
+     * L'ordre compte : « redevance marketing » contient aussi « marque » dans
+     * certaines formulations, et le premier trouvé gagne.
      *
      * @var array<string, list<string>>
      */
     private const KIND_HINTS = [
-        'MARKETING'  => ['marketing', 'mkt', 'communication', 'pub'],
-        'ASSISTANCE' => ['assistance', 'assist', 'support', 'service'],
-        'MARQUE'     => ['marque', 'brand', 'enseigne', 'licence', 'royalt', 'redevance'],
+        'MARKETING'  => ['marketing', 'mkt', 'communication', 'publicit'],
+        'ASSISTANCE' => ['assistance', 'assist', 'support'],
+        'MARQUE'     => ['marque', 'brand', 'enseigne', 'licence'],
     ];
 
     /** Inventaire de la dernière résolution, pour le diagnostic de l'écran. */
@@ -370,6 +380,18 @@ final class ErpRoyaltyRepository
         }
 
         return ['mapping' => ['invoice' => $facture, 'line' => $ligne], 'invoices' => $resultat];
+    }
+
+    /**
+     * Nature d'une ligne, d'après son libellé — ou rien.
+     *
+     * Publique et statique parce qu'elle se vérifie sans base : c'est une règle
+     * de lecture, et les tables de l'ERP n'ont pas à être imitées pour
+     * l'éprouver.
+     */
+    public static function kindFromLabel(string $texte): ?string
+    {
+        return (new self())->recognise($texte);
     }
 
     /** Nature d'une ligne, d'après ce qu'elle dit d'elle-même. */
