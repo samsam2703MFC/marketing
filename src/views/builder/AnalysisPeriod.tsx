@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import RangeCalendar from './RangeCalendar'
+import RangeCalendar from '../../components/RangeCalendar'
 
 /**
  * Période d'analyse : la fenêtre de ventes qui sert de repère.

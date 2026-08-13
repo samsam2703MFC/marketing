@@ -5,6 +5,7 @@ import type { Granularity, LedgerPeriod, LedgerRow, MovementDraft } from '../lib
 import LinkBadge from '../components/LinkBadge'
 import { useLabel, useReferences } from '../state/references'
 import { describeError } from '../state/auth'
+import RangeCalendar, { DayCalendar } from '../components/RangeCalendar'
 
 const GRANULARITIES: Array<{ value: Granularity; label: string }> = [
   { value: 'month', label: 'Mois' },
@@ -25,6 +26,7 @@ export default function FundsView() {
   const [to, setTo] = useState('')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [saisie, setSaisie] = useState(false)
+  const [fenetre, setFenetre] = useState(false)
   const [rechargement, setRechargement] = useState(0)
 
   const { data, error, loading } = useAsync(
@@ -58,12 +60,19 @@ export default function FundsView() {
         </div>
 
         <div className="filters__row">
-          <label className="field">
-            Du <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-          </label>
-          <label className="field">
-            Au <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-          </label>
+          {/* Même calendrier que la saisie : les deux derniers champs natifs de
+              l'écran affichaient encore `mm/dd/yyyy` juste au-dessus d'un
+              formulaire qui écrit le jour d'abord. */}
+          <button
+            type="button"
+            className={`filter${fenetre ? ' is-on' : ''}`}
+            aria-expanded={fenetre}
+            onClick={() => setFenetre(!fenetre)}
+          >
+            {from === '' && to === ''
+              ? 'Toute la période'
+              : `Du ${from === '' ? '…' : jour(from)} au ${to === '' ? '…' : jour(to)}`}
+          </button>
           <button type="button" className="filter" onClick={() => setCollapsed(new Set())}>
             Tout déplier
           </button>
@@ -85,6 +94,18 @@ export default function FundsView() {
           </button>
         </div>
       </div>
+
+      {fenetre ? (
+        <RangeCalendar
+          from={from}
+          to={to}
+          onChange={(plage) => {
+            setFrom(plage.starts_on)
+            setTo(plage.ends_on)
+            if (plage.ends_on !== '') setFenetre(false)
+          }}
+        />
+      ) : null}
 
       {saisie ? (
         <MovementForm
@@ -213,6 +234,15 @@ function Block({
   )
 }
 
+/** « 13/08/2026 », l'ordre du reste du module. */
+function jour(valeur: string): string {
+  const [annee, mois, quantieme] = valeur.split('-')
+
+  return annee === undefined || mois === undefined || quantieme === undefined
+    ? valeur
+    : `${quantieme}/${mois}/${annee}`
+}
+
 /**
  * Saisie d'une entrée ou d'une sortie du fonds.
  *
@@ -241,6 +271,9 @@ function MovementForm({ onDone, onCancel }: { onDone: () => void; onCancel: () =
   const [piece, setPiece] = useState('')
   const [erreur, setErreur] = useState<string | null>(null)
   const [envoi, setEnvoi] = useState(false)
+  // Un seul calendrier ouvert à la fois : deux grilles côte à côte dans un
+  // formulaire de dix champs, on ne sait plus laquelle on remplit.
+  const [ouvert, setOuvert] = useState<'date' | 'periode' | null>(null)
 
   const somme = Number(montant.trim().replace(',', '.'))
   const montantValide = montant.trim() !== '' && Number.isFinite(somme) && somme > 0
@@ -323,10 +356,17 @@ function MovementForm({ onDone, onCancel }: { onDone: () => void; onCancel: () =
           </span>
         </label>
 
-        <label className="field">
-          Date d’écriture
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </label>
+        <div className="field">
+          <span>Date d’écriture</span>
+          <button
+            type="button"
+            className="datefield"
+            aria-expanded={ouvert === 'date'}
+            onClick={() => setOuvert(ouvert === 'date' ? null : 'date')}
+          >
+            {date === '' ? 'Choisir une date' : jour(date)}
+          </button>
+        </div>
 
         <label className="field">
           Levier
@@ -354,16 +394,16 @@ function MovementForm({ onDone, onCancel }: { onDone: () => void; onCancel: () =
             n'avait plus l'air d'appartenir au premier. */}
         <div className="field movement__periode">
           <span>Période couverte</span>
-          <div className="movement__bornes">
-            <label>
-              du
-              <input type="date" value={debut} onChange={(e) => setDebut(e.target.value)} />
-            </label>
-            <label>
-              au
-              <input type="date" value={fin} onChange={(e) => setFin(e.target.value)} />
-            </label>
-          </div>
+          <button
+            type="button"
+            className="datefield"
+            aria-expanded={ouvert === 'periode'}
+            onClick={() => setOuvert(ouvert === 'periode' ? null : 'periode')}
+          >
+            {debut === '' && fin === ''
+              ? 'Aucune — mouvement ponctuel'
+              : `du ${debut === '' ? '…' : jour(debut)} au ${fin === '' ? '…' : jour(fin)}`}
+          </button>
         </div>
 
         <label className="field">
@@ -399,6 +439,31 @@ function MovementForm({ onDone, onCancel }: { onDone: () => void; onCancel: () =
           />
         </label>
       </div>
+
+      {ouvert === 'date' ? (
+        <DayCalendar
+          value={date}
+          onChange={(valeur) => {
+            setDate(valeur)
+            setOuvert(null)
+          }}
+        />
+      ) : null}
+
+      {ouvert === 'periode' ? (
+        <RangeCalendar
+          from={debut}
+          to={fin}
+          onChange={(plage) => {
+            setDebut(plage.starts_on)
+            setFin(plage.ends_on)
+            // On referme quand la période est complète : rouvrir pour corriger
+            // est un clic, refermer soi-même à chaque saisie en est un aussi,
+            // à chaque fois.
+            if (plage.ends_on !== '') setOuvert(null)
+          }}
+        />
+      ) : null}
 
       {!periodeValide ? (
         <p className="error">

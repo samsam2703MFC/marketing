@@ -3560,3 +3560,25 @@ table select,
   flex: 1;
   min-width: 0;
 }
+
+/* Un champ de date qui n'en est pas un : il ouvre le calendrier maison plutôt
+   que le sélecteur natif, qui affiche `mm/dd/yyyy` à des gens qui écrivent le
+   jour d'abord. */
+.datefield {
+  width: 100%;
+  padding: 7px 10px;
+  font: 500 13px 'Gotham', system-ui, sans-serif;
+  text-align: left;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.datefield:hover { border-color: var(--muted); }
+.datefield[aria-expanded='true'] { border-color: var(--accent); color: var(--accent); }
+
+/* Un seul mois : la grille ne doit pas s'étaler sur toute la largeur du
+   formulaire, où elle donnerait des cases de cinq centimètres. */
+.calendar--single { max-width: 22rem; }

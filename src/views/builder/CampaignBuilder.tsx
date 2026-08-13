@@ -7,7 +7,7 @@ import { describeError } from '../../state/auth'
 import ObjectivesStep from './ObjectivesStep'
 import PricingStep from './PricingStep'
 import ProspectList from './ProspectList'
-import RangeCalendar from './RangeCalendar'
+import RangeCalendar from '../../components/RangeCalendar'
 
 /**
  * Assistant de création de campagne, en sept étapes.

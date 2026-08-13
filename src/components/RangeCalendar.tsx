@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 /**
- * Période de campagne, en deux clics.
+ * Choix de dates, en français, sans champ natif.
  *
  * Les deux champs `<input type="date">` demandaient d'ouvrir un calendrier,
  * choisir, refermer, recommencer sur le second — et affichaient `mm/dd/yyyy`,
@@ -14,6 +14,10 @@ import { useState } from 'react'
  * Premier clic : le début. Deuxième : la fin. Deux mois côte à côte parce
  * qu'une campagne franchit presque toujours une fin de mois — les afficher
  * évite d'avoir à naviguer entre les deux clics.
+ *
+ * `DayCalendar` en est la forme à une date — une écriture comptable tombe un
+ * jour, pas sur une période. Même grille, même ordre de lecture : les deux
+ * cohabitent dans un formulaire sans que l'œil ait à changer d'habitude.
  */
 
 const JOURS = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
@@ -220,6 +224,77 @@ export default function RangeCalendar({
       <div className="calendar__months">
         <Month year={anchor.year} month={anchor.month} from={from} to={to} onPick={pick} />
         <Month year={second.year} month={second.month} from={from} to={to} onPick={pick} />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * La même grille, pour une seule date.
+ *
+ * Un mois plutôt que deux : on choisit un jour, pas un intervalle, et le second
+ * mois n'aurait servi qu'à occuper la place. La navigation reste, pour les
+ * factures qui arrivent en retard.
+ */
+export function DayCalendar({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
+  const [anchor, setAnchor] = useState(() => {
+    if (value !== '') {
+      const [year, month] = value.split('-').map(Number)
+
+      return { year, month: month - 1 }
+    }
+
+    return today()
+  })
+
+  function shift(months: number) {
+    const total = anchor.year * 12 + anchor.month + months
+
+    setAnchor({ year: Math.floor(total / 12), month: ((total % 12) + 12) % 12 })
+  }
+
+  return (
+    <div className="calendar calendar--single">
+      <div className="calendar__bar">
+        <button
+          type="button"
+          className="calendar__nav"
+          onClick={() => shift(-1)}
+          aria-label="Mois précédent"
+        >
+          ‹
+        </button>
+
+        <p className="calendar__range">
+          {value === '' ? 'Cliquez un jour.' : <strong>{human(value)}</strong>}
+        </p>
+
+        <button
+          type="button"
+          className="calendar__nav"
+          onClick={() => shift(1)}
+          aria-label="Mois suivant"
+        >
+          ›
+        </button>
+      </div>
+
+      <div className="calendar__months">
+        {/* `from` et `to` sur le même jour : la grille marque alors une seule
+            case, sans qu'il faille lui apprendre un troisième état. */}
+        <Month
+          year={anchor.year}
+          month={anchor.month}
+          from={value}
+          to={value}
+          onPick={onChange}
+        />
       </div>
     </div>
   )
