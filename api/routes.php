@@ -121,6 +121,10 @@ return static function (Router $router): void {
     $router->get('/api/v1/marketing/funds/royalties',           [$funds, 'royalties']);
     $router->put('/api/v1/marketing/funds/royalties',           [$funds, 'saveRoyalties']);
     $router->post('/api/v1/marketing/funds/royalties/generate', [$funds, 'generateRoyalties']);
+    // Les redevances telles que l'ERP les a facturées : lecture seule de
+    // `royalty_invoice`, puis reprise au grand livre.
+    $router->get('/api/v1/marketing/funds/royalties/erp',       [$funds, 'erpRoyalties']);
+    $router->post('/api/v1/marketing/funds/royalties/erp/import', [$funds, 'importErpRoyalties']);
     $router->get('/api/v1/marketing/roi/quarterly',             [$funds, 'roiQuarterly']);
     $router->get('/api/v1/marketing/campaigns/{id}/roi-costs',  [$funds, 'roiCosts']);
 };

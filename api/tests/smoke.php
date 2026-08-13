@@ -1785,6 +1785,51 @@ check(
     isset($sourcesMarque['ROYALTY_MARKETING'], $sourcesMarque['ROYALTY_ASSISTANCE'], $sourcesMarque['ROYALTY_MARQUE'])
 );
 
+// --- Redevances facturées par l'ERP -----------------------------------------
+// `royalty_invoice` et `royalty_invoice_line` appartiennent à l'ERP : ce dépôt
+// ne les crée pas, même pour se tester — la même prudence que pour la reprise
+// des boutiques, dont le moindre lancement contre la base réelle effacerait
+// l'ERP. Là où elles manquent, c'est le diagnostic qui est vérifié : il vaut
+// mieux un refus lisible qu'un import qui invente des montants.
+$facturesErp = (int) $pdo->query(
+    "SELECT COUNT(*) FROM information_schema.tables
+      WHERE table_schema = DATABASE() AND table_name = 'royalty_invoice'"
+)->fetchColumn() === 1;
+
+$apercu = call($router, 'GET', '/api/v1/marketing/funds/royalties/erp', ['month' => '2026-04']);
+check('la lecture ERP répond toujours, même sans les tables', $apercu['status'] === 200);
+
+if (!$facturesErp) {
+    printf("  · royalty_invoice absente de cette base — reprise non vérifiée ici\n");
+    check(
+        'elle dit ce qui manque plutôt que de se taire',
+        ($apercu['body']['available'] ?? true) === false
+            && is_string($apercu['body']['reason'] ?? null)
+            && $apercu['body']['reason'] !== '',
+        json_encode($apercu['body']['reason'] ?? null)
+    );
+} else {
+    check('la lecture ERP aboutit', ($apercu['body']['available'] ?? false) === true,
+        json_encode($apercu['body']['reason'] ?? null));
+    check(
+        'elle dit quelles colonnes elle a reconnues',
+        isset($apercu['body']['mapping']['invoice']['id'], $apercu['body']['mapping']['line']['amount']),
+        json_encode($apercu['body']['mapping'] ?? null)
+    );
+
+    $reprise = call($router, 'POST', '/api/v1/marketing/funds/royalties/erp/import', [], ['month' => '2026-04']);
+    check('la reprise écrit les redevances facturées', $reprise['status'] === 201,
+        json_encode($reprise['body']));
+
+    $rejeuErp = call($router, 'POST', '/api/v1/marketing/funds/royalties/erp/import', [], ['month' => '2026-04']);
+    check(
+        'relancer la reprise ne double pas les pièces',
+        ($rejeuErp['body']['created'] ?? -1) === 0
+            && ($rejeuErp['body']['skipped'] ?? 0) === ($reprise['body']['created'] ?? -1),
+        json_encode($rejeuErp['body'])
+    );
+}
+
 // Les contrôles de la création s'appliquent aussi à la mise à jour.
 $target = (int) $pdo->query("SELECT id FROM mar_campaign WHERE scope = 'RESEAU' ORDER BY id LIMIT 1")->fetchColumn();
 foreach ([

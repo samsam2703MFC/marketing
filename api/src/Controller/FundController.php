@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Marketing\Controller;
 
+use Marketing\Repository\ErpRoyaltyRepository;
 use Marketing\Repository\FundRepository;
 use Marketing\Repository\RoyaltyRepository;
 use Marketing\Support\AuthContext;
@@ -15,6 +16,7 @@ final class FundController
     public function __construct(
         private readonly FundRepository $funds = new FundRepository(),
         private readonly RoyaltyRepository $royalties = new RoyaltyRepository(),
+        private readonly ErpRoyaltyRepository $erpRoyalties = new ErpRoyaltyRepository(),
     ) {
     }
 
@@ -193,6 +195,27 @@ final class FundController
             $this->royalties->generate(AuthContext::current(), $mois, is_array($kinds) ? $kinds : []),
             201
         );
+    }
+
+    /**
+     * Ce que l'ERP a facturé ce mois-là, et comment le module le comprend.
+     *
+     * Répond toujours 200, même quand la lecture échoue : « la table n'existe
+     * pas », « la colonne du montant n'a pas été reconnue » sont des réponses
+     * utiles, pas des erreurs de l'appelant. L'écran les affiche telles quelles.
+     */
+    public function erpRoyalties(Request $request): array
+    {
+        $mois = $request->queryString('month') ?? date('Y-m');
+
+        return Response::data($this->erpRoyalties->preview(AuthContext::current(), $mois));
+    }
+
+    public function importErpRoyalties(Request $request): array
+    {
+        $mois = (string) ($request->input('month') ?? '');
+
+        return Response::data($this->erpRoyalties->import(AuthContext::current(), $mois), 201);
     }
 
     public function destroyRecurrence(Request $request): array

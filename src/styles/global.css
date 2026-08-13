@@ -3609,6 +3609,29 @@ table select,
 
 .royalties__prive { font-size: 11px; }
 
+/* La source qui fait foi, au-dessus de la grille manuelle : ce que l'ERP a
+   facturé se reprend, il ne se recalcule pas. Grisée quand la lecture échoue,
+   parce qu'un bloc muet laisse croire qu'il n'y a rien à reprendre. */
+.erpinvoices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper, #fbf9f6);
+}
+
+.erpinvoices.is-off { background: #fff; border-style: dashed; }
+
+.erpinvoices__head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.erpinvoices__head strong { font-size: 13.5px; }
+.erpinvoices__head span { font-size: 12px; }
+.erpinvoices__head .action { margin-left: auto; }
+
+.erpinvoices__detail { display: flex; flex-direction: column; gap: 6px; }
+.erpinvoices__detail p { margin: 0; font-size: 11.5px; line-height: 1.5; word-break: break-word; }
+
 /* Une case à cocher se lit avec son étiquette, pas au-dessus d'elle. */
 .movement__grid .field--inline { flex-direction: row; align-items: flex-start; gap: 8px; }
 .movement__grid .field--inline input { width: auto; }

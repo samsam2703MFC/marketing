@@ -1289,6 +1289,58 @@ export function saveRoyalties(payload: {
   return request(`${BASE}/funds/royalties`, { method: 'PUT', body: payload })
 }
 
+/**
+ * Ce que l'ERP a facturé, tel que le module le lit.
+ *
+ * `available: false` n'est pas une panne : c'est une réponse — la table manque,
+ * ou une colonne n'a pas été reconnue. `reason` le dit en clair, et `inventory`
+ * donne les colonnes réellement présentes pour qu'on puisse trancher.
+ */
+export interface ErpRoyaltyLine {
+  label: string | null
+  kind: RoyaltyKind | null
+  rate: number | null
+  base: number | null
+  amount: number
+}
+
+export interface ErpRoyaltyInvoice {
+  erp_id: string
+  shop_id: number | null
+  shop_name: string
+  erp_shop_id: string
+  document_ref: string
+  invoice_date: string
+  period_from: string
+  period_to: string
+  revenue: number | null
+  total: number | null
+  status: string | null
+  lines: ErpRoyaltyLine[]
+}
+
+export interface ErpRoyaltyPreview {
+  available: boolean
+  reason: string | null
+  mapping: { invoice?: Record<string, string>; line?: Record<string, string> }
+  inventory: Record<string, { 'non reconnues': string[]; disponibles: string[] }>
+  invoices: ErpRoyaltyInvoice[]
+}
+
+export function getErpRoyalties(month: string): Promise<ErpRoyaltyPreview> {
+  return request(`${BASE}/funds/royalties/erp`, { query: { month } })
+}
+
+export function importErpRoyalties(month: string): Promise<{
+  created: number
+  skipped: number
+  unmatched_shop: number
+  unknown_kind: number
+  total_amount: number
+}> {
+  return request(`${BASE}/funds/royalties/erp/import`, { method: 'POST', body: { month } })
+}
+
 export function generateRoyalties(
   month: string,
   kinds: RoyaltyKind[] = [],

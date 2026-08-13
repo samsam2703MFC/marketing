@@ -147,6 +147,15 @@ export default function RoyaltiesPanel({ onWritten }: { onWritten: () => void })
         premier du mois affiché : les mois déjà facturés gardent leur taux.
       </p>
 
+      <ErpInvoices
+        month={mois}
+        tour={tour}
+        onImported={() => {
+          setTour((n) => n + 1)
+          onWritten()
+        }}
+      />
+
       {loading ? <p className="muted">Chargement…</p> : null}
       {erreur === null ? null : <p className="error">{erreur}</p>}
       {bilan === null ? null : <p className="royalties__bilan">{bilan}</p>}
@@ -259,6 +268,121 @@ export default function RoyaltiesPanel({ onWritten }: { onWritten: () => void })
         </button>
       </div>
     </section>
+  )
+}
+
+/**
+ * Les redevances telles que l'ERP les a facturées.
+ *
+ * C'est la source qui fait foi : `royalty_invoice` existe déjà, et recalculer le
+ * même fait à partir d'un taux tenu à part produirait un second chiffre — le
+ * jour où les deux divergent, personne ne sait lequel est le bon.
+ *
+ * Quand la lecture échoue, l'écran montre pourquoi et ce que les tables
+ * contiennent réellement, au lieu de laisser croire qu'il n'y a rien à
+ * reprendre. Les noms de colonnes de l'ERP ne sont pas connus de ce dépôt ; ils
+ * sont reconnus, et ce qui ne l'est pas se voit.
+ */
+function ErpInvoices({
+  month,
+  tour,
+  onImported,
+}: {
+  month: string
+  tour: number
+  onImported: () => void
+}) {
+  const { data, loading } = useAsync(() => api.getErpRoyalties(month), [month, tour])
+  const [envoi, setEnvoi] = useState(false)
+  const [bilan, setBilan] = useState<string | null>(null)
+  const [erreur, setErreur] = useState<string | null>(null)
+  const [detail, setDetail] = useState(false)
+
+  if (loading || data === null) return null
+
+  const factures = data.invoices
+  const lignes = factures.reduce((total, facture) => total + facture.lines.length, 0)
+  const reprendre = async () => {
+    setEnvoi(true)
+    setErreur(null)
+
+    try {
+      const resultat = await api.importErpRoyalties(month)
+      const restes = [
+        resultat.skipped > 0 ? `${resultat.skipped} déjà reprise${resultat.skipped > 1 ? 's' : ''}` : null,
+        resultat.unmatched_shop > 0 ? `${resultat.unmatched_shop} sans boutique rapprochée` : null,
+        resultat.unknown_kind > 0 ? `${resultat.unknown_kind} de nature non reconnue` : null,
+      ].filter((part): part is string => part !== null)
+
+      setBilan(
+        `${resultat.created} entrée${resultat.created > 1 ? 's' : ''} reprise${resultat.created > 1 ? 's' : ''}`
+        + ` — ${formatEur(resultat.total_amount, 2)}`
+        + (restes.length > 0 ? ` (${restes.join(', ')})` : ''),
+      )
+      onImported()
+    } catch (echec) {
+      setErreur(describeError(echec))
+    } finally {
+      setEnvoi(false)
+    }
+  }
+
+  return (
+    <div className={`erpinvoices${data.available ? '' : ' is-off'}`}>
+      <div className="erpinvoices__head">
+        <strong>Facturé par l’ERP</strong>
+        {data.available ? (
+          <span className="muted">
+            {factures.length} facture{factures.length > 1 ? 's' : ''}, {lignes} ligne
+            {lignes > 1 ? 's' : ''} sur ce mois
+          </span>
+        ) : (
+          <span className="muted">lecture impossible</span>
+        )}
+
+        <button type="button" className="linklike" onClick={() => setDetail(!detail)}>
+          {detail ? 'Masquer le détail' : 'Voir le détail'}
+        </button>
+
+        {data.available && factures.length > 0 ? (
+          <button type="button" className="action" disabled={envoi} onClick={reprendre}>
+            {envoi ? 'Reprise…' : 'Reprendre au grand livre'}
+          </button>
+        ) : null}
+      </div>
+
+      {data.available ? null : <p className="error">{data.reason}</p>}
+      {erreur === null ? null : <p className="error">{erreur}</p>}
+      {bilan === null ? null : <p className="royalties__bilan">{bilan}</p>}
+
+      {detail ? (
+        <div className="erpinvoices__detail">
+          {/* Les colonnes reconnues, et celles que la table contient. C'est ce
+              qu'il faut lire pour comprendre un import qui ne trouve rien. */}
+          {Object.entries(data.inventory).map(([table, contenu]) => (
+            <p key={table} className="muted">
+              <strong>{table}</strong> — non reconnues :{' '}
+              {contenu['non reconnues'].length === 0 ? 'aucune' : contenu['non reconnues'].join(', ')}
+              <br />
+              colonnes présentes : {contenu.disponibles.join(', ')}
+            </p>
+          ))}
+
+          {factures.map((facture) => (
+            <p key={facture.erp_id} className="muted">
+              <strong>{facture.document_ref}</strong> — {facture.shop_name}
+              {facture.shop_id === null ? ' (boutique non rapprochée)' : ''} —{' '}
+              {facture.lines
+                .map(
+                  (ligne) =>
+                    `${ligne.kind ?? 'nature inconnue'} ${formatEur(ligne.amount, 2)}`,
+                )
+                .join(' · ')}
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </div>
   )
 }
 
