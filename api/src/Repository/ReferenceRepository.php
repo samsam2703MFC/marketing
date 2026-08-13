@@ -48,6 +48,12 @@ final class ReferenceRepository
             'posAnswerTypes'     => $this->fetch(
                 'SELECT code, label, hint FROM mar_pos_answer_type ORDER BY sort_order'
             ),
+            // Palette par défaut d'une campagne. Elle voyage avec les
+            // référentiels plutôt que d'être recopiée dans le front : l'écran
+            // l'affiche en filigrane des champs vides, l'impression la rend
+            // quand la campagne n'a rien choisi, et les deux lisent la même
+            // source.
+            'campaignColors'     => CampaignRepository::COLORS,
         ];
     }
 

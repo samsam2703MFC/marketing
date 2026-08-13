@@ -125,6 +125,17 @@ export interface Draft {
   offer_mechanic: string
   offer_items: OfferElement[]
 
+  /**
+   * Palette de la campagne. Champ vide = suit la palette par défaut, qui vient
+   * du serveur : le front n'en garde pas une copie, sinon deux endroits
+   * répondraient « la couleur par défaut » et finiraient par ne plus dire la
+   * même chose.
+   */
+  color_primary_hex: string
+  color_secondary_hex: string
+  color_accent_hex: string
+  color_ink_hex: string
+
   // 3 — Objectifs (pièces par boutique ; la période n'est qu'une aide d'analyse)
   shop_objectives: Record<number, string>
   /**
@@ -237,6 +248,11 @@ function emptyDraft(refs: References, role: Role): Draft {
     offer_title: '',
     offer_mechanic: '',
     offer_items: [],
+
+    color_primary_hex: '',
+    color_secondary_hex: '',
+    color_accent_hex: '',
+    color_ink_hex: '',
 
     shop_objectives: {},
     shop_item_targets: {},
@@ -696,6 +712,11 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
       target_pieces: numberOrBlank(item.target_pieces),
     })),
 
+    color_primary_hex: state.colors?.color_primary_hex ?? '',
+    color_secondary_hex: state.colors?.color_secondary_hex ?? '',
+    color_accent_hex: state.colors?.color_accent_hex ?? '',
+    color_ink_hex: state.colors?.color_ink_hex ?? '',
+
     shop_objectives: Object.fromEntries(
       (state.shop_targets ?? []).map((target) => [target.shop_id, String(target.target_pieces)]),
     ),
@@ -861,6 +882,14 @@ function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): Cam
       ? null
       : Number(draft.margin_pct_default.trim()),
 
+    // Champ vide = aucune couleur choisie : on envoie `null`, et le serveur
+    // rendra la valeur par défaut à l'impression. Envoyer la valeur par défaut
+    // la figerait sur cette campagne.
+    color_primary_hex: draft.color_primary_hex.trim() || null,
+    color_secondary_hex: draft.color_secondary_hex.trim() || null,
+    color_accent_hex: draft.color_accent_hex.trim() || null,
+    color_ink_hex: draft.color_ink_hex.trim() || null,
+
     shop_ids: draft.scope === 'LOCALE' ? draft.shop_ids : [],
     // Seuls les objectifs réellement posés voyagent : zéro ou vide = aucun.
     shop_targets: Object.entries(draft.shop_objectives)
@@ -985,6 +1014,65 @@ const CLIENT_TARGETS: Array<{ value: ClientTarget; label: string }> = [
 ]
 
 /** Bascule un identifiant dans une liste. Le geste revient à chaque étape. */
+/** Les quatre rôles de la palette, dans l'ordre où l'écran les propose. */
+const ROLES_COULEUR: Array<{
+  champ: 'color_primary_hex' | 'color_secondary_hex' | 'color_accent_hex' | 'color_ink_hex'
+  label: string
+  usage: string
+}> = [
+  { champ: 'color_primary_hex', label: 'Dominante', usage: 'Titres, traits' },
+  { champ: 'color_secondary_hex', label: 'Aplat', usage: 'Fonds' },
+  { champ: 'color_accent_hex', label: 'Accent', usage: 'Prix, pastilles' },
+  { champ: 'color_ink_hex', label: 'Encre', usage: 'Texte sur l’aplat' },
+]
+
+/** Composantes 0–255 d'un `#RGB` ou `#RRGGBB`, ou `null` si la forme est autre. */
+function rgb(hex: string): [number, number, number] | null {
+  const brut = hex.trim()
+  if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(brut)) return null
+
+  const plein =
+    brut.length === 4
+      ? `#${brut[1]}${brut[1]}${brut[2]}${brut[2]}${brut[3]}${brut[3]}`
+      : brut
+
+  return [
+    parseInt(plein.slice(1, 3), 16),
+    parseInt(plein.slice(3, 5), 16),
+    parseInt(plein.slice(5, 7), 16),
+  ]
+}
+
+/**
+ * Rapport de contraste WCAG entre deux couleurs.
+ *
+ * Sert à prévenir, pas à interdire : une charte se décide ailleurs que dans cet
+ * écran. Mais un texte à 2:1 sur son aplat est illisible une fois imprimé, et
+ * cela ne se voit pas sur un nuancier de quatre pastilles alignées.
+ */
+function contrasteEntre(avant: string, arriere: string): number {
+  const luminance = (couleur: string): number | null => {
+    const composantes = rgb(couleur)
+    if (composantes === null) return null
+
+    const [r, v, b] = composantes.map((valeur) => {
+      const canal = valeur / 255
+
+      return canal <= 0.03928 ? canal / 12.92 : ((canal + 0.055) / 1.055) ** 2.4
+    }) as [number, number, number]
+
+    return 0.2126 * r + 0.7152 * v + 0.0722 * b
+  }
+
+  const clair = luminance(avant)
+  const sombre = luminance(arriere)
+
+  // Une couleur en cours de saisie ne doit pas déclencher d'alerte.
+  if (clair === null || sombre === null) return 21
+
+  return (Math.max(clair, sombre) + 0.05) / (Math.min(clair, sombre) + 0.05)
+}
+
 function toggle(list: number[], id: number): number[] {
   return list.includes(id) ? list.filter((entry) => entry !== id) : [...list, id]
 }
@@ -1087,6 +1175,15 @@ function FramingStep({
    * « toutes ».
    */
   const perimetre = draft.scope === 'LOCALE' ? draft.shop_ids : []
+
+  /** Couleur retenue pour un rôle : celle de la campagne, sinon celle par défaut. */
+  const couleurDe = (champ: (typeof ROLES_COULEUR)[number]['champ']): string => {
+    const choisie = draft[champ].trim()
+
+    return rgb(choisie) === null ? (refs.campaignColors?.[champ] ?? '#000000') : choisie
+  }
+
+  const contraste = contrasteEntre(couleurDe('color_ink_hex'), couleurDe('color_secondary_hex'))
 
   // Les effectifs des pastilles suivent ce périmètre : annoncer « Horeca · 184 »
   // quand la boutique choisie n'en compte que douze fait cocher un secteur sur
@@ -1338,6 +1435,91 @@ function FramingStep({
           </div>
         </div>
       )}
+
+      {/* ── Couleurs ───────────────────────────────────────────────────────
+          Elles se posent ici, avec le nom et le visuel : c'est l'identité de la
+          campagne, pas un réglage d'affichage. Les supports imprimés les
+          reprennent — un gabarit ne devine pas une couleur.
+
+          Champ vide = palette par défaut, montrée en filigrane. La valeur par
+          défaut n'est pas recopiée dans le champ : elle serait alors figée sur
+          cette campagne le jour où la marque change la sienne. */}
+      <h3 className="section-label">
+        Couleurs
+        <span className="section-label__aside">
+          Reprises sur les supports imprimés · vide = palette par défaut
+        </span>
+      </h3>
+
+      <div className="palette">
+        {ROLES_COULEUR.map((couleur) => {
+          const choisie = draft[couleur.champ].trim()
+          const defaut = refs.campaignColors?.[couleur.champ] ?? '#000000'
+          const valide = choisie === '' || /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(choisie)
+
+          return (
+            <div key={couleur.champ} className="palette__role">
+              <label className="palette__label" htmlFor={`couleur-${couleur.champ}`}>
+                {couleur.label}
+                <span className="palette__usage">{couleur.usage}</span>
+              </label>
+              <div className="palette__saisie">
+                <input
+                  id={`couleur-${couleur.champ}`}
+                  type="color"
+                  className="palette__pastille"
+                  value={valide && choisie !== '' ? choisie : defaut}
+                  aria-label={`Choisir la couleur ${couleur.label.toLowerCase()}`}
+                  onChange={(e) => patch({ [couleur.champ]: e.target.value.toUpperCase() })}
+                />
+                <input
+                  className={valide ? 'palette__hex' : 'palette__hex is-invalid'}
+                  value={choisie}
+                  placeholder={defaut}
+                  spellCheck={false}
+                  aria-label={`Code hexadécimal ${couleur.label.toLowerCase()}`}
+                  aria-invalid={!valide}
+                  onChange={(e) => patch({ [couleur.champ]: e.target.value })}
+                />
+                {choisie === '' ? null : (
+                  <button
+                    type="button"
+                    className="palette__reset"
+                    title="Revenir à la couleur par défaut"
+                    onClick={() => patch({ [couleur.champ]: '' })}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              {valide ? null : <span className="error">Attendu #RRGGBB</span>}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Un aperçu vaut mieux que quatre pastilles côte à côte : c'est la
+          lisibilité du texte sur l'aplat qui décide, et elle ne se voit pas sur
+          un nuancier. */}
+      <div
+        className="palette__apercu"
+        style={{ background: couleurDe('color_secondary_hex'), color: couleurDe('color_ink_hex') }}
+      >
+        <span className="palette__apercu-titre" style={{ color: couleurDe('color_primary_hex') }}>
+          {draft.name.trim() === '' ? 'Nom de la campagne' : draft.name}
+        </span>
+        <span>Texte courant sur l’aplat</span>
+        <span className="palette__apercu-prix" style={{ background: couleurDe('color_accent_hex') }}>
+          15,92 €
+        </span>
+      </div>
+
+      {contraste < 4.5 ? (
+        <p className="muted">
+          Contraste texte/aplat de {contraste.toFixed(1)}:1 — en dessous de 4,5:1, le texte
+          devient difficile à lire, à l’écran comme à l’impression.
+        </p>
+      ) : null}
 
       <h3 className="section-label">Portée</h3>
       {role === 'BRAND_ADMIN' ? (

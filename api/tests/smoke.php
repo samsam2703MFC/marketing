@@ -1396,6 +1396,85 @@ check(
     $pdo->query(sprintf('SELECT name FROM mar_campaign WHERE id = %d', $target))->fetchColumn() !== 'Détournée'
 );
 
+// --- Palette de campagne ---------------------------------------------------
+//
+// Une campagne empruntait la couleur de son levier — un objectif commercial, pas
+// une identité. Ces quatre couleurs sont les siennes, et ce sont elles que les
+// supports imprimés reprennent.
+echo "\nCouleurs de campagne\n";
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+$reponse = call($router, 'GET', '/api/v1/marketing/references');
+check(
+    'la palette par défaut voyage avec les référentiels',
+    ($reponse['body']['campaignColors']['color_primary_hex'] ?? null) === '#8D1D2C'
+        && count($reponse['body']['campaignColors'] ?? []) === 4,
+    json_encode($reponse['body']['campaignColors'] ?? null)
+);
+
+$aPeindre = (int) call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name'          => 'Épiphanie en bordeaux',
+    'status_code'   => 'draft',
+    'scope'         => 'RESEAU',
+    'client_target' => 'b2c',
+    'type_id'       => (int) $types['ouverture']['id'],
+    // Forme courte, telle qu'un navigateur l'écrit, et casse mélangée.
+    'color_primary_hex'   => '#abc',
+    'color_secondary_hex' => '#E8D9C0',
+])['body']['inserted_id'];
+
+$etat = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $aPeindre))['body'];
+check(
+    'la forme courte est développée et normalisée',
+    ($etat['colors']['color_primary_hex'] ?? null) === '#AABBCC',
+    json_encode($etat['colors'] ?? null)
+);
+check(
+    'une couleur non choisie reste nulle',
+    array_key_exists('color_accent_hex', $etat['colors'])
+        && $etat['colors']['color_accent_hex'] === null,
+    json_encode($etat['colors'] ?? null)
+);
+check(
+    'mais l\'impression reçoit quand même les quatre',
+    ($etat['colors_effective']['color_accent_hex'] ?? null) === '#B0821A'
+        && ($etat['colors_effective']['color_primary_hex'] ?? null) === '#AABBCC',
+    json_encode($etat['colors_effective'] ?? null)
+);
+
+// Une couleur mal écrite se refuse plutôt que de se rattraper en silence : elle
+// ressortirait sur un tirage à deux mille exemplaires sans que personne ne
+// sache d'où elle vient.
+$reponse = call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $aPeindre), [], [
+    'name'              => 'Épiphanie en bordeaux',
+    'status_code'       => 'draft',
+    'scope'             => 'RESEAU',
+    'color_primary_hex' => 'bordeaux',
+]);
+check(
+    'une couleur mal écrite est refusée avec son nom',
+    $reponse['status'] === 422
+        && str_contains((string) ($reponse['body']['description'] ?? ''), 'color_primary_hex'),
+    json_encode($reponse['body'] ?? null)
+);
+
+// Vider une couleur la rend à la palette par défaut, sans figer sa valeur.
+call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $aPeindre), [], [
+    'name'              => 'Épiphanie en bordeaux',
+    'status_code'       => 'draft',
+    'scope'             => 'RESEAU',
+    'color_primary_hex' => '',
+]);
+$etat = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $aPeindre))['body'];
+check(
+    'vider une couleur la rend au défaut sans la figer',
+    $etat['colors']['color_primary_hex'] === null
+        && $etat['colors_effective']['color_primary_hex'] === '#8D1D2C',
+    json_encode($etat['colors'] ?? null)
+);
+
+call($router, 'DELETE', sprintf('/api/v1/marketing/campaigns/%d', $aPeindre));
+
 // --- Suppression : ce qui pendait à la campagne part avec elle --------------
 //
 // Une campagne effacée qui laisserait ses objectifs derrière elle donnerait des

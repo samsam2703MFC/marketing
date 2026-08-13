@@ -26,6 +26,25 @@ final class CampaignRepository
     private const CHALLENGE_METRICS = ['attainment', 'pieces', 'growth'];
 
     /**
+     * Palette par défaut d'une campagne, et rôle de chaque couleur.
+     *
+     * Un imprimé en demande quatre : un aplat de fond, un texte lisible dessus,
+     * une dominante, un accent pour le prix. Elles vivent ici et nulle part
+     * ailleurs — le front les affiche en placeholder, l'impression les rend
+     * quand la campagne n'a rien choisi. Les écrire en base à la création les
+     * figerait : une campagne d'aujourd'hui garderait l'ancienne palette le jour
+     * où la marque change la sienne.
+     *
+     * @var array<string, string>
+     */
+    public const COLORS = [
+        'color_primary_hex'   => '#8D1D2C',
+        'color_secondary_hex' => '#E8D9C0',
+        'color_accent_hex'    => '#B0821A',
+        'color_ink_hex'       => '#241C1A',
+    ];
+
+    /**
      * Mécaniques de promotion reconnues — les codes de `mar_promotion_mechanic`.
      *
      * Recopiés plutôt que relus : une mécanique inconnue doit être refusée avec
@@ -266,14 +285,18 @@ final class CampaignRepository
                  agency_note, b2b_webshop_enabled, pos_survey_enabled, owner_user_id,
                  create_crm_leads, image_url,
                  challenge_enabled, challenge_metric, challenge_trigger_pct,
-                 margin_pct_default, created_by)
+                 margin_pct_default,
+                 color_primary_hex, color_secondary_hex, color_accent_hex, color_ink_hex,
+                 created_by)
              VALUES
                 (:brand_id, :type_id, :parent_campaign_id, :name, :scope, :client_target, :tone,
                  :status_code, :draft_step, :starts_on, :ends_on, :budget_amount, :objective_coef_pct,
                  :agency_note, :b2b_webshop_enabled, :pos_survey_enabled, :owner_user_id,
                  :create_crm_leads, :image_url,
                  :challenge_enabled, :challenge_metric, :challenge_trigger_pct,
-                 :margin_pct_default, :created_by)'
+                 :margin_pct_default,
+                 :color_primary_hex, :color_secondary_hex, :color_accent_hex, :color_ink_hex,
+                 :created_by)'
         );
 
         $statement->execute([
@@ -310,6 +333,10 @@ final class CampaignRepository
             'margin_pct_default' => ($data['margin_pct_default'] ?? '') === ''
                 ? null
                 : $data['margin_pct_default'],
+            'color_primary_hex'   => $data['color_primary_hex'] ?? null,
+            'color_secondary_hex' => $data['color_secondary_hex'] ?? null,
+            'color_accent_hex'    => $data['color_accent_hex'] ?? null,
+            'color_ink_hex'       => $data['color_ink_hex'] ?? null,
             'created_by'         => $auth->userId,
         ]);
 
@@ -392,6 +419,7 @@ final class CampaignRepository
         }
 
         $data = $this->validatedChallenge($data);
+        $data = $this->validatedColors($data);
 
         $connection = Database::connection();
 
@@ -504,6 +532,51 @@ final class CampaignRepository
      * @param  array<string,mixed> $data
      * @return array<string,mixed>
      */
+    /**
+     * Couleurs de la campagne : `#RRGGBB`, ou rien.
+     *
+     * Refusé plutôt que corrigé. Une couleur mal écrite qu'on rattraperait en
+     * silence — « bordeaux », `rgb(141,29,44)`, `#8D1D2` — ressortirait sur un
+     * imprimé tiré à deux mille exemplaires, et personne ne saurait d'où elle
+     * vient. La forme courte `#abc` est acceptée et développée : c'est la même
+     * couleur, écrite comme un navigateur l'écrit.
+     *
+     * @param  array<string,mixed> $data
+     * @return array<string,mixed>
+     */
+    private function validatedColors(array $data): array
+    {
+        foreach (array_keys(self::COLORS) as $champ) {
+            if (!array_key_exists($champ, $data)) {
+                continue;
+            }
+
+            $valeur = trim((string) ($data[$champ] ?? ''));
+
+            if ($valeur === '') {
+                $data[$champ] = null;
+
+                continue;
+            }
+
+            if (preg_match('/^#([0-9a-f]{3}|[0-9a-f]{6})$/i', $valeur) !== 1) {
+                throw new RuntimeException(sprintf(
+                    'Couleur « %s » invalide pour %s : attendu #RRGGBB.',
+                    $valeur,
+                    $champ
+                ));
+            }
+
+            if (strlen($valeur) === 4) {
+                $valeur = '#' . $valeur[1] . $valeur[1] . $valeur[2] . $valeur[2] . $valeur[3] . $valeur[3];
+            }
+
+            $data[$champ] = strtoupper($valeur);
+        }
+
+        return $data;
+    }
+
     private function validatedChallenge(array $data): array
     {
         if (array_key_exists('challenge_metric', $data)) {
@@ -1282,6 +1355,7 @@ final class CampaignRepository
             'create_crm_leads', 'image_url',
             'challenge_enabled', 'challenge_metric', 'challenge_trigger_pct',
             'margin_pct_default',
+            'color_primary_hex', 'color_secondary_hex', 'color_accent_hex', 'color_ink_hex',
         ];
 
         // Colonnes TINYINT. PDO lie un `false` PHP comme chaîne vide, que MySQL
@@ -1413,6 +1487,27 @@ final class CampaignRepository
 
             'shop_ids'       => $ids('SELECT shop_id FROM mar_campaign_shop WHERE campaign_id = :id'),
             'margin_pct_default'    => $campaign['margin_pct_default'],
+
+            // Deux formes de la même palette : `colors` porte ce que la
+            // campagne a choisi — `null` quand elle n'a rien choisi — et
+            // `colors_effective` ce qu'un support doit réellement imprimer.
+            // L'assistant a besoin de la première pour distinguer un champ vide
+            // d'un champ réglé sur la valeur par défaut ; l'impression n'a que
+            // faire de cette nuance et veut quatre couleurs.
+            'colors'           => array_combine(
+                array_keys(self::COLORS),
+                array_map(
+                    static fn (string $champ) => $campaign[$champ],
+                    array_keys(self::COLORS)
+                )
+            ),
+            'colors_effective' => array_combine(
+                array_keys(self::COLORS),
+                array_map(
+                    static fn (string $champ): string => (string) ($campaign[$champ] ?? self::COLORS[$champ]),
+                    array_keys(self::COLORS)
+                )
+            ),
             'challenge_enabled'     => (bool) $campaign['challenge_enabled'],
             'challenge_metric'      => $campaign['challenge_metric'],
             'challenge_trigger_pct' => $campaign['challenge_trigger_pct'],

@@ -226,6 +226,8 @@ export interface References {
   promotionMechanics: CodeLabel[]
   /** Formes de réponse acceptées par la caisse. */
   posAnswerTypes: Array<CodeLabel & { hint: string | null }>
+  /** Palette par défaut d'une campagne — une seule source, côté serveur. */
+  campaignColors: CampaignColors<string>
 }
 
 /**
@@ -469,6 +471,16 @@ export interface CampaignDraft {
     offer_item_id: number
     target_pieces: number
   }>
+  /**
+   * Palette de la campagne. `null` ou absent = la palette par défaut du module.
+   *
+   * Quatre couleurs parce qu'un imprimé en demande quatre : un aplat, un texte
+   * lisible dessus, une dominante, un accent pour le prix.
+   */
+  color_primary_hex?: string | null
+  color_secondary_hex?: string | null
+  color_accent_hex?: string | null
+  color_ink_hex?: string | null
   /** Challenge attaché aux objectifs — facultatif. */
   challenge_enabled?: boolean
   challenge_metric?: 'attainment' | 'pieces' | 'growth' | null
@@ -523,6 +535,14 @@ export function createCampaign(
  * Distinct de `getCampaign`, qui sert le suivi et rend des libellés : une
  * pastille se recoche avec un identifiant, pas avec « Horeca ».
  */
+/** Les quatre rôles de la palette, dans l'ordre où l'écran les propose. */
+export interface CampaignColors<T> {
+  color_primary_hex: T
+  color_secondary_hex: T
+  color_accent_hex: T
+  color_ink_hex: T
+}
+
 export interface CampaignDraftState
   extends Omit<CampaignDraft, 'lever_targets' | 'channels' | 'offer'> {
   id: number
@@ -537,6 +557,10 @@ export interface CampaignDraftState
     offer_item_id: number
     target_pieces: number
   }>
+  /** Ce que la campagne a choisi — `null` pour ce qu'elle n'a pas choisi. */
+  colors: CampaignColors<string | null>
+  /** Ce qu'un support doit imprimer : le choix, sinon la valeur par défaut. */
+  colors_effective: CampaignColors<string>
   /** Relu avec son rang : l'écran affiche trois rangs, la base peut en porter moins. */
   challenge_prizes: Array<{ rank_position: number; label: string }>
   sector_ids: number[]
