@@ -475,6 +475,15 @@ jobs:
           MAR_DB_NAME: ${{ secrets.MAR_DB_NAME }}
           MAR_DB_USER: ${{ secrets.MAR_DB_USER }}
           MAR_DB_PASSWORD: ${{ secrets.MAR_DB_PASSWORD }}
+          # Tables de l'ERP que le module lit. Des variables, pas des secrets :
+          # un nom de table ne se cache pas, et il doit rester relisible pour
+          # comprendre une reprise qui ne trouve rien. Vides, elles ne touchent
+          # à rien — le serveur garde ce qui y est déjà réglé à la main.
+          MAR_ERP_SHOPS_TABLE: ${{ vars.MAR_ERP_SHOPS_TABLE }}
+          MAR_ERP_ROYALTY_INVOICE_TABLE: ${{ vars.MAR_ERP_ROYALTY_INVOICE_TABLE }}
+          MAR_ERP_ROYALTY_LINE_TABLE: ${{ vars.MAR_ERP_ROYALTY_LINE_TABLE }}
+          MAR_ERP_PRODUCTS_TABLE: ${{ vars.MAR_ERP_PRODUCTS_TABLE }}
+          MAR_ERP_CUSTOMERS_TABLE: ${{ vars.MAR_ERP_CUSTOMERS_TABLE }}
         run: |
           umask 077
           # Valeurs entre guillemets et échappées : sans cela, un mot de passe
@@ -487,7 +496,27 @@ jobs:
             printf 'MAR_DB_NAME="%s"\n'     "$(esc "$MAR_DB_NAME")"
             printf 'MAR_DB_USER="%s"\n'     "$(esc "$MAR_DB_USER")"
             printf 'MAR_DB_PASSWORD="%s"\n' "$(esc "$MAR_DB_PASSWORD")"
+
+            # Chaque table n'est écrite que si elle est déclarée : une variable
+            # vide effacerait un réglage posé sur le serveur, et la reprise
+            # repartirait en silence sur la table par défaut.
+            for cle in MAR_ERP_SHOPS_TABLE MAR_ERP_ROYALTY_INVOICE_TABLE \
+                       MAR_ERP_ROYALTY_LINE_TABLE MAR_ERP_PRODUCTS_TABLE \
+                       MAR_ERP_CUSTOMERS_TABLE; do
+              valeur="${!cle:-}"
+              # Un `if`, pas un `&&` : le pas de la boucle sort en échec quand la
+              # dernière variable est vide, et l'étape entière tomberait avec lui.
+              if [ -n "$valeur" ]; then
+                printf '%s="%s"\n' "$cle" "$(esc "$valeur")"
+              fi
+            done
           } > .env.deploy
+
+          # Les clés que ce déploiement possède : elles sont retirées du .env du
+          # serveur avant d'y être réécrites. Celles qu'il ne possède pas — parce
+          # que la variable est vide — n'apparaissent pas ici, et survivent donc
+          # intactes.
+          POSSEDEES=$(sed 's/=.*//' .env.deploy | paste -sd'|')
           if [ -n "$SSH_KEY" ]; then PRE=""; else PRE="sshpass -e"; fi
           $SSH_CMD $SSH_OPTS "$SSH_USER@$SSH_HOST" "mkdir -p '$CONFIG_DIR' && chmod 750 '$CONFIG_DIR'"
           # 640 et groupe www-data, pas 600 : le fichier est écrit par le compte
@@ -495,8 +524,9 @@ jobs:
           # root, l'API ne peut pas l'ouvrir — elle perd les identifiants de base
           # sans qu'aucune étape n'échoue, puisque rien ne les lit avant le
           # premier appel qui touche la base.
-          # Fusion, pas écrasement : le déploiement possède les clés MAR_DB_*,
-          # rien d'autre. Une réécriture intégrale effaçait à chaque mise en ligne
+          # Fusion, pas écrasement : le déploiement ne possède que les clés qu'il
+          # vient d'écrire — les MAR_DB_*, et les tables ERP effectivement
+          # déclarées. Une réécriture intégrale effaçait à chaque mise en ligne
           # les réglages posés à la main sur le serveur, sans le dire.
           $PRE rsync -a --chmod=640 -e "ssh $SSH_OPTS" .env.deploy "$SSH_USER@$SSH_HOST:$CONFIG_DIR/.env.db"
           $SSH_CMD $SSH_OPTS "$SSH_USER@$SSH_HOST" "
@@ -504,7 +534,7 @@ jobs:
             touch .env
             # On conserve toute ligne qui n'appartient pas au déploiement, puis
             # on ajoute les siennes — elles arrivent en dernier, donc priment.
-            grep -vE '^(MAR_DB_HOST|MAR_DB_PORT|MAR_DB_NAME|MAR_DB_USER|MAR_DB_PASSWORD)=' .env > .env.merged 2>/dev/null || true
+            grep -vE '^($POSSEDEES)=' .env > .env.merged 2>/dev/null || true
             cat .env.db >> .env.merged
             mv .env.merged .env
             rm -f .env.db
