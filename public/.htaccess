@@ -19,6 +19,27 @@
   RewriteRule ^ index.html [L]
 </IfModule>
 
+# Mise en cache. Sans ces règles, Apache ne dit rien et le navigateur décide
+# seul : il garde `index.html` un moment, or c'est lui qui nomme les fichiers
+# d'actifs — dont l'empreinte change à chaque publication. Un déploiement passe,
+# le serveur sert la nouvelle version, et l'écran ne bouge pas parce que la page
+# gardée en cache continue de réclamer les anciens actifs.
+<IfModule mod_headers.c>
+  # La page se revalide à chaque visite. Elle pèse deux kilo-octets : la
+  # vérifier coûte moins qu'une version en retard d'un déploiement.
+  <FilesMatch "^index\.html$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+
+  # Les scripts et styles portent leur empreinte dans leur nom : leur contenu ne
+  # changera jamais, ils se gardent donc un an. Les images n'en portent pas —
+  # elles restent sous le régime par défaut, faute de quoi un logo remplacé
+  # mettrait un an à apparaître.
+  <FilesMatch "\.(js|css)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+</IfModule>
+
 # Le fichier de configuration ne vit pas ici, mais si une installation le pose
 # malgré tout à la racine du déploiement, il ne doit pas être téléchargeable.
 <FilesMatch "^\.">
