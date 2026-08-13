@@ -110,6 +110,24 @@ jobs:
 
           echo "Numérotation des migrations : aucun doublon nouveau (connus :$connus)"
 
+      # `migrate.php` rejoue les fichiers `_vues` à chaque passage. Une vue
+      # redéfinie ailleurs se fait donc écraser au passage suivant : ce qui
+      # marche au premier déploiement casse au second, sans qu'aucune migration
+      # n'ait échoué. Une seule définition par vue, dans un fichier `_vues`.
+      - name: Vérifier que les vues vivent dans les fichiers de vues
+        run: |
+          coupables=$(grep -ln 'CREATE OR REPLACE VIEW\|CREATE VIEW' db/migrations/*.sql \
+            | grep -v '_vues' || true)
+
+          if [ -n "$coupables" ]; then
+            echo "::error title=Vue hors fichier de vues::$coupables"
+            echo 'Une vue redéfinie hors d'"'"'un fichier `_vues` est restaurée au'
+            echo 'passage suivant de migrate.php, qui rejoue ces fichiers-là.'
+            exit 1
+          fi
+
+          echo 'Chaque vue vit dans un fichier de vues.'
+
       - name: Lint PHP
         run: find api -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
 

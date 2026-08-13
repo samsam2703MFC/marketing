@@ -25,33 +25,11 @@ ALTER TABLE mar_fund_movement
     COMMENT 'Fin de la période couverte ; va avec period_from'
     AFTER period_from;
 
--- La vue du grand livre les rend à son tour : sans cela, l'écran devrait
--- relire la table pour une colonne que la vue a déjà sous la main.
-CREATE OR REPLACE VIEW mar_v_fund_ledger_by_period AS
-SELECT
-  fm.id,
-  fm.movement_date,
-  fm.period_from,
-  fm.period_to,
-  DATE_FORMAT(fm.movement_date, '%Y-%m-01')            AS period_month,
-  CONCAT(YEAR(fm.movement_date), '-T', QUARTER(fm.movement_date)) AS period_quarter,
-  YEAR(fm.movement_date)                                AS period_year,
-  fm.direction,
-  fm.label,
-  fm.amount,
-  CASE WHEN fm.direction = 'IN' THEN fm.amount ELSE -fm.amount END AS signed_amount,
-  fm.source,
-  fm.supplier_name,
-  fm.document_ref,
-  fm.shop_id,
-  s.name                                                AS shop_name,
-  fm.campaign_id,
-  c.name                                                AS campaign_name,
-  fm.lever_id,
-  l.code                                                AS lever_code,
-  l.label                                               AS lever_label,
-  l.color_hex                                           AS lever_color_hex
-FROM mar_fund_movement fm
-LEFT JOIN mar_shop     s ON s.id = fm.shop_id
-LEFT JOIN mar_campaign c ON c.id = fm.campaign_id
-LEFT JOIN mar_lever    l ON l.id = fm.lever_id;
+-- La vue `mar_v_fund_ledger_by_period` n'est pas touchée ici, et c'est
+-- délibéré : `migrate.php` rejoue les fichiers `_vues` à chaque passage, donc
+-- `010_vues.sql` repasserait après cette migration et restaurerait sa propre
+-- définition. Deux définitions d'une même vue, la dernière rejouée l'emporte —
+-- et un déploiement qui migre deux fois casse ce qui marchait au premier.
+--
+-- Le grand livre lit donc ces deux colonnes sur la table, jointe à la vue par
+-- son identifiant.

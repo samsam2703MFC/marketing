@@ -32,33 +32,42 @@ final class FundRepository
             ? $filters['granularity']
             : 'month';
 
-        [$scopeSql, $bindings] = Scope::shopFilter($auth, 'shop_id');
-        $where                 = [sprintf('(shop_id IS NULL OR %s)', $scopeSql)];
+        // Colonnes préfixées : la vue est désormais jointe à sa table, et
+        // `shop_id` existe des deux côtés — MySQL refuse alors la condition.
+        [$scopeSql, $bindings] = Scope::shopFilter($auth, 'v.shop_id');
+        $where                 = [sprintf('(v.shop_id IS NULL OR %s)', $scopeSql)];
 
         if (!empty($filters['from'])) {
-            $where[]          = 'movement_date >= :from';
+            $where[]          = 'v.movement_date >= :from';
             $bindings['from'] = $filters['from'];
         }
 
         if (!empty($filters['to'])) {
-            $where[]        = 'movement_date <= :to';
+            $where[]        = 'v.movement_date <= :to';
             $bindings['to'] = $filters['to'];
         }
 
         $periodColumn = match ($granularity) {
-            'quarter' => 'period_quarter',
-            'year'    => 'period_year',
-            default   => 'period_month',
+            'quarter' => 'v.period_quarter',
+            'year'    => 'v.period_year',
+            default   => 'v.period_month',
         };
 
         $statement = Database::connection()->prepare(sprintf(
-            'SELECT %s AS period_key, id, movement_date, period_from, period_to,
-                    direction, label, amount, signed_amount,
-                    source, supplier_name, document_ref, shop_id, shop_name,
-                    campaign_id, campaign_name, lever_code, lever_label, lever_color_hex
-               FROM mar_v_fund_ledger_by_period
+            // La période vient de la table et non de la vue : les fichiers de
+            // vues sont rejoués à chaque migration, et une définition mise à
+            // jour ailleurs qu'en un seul endroit se fait écraser au passage
+            // suivant. La jointure porte sur la clé primaire.
+            'SELECT %s AS period_key, v.id, v.movement_date,
+                    m.period_from, m.period_to,
+                    v.direction, v.label, v.amount, v.signed_amount,
+                    v.source, v.supplier_name, v.document_ref, v.shop_id, v.shop_name,
+                    v.campaign_id, v.campaign_name, v.lever_code, v.lever_label,
+                    v.lever_color_hex
+               FROM mar_v_fund_ledger_by_period v
+               JOIN mar_fund_movement m ON m.id = v.id
               WHERE %s
-              ORDER BY movement_date, id',
+              ORDER BY v.movement_date, v.id',
             $periodColumn,
             implode(' AND ', $where)
         ));
