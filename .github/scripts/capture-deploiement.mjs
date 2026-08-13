@@ -57,6 +57,29 @@ const photographier = async (nom) => {
   note(`  → ${nom}.png`)
 }
 
+/**
+ * Descend dans le conteneur qui défile réellement.
+ *
+ * L'application scrolle dans un panneau interne, pas dans le document : une
+ * capture `fullPage` ne voit donc que la hauteur de la fenêtre, et tout ce qui
+ * est sous le pli — les fiches magasin, le bilan de compensation — n'apparaît
+ * sur aucune image.
+ */
+const descendre = async (selecteur) => {
+  await page.evaluate((cible) => {
+    const panneau = [...document.querySelectorAll('*')].find(
+      (noeud) => noeud.scrollHeight > noeud.clientHeight + 40 && noeud.clientHeight > 400,
+    )
+    const ancre = cible === null ? null : document.querySelector(cible)
+
+    if (ancre !== null) ancre.scrollIntoView({ block: 'start' })
+    else if (panneau) panneau.scrollTop = panneau.scrollHeight
+    else window.scrollTo(0, document.body.scrollHeight)
+  }, selecteur ?? null)
+
+  await page.waitForTimeout(700)
+}
+
 /** Clic tolérant : le serveur n'a pas nos données, une cible peut manquer. */
 const cliquer = async (cible, libelle) => {
   try {
@@ -113,12 +136,36 @@ if (repris) {
     ['03-objectifs', /Objectifs de vente$/],
     ['04-prix', /Prix$/],
   ]) {
-    if (await cliquer(page.getByRole('button', { name: motif }), String(motif))) {
-      // La période d'analyse par défaut est le mois en cours : sans ventes
-      // dessus, l'écran est vide et ne montre rien de ce qu'on veut voir.
-      await cliquer(page.getByRole('button', { name: '12 derniers mois' }), '12 derniers mois')
-      await page.waitForTimeout(2500)
-      await photographier(nom)
+    if (!(await cliquer(page.getByRole('button', { name: motif }), String(motif)))) {
+      continue
+    }
+
+    // La période d'analyse par défaut est le mois en cours : sans ventes
+    // dessus, l'écran est vide et ne montre rien de ce qu'on veut voir.
+    await cliquer(page.getByRole('button', { name: '12 derniers mois' }), '12 derniers mois')
+    await page.waitForTimeout(2500)
+    await photographier(nom)
+
+    if (nom === '03-objectifs') {
+      // Les fiches magasin, et le détail par catégorie puis par produit :
+      // c'est là que se pose l'objectif, et c'est sous le pli.
+      await descendre('.shop-cards')
+      await photographier('03b-magasins')
+
+      if (await cliquer(page.locator('.shop-detail__toggle'), 'Par catégorie ou produit')) {
+        await cliquer(
+          page.locator('.shop-detail__row--family .shop-detail__name'),
+          'première catégorie',
+        )
+        await descendre('.shop-cards')
+        await photographier('03c-detail-objectifs')
+      }
+    }
+
+    if (nom === '04-prix') {
+      // Le bilan : ce que la promotion demande au réseau.
+      await descendre(null)
+      await photographier('04b-compensation')
     }
   }
 }
