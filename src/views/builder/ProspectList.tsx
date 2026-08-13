@@ -16,19 +16,36 @@ import type { Prospect } from '../../lib/api/module'
  * en colonne à droite du formulaire, où huit cents comptes tenaient dans un
  * filet de deux cents pixels.
  */
-export default function ProspectList({ sectorIds }: { sectorIds: number[] }) {
+export default function ProspectList({
+  sectorIds,
+  shopIds = [],
+}: {
+  sectorIds: number[]
+  /**
+   * Boutiques de la campagne. Ne sont alors montrés que les comptes qui leur
+   * sont rattachés — la boutique préférée du client dans l'ERP, celle où il a
+   * l'habitude d'aller et qui l'appellera. Vide pour une campagne réseau : elle
+   * vise tout le vivier.
+   */
+  shopIds?: number[]
+}) {
   const [query, setQuery] = useState('')
 
   const { data, error, loading } = useAsync(
-    () => api.listProspects(sectorIds),
-    [sectorIds.join(',')],
+    () => api.listProspects(sectorIds, shopIds),
+    [sectorIds.join(','), shopIds.join(',')],
   )
 
   // L'effectif vient de la base, pas de la longueur de la liste : celle-ci est
   // bornée, et compter ses lignes annoncerait deux cents comptes à qui va en
   // démarcher neuf cents. L'écart, quand il existe, est écrit noir sur blanc.
-  const count = useAsync(() => api.countProspects(sectorIds), [sectorIds.join(',')])
+  const count = useAsync(
+    () => api.countProspects(sectorIds, shopIds),
+    [sectorIds.join(','), shopIds.join(',')],
+  )
   const total = count.data?.total ?? data?.length ?? 0
+  const reseau = count.data?.network ?? 0
+  const sansBoutique = count.data?.without_shop ?? 0
 
   if (sectorIds.length === 0) {
     return (
@@ -43,7 +60,20 @@ export default function ProspectList({ sectorIds }: { sectorIds: number[] }) {
   if (data === null) return null
 
   if (data.length === 0) {
-    return (
+    // Deux vides très différents : « ces secteurs n'ont personne » appelle un
+    // autre secteur, « personne n'est rattaché à ces boutiques » appelle une
+    // autre boutique. Les confondre envoie chercher au mauvais endroit.
+    return shopIds.length > 0 && reseau > 0 ? (
+      <p className="muted">
+        Aucun compte de ces secteurs n’est rattaché {shopIds.length > 1
+          ? `aux ${shopIds.length} boutiques choisies`
+          : 'à la boutique choisie'}, alors que le réseau en compte {reseau}.
+        {sansBoutique > 0
+          ? ` ${sansBoutique} compte${sansBoutique > 1 ? 's n’ont' : ' n’a'} aucune boutique de
+             rattachement dans l’ERP : la génération les répartira quand même sur vos boutiques.`
+          : ''}
+      </p>
+    ) : (
       <p className="muted">
         Aucun compte dans le vivier pour ces secteurs. La génération de leads ne créera rien tant
         que la reprise ERP n’a pas rattaché de comptes à ces secteurs.
@@ -76,10 +106,28 @@ export default function ProspectList({ sectorIds }: { sectorIds: number[] }) {
     <>
       <div className="prospects__head">
         <p className="muted">
-          {total} compte{total > 1 ? 's' : ''} dans le vivier
+          {total} compte{total > 1 ? 's' : ''}
+          {/* D'où vient le chiffre : le vivier entier, ou la part que les
+              boutiques choisies en retiennent. Sans cette précision, un
+              effectif qui tombe de 184 à 12 en cochant une boutique se lit
+              comme une perte de données. */}
+          {shopIds.length === 0
+            ? ' dans le vivier'
+            : ` rattaché${total > 1 ? 's' : ''} à ${
+                shopIds.length > 1 ? `vos ${shopIds.length} boutiques` : 'votre boutique'
+              }, sur ${reseau} dans le réseau`}
           {data.length < total ? ` · ${data.length} affichés` : ''} ·{' '}
           {groups.length} boutique{groups.length > 1 ? 's' : ''} concernée
           {groups.length > 1 ? 's' : ''}
+          {/* Les orphelins ne sont pas listés — ils ne sont « chez » personne —
+              mais la génération les répartira sur les boutiques de la
+              campagne. Les taire ferait découvrir des leads inattendus après
+              coup. */}
+          {shopIds.length > 0 && sansBoutique > 0
+            ? ` · ${sansBoutique} sans boutique de rattachement, non listé${
+                sansBoutique > 1 ? 's' : ''
+              } ici mais réparti${sansBoutique > 1 ? 's' : ''} à la génération`
+            : ''}
         </p>
         <input
           type="search"

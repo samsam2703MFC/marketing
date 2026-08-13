@@ -938,20 +938,37 @@ export interface Prospect {
  * Un compte relevant de deux secteurs cochés ne produit qu'un lead : additionner
  * les effectifs par secteur annoncerait plus de comptes qu'il n'en sera créé.
  */
-export function countProspects(sectorIds: number[]): Promise<{ total: number }> {
-  return request<{ total: number }>(`${BASE}/b2b/prospects/count`, {
-    query: { sector_ids: sectorIds.join(',') },
+/**
+ * Effectifs du vivier.
+ *
+ * `shopIds` restreint aux comptes rattachés à ces boutiques — la boutique
+ * préférée du client dans l'ERP. Vide pour une campagne réseau : elle vise tout
+ * le monde. `network` et `without_shop` disent ce que la restriction a écarté,
+ * pour que l'écran distingue « le périmètre est petit » de « le vivier est
+ * vide » — deux situations qui appellent des décisions opposées.
+ */
+export interface ProspectCount {
+  total: number
+  network: number
+  without_shop: number
+}
+
+export function countProspects(sectorIds: number[], shopIds: number[] = []): Promise<ProspectCount> {
+  return request<ProspectCount>(`${BASE}/b2b/prospects/count`, {
+    query: { sector_ids: sectorIds.join(','), shop_ids: shopIds.join(',') },
   })
 }
 
-export function listProspects(sectorIds: number[]): Promise<Prospect[]> {
+export function listProspects(sectorIds: number[], shopIds: number[] = []): Promise<Prospect[]> {
   return request<Prospect[]>(`${BASE}/b2b/prospects`, {
-    query: { sector_ids: sectorIds.join(',') },
+    query: { sector_ids: sectorIds.join(','), shop_ids: shopIds.join(',') },
   })
 }
 
-export function getSectorAvailability(): Promise<SectorAvailability[]> {
-  return request<SectorAvailability[]>(`${BASE}/b2b/sectors`)
+export function getSectorAvailability(shopIds: number[] = []): Promise<SectorAvailability[]> {
+  return request<SectorAvailability[]>(`${BASE}/b2b/sectors`, {
+    query: { shop_ids: shopIds.join(',') },
+  })
 }
 
 /** Une ligne du fichier importé, déjà découpée par le client. */

@@ -1742,6 +1742,130 @@ $response = call($router, 'GET', '/api/v1/marketing/b2b/prospects/count', [
 $total = (int) ($response['body']['total'] ?? -1);
 check('le total ne compte chaque compte qu\'une fois', $total === $summed - 1, "$total vs $summed");
 
+// --- Le vivier suit les boutiques de la campagne ----------------------------
+//
+// `mar_b2b_prospect.shop_id` vient de la boutique préférée du client dans l'ERP
+// (`client.id_main_shop`) : c'est là qu'il a l'habitude d'aller, et c'est elle
+// qui l'appellera. Une campagne locale qui démarcherait un compte rattaché
+// ailleurs enverrait quelqu'un travailler la clientèle d'une autre boutique.
+$pdo->exec(sprintf(
+    "UPDATE mar_b2b_prospect SET shop_id = 1 WHERE external_ref = 'A1'"
+));
+$pdo->exec(sprintf(
+    "UPDATE mar_b2b_prospect SET shop_id = 2 WHERE external_ref = 'A2'"
+));
+$pdo->exec("UPDATE mar_b2b_prospect SET shop_id = NULL WHERE external_ref = 'A5'");
+
+$reponse = call($router, 'GET', '/api/v1/marketing/b2b/prospects', [
+    'sector_ids' => (string) $officesId,
+    'shop_ids'   => '1',
+]);
+$noms = array_column($reponse['body'], 'company_name');
+check(
+    'les comptes affichés sont ceux rattachés à la boutique choisie',
+    in_array('Deloitte Diegem Belgium', $noms, true) && !in_array('AXA Belgium', $noms, true),
+    implode(', ', $noms)
+);
+
+$reponse = call($router, 'GET', '/api/v1/marketing/b2b/prospects/count', [
+    'sector_ids' => (string) $officesId,
+    'shop_ids'   => '1',
+]);
+$comptage = $reponse['body'];
+check(
+    'le compte dit ce que le périmètre retient, et ce qu\'il écarte',
+    ($comptage['total'] ?? -1) < ($comptage['network'] ?? -1)
+        && ($comptage['without_shop'] ?? 0) >= 1,
+    json_encode($comptage)
+);
+
+// Deux boutiques : l'union, pas l'intersection.
+$reponse = call($router, 'GET', '/api/v1/marketing/b2b/prospects', [
+    'sector_ids' => (string) $officesId,
+    'shop_ids'   => '1,2',
+]);
+$noms = array_column($reponse['body'], 'company_name');
+check(
+    'deux boutiques réunissent leurs comptes',
+    in_array('Deloitte Diegem Belgium', $noms, true) && in_array('AXA Belgium', $noms, true),
+    implode(', ', $noms)
+);
+
+// Sans boutique demandée — une campagne réseau — rien n'est restreint.
+$reponse = call($router, 'GET', '/api/v1/marketing/b2b/prospects/count', [
+    'sector_ids' => (string) $officesId,
+]);
+check(
+    'une campagne réseau garde tout le vivier',
+    ($reponse['body']['total'] ?? 0) === ($comptage['network'] ?? -1),
+    json_encode($reponse['body'])
+);
+
+// Les pastilles de secteur suivent le même périmètre : afficher l'effectif
+// réseau à côté d'une liste restreinte ferait cocher un secteur sur un chiffre
+// qui ne le concerne pas.
+$reseauParSecteur = call($router, 'GET', '/api/v1/marketing/b2b/sectors')['body'];
+$localParSecteur  = call($router, 'GET', '/api/v1/marketing/b2b/sectors', ['shop_ids' => '1'])['body'];
+$effectif = static function (array $lignes, int $id): int {
+    foreach ($lignes as $ligne) {
+        if ((int) $ligne['id'] === $id) {
+            return (int) $ligne['available'];
+        }
+    }
+
+    return -1;
+};
+check(
+    'l\'effectif d\'un secteur se restreint aux boutiques demandées',
+    $effectif($localParSecteur, $officesId) < $effectif($reseauParSecteur, $officesId)
+        && $effectif($localParSecteur, $officesId) >= 1,
+    sprintf(
+        'local %d vs réseau %d',
+        $effectif($localParSecteur, $officesId),
+        $effectif($reseauParSecteur, $officesId)
+    )
+);
+
+// La génération suit la même règle, à une nuance près et elle compte : un
+// compte rattaché à une autre boutique est écarté, un compte sans rattachement
+// reste pris et réparti — il n'appartient à personne, il n'est volé à personne.
+$campagneLocale = (int) call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name'             => 'Locale Halle',
+    'scope'            => 'LOCALE',
+    'client_target'    => 'b2b',
+    'shop_ids'         => [1],
+    'sector_ids'       => [$officesId],
+    'create_crm_leads' => false,
+])['body']['inserted_id'];
+
+call($router, 'POST', sprintf('/api/v1/marketing/campaigns/%d/leads/generate', $campagneLocale));
+$societes = array_column(
+    $pdo->query(sprintf(
+        'SELECT company_name FROM mar_crm_lead WHERE campaign_id = %d',
+        $campagneLocale
+    ))->fetchAll(),
+    'company_name'
+);
+check(
+    'la génération locale écarte les comptes d\'une autre boutique',
+    !in_array('AXA Belgium', $societes, true),
+    implode(', ', array_slice($societes, 0, 6))
+);
+check(
+    'mais garde ceux que l\'ERP n\'a rattachés à personne',
+    in_array('Deloitte Diegem Belgium', $societes, true)
+        && count(array_filter(
+            $pdo->query(sprintf(
+                'SELECT p.shop_id FROM mar_crm_lead l
+                   JOIN mar_b2b_prospect p ON p.id = l.prospect_id
+                  WHERE l.campaign_id = %d',
+                $campagneLocale
+            ))->fetchAll(),
+            static fn (array $r): bool => $r['shop_id'] === null
+        )) > 0,
+    implode(', ', array_slice($societes, 0, 6))
+);
+
 // Et la génération s'y tient : autant de leads que de comptes distincts.
 $response = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
     'name'             => 'Traiteurs multi-secteurs',

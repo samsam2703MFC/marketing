@@ -44,21 +44,31 @@ final class ProspectRepository
      *
      * @return list<array<string,mixed>>
      */
-    public function summaryBySector(): array
+    public function summaryBySector(array $shopIds = []): array
     {
+        // Boutiques données : l'effectif devient celui du périmètre. Sans cela
+        // la pastille annonce « Horeca · 184 » quand la campagne locale n'en
+        // touchera que douze, et c'est sur ce 184 qu'on décide de la cocher.
+        [$shopSql, $shopBindings] = self::attachedTo($shopIds);
+
         // `COUNT(p.id)` et non `COUNT(ps.prospect_id)` : la jonction garde ses
         // lignes même quand le compte a été désactivé, et les compter
         // annoncerait un vivier plus fourni qu'il ne l'est.
-        $rows = Database::connection()->query(
+        $statement = Database::connection()->prepare(sprintf(
             'SELECT s.id, s.code, s.label, s.estimated_leads_count,
                     COUNT(p.id) AS available
                FROM mar_b2b_sector s
                LEFT JOIN mar_b2b_prospect_sector ps ON ps.sector_id  = s.id
-               LEFT JOIN mar_b2b_prospect p         ON p.id = ps.prospect_id AND p.is_active = 1
+               LEFT JOIN mar_b2b_prospect p         ON p.id = ps.prospect_id
+                    AND p.is_active = 1 %s
               WHERE s.is_active = 1
               GROUP BY s.id, s.code, s.label, s.estimated_leads_count, s.sort_order
-              ORDER BY s.sort_order'
-        )->fetchAll();
+              ORDER BY s.sort_order',
+            $shopSql
+        ));
+        $statement->execute($shopBindings);
+
+        $rows = $statement->fetchAll();
 
         foreach ($rows as &$row) {
             $row['id']                    = (int) $row['id'];
@@ -79,14 +89,19 @@ final class ProspectRepository
      * @param  list<int> $sectorIds
      * @return list<array<string,mixed>>
      */
-    public function listBySectors(AuthContext $auth, array $sectorIds, int $limit = self::LIST_MAX): array
-    {
+    public function listBySectors(
+        AuthContext $auth,
+        array $sectorIds,
+        array $shopIds = [],
+        int $limit = self::LIST_MAX,
+    ): array {
         if ($sectorIds === []) {
             return [];
         }
 
         [$scopeSql, $bindings] = Scope::shopFilter($auth, 'p.shop_id');
         [$placeholders, $sectorBindings] = Database::inClause($sectorIds, 'sector');
+        [$shopSql, $shopBindings] = self::attachedTo($shopIds);
 
         // La limite est interpolée après bornage : MySQL refuse un paramètre
         // lié en LIMIT quand l'émulation des requêtes préparées est coupée.
@@ -113,13 +128,15 @@ final class ProspectRepository
                        WHERE ps.prospect_id = p.id AND ps.sector_id IN (%s)
                 )
                 AND (p.shop_id IS NULL OR %s)
+                %s
               ORDER BY p.company_name
               LIMIT %d',
             $placeholders,
             $scopeSql,
+            $shopSql,
             $limit
         ));
-        $statement->execute($sectorBindings + $bindings);
+        $statement->execute($sectorBindings + $bindings + $shopBindings);
 
         $rows = $statement->fetchAll();
         foreach ($rows as &$row) {
@@ -142,30 +159,95 @@ final class ProspectRepository
      *
      * @param list<int> $sectorIds
      */
-    public function countBySectors(AuthContext $auth, array $sectorIds): int
+    public function countBySectors(AuthContext $auth, array $sectorIds, array $shopIds = []): array
     {
         if ($sectorIds === []) {
-            return 0;
+            return ['total' => 0, 'network' => 0, 'without_shop' => 0];
         }
 
         [$scopeSql, $bindings]           = Scope::shopFilter($auth, 'p.shop_id');
         [$placeholders, $sectorBindings] = Database::inClause($sectorIds, 'sector');
 
-        $statement = Database::connection()->prepare(sprintf(
-            'SELECT COUNT(*)
-               FROM mar_b2b_prospect p
-              WHERE p.is_active = 1
-                AND EXISTS (
-                      SELECT 1 FROM mar_b2b_prospect_sector ps
-                       WHERE ps.prospect_id = p.id AND ps.sector_id IN (%s)
-                )
-                AND (p.shop_id IS NULL OR %s)',
+        $compter = static function (string $condition, array $extra) use (
             $placeholders,
-            $scopeSql
-        ));
-        $statement->execute($sectorBindings + $bindings);
+            $scopeSql,
+            $sectorBindings,
+            $bindings
+        ): int {
+            $statement = Database::connection()->prepare(sprintf(
+                'SELECT COUNT(*)
+                   FROM mar_b2b_prospect p
+                  WHERE p.is_active = 1
+                    AND EXISTS (
+                          SELECT 1 FROM mar_b2b_prospect_sector ps
+                           WHERE ps.prospect_id = p.id AND ps.sector_id IN (%s)
+                    )
+                    AND (p.shop_id IS NULL OR %s)
+                    %s',
+                $placeholders,
+                $scopeSql,
+                $condition
+            ));
+            $statement->execute($sectorBindings + $bindings + $extra);
 
-        return (int) $statement->fetchColumn();
+            return (int) $statement->fetchColumn();
+        };
+
+        [$shopSql, $shopBindings] = self::attachedTo($shopIds);
+
+        return [
+            // Ce que la campagne démarchera réellement.
+            'total'   => $compter($shopSql, $shopBindings),
+            // Le vivier entier des mêmes secteurs : c'est l'écart entre les deux
+            // qui dit ce que le choix des boutiques a écarté.
+            'network' => $compter('', []),
+            // Rattachés à aucune boutique. Ils ne relèvent d'aucun périmètre
+            // local, et les taire ferait passer un trou de données pour un
+            // vivier vide.
+            'without_shop' => $shopIds === [] ? 0 : $compter('AND p.shop_id IS NULL', []),
+        ];
+    }
+
+    /**
+     * Restriction aux comptes rattachés à des boutiques données.
+     *
+     * `shop_id` du vivier vient de la boutique préférée du client dans l'ERP
+     * (`client.id_main_shop`) : c'est celle où il a l'habitude d'aller, donc
+     * celle qui l'appellera. Une campagne locale qui démarcherait un client
+     * rattaché ailleurs enverrait quelqu'un travailler la clientèle d'une autre
+     * boutique du réseau.
+     *
+     * Liste vide = aucune restriction : une campagne réseau vise tout le monde.
+     *
+     * `$avecOrphelins` distingue les deux usages, qui n'ont pas la même réponse
+     * pour un compte sans boutique :
+     *
+     *   • **l'affichage** ne montre que les comptes rattachés — c'est ce qu'on
+     *     demande à l'écran, « qui, chez moi, vais-je appeler » ;
+     *   • **la génération** prend aussi les comptes orphelins et les répartit
+     *     sur les boutiques de la campagne. C'est le comportement voulu depuis
+     *     l'origine : un compte que l'ERP n'a rattaché à personne n'appartient
+     *     à aucune boutique, il n'est donc volé à aucune.
+     *
+     * Dans les deux cas, un compte rattaché à une **autre** boutique est écarté.
+     *
+     * @param  list<int> $shopIds
+     * @return array{0:string, 1:array<string,int>}
+     */
+    private static function attachedTo(array $shopIds, bool $avecOrphelins = false): array
+    {
+        if ($shopIds === []) {
+            return ['', []];
+        }
+
+        [$placeholders, $bindings] = Database::inClause(array_values($shopIds), 'pshop');
+
+        return [
+            $avecOrphelins
+                ? sprintf('AND (p.shop_id IS NULL OR p.shop_id IN (%s))', $placeholders)
+                : sprintf('AND p.shop_id IN (%s)', $placeholders),
+            $bindings,
+        ];
     }
 
     /**
@@ -338,7 +420,16 @@ final class ProspectRepository
         [$placeholders, $bindings]     = Database::inClause($sectorIds, 'sector');
         [$pickPlaceholders, $pickBind] = Database::inClause($sectorIds, 'pick');
 
-        $bindings                 += $pickBind;
+        // Une campagne locale ne démarche pas la clientèle d'une autre boutique.
+        // Sans ce filtre, un compte rattaché à Gosselies entrait dans une
+        // campagne de Corbais, et personne ne s'en apercevait avant l'appel.
+        // Les comptes sans rattachement, eux, restent pris et répartis : ils
+        // n'appartiennent à personne, ils ne sont donc volés à personne.
+        [$shopSql, $shopBind] = $campaign['scope'] === 'LOCALE'
+            ? self::attachedTo($shopIds, true)
+            : ['', []];
+
+        $bindings                 += $pickBind + $shopBind;
         $bindings['brand_id']      = $campaign['brand_id'];
         $bindings['campaign_id']   = $campaignId;
 
@@ -373,9 +464,11 @@ final class ProspectRepository
                       SELECT 1 FROM mar_crm_lead ld
                        WHERE ld.campaign_id = :campaign_id AND ld.prospect_id = p.id
                 )
+                %s
               ORDER BY p.company_name',
             $pickPlaceholders,
-            $placeholders
+            $placeholders,
+            $shopSql
         ));
         $statement->execute($bindings);
         $prospects = $statement->fetchAll();

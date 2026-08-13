@@ -1078,6 +1078,31 @@ function FramingStep({
   draft,
   patch,
 }: StepProps & { role: Role; shops: Array<{ id: number; name: string; city: string | null }> }) {
+  /**
+   * Boutiques qui restreignent le vivier.
+   *
+   * Une campagne locale ne démarche que les clients rattachés à ses boutiques —
+   * la boutique préférée du client dans l'ERP. Une campagne réseau ne restreint
+   * rien, d'où la liste vide, qui n'est pas un « aucune boutique » mais un
+   * « toutes ».
+   */
+  const perimetre = draft.scope === 'LOCALE' ? draft.shop_ids : []
+
+  // Les effectifs des pastilles suivent ce périmètre : annoncer « Horeca · 184 »
+  // quand la boutique choisie n'en compte que douze fait cocher un secteur sur
+  // un chiffre qui ne le concerne pas. Le référentiel sert de repli tant que la
+  // lecture n'a pas répondu — mieux vaut un chiffre réseau qu'un tiret.
+  const effectifs = useAsync(
+    () =>
+      draft.client_target === 'b2c'
+        ? Promise.resolve(null)
+        : api.getSectorAvailability(perimetre),
+    [draft.client_target, perimetre.join(',')],
+  )
+
+  const effectifDe = (sectorId: number, defaut: number): number =>
+    effectifs.data?.find((entry) => entry.id === sectorId)?.available ?? defaut
+
   // Vrai quand tous les secteurs sont retenus. Comparé sur le nombre, les
   // identifiants venant de la même liste : un secteur désactivé entre-temps
   // côté ERP ne doit pas laisser le bouton allumé pour toujours.
@@ -1416,9 +1441,13 @@ function FramingStep({
                 type="button"
                 className={`filter${draft.sector_ids.includes(sector.id) ? ' is-on' : ''}`}
                 onClick={() => patch({ sector_ids: toggle(draft.sector_ids, sector.id) })}
-                title={`${sector.available_count} compte${sector.available_count > 1 ? 's' : ''} dans le vivier`}
+                title={
+                  perimetre.length === 0
+                    ? `${effectifDe(sector.id, sector.available_count)} compte(s) dans le vivier`
+                    : `${effectifDe(sector.id, sector.available_count)} compte(s) rattaché(s) aux boutiques choisies`
+                }
               >
-                {sector.label} · {sector.available_count}
+                {sector.label} · {effectifDe(sector.id, sector.available_count)}
               </button>
             ))}
           </div>
@@ -1426,8 +1455,17 @@ function FramingStep({
           {/* Les comptes suivent les secteurs, dans le fil du formulaire : ils
               répondent à la question que les pastilles posent — qui va-t-on
               réellement démarcher, et depuis quelle boutique. */}
-          <h3 className="section-label">Comptes visés</h3>
-          <ProspectList sectorIds={draft.sector_ids} />
+          <h3 className="section-label">
+            Comptes visés
+            {perimetre.length === 0 ? null : (
+              <span className="section-label__aside">
+                Rattachés {perimetre.length > 1
+                  ? `aux ${perimetre.length} boutiques choisies`
+                  : 'à la boutique choisie'}
+              </span>
+            )}
+          </h3>
+          <ProspectList sectorIds={draft.sector_ids} shopIds={perimetre} />
         </>
       ) : null}
 

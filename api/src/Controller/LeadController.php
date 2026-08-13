@@ -45,9 +45,7 @@ final class LeadController
     /** Effectif réel du vivier par secteur, face au chiffre de cadrage. */
     public function sectorSummary(Request $request): array
     {
-        unset($request);
-
-        return Response::data($this->prospects->summaryBySector());
+        return Response::data($this->prospects->summaryBySector(self::shopIds($request)));
     }
 
     /** Comptes du vivier pour les secteurs demandés. */
@@ -55,7 +53,8 @@ final class LeadController
     {
         return Response::data($this->prospects->listBySectors(
             AuthContext::current(),
-            self::sectorIds($request)
+            self::sectorIds($request),
+            self::shopIds($request)
         ));
     }
 
@@ -68,12 +67,31 @@ final class LeadController
      */
     public function prospectCount(Request $request): array
     {
-        return Response::data([
-            'total' => $this->prospects->countBySectors(
-                AuthContext::current(),
-                self::sectorIds($request)
-            ),
-        ]);
+        return Response::data($this->prospects->countBySectors(
+            AuthContext::current(),
+            self::sectorIds($request),
+            self::shopIds($request)
+        ));
+    }
+
+    /**
+     * Boutiques de la campagne, quand elle en vise.
+     *
+     * Vide pour une campagne réseau, et c'est la bonne valeur : elle ne
+     * restreint rien. Le périmètre de l'appelant, lui, s'applique de toute
+     * façon plus loin — les deux filtres ne disent pas la même chose et ne se
+     * remplacent pas.
+     *
+     * @return list<int>
+     */
+    private static function shopIds(Request $request): array
+    {
+        $raw = $request->queryString('shop_ids') ?? '';
+
+        return array_values(array_filter(
+            array_map('intval', explode(',', $raw)),
+            static fn (int $v): bool => $v > 0
+        ));
     }
 
     /** @return list<int> */
