@@ -185,5 +185,20 @@ if (repris) {
   }
 }
 
+// 4 — Le grand livre du fonds, et sa saisie. Le formulaire s'ouvre mais
+//     n'est jamais enregistré : la capture ne clique pas « Enregistrer », et
+//     quitter la page abandonne ce qui y a été tapé.
+await page.goto(`${base}/?brand=1`, { waitUntil: 'networkidle' })
+await page.waitForTimeout(1200)
+
+if (await cliquer(page.getByRole('link', { name: 'Fonds & Royalties' }), 'Fonds & Royalties')) {
+  await photographier('05-fonds')
+
+  if (await cliquer(page.getByRole('button', { name: '+ Entrée ou sortie' }), 'Nouveau mouvement')) {
+    await cliquer(page.locator('.movement__periode .datefield'), 'Période couverte')
+    await photographier('05b-mouvement')
+  }
+}
+
 await writeFile(path.join(sortie, 'journal.txt'), `${journal.join('\n')}\n`, 'utf8')
 await navigateur.close()
