@@ -406,6 +406,7 @@ $response  = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
     'objective_coef_pct' => 12,
     'agency_note'        => 'Prévoir un shooting en boutique.',
     'b2b_webshop_enabled'=> true,
+    'show_web_shop'      => true,
     'sector_ids'      => array_column($refs['b2bSectors'], 'id'),
     'agency_ask_ids'  => [(int) $refs['agencyAsks'][0]['id'], (int) $refs['agencyAsks'][2]['id']],
     'b2b_option_ids'  => [(int) $refs['b2bOptions'][0]['id']],
@@ -558,13 +559,48 @@ check(
 );
 
 $campaignRow = $pdo->query(sprintf(
-    'SELECT tone, objective_coef_pct, agency_note, b2b_webshop_enabled FROM mar_campaign WHERE id = %d',
+    'SELECT tone, objective_coef_pct, agency_note, b2b_webshop_enabled, show_web_shop
+       FROM mar_campaign WHERE id = %d',
     $newId
 ))->fetch();
 check('le ton éditorial est enregistré', ($campaignRow['tone'] ?? '') === 'gourmand');
 check('l\'objectif en écart au N-1 est enregistré', (float) ($campaignRow['objective_coef_pct'] ?? 0) === 12.0);
 check('la note de brief est enregistrée', ($campaignRow['agency_note'] ?? '') !== '');
 check('le web-shop B2B est activé', (int) ($campaignRow['b2b_webshop_enabled'] ?? 0) === 1);
+// La vitrine grand public est une autre décision que la commande en ligne des
+// professionnels : les deux drapeaux existent côte à côte et ne se déduisent
+// pas l'un de l'autre.
+check('l\'affichage en boutique en ligne est enregistré',
+    (int) ($campaignRow['show_web_shop'] ?? 0) === 1);
+check(
+    'le brouillon relu le rend au même état',
+    (call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $newId))['body']['show_web_shop'] ?? null)
+        === true
+);
+
+// Publier vers l'extérieur se demande : sans mention, la campagne reste
+// interne. Une case oubliée qui n'affiche rien se rattrape ; une offre interne
+// parue en vitrine, beaucoup moins.
+$sansMention = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name' => 'Sans vitrine', 'scope' => 'RESEAU', 'client_target' => 'b2c',
+    'starts_on' => '2026-05-01', 'ends_on' => '2026-05-31',
+]);
+check(
+    'une campagne sans mention ne paraît pas en vitrine',
+    (int) $pdo->query(sprintf(
+        'SELECT show_web_shop FROM mar_campaign WHERE id = %d',
+        (int) $sansMention['body']['inserted_id']
+    ))->fetchColumn() === 0
+);
+
+// Et l'inverse : décocher après coup retire la campagne de la vitrine.
+call($router, 'PATCH', sprintf('/api/v1/marketing/campaigns/%d', $newId), [], ['show_web_shop' => false]);
+check(
+    'décocher retire la campagne de la vitrine',
+    (int) $pdo->query(sprintf('SELECT show_web_shop FROM mar_campaign WHERE id = %d', $newId))
+        ->fetchColumn() === 0
+);
+call($router, 'PATCH', sprintf('/api/v1/marketing/campaigns/%d', $newId), [], ['show_web_shop' => true]);
 
 check('les six secteurs B2B sont rattachés', $count('mar_campaign_b2b_sector') === 6, (string) $count('mar_campaign_b2b_sector'));
 check('les deux demandes agence sont rattachées', $count('mar_campaign_agency_ask') === 2);

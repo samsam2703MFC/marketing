@@ -282,7 +282,7 @@ final class CampaignRepository
             'INSERT INTO mar_campaign
                 (brand_id, type_id, parent_campaign_id, name, scope, client_target, tone,
                  status_code, draft_step, starts_on, ends_on, budget_amount, objective_coef_pct,
-                 agency_note, b2b_webshop_enabled, pos_survey_enabled, owner_user_id,
+                 agency_note, b2b_webshop_enabled, show_web_shop, pos_survey_enabled, owner_user_id,
                  create_crm_leads, image_url,
                  challenge_enabled, challenge_metric, challenge_trigger_pct,
                  margin_pct_default,
@@ -291,7 +291,7 @@ final class CampaignRepository
              VALUES
                 (:brand_id, :type_id, :parent_campaign_id, :name, :scope, :client_target, :tone,
                  :status_code, :draft_step, :starts_on, :ends_on, :budget_amount, :objective_coef_pct,
-                 :agency_note, :b2b_webshop_enabled, :pos_survey_enabled, :owner_user_id,
+                 :agency_note, :b2b_webshop_enabled, :show_web_shop, :pos_survey_enabled, :owner_user_id,
                  :create_crm_leads, :image_url,
                  :challenge_enabled, :challenge_metric, :challenge_trigger_pct,
                  :margin_pct_default,
@@ -318,6 +318,8 @@ final class CampaignRepository
                 : $data['objective_coef_pct'],
             'agency_note'        => ($data['agency_note'] ?? null) ?: null,
             'b2b_webshop_enabled'=> !empty($data['b2b_webshop_enabled']) ? 1 : 0,
+            // Publier vers l'extérieur se demande : le défaut ne montre rien.
+            'show_web_shop'      => !empty($data['show_web_shop']) ? 1 : 0,
             'pos_survey_enabled' => !empty($data['pos_survey_enabled']) ? 1 : 0,
             'create_crm_leads'   => !empty($data['create_crm_leads']) ? 1 : 0,
             'image_url'          => $data['image_url'] ?? null,
@@ -1351,7 +1353,7 @@ final class CampaignRepository
         $columns = [
             'type_id', 'name', 'scope', 'client_target', 'tone', 'status_code', 'draft_step',
             'starts_on', 'ends_on', 'budget_amount', 'objective_coef_pct', 'agency_note',
-            'b2b_webshop_enabled', 'pos_survey_enabled', 'spent_amount', 'approval_status',
+            'b2b_webshop_enabled', 'show_web_shop', 'pos_survey_enabled', 'spent_amount', 'approval_status',
             'create_crm_leads', 'image_url',
             'challenge_enabled', 'challenge_metric', 'challenge_trigger_pct',
             'margin_pct_default',
@@ -1363,7 +1365,8 @@ final class CampaignRepository
         // les normalisait déjà, la mise à jour non — le défaut ne se voyait pas
         // tant que personne n'envoyait un booléen à cette route.
         $flags = [
-            'b2b_webshop_enabled', 'pos_survey_enabled', 'create_crm_leads', 'challenge_enabled',
+            'b2b_webshop_enabled', 'show_web_shop', 'pos_survey_enabled', 'create_crm_leads',
+            'challenge_enabled',
         ];
 
         $assignments = [];
@@ -1479,6 +1482,7 @@ final class CampaignRepository
             'objective_coef_pct' => $campaign['objective_coef_pct'],
             'agency_note'        => $campaign['agency_note'],
             'b2b_webshop_enabled' => (bool) $campaign['b2b_webshop_enabled'],
+            'show_web_shop'      => (bool) $campaign['show_web_shop'],
             'pos_survey_enabled' => (bool) $campaign['pos_survey_enabled'],
             'create_crm_leads'   => (bool) $campaign['create_crm_leads'],
             'image_url'          => $asset === false ? '' : (string) $asset['file_url'],

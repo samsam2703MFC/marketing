@@ -197,6 +197,8 @@ export interface Draft {
   uniform_ids: number[]
   b2b_webshop_enabled: boolean
   b2b_option_ids: number[]
+  /** La campagne paraît-elle en vitrine de la boutique en ligne. */
+  show_web_shop: boolean
   pos_survey_enabled: boolean
   pos_questions: PosQuestion[]
   image_url: string
@@ -281,6 +283,10 @@ function emptyDraft(refs: References, role: Role): Draft {
     uniform_ids: [],
     b2b_webshop_enabled: false,
     b2b_option_ids: [],
+    // Non par défaut : une campagne oubliée qui ne paraît pas se corrige d'une
+    // case cochée, une offre interne parue en vitrine se corrige beaucoup moins
+    // bien.
+    show_web_shop: false,
     pos_survey_enabled: false,
     pos_questions: [],
     image_url: '',
@@ -772,6 +778,7 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
     uniform_ids: state.uniform_ids,
     b2b_webshop_enabled: state.b2b_webshop_enabled ?? false,
     b2b_option_ids: state.b2b_option_ids,
+    show_web_shop: state.show_web_shop ?? false,
     pos_survey_enabled: state.pos_survey_enabled ?? false,
     pos_questions: (state.pos_questions ?? []).map((question) => ({
       label: question.label,
@@ -874,6 +881,7 @@ function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): Cam
     objective_coef_pct: draft.objective_coef_pct === '' ? null : Number(draft.objective_coef_pct),
     agency_note: draft.agency_note.trim() || null,
     b2b_webshop_enabled: draft.b2b_webshop_enabled,
+    show_web_shop: draft.show_web_shop,
     image_url: draft.image_url.trim() || null,
     focal_point_y: draft.image_url.trim() === '' ? null : draft.focal_point_y,
     image_fit: draft.image_fit,
@@ -2103,6 +2111,27 @@ function CommunicationStep({
       <p className="muted">
         Les canaux activés ici alimentent les écrans « Pub physique » et « Pub digitale ».
       </p>
+
+      {/* Avant les canaux, parce que c'en est un — et le seul qui sorte du
+          réseau tout seul, sans qu'on imprime ni n'achète quoi que ce soit.
+          Décoché par défaut : une campagne oubliée qui ne paraît pas se corrige
+          d'une case cochée, une offre interne parue en vitrine beaucoup moins
+          bien. */}
+      <label className="field webshop">
+        <input
+          type="checkbox"
+          checked={draft.show_web_shop}
+          onChange={(e) => patch({ show_web_shop: e.target.checked })}
+        />
+        <span>
+          <strong>Afficher sur la boutique en ligne</strong>
+          <span className="muted">
+            {draft.show_web_shop
+              ? 'La campagne paraîtra en vitrine du site pendant sa période.'
+              : 'La campagne reste interne : rien ne s’affiche côté client.'}
+          </span>
+        </span>
+      </label>
 
       {families.map((family) => (
         <div key={family.key}>

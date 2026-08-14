@@ -3570,6 +3570,23 @@ table select,
    mauvaise une fois sur dix, et celle-ci ne se rattrape pas. */
 .movement__supprimer { margin-right: auto; }
 
+/* La vitrine est un canal comme un autre, et le seul qui sorte du réseau sans
+   qu'on imprime ni n'achète quoi que ce soit : il se lit d'abord. */
+.webshop {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper, #fbf9f6);
+}
+
+.webshop > span { display: flex; flex-direction: column; gap: 2px; }
+.webshop strong { font-size: 13.5px; font-weight: 600; }
+.webshop span span { font-size: 12px; }
+
 /* ── Éditeur des types de campagne ───────────────────────────────────────
    Les cartes sont celles de l'assistant, à l'identique : régler une couleur
    ici pour découvrir le résultat trois écrans plus loin fait recommencer. */

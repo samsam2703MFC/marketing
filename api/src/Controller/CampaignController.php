@@ -76,7 +76,7 @@ final class CampaignController
         $payload = $request->only([
             'brand_id', 'type_id', 'parent_campaign_id', 'name', 'scope', 'client_target', 'tone',
             'status_code', 'draft_step', 'starts_on', 'ends_on', 'budget_amount', 'objective_coef_pct',
-            'agency_note', 'b2b_webshop_enabled', 'pos_survey_enabled', 'pos_questions',
+            'agency_note', 'b2b_webshop_enabled', 'show_web_shop', 'pos_survey_enabled', 'pos_questions',
             'owner_user_id', 'create_crm_leads',
             'image_url', 'focal_point_y', 'image_fit', 'shop_ids', 'shop_targets', 'shop_item_targets', 'channels', 'lever_targets',
             'color_primary_hex', 'color_secondary_hex', 'color_accent_hex', 'color_ink_hex',
@@ -142,7 +142,7 @@ final class CampaignController
         $payload = $request->only([
             'type_id', 'name', 'scope', 'client_target', 'tone', 'status_code', 'draft_step',
             'starts_on', 'ends_on', 'budget_amount', 'objective_coef_pct',
-            'agency_note', 'b2b_webshop_enabled', 'pos_survey_enabled', 'pos_questions',
+            'agency_note', 'b2b_webshop_enabled', 'show_web_shop', 'pos_survey_enabled', 'pos_questions',
             'create_crm_leads', 'image_url', 'focal_point_y', 'image_fit', 'shop_ids', 'shop_targets', 'shop_item_targets', 'channels',
             'color_primary_hex', 'color_secondary_hex', 'color_accent_hex', 'color_ink_hex',
             'lever_targets', 'sector_ids', 'agency_ask_ids', 'b2b_option_ids',
@@ -166,7 +166,7 @@ final class CampaignController
         $payload = $request->only([
             'type_id', 'name', 'scope', 'client_target', 'tone', 'status_code',
             'starts_on', 'ends_on', 'budget_amount', 'objective_coef_pct', 'agency_note',
-            'b2b_webshop_enabled', 'pos_survey_enabled', 'spent_amount', 'approval_status',
+            'b2b_webshop_enabled', 'show_web_shop', 'pos_survey_enabled', 'spent_amount', 'approval_status',
             'create_crm_leads', 'image_url',
         ]);
 

@@ -314,6 +314,8 @@ export interface CampaignDetail extends Campaign {
   objective_coef_pct: number | null
   agency_note: string | null
   b2b_webshop_enabled: number | boolean
+  /** La campagne paraît-elle en vitrine de la boutique en ligne. */
+  show_web_shop: number | boolean
   pos_survey_enabled: number | boolean
   pos_questions: Array<{
     id: number
@@ -442,6 +444,8 @@ export interface CampaignDraft {
   objective_coef_pct?: number | null
   agency_note?: string | null
   b2b_webshop_enabled?: boolean
+  /** Absent = non publiée : montrer en vitrine se demande explicitement. */
+  show_web_shop?: boolean
   /** Un questionnaire est-il posé en caisse pendant la campagne. */
   pos_survey_enabled?: boolean
   pos_questions?: Array<{
