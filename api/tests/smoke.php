@@ -2260,6 +2260,55 @@ check(
     $illisible
 );
 
+// --- Lecture des redevances : enchaînement des appels ------------------------
+// Ce qui est vérifié ici est notre enchaînement, pas la forme des factures de
+// l'ERP : la liste est appelée, et le détail ne l'est que si la liste ne porte
+// pas les lignes. Les corps rendus par le transport sont des enveloppes vides
+// de sens — aucun montant, aucun libellé — précisément pour qu'aucun test ne
+// puisse dire quelque chose de faux sur ce que l'ERP renvoie.
+echo "\nRedevances : enchaînement des appels\n";
+
+$appels = [];
+$transportRedevances = static function (string $url) use (&$appels): array {
+    $appels[] = parse_url($url, PHP_URL_PATH);
+
+    // La liste rend une facture sans lignes ; le détail rend une liste vide.
+    return str_contains((string) parse_url($url, PHP_URL_PATH), '/invoices/')
+        ? [200, '{"data":{"invoice":{"lines":[]}}}']
+        : [200, '{"data":{"invoices":[{"id":"1","id_shop":"999"}]}}'];
+};
+
+$baseAvant = getenv('MAR_ERP_API_BASE');
+\Marketing\Support\Env::set('MAR_ERP_API_BASE', 'https://erp.test');
+
+$lecteur = new \Marketing\Repository\ErpRoyaltyRepository(
+    new \Marketing\Support\ErpClient($transportRedevances)
+);
+$vu = $lecteur->preview(AuthContext::current(), '2026-04');
+
+\Marketing\Support\Env::set('MAR_ERP_API_BASE', $baseAvant === false ? null : $baseAvant);
+
+check('la lecture aboutit quand l\'ERP répond', ($vu['available'] ?? false) === true,
+    json_encode($vu['reason'] ?? null));
+check(
+    'la liste est demandée pour la période, pas pour une date d\'émission',
+    ($appels[0] ?? '') === '/api/v1/panel/royalties/invoices',
+    json_encode($appels)
+);
+check(
+    'le détail est demandé quand la liste ne porte pas les lignes',
+    ($appels[1] ?? '') === '/api/v1/panel/royalties/invoices/1',
+    json_encode($appels)
+);
+// `??` rendrait « absent » sur une valeur nulle, ce qui est justement la valeur
+// attendue ici : c'est la clé qu'on vérifie, et son contenu séparément.
+check(
+    'une boutique inconnue du module n\'est pas importée en silence',
+    array_key_exists('shop_id', $vu['invoices'][0] ?? [])
+        && $vu['invoices'][0]['shop_id'] === null,
+    json_encode($vu['invoices'][0] ?? null)
+);
+
 // --- Redevances facturées par l'ERP -----------------------------------------
 // Les factures ne sont plus lues en base : elles viennent de l'API de l'ERP
 // (`GET /api/v1/panel/royalties/invoices?period=AAAA-MM`). Sans adresse d'ERP

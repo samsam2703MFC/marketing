@@ -65,8 +65,11 @@ final class ErpRoyaltyRepository
         'period_to'   => ['period_to', 'periodTo', 'date_to', 'to'],
         'total'       => ['total_net', 'totalNet', 'net_amount', 'netAmount', 'total', 'amount'],
         'status'      => ['status', 'state'],
-        'lines'       => ['lines', 'items', 'positions', 'invoice_lines', 'invoiceLines', 'details'],
+        'lines'       => self::LINE_HOLDERS,
     ];
+
+    /** Les noms sous lesquels une liste de lignes peut se présenter. */
+    private const LINE_HOLDERS = ['lines', 'items', 'positions', 'invoice_lines', 'invoiceLines', 'details'];
 
     /**
      * Clés cherchées dans une ligne de facture.
@@ -327,12 +330,26 @@ final class ErpRoyaltyRepository
         $mapLigne = [];
 
         foreach ($factures as $facture) {
-            $lignes = ErpClient::rows(
-                isset($mapFacture['lines']) && is_array($facture[$mapFacture['lines']] ?? null)
-                    ? ['data' => $facture[$mapFacture['lines']]]
-                    : [],
-                []
-            );
+            $lignes = $this->lignesDe($facture);
+
+            // La liste ne porte pas toujours le détail : `…/invoices/{id}` le
+            // rend. Un appel par facture, et seulement quand la liste n'a rien
+            // donné — une facture par boutique et par mois, l'addition reste
+            // raisonnable, mais il n'y a aucune raison de la payer pour rien.
+            if ($lignes === [] && isset($mapFacture['id'], $facture[$mapFacture['id']])) {
+                try {
+                    $lignes = $this->lignesDe($this->erp->get(sprintf(
+                        '%s/%s',
+                        rtrim($chemin, '/'),
+                        rawurlencode((string) $facture[$mapFacture['id']])
+                    )));
+                } catch (RuntimeException $echec) {
+                    // Une facture illisible ne doit pas emporter les autres :
+                    // le mois reste importable, celle-ci est signalée.
+                    $this->inventory['factures en échec'][(string) $facture[$mapFacture['id']]]
+                        = $echec->getMessage();
+                }
+            }
 
             if ($lignes !== [] && $mapLigne === []) {
                 $mapLigne = $this->resolve($lignes[0], self::LINE_KEYS, self::LINE_REQUIRED, 'ligne');
@@ -359,6 +376,37 @@ final class ErpRoyaltyRepository
         }
 
         return ['mapping' => ['invoice' => $mapFacture, 'line' => $mapLigne], 'invoices' => $resultat];
+    }
+
+    /**
+     * Les lignes portées par une facture ou par sa fiche détaillée.
+     *
+     * Trois enveloppes possibles, aucune documentée : la facture elle-même, un
+     * `data` qui la contient, ou un `data.invoice`. On descend jusqu'à trouver
+     * une liste, plutôt que de parier sur une forme — et on rend une liste vide
+     * si rien ne ressemble à des lignes, ce que l'appelant sait interpréter.
+     *
+     * @param  array<string,mixed> $payload
+     * @return list<array<string,mixed>>
+     */
+    private function lignesDe(array $payload): array
+    {
+        $niveau = isset($payload['data']) && is_array($payload['data']) ? $payload['data'] : $payload;
+
+        foreach (['invoice', 'royaltyInvoice', 'royalty_invoice'] as $porteur) {
+            if (isset($niveau[$porteur]) && is_array($niveau[$porteur])) {
+                $niveau = $niveau[$porteur];
+                break;
+            }
+        }
+
+        foreach (self::LINE_HOLDERS as $cle) {
+            if (isset($niveau[$cle]) && is_array($niveau[$cle])) {
+                return array_values(array_filter($niveau[$cle], 'is_array'));
+            }
+        }
+
+        return [];
     }
 
     /**
