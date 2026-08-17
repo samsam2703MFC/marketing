@@ -74,7 +74,7 @@ consommateur machine, pas un utilisateur.
 ### 1.4 Redevances — **passé en API** ✅
 
 `ErpRoyaltyRepository` ne lit plus `royalty_invoice` : il appelle
-`GET /api/v1/admin/royalties/invoices?period=AAAA-MM`, dont le paramètre désigne
+`GET /api/v1/panel/royalties/invoices?period=AAAA-MM`, dont le paramètre désigne
 la période **couverte**. Le contournement bâti sur la date d'émission — chercher
 mai pour obtenir avril — a disparu avec le SQL.
 
@@ -82,6 +82,15 @@ Les clés de la réponse restent **reconnues et non supposées** : `line_label` 
 la nature, `net_amount` pour le montant dû sont les deux seuls points établis.
 Ce qui n'est pas reconnu s'affiche dans l'écran avec les clés reçues, et rien
 n'est importé à l'aveugle. Un appel réel reste nécessaire pour figer le reste.
+
+**Une question ouverte sur le périmètre.** L'ERP expose deux familles :
+`/api/v1/panel/…`, servie par `Panel/royaltyShopRoutes.php` et dotée de sa propre
+authentification (`/api/v1/panel/authenticate`), et `/api/v1/admin/…`, la vue
+franchiseur. Le nom du fichier de routes laisse penser que la première est cadrée
+sur **une** boutique — or la grille des redevances en couvre tout un réseau. Si
+c'est le cas, il faut un appel par magasin : `MAR_ERP_ROYALTY_SHOP_PARAM` porte
+alors le nom du paramètre qui la désigne, et le module boucle. Vide, il appelle
+une fois. Ce nom se déclare, il ne se devine pas.
 
 ### 1.5 Clients et secteurs B2B — `client`, `b2b_client_type`, `b2b_client_interest_connection`
 
@@ -173,7 +182,7 @@ vérification qui manquait à la reprise des redevances, et qui m'a fait ranger
 | §1.2 Produits | `GET /api/v1/products`, `GET /api/v1/products/{id}` | à confirmer |
 | §1.2 Catégories | `GET /api/v1/product-categories` (+ `/used`) | à confirmer |
 | §1.2 Saisons | `GET /api/v1/product-availability-periods`, `…/{id}/products`, `GET /api/v1/products/{id}/availability-periods` | à confirmer |
-| §1.4 Redevances | `GET /api/v1/admin/royalties/invoices?id_shop=&status=&period=AAAA-MM` puis `…/invoices/{id}` | **documenté** (`RoyaltyInvoiceListResponse`) |
+| §1.4 Redevances | `GET /api/v1/panel/royalties/invoices?period=AAAA-MM` *(celui retenu)* ; `GET /api/v1/admin/royalties/invoices?id_shop=&status=&period=` pour la vue franchiseur | panel : **non documenté** · admin : documenté (`RoyaltyInvoiceListResponse`) |
 | §1.5 Clients | `GET /api/v1/clients?limit=&offset=&type=&vat_id=` | **documenté** (`ClientRecord`) |
 | §1.6 Tarifs | `GET /api/v1/shops/{shop}/products/price-list/document` | déjà consommé |
 | §1.7 Recettes | `GET /api/v1/franchise/{shop}/product-recipes/calculation`, `…/product-recipe/{id}/calculation` | à confirmer |
@@ -223,7 +232,7 @@ reste est faisable avec l'existant.
 | Rang | Chantier | Dépend de |
 |---|---|---|
 | **fait** | **Client HTTP ERP mutualisé** (`Support\ErpClient`) — un seul point d'appel : adresse en configuration, jeton, `X-Request-Id`, délai, déballage d'enveloppe, échecs traduits en messages qui disent quoi regarder. Extrait de l'appel des tarifs, pas écrit à côté. | — |
-| **fait** | **Redevances par API** (§1.4) — `ErpRoyaltyRepository` ne touche plus `royalty_invoice` : il appelle `GET /api/v1/admin/royalties/invoices?period=AAAA-MM`. Le décalage d'un mois disparaît avec le SQL. | un appel réel pour figer le mapping |
+| **fait** | **Redevances par API** (§1.4) — `ErpRoyaltyRepository` ne touche plus `royalty_invoice` : il appelle `GET /api/v1/panel/royalties/invoices?period=AAAA-MM`. Le décalage d'un mois disparaît avec le SQL. | un appel réel pour figer le mapping |
 | **fait** | **Route vitrine publique** (§2.1) — `GET /api/v1/public/marketing/campaigns`, au format du standard. | — |
 | 4 | **Boutiques et catalogue** (§1.1, §1.2) — la reprise ERP devient un client HTTP | un appel réel par endpoint |
 | 5 | **Clients B2B** (§1.5) — `limit`/`offset` existent ; reste à savoir s'il y a un filtre incrémental, sinon la reprise relit tout | un appel réel |

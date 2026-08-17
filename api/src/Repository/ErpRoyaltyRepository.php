@@ -33,8 +33,22 @@ use RuntimeException;
  */
 final class ErpRoyaltyRepository
 {
-    /** Le chemin est configurable : une installation peut l'avoir monté ailleurs. */
-    private const INVOICES_PATH = '/api/v1/admin/royalties/invoices';
+    /**
+     * Le chemin des factures, configurable — une installation peut l'avoir monté
+     * ailleurs, et l'ERP en expose deux familles :
+     *
+     * — `/api/v1/panel/royalties/invoices`, celle qu'on utilise, servie par
+     *   `Panel/royaltyShopRoutes.php` ;
+     * — `/api/v1/admin/royalties/invoices`, la vue franchiseur, seule à porter
+     *   un contrat documenté (`id_shop`, `status`, `period`).
+     *
+     * Le nom du fichier de routes laisse penser que la première est cadrée sur
+     * une boutique. Si c'est le cas, il faut un appel par magasin :
+     * `MAR_ERP_ROYALTY_SHOP_PARAM` porte alors le nom du paramètre, et le module
+     * boucle. Sans lui, il appelle une fois. On ne devine pas ce nom — on le
+     * déclare quand on le connaît.
+     */
+    private const INVOICES_PATH = '/api/v1/panel/royalties/invoices';
 
     /**
      * Clés cherchées dans une facture. L'ordre compte : le premier trouvé gagne.
@@ -276,15 +290,36 @@ final class ErpRoyaltyRepository
             $boutiques[(string) $shop['erp_shop_id']] = ['id' => (int) $shop['id'], 'name' => $shop['name']];
         }
 
+        $chemin = (string) (\Marketing\Support\Env::get('MAR_ERP_ROYALTY_INVOICES_PATH', self::INVOICES_PATH)
+            ?: self::INVOICES_PATH);
+        $paramBoutique = trim((string) (\Marketing\Support\Env::get('MAR_ERP_ROYALTY_SHOP_PARAM', '') ?? ''));
+
         // `period` désigne la période couverte, pas la date d'émission : c'est
         // l'API qui porte la distinction, et elle nous épargne le décalage d'un
         // mois qu'il fallait appliquer en lisant la table.
-        $payload  = $this->erp->get(
-            (string) (\Marketing\Support\Env::get('MAR_ERP_ROYALTY_INVOICES_PATH', self::INVOICES_PATH)
-                ?: self::INVOICES_PATH),
-            ['period' => $mois]
-        );
-        $factures = ErpClient::rows($payload, ['invoices', 'items', 'rows']);
+        $factures = [];
+
+        if ($paramBoutique === '') {
+            $factures = ErpClient::rows(
+                $this->erp->get($chemin, ['period' => $mois]),
+                ['invoices', 'items', 'rows']
+            );
+        } else {
+            // Un appel par boutique quand l'endpoint est cadré sur une seule.
+            // L'échec d'un magasin n'emporte pas les autres : une boutique qui
+            // n'a pas de facture ce mois-là ne doit pas priver le réseau des
+            // siennes.
+            foreach ($boutiques as $erpShopId => $boutique) {
+                try {
+                    $factures = array_merge($factures, ErpClient::rows(
+                        $this->erp->get($chemin, ['period' => $mois, $paramBoutique => $erpShopId]),
+                        ['invoices', 'items', 'rows']
+                    ));
+                } catch (RuntimeException $echec) {
+                    $this->inventory['boutiques en échec'][$boutique['name']] = $echec->getMessage();
+                }
+            }
+        }
 
         $mapFacture = $this->resolve($factures[0] ?? [], self::INVOICE_KEYS, self::INVOICE_REQUIRED, 'facture');
 

@@ -2262,7 +2262,7 @@ check(
 
 // --- Redevances facturées par l'ERP -----------------------------------------
 // Les factures ne sont plus lues en base : elles viennent de l'API de l'ERP
-// (`GET /api/v1/admin/royalties/invoices?period=AAAA-MM`). Sans adresse d'ERP
+// (`GET /api/v1/panel/royalties/invoices?period=AAAA-MM`). Sans adresse d'ERP
 // configurée, il n'y a rien à joindre — et c'est le diagnostic qui est vérifié :
 // il vaut mieux un refus lisible qu'un import qui invente des montants.
 $facturesErp = Marketing\Support\ErpClient::isConfigured();
