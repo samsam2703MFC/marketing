@@ -151,17 +151,68 @@ pendant la fenêtre de dépréciation de trois mois (§14).
 
 ---
 
-## 3. Ce qu'il faut de vous pour avancer
+## 3. Correspondance avec le swagger TFBuddy
 
-1. **Le fichier swagger de l'ERP.** Il n'est dans aucun des trois dépôts de cette
-   session (`marketing`, `back_office_ws_franchisor`, `consultant_bo`). Sans lui
-   je ne peux pas dire lesquels des sept besoins du §1 existent déjà — et le §0.2
-   du standard interdit d'inventer un second endpoint pour une donnée qui en a
-   déjà un. Chemin du fichier, ou URL du swagger.
-2. **Confirmation sur les ventes agrégées (§1.3).** C'est le seul point où
-   l'absence d'endpoint bloque réellement le passage en tout-API.
-3. **Le nom de la colonne photo produit**, si elle existe (§1.2). Le dossier
-   d'impression l'attend depuis le début.
+Le swagger est arrivé dans le dépôt (`/swagger`, OpenAPI 3.0, **924 chemins**,
+serveur `https://test.tfbuddy.com`). Six des sept besoins ont déjà leur endpoint.
+
+**Réserve valable pour tout ce tableau** : le swagger est engendré depuis
+l'enregistrement des routes, et le dit lui-même — « Request, authorization and
+response contracts are not inferred by coverage generation ». Sur 1 229
+opérations, 454 portent un contrat détaillé ; les autres n'ont qu'une réponse
+« The data ». **Les chemins sont donc sûrs, les charges utiles ne le sont pas.**
+Il faudra un appel réel par endpoint avant d'écrire le mapping — c'est la
+vérification qui manquait à la reprise des redevances, et qui m'a fait ranger
+`net_amount` du mauvais côté.
+
+| Besoin | Endpoint TFBuddy | Contrat |
+|---|---|---|
+| §1.1 Boutiques | `GET /api/v1/shops`, `GET /api/v1/shops/{id}` | à confirmer |
+| §1.2 Produits | `GET /api/v1/products`, `GET /api/v1/products/{id}` | à confirmer |
+| §1.2 Catégories | `GET /api/v1/product-categories` (+ `/used`) | à confirmer |
+| §1.2 Saisons | `GET /api/v1/product-availability-periods`, `…/{id}/products`, `GET /api/v1/products/{id}/availability-periods` | à confirmer |
+| §1.4 Redevances | `GET /api/v1/admin/royalties/invoices?id_shop=&status=&period=AAAA-MM` puis `…/invoices/{id}` | **documenté** (`RoyaltyInvoiceListResponse`) |
+| §1.5 Clients | `GET /api/v1/clients?limit=&offset=&type=&vat_id=` | **documenté** (`ClientRecord`) |
+| §1.6 Tarifs | `GET /api/v1/shops/{shop}/products/price-list/document` | déjà consommé |
+| §1.7 Recettes | `GET /api/v1/franchise/{shop}/product-recipes/calculation`, `…/product-recipe/{id}/calculation` | à confirmer |
+| §1.3 **Ventes par produit** | *rien de direct* — voir ci-dessous | — |
+
+### 3.1 Deux gains immédiats, déjà lisibles dans le swagger
+
+- **Redevances.** `period` est un paramètre au format `AAAA-MM`, et il désigne la
+  période **couverte**. Passer par l'API supprime donc le contournement bâti sur
+  la date d'émission (« le mois suivant celui que la facture couvre ») : on
+  demande avril, on reçoit avril. Ce contournement disparaît avec le SQL.
+- **Clients.** `ClientRecord` porte `id_main_shop` et `is_b2b` — exactement le
+  rattachement boutique et le marqueur professionnel dont le ciblage a besoin,
+  sans avoir à connaître le schéma.
+
+### 3.2 Le seul vrai trou : les ventes par produit
+
+Le swagger expose des ventes **agrégées autrement** que ce dont le module a
+besoin :
+
+- `/api/v1/consultant/shops/monthly-sales?from=&to=` — par boutique et par mois ;
+- `/api/v1/consultant/shops/category-sales` — par catégorie ;
+- `/api/v1/shops/{id}/statistics/sales/product-category-groups` — par groupe ;
+- `/api/v1/shops/{id}/transactions`, `/api/v1/transactions/{id}/products` — le
+  détail ticket par ticket.
+
+Le module a besoin de **quantités par produit, par boutique et par mois** : c'est
+l'historique N-1 sur lequel se calculent les objectifs de campagne. Aucun de ces
+endpoints ne le rend. Reconstituer l'agrégat en parcourant les transactions
+demanderait de rapatrier tous les tickets d'une année — irréaliste.
+
+Il manque donc **un** endpoint côté ERP, et un seul :
+
+```
+GET /api/v1/consultant/shops/product-sales?from=2025-01-01&to=2025-12-31
+    &shopIds=3,7,12&groupBy=product,shop,month
+→ [{ shopId, productId, month, quantity, revenueCents }]
+```
+
+C'est la seule dépendance qui empêche le module d'être en tout-API. Tout le
+reste est faisable avec l'existant.
 
 ---
 
@@ -169,10 +220,14 @@ pendant la fenêtre de dépréciation de trois mois (§14).
 
 | Rang | Chantier | Dépend de |
 |---|---|---|
-| 1 | Lire le swagger, cocher ce qui existe déjà | vous |
-| 2 | Redevances par API (§1.4) — petit volume, gain immédiat, remplace la lecture SQL la plus récente | swagger |
-| 3 | Boutiques et catalogue par API (§1.1, §1.2) — la reprise ERP devient un client HTTP | swagger + pagination |
-| 4 | Route vitrine publique (§2.1) — indépendante, réalisable tout de suite | rien |
-| 5 | Ventes agrégées (§1.3) | endpoint ERP à créer |
-| 6 | Clients B2B (§1.5) | endpoint + filtre incrémental |
-| 7 | Bascule `v2` des 59 routes | décision |
+| 1 | **Client HTTP ERP mutualisé** — un seul point d'appel (base URL en configuration, jeton, `X-Request-Id`, erreurs, pagination, journalisation). `PriceListRepository` en contient déjà la moitié : on l'en extrait au lieu d'en écrire un second. | rien |
+| 2 | **Redevances par API** (§1.4) — petit volume, contrat documenté, et supprime au passage le contournement du décalage de mois | un appel réel pour figer le mapping |
+| 3 | **Route vitrine publique** (§2.1) — indépendante de l'ERP, réalisable tout de suite | rien |
+| 4 | **Boutiques et catalogue** (§1.1, §1.2) — la reprise ERP devient un client HTTP | un appel réel par endpoint |
+| 5 | **Clients B2B** (§1.5) — `limit`/`offset` existent ; reste à savoir s'il y a un filtre incrémental, sinon la reprise relit tout | un appel réel |
+| 6 | **Ventes par produit** (§3.2) | un endpoint à créer côté ERP |
+| 7 | **Bascule `v2`** des 59 routes | décision |
+
+Les rangs 1 à 5 ne demandent rien à personne d'autre que des appels de
+vérification. Le rang 6 demande un développement côté TFBuddy. Le rang 7 est une
+décision de calendrier, pas une difficulté technique.
