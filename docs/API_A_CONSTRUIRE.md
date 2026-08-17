@@ -23,8 +23,8 @@ donc ce dont il a besoin en HTTP, et **ce qu'il peut exposer** en retour.
 - **Les tables de l'ERP ne sont jamais écrites.** Aucune migration, aucun test,
   aucun script ne les crée, ne les modifie ni ne les supprime.
 
-Le seul écart au §1.1 est donc la **lecture** : le module interroge directement
-huit tables de l'ERP, listées ci-dessous.
+Le seul écart au §1.1 est donc la **lecture**. Il portait sur huit tables ; les
+deux tables de redevances sont passées en API (§1.4), il en reste six.
 
 ---
 
@@ -71,15 +71,17 @@ consommateur machine, pas un utilisateur.
 - **Sans cet endpoint agrégé, le passage en API n'est pas faisable** pour cet
   écran : c'est le seul point où la règle et la physique se rencontrent.
 
-### 1.4 Redevances — `royalty_invoice` + `royalty_invoice_line`
+### 1.4 Redevances — **passé en API** ✅
 
-- **Lu par** `ErpRoyaltyRepository` : alimente les entrées du fonds marketing.
-- **Champs utilisés** : en-tête (id, `shop_id` → `shops.id`, numéro, date
-  d'émission — mois suivant le mois couvert) ; ligne (`line_label` qui porte la
-  nature, `net_amount` qui porte le montant dû, taux si présent).
-- **Besoin** :
-  `GET /api/v1/integration/redevances/royalty-invoices?filter[issuedAt][gte]=…&filter[issuedAt][lt]=…&include=lines`
-- **Volume** : une facture par boutique et par mois. Trivial.
+`ErpRoyaltyRepository` ne lit plus `royalty_invoice` : il appelle
+`GET /api/v1/admin/royalties/invoices?period=AAAA-MM`, dont le paramètre désigne
+la période **couverte**. Le contournement bâti sur la date d'émission — chercher
+mai pour obtenir avril — a disparu avec le SQL.
+
+Les clés de la réponse restent **reconnues et non supposées** : `line_label` pour
+la nature, `net_amount` pour le montant dû sont les deux seuls points établis.
+Ce qui n'est pas reconnu s'affiche dans l'écran avec les clés reçues, et rien
+n'est importé à l'aveugle. Un appel réel reste nécessaire pour figer le reste.
 
 ### 1.5 Clients et secteurs B2B — `client`, `b2b_client_type`, `b2b_client_interest_connection`
 
@@ -220,9 +222,9 @@ reste est faisable avec l'existant.
 
 | Rang | Chantier | Dépend de |
 |---|---|---|
-| 1 | **Client HTTP ERP mutualisé** — un seul point d'appel (base URL en configuration, jeton, `X-Request-Id`, erreurs, pagination, journalisation). `PriceListRepository` en contient déjà la moitié : on l'en extrait au lieu d'en écrire un second. | rien |
-| 2 | **Redevances par API** (§1.4) — petit volume, contrat documenté, et supprime au passage le contournement du décalage de mois | un appel réel pour figer le mapping |
-| 3 | **Route vitrine publique** (§2.1) — indépendante de l'ERP, réalisable tout de suite | rien |
+| **fait** | **Client HTTP ERP mutualisé** (`Support\ErpClient`) — un seul point d'appel : adresse en configuration, jeton, `X-Request-Id`, délai, déballage d'enveloppe, échecs traduits en messages qui disent quoi regarder. Extrait de l'appel des tarifs, pas écrit à côté. | — |
+| **fait** | **Redevances par API** (§1.4) — `ErpRoyaltyRepository` ne touche plus `royalty_invoice` : il appelle `GET /api/v1/admin/royalties/invoices?period=AAAA-MM`. Le décalage d'un mois disparaît avec le SQL. | un appel réel pour figer le mapping |
+| **fait** | **Route vitrine publique** (§2.1) — `GET /api/v1/public/marketing/campaigns`, au format du standard. | — |
 | 4 | **Boutiques et catalogue** (§1.1, §1.2) — la reprise ERP devient un client HTTP | un appel réel par endpoint |
 | 5 | **Clients B2B** (§1.5) — `limit`/`offset` existent ; reste à savoir s'il y a un filtre incrémental, sinon la reprise relit tout | un appel réel |
 | 6 | **Ventes par produit** (§3.2) | un endpoint à créer côté ERP |

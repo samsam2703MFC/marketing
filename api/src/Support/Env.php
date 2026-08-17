@@ -59,6 +59,31 @@ final class Env
         return self::$values[$key] ?? $default;
     }
 
+    /**
+     * Pose une valeur pour la durée du processus.
+     *
+     * Sert aux tests, qui doivent pouvoir éprouver un code selon qu'un réglage
+     * est présent ou non — sans écrire dans le fichier de configuration du
+     * poste, ni dépendre de ce qu'il contient ce jour-là. `putenv()` en plus des
+     * valeurs internes, pour que `getenv()` voie la même chose : sans lui, la
+     * valeur réelle de l'environnement continuerait de primer et le réglage
+     * posé ici resterait sans effet.
+     */
+    public static function set(string $key, ?string $value): void
+    {
+        self::load();
+
+        if ($value === null) {
+            unset(self::$values[$key]);
+            @putenv($key);
+
+            return;
+        }
+
+        self::$values[$key] = $value;
+        @putenv($key . '=' . $value);
+    }
+
     /** Chemin du fichier de configuration chargé, ou `null` si aucun. */
     public static function source(): ?string
     {

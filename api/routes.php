@@ -19,6 +19,7 @@ use Marketing\Controller\CatalogController;
 use Marketing\Controller\FundController;
 use Marketing\Controller\LeadController;
 use Marketing\Controller\NetworkController;
+use Marketing\Controller\PublicController;
 use Marketing\Controller\ReferenceController;
 use Marketing\Controller\SalesController;
 use Marketing\Controller\SessionController;
@@ -35,11 +36,19 @@ return static function (Router $router): void {
     $network    = new NetworkController();
     $sales      = new SalesController();
     $uploads    = new UploadController();
+    $public     = new PublicController();
 
     // Session — publique : elle ne dit que si l'appelant est authentifié.
     // Le front s'en sert pour savoir s'il est embarqué dans l'ERP, auquel cas
     // l'identité est déjà posée et son écran de connexion n'a pas lieu d'être.
     $router->get('/api/v1/marketing/session', [$session, 'show'], true);
+
+    // ── Vitrine ────────────────────────────────────────────────────────────
+    // La seule route publique du module, et la seule écrite au format du
+    // standard : chemin `{app}/{domaine}/{ressource}`, enveloppe, pagination,
+    // montants en centimes. Les routes ci-dessous gardent leur forme jusqu'à la
+    // bascule v2 — voir docs/API_REGISTRY.md.
+    $router->get('/api/v1/public/marketing/campaigns', [$public, 'campaigns'], true);
 
     // Référentiels
     $router->get('/api/v1/marketing/references', [$references, 'index']);

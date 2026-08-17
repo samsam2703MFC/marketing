@@ -199,33 +199,12 @@ final class PrintRepository
         $saisi   = $item['baseline_price'] === null ? null : (float) $item['baseline_price'];
         $avant   = $saisi ?? ($tarif['price'] ?? null);
 
-        $mecanique = (string) ($item['mechanic_type'] ?? '');
-        $remise    = $item['discount_pct'] === null ? null : (float) $item['discount_pct'];
-        $impose    = $item['fixed_price'] === null ? null : (float) $item['fixed_price'];
-        $achetes   = $item['buy_qty'] === null ? null : (int) $item['buy_qty'];
-        $offerts   = $item['get_qty'] === null ? null : (int) $item['get_qty'];
-
-        $apres = null;
-        $texte = null;
-
-        if ($avant !== null) {
-            if ($mecanique === 'PERCENT' && $remise !== null) {
-                $apres = round($avant * (1 - $remise / 100), 2);
-                $texte = sprintf('−%s %%', rtrim(rtrim(number_format($remise, 2, ',', ' '), '0'), ','));
-            } elseif (($mecanique === 'CROSSED_PRICE' || $mecanique === 'BUNDLE_FIXED') && $impose !== null) {
-                $apres = round($impose, 2);
-                $texte = number_format($apres, 2, ',', ' ') . ' €';
-            } elseif ($mecanique === 'BUY_X_GET_Y' && $achetes !== null && $offerts !== null
-                      && $achetes > 0 && $offerts > 0) {
-                // Le lot se vend au prix de `achetés` mais compte
-                // `achetés + offerts` pièces : c'est la recette moyenne par
-                // pièce qui baisse, pas le prix affiché en rayon.
-                $apres = round(($avant * $achetes) / ($achetes + $offerts), 2);
-                $texte = sprintf('%d + %d offert%s', $achetes, $offerts, $offerts > 1 ? 's' : '');
-            } elseif ($mecanique === 'FREE_DELIVERY') {
-                $texte = 'Livraison offerte';
-            }
-        }
+        // La règle de prix vit dans `OfferPricing` : la vitrine publique
+        // l'applique aussi, et une règle écrite deux fois n'est corrigée
+        // qu'une fois le jour où une mécanique change.
+        $calcul = \Marketing\Support\OfferPricing::apply($item, $avant);
+        $apres  = $calcul['after'];
+        $texte  = $calcul['mechanic']['text'] ?? null;
 
         return [
             'label'     => (string) $item['label'],
@@ -236,17 +215,11 @@ final class PrintRepository
             // `null` franc vaut mieux qu'une image de remplacement, qu'un
             // gabarit prendrait pour la photo du produit.
             'image_url' => $item['catalog_image'],
-            'price_before' => $avant,
-            'price_after'  => $apres,
-            'price_before_ht' => $avant === null ? null : round($avant / (1 + self::TVA_PCT / 100), 4),
-            'price_after_ht'  => $apres === null ? null : round($apres / (1 + self::TVA_PCT / 100), 4),
-            'mechanic' => $mecanique === '' ? null : [
-                'type'  => $mecanique,
-                'value' => $remise ?? $impose ?? null,
-                'buy'   => $achetes,
-                'get'   => $offerts,
-                'text'  => $texte,
-            ],
+            'price_before'    => $calcul['before'],
+            'price_after'     => $calcul['after'],
+            'price_before_ht' => $calcul['before_ht'],
+            'price_after_ht'  => $calcul['after_ht'],
+            'mechanic'        => $calcul['mechanic'],
             // Réglages d'affichage par produit, à construire : tant que
             // l'écran ne les propose pas, tout s'imprime, ce qui est le
             // comportement qu'un gabarit attend par défaut.

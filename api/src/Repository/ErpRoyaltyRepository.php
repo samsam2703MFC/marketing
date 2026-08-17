@@ -6,73 +6,76 @@ namespace Marketing\Repository;
 
 use Marketing\Support\AuthContext;
 use Marketing\Support\Database;
-use Marketing\Support\Env;
+use Marketing\Support\ErpClient;
 use Marketing\Support\Scope;
-use PDO;
 use RuntimeException;
 
 /**
- * Redevances facturées par l'ERP : `royalty_invoice` et `royalty_invoice_line`.
+ * Redevances facturées par l'ERP, lues par son API.
  *
  * Ces factures existent déjà. Les ressaisir dans le module, ou les recalculer à
  * partir d'un taux et d'un CA tenus à part, produirait un deuxième chiffre pour
  * le même fait — et le jour où les deux divergent, personne ne sait lequel est
- * le bon. Le module lit donc ce que l'ERP a facturé, et rien d'autre.
+ * le bon.
  *
- * Il le lit sans jamais l'écrire : aucune requête d'ici ne modifie une table de
- * l'ERP. Les colonnes sont découvertes dans le schéma plutôt que codées en dur,
- * comme pour les autres reprises du module — un nom de colonne deviné juste
- * aujourd'hui devient un montant faux en silence après une mise à jour de
- * l'ERP. Ce qui n'est pas reconnu est dit, avec la liste de ce que la table
- * contient réellement.
+ * Elles étaient lues en SQL dans `royalty_invoice`. Elles ne le sont plus :
+ * `GET /api/v1/admin/royalties/invoices` les rend, et le standard interdit à un
+ * module de lire la base d'un autre. Le changement n'est pas que formel — le
+ * paramètre `period` de l'API désigne la période **couverte**, là où la table
+ * n'offrait qu'une date d'émission tombant le mois suivant. On demandait avril
+ * en cherchant mai ; on demande avril.
+ *
+ * Ce que le module ne connaît toujours pas, c'est la forme des réponses : le
+ * swagger de l'ERP documente les chemins et laisse les corps à « The data ».
+ * Les clés sont donc reconnues, pas supposées, et ce qui ne l'est pas est
+ * affiché avec ce qui a été reçu. Un nom deviné juste aujourd'hui devient un
+ * montant faux en silence après une mise à jour de l'ERP.
  */
 final class ErpRoyaltyRepository
 {
+    /** Le chemin est configurable : une installation peut l'avoir monté ailleurs. */
+    private const INVOICES_PATH = '/api/v1/admin/royalties/invoices';
+
     /**
-     * L'en-tête de facture. Une notion par ligne, plusieurs noms possibles :
-     * l'ordre compte, le premier trouvé gagne.
+     * Clés cherchées dans une facture. L'ordre compte : le premier trouvé gagne.
      *
      * @var array<string, list<string>>
      */
-    private const INVOICE_COLUMNS = [
-        'id'          => ['id', 'royalty_invoice_id', 'invoice_id'],
-        // `shop_id` d'abord : la facture désigne `shops.id`, pas le magasin
-        // franchisé. Si les deux colonnes coexistaient, l'ordre trancherait au
-        // profit de la mauvaise.
-        'shop'        => ['shop_id', 'id_shop', 'franchisee_shop_id', 'id_franchisee_shop', 'magasin_id'],
-        'number'      => ['invoice_number', 'number', 'reference', 'ref', 'code', 'num'],
-        'date'        => ['invoice_date', 'date', 'issued_at', 'billing_date', 'created_at'],
-        'period_from' => ['period_from', 'period_start', 'date_from', 'start_date', 'period_month', 'month'],
-        'period_to'   => ['period_to', 'period_end', 'date_to', 'end_date'],
-        'revenue'     => ['net_revenue', 'revenue_net', 'ca_net', 'turnover', 'revenue_amount', 'base_amount'],
-        'total'       => ['total_amount', 'amount_total', 'total_ht', 'total', 'amount'],
-        'status'      => ['status', 'state', 'statut'],
-    ];
-
-    /** @var array<string, list<string>> */
-    private const LINE_COLUMNS = [
-        'invoice' => ['royalty_invoice_id', 'invoice_id', 'id_royalty_invoice', 'id_invoice', 'header_id'],
-        // `line_label` porte la nature de la ligne : c'est lui qui distingue les
-        // trois redevances, et il passe donc avant tout autre libellé.
-        'label'   => ['line_label', 'label', 'designation', 'description', 'name', 'wording', 'libelle'],
-        'kind'    => ['type', 'kind', 'royalty_type', 'category', 'code', 'nature'],
-        'rate'    => ['rate_pct', 'rate', 'percent', 'percentage', 'pct', 'taux'],
-        // L'assiette, si elle est stockée. Surtout pas `net_amount` : c'est le
-        // montant dû, et le lire aussi comme assiette afficherait un chiffre
-        // d'affaires égal à la redevance — un chiffre faux, mais plausible, donc
-        // le pire des deux.
-        'base'    => ['base_amount', 'base', 'net_revenue', 'revenue_amount', 'ca_net', 'turnover'],
-        // Le montant dû, hors taxe : `net_amount` sur la ligne.
-        'amount'  => ['net_amount', 'amount', 'total_amount', 'amount_ht', 'line_total', 'total', 'montant'],
+    private const INVOICE_KEYS = [
+        'id'          => ['id', 'invoiceId', 'id_invoice', 'royalty_invoice_id'],
+        'shop'        => ['id_shop', 'shopId', 'shop_id', 'idShop'],
+        'number'      => ['number', 'invoice_number', 'invoiceNumber', 'reference', 'symbol'],
+        'date'        => ['issued_at', 'issuedAt', 'invoice_date', 'invoiceDate', 'date', 'created_at'],
+        'period'      => ['period', 'month', 'period_month', 'periodMonth'],
+        'period_from' => ['period_from', 'periodFrom', 'date_from', 'from'],
+        'period_to'   => ['period_to', 'periodTo', 'date_to', 'to'],
+        'total'       => ['total_net', 'totalNet', 'net_amount', 'netAmount', 'total', 'amount'],
+        'status'      => ['status', 'state'],
+        'lines'       => ['lines', 'items', 'positions', 'invoice_lines', 'invoiceLines', 'details'],
     ];
 
     /**
-     * Ce qu'il faut au minimum pour écrire une entrée honnête : à qui, quand,
-     * combien. Sans l'une des trois, mieux vaut ne rien importer que d'importer
-     * approximativement.
+     * Clés cherchées dans une ligne de facture.
+     *
+     * `line_label` porte la nature de la redevance et `net_amount` le montant
+     * dû — les deux seuls points établis avec certitude, parce qu'ils ont été
+     * demandés puis confirmés.
+     *
+     * @var array<string, list<string>>
+     */
+    private const LINE_KEYS = [
+        'label'  => ['line_label', 'lineLabel', 'label', 'name', 'description', 'designation'],
+        'amount' => ['net_amount', 'netAmount', 'amount', 'total_net', 'value'],
+        'rate'   => ['rate', 'rate_pct', 'ratePct', 'percent', 'percentage'],
+        'base'   => ['base_amount', 'baseAmount', 'base', 'turnover', 'revenue'],
+    ];
+
+    /**
+     * Ce qu'il faut au minimum pour écrire une entrée honnête : à qui, combien.
+     * Sans l'un des deux, mieux vaut ne rien importer qu'importer à peu près.
      */
     private const INVOICE_REQUIRED = ['id', 'shop'];
-    private const LINE_REQUIRED    = ['invoice', 'amount'];
+    private const LINE_REQUIRED    = ['amount'];
 
     /**
      * Reconnaissance de la nature d'une ligne, par son libellé.
@@ -85,9 +88,6 @@ final class ErpRoyaltyRepository
      * libellé exact, et non importé : une nature manquante se corrige, une
      * nature fausse se découvre au contrôle fiscal.
      *
-     * L'ordre compte : « redevance marketing » contient aussi « marque » dans
-     * certaines formulations, et le premier trouvé gagne.
-     *
      * @var array<string, list<string>>
      */
     private const KIND_HINTS = [
@@ -96,16 +96,19 @@ final class ErpRoyaltyRepository
         'MARQUE'     => ['marque', 'brand', 'enseigne', 'licence'],
     ];
 
-    /** Inventaire de la dernière résolution, pour le diagnostic de l'écran. */
+    /** Inventaire de la dernière lecture, pour le diagnostic de l'écran. */
     private array $inventory = [];
 
+    public function __construct(private readonly ErpClient $erp = new ErpClient())
+    {
+    }
+
     /**
-     * Ce que l'ERP contient pour ce mois, et comment le module le comprend.
+     * Ce que l'ERP a facturé pour ce mois, et comment le module le comprend.
      *
-     * Ce diagnostic n'est pas un luxe : les deux tables vivent dans l'ERP, dont
-     * ce dépôt ne connaît pas le schéma. Il vaut mieux montrer ce qui a été
-     * reconnu — et ce qui ne l'a pas été — que de laisser un import produire des
-     * montants dont personne ne peut dire d'où ils sortent.
+     * Ne lève pas : « l'adresse de l'ERP n'est pas renseignée » et « la clé du
+     * montant n'a pas été reconnue » sont des réponses utiles, pas des erreurs
+     * de l'appelant. L'écran les affiche telles quelles.
      *
      * @return array{available:bool, reason:?string, mapping:array<string,mixed>,
      *               inventory:array<string,mixed>, invoices:list<array<string,mixed>>}
@@ -136,10 +139,10 @@ final class ErpRoyaltyRepository
     /**
      * Écrit au grand livre les redevances facturées par l'ERP pour ce mois.
      *
-     * Chaque ligne de facture devient une entrée, avec la référence de la pièce
-     * : c'est elle qui rend l'import rejouable sans doubler quoi que ce soit —
-     * une facture déjà reprise est reconnue et laissée telle quelle, y compris
-     * si elle a été corrigée à la main depuis.
+     * Chaque ligne de facture devient une entrée, avec la référence de la pièce :
+     * c'est elle qui rend la reprise rejouable sans rien doubler — une facture
+     * déjà reprise est reconnue et laissée telle quelle, y compris si elle a été
+     * corrigée à la main depuis.
      *
      * @return array{created:int, skipped:int, unmatched_shop:int, unknown_kind:int,
      *               total_amount:float, lines:list<array<string,mixed>>}
@@ -220,9 +223,9 @@ final class ErpRoyaltyRepository
                     $bilan['created']++;
                     $bilan['total_amount'] += $ligne['amount'];
                     $bilan['lines'][] = [
-                        'shop_name' => $facture['shop_name'],
-                        'kind'      => $ligne['kind'],
-                        'amount'    => $ligne['amount'],
+                        'shop_name'    => $facture['shop_name'],
+                        'kind'         => $ligne['kind'],
+                        'amount'       => $ligne['amount'],
                         'document_ref' => $facture['document_ref'],
                     ];
                 }
@@ -241,8 +244,7 @@ final class ErpRoyaltyRepository
     }
 
     /**
-     * Lecture brute des factures du mois, boutiques rapprochées et natures
-     * reconnues.
+     * Lecture des factures du mois, boutiques rapprochées et natures reconnues.
      *
      * @return array{mapping:array<string,mixed>, invoices:list<array<string,mixed>>}
      */
@@ -253,70 +255,12 @@ final class ErpRoyaltyRepository
             throw new RuntimeException('Mois invalide : format attendu AAAA-MM.');
         }
 
+        if (!ErpClient::isConfigured()) {
+            throw new RuntimeException(ErpClient::missingConfiguration());
+        }
+
         $premier = $mois . '-01';
         $dernier = (new \DateTimeImmutable($premier))->modify('last day of this month')->format('Y-m-d');
-
-        [$factureSchema, $factureTable] = $this->source('MAR_ERP_ROYALTY_INVOICE_TABLE', 'royalty_invoice');
-        [$ligneSchema, $ligneTable]     = $this->source('MAR_ERP_ROYALTY_LINE_TABLE', 'royalty_invoice_line');
-
-        $facture = $this->resolve($factureSchema, $factureTable, self::INVOICE_COLUMNS, self::INVOICE_REQUIRED);
-        $ligne   = $this->resolve($ligneSchema, $ligneTable, self::LINE_COLUMNS, self::LINE_REQUIRED);
-
-        // La période de la facture : une borne explicite si l'ERP en tient une,
-        // sa date d'émission sinon. Sans l'une ni l'autre, on ne sait pas quel
-        // mois la facture couvre, et importer « tout » chaque fois doublerait
-        // le grand livre au deuxième passage.
-        $colonneMois = $facture['period_from'] ?? $facture['date'] ?? null;
-        if ($colonneMois === null) {
-            throw new RuntimeException(sprintf(
-                'Aucune colonne de période ni de date dans « %s.%s » : impossible de savoir '
-                . 'quel mois une facture couvre. Colonnes vues : %s.',
-                $factureSchema,
-                $factureTable,
-                implode(', ', $this->inventory[$factureSchema . '.' . $factureTable]['disponibles'] ?? [])
-            ));
-        }
-
-        $selection = [sprintf('f.`%s` AS erp_id', $facture['id']), sprintf('f.`%s` AS erp_shop', $facture['shop'])];
-        foreach (['number', 'date', 'period_from', 'period_to', 'revenue', 'total', 'status'] as $notion) {
-            if (isset($facture[$notion])) {
-                $selection[] = sprintf('f.`%s` AS %s', $facture[$notion], $notion);
-            }
-        }
-
-        // La facture porte sur le mois précédent celui où elle est émise : la
-        // redevance d'avril est facturée en mai. Chercher avril dans les dates
-        // d'émission ne trouverait donc rien — ou pire, trouverait mars.
-        // Une colonne de période, quand elle existe, dit le mois couvert et
-        // n'a pas besoin de ce décalage.
-        $surPeriode = isset($facture['period_from']) && $colonneMois === $facture['period_from'];
-        $fenetre    = $surPeriode
-            ? ['depuis' => $premier, 'jusqu' => $dernier]
-            : [
-                'depuis' => (new \DateTimeImmutable($premier))->modify('+1 month')->format('Y-m-d'),
-                'jusqu'  => (new \DateTimeImmutable($premier))
-                    ->modify('+1 month')
-                    ->modify('last day of this month')
-                    ->format('Y-m-d'),
-            ];
-
-        $lecture = Database::connection()->prepare(sprintf(
-            'SELECT %s FROM `%s`.`%s` f WHERE f.`%s` BETWEEN :depuis AND :jusqu ORDER BY f.`%s`',
-            implode(', ', $selection),
-            $factureSchema,
-            $factureTable,
-            $colonneMois,
-            $facture['id']
-        ));
-        $lecture->execute([
-            'depuis' => $fenetre['depuis'],
-            'jusqu'  => $fenetre['jusqu'] . ' 23:59:59',
-        ]);
-
-        $factures = $lecture->fetchAll();
-        if ($factures === []) {
-            return ['mapping' => ['invoice' => $facture, 'line' => $ligne], 'invoices' => []];
-        }
 
         // Rapprochement ERP → module par `erp_shop_id`, la référence externe que
         // `mar_shop` porte déjà. Une boutique non rapprochée n'est pas importée
@@ -332,32 +276,75 @@ final class ErpRoyaltyRepository
             $boutiques[(string) $shop['erp_shop_id']] = ['id' => (int) $shop['id'], 'name' => $shop['name']];
         }
 
-        $ids = array_map(static fn (array $f): string => (string) $f['erp_id'], $factures);
+        // `period` désigne la période couverte, pas la date d'émission : c'est
+        // l'API qui porte la distinction, et elle nous épargne le décalage d'un
+        // mois qu'il fallait appliquer en lisant la table.
+        $payload  = $this->erp->get(
+            (string) (\Marketing\Support\Env::get('MAR_ERP_ROYALTY_INVOICES_PATH', self::INVOICES_PATH)
+                ?: self::INVOICES_PATH),
+            ['period' => $mois]
+        );
+        $factures = ErpClient::rows($payload, ['invoices', 'items', 'rows']);
 
-        $selectionLignes = [sprintf('l.`%s` AS erp_invoice', $ligne['invoice']), sprintf('l.`%s` AS amount', $ligne['amount'])];
-        foreach (['label', 'kind', 'rate', 'base'] as $notion) {
-            if (isset($ligne[$notion])) {
-                $selectionLignes[] = sprintf('l.`%s` AS %s', $ligne[$notion], $notion);
+        $mapFacture = $this->resolve($factures[0] ?? [], self::INVOICE_KEYS, self::INVOICE_REQUIRED, 'facture');
+
+        $resultat = [];
+        $mapLigne = [];
+
+        foreach ($factures as $facture) {
+            $lignes = ErpClient::rows(
+                isset($mapFacture['lines']) && is_array($facture[$mapFacture['lines']] ?? null)
+                    ? ['data' => $facture[$mapFacture['lines']]]
+                    : [],
+                []
+            );
+
+            if ($lignes !== [] && $mapLigne === []) {
+                $mapLigne = $this->resolve($lignes[0], self::LINE_KEYS, self::LINE_REQUIRED, 'ligne');
             }
+
+            $erpShop   = (string) ($facture[$mapFacture['shop']] ?? '');
+            $rapproche = $boutiques[$erpShop] ?? null;
+
+            $resultat[] = [
+                'erp_id'       => (string) ($facture[$mapFacture['id']] ?? ''),
+                'shop_id'      => $rapproche['id'] ?? null,
+                'shop_name'    => $rapproche['name'] ?? sprintf('Boutique ERP %s', $erpShop),
+                'erp_shop_id'  => $erpShop,
+                'document_ref' => (string) ($this->lire($facture, $mapFacture, 'number')
+                    ?? sprintf('royalty-%s', $facture[$mapFacture['id']] ?? '')),
+                'invoice_date' => substr((string) ($this->lire($facture, $mapFacture, 'date') ?? $dernier), 0, 10),
+                'period_from'  => substr((string) ($this->lire($facture, $mapFacture, 'period_from') ?? $premier), 0, 10),
+                'period_to'    => substr((string) ($this->lire($facture, $mapFacture, 'period_to') ?? $dernier), 0, 10),
+                'revenue'      => null,
+                'total'        => $this->nombre($this->lire($facture, $mapFacture, 'total')),
+                'status'       => $this->lire($facture, $mapFacture, 'status'),
+                'lines'        => $this->lignes($lignes, $mapLigne),
+            ];
         }
 
-        $lignes = Database::connection()->prepare(sprintf(
-            'SELECT %s FROM `%s`.`%s` l WHERE l.`%s` IN (%s)',
-            implode(', ', $selectionLignes),
-            $ligneSchema,
-            $ligneTable,
-            $ligne['invoice'],
-            implode(', ', array_fill(0, count($ids), '?'))
-        ));
-        $lignes->execute($ids);
+        return ['mapping' => ['invoice' => $mapFacture, 'line' => $mapLigne], 'invoices' => $resultat];
+    }
 
-        $parFacture = [];
-        foreach ($lignes->fetchAll() as $l) {
-            $taux    = isset($l['rate']) && $l['rate'] !== null ? (float) $l['rate'] : null;
-            $montant = round((float) $l['amount'], 2);
-            $assiette = isset($l['base']) && $l['base'] !== null ? (float) $l['base'] : null;
+    /**
+     * @param  list<array<string,mixed>> $lignes
+     * @param  array<string,string>      $map
+     * @return list<array<string,mixed>>
+     */
+    private function lignes(array $lignes, array $map): array
+    {
+        if ($map === []) {
+            return [];
+        }
 
-            // L'assiette déduite quand l'ERP ne la stocke pas : un montant et un
+        $sorties = [];
+        foreach ($lignes as $ligne) {
+            $libelle  = $this->lire($ligne, $map, 'label');
+            $montant  = round((float) $this->nombre($this->lire($ligne, $map, 'amount')), 2);
+            $taux     = $this->nombre($this->lire($ligne, $map, 'rate'));
+            $assiette = $this->nombre($this->lire($ligne, $map, 'base'));
+
+            // L'assiette déduite quand l'ERP ne la rend pas : un montant et un
             // pourcentage suffisent à la retrouver, c'est la définition même
             // d'un pourcentage. Elle est marquée comme déduite — un chiffre
             // calculé ne se présente pas comme un chiffre lu.
@@ -367,9 +354,9 @@ final class ErpRoyaltyRepository
                 $deduite  = true;
             }
 
-            $parFacture[(string) $l['erp_invoice']][] = [
-                'label'        => $l['label'] ?? null,
-                'kind'         => $this->recognise((string) (($l['kind'] ?? '') . ' ' . ($l['label'] ?? ''))),
+            $sorties[] = [
+                'label'        => $libelle === null ? null : (string) $libelle,
+                'kind'         => $this->recognise((string) ($libelle ?? '')),
                 'rate'         => $taux,
                 'base'         => $assiette,
                 'base_derived' => $deduite,
@@ -377,43 +364,16 @@ final class ErpRoyaltyRepository
             ];
         }
 
-        $resultat = [];
-        foreach ($factures as $f) {
-            $rapproche = $boutiques[(string) $f['erp_shop']] ?? null;
-
-            $resultat[] = [
-                'erp_id'       => (string) $f['erp_id'],
-                'shop_id'      => $rapproche['id'] ?? null,
-                'shop_name'    => $rapproche['name'] ?? sprintf('Boutique ERP %s', $f['erp_shop']),
-                'erp_shop_id'  => (string) $f['erp_shop'],
-                'document_ref' => (string) ($f['number'] ?? sprintf('%s-%s', $factureTable, $f['erp_id'])),
-                'invoice_date' => substr((string) ($f['date'] ?? $dernier), 0, 10),
-                'period_from'  => substr((string) ($f['period_from'] ?? $premier), 0, 10),
-                'period_to'    => substr((string) ($f['period_to'] ?? $dernier), 0, 10),
-                'revenue'      => isset($f['revenue']) && $f['revenue'] !== null ? (float) $f['revenue'] : null,
-                'total'        => isset($f['total']) && $f['total'] !== null ? (float) $f['total'] : null,
-                'status'       => $f['status'] ?? null,
-                'lines'        => $parFacture[(string) $f['erp_id']] ?? [],
-            ];
-        }
-
-        return ['mapping' => ['invoice' => $facture, 'line' => $ligne], 'invoices' => $resultat];
+        return $sorties;
     }
 
     /**
      * Nature d'une ligne, d'après son libellé — ou rien.
      *
-     * Publique et statique parce qu'elle se vérifie sans base : c'est une règle
-     * de lecture, et les tables de l'ERP n'ont pas à être imitées pour
-     * l'éprouver.
+     * Publique et statique parce qu'elle se vérifie sans réseau : c'est une
+     * règle de lecture, et l'ERP n'a pas à être imité pour l'éprouver.
      */
     public static function kindFromLabel(string $texte): ?string
-    {
-        return (new self())->recognise($texte);
-    }
-
-    /** Nature d'une ligne, d'après ce qu'elle dit d'elle-même. */
-    private function recognise(string $texte): ?string
     {
         $normalise = mb_strtolower(trim($texte));
         if ($normalise === '') {
@@ -431,64 +391,34 @@ final class ErpRoyaltyRepository
         return null;
     }
 
-    /**
-     * Table source, sous la forme `table` ou `schéma.table`.
-     *
-     * Le nom est validé strictement : il finit dans du SQL, où une table ne peut
-     * pas être liée comme un paramètre.
-     *
-     * @return array{0:string, 1:string}
-     */
-    private function source(string $variable, string $default): array
+    private function recognise(string $texte): ?string
     {
-        $valeur = trim((string) (Env::get($variable, $default) ?: $default));
-
-        if (preg_match('/^(?:([A-Za-z0-9_]+)\.)?([A-Za-z0-9_]+)$/', $valeur, $parts) !== 1) {
-            throw new RuntimeException(sprintf(
-                '%s doit être « table » ou « schéma.table » ; reçu « %s ».',
-                $variable,
-                $valeur
-            ));
-        }
-
-        return [
-            $parts[1] !== '' ? $parts[1] : (string) Database::connection()->query('SELECT DATABASE()')->fetchColumn(),
-            $parts[2],
-        ];
+        return self::kindFromLabel($texte);
     }
 
     /**
-     * Correspondance notion → colonne réelle, découverte dans le schéma.
+     * Correspondance notion → clé réelle, découverte dans la réponse.
      *
-     * Ce qui n'a pas été reconnu est conservé avec la liste des colonnes
-     * présentes : sans cet inventaire, une notion absente se traduit par un
-     * champ vide, et rien ne dit si la colonne manque ou si elle porte un nom
-     * auquel personne n'a pensé.
+     * Ce qui n'a pas été reconnu est conservé avec les clés reçues : sans cet
+     * inventaire, une notion absente se traduit par un champ vide, et rien ne
+     * dit si l'ERP ne la rend pas ou s'il la nomme autrement.
      *
+     * @param  array<string,mixed>         $echantillon
      * @param  array<string, list<string>> $candidates
      * @param  list<string>                $required
      * @return array<string, string>
      */
-    private function resolve(string $schema, string $table, array $candidates, array $required): array
+    private function resolve(array $echantillon, array $candidates, array $required, string $quoi): array
     {
-        $statement = Database::connection()->prepare(
-            'SELECT column_name FROM information_schema.columns
-              WHERE table_schema = :schema AND table_name = :table
-              ORDER BY ordinal_position'
-        );
-        $statement->execute(['schema' => $schema, 'table' => $table]);
-
-        $presentes = $statement->fetchAll(PDO::FETCH_COLUMN);
-        $minuscule = array_map('strtolower', $presentes);
+        $presentes = array_keys($echantillon);
+        $minuscule = array_map('strtolower', array_map('strval', $presentes));
 
         if ($presentes === []) {
-            $this->inventory[$schema . '.' . $table] = ['disponibles' => [], 'non reconnues' => array_keys($candidates)];
+            $this->inventory[$quoi] = ['disponibles' => [], 'non reconnues' => array_keys($candidates)];
 
-            throw new RuntimeException(sprintf(
-                'Table « %s.%s » introuvable, ou aucun droit de lecture dessus.',
-                $schema,
-                $table
-            ));
+            // Pas de facture ce mois-ci : ce n'est pas une erreur, et un mois
+            // sans redevance existe (réseau fermé, période non facturée).
+            return [];
         }
 
         $trouvees = [];
@@ -496,28 +426,51 @@ final class ErpRoyaltyRepository
             foreach ($noms as $nom) {
                 $rang = array_search(strtolower($nom), $minuscule, true);
                 if ($rang !== false) {
-                    $trouvees[$notion] = $presentes[$rang];
+                    $trouvees[$notion] = (string) $presentes[$rang];
                     break;
                 }
             }
         }
 
-        $this->inventory[$schema . '.' . $table] = [
+        $this->inventory[$quoi] = [
             'non reconnues' => array_values(array_diff(array_keys($candidates), array_keys($trouvees))),
-            'disponibles'   => $presentes,
+            'disponibles'   => array_map('strval', $presentes),
         ];
 
         $manquantes = array_diff($required, array_keys($trouvees));
         if ($manquantes !== []) {
             throw new RuntimeException(sprintf(
-                'Colonnes indispensables introuvables dans « %s.%s » : %s. Colonnes vues : %s.',
-                $schema,
-                $table,
+                'Clés indispensables absentes de la %s rendue par l\'ERP : %s. Clés reçues : %s.',
+                $quoi,
                 implode(', ', $manquantes),
-                implode(', ', $presentes)
+                implode(', ', array_map('strval', $presentes))
             ));
         }
 
         return $trouvees;
+    }
+
+    /**
+     * @param array<string,mixed>  $source
+     * @param array<string,string> $map
+     */
+    private function lire(array $source, array $map, string $notion): mixed
+    {
+        return isset($map[$notion]) ? ($source[$map[$notion]] ?? null) : null;
+    }
+
+    /** Un nombre, quelle que soit la façon dont l'ERP l'écrit — ou rien. */
+    private function nombre(mixed $valeur): ?float
+    {
+        if ($valeur === null || $valeur === '' || is_array($valeur)) {
+            return null;
+        }
+
+        // Les montants arrivent parfois en chaîne, avec une virgule ou une
+        // espace insécable de milliers : les refuser ferait perdre la facture
+        // entière pour une question de typographie.
+        $texte = str_replace([' ', ' ', ','], ['', '', '.'], (string) $valeur);
+
+        return is_numeric($texte) ? (float) $texte : null;
     }
 }

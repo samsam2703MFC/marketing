@@ -2022,16 +2022,250 @@ check(
     isset($sourcesMarque['ROYALTY_MARKETING'], $sourcesMarque['ROYALTY_ASSISTANCE'], $sourcesMarque['ROYALTY_MARQUE'])
 );
 
+// --- Vitrine publique -------------------------------------------------------
+// La seule route sans authentification du module. Ce qu'elle montre importe
+// moins que ce qu'elle ne montre pas : elle est ouverte à Internet, et une
+// colonne ajoutée demain ne doit pas s'y retrouver par héritage.
+echo "\nVitrine publique\n";
+
+$vitrine = static fn (array $query = []): array => call($router, 'GET', '/api/v1/public/marketing/campaigns', $query);
+
+// Sans identité : c'est tout l'objet d'une vitrine.
+AuthContext::clear();
+$ouverte = $vitrine();
+check('la vitrine répond sans authentification', $ouverte['status'] === 200, 'statut ' . $ouverte['status']);
+check(
+    'elle rend l\'enveloppe du standard',
+    ($ouverte['body']['success'] ?? null) === true
+        && is_array($ouverte['body']['data'] ?? null)
+        && isset($ouverte['body']['meta']['requestId'], $ouverte['body']['meta']['pagination']),
+    json_encode(array_keys($ouverte['body']))
+);
+check(
+    'la pagination annonce ses bornes',
+    isset($ouverte['body']['meta']['pagination']['page'],
+          $ouverte['body']['meta']['pagination']['perPage'],
+          $ouverte['body']['meta']['pagination']['total'],
+          $ouverte['body']['meta']['pagination']['totalPages'])
+);
+check(
+    'une demande au-delà du maximum est ramenée, pas refusée',
+    ($vitrine(['perPage' => 5000])['body']['meta']['pagination']['perPage'] ?? 0) === 100
+);
+check(
+    'une date illisible est refusée avec un code machine',
+    ($vitrine(['activeOn' => 'demain'])['status'] === 422)
+        && ($vitrine(['activeOn' => 'demain'])['body']['error']['code'] ?? '') === 'VALIDATION_FAILED'
+);
+
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+// Une campagne qui ne demande rien ne paraît pas ; celle qui coche la case
+// paraît, mais seulement pendant sa période et hors brouillon.
+$vitrineId = (int) $pdo->query("SELECT id FROM mar_campaign WHERE status_code <> 'draft' ORDER BY id LIMIT 1")->fetchColumn();
+// Son état d'origine : ce bloc va la publier et lui imposer des dates, et les
+// contrôles suivants comptent les campagnes telles qu'ils les ont laissées.
+$vitrineAvant = $pdo->query(sprintf(
+    'SELECT status_code, show_web_shop, starts_on, ends_on FROM mar_campaign WHERE id = %d',
+    $vitrineId
+))->fetch();
+$pdo->exec(sprintf(
+    "UPDATE mar_campaign SET show_web_shop = 1, starts_on = '2026-01-01', ends_on = '2026-12-31' WHERE id = %d",
+    $vitrineId
+));
+
+AuthContext::clear();
+$paraissent = static fn (array $q = []): array => array_column($vitrine($q)['body']['data'] ?? [], 'name', 'id');
+
+check(
+    'une campagne publiée paraît pendant sa période',
+    isset($paraissent(['activeOn' => '2026-06-15'])[(string) $vitrineId])
+);
+check(
+    'elle ne paraît pas avant son début',
+    !isset($paraissent(['activeOn' => '2025-06-15'])[(string) $vitrineId])
+);
+check(
+    'ni après sa fin',
+    !isset($paraissent(['activeOn' => '2027-06-15'])[(string) $vitrineId])
+);
+
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$pdo->exec(sprintf("UPDATE mar_campaign SET status_code = 'draft' WHERE id = %d", $vitrineId));
+AuthContext::clear();
+check(
+    'un brouillon ne paraît pas, même en cochant la case',
+    !isset($paraissent(['activeOn' => '2026-06-15'])[(string) $vitrineId])
+);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$pdo->exec(sprintf("UPDATE mar_campaign SET status_code = 'live' WHERE id = %d", $vitrineId));
+
+AuthContext::clear();
+$publiee = null;
+foreach ($vitrine(['activeOn' => '2026-06-15'])['body']['data'] as $campagne) {
+    if ($campagne['id'] === (string) $vitrineId) {
+        $publiee = $campagne;
+    }
+}
+
+check('la campagne publiée est bien rendue', $publiee !== null);
+check(
+    'son identifiant est une chaîne et ses dates des dates seules',
+    is_string($publiee['id'] ?? null)
+        && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($publiee['startsOn'] ?? '')) === 1
+);
+
+// Le point qui compte : rien d'interne ne sort. Le contrôle porte sur la
+// campagne entière, sérialisée, plutôt que sur une liste de champs attendus —
+// c'est le seul moyen d'attraper une colonne ajoutée plus tard.
+$fuite = json_encode($publiee, JSON_UNESCAPED_UNICODE);
+foreach ([
+    'budget', 'spent', 'margin', 'marge', 'objective', 'target', 'coef',
+    'lead', 'prospect', 'agency', 'owner', 'created_by', 'shop_id', 'shopId',
+] as $interdit) {
+    check(
+        sprintf('la vitrine ne dit rien de « %s »', $interdit),
+        stripos((string) $fuite, $interdit) === false,
+        (string) $fuite
+    );
+}
+
+check(
+    'les boutiques sortent par leur nom, sans identifiant',
+    !isset($publiee['shops'][0]['id']) || $publiee['shops'] === []
+);
+
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+// Remise en état : la campagne retrouve son statut, ses dates et sa visibilité.
+$remise = $pdo->prepare(
+    'UPDATE mar_campaign SET status_code = :statut, show_web_shop = :vitrine,
+            starts_on = :debut, ends_on = :fin
+      WHERE id = :id'
+);
+$remise->execute([
+    'statut'  => $vitrineAvant['status_code'],
+    'vitrine' => $vitrineAvant['show_web_shop'],
+    'debut'   => $vitrineAvant['starts_on'],
+    'fin'     => $vitrineAvant['ends_on'],
+    'id'      => $vitrineId,
+]);
+
+// --- Client HTTP de l'ERP ---------------------------------------------------
+// Ce qui est éprouvé ici est notre code, pas celui de l'ERP : composition de
+// l'URL, en-têtes, traduction d'un statut en message, déballage d'une enveloppe.
+// Le transport est remplacé par une fonction qui rend ce qu'on lui dit de
+// rendre — aucune réponse de l'ERP n'est imitée, et rien n'est affirmé sur la
+// forme réelle de ses factures.
+echo "\nClient HTTP de l'ERP\n";
+
+$avecErp = static function (callable $transport, callable $essai) {
+    $baseAvant = getenv('MAR_ERP_API_BASE');
+    \Marketing\Support\Env::set('MAR_ERP_API_BASE', 'https://erp.test/');
+
+    try {
+        return $essai(new \Marketing\Support\ErpClient($transport));
+    } finally {
+        \Marketing\Support\Env::set('MAR_ERP_API_BASE', $baseAvant === false ? null : $baseAvant);
+    }
+};
+
+check(
+    'sans adresse configurée, aucun appel n\'est tenté',
+    \Marketing\Support\ErpClient::isConfigured() === false
+);
+
+$vueUrl = null;
+$vusEntetes = [];
+$avecErp(
+    static function (string $url, array $entetes) use (&$vueUrl, &$vusEntetes): array {
+        $vueUrl = $url;
+        $vusEntetes = $entetes;
+
+        return [200, '{"data":{"invoices":[{"id":7}]}}'];
+    },
+    static fn ($client) => $client->get('/api/v1/admin/royalties/invoices', ['period' => '2026-04', 'id_shop' => null])
+);
+
+check(
+    'l\'URL colle la base au chemin sans doubler la barre',
+    $vueUrl === 'https://erp.test/api/v1/admin/royalties/invoices?period=2026-04',
+    (string) $vueUrl
+);
+check(
+    'un paramètre nul ne part pas dans l\'URL',
+    !str_contains((string) $vueUrl, 'id_shop')
+);
+check(
+    'l\'appel porte un identifiant de requête',
+    count(array_filter($vusEntetes, static fn ($e) => str_starts_with($e, 'X-Request-Id: '))) === 1,
+    json_encode($vusEntetes)
+);
+
+// Le déballage : l'ERP enveloppe tantôt sous `data`, tantôt sous `data.{clé}`,
+// tantôt pas du tout. L'appelant reçoit une liste dans les trois cas.
+check(
+    'une enveloppe data.invoices se déballe',
+    \Marketing\Support\ErpClient::rows(['data' => ['invoices' => [['id' => 1]]]], ['invoices']) === [['id' => 1]]
+);
+check(
+    'une enveloppe data seule se déballe',
+    \Marketing\Support\ErpClient::rows(['data' => [['id' => 1]]], ['invoices']) === [['id' => 1]]
+);
+check(
+    'une liste nue se déballe',
+    \Marketing\Support\ErpClient::rows([['id' => 1]], ['invoices']) === [['id' => 1]]
+);
+check(
+    'un objet seul devient une liste d\'un élément',
+    \Marketing\Support\ErpClient::rows(['data' => ['id' => 1]], ['invoices']) === [['id' => 1]]
+);
+
+// Les échecs : chacun doit dire quoi faire, pas seulement qu'il a échoué.
+foreach ([
+    [401, 'MAR_ERP_API_TOKEN'],
+    [403, 'MAR_ERP_API_TOKEN'],
+    [404, 'Chemin inconnu'],
+    [500, 'a répondu 500'],
+] as [$statut, $attendu]) {
+    $message = '';
+    try {
+        $avecErp(
+            static fn (): array => [$statut, 'Erreur'],
+            static fn ($client) => $client->get('/api/v1/quelque-chose')
+        );
+    } catch (RuntimeException $echec) {
+        $message = $echec->getMessage();
+    }
+
+    check(
+        sprintf('un %d explique ce qu\'il faut regarder', $statut),
+        str_contains($message, $attendu),
+        $message
+    );
+}
+
+$illisible = '';
+try {
+    $avecErp(
+        static fn (): array => [200, '<html>maintenance</html>'],
+        static fn ($client) => $client->get('/api/v1/quelque-chose')
+    );
+} catch (RuntimeException $echec) {
+    $illisible = $echec->getMessage();
+}
+check(
+    'une réponse non-JSON est refusée en le disant',
+    str_contains($illisible, 'illisible') && str_contains($illisible, 'maintenance'),
+    $illisible
+);
+
 // --- Redevances facturées par l'ERP -----------------------------------------
-// `royalty_invoice` et `royalty_invoice_line` appartiennent à l'ERP : ce dépôt
-// ne les crée pas, même pour se tester — la même prudence que pour la reprise
-// des boutiques, dont le moindre lancement contre la base réelle effacerait
-// l'ERP. Là où elles manquent, c'est le diagnostic qui est vérifié : il vaut
-// mieux un refus lisible qu'un import qui invente des montants.
-$facturesErp = (int) $pdo->query(
-    "SELECT COUNT(*) FROM information_schema.tables
-      WHERE table_schema = DATABASE() AND table_name = 'royalty_invoice'"
-)->fetchColumn() === 1;
+// Les factures ne sont plus lues en base : elles viennent de l'API de l'ERP
+// (`GET /api/v1/admin/royalties/invoices?period=AAAA-MM`). Sans adresse d'ERP
+// configurée, il n'y a rien à joindre — et c'est le diagnostic qui est vérifié :
+// il vaut mieux un refus lisible qu'un import qui invente des montants.
+$facturesErp = Marketing\Support\ErpClient::isConfigured();
 
 // La nature d'une ligne se lit dans son libellé. La règle se vérifie sans base :
 // c'est une lecture de texte, et les tables de l'ERP n'ont pas à être imitées
@@ -2064,13 +2298,18 @@ $apercu = call($router, 'GET', '/api/v1/marketing/funds/royalties/erp', ['month'
 check('la lecture ERP répond toujours, même sans les tables', $apercu['status'] === 200);
 
 if (!$facturesErp) {
-    printf("  · royalty_invoice absente de cette base — reprise non vérifiée ici\n");
+    printf("  · MAR_ERP_API_BASE non renseigné — reprise non vérifiée ici\n");
     check(
         'elle dit ce qui manque plutôt que de se taire',
         ($apercu['body']['available'] ?? true) === false
             && is_string($apercu['body']['reason'] ?? null)
             && $apercu['body']['reason'] !== '',
         json_encode($apercu['body']['reason'] ?? null)
+    );
+    check(
+        'et elle nomme le réglage en cause',
+        str_contains((string) ($apercu['body']['reason'] ?? ''), 'MAR_ERP_API_BASE'),
+        (string) ($apercu['body']['reason'] ?? '')
     );
 } else {
     check('la lecture ERP aboutit', ($apercu['body']['available'] ?? false) === true,

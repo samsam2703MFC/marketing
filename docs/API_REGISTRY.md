@@ -35,6 +35,24 @@ commun est `/api/v1/marketing/`, abrégé ci-dessous en `…`.
 Colonne **Périmètre** : `tenant` = filtré sur les boutiques de l'appelant dans le
 dépôt ; `marque` = réservé au rôle `BRAND_ADMIN` ; `—` = référentiel commun.
 
+### 2.0 Vitrine — conforme au standard
+
+Seule route écrite au format `API_STANDARD.md` : chemin `{app}/{domaine}/{ressource}`,
+enveloppe `{success, data, meta}`, pagination, `camelCase`, dates ISO, montants en
+centimes, code d'erreur machine. Elle n'a pas d'antériorité à ménager ; elle sert
+de cible aux autres.
+
+| Méthode | Chemin | Périmètre | Réponse |
+|---|---|---|---|
+| GET | `/api/v1/public/marketing/campaigns` **@public** | — | enveloppe + `data[]` paginé |
+
+Paramètres : `page`, `perPage` (max 100, ramené), `activeOn=AAAA-MM-JJ` (défaut :
+aujourd'hui). Ne rend que les campagnes qui ont demandé à paraître
+(`show_web_shop`), hors brouillon, dont la période couvre le jour consulté. La
+projection est explicite : ni budget, ni marge, ni objectif, ni prospect, ni
+identifiant de boutique — et un test le vérifie sur la campagne sérialisée
+entière, pour attraper une colonne ajoutée plus tard.
+
 ### 2.1 Session et référentiels
 
 | Méthode | Chemin | Périmètre | Réponse |
@@ -137,7 +155,7 @@ dépôt ; `marque` = réservé au rôle `BRAND_ADMIN` ; `—` = référentiel co
 | §10.3 filtrage dans le dépôt | **Tenu.** `Scope::shopFilter()` compose la condition SQL dans les dépôts, pas dans les contrôleurs. |
 | §18.4 test d'isolation | **Tenu.** La suite couvre « un franchisé ne voit pas / ne modifie pas ce qui n'est pas à lui » sur les campagnes, le fonds et les redevances. |
 | §11.4 secrets | **Tenu.** Aucun secret en dur, `.env` non versionné, identifiants écrits hors racine web. |
-| §1.1 zéro accès direct à la base | **Tenu pour le front.** Le front ne parle qu'à cette API. `db/migrate.php` et `db/sync-erp.php` touchent la base directement, mais ce sont des tâches serveur (migration, reprise), pas des consommateurs applicatifs. |
+| §1.1 zéro accès direct à la base | **Tenu pour le front.** Le front ne parle qu'à cette API. Côté ERP, les redevances sont passées en API ; restent sept tables lues en SQL, listées dans `API_A_CONSTRUIRE.md`. `db/migrate.php` et `db/sync-erp.php` touchent la base directement, mais ce sont des tâches serveur (migration, reprise), pas des consommateurs applicatifs. |
 
 ### 3.2 Écarts de forme — à traiter en `v2` (§20.4)
 
