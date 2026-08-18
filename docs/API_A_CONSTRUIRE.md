@@ -39,7 +39,7 @@ consommateur machine, pas un utilisateur.
 ### 1.1 Boutiques — `shops` *(ex-`franchisee_shop`)*
 
 - **Lu par** `ErpSyncRepository` (alimente `mar_shop`), et indirectement par tout
-  l'écran réseau. `ErpRoyaltyRepository` s'en sert pour rapprocher une facture.
+  l'écran réseau.
 - **Champs utilisés** : id, code, nom, ville, marque/enseigne, actif.
 - **Besoin** : `GET /api/v1/integration/referentiels/shops?page&perPage&filter[brandId]`
 - **Volume** : quelques dizaines. Une page suffit.
@@ -75,10 +75,13 @@ consommateur machine, pas un utilisateur.
 ### 1.4 Redevances — **retiré**
 
 La gestion des redevances a été retirée du module : plus d'écran, plus de
-routes, plus de lecture de `royalty_invoice`. Le fonds garde ses écritures — y
-compris celles qui ont pu être produites avant le retrait, qui sont des lignes de
-grand livre comme les autres et n'avaient aucune raison de disparaître avec
-l'outil qui les avait créées.
+routes, plus de lecture de `royalty_invoice`. La migration 034 a fait le ménage
+en base — taux, colonnes de calcul et origines de mouvement partent là où rien
+n'a été saisi ; le détail est au §5 du registre.
+
+Le fonds garde ses écritures — y compris celles qui ont pu être produites avant
+le retrait, qui sont des lignes de grand livre comme les autres et n'avaient
+aucune raison de disparaître avec l'outil qui les avait créées.
 
 Rien à construire ici, donc, tant que le sujet ne revient pas.
 

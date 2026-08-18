@@ -1197,9 +1197,6 @@ export interface LedgerRow {
   recurrence_id: number | null
   /** Faux : ligne réservée à la marque, invisible pour le réseau. */
   is_public: boolean
-  /** Base et taux, quand le montant a été calculé — une redevance. */
-  base_amount: number | null
-  rate_pct: number | null
   /** Vrai si la ligne est rattachée à une campagne (badge de liaison). */
   is_linked: boolean
 }

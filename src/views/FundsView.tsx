@@ -478,8 +478,8 @@ function MovementForm({
   const [piece, setPiece] = useState(initial?.document_ref ?? '')
   /**
    * Publique par défaut : le fonds marketing se rend des comptes au réseau qui
-   * l'alimente. Ce sont les redevances d'assistance et de marque qui demandent
-   * le silence, et elles le demandent explicitement.
+   * l'alimente. Une écriture qui demande le silence — un revenu propre à la
+   * marque — le demande donc explicitement, ici.
    */
   const [publique, setPublique] = useState(initial === null ? true : initial.is_public)
   /**
@@ -679,7 +679,7 @@ function MovementForm({
           Libellé
           <input
             value={libelle}
-            placeholder={sens === 'IN' ? 'Redevance marketing T1' : 'Impression dépliants Épiphanie'}
+            placeholder={sens === 'IN' ? 'Dotation du fonds T1' : 'Impression dépliants Épiphanie'}
             onChange={(e) => setLibelle(e.target.value)}
           />
         </label>

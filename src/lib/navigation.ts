@@ -89,7 +89,7 @@ const NETWORK: NavGroup[] = [
     label: 'Réseau',
     items: [
       item('crm', 'Fidélité & CRM'),
-      item('funds', 'Fonds & Royalties'),
+      item('funds', 'Fonds marketing'),
       item('local', 'Présence locale'),
       item('dam', 'Kit local & DAM'),
     ],

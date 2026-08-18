@@ -54,7 +54,7 @@ Le schéma a été **exécuté et vérifié**, pas seulement écrit :
 | Point | Choix | Motif |
 |---|---|---|
 | Clé primaire | `BIGINT UNSIGNED AUTO_INCREMENT` | Plus compact que l'uuid en index, et le module n'a pas d'insertion distribuée |
-| Montants | `DECIMAL(12,2)` | Le grand livre additionne et soustrait des royalties ; les centimes en entier obligeraient à convertir à chaque affichage |
+| Montants | `DECIMAL(12,2)` | Le grand livre additionne et soustrait des recettes et des dépenses ; les centimes en entier obligeraient à convertir à chaque affichage |
 | Moteur | InnoDB, `utf8mb4_unicode_ci` | Clés étrangères et texte français accentué |
 
 Autres conventions appliquées : FK nommées `<entité>_id` sans préfixe (`campaign_id`), et `created_at` / `updated_at` / `created_by` sur toutes les tables transactionnelles.

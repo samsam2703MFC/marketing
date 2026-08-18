@@ -38,9 +38,9 @@ final class FundRepository
         $where                 = [sprintf('(v.shop_id IS NULL OR %s)', $scopeSql)];
 
         // Le fonds marketing se rend des comptes au réseau qui l'alimente : ce
-        // qui l'alimente est donc lisible. Les redevances d'assistance et de
-        // marque ne le sont pas — ce sont les revenus de la marque, et le solde
-        // d'un franchisé n'est pas l'affaire de son voisin.
+        // qui l'alimente est donc lisible. Une écriture réservée à la marque ne
+        // l'est pas — le solde d'un franchisé n'est pas l'affaire de son
+        // voisin.
         if (Scope::shopIds($auth) !== null) {
             $where[] = 'm.is_public = 1';
         }
@@ -68,7 +68,7 @@ final class FundRepository
             // suivant. La jointure porte sur la clé primaire.
             'SELECT %s AS period_key, v.id, v.movement_date,
                     m.period_from, m.period_to, m.lever_id, m.recurrence_id,
-                    m.is_public, m.base_amount, m.rate_pct,
+                    m.is_public,
                     v.direction, v.label, v.amount, v.signed_amount,
                     v.source, v.supplier_name, v.document_ref, v.shop_id, v.shop_name,
                     v.campaign_id, v.campaign_name, v.lever_code, v.lever_label,
@@ -95,10 +95,6 @@ final class FundRepository
             // même chose.
             $row['recurrence_id'] = $row['recurrence_id'] !== null ? (int) $row['recurrence_id'] : null;
             $row['is_public']     = (bool) $row['is_public'];
-            // La base et le taux d'une redevance : « 1 240,50 € » ne se
-            // recalcule pas sans eux, et une contestation n'a rien à examiner.
-            $row['base_amount']   = $row['base_amount'] !== null ? (float) $row['base_amount'] : null;
-            $row['rate_pct']      = $row['rate_pct'] !== null ? (float) $row['rate_pct'] : null;
             // Le badge ⛓ de la maquette : la ligne est rattachée à une campagne.
             $row['is_linked']     = $row['campaign_id'] !== null;
 
@@ -668,8 +664,8 @@ final class FundRepository
      *
      * Le défaut n'est pas neutre : le fonds marketing se rend des comptes au
      * réseau qui l'alimente, et une ligne muette par accident vaut moins qu'une
-     * ligne visible par accident. Ce sont les redevances d'assistance et de
-     * marque qui demandent le silence, et elles le demandent explicitement.
+     * ligne visible par accident. Une écriture qui demande le silence le demande
+     * donc explicitement, à la saisie.
      *
      * @param array<string,mixed> $data
      */
@@ -775,7 +771,7 @@ final class FundRepository
      *
      * Une ligne du fonds commun (sans boutique) est lisible par tout le réseau —
      * c'est le pot commun — mais elle ne se corrige qu'au niveau de la marque :
-     * un franchisé qui rectifierait la redevance d'un autre déplacerait un solde
+     * un franchisé qui rectifierait l'écriture d'un autre déplacerait un solde
      * qui n'est pas le sien.
      */
     private function assertWritable(AuthContext $auth, ?int $shopId): void

@@ -206,30 +206,43 @@ Dans l'ordre du §20, en ne cassant rien en production :
 
 ---
 
-## 5. Ce que le retrait des redevances a laissé en base
+## 5. Le retrait des redevances
 
-La gestion des redevances a été retirée le 17 août 2026 : écran, routes, dépôts
-et tests. **Aucune table n'a été supprimée**, et c'est délibéré — un `DROP` est
-irréversible, et rien n'oblige à le prendre dans le même mouvement qu'un retrait
-de fonctionnalité.
+La gestion des redevances a été retirée le 17 août 2026 — écran, routes, dépôts
+et tests —, la base étant alors laissée en l'état : un `DROP` est irréversible et
+n'avait pas à être pris dans le même mouvement qu'un retrait de fonctionnalité.
+Le retrait ayant été redemandé, la **migration 034** s'en charge.
 
-Restent donc, inertes :
+Elle ne détruit aucune donnée saisie. Chaque suppression est conditionnée à
+l'absence de contenu ; là où quelque chose a réellement été enregistré, l'objet
+reste, inerte et invisible, et son sort se décide en le regardant.
 
-| Objet | Origine | Contenu |
-|---|---|---|
-| `mar_royalty_rate` (+ sa colonne `kind`) | migrations 005 et 030 | les taux saisis, s'il y en a eu |
-| `mar_shop_revenue` | migration 005 | les CA nets saisis |
-| `mar_fund_movement.base_amount`, `.rate_pct` | migration 030 | l'assiette et le taux des écritures calculées |
-| `mar_fund_source` : `ROYALTY_MARKETING`, `ROYALTY_ASSISTANCE`, `ROYALTY_MARQUE` | migration 030 | référencés par les écritures déjà passées |
+| Objet | Sort en 034 |
+|---|---|
+| `mar_royalty_rate` (+ sa colonne `kind`) | supprimée **si vide** |
+| `mar_fund_movement.base_amount`, `.rate_pct` | supprimées **si aucune écriture n'en porte** |
+| `mar_fund_source` : `ROYALTY_MARKETING`, `ROYALTY_ASSISTANCE`, `ROYALTY_MARQUE` | supprimées **si aucune écriture ne les référence** |
+| index `ix_mar_fm_redevance` | **renommé** `ix_mar_fm_source` — MySQL s'en sert pour porter la clé étrangère vers `mar_fund_source`, et le supprimer laisserait cette clé sans index |
 
-Deux d'entre eux **ne doivent pas partir** sans y regarder : les écritures de
-redevance déjà au grand livre pointent vers les sources ci-dessus et portent leur
-base et leur taux. Ce sont des lignes comptables, pas des restes de l'outil qui
-les a créées, et elles n'avaient aucune raison de disparaître avec lui.
+Sur une base où les redevances n'ont jamais tourné, les trois premières lignes
+partent entièrement. Sur une base qui en porte, tout reste : une écriture de
+redevance est une ligne comptable, et « 1 240,50 € » sans sa base ni son taux ne
+se recalcule pas.
 
-Les deux premières tables, elles, ne servent plus à rien. Une migration qui les
-retire est écrite en dix lignes le jour où vous le demandez.
+Ce qui n'est **pas** concerné, et pourquoi :
 
-`mar_fund_movement.is_public` reste en service : la visibilité d'une écriture est
-une décision propre au fonds, réglée dans le formulaire de saisie, et sans rapport
-avec les redevances.
+- **`mar_fund_source.ROYALTY`** (« Royalties ») date de la migration 005, bien
+  avant la fonctionnalité retirée. C'est la ligne de recette du fonds marketing —
+  ce que le réseau verse —, pas un reste de l'outil. Elle reste donc proposée à
+  la saisie d'un mouvement.
+- **`mar_shop_revenue`** porte le CA déclaré par boutique et par mois. Son
+  commentaire d'origine la disait « assiette des royalties », mais elle est lue
+  aujourd'hui par la synthèse par levier, pour la pénétration sur le CA réseau.
+  Elle est en service.
+- **`mar_fund_movement.is_public`** règle la visibilité d'une écriture. C'est une
+  décision propre au fonds, prise dans le formulaire de saisie, et sans rapport
+  avec les redevances.
+
+Côté écran, l'entrée de menu « Fonds & Royalties » devient **« Fonds marketing »** :
+le fonds est ce que l'écran gère, les royalties n'en sont qu'une origine de
+recette parmi cinq.
