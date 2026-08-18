@@ -87,7 +87,7 @@ entière, pour attraper une colonne ajoutée plus tard.
 | GET | `…/campaign-offers` | tenant | tableau |
 | GET | `…/offer-items` | — | tableau |
 
-### 2.3 Fonds, royalties, redevances
+### 2.3 Fonds et ROI
 
 | Méthode | Chemin | Périmètre | Réponse |
 |---|---|---|---|
@@ -98,11 +98,6 @@ entière, pour attraper une colonne ajoutée plus tard.
 | GET | `…/funds/recurrences` | tenant | tableau |
 | POST | `…/funds/recurrences` | tenant | objet |
 | DELETE | `…/funds/recurrences/{id}` | tenant | `{status, message}` |
-| GET | `…/funds/royalties` | tenant | objet `{month, shops, erp}` |
-| PUT | `…/funds/royalties` | tenant | objet |
-| POST | `…/funds/royalties/generate` | tenant | objet (bilan d'écriture) |
-| GET | `…/funds/royalties/erp` | tenant | objet (lecture ERP + diagnostic) |
-| POST | `…/funds/royalties/erp/import` | tenant | objet (bilan de reprise) |
 | GET | `…/funds/levers` | — | tableau |
 | GET | `…/roi` | tenant | objet |
 | GET | `…/roi/quarterly` | — | tableau |
@@ -153,18 +148,18 @@ entière, pour attraper une colonne ajoutée plus tard.
 | §1.7 / §10.2 deny-by-default | **Tenu.** Sans identité, le routeur répond `401` avant d'atteindre le contrôleur. Une route ne devient pas publique par oubli. |
 | §10.3 tenant lu côté serveur | **Tenu.** Le périmètre vient du contexte d'identité, jamais du corps ni de la query. Un `shop_id` envoyé par le client est vérifié contre le périmètre avant écriture. |
 | §10.3 filtrage dans le dépôt | **Tenu.** `Scope::shopFilter()` compose la condition SQL dans les dépôts, pas dans les contrôleurs. |
-| §18.4 test d'isolation | **Tenu.** La suite couvre « un franchisé ne voit pas / ne modifie pas ce qui n'est pas à lui » sur les campagnes, le fonds et les redevances. |
+| §18.4 test d'isolation | **Tenu.** La suite couvre « un franchisé ne voit pas / ne modifie pas ce qui n'est pas à lui » sur les campagnes et le fonds. |
 | §11.4 secrets | **Tenu.** Aucun secret en dur, `.env` non versionné, identifiants écrits hors racine web. |
-| §1.1 zéro accès direct à la base | **Tenu pour le front.** Le front ne parle qu'à cette API. Côté ERP, les redevances sont passées en API ; restent sept tables lues en SQL, listées dans `API_A_CONSTRUIRE.md`. `db/migrate.php` et `db/sync-erp.php` touchent la base directement, mais ce sont des tâches serveur (migration, reprise), pas des consommateurs applicatifs. |
+| §1.1 zéro accès direct à la base | **Tenu pour le front.** Le front ne parle qu'à cette API. Côté ERP, six tables restent lues en SQL, listées dans `API_A_CONSTRUIRE.md`. `db/migrate.php` et `db/sync-erp.php` touchent la base directement, mais ce sont des tâches serveur (migration, reprise), pas des consommateurs applicatifs. |
 
 ### 3.2 Écarts de forme — à traiter en `v2` (§20.4)
 
 | § | Écart | Portée |
 |---|---|---|
-| 2.3 | Pas de segment `{app}`. Le préfixe est `/api/v1/marketing/…`, où `marketing` est un **module**, pas un contexte d'appel. Les deux consommateurs (réseau, franchisé) partagent le même préfixe et se distinguent par le rôle. | 59 routes |
-| 6 | Enveloppe absente. Les lectures renvoient la donnée brute (souvent un tableau nu à la racine, interdit par §6.3), les écritures `{status, message, inserted_id}`. Pas de `meta`, pas de `requestId`. | 59 routes |
+| 2.3 | Pas de segment `{app}`. Le préfixe est `/api/v1/marketing/…`, où `marketing` est un **module**, pas un contexte d'appel. Les deux consommateurs (réseau, franchisé) partagent le même préfixe et se distinguent par le rôle. | 54 routes |
+| 6 | Enveloppe absente. Les lectures renvoient la donnée brute (souvent un tableau nu à la racine, interdit par §6.3), les écritures `{status, message, inserted_id}`. Pas de `meta`, pas de `requestId`. | 54 routes |
 | 7 | Format d'erreur différent : `{status: "error", description, errors?}`. Pas de `code` machine-readable — le front lit le message. | toutes les erreurs |
-| 3 | Champs JSON en `snake_case`, alignés sur les colonnes. Le standard impose `camelCase` avec traduction dans le mapper. | 59 routes |
+| 3 | Champs JSON en `snake_case`, alignés sur les colonnes. Le standard impose `camelCase` avec traduction dans le mapper. | 54 routes |
 | 3.1 | Montants en décimal flottant (`amount: 1600.0`), pas en unité mineure + devise. | fonds, ROI, budgets |
 | 3.1 | Identifiants numériques (`id: 42`), pas des chaînes. | toutes |
 | 8.1 | **Aucune collection paginée.** Les listes rendent tout. Les volumes actuels (dizaines de campagnes, quelques centaines de prospects) le supportent, mais la règle est absolue. | ~25 collections |
@@ -173,7 +168,7 @@ entière, pour attraper une colonne ajoutée plus tard.
 | 10.1 | Autorisation par **rôle** (`BRAND_ADMIN`, `FRANCHISEE`), pas par scope `{ressource}:{action}`. | module entier |
 | 15 | Pas de couche `services/` : la règle métier vit dans les dépôts, avec le SQL. Les contrôleurs restent minces et sans SQL, mais la séparation métier/persistance n'existe pas. | module entier |
 | 15 | Validation à la main dans les dépôts (exceptions métier), pas par schéma déclaratif strict. Un champ inconnu est ignoré, pas rejeté. | module entier |
-| 12 | Ni `Idempotency-Key` ni `ETag`/`If-Match`. La génération des redevances et la reprise ERP sont idempotentes **par construction** (relecture de l'existant), ce qui couvre le risque financier principal sans l'en-tête. | écritures |
+| 12 | Ni `Idempotency-Key` ni `ETag`/`If-Match`. La reprise ERP est idempotente **par construction** (relecture de l’existant). | écritures |
 | 13 | Les visuels sont stockés et servis par l'application, pas sur R2 par URL présignée. | `…/uploads` |
 | 16 | Pas d'OpenAPI. Ce registre est le seul contrat écrit. | module entier |
 | 17 | Pas de `requestId` ni de log structuré JSON. Les erreurs SQL partent dans `error_log`. | module entier |
@@ -181,7 +176,7 @@ entière, pour attraper une colonne ajoutée plus tard.
 
 ### 3.3 Ce qui n'est pas un écart mais mérite d'être noté
 
-- `PUT …/campaign-types/order` et `POST …/funds/royalties/generate` sont des
+- `PUT …/campaign-types/order` est une
   actions non-CRUD au sens du §4.3. `generate` est bien en `POST` avec le verbe
   en dernier segment ; `order` devrait être `POST …/campaign-types/reordonner`
   pour respecter la lettre du §4.3.
@@ -200,7 +195,7 @@ Dans l'ordre du §20, en ne cassant rien en production :
 3. **Sans objet** — pas d'accès direct à la base depuis un consommateur applicatif.
 4. **À décider** — uniformisation en `v2` : préfixe `{app}`, enveloppe, format
    d'erreur avec catalogue de codes, `camelCase`, pagination. C'est un chantier
-   qui touche les 59 routes **et** le client du front. Il ne se fait pas à
+   qui touche les 54 routes **et** le client du front. Il ne se fait pas à
    l'économie : la bascule doit être testée route par route, et `v1` reste servi
    pendant la fenêtre de dépréciation de trois mois (§14).
 5. **Lié à l'écosystème** — l'authentification JWT (§9) ne peut pas être décidée
@@ -208,3 +203,33 @@ Dans l'ordre du §20, en ne cassant rien en production :
    émet des tokens conformes et le module les vérifie, soit le module reste
    monté dans l'ERP et hérite de son middleware. C'est une décision d'écosystème,
    pas un choix d'implémentation local.
+
+---
+
+## 5. Ce que le retrait des redevances a laissé en base
+
+La gestion des redevances a été retirée le 17 août 2026 : écran, routes, dépôts
+et tests. **Aucune table n'a été supprimée**, et c'est délibéré — un `DROP` est
+irréversible, et rien n'oblige à le prendre dans le même mouvement qu'un retrait
+de fonctionnalité.
+
+Restent donc, inertes :
+
+| Objet | Origine | Contenu |
+|---|---|---|
+| `mar_royalty_rate` (+ sa colonne `kind`) | migrations 005 et 030 | les taux saisis, s'il y en a eu |
+| `mar_shop_revenue` | migration 005 | les CA nets saisis |
+| `mar_fund_movement.base_amount`, `.rate_pct` | migration 030 | l'assiette et le taux des écritures calculées |
+| `mar_fund_source` : `ROYALTY_MARKETING`, `ROYALTY_ASSISTANCE`, `ROYALTY_MARQUE` | migration 030 | référencés par les écritures déjà passées |
+
+Deux d'entre eux **ne doivent pas partir** sans y regarder : les écritures de
+redevance déjà au grand livre pointent vers les sources ci-dessus et portent leur
+base et leur taux. Ce sont des lignes comptables, pas des restes de l'outil qui
+les a créées, et elles n'avaient aucune raison de disparaître avec lui.
+
+Les deux premières tables, elles, ne servent plus à rien. Une migration qui les
+retire est écrite en dix lignes le jour où vous le demandez.
+
+`mar_fund_movement.is_public` reste en service : la visibilité d'une écriture est
+une décision propre au fonds, réglée dans le formulaire de saisie, et sans rapport
+avec les redevances.

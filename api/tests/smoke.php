@@ -1824,204 +1824,6 @@ check('une écriture se supprime',
 check('une écriture déjà supprimée est introuvable',
     call($router, 'DELETE', sprintf('/api/v1/marketing/funds/movements/%d', $corrigible))['status'] === 404);
 
-// --- Redevances -------------------------------------------------------------
-// Trois natures, un taux par magasin, un CA net par mois : les entrées du fonds
-// se calculent. Vingt magasins font soixante écritures mensuelles, que personne
-// ne tape et que personne ne relit pour vérifier qu'aucune ne manque.
-echo "\nRedevances\n";
-
-check(
-    'un mois mal formé est refusé',
-    call($router, 'GET', '/api/v1/marketing/funds/royalties', ['month' => 'juin'])['status'] === 422
-);
-
-$grille = static fn (array $corps): array => call($router, 'PUT', '/api/v1/marketing/funds/royalties', [], $corps);
-
-check(
-    'un taux au-delà de cent pour cent est refusé',
-    $grille([
-        'month' => '2026-04',
-        'rates' => [['shop_id' => 1, 'kind' => 'MARKETING', 'rate_pct' => 140]],
-    ])['status'] === 422
-);
-check(
-    'une nature de redevance inconnue est refusée',
-    $grille([
-        'month' => '2026-04',
-        'rates' => [['shop_id' => 1, 'kind' => 'PARKING', 'rate_pct' => 2]],
-    ])['status'] === 422
-);
-check(
-    'un chiffre d\'affaires négatif est refusé',
-    $grille([
-        'month'    => '2026-04',
-        'revenues' => [['shop_id' => 1, 'revenue_amount' => -3000]],
-    ])['status'] === 422
-);
-
-$enregistrement = $grille([
-    'month' => '2026-04',
-    'rates' => [
-        ['shop_id' => 1, 'kind' => 'MARKETING',  'rate_pct' => 2],
-        ['shop_id' => 1, 'kind' => 'ASSISTANCE', 'rate_pct' => 4],
-        ['shop_id' => 1, 'kind' => 'MARQUE',     'rate_pct' => 1.5],
-        ['shop_id' => 2, 'kind' => 'MARKETING',  'rate_pct' => 2],
-    ],
-    'revenues' => [
-        ['shop_id' => 1, 'revenue_amount' => 80000],
-        // Uccle n'a pas encore déclaré : rien ne doit être facturé pour lui.
-        ['shop_id' => 2, 'revenue_amount' => null],
-    ],
-]);
-check('la grille du mois s\'enregistre', $enregistrement['status'] === 200
-    && $enregistrement['body']['rates_changed'] === 4, json_encode($enregistrement['body']));
-
-// Réenregistrer la même grille ne doit rien versionner : sinon l'historique des
-// taux, qui sert à savoir quand le contrat a bougé, se remplit de doublons à
-// chaque ouverture de l'écran.
-$rejeu = $grille([
-    'month' => '2026-04',
-    'rates' => [['shop_id' => 1, 'kind' => 'MARKETING', 'rate_pct' => 2]],
-]);
-check('un taux inchangé ne crée pas de version', $rejeu['body']['rates_unchanged'] === 1
-    && $rejeu['body']['rates_changed'] === 0, json_encode($rejeu['body']));
-
-$tableau = call($router, 'GET', '/api/v1/marketing/funds/royalties', ['month' => '2026-04'])['body'];
-$namur = null;
-foreach ($tableau['shops'] as $boutique) {
-    if ($boutique['shop_id'] === 1) {
-        $namur = $boutique;
-    }
-}
-check(
-    'le tableau rend le CA et les trois taux',
-    $namur !== null && $namur['revenue_amount'] === 80000.0
-        && $namur['rates']['MARKETING']['rate_pct'] === 2.0
-        && $namur['rates']['ASSISTANCE']['rate_pct'] === 4.0
-        && $namur['rates']['MARQUE']['rate_pct'] === 1.5,
-    json_encode($namur)
-);
-
-$generation = call($router, 'POST', '/api/v1/marketing/funds/royalties/generate', [], ['month' => '2026-04']);
-check(
-    'la génération écrit une entrée par nature et par magasin déclaré',
-    $generation['status'] === 201 && $generation['body']['created'] === 3
-        // Uccle a un taux marketing mais pas de CA : rien n'est écrit pour lui,
-        // et le bilan le dit plutôt que de le passer sous silence.
-        && $generation['body']['without_revenue'] === 1
-        // Uccle n'a ni taux d'assistance ni taux de marque.
-        && $generation['body']['without_rate'] === 2,
-    json_encode($generation['body'])
-);
-check(
-    'le total écrit vaut le CA fois les taux',
-    $generation['body']['total_amount'] === 6000.0,
-    json_encode($generation['body']['total_amount'])
-);
-
-$ecrites = $pdo->query(
-    "SELECT source, amount, base_amount, rate_pct, is_public, movement_date, period_from, period_to
-       FROM mar_fund_movement WHERE period_from = '2026-04-01' AND source LIKE 'ROYALTY\_%'
-      ORDER BY source"
-)->fetchAll();
-check(
-    'chaque redevance garde sa base et son taux',
-    count($ecrites) === 3
-        && (float) $ecrites[0]['base_amount'] === 80000.0
-        && (float) $ecrites[0]['rate_pct'] === 4.0
-        && (float) $ecrites[0]['amount'] === 3200.0,
-    json_encode($ecrites[0] ?? null)
-);
-check(
-    'elle est datée de la clôture du mois qu\'elle couvre',
-    $ecrites[0]['movement_date'] === '2026-04-30'
-        && $ecrites[0]['period_from'] === '2026-04-01'
-        && $ecrites[0]['period_to'] === '2026-04-30'
-);
-
-$visibilite = [];
-foreach ($ecrites as $ligne) {
-    $visibilite[$ligne['source']] = (int) $ligne['is_public'];
-}
-check(
-    'le marketing est public, l\'assistance et la marque ne le sont pas',
-    $visibilite['ROYALTY_MARKETING'] === 1
-        && $visibilite['ROYALTY_ASSISTANCE'] === 0
-        && $visibilite['ROYALTY_MARQUE'] === 0,
-    json_encode($visibilite)
-);
-
-// Relancer ne double pas la facture : une redevance corrigée à la main — remise
-// accordée, mois partiel négocié — serait sinon écrasée sans trace.
-$relance = call($router, 'POST', '/api/v1/marketing/funds/royalties/generate', [], ['month' => '2026-04']);
-check('relancer la génération ne facture pas deux fois',
-    $relance['body']['created'] === 0 && $relance['body']['skipped'] === 3,
-    json_encode($relance['body']));
-
-// Un taux renégocié en juin ne réécrit pas avril : c'est tout l'objet des
-// périodes de validité.
-$grille([
-    'month' => '2026-06',
-    'rates' => [['shop_id' => 1, 'kind' => 'MARKETING', 'rate_pct' => 3]],
-    'revenues' => [['shop_id' => 1, 'revenue_amount' => 80000]],
-]);
-$avril = call($router, 'GET', '/api/v1/marketing/funds/royalties', ['month' => '2026-04'])['body'];
-$juin  = call($router, 'GET', '/api/v1/marketing/funds/royalties', ['month' => '2026-06'])['body'];
-$tauxDe = static function (array $tableau, string $kind): ?float {
-    foreach ($tableau['shops'] as $boutique) {
-        if ($boutique['shop_id'] === 1) {
-            return $boutique['rates'][$kind]['rate_pct'] ?? null;
-        }
-    }
-
-    return null;
-};
-check('un taux renégocié en juin laisse avril à son taux',
-    $tauxDe($avril, 'MARKETING') === 2.0 && $tauxDe($juin, 'MARKETING') === 3.0,
-    sprintf('avril %s / juin %s', json_encode($tauxDe($avril, 'MARKETING')), json_encode($tauxDe($juin, 'MARKETING'))));
-
-check(
-    'la redevance d\'avril déjà écrite garde son montant',
-    (float) $pdo->query(
-        "SELECT amount FROM mar_fund_movement
-          WHERE period_from = '2026-04-01' AND source = 'ROYALTY_MARKETING'"
-    )->fetchColumn() === 1600.0
-);
-
-// Le franchisé voit ce qui alimente le fonds marketing — c'est le sien — mais
-// pas les revenus de la marque.
-AuthContext::set(77, 'FRANCHISEE', 1, [1]);
-$vuFranchise = call($router, 'GET', '/api/v1/marketing/funds/ledger')['body'];
-$sourcesVues = [];
-foreach ($vuFranchise['periods'] as $periode) {
-    foreach ([...$periode['entries'], ...$periode['exits']] as $ligne) {
-        $sourcesVues[$ligne['source']] = true;
-    }
-}
-check(
-    'le franchisé voit la redevance marketing',
-    isset($sourcesVues['ROYALTY_MARKETING']),
-    json_encode(array_keys($sourcesVues))
-);
-check(
-    'il ne voit ni l\'assistance ni la marque',
-    !isset($sourcesVues['ROYALTY_ASSISTANCE']) && !isset($sourcesVues['ROYALTY_MARQUE']),
-    json_encode(array_keys($sourcesVues))
-);
-AuthContext::set(1, 'BRAND_ADMIN', 1);
-
-$vuMarque = call($router, 'GET', '/api/v1/marketing/funds/ledger')['body'];
-$sourcesMarque = [];
-foreach ($vuMarque['periods'] as $periode) {
-    foreach ([...$periode['entries'], ...$periode['exits']] as $ligne) {
-        $sourcesMarque[$ligne['source']] = true;
-    }
-}
-check(
-    'la marque voit les trois',
-    isset($sourcesMarque['ROYALTY_MARKETING'], $sourcesMarque['ROYALTY_ASSISTANCE'], $sourcesMarque['ROYALTY_MARQUE'])
-);
-
 // --- Vitrine publique -------------------------------------------------------
 // La seule route sans authentification du module. Ce qu'elle montre importe
 // moins que ce qu'elle ne montre pas : elle est ouverte à Internet, et une
@@ -2182,19 +1984,19 @@ $avecErp(
         $vueUrl = $url;
         $vusEntetes = $entetes;
 
-        return [200, '{"data":{"invoices":[{"id":7}]}}'];
+        return [200, '{"data":{"shops":[{"id":7}]}}'];
     },
-    static fn ($client) => $client->get('/api/v1/admin/royalties/invoices', ['period' => '2026-04', 'id_shop' => null])
+    static fn ($client) => $client->get('/api/v1/shops', ['page' => 2, 'brandId' => null])
 );
 
 check(
     'l\'URL colle la base au chemin sans doubler la barre',
-    $vueUrl === 'https://erp.test/api/v1/admin/royalties/invoices?period=2026-04',
+    $vueUrl === 'https://erp.test/api/v1/shops?page=2',
     (string) $vueUrl
 );
 check(
     'un paramètre nul ne part pas dans l\'URL',
-    !str_contains((string) $vueUrl, 'id_shop')
+    !str_contains((string) $vueUrl, 'brandId')
 );
 check(
     'l\'appel porte un identifiant de requête',
@@ -2205,20 +2007,20 @@ check(
 // Le déballage : l'ERP enveloppe tantôt sous `data`, tantôt sous `data.{clé}`,
 // tantôt pas du tout. L'appelant reçoit une liste dans les trois cas.
 check(
-    'une enveloppe data.invoices se déballe',
-    \Marketing\Support\ErpClient::rows(['data' => ['invoices' => [['id' => 1]]]], ['invoices']) === [['id' => 1]]
+    'une enveloppe data.{clé} se déballe',
+    \Marketing\Support\ErpClient::rows(['data' => ['shops' => [['id' => 1]]]], ['shops']) === [['id' => 1]]
 );
 check(
     'une enveloppe data seule se déballe',
-    \Marketing\Support\ErpClient::rows(['data' => [['id' => 1]]], ['invoices']) === [['id' => 1]]
+    \Marketing\Support\ErpClient::rows(['data' => [['id' => 1]]], ['shops']) === [['id' => 1]]
 );
 check(
     'une liste nue se déballe',
-    \Marketing\Support\ErpClient::rows([['id' => 1]], ['invoices']) === [['id' => 1]]
+    \Marketing\Support\ErpClient::rows([['id' => 1]], ['shops']) === [['id' => 1]]
 );
 check(
     'un objet seul devient une liste d\'un élément',
-    \Marketing\Support\ErpClient::rows(['data' => ['id' => 1]], ['invoices']) === [['id' => 1]]
+    \Marketing\Support\ErpClient::rows(['data' => ['id' => 1]], ['shops']) === [['id' => 1]]
 );
 
 // Les échecs : chacun doit dire quoi faire, pas seulement qu'il a échoué.
@@ -2258,218 +2060,6 @@ check(
     'une réponse non-JSON est refusée en le disant',
     str_contains($illisible, 'illisible') && str_contains($illisible, 'maintenance'),
     $illisible
-);
-
-// --- Lecture des redevances : enchaînement des appels ------------------------
-// Ce qui est vérifié ici est notre enchaînement, pas la forme des factures de
-// l'ERP : la liste est appelée, et le détail ne l'est que si la liste ne porte
-// pas les lignes. Les corps rendus par le transport sont des enveloppes vides
-// de sens — aucun montant, aucun libellé — précisément pour qu'aucun test ne
-// puisse dire quelque chose de faux sur ce que l'ERP renvoie.
-echo "\nRedevances : enchaînement des appels\n";
-
-$appels = [];
-$transportRedevances = static function (string $url) use (&$appels): array {
-    $appels[] = parse_url($url, PHP_URL_PATH);
-
-    // La liste rend une facture sans lignes ; le détail rend une liste vide.
-    return str_contains((string) parse_url($url, PHP_URL_PATH), '/invoices/')
-        ? [200, '{"data":{"invoice":{"lines":[]}}}']
-        : [200, '{"data":{"invoices":[{"id":"1","id_shop":"999"}]}}'];
-};
-
-$baseAvant = getenv('MAR_ERP_API_BASE');
-\Marketing\Support\Env::set('MAR_ERP_API_BASE', 'https://erp.test');
-
-$lecteur = new \Marketing\Repository\ErpRoyaltyRepository(
-    new \Marketing\Support\ErpClient($transportRedevances)
-);
-$vu = $lecteur->preview(AuthContext::current(), '2026-04');
-
-\Marketing\Support\Env::set('MAR_ERP_API_BASE', $baseAvant === false ? null : $baseAvant);
-
-check('la lecture aboutit quand l\'ERP répond', ($vu['available'] ?? false) === true,
-    json_encode($vu['reason'] ?? null));
-check(
-    'la liste est demandée pour la période, pas pour une date d\'émission',
-    ($appels[0] ?? '') === '/api/v1/panel/royalties/invoices',
-    json_encode($appels)
-);
-check(
-    'le détail est demandé quand la liste ne porte pas les lignes',
-    ($appels[1] ?? '') === '/api/v1/panel/royalties/invoices/1',
-    json_encode($appels)
-);
-// `??` rendrait « absent » sur une valeur nulle, ce qui est justement la valeur
-// attendue ici : c'est la clé qu'on vérifie, et son contenu séparément.
-check(
-    'une boutique inconnue du module n\'est pas importée en silence',
-    array_key_exists('shop_id', $vu['invoices'][0] ?? [])
-        && $vu['invoices'][0]['shop_id'] === null,
-    json_encode($vu['invoices'][0] ?? null)
-);
-
-// --- Redevances facturées par l'ERP -----------------------------------------
-// Les factures ne sont plus lues en base : elles viennent de l'API de l'ERP
-// (`GET /api/v1/panel/royalties/invoices?period=AAAA-MM`). Sans adresse d'ERP
-// configurée, il n'y a rien à joindre — et c'est le diagnostic qui est vérifié :
-// il vaut mieux un refus lisible qu'un import qui invente des montants.
-$facturesErp = Marketing\Support\ErpClient::isConfigured();
-
-// La nature d'une ligne se lit dans son libellé. La règle se vérifie sans base :
-// c'est une lecture de texte, et les tables de l'ERP n'ont pas à être imitées
-// pour l'éprouver.
-foreach ([
-    'Redevance marketing'      => 'MARKETING',
-    'REDEVANCE MKT'            => 'MARKETING',
-    'Redevance d\'assistance'  => 'ASSISTANCE',
-    'Assistance technique'     => 'ASSISTANCE',
-    'Redevance de marque'      => 'MARQUE',
-    'Licence enseigne'         => 'MARQUE',
-] as $libelle => $attendu) {
-    check(
-        sprintf('« %s » se lit comme une redevance %s', $libelle, strtolower($attendu)),
-        \Marketing\Repository\ErpRoyaltyRepository::kindFromLabel($libelle) === $attendu
-    );
-}
-
-// Un libellé vague s'applique aux trois natures. Mal classée, une ligne s'écrit
-// aussi bien qu'une autre et personne ne s'en aperçoit : une nature manquante se
-// corrige, une nature fausse se découvre au contrôle.
-foreach (['Redevance', 'Royalties', 'Frais de service', 'Livraison', ''] as $vague) {
-    check(
-        sprintf('« %s » n\'est rattaché à aucune redevance', $vague),
-        \Marketing\Repository\ErpRoyaltyRepository::kindFromLabel($vague) === null
-    );
-}
-
-$apercu = call($router, 'GET', '/api/v1/marketing/funds/royalties/erp', ['month' => '2026-04']);
-check('la lecture ERP répond toujours, même sans les tables', $apercu['status'] === 200);
-
-if (!$facturesErp) {
-    printf("  · MAR_ERP_API_BASE non renseigné — reprise non vérifiée ici\n");
-    check(
-        'elle dit ce qui manque plutôt que de se taire',
-        ($apercu['body']['available'] ?? true) === false
-            && is_string($apercu['body']['reason'] ?? null)
-            && $apercu['body']['reason'] !== '',
-        json_encode($apercu['body']['reason'] ?? null)
-    );
-    check(
-        'et elle nomme le réglage en cause',
-        str_contains((string) ($apercu['body']['reason'] ?? ''), 'MAR_ERP_API_BASE'),
-        (string) ($apercu['body']['reason'] ?? '')
-    );
-} else {
-    check('la lecture ERP aboutit', ($apercu['body']['available'] ?? false) === true,
-        json_encode($apercu['body']['reason'] ?? null));
-    check(
-        'elle dit quelles colonnes elle a reconnues',
-        isset($apercu['body']['mapping']['invoice']['id'], $apercu['body']['mapping']['line']['amount']),
-        json_encode($apercu['body']['mapping'] ?? null)
-    );
-
-    // Sans rapprochement, la reprise ne trouve aucune boutique et le test
-    // passerait au vert sans rien avoir écrit. On raccroche donc une boutique du
-    // module à la première facture trouvée — côté `mar_shop`, jamais côté ERP.
-    $premiereFacture = $apercu['body']['invoices'][0] ?? null;
-
-    if ($premiereFacture === null) {
-        printf("  · aucune facture ERP sur ce mois — reprise non vérifiée ici\n");
-    } else {
-        $rattachement = $pdo->prepare('UPDATE mar_shop SET erp_shop_id = :erp WHERE id = 1');
-        $rattachement->execute(['erp' => $premiereFacture['erp_shop_id']]);
-
-        $apercu = call($router, 'GET', '/api/v1/marketing/funds/royalties/erp', ['month' => '2026-04'])['body'];
-        $facture = $apercu['invoices'][0];
-        $facturees = array_values(array_filter(
-            $facture['lines'],
-            static fn (array $ligne): bool => $ligne['kind'] !== null
-        ));
-
-        check('la facture est rapprochée d\'une boutique du module',
-            $facture['shop_id'] === 1, json_encode($facture['shop_id']));
-
-        // Le tableau porte la facture sur la ligne du magasin : c'est là qu'on
-        // répond à « ce magasin est-il à jour ? », pas dans une liste à côté.
-        $tableauErp = call($router, 'GET', '/api/v1/marketing/funds/royalties', ['month' => '2026-04'])['body'];
-        $ligneErp = null;
-        foreach ($tableauErp['shops'] as $boutique) {
-            if ($boutique['shop_id'] === 1) {
-                $ligneErp = $boutique;
-            }
-        }
-        check(
-            'le tableau montre la facture ERP sur la ligne du magasin',
-            ($ligneErp['erp']['document_ref'] ?? null) === $facture['document_ref']
-                && count($ligneErp['erp']['lines'] ?? []) === count($facturees),
-            json_encode($ligneErp['erp'] ?? null)
-        );
-
-        // Les redevances calculées d'avril occupent déjà la place : on les retire
-        // pour que la facture ERP puisse s'écrire à leur place.
-        $pdo->exec("DELETE FROM mar_fund_movement WHERE period_from = '2026-04-01' AND source LIKE 'ROYALTY\_%'");
-
-        $repriseErp = call($router, 'POST', '/api/v1/marketing/funds/royalties/generate', [], ['month' => '2026-04']);
-        check(
-            'la génération reprend les montants facturés plutôt que de les recalculer',
-            ($repriseErp['body']['from_erp'] ?? 0) === count($facturees),
-            json_encode($repriseErp['body'])
-        );
-
-        $montantEcrit = (float) $pdo->query(sprintf(
-            "SELECT amount FROM mar_fund_movement
-              WHERE document_ref = %s AND source = 'ROYALTY_%s'",
-            $pdo->quote($facture['document_ref']),
-            $facturees[0]['kind']
-        ))->fetchColumn();
-        check(
-            'le montant écrit est celui de la ligne de facture',
-            abs($montantEcrit - $facturees[0]['amount']) < 0.005,
-            sprintf('%s vs %s', $montantEcrit, $facturees[0]['amount'])
-        );
-
-        $rejeuErp = call($router, 'POST', '/api/v1/marketing/funds/royalties/generate', [], ['month' => '2026-04']);
-        check(
-            'relancer ne reprend pas deux fois la même pièce',
-            ($rejeuErp['body']['created'] ?? -1) === 0,
-            json_encode($rejeuErp['body'])
-        );
-    }
-}
-
-// Les contrôles de la création s'appliquent aussi à la mise à jour.
-$target = (int) $pdo->query("SELECT id FROM mar_campaign WHERE scope = 'RESEAU' ORDER BY id LIMIT 1")->fetchColumn();
-foreach ([
-    'état inconnu'     => ['status_code' => 'zzz'],
-    'portée inconnue'  => ['scope' => 'BIDON'],
-    'cible inconnue'   => ['client_target' => 'b2x'],
-    'période inversée' => ['starts_on' => '2026-12-31', 'ends_on' => '2026-01-01'],
-] as $label => $payload) {
-    $response = call($router, 'PATCH', sprintf('/api/v1/marketing/campaigns/%d', $target), [], $payload);
-    check(sprintf('mise à jour — %s refusée', $label), $response['status'] === 422, 'statut ' . $response['status']);
-}
-
-// Une portée hors référentiel fait sortir la campagne du filtre de périmètre :
-// elle disparaît de la vue de tout le monde, sans erreur nulle part.
-check(
-    'la campagne garde une portée valide',
-    in_array($pdo->query(sprintf('SELECT scope FROM mar_campaign WHERE id = %d', $target))->fetchColumn(), ['RESEAU', 'LOCALE'], true)
-);
-
-// Voir une campagne réseau et pouvoir l'écrire sont deux choses distinctes.
-AuthContext::set(77, 'FRANCHISEE', 1, [1]);
-$response = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d', $target));
-check('un franchisé voit bien la campagne réseau', $response['status'] === 200);
-
-$response = call($router, 'PATCH', sprintf('/api/v1/marketing/campaigns/%d', $target), [], ['name' => 'Détournée']);
-check('mais ne peut pas la modifier', $response['status'] === 422, 'statut ' . $response['status']);
-
-$response = call($router, 'DELETE', sprintf('/api/v1/marketing/campaigns/%d', $target));
-check('ni la supprimer', $response['status'] === 422, 'statut ' . $response['status']);
-check(
-    'et elle est intacte',
-    $pdo->query(sprintf('SELECT name FROM mar_campaign WHERE id = %d', $target))->fetchColumn() !== 'Détournée'
 );
 
 // --- Palette de campagne ---------------------------------------------------

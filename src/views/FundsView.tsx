@@ -11,7 +11,6 @@ import type {
   RecurrenceDraft,
 } from '../lib/api/module'
 import LinkBadge from '../components/LinkBadge'
-import RoyaltiesPanel from './RoyaltiesPanel'
 import { useLabel, useReferences } from '../state/references'
 import { describeError } from '../state/auth'
 import RangeCalendar, { DayCalendar } from '../components/RangeCalendar'
@@ -39,7 +38,6 @@ export default function FundsView() {
   const [rechargement, setRechargement] = useState(0)
   /** Écriture en cours de correction, tant qu'elle n'est pas enregistrée. */
   const [aCorriger, setACorriger] = useState<LedgerRow | null>(null)
-  const [redevances, setRedevances] = useState(false)
 
   const { data, error, loading } = useAsync(
     () => api.getLedger(granularity, from || undefined, to || undefined),
@@ -105,14 +103,6 @@ export default function FundsView() {
               milieu des autres. */}
           <button
             type="button"
-            className={`filter${redevances ? ' is-on' : ''}`}
-            aria-expanded={redevances}
-            onClick={() => setRedevances(!redevances)}
-          >
-            Redevances
-          </button>
-          <button
-            type="button"
             className={`action${saisie ? ' is-open' : ''}`}
             aria-expanded={saisie}
             onClick={() => setSaisie(!saisie)}
@@ -157,8 +147,6 @@ export default function FundsView() {
           onCancel={() => setACorriger(null)}
         />
       )}
-
-      {redevances ? <RoyaltiesPanel onWritten={relire} /> : null}
 
       {error ? <p className="error">{error}</p> : null}
       {loading ? <p className="muted">Chargement…</p> : null}

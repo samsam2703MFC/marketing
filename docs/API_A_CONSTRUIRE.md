@@ -24,7 +24,8 @@ donc ce dont il a besoin en HTTP, et **ce qu'il peut exposer** en retour.
   aucun script ne les crée, ne les modifie ni ne les supprime.
 
 Le seul écart au §1.1 est donc la **lecture**. Il portait sur huit tables ; les
-deux tables de redevances sont passées en API (§1.4), il en reste six.
+deux tables de redevances sont sorties avec la gestion des redevances (§1.4), il
+en reste six.
 
 ---
 
@@ -71,26 +72,15 @@ consommateur machine, pas un utilisateur.
 - **Sans cet endpoint agrégé, le passage en API n'est pas faisable** pour cet
   écran : c'est le seul point où la règle et la physique se rencontrent.
 
-### 1.4 Redevances — **passé en API** ✅
+### 1.4 Redevances — **retiré**
 
-`ErpRoyaltyRepository` ne lit plus `royalty_invoice` : il appelle
-`GET /api/v1/panel/royalties/invoices?period=AAAA-MM`, dont le paramètre désigne
-la période **couverte**. Le contournement bâti sur la date d'émission — chercher
-mai pour obtenir avril — a disparu avec le SQL.
+La gestion des redevances a été retirée du module : plus d'écran, plus de
+routes, plus de lecture de `royalty_invoice`. Le fonds garde ses écritures — y
+compris celles qui ont pu être produites avant le retrait, qui sont des lignes de
+grand livre comme les autres et n'avaient aucune raison de disparaître avec
+l'outil qui les avait créées.
 
-Les clés de la réponse restent **reconnues et non supposées** : `line_label` pour
-la nature, `net_amount` pour le montant dû sont les deux seuls points établis.
-Ce qui n'est pas reconnu s'affiche dans l'écran avec les clés reçues, et rien
-n'est importé à l'aveugle. Un appel réel reste nécessaire pour figer le reste.
-
-**Une question ouverte sur le périmètre.** L'ERP expose deux familles :
-`/api/v1/panel/…`, servie par `Panel/royaltyShopRoutes.php` et dotée de sa propre
-authentification (`/api/v1/panel/authenticate`), et `/api/v1/admin/…`, la vue
-franchiseur. Le nom du fichier de routes laisse penser que la première est cadrée
-sur **une** boutique — or la grille des redevances en couvre tout un réseau. Si
-c'est le cas, il faut un appel par magasin : `MAR_ERP_ROYALTY_SHOP_PARAM` porte
-alors le nom du paramètre qui la désigne, et le module boucle. Vide, il appelle
-une fois. Ce nom se déclare, il ne se devine pas.
+Rien à construire ici, donc, tant que le sujet ne revient pas.
 
 ### 1.5 Clients et secteurs B2B — `client`, `b2b_client_type`, `b2b_client_interest_connection`
 
@@ -118,7 +108,7 @@ développement (IP hors allowlist). Alimenterait le coût matière d'une offre.
 
 ## 2. Ce que le module peut exposer — API que je peux construire
 
-Le module possède ses propres données (`mar_*`) et les sert déjà par 59 routes
+Le module possède ses propres données (`mar_*`) et les sert déjà par 54 routes
 (`API_REGISTRY.md`). Ce qui manque, en API que ce dépôt peut écrire seul :
 
 ### 2.1 La vitrine — nouvelle, et attendue
@@ -142,7 +132,7 @@ elle se déclare explicitement.
 devient `GET /api/v1/erp/marketing/campaigns/{id}/print` avec enveloppe et
 `camelCase`.
 
-### 2.3 Les 59 routes existantes, en `v2`
+### 2.3 Les 54 routes existantes, en `v2`
 
 Le préfixe actuel `/api/v1/marketing/…` est à une chose près conforme : il lui
 manque le segment `{app}`. La bascule est mécanique :
@@ -173,8 +163,7 @@ response contracts are not inferred by coverage generation ». Sur 1 229
 opérations, 454 portent un contrat détaillé ; les autres n'ont qu'une réponse
 « The data ». **Les chemins sont donc sûrs, les charges utiles ne le sont pas.**
 Il faudra un appel réel par endpoint avant d'écrire le mapping — c'est la
-vérification qui manquait à la reprise des redevances, et qui m'a fait ranger
-`net_amount` du mauvais côté.
+vérification qui a manqué la seule fois où un mapping a été écrit sans elle.
 
 | Besoin | Endpoint TFBuddy | Contrat |
 |---|---|---|
@@ -182,18 +171,14 @@ vérification qui manquait à la reprise des redevances, et qui m'a fait ranger
 | §1.2 Produits | `GET /api/v1/products`, `GET /api/v1/products/{id}` | à confirmer |
 | §1.2 Catégories | `GET /api/v1/product-categories` (+ `/used`) | à confirmer |
 | §1.2 Saisons | `GET /api/v1/product-availability-periods`, `…/{id}/products`, `GET /api/v1/products/{id}/availability-periods` | à confirmer |
-| §1.4 Redevances | `GET /api/v1/panel/royalties/invoices?period=AAAA-MM` *(celui retenu)* ; `GET /api/v1/admin/royalties/invoices?id_shop=&status=&period=` pour la vue franchiseur | panel : **non documenté** · admin : documenté (`RoyaltyInvoiceListResponse`) |
+| §1.4 Redevances | *retiré du module* | — |
 | §1.5 Clients | `GET /api/v1/clients?limit=&offset=&type=&vat_id=` | **documenté** (`ClientRecord`) |
 | §1.6 Tarifs | `GET /api/v1/shops/{shop}/products/price-list/document` | déjà consommé |
 | §1.7 Recettes | `GET /api/v1/franchise/{shop}/product-recipes/calculation`, `…/product-recipe/{id}/calculation` | à confirmer |
 | §1.3 **Ventes par produit** | *rien de direct* — voir ci-dessous | — |
 
-### 3.1 Deux gains immédiats, déjà lisibles dans le swagger
+### 3.1 Un gain immédiat, déjà lisible dans le swagger
 
-- **Redevances.** `period` est un paramètre au format `AAAA-MM`, et il désigne la
-  période **couverte**. Passer par l'API supprime donc le contournement bâti sur
-  la date d'émission (« le mois suivant celui que la facture couvre ») : on
-  demande avril, on reçoit avril. Ce contournement disparaît avec le SQL.
 - **Clients.** `ClientRecord` porte `id_main_shop` et `is_b2b` — exactement le
   rattachement boutique et le marqueur professionnel dont le ciblage a besoin,
   sans avoir à connaître le schéma.
@@ -232,12 +217,11 @@ reste est faisable avec l'existant.
 | Rang | Chantier | Dépend de |
 |---|---|---|
 | **fait** | **Client HTTP ERP mutualisé** (`Support\ErpClient`) — un seul point d'appel : adresse en configuration, jeton, `X-Request-Id`, délai, déballage d'enveloppe, échecs traduits en messages qui disent quoi regarder. Extrait de l'appel des tarifs, pas écrit à côté. | — |
-| **fait** | **Redevances par API** (§1.4) — `ErpRoyaltyRepository` ne touche plus `royalty_invoice` : il appelle `GET /api/v1/panel/royalties/invoices?period=AAAA-MM`. Le décalage d'un mois disparaît avec le SQL. | un appel réel pour figer le mapping |
 | **fait** | **Route vitrine publique** (§2.1) — `GET /api/v1/public/marketing/campaigns`, au format du standard. | — |
 | 4 | **Boutiques et catalogue** (§1.1, §1.2) — la reprise ERP devient un client HTTP | un appel réel par endpoint |
 | 5 | **Clients B2B** (§1.5) — `limit`/`offset` existent ; reste à savoir s'il y a un filtre incrémental, sinon la reprise relit tout | un appel réel |
 | 6 | **Ventes par produit** (§3.2) | un endpoint à créer côté ERP |
-| 7 | **Bascule `v2`** des 59 routes | décision |
+| 7 | **Bascule `v2`** des 54 routes | décision |
 
 Les rangs 1 à 5 ne demandent rien à personne d'autre que des appels de
 vérification. Le rang 6 demande un développement côté TFBuddy. Le rang 7 est une

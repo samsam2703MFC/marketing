@@ -7,6 +7,7 @@ namespace Marketing\Repository;
 use Marketing\Support\AuthContext;
 use Marketing\Support\Database;
 use Marketing\Support\Env;
+use Marketing\Support\ErpClient;
 use Marketing\Support\Scope;
 use RuntimeException;
 use Throwable;
@@ -63,6 +64,10 @@ final class PriceListRepository
      *                       includes_tax: ?bool}>, keys: ?array<string,string>, error: ?string}>
      */
     private array $cache = [];
+
+    public function __construct(private readonly ErpClient $erp = new ErpClient())
+    {
+    }
 
     /**
      * Prix des produits demandés, par boutique du périmètre.
@@ -253,27 +258,18 @@ final class PriceListRepository
             return $this->cache[$erpShopId];
         }
 
-        $url = rtrim($base, '/') . str_replace('{shop}', (string) $erpShopId, $template);
-
+        // Le client partagé porte le jeton, le délai, l'identifiant de requête
+        // et la traduction des échecs. `{shop}` reste substitué ici : c'est ce
+        // chemin-là qui le prévoit, pas le client.
         try {
-            $body = $this->fetch($url);
+            $decoded = $this->erp->get(str_replace('{shop}', (string) $erpShopId, $template));
         } catch (Throwable $failure) {
             return $this->cache[$erpShopId] = [
                 'rows' => [], 'keys' => null, 'error' => $failure->getMessage(),
             ];
         }
 
-        $decoded = json_decode($body, true);
-
-        if (!is_array($decoded)) {
-            return $this->cache[$erpShopId] = [
-                'rows'  => [],
-                'keys'  => null,
-                // Un tarif rendu en PDF est un cas plausible pour une route qui
-                // s'appelle « document » : le dire vaut mieux que « 0 ligne ».
-                'error' => 'réponse illisible en JSON (' . strlen($body) . ' octets)',
-            ];
-        }
+        unset($base);
 
         return $this->cache[$erpShopId] = self::extract($decoded);
     }
@@ -374,64 +370,5 @@ final class PriceListRepository
         }
 
         return null;
-    }
-
-    /**
-     * Appel HTTP.
-     *
-     * cURL s'il est chargé, flux HTTP sinon : les deux existent sur la plupart
-     * des installations, aucun des deux n'est garanti. Le délai est court —
-     * l'appel se fait pendant qu'un utilisateur attend son écran, et un ERP
-     * lent doit produire un repli sur le catalogue, pas une page bloquée.
-     */
-    private function fetch(string $url): string
-    {
-        $timeout = max(1, (int) (Env::get('MAR_ERP_API_TIMEOUT', '5') ?? '5'));
-        $token   = Env::get('MAR_ERP_API_TOKEN');
-
-        $headers = ['Accept: application/json'];
-        if ($token !== null && $token !== '') {
-            $headers[] = 'Authorization: Bearer ' . $token;
-        }
-
-        if (function_exists('curl_init')) {
-            $handle = curl_init($url);
-            curl_setopt_array($handle, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT        => $timeout,
-                CURLOPT_CONNECTTIMEOUT => $timeout,
-                CURLOPT_HTTPHEADER     => $headers,
-            ]);
-
-            $body   = curl_exec($handle);
-            $status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
-            $error  = curl_error($handle);
-            curl_close($handle);
-
-            if ($body === false) {
-                throw new RuntimeException($error === '' ? 'appel impossible' : $error);
-            }
-
-            if ($status >= 400) {
-                throw new RuntimeException('HTTP ' . $status);
-            }
-
-            return (string) $body;
-        }
-
-        $context = stream_context_create(['http' => [
-            'method'        => 'GET',
-            'header'        => implode("\r\n", $headers),
-            'timeout'       => $timeout,
-            'ignore_errors' => true,
-        ]]);
-
-        $body = @file_get_contents($url, false, $context);
-
-        if ($body === false) {
-            throw new RuntimeException('appel impossible');
-        }
-
-        return $body;
     }
 }
