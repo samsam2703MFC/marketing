@@ -586,6 +586,40 @@ export default function ObjectivesStep({
     writeCross(parts.map((part) => ({ shopId, itemId: part.key, value: String(part.valeur) })))
   }
 
+
+  /**
+   * Nouveau total pour une boutique déjà détaillée.
+   *
+   * Le champ était bloqué dès qu'un détail existait : le total étant la somme
+   * des lignes, le laisser saisir aurait fait dire deux choses différentes au
+   * même écran. Sauf que le détail apparaît dès qu'on répartit un pourcentage,
+   * c'est-à-dire presque toujours — et l'écran se retrouvait entièrement grisé
+   * sans dire pourquoi ni comment en sortir.
+   *
+   * Le total redevient donc saisissable, et c'est le détail qui suit : la somme
+   * demandée se répartit sur les lignes existantes, au prorata de ce qu'elles
+   * portent. Rien n'est écrasé en douce — les lignes changent sous les yeux de
+   * celui qui tape, juste en dessous.
+   */
+  const redistribuer = (shop: ShopSalesRow, saisie: string) => {
+    if (data === null || !/^\d+$/.test(saisie.trim())) {
+      return
+    }
+
+    const poids = data.products.map((produit) => ({
+      key: produit.item_id,
+      poids: crossValue(shop.shop_id, produit.item_id) ?? (shop.quantities[produit.item_id] ?? 0),
+    }))
+
+    writeCross(
+      repartir(readInt(saisie), poids).map((part) => ({
+        shopId: shop.shop_id,
+        itemId: part.key,
+        value: String(part.valeur),
+      })),
+    )
+  }
+
   /** Objectif détaillé d'une boutique : somme de ses cases et de son historique. */
   const detailTotalOf = (shop: ShopSalesRow): number =>
     data === null
@@ -1284,14 +1318,17 @@ export default function ObjectivesStep({
                       value={detaille ? String(detailTotalOf(shop)) : raw}
                       inputMode="numeric"
                       placeholder="0"
-                      disabled={detaille}
                       title={detaille
-                        ? 'Somme du détail ci-dessous — effacez le détail pour saisir un total'
+                        ? 'Réparti sur le détail ci-dessous, au prorata des lignes existantes'
                         : undefined}
                       aria-label={`Objectif ${shop.shop_name}`}
                       aria-invalid={!valid}
                       className={valid ? undefined : 'is-invalid'}
-                      onChange={(e) => setObjective(shop.shop_id, e.target.value)}
+                      onChange={(e) =>
+                        detaille
+                          ? redistribuer(shop, e.target.value)
+                          : setObjective(shop.shop_id, e.target.value)
+                      }
                     />
                     {!valid ? (
                       <span className="error">Entier ≥ 0</span>
@@ -1320,7 +1357,14 @@ export default function ObjectivesStep({
                       }
                     >
                       {ouvert ? '▾' : '▸'} Par catégorie ou produit
-                      {detaille ? <span className="shop-detail__flag">détaillé</span> : null}
+                      {detaille ? (
+                        <span
+                          className="shop-detail__flag"
+                          title="Cette boutique porte des objectifs par produit : le total ci-dessus en est la somme, et le modifier les répartit."
+                        >
+                          détaillé
+                        </span>
+                      ) : null}
                     </button>
 
                     {ouvert ? (
