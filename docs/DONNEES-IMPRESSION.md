@@ -207,6 +207,14 @@ questions : quelle photo, et part-elle à l'impression.
 | Photo du catalogue | `mar_offer_item.image_url` | à défaut |
 | Aucune | — | `image_url: null`, et `show_photo` retombe à `false` |
 
+Une **gamme** n'est pas un produit. Elle entre dans l'offre au même titre — c'est
+elle qui la nomme —, mais elle n'a ni prix ni ligne sur le dépliant : le dossier
+d'impression écarte déjà tout ce qui n'est pas `category = 'produit'`. Son
+illustration est par ailleurs dessinée une fois pour toutes
+(`public/img/seasons/`, reconnue au mot-clé du libellé). L'étape la montre donc
+à part, avec son visuel, et ne lui réclame rien — elle ne compte pas non plus
+dans le « n photos sur m produits ».
+
 Une photo déposée dans l'étape ne vaut **que pour cette campagne** : elle couvre
 celle du catalogue le temps de l'opération sans la remplacer, une opération de
 Noël pouvant vouloir son propre visuel sans que le catalogue change pour tout le

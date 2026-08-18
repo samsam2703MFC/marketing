@@ -3796,3 +3796,13 @@ table select,
    selon le poste : on l'habille d'un bouton et on le masque. */
 .photos__envoi { position: relative; overflow: hidden; cursor: pointer; }
 .photos__envoi input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+/* Une gamme n'est pas un produit : pas de case, pas de dépôt, rien à décider.
+   Le bloc se distingue donc de la liste des produits — fond neutre et
+   illustration entière plutôt que recoupée, un visuel de marque n'étant pas
+   une photo qu'on recadre. */
+.photos__titre { margin: 20px 0 8px; font-size: 13px; font-weight: 600; }
+
+.photos--gammes .photos__item { background: var(--paper, #fbf9f6); }
+.photos--gammes .photos__vignette { background: #fff; }
+.photos--gammes .photos__vignette img { object-fit: contain; padding: 8px; }
