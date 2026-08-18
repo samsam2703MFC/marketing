@@ -428,9 +428,13 @@ $response  = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
         // périmée qui doit retomber sur le libellé seul plutôt qu'échouer.
         'items'         => [
             'Brochette maison',
-            ['label' => 'Tarte du jour', 'offer_item_id' => $catalogItemId],
+            // Photo propre à la campagne : elle doit primer sur celle du
+            // catalogue sans la remplacer.
+            ['label' => 'Tarte du jour', 'offer_item_id' => $catalogItemId,
+             'show_photo' => true, 'image_url' => '/img/campagnes/tarte.jpg'],
             '  ',
-            ['label' => 'Référence disparue', 'offer_item_id' => 999999],
+            ['label' => 'Référence disparue', 'offer_item_id' => 999999,
+             'show_photo' => false],
         ],
     ],
     'pos_survey_enabled' => true,
@@ -628,6 +632,53 @@ check(
         'SELECT offer_item_id FROM mar_campaign_offer_item WHERE campaign_offer_id = %d AND label = \'Référence disparue\'',
         $offerId
     ))->fetchColumn() === null
+);
+
+// --- Photos produits --------------------------------------------------------
+// Le dossier d'impression portait une option `show_photo` figée à « vrai »,
+// faute d'écran pour la poser. L'étape « Photos produits » la pose ; ce qui
+// suit vérifie qu'elle traverse la chaîne jusqu'au fichier imprimé.
+$photos = $pdo->query(sprintf(
+    'SELECT label, show_photo, image_url FROM mar_campaign_offer_item
+      WHERE campaign_offer_id = %d ORDER BY sort_order',
+    $offerId
+))->fetchAll();
+$parLabel = [];
+foreach ($photos as $ligne) {
+    $parLabel[$ligne['label']] = $ligne;
+}
+
+check(
+    'une photo propre à la campagne est enregistrée',
+    ($parLabel['Tarte du jour']['image_url'] ?? null) === '/img/campagnes/tarte.jpg'
+);
+check(
+    'la case décochée est enregistrée',
+    (int) ($parLabel['Référence disparue']['show_photo'] ?? 1) === 0
+);
+// Un appelant qui ne parle pas de photo ne doit pas en priver la campagne :
+// c'est ce que faisait le module avant que la question soit posée.
+check(
+    'un produit sans mention garde sa photo',
+    (int) ($parLabel['Brochette maison']['show_photo'] ?? 0) === 1
+        // `??` rendrait « x » sur une valeur nulle, qui est justement la valeur
+        // attendue : on regarde la clé, puis son contenu.
+        && array_key_exists('image_url', $parLabel['Brochette maison'] ?? [])
+        && $parLabel['Brochette maison']['image_url'] === null
+);
+
+$relu = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $newId))['body'];
+$tarte = null;
+foreach ($relu['offer']['items'] ?? [] as $ligne) {
+    if ($ligne['label'] === 'Tarte du jour') {
+        $tarte = $ligne;
+    }
+}
+check(
+    'le brouillon rend la photo et son catalogue',
+    ($tarte['image_url'] ?? null) === '/img/campagnes/tarte.jpg'
+        && array_key_exists('catalog_image_url', $tarte ?? []),
+    json_encode($tarte)
 );
 
 $response = call($router, 'GET', '/api/v1/marketing/offer-items');
@@ -2181,6 +2232,20 @@ $aImprimer = (int) call($router, 'POST', '/api/v1/marketing/campaigns', [], [
             'mechanic_type'  => 'PERCENT',
             'discount_pct'   => 20,
             'baseline_price' => 20.00,
+            'image_url'      => '/img/campagnes/galette.jpg',
+        ], [
+            // Même produit, photo refusée : c'est la case de l'étape « Photos »
+            // que le dossier doit respecter, pas la présence d'une image.
+            'label'          => 'Galette sans photo',
+            'offer_item_id'  => $catalogItemId,
+            'baseline_price' => 18.00,
+            'show_photo'     => false,
+            'image_url'      => '/img/campagnes/galette.jpg',
+        ], [
+            // Ni photo de campagne ni photo au catalogue : le dossier doit
+            // rendre un vide franc plutôt qu'une image de remplacement.
+            'label'          => 'Galette nature',
+            'baseline_price' => 12.00,
         ]],
     ],
 ])['body']['inserted_id'];
@@ -2197,6 +2262,25 @@ check(
     json_encode($dossier['campaign'] ?? null)
 );
 
+// La photo suit ce que l'étape « Photos produits » a décidé : la même image
+// s'imprime pour l'un et pas pour l'autre.
+$parProduit = [];
+foreach ($dossier['products'] ?? [] as $produit) {
+    $parProduit[$produit['label']] = $produit;
+}
+check(
+    'la photo de campagne arrive au dossier',
+    ($parProduit['Tarte du jour']['image_url'] ?? null) === '/img/campagnes/galette.jpg'
+        && ($parProduit['Tarte du jour']['options']['show_photo'] ?? false) === true,
+    json_encode($parProduit['Tarte du jour']['options'] ?? null)
+);
+check(
+    'une photo refusée ne s\'imprime pas, même si elle existe',
+    ($parProduit['Galette sans photo']['options']['show_photo'] ?? true) === false,
+    json_encode($parProduit['Galette sans photo']['options'] ?? null)
+);
+
+
 // Le prix après promotion se calcule ici, une fois pour tous les gabarits.
 $produit = $dossier['products'][0] ?? [];
 check(
@@ -2208,7 +2292,10 @@ check(
 );
 check(
     'la photo absente vaut null, pas une image de remplacement',
-    array_key_exists('image_url', $produit) && $produit['image_url'] === null
+    array_key_exists('image_url', $parProduit['Galette nature'] ?? [])
+        && $parProduit['Galette nature']['image_url'] === null
+        && ($parProduit['Galette nature']['options']['show_photo'] ?? true) === false,
+    json_encode($parProduit['Galette nature'] ?? null)
 );
 check(
     'les mentions de validité sont rédigées',

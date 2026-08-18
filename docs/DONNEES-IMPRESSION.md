@@ -195,30 +195,48 @@ dériver trois, et deux gabarits en dériveraient deux résultats différents.
 
 ---
 
-## 8. Les photos produits — *dormant*
+## 8. Les photos produits — *en base*
 
-`mar_offer_item.image_url` **existe** dans le catalogue. Rien ne l'écrit — la
-reprise ERP ne lit pas de colonne d'image — et rien ne la lit : l'étape « Offre »
-affiche des illustrations locales choisies par famille et par saison
-(`public/img/…`), pas la photo du produit.
+Une étape de l'assistant, **« Photos produits »**, se tient entre « Prix » et
+« Budget ». Elle liste les produits retenus et pose, pour chacun, deux
+questions : quelle photo, et part-elle à l'impression.
 
-Il manque donc les deux bouts :
+| Source | Où | Priorité |
+|---|---|---|
+| Photo de la campagne | `mar_campaign_offer_item.image_url` | prime |
+| Photo du catalogue | `mar_offer_item.image_url` | à défaut |
+| Aucune | — | `image_url: null`, et `show_photo` retombe à `false` |
 
-1. **La source.** Si la table `product` de l'ERP porte une image, la reprise
-   peut la découvrir comme elle découvre les autres colonnes — dites-moi son
-   nom, ou je l'ajoute à la liste des candidats (`image`, `photo`, `picture`,
-   `image_url`, `img`, `thumbnail`). À défaut, un envoi manuel par produit,
-   comme le visuel de campagne.
-2. **Les options d'impression**, à décider par produit et par support :
+Une photo déposée dans l'étape ne vaut **que pour cette campagne** : elle couvre
+celle du catalogue le temps de l'opération sans la remplacer, une opération de
+Noël pouvant vouloir son propre visuel sans que le catalogue change pour tout le
+réseau.
+
+`options.show_photo` du dossier d'impression n'est plus figé à `true` : il vaut
+ce que la case a dit, **et** exige qu'une photo existe — on n'annonce pas au
+gabarit une image qu'on n'a pas.
+
+Reste ouvert, et hors de portée de ce dépôt : **la photo du catalogue n'est
+alimentée par rien.** La reprise ERP ne lit aucune colonne d'image. Deux façons
+de la remplir, au choix :
+
+1. **Depuis la fiche produit de l'ERP** — dites-moi le nom de la colonne ou de
+   l'endpoint (le swagger expose `/api/v1/products/{id}` et
+   `/api/v1/products/{id}/technical-sheet`), et la reprise la découvrira comme
+   elle découvre les autres.
+2. **À la main, par campagne** — c'est ce que l'étape permet déjà, sans rien
+   attendre de personne.
+
+Restent à construire, par produit et par support, les options de mise en page
+que le dossier n'expose pas encore :
 
 ```
-afficher la photo          oui / non
 cadrage                    remplir (recoupé) / entier (avec marges)
 point focal                0–100, comme le visuel de campagne
-afficher le prix barré     oui / non
-afficher le prix après     oui / non
-afficher la mécanique      oui / non   (« 2+1 offert »)
 ```
+
+Les trois autres (`show_price_before`, `show_price_after`, `show_mechanic`) se
+déduisent de ce qui existe : on n'annonce pas un prix qu'on n'a pas.
 
 ---
 

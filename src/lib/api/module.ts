@@ -419,6 +419,10 @@ export interface OfferItemPayload {
   margin_pct?: number | string | null
   /** Objectif réseau de pièces sur ce produit ; nul = aucun objectif posé. */
   target_pieces?: number | string | null
+  /** La photo de ce produit part-elle dans le dossier d'impression. */
+  show_photo?: boolean
+  /** Photo propre à cette campagne ; nulle = celle du catalogue. */
+  image_url?: string | null
 }
 
 export interface CampaignDraft {
@@ -662,6 +666,8 @@ export interface OfferItem {
   /** Famille de produits, quand la reprise l'a trouvée. */
   detail: string | null
   price_amount: number | null
+  /** Photo du catalogue, quand la reprise en a trouvé une. */
+  image_url: string | null
   /** Gammes saisonnières où le produit est actif (`mar_offer_item_season`). */
   season_ids: number[]
 }

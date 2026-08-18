@@ -3747,3 +3747,52 @@ table select,
 /* Un seul mois : la grille ne doit pas s'étaler sur toute la largeur du
    formulaire, où elle donnerait des cases de cinq centimètres. */
 .calendar--single { max-width: 22rem; }
+
+/* ── Photos produits ─────────────────────────────────────────────────────
+   Une vignette par produit, à taille égale : c'est en les voyant côte à côte
+   qu'on repère celui dont la photo manque, pas en lisant une liste. */
+.photos { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+
+.photos__bilan { margin: 0; font-size: 13px; }
+
+.photos__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fff;
+}
+
+.photos__vignette {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 84px;
+  height: 84px;
+  overflow: hidden;
+  border-radius: 9px;
+  background: var(--paper, #fbf9f6);
+}
+
+.photos__vignette img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Un cadre en pointillé plutôt qu'une image de remplacement : un gabarit
+   prendrait la seconde pour la photo du produit, et l'œil aussi. */
+.photos__vignette.is-empty { border: 1px dashed var(--line); font-size: 11px; text-align: center; }
+
+.photos__corps { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 0; }
+.photos__nom { font-size: 13.5px; font-weight: 600; }
+.photos__source { font-size: 11.5px; }
+
+.photos__case { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12.5px; }
+.photos__case input { width: auto; }
+
+.photos__actions { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+
+/* Le champ de fichier natif affiche « Aucun fichier sélectionné » en anglais
+   selon le poste : on l'habille d'un bouton et on le masque. */
+.photos__envoi { position: relative; overflow: hidden; cursor: pointer; }
+.photos__envoi input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }

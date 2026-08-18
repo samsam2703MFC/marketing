@@ -504,6 +504,16 @@ final class CampaignRepository
             'target_pieces'  => ($item['target_pieces'] ?? '') === '' || ($item['target_pieces'] ?? null) === null
                 ? null
                 : max(0, (int) $item['target_pieces']),
+            // La photo part-elle à l'impression, et laquelle. Absent = oui, et
+            // celle du catalogue : c'est ce que le module faisait avant que
+            // l'écran ne pose la question, et un dossier qui perdrait ses
+            // photos parce qu'un appelant se tait serait une régression.
+            'show_photo'     => array_key_exists('show_photo', $item)
+                ? (filter_var($item['show_photo'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0)
+                : 1,
+            'image_url'      => trim((string) ($item['image_url'] ?? '')) === ''
+                ? null
+                : mb_substr(trim((string) $item['image_url']), 0, 500),
         ];
 
         if ($mechanic === 'PERCENT') {
@@ -1123,11 +1133,11 @@ final class CampaignRepository
             'INSERT INTO mar_campaign_offer_item
                 (campaign_offer_id, offer_item_id, label, sort_order,
                  mechanic_type, discount_pct, fixed_price, buy_qty, get_qty,
-                 baseline_price, margin_pct, target_pieces)
+                 baseline_price, margin_pct, target_pieces, show_photo, image_url)
              VALUES
                 (:offer_id, :offer_item_id, :label, :sort_order,
                  :mechanic_type, :discount_pct, :fixed_price, :buy_qty, :get_qty,
-                 :baseline_price, :margin_pct, :target_pieces)'
+                 :baseline_price, :margin_pct, :target_pieces, :show_photo, :image_url)'
         );
 
         $order = 0;
@@ -1758,7 +1768,8 @@ final class CampaignRepository
             'SELECT ci.label, ci.offer_item_id, ci.sort_order,
                     ci.mechanic_type, ci.discount_pct, ci.fixed_price,
                     ci.buy_qty, ci.get_qty, ci.baseline_price, ci.margin_pct,
-                    ci.target_pieces, oi.category
+                    ci.target_pieces, ci.show_photo, ci.image_url,
+                    oi.category, oi.image_url AS catalog_image_url
                FROM mar_campaign_offer_item ci
                LEFT JOIN mar_offer_item oi ON oi.id = ci.offer_item_id
               WHERE ci.campaign_offer_id = :id

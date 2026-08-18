@@ -6,6 +6,7 @@ import type { Role } from '../../lib/navigation'
 import { describeError } from '../../state/auth'
 import ObjectivesStep from './ObjectivesStep'
 import PricingStep from './PricingStep'
+import PhotosStep from './PhotosStep'
 import ProspectList from './ProspectList'
 import RangeCalendar from '../../components/RangeCalendar'
 
@@ -80,7 +81,21 @@ interface OfferElement {
    * du total, sans qu'on lui dise de quoi il est fait.
    */
   target_pieces: string
+
+  /**
+   * Photos, posées à l'étape « Photos produits ».
+   *
+   * `show_photo` : cette photo part-elle à l'impression. Vrai par défaut, ce
+   * qui est le comportement qu'avait le module avant que l'écran ne pose la
+   * question.
+   *
+   * `image_url` : la photo retenue **pour cette campagne**. Vide = celle du
+   * catalogue, qui reste la référence.
+   */
+  show_photo: boolean
+  image_url: string
 }
+
 
 /** Codes de `mar_promotion_mechanic`. */
 export type MechanicCode =
@@ -101,6 +116,8 @@ export function blankPricing(): Omit<OfferElement, 'offer_item_id' | 'label' | '
     baseline_price: '',
     margin_pct: '',
     target_pieces: '',
+    show_photo: true,
+    image_url: '',
   }
 }
 
@@ -369,6 +386,16 @@ const STEPS: Step[] = [
     },
   },
   {
+    // Après le prix, avant le budget : on choisit les photos une fois que
+    // l'offre et ses prix sont arrêtés, et avant de parler d'argent — c'est
+    // le dernier geste qui touche encore aux produits eux-mêmes.
+    key: 'photos',
+    label: 'Photos produits',
+    // Jamais bloquante : une campagne peut s'imprimer sans photo, et un
+    // produit sans photo au catalogue ne doit pas retenir tout l'assistant.
+    blocking: () => null,
+  },
+  {
     key: 'budget',
     label: 'Budget & leviers',
     blocking: (d) =>
@@ -600,6 +627,7 @@ export default function CampaignBuilder({
         {here === 'offer' ? <OfferStep {...shared} /> : null}
         {here === 'objectives' ? <ObjectivesStep {...shared} /> : null}
         {here === 'pricing' ? <PricingStep {...shared} /> : null}
+        {here === 'photos' ? <PhotosStep {...shared} /> : null}
         {here === 'budget' ? <BudgetStep {...shared} /> : null}
         {here === 'communication' ? <CommunicationStep {...shared} agencies={agencies.data ?? []} /> : null}
         {here === 'planning' ? <PlanningStep {...shared} /> : null}
@@ -716,6 +744,8 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
       baseline_price: numberOrBlank(item.baseline_price),
       margin_pct: numberOrBlank(item.margin_pct),
       target_pieces: numberOrBlank(item.target_pieces),
+      show_photo: item.show_photo ?? true,
+      image_url: item.image_url ?? '',
     })),
 
     color_primary_hex: state.colors?.color_primary_hex ?? '',
@@ -857,6 +887,8 @@ function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): Cam
       baseline_price: num(item.baseline_price),
       margin_pct: num(item.margin_pct),
       target_pieces: num(item.target_pieces),
+      show_photo: item.show_photo,
+      image_url: item.image_url.trim() || null,
     }))
     .filter((item) => item.label !== '')
 

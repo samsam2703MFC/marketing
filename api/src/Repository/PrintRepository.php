@@ -211,20 +211,23 @@ final class PrintRepository
             'name'      => $item['catalog_name'],
             'family'    => $item['category_detail'],
             'sku_ref'   => $item['sku_ref'],
-            // La colonne existe au catalogue, rien ne la remplit encore : un
-            // `null` franc vaut mieux qu'une image de remplacement, qu'un
-            // gabarit prendrait pour la photo du produit.
-            'image_url' => $item['catalog_image'],
+            // La photo retenue pour cette campagne prime sur celle du
+            // catalogue : une opération peut vouloir son propre visuel sans que
+            // le catalogue change pour tout le réseau. Aucune des deux ? Un
+            // `null` franc, plutôt qu'une image de remplacement qu'un gabarit
+            // prendrait pour la photo du produit.
+            'image_url' => $item['campaign_image'] ?: $item['catalog_image'],
             'price_before'    => $calcul['before'],
             'price_after'     => $calcul['after'],
             'price_before_ht' => $calcul['before_ht'],
             'price_after_ht'  => $calcul['after_ht'],
             'mechanic'        => $calcul['mechanic'],
-            // Réglages d'affichage par produit, à construire : tant que
-            // l'écran ne les propose pas, tout s'imprime, ce qui est le
-            // comportement qu'un gabarit attend par défaut.
+            // Réglages d'affichage par produit. `show_photo` vient de l'étape
+            // « Photos » ; les trois autres se déduisent de ce qui existe —
+            // on n'annonce pas un prix qu'on n'a pas.
             'options' => [
-                'show_photo'        => true,
+                'show_photo'        => (bool) ($item['show_photo'] ?? 1)
+                    && ($item['campaign_image'] ?: $item['catalog_image']) !== null,
                 'show_price_before' => $avant !== null,
                 'show_price_after'  => $apres !== null,
                 'show_mechanic'     => $texte !== null,
@@ -428,6 +431,7 @@ final class PrintRepository
         $items = $connection->prepare(
             'SELECT ci.label, ci.offer_item_id, ci.mechanic_type, ci.discount_pct,
                     ci.fixed_price, ci.buy_qty, ci.get_qty, ci.baseline_price,
+                    ci.show_photo, ci.image_url AS campaign_image,
                     oi.name AS catalog_name, oi.detail AS category_detail,
                     oi.sku_ref, oi.image_url AS catalog_image, oi.category
                FROM mar_campaign_offer_item ci

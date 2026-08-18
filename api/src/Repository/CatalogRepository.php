@@ -32,7 +32,7 @@ final class CatalogRepository
         $connection = Database::connection();
 
         $rows = $connection->query(
-            'SELECT id, category, sku_ref, name, detail, price_amount
+            'SELECT id, category, sku_ref, name, detail, price_amount, image_url
                FROM mar_offer_item
               WHERE is_active = 1
               ORDER BY detail IS NULL, detail, name'
