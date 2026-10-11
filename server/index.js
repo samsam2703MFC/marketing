@@ -12,6 +12,7 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getDb, DB_PATH } from './db.js';
 import { handleApi } from './api.js';
+import { serviceWorkerSource } from './sw.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC_DIR = join(ROOT, 'public');
@@ -38,9 +39,26 @@ const MIME = {
   '.otf': 'font/otf',
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
+  '.gif': 'image/gif',
+  '.avif': 'image/avif',
+  // Vidéos (médiathèque agence, vidéos surprise, animations) : sans leur vrai
+  // type, certains lecteurs refusent de les jouer depuis le cache des écrans.
+  '.mp4': 'video/mp4',
+  '.m4v': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
+  '.ogv': 'video/ogg',
+  '.txt': 'text/plain; charset=utf-8',
 };
 
 function serveStatic(req, res, pathname) {
+  // Service worker des écrans : généré (liste + version de la coquille).
+  if (pathname === '/sw.js') {
+    const body = Buffer.from(serviceWorkerSource(PUBLIC_DIR));
+    res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'content-length': body.length, 'cache-control': 'no-cache' });
+    res.end(req.method === 'HEAD' ? undefined : body);
+    return;
+  }
   if (pathname === '/') pathname = '/index.html';
   if (pathname === '/player') pathname = '/player.html';
   if (pathname === '/film') pathname = '/film.html';
@@ -54,12 +72,44 @@ function serveStatic(req, res, pathname) {
     return;
   }
   const ext = extname(file).toLowerCase();
+  const st = statSync(file);
   const longCache = ['.png', '.jpg', '.jpeg', '.webp', '.ttf', '.otf', '.woff', '.woff2'].includes(ext);
-  res.writeHead(200, {
+  const etag = `W/"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}"`;
+  const headers = {
     'content-type': MIME[ext] || 'application/octet-stream',
-    'content-length': statSync(file).size,
     'cache-control': longCache ? 'public, max-age=86400' : 'no-cache',
-  });
+    etag,
+    'last-modified': st.mtime.toUTCString(),
+    'accept-ranges': 'bytes',
+  };
+  // Revalidation : le cache des écrans (et du navigateur) redemande chaque
+  // fichier avec son ETag ; inchangé → 304, rien n'est retéléchargé.
+  const inm = req.headers['if-none-match'];
+  const ims = Date.parse(req.headers['if-modified-since'] || '');
+  if ((inm && inm.split(/\s*,\s*/).includes(etag)) || (!inm && ims && ims >= Math.floor(st.mtimeMs / 1000) * 1000)) {
+    res.writeHead(304, headers);
+    res.end();
+    return;
+  }
+  // Lecture partielle (Range) : une balise <video> avance dans le fichier
+  // sans le télécharger en entier.
+  const r = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+  if (r && (r[1] !== '' || r[2] !== '') && st.size > 0) {
+    let start; let end;
+    if (r[1] === '') { start = Math.max(0, st.size - parseInt(r[2], 10)); end = st.size - 1; } // bytes=-N : les N derniers
+    else { start = parseInt(r[1], 10); end = r[2] === '' ? st.size - 1 : Math.min(parseInt(r[2], 10), st.size - 1); }
+    if (start > end || start >= st.size) {
+      res.writeHead(416, { ...headers, 'content-range': `bytes */${st.size}` });
+      res.end();
+      return;
+    }
+    res.writeHead(206, { ...headers, 'content-range': `bytes ${start}-${end}/${st.size}`, 'content-length': end - start + 1 });
+    if (req.method === 'HEAD') { res.end(); return; }
+    createReadStream(file, { start, end }).pipe(res);
+    return;
+  }
+  res.writeHead(200, { ...headers, 'content-length': st.size });
+  if (req.method === 'HEAD') { res.end(); return; }
   createReadStream(file).pipe(res);
 }
 

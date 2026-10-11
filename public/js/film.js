@@ -7,6 +7,9 @@
 // TV/box peut être pointée directement sur son format.
 import { html, h, render, Component } from './vendor/preact-htm.js';
 import { W, H, FUI, RUBY, renderModule, moduleDur, scheduledNow, playable, clx } from './renderer.js';
+import { snapshotAssets } from './assets.js';
+import { offlineSupported, loadSnapshot, saveSnapshot, syncAssets, cacheStats, resolveSnapshot, releaseExcept, gcAssets, requestPersist } from './offline.js';
+import { registerOfflineShell } from './sw-register.js';
 
 const REFRESH_MS = 30000;
 const apiUrl = (p) => new URL('api/v1' + p, location.href).toString();
@@ -16,6 +19,9 @@ const apiUrl = (p) => new URL('api/v1' + p, location.href).toString();
 const STORE = new URLSearchParams(location.search).get('store') || '';
 const FILM = new URLSearchParams(location.search).get('film') || '';
 const GROUP = new URLSearchParams(location.search).get('group') || '';
+// Cache local (IndexedDB) propre à CE lien : un écran branché sur ?store=…
+// rejoue son dernier film sans réseau, fichiers compris.
+const CACHE_KEY = 'film:' + (GROUP ? `group=${GROUP}` : FILM ? `film=${FILM}` : STORE ? `store=${STORE}` : 'all');
 const filmApi = () => {
   const q = new URLSearchParams();
   if (GROUP) q.set('group', GROUP);          // le groupe prime (comme côté serveur)
@@ -54,6 +60,7 @@ function initialFormat() {
 class Film extends Component {
   state = {
     snap: null, error: '', t: 0,
+    cache: { total: 0, cached: 0, missing: 0 }, offline: false, fromCache: false, syncing: false,
     winW: window.innerWidth, winH: window.innerHeight,
     fmt: initialFormat(),
     badge: true, panel: false,
@@ -65,6 +72,9 @@ class Film extends Component {
     window.addEventListener('resize', this._resize);
     this._last = performance.now();
     this._raf = requestAnimationFrame(this.tick);
+    registerOfflineShell();
+    requestPersist();
+    await this.bootFromCache();
     await this.load(true);
     this._poll = setInterval(() => this.load(false), REFRESH_MS);
     this._armBadge();
@@ -95,6 +105,16 @@ class Film extends Component {
     this._armBadge();
   }
 
+  // Le dernier film enregistré sur cet écran, rejoué avant tout contact réseau.
+  async bootFromCache() {
+    if (!offlineSupported) return;
+    const rec = await loadSnapshot(CACHE_KEY);
+    if (!rec || !rec.snap) return;
+    this.raw = rec.snap;
+    const st = await cacheStats(rec.snap);
+    this.setState({ snap: await resolveSnapshot(rec.snap), fromCache: true, cache: { ...st, missing: 0 }, t: 0 });
+  }
+
   async load(first) {
     try {
       const res = await fetch(filmApi(), { cache: 'no-store' });
@@ -103,6 +123,7 @@ class Film extends Component {
         throw new Error(j.error || `HTTP ${res.status}`);
       }
       const snap = await res.json();
+      if (this.state.offline) this.setState({ offline: false });
       // Le combo d'écrans du magasin (réglé dans la régie, ex. 3 × 55″
       // portrait = 6480 × 3840) donne la taille par défaut du lien ?store= —
       // sauf format explicite dans l'URL ou choix manuel dans le panneau.
@@ -112,17 +133,38 @@ class Film extends Component {
           this.setState({ fmt: { w: snap.format.w, h: snap.format.h, fit: f.fit || 'cover' } });
         }
       }
-      const cur = this.state.snap;
+      const cur = this.raw;
       const newVersion = !cur || cur.version !== snap.version;
       // Film continu : la boucle est régénérée en direct ; on l'applique quand la
       // révision change (changement de moment/saison), en repartant du début.
       const newRevision = snap.continuous && (!cur || cur.revision !== snap.revision);
       const changed = newVersion || newRevision || cur.dataVer !== snap.dataVer || cur.override !== snap.override;
-      if (changed) this.setState({ snap, error: '', ...(newVersion || newRevision ? { t: 0 } : {}) });
-      else if (first) this.setState({ snap, error: '' });
+      if (changed || first || this.state.fromCache) await this.apply(snap, newVersion || newRevision);
     } catch (e) {
-      if (first) this.setState({ error: String(e.message || e) });
+      this.setState({ offline: true });
+      if (first && !this.state.snap) this.setState({ error: String(e.message || e) });
       // sinon : on continue sur le film en cache, comme un vrai écran
+    }
+  }
+
+  // Bascule atomique : le nouveau film ne remplace l'ancien qu'une fois TOUS
+  // ses fichiers téléchargés ; s'il en manque pour cause de réseau, l'ancien
+  // continue et on retente au prochain passage.
+  async apply(snap, restart) {
+    if (this.state.syncing) return;
+    this.setState({ syncing: true });
+    try {
+      const res = await syncAssets(snapshotAssets(snap));
+      const cache = { total: res.total, cached: res.ok.length, missing: res.missing.length + res.external.length };
+      if (res.error.length && this.state.snap) { this.setState({ syncing: false, cache }); return; }
+      this.raw = snap;
+      await saveSnapshot(CACHE_KEY, snap);
+      const resolved = await resolveSnapshot(snap);
+      this.setState({ snap: resolved, error: '', cache, fromCache: false, syncing: false, ...(restart ? { t: 0 } : {}) });
+      releaseExcept(snap);
+      gcAssets();
+    } catch {
+      this.setState({ syncing: false });
     }
   }
 
@@ -210,14 +252,14 @@ class Film extends Component {
     if (st.error && !st.snap) {
       return html`<div style="height:100vh;display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;color:#B8B2A8;background:#0a0a0a;font-family:${FUI};padding:40px;text-align:center;">
         <img src="assets/logo-white.png" style="height:60px;opacity:0.8;" />
-        <div style="font-size:16px;color:#fff;">Film indisponible</div>
+        <div style="font-size:16px;color:#fff;">Film indisponible · Film niet beschikbaar</div>
         <div style="font-size:13px;max-width:520px;">${st.error}</div>
       </div>`;
     }
     if (!st.snap) {
       return html`<div style="height:100vh;display:flex;flex-direction:column;gap:16px;align-items:center;justify-content:center;background:#0a0a0a;font-family:${FUI};">
         <img src="assets/logo-white.png" style="height:60px;opacity:0.85;" />
-        <div style="color:#B8B2A8;font-size:14px;">Chargement du film…</div>
+        <div style="color:#B8B2A8;font-size:14px;">Chargement du film… · Film laden…</div>
       </div>`;
     }
 
@@ -234,11 +276,14 @@ class Film extends Component {
         : (this.playlistMods().length === 0 && (this.state.snap.playlist || []).length > 0
           ? 'éléments hors créneau à cette heure'
           : 'film vide — ajoute des éléments dans la régie');
+      // Sur un écran de magasin (?store=), les clients voient l'attente : le
+      // logo seul, sans texte, quelle que soit la langue du magasin. Le lien
+      // de partage garde l'explication, pour la régie.
       content = m
         ? renderModule(h, m, lt, { secPerLine: st.snap.secPerLine })
         : h('div', { style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', gap: 90, alignItems: 'center', justifyContent: 'center' } },
           h('img', { src: 'assets/logo.png', style: { height: 420 } }),
-          h('div', { style: { fontFamily: FUI, fontSize: 90, color: '#8A847C', letterSpacing: '0.14em', textTransform: 'uppercase', textAlign: 'center', padding: '0 200px' } }, idleMsg));
+          this.isScreenMode() ? null : h('div', { style: { fontFamily: FUI, fontSize: 90, color: '#8A847C', letterSpacing: '0.14em', textTransform: 'uppercase', textAlign: 'center', padding: '0 200px' } }, idleMsg));
     }
 
     const b = this.box();
@@ -282,8 +327,8 @@ class Film extends Component {
           `}
           <div style="display:flex;align-items:center;gap:10px;">
             <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-radius:999px;background:rgba(10,10,10,0.75);color:#fff;font-size:12.5px;backdrop-filter:blur(6px);">
-              <span style="width:8px;height:8px;border-radius:50%;background:#5BBE7A;"></span>
-              <span>${st.snap.playlistName || 'Film'}${st.snap.storeName ? ` · ${st.snap.storeName}` : ''}${st.snap.draft ? ' · brouillon (pas encore publié)' : ''} · v${st.snap.version} · prix d${st.snap.dataVer} · ${st.fmt.w}×${st.fmt.h}${st.snap.format && st.fmt.w === st.snap.format.w && st.fmt.h === st.snap.format.h ? ` (${st.snap.format.label})` : ''}${this.offAirNote()}</span>
+              <span style="width:8px;height:8px;border-radius:50%;background:${st.offline ? '#C0392B' : (st.syncing ? '#B8860B' : '#5BBE7A')};"></span>
+              <span>${st.offline ? 'hors ligne · ' : ''}${st.fromCache ? 'depuis le cache · ' : ''}cache ${st.cache.cached}/${st.cache.total}${st.cache.missing ? ` (${st.cache.missing} absent·s)` : ''} · ${st.snap.playlistName || 'Film'}${st.snap.storeName ? ` · ${st.snap.storeName}` : ''}${st.snap.draft ? ' · brouillon (pas encore publié)' : ''} · v${st.snap.version} · prix d${st.snap.dataVer} · ${st.fmt.w}×${st.fmt.h}${st.snap.format && st.fmt.w === st.snap.format.w && st.fmt.h === st.snap.format.h ? ` (${st.snap.format.label})` : ''}${this.offAirNote()}</span>
             </div>
             <button onClick=${() => { this.setState({ panel: !st.panel }); this._armBadge(); }} title="Choisir le format d'écran" style="padding:10px 14px;border-radius:999px;border:1px solid rgba(255,255,255,0.22);background:rgba(10,10,10,0.75);color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;backdrop-filter:blur(6px);">⛶ Format</button>
           </div>

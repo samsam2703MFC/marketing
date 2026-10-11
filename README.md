@@ -170,10 +170,32 @@ Le résultat s'affiche dans le toast (« tests live 7/7 OK ») et le détail dan
 
 ### Player (`/player.html`)
 S'authentifie par token (`sig_players.token`), envoie un **heartbeat toutes les 5 s**
-(état, cache %, média en cours, version jouée, disque). Quand une nouvelle version lui est
-assignée : téléchargement du snapshot, **préchargement de tous les médias** (progression = cache %),
-puis **bascule atomique** — l'ancienne playlist tourne jusqu'à ce que la nouvelle soit prête.
-Respecte la programmation des modules (jours / fenêtre horaire) et le mode « ⚡ Diffusion flash ».
+(état, cache réel, média en cours, version jouée, disque). Quand une nouvelle version lui est
+assignée : téléchargement du snapshot, **téléchargement réel de chacun de ses fichiers**
+(progression = cache %), puis **bascule atomique** — l'ancienne playlist tourne jusqu'à ce que
+la nouvelle soit prête. Respecte la programmation des modules (jours / fenêtre horaire) et le
+mode « ⚡ Diffusion flash ».
+
+### Écrans hors ligne (player et liens `film?store=…`)
+Chaque écran garde sur son disque (IndexedDB) **le dernier film reçu et tous ses fichiers** —
+photos, vidéos, animations — et le rejoue **au démarrage, avant tout contact réseau** :
+
+- La liste des fichiers d'un film est **unique** (`public/js/assets.js`), partagée par le serveur
+  (champ `media` des snapshots), le player et la visionneuse ; les fichiers passent par des URL
+  locales (`blob:`). Ce qui n'est pas dans le film (logos, fonds de catégorie) est gardé par le
+  service worker.
+- Un fichier en **échec réseau** bloque la bascule : l'écran garde l'ancienne version et retente
+  (délai croissant). Un fichier **absent du serveur** (404) ne la bloque pas, mais est **signalé**.
+- **Réseau → Écrans** affiche ce que l'écran a vraiment : « 10/11 fichiers sur l'écran · 1 absent
+  du serveur · stockage protégé · redémarre hors ligne ✓ ». Le « cache 100 % » ne ment plus :
+  l'ancien préchargement par `new Image()` échouait sur les vidéos et les comptait quand même.
+- **Coupure réseau, page ouverte** : l'écran continue, en http comme en https.
+- **Redémarrage sans réseau** : il faut le **service worker** (`/sw.js`, généré par
+  `server/sw.js`), qui garde la page, son code, la CSS, les polices et le décor. Le navigateur ne
+  l'autorise qu'en **https** (ou sur `localhost`) ; il se met à jour seul après chaque livraison
+  (version = empreinte des fichiers) et l'écran se recharge sur le nouveau code.
+- Le serveur sert les fichiers avec leur vrai type (vidéos comprises), un **ETag** (revalidation →
+  304, rien n'est retéléchargé) et la **lecture partielle** (`Range` → 206).
 
 Un player inconnu qui se présente avec un token `plyr_…` est **auto-enregistré** dans le magasin
 « Nouveaux écrans » — ouvrir `player.html?id=monecran&token=plyr_TEST42&name=Vitrine` suffit pour
@@ -182,7 +204,8 @@ le voir apparaître dans le réseau. Dans la vue Réseau, cliquer le nom d'un é
 ### Réseau & supervision
 KPIs, alertes, état par magasin / écran depuis les vrais heartbeats : en ligne (< 30 s),
 hors ligne (lecture depuis le cache local), version jouée vs assignée (« en retard »),
-fraîcheur des prix (périmé > 1 h), cache, disque, dernier contact.
+fraîcheur des prix (périmé > 1 h), cache réel (fichiers sur l'écran, absents du serveur,
+stockage protégé, redémarrage hors ligne possible), disque, dernier contact.
 
 ### Contenu dynamique par magasin
 Un seul gabarit s'adapte à chaque point de vente, **résolu par magasin à la diffusion**

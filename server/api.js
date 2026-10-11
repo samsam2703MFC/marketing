@@ -18,6 +18,8 @@ import {
   checkLogin, createSession, sessionUser, destroySession, agencyAccountEnabled,
 } from './db.js';
 import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
+// Liste des fichiers d'un snapshot — la même que celle du cache des écrans.
+import { snapshotAssets } from '../public/js/assets.js';
 import { publicPwaConfig, savePwaConfig, resetPwaConfig, testPwa, importPwa, pwaBaseName, importSeasons, inspectSeasons, inspectIngredients } from './pwadb.js';
 import { scheduleMirror, syncMirror, mirrorStatus } from './mirror.js';
 import { runConnectionTest, runDeployTests, tcpPing } from './livetest.js';
@@ -222,6 +224,8 @@ function finishSnapshot(snap, storeId, date = new Date()) {
   applyStoreTokens(snap.modules, storeId, date);
   resolveSurprise(snap.modules);
   resolveMediaElements(snap.modules, date);
+  // Après les pioches (surprise, média ciblé) : la liste reflète ce qui jouera.
+  snap.media = snapshotAssets(snap);
   return snap;
 }
 // Révision continue du film actuellement assigné à un player (ou null).
@@ -235,6 +239,7 @@ function continuousRevisionForVer(ver) {
 }
 
 const nowIso = () => new Date().toISOString();
+const parseDetail = (raw) => { try { return raw ? JSON.parse(raw) : null; } catch { return null; } };
 const secsSince = (iso) => (iso ? Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 1000)) : null);
 
 function playerRow(id) {
@@ -289,6 +294,7 @@ export function fleetJson() {
       syncAgo: seen ?? 999999,
       cache: p.cache_pct, media: p.media, disk: p.disk, temp: p.temp,
       token: p.token, groupId: p.group_id || '',
+      detail: parseDetail(p.detail),
     });
   }
   // Les magasins sans écran restent visibles (on peut préparer combo, langue
@@ -355,13 +361,7 @@ export function reportJson() {
 
 // ---------------------------------------------------------------------------
 function collectMedia(modules) {
-  const media = new Set();
-  for (const m of modules) {
-    if (m.tag && m.tag.enabled && m.tag.img) media.add(m.tag.img);
-    for (const it of m.items || []) if (it.img) media.add(it.img);
-  }
-  media.add('assets/logo.png');
-  return [...media];
+  return snapshotAssets({ modules });
 }
 
 function cleanSchedule(s) {
@@ -462,6 +462,20 @@ async function publish({ mode, targets, slot, when, activateAt, playlistId, sche
 }
 
 // ---------------------------------------------------------------------------
+// Détail du cache hors ligne envoyé par l'écran : seuls les champs attendus,
+// en nombres et booléens — rien d'autre n'entre en base.
+function cleanDetail(d) {
+  if (!d || typeof d !== 'object') return null;
+  const n = (v) => (Number.isFinite(+v) ? Math.max(0, Math.round(+v)) : 0);
+  const a = d.assets && typeof d.assets === 'object' ? d.assets : {};
+  const s = d.storage && typeof d.storage === 'object' ? d.storage : {};
+  return {
+    assets: { total: n(a.total), cached: n(a.cached), missing: n(a.missing), external: n(a.external), error: n(a.error), quota: !!a.quota },
+    storage: { persisted: !!s.persisted, usage: n(s.usage), quota: n(s.quota) },
+    offlineCache: !!d.offlineCache, secure: !!d.secure, sw: !!d.sw, fromCache: !!d.fromCache, offlineFor: n(d.offlineFor),
+  };
+}
+
 function heartbeat(id, body, url) {
   const db = getDb();
   let p = playerRow(id);
@@ -492,6 +506,8 @@ function heartbeat(id, body, url) {
       Number.isFinite(+body.playedVer) ? +body.playedVer : p.played_ver,
       dataVer, nowIso(), dataVer, nowIso(), nowIso(), id
     );
+    const detail = cleanDetail(body.detail);
+    if (detail) db.prepare('UPDATE sig_players SET detail = ? WHERE id = ?').run(JSON.stringify(detail), id);
     db.prepare('INSERT INTO sig_heartbeats(player_id, state, cache_pct, media, disk, temp) VALUES (?, ?, ?, ?, ?, ?)')
       .run(id, String(body.state || ''), Math.round(+body.cachePct || 0), String(body.media || ''), String(body.disk || ''), String(body.temp || ''));
   }

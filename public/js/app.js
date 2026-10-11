@@ -2634,6 +2634,23 @@ class App extends Component {
           dataAgeColor: dstale ? '#8D1D2C' : '#8A847C',
           cachePct: `${p.cache}%`,
           cacheColor: p.cache >= 100 ? '#2E7D32' : p.cache >= 50 ? '#B8860B' : '#8D1D2C',
+          // Ce que l'écran a VRAIMENT sur son disque (fichiers téléchargés, pas
+          // seulement « préchargés »), et s'il saurait redémarrer sans réseau.
+          ...(() => {
+            const d = p.detail;
+            if (!d) return { cacheNote: 'détail indisponible — player d\'avant le cache hors ligne', cacheNoteColor: '#8A847C' };
+            const a = d.assets || {};
+            const parts = [`${a.cached || 0}/${a.total || 0} fichiers sur l'écran`];
+            if (a.missing) parts.push(`${a.missing} absent(s) du serveur`);
+            if (a.external) parts.push(`${a.external} externe(s) non gardé(s)`);
+            if (a.error) parts.push(`${a.error} en échec réseau`);
+            if (a.quota) parts.push('disque plein');
+            parts.push(d.storage && d.storage.persisted ? 'stockage protégé' : 'stockage non protégé');
+            parts.push(d.sw ? 'redémarre hors ligne ✓' : (d.secure ? 'mise en cache de la page…' : 'http : ne redémarre pas hors ligne'));
+            if (d.fromCache) parts.push('joue depuis son cache');
+            const bad = a.missing || a.error || a.quota;
+            return { cacheNote: parts.join(' · '), cacheNoteColor: bad ? '#8D1D2C' : '#8A847C' };
+          })(),
           media: p.media,
           sync: p.state === 'offline' ? `hors ligne ${fmtAgo(p.syncAgo)}` : fmtAgo(p.syncAgo),
           health: p.state === 'offline' ? `heartbeats en file · ${p.disk}` : `${p.disk} · ${p.temp}`,
@@ -5042,6 +5059,7 @@ class App extends Component {
                     <div style="flex:1 1 auto;height:6px;border-radius:3px;background:rgba(35,34,32,0.10);overflow:hidden;"><div style="height:100%;border-radius:3px;background:${p.cacheColor};width:${p.cachePct};"></div></div>
                     <span style="flex:0 0 auto;font-variant-numeric:tabular-nums;">${p.cachePct}</span>
                   </div>
+                  <div title=${p.cacheNote} style="font-size:11px;color:${p.cacheNoteColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px;">${p.cacheNote}</div>
                   <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">▶ ${p.media}</div>
                 </div>
                 <div style="font-size:12px;color:#8A847C;text-align:right;"><div style="font-weight:500;color:#232220;">${p.sync}</div><div>${p.health}</div></div>

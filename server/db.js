@@ -9,6 +9,8 @@ import { hashPassword, verifyPassword, newSessionToken } from './auth.js';
 import { continuousDefaults, normContinuous } from '../public/js/continuous.js';
 // Enrobage du décalage d'une variable de gabarit (partagé avec la régie).
 import { wrapHtmlVarPos, applyHtmlVarPositions } from '../public/js/html-templates.js';
+// Fichiers d'un snapshot (liste partagée avec le cache des écrans).
+import { snapshotAssets } from '../public/js/assets.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const DB_PATH = process.env.SIG_DB || join(ROOT, 'data', 'signage.db');
@@ -257,6 +259,9 @@ function migrate(db) {
   // Rattachement d'un player à un groupe d'écrans (vide = niveau magasin, défaut).
   const plColsG = db.prepare('PRAGMA table_info(sig_players)').all().map((c) => c.name);
   if (plColsG.length && !plColsG.includes('group_id')) db.exec(`ALTER TABLE sig_players ADD COLUMN group_id TEXT NOT NULL DEFAULT ''`);
+  // État réel du cache hors ligne remonté par l'écran (JSON : fichiers en
+  // cache / absents, stockage persistant, service worker, durée hors ligne).
+  if (plColsG.length && !plColsG.includes('detail')) db.exec(`ALTER TABLE sig_players ADD COLUMN detail TEXT NOT NULL DEFAULT ''`);
 
   // Ce que le SECTEUR filtre, explicitement : les périodes de vente (matin /
   // midi / après-midi) et les catégories. Historiquement, un secteur avec des
@@ -1368,7 +1373,7 @@ export function buildContinuous(cfg, date = new Date(), ctx = {}) {
   // 7) Boucle vide : slide d'attente.
   if (!modules.length) modules.push({ id: 'k-empty', type: 'liaison', name: "L'Atelier By", sub: 'boucle en préparation', items: [], tag: { enabled: false } });
 
-  const media = modules.flatMap((m) => (m.items || []).map((it) => it.img)).filter((u) => u && !String(u).startsWith('data:'));
+  const media = snapshotAssets({ modules });
   return {
     modules,
     playlist: modules.map((m) => m.id),

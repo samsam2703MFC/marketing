@@ -109,7 +109,10 @@ export function layoutCfg(L, n) {
 // Nature d'un fichier d'animation, d'après son extension : c'est elle qui
 // décide du lecteur (balise vidéo, image, ou lecteur Lottie).
 export function animAssetKind(url) {
-  const u = String(url || '').split(/[?#]/)[0].toLowerCase();
+  const s = String(url || '');
+  // Copie locale du cache hors ligne (blob:…#nom.ext) : l'extension d'origine
+  // est gardée après le « # ».
+  const u = (s.startsWith('blob:') ? (s.split('#')[1] || '') : s.split(/[?#]/)[0]).toLowerCase();
   if (!u) return '';
   if (/\.(mp4|webm|mov|m4v|ogv|ogg)$/.test(u)) return 'video';
   if (/\.json$/.test(u)) return 'lottie';

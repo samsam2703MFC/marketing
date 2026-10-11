@@ -10,6 +10,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { snapshotAssets } from '../public/js/assets.js';
 
 const args = process.argv.slice(2);
 const MUTATE = args.includes('--mutate');
@@ -168,6 +169,40 @@ async function main() {
   await step('GET /player.html — player servi', async () => {
     const res = await fetch(BASE + '/player.html');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  });
+  await step('GET /sw.js — service worker des écrans (redémarrage hors ligne)', async () => {
+    const res = await fetch(BASE + '/sw.js');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!/javascript/.test(res.headers.get('content-type') || '')) throw new Error(`type ${res.headers.get('content-type')}`);
+    const src = await res.text();
+    const v = (src.match(/version ([0-9a-f]{12})/) || [])[1];
+    const shell = JSON.parse((src.match(/const SHELL = (\[[^\n]*\]);/) || [])[1] || '[]');
+    for (const f of ['player.html', 'film.html', 'js/player.js', 'js/offline.js', 'js/renderer.js', 'css/base.css', 'assets/logo.png']) {
+      if (!shell.includes(f)) throw new Error(`coquille incomplète : ${f} manque`);
+    }
+    // chaque fichier de la coquille doit exister, sinon l'installation échoue
+    for (const f of shell) { const r = await fetch(BASE + '/' + f, { method: 'HEAD' }); if (!r.ok) throw new Error(`${f} → HTTP ${r.status}`); }
+    return `version ${v} · ${shell.length} fichiers gardés`;
+  });
+  await step('Fichiers statiques — revalidation (304) et lecture partielle (206)', async () => {
+    const r1 = await fetch(BASE + '/assets/logo.png');
+    const etag = r1.headers.get('etag');
+    if (!r1.ok || !etag) throw new Error('ETag absent');
+    const r2 = await fetch(BASE + '/assets/logo.png', { headers: { 'if-none-match': etag } });
+    if (r2.status !== 304) throw new Error(`revalidation → HTTP ${r2.status} (attendu 304)`);
+    const r3 = await fetch(BASE + '/assets/logo.png', { headers: { range: 'bytes=0-99' } });
+    const body = await r3.arrayBuffer();
+    if (r3.status !== 206 || body.byteLength !== 100) throw new Error(`Range → HTTP ${r3.status}, ${body.byteLength} octets`);
+    return `ETag ${etag} · 304 · 206 (${r3.headers.get('content-range')})`;
+  });
+  await step('Snapshot — la liste « media » couvre tous les fichiers du film', async () => {
+    const res = await fetch(BASE + '/api/v1/film');
+    const f = await res.json();
+    if (!Array.isArray(f.media)) throw new Error('liste media absente');
+    const need = snapshotAssets(f);
+    const lack = need.filter((u) => !f.media.includes(u));
+    if (lack.length) throw new Error(`fichiers non listés : ${lack.slice(0, 3).join(', ')}`);
+    return `${f.media.length} fichier(s) listé(s)`;
   });
   await step('GET /film — visionneuse publique servie', async () => {
     const res = await fetch(BASE + '/film');
@@ -1001,10 +1036,15 @@ async function main() {
     });
     await step('POST heartbeat — auto-enregistrement d\'un player de test', async () => {
       const hb = await call('POST', `/api/v1/players/${pid}/heartbeat`, {
-        token, name: 'Écran de test live', state: 'playing', cachePct: 100, media: 'test', playedVer: 0, dataVer: 0,
+        token, name: 'Écran de test live', state: 'playing', cachePct: 91, media: 'test', playedVer: 0, dataVer: 0,
+        detail: { assets: { total: 11, cached: 10, missing: 1 }, storage: { persisted: true, usage: 5, quota: 9 }, sw: true, secure: true, intrus: 'x'.repeat(5000) },
       });
       if (!hb.ok) throw new Error('heartbeat refusé');
-      return `assignée v${hb.assignedVer}`;
+      const me = (await call('GET', '/api/v1/fleet')).stores.flatMap((s) => s.players).find((x) => x.id === pid);
+      const d = me && me.detail;
+      if (!d || d.assets.cached !== 10 || d.assets.missing !== 1 || !d.storage.persisted || !d.sw) throw new Error(`détail du cache non remonté : ${JSON.stringify(d)}`);
+      if ('intrus' in d) throw new Error('champ inattendu enregistré');
+      return `assignée v${hb.assignedVer} · supervision : ${d.assets.cached}/${d.assets.total} fichiers, ${d.assets.missing} absent`;
     });
     await step('POST /api/v1/stores/<id> — combo d\'écrans du magasin', async () => {
       const fleetRes = await call('GET', '/api/v1/fleet');
