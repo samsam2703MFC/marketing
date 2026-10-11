@@ -1,14 +1,18 @@
 # Unité systemd — CMS signage (à copier dans /etc/systemd/system/signage.service)
 #   sudo cp deploy/signage.service /etc/systemd/system/signage.service
 #   sudo systemctl daemon-reload && sudo systemctl enable --now signage
-# Adapter WorkingDirectory, User et SIG_ADMIN_PASSWORD.
+# La livraison (.github/workflows/deploy.yml) l'installe telle quelle.
 [Unit]
 Description=Signage CMS — Régie d'affichage L'Atelier By
 After=network.target
 
 [Service]
 Type=simple
-User=www-data
+# Encore root, en attendant mieux : sans utilisateur MySQL réglé en régie,
+# l'import ERP et le miroir se connectent à MariaDB par la socket locale, où
+# seul root entre sans mot de passe. Passer à un compte dédié demande de lui
+# ouvrir un accès MariaDB — décision à prendre (README, « Comptes & sécurité »).
+User=root
 WorkingDirectory=/var/www/signage
 ExecStart=/usr/bin/node server/index.js
 Restart=always
@@ -18,10 +22,15 @@ Environment=HOST=127.0.0.1
 Environment=PORT=8080
 # Chemin public de montage (cookie de session + redirections).
 Environment=BASE_PATH=/signage
-# Mot de passe du compte « admin » du back office — À CHANGER.
-Environment=SIG_ADMIN_PASSWORD=signage
 # Emplacement de la base SQLite (tables préfixées sig_).
 Environment=SIG_DB=/var/www/signage/data/signage.db
+# Mots de passe : JAMAIS dans ce fichier, versionné et lisible par tous sur le
+# serveur. Ils vivent dans /etc/signage/signage.env (root, 0600) :
+#   SIG_ADMIN_PASSWORD="…"    compte admin du back office
+#   SIG_AGENCY_PASSWORD="…"   compte agence — sans lui, l'espace agence est fermé
+# La livraison l'écrit à partir des secrets GitHub du même nom. Le « - » le
+# rend facultatif : sans lui, le service démarre, compte agence fermé.
+EnvironmentFile=-/etc/signage/signage.env
 
 [Install]
 WantedBy=multi-user.target

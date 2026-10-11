@@ -251,6 +251,7 @@ class App extends Component {
       this.setState({
         loading: false, authRequired: false,
         library: st.modules,
+        agencyEnabled: !!st.agencyEnabled,
         elementTypes: et.types || [],
         langs: lg.langs || [{ id: 'fr', label: 'Français' }],
         promoTypes: pt.promoTypes || [],
@@ -4162,7 +4163,10 @@ class App extends Component {
       <!-- Espace Vidéo — Agence -->
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;margin-top:20px;">
         <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Espace Vidéo — Agence</h2>
-        <p style="margin:0 0 14px;font-size:12px;color:#8A847C;line-height:1.5;">Un accès séparé (mot de passe dédié — variable <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">SIG_AGENCY_PASSWORD</code>, défaut « agence ») où les agences uploadent des vidéos/photos taguées (moment · produit · saison) et vérifient leur présence sur le serveur. Elles n'accèdent qu'à cette page. Partage-leur ce lien :</p>
+        <p style="margin:0 0 12px;font-size:12px;color:#8A847C;line-height:1.5;">Un accès séparé où les agences uploadent des vidéos/photos taguées (moment · produit · saison) et vérifient leur présence sur le serveur. Elles n'accèdent qu'à cette page, avec l'identifiant <strong>agence</strong> et un mot de passe dédié.</p>
+        ${st.agencyEnabled
+          ? html`<p style="margin:0 0 14px;font-size:12px;color:#2E6E4E;font-weight:600;">● Accès ouvert — partage-leur ce lien :</p>`
+          : html`<p style="margin:0 0 14px;padding:10px 12px;border-radius:9px;background:rgba(184,134,11,0.10);border:1px solid rgba(184,134,11,0.35);font-size:12px;color:#6E4A2B;line-height:1.5;"><strong>Accès fermé.</strong> Aucun mot de passe agence n'est défini sur ce serveur, et le mot de passe par défaut est refusé en production. Pour l'ouvrir : ajouter le secret <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">SIG_AGENCY_PASSWORD</code> au dépôt GitHub (Settings → Secrets and variables → Actions), puis relancer le déploiement.</p>`}
         <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.08);">
           <input readonly value=${v.agencyUrl} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:8px 10px;font-size:12.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:7px;background:#fff;" />
           <button onClick=${() => v.copyLink(v.agencyUrl)} style="flex:0 0 auto;padding:8px 14px;font-size:12.5px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Copier</button>
@@ -4576,6 +4580,7 @@ class App extends Component {
           <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Médiathèque agence — ${v.mediaOverview.total ? `${v.mediaOverview.total} média(s) sur le serveur` : 'vide'}</h3>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <button onClick=${v.refreshMediaLib} style="padding:7px 13px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">⟳ Rafraîchir</button>
+            ${!st.agencyEnabled && html`<span title="Aucun mot de passe agence sur ce serveur (secret SIG_AGENCY_PASSWORD) : l'espace agence refuse toute connexion. Voir Paramètres." style="padding:6px 11px;font-size:11.5px;font-weight:600;color:#6E4A2B;background:rgba(184,134,11,0.12);border:1px solid rgba(184,134,11,0.35);border-radius:999px;">Accès agence fermé</span>`}
             <a href=${v.agencyUrl} target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:8px 15px;font-size:12.5px;font-weight:600;color:#fff;background:#6E4A2B;border-radius:999px;">🎬 Ouvrir l'espace Agence ↗</a>
             <button onClick=${() => v.copyLink(v.agencyUrl)} title="Copier le lien agence" style="padding:8px 13px;font-size:12px;font-weight:600;border-radius:999px;border:1px solid rgba(110,74,43,0.35);background:#fff;color:#6E4A2B;cursor:pointer;">⎘ Lien</button>
           </div>

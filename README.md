@@ -9,7 +9,8 @@ avec CMS, base de données, player d'écran et **tests live exécutés à chaque
   `sig_heartbeats`, `sig_settings`, `sig_users`, `sig_sessions`).
 - **Front** : Preact + HTM embarqués (`public/js/vendor/`), aucun build.
 - **Accès protégé** : le back office demande une connexion (`admin` / mot de passe
-  `SIG_ADMIN_PASSWORD`, défaut `signage`) ; les players s'authentifient par token.
+  `SIG_ADMIN_PASSWORD`, défaut `signage`) ; l'espace agence a son propre compte (`agence`),
+  fermé tant que `SIG_AGENCY_PASSWORD` n'est pas défini ; les players s'authentifient par token.
 
 ## Démarrer
 
@@ -26,30 +27,56 @@ npm start            # ou : node server/index.js
 
 Variables : `PORT` (défaut 8080), `HOST`, `SIG_DB` (chemin SQLite, défaut `data/signage.db`),
 `SIG_ADMIN_PASSWORD` (mot de passe du compte `admin`, appliqué à chaque démarrage),
-`BASE_PATH` (chemin public si l'app est montée sous un sous-chemin, ex. `/signage`).
-Au premier démarrage la base est créée et **seedée** avec le contenu de la maquette
-(catégorie *Tartes* 8 produits, liaison *Fait maison*, 3 magasins / 5 écrans de démo).
+`SIG_AGENCY_PASSWORD` (mot de passe du compte `agence` ; absent = compte fermé),
+`BASE_PATH` (chemin public si l'app est montée sous un sous-chemin, ex. `/signage`),
+`SIG_DEMO=1` (démo / tests uniquement).
+Au premier démarrage la base est créée vide et se remplit par l'import PWA. Avec
+`SIG_DEMO=1`, elle est **seedée** avec le contenu de la maquette (catégorie *Tartes*
+8 produits, liaison *Fait maison*, 3 magasins / 5 écrans de démo — dont le player
+d'exemple ci-dessus) et le compte `agence` garde son mot de passe de démo `agence`.
 
 ## Déploiement sur http://185.180.206.46/signage/
 
-Prérequis serveur : Node.js ≥ 22.5 (`node --version`).
+**Automatique** : chaque push sur la branche lance `.github/workflows/deploy.yml` —
+transfert du code, provisionnement (Node ≥ 22, mots de passe, service systemd, proxy
+Apache), puis tests live. Secrets GitHub (Settings → Secrets and variables → Actions) :
+`SERVER_HOST`, `SERVER_USER` (root), `SERVER_SSH_KEY`, `SIG_ADMIN_PASSWORD`,
+`SIG_AGENCY_PASSWORD` — détail en tête du workflow.
+
+- **Les fichiers uploadés ne sont jamais effacés.** Le transfert se fait sans `--delete`
+  et ne touche ni `data/` ni `public/media/`, `public/surprise/`, `public/anim/` (médiathèque
+  agence, vidéos surprise, fichiers d'animation). La livraison compte ces fichiers avant
+  et après le transfert, et échoue si le nombre baisse.
+- **Mots de passe hors du dépôt.** La livraison écrit les deux secrets dans
+  `/etc/signage/signage.env` (root, 0600), que systemd lit via `EnvironmentFile=` ; l'unité
+  versionnée n'en contient aucun, et l'ancien drop-in `signage.service.d/override.conf`
+  (mot de passe admin en clair, lisible par tous) est supprimé.
+
+Installation manuelle (sans GitHub Actions) — prérequis : Node.js ≥ 22.5 (`node --version`).
 
 ```bash
 # 1) Copier le dépôt sur le serveur
-sudo mkdir -p /var/www/signage && sudo chown www-data: /var/www/signage
+sudo mkdir -p /var/www/signage
 git clone <repo> /var/www/signage          # ou rsync/scp du dossier
 
-# 2) Service systemd (écoute en local sur 127.0.0.1:8080)
+# 2) Mots de passe : hors du dépôt, lisibles par root seul
+sudo install -d -m 0700 /etc/signage
+sudo install -m 0600 /dev/null /etc/signage/signage.env
+sudo nano /etc/signage/signage.env
+#   SIG_ADMIN_PASSWORD="…"
+#   SIG_AGENCY_PASSWORD="…"    ← facultatif : sans lui, l'espace agence est fermé
+#   (entre guillemets doubles ; écrire \" pour un « " » et \\ pour un « \ »)
+
+# 3) Service systemd (écoute en local sur 127.0.0.1:8080)
 sudo cp /var/www/signage/deploy/signage.service /etc/systemd/system/signage.service
-sudo nano /etc/systemd/system/signage.service   # → changer SIG_ADMIN_PASSWORD !
 sudo systemctl daemon-reload && sudo systemctl enable --now signage
 curl http://127.0.0.1:8080/api/v1/health        # → {"ok":true,...}
 
-# 3) Reverse proxy sur le site existant (Apache OU Nginx)
+# 4) Reverse proxy sur le site existant (Apache OU Nginx)
 #    → deploy/apache-signage.conf  ou  deploy/nginx-signage.conf
 #    montent l'app sous /signage/
 
-# 4) Tests live post-déploiement, depuis n'importe où :
+# 5) Tests live post-déploiement, depuis n'importe où :
 node test/live-test.js http://185.180.206.46/signage --password=VOTREMDP
 node test/live-test.js http://185.180.206.46/signage --password=VOTREMDP --mutate
 ```
@@ -63,8 +90,19 @@ reverse proxy expose l'application.
 ### Comptes & sécurité
 
 - Back office : utilisateur **`admin`**, mot de passe **`SIG_ADMIN_PASSWORD`**
-  (défaut `signage` — à changer avant l'exposition publique). Sessions de 30 jours,
-  verrouillage 60 s après 8 échecs.
+  (défaut `signage` tant que la variable n'a jamais été posée — à définir avant
+  l'exposition publique). Sessions de 30 jours, verrouillage 60 s après 8 échecs.
+- Espace agence : utilisateur **`agence`**, mot de passe **`SIG_AGENCY_PASSWORD`**. En
+  production, **pas de mot de passe, pas de compte** : le défaut `agence` est refusé, et
+  retirer le secret supprime le compte et ses sessions au redémarrage suivant.
+  ⚙ Paramètres → « Espace Vidéo — Agence » dit si l'accès est ouvert ou fermé.
+- Changer un mot de passe = changer le secret GitHub puis relancer le déploiement : au
+  démarrage, le compte est réaligné sur la variable et ses sessions ouvertes sont coupées.
+- Le service tourne **encore en root** : sans utilisateur MySQL réglé en régie, l'import
+  ERP et le miroir se connectent à MariaDB par la socket locale, où seul root entre sans
+  mot de passe. Passer à un compte système dédié demande de lui ouvrir un accès MariaDB
+  (ou de régler un utilisateur MySQL dans ⚙ Paramètres → Catalogue PWA → Réglages avancés)
+  — décision en attente.
 - Players : token `plyr_…` par écran (`sig_players.token`). Un player inconnu muni d'un
   token `plyr_…` s'auto-enregistre dans « Nouveaux écrans ».
 - Endpoints publics : uniquement `GET /api/v1/health` et les fichiers statiques.
@@ -393,7 +431,7 @@ qui la portent restent visibles ; la liste ne peut pas être vidée.
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + cycle complet — 65 tests
+npm test              # serveur jetable (BDD temporaire) + cycle complet — 66 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
 node test/live-test.js http://185.180.206.46/signage --password=… --mutate

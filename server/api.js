@@ -15,7 +15,7 @@ import {
   buildContinuous, continuousRevision, normContinuous,
   loadScreenGroups, screenGroupById, saveScreenGroup, deleteScreenGroup, setPlayerGroup,
   loadPlan, savePlan, planFilmAt, setActiveWeek, duplicateWeek,
-  checkLogin, createSession, sessionUser, destroySession,
+  checkLogin, createSession, sessionUser, destroySession, agencyAccountEnabled,
 } from './db.js';
 import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
 import { publicPwaConfig, savePwaConfig, resetPwaConfig, testPwa, importPwa, pwaBaseName, importSeasons, inspectSeasons, inspectIngredients } from './pwadb.js';
@@ -264,6 +264,9 @@ export function stateJson() {
       srvToken: getSetting('srv_token', ''),
     },
     server: { now: nowIso(), db: DB_PATH },
+    // L'écran Paramètres dit si l'espace agence est ouvert, plutôt que
+    // d'annoncer un mot de passe qui n'existe pas.
+    agencyEnabled: agencyAccountEnabled(),
   };
 }
 

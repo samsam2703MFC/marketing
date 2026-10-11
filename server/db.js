@@ -1863,9 +1863,25 @@ export function setPlayerGroup(playerId, groupId) {
 // est définie au démarrage, le mot de passe du compte admin est aligné dessus.
 function ensureAdmin(db) {
   ensureUser(db, 'admin', process.env.SIG_ADMIN_PASSWORD, 'signage');
-  // Compte « agence » (upload de vidéos/photos uniquement). Mot de passe :
-  // SIG_AGENCY_PASSWORD (env), défaut « agence ».
-  ensureUser(db, 'agence', process.env.SIG_AGENCY_PASSWORD, 'agence');
+  // Compte « agence » (upload de vidéos/photos uniquement). En PRODUCTION il
+  // n'existe que si SIG_AGENCY_PASSWORD est fourni : un mot de passe par défaut
+  // connu de tous ouvrait l'écriture de fichiers sur le serveur. Sans mot de
+  // passe, le compte et ses sessions sont retirés — « pas de mot de passe, pas
+  // de compte » ; il revient tel quel dès que la variable est posée. En démo et
+  // en test (SIG_DEMO=1), le défaut « agence » reste, pour la commodité.
+  if (agencyAccountEnabled()) {
+    ensureUser(db, 'agence', process.env.SIG_AGENCY_PASSWORD, 'agence');
+  } else {
+    const had = db.prepare(`SELECT 1 AS x FROM sig_users WHERE username = 'agence'`).get();
+    db.prepare(`DELETE FROM sig_sessions WHERE username = 'agence'`).run();
+    db.prepare(`DELETE FROM sig_users WHERE username = 'agence'`).run();
+    if (had) console.warn('[signage] compte « agence » désactivé : SIG_AGENCY_PASSWORD absent (le mot de passe par défaut est refusé en production)');
+  }
+}
+// Le compte agence est-il ouvert ? Oui en démo/test, et en production
+// seulement si un mot de passe lui a été donné.
+export function agencyAccountEnabled() {
+  return !!process.env.SIG_AGENCY_PASSWORD || process.env.SIG_DEMO === '1';
 }
 function ensureUser(db, username, envPw, fallback) {
   const row = db.prepare('SELECT pass_salt, pass_hash FROM sig_users WHERE username = ?').get(username);

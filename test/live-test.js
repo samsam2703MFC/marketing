@@ -1209,6 +1209,67 @@ async function main() {
     });
   }
 
+  // --- mode production (serveur jetable uniquement) --------------------------
+  // Le serveur jetable tourne en démo (SIG_DEMO=1), où « agence/agence » reste
+  // ouvert pour la commodité. On rejoue ici ce que vit la production : sans
+  // SIG_AGENCY_PASSWORD, pas de compte agence ; avec, seul ce mot de passe
+  // ouvre ; le secret retiré, le compte et ses sessions tombent.
+  if (LOCAL) {
+    await step('Production — compte agence : fermé sans secret, jamais « agence »', async () => {
+      const db = join(mkdtempSync(join(tmpdir(), 'sig-prod-')), 'prod.db');
+      const ADMIN_PW = 'admin-prod-test';
+      const AGENCY_PW = 'Secret agence « test » 2026';
+      const login = async (base, username, password) => {
+        const res = await fetch(base + '/api/v1/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username, password }) });
+        return { status: res.status, token: (await res.json().catch(() => ({}))).token };
+      };
+      const agencyEnabled = async (base) => {
+        const a = await login(base, 'admin', ADMIN_PW);
+        if (!a.token) throw new Error(`admin refusé en mode production (HTTP ${a.status})`);
+        return (await (await fetch(base + '/api/v1/state', { headers: { authorization: `Bearer ${a.token}` } })).json()).agencyEnabled;
+      };
+      let port = 9000 + Math.floor(Math.random() * 500);
+      // Serveur de production : ni SIG_DEMO, ni mot de passe hérité de l'environnement.
+      const prod = async (agencyPw) => {
+        const env = { ...process.env, PORT: String(++port), SIG_DB: db, SIG_ADMIN_PASSWORD: ADMIN_PW };
+        delete env.SIG_DEMO; delete env.SIG_AGENCY_PASSWORD;
+        if (agencyPw) env.SIG_AGENCY_PASSWORD = agencyPw;
+        const proc = spawn(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), '..', 'server', 'index.js')], { env, stdio: 'ignore' });
+        const base = `http://127.0.0.1:${port}`;
+        for (let i = 0; i < 60; i++) {
+          if (await fetch(base + '/api/v1/health').then((r) => r.ok, () => false)) break;
+          await new Promise((r) => setTimeout(r, 150));
+        }
+        return { base, stop: () => new Promise((r) => { proc.once('exit', r); proc.kill(); }) };
+      };
+
+      let srv = await prod('');
+      try {
+        if ((await login(srv.base, 'agence', 'agence')).status !== 401) throw new Error('serveur neuf sans secret : « agence/agence » accepté');
+        if (await agencyEnabled(srv.base) !== false) throw new Error('serveur neuf sans secret : agencyEnabled devrait être false');
+      } finally { await srv.stop(); }
+
+      srv = await prod(AGENCY_PW);
+      let token;
+      try {
+        if ((await login(srv.base, 'agence', 'agence')).status !== 401) throw new Error('secret posé : le défaut « agence » est encore accepté');
+        const ag = await login(srv.base, 'agence', AGENCY_PW);
+        if (!ag.token) throw new Error(`secret posé : le mot de passe agence est refusé (HTTP ${ag.status})`);
+        token = ag.token;
+        if (await agencyEnabled(srv.base) !== true) throw new Error('secret posé : agencyEnabled devrait être true');
+      } finally { await srv.stop(); }
+
+      srv = await prod('');
+      try {
+        if ((await login(srv.base, 'agence', AGENCY_PW)).status !== 401) throw new Error('secret retiré : l’ancien mot de passe agence ouvre encore');
+        const old = await fetch(srv.base + '/api/v1/media', { headers: { authorization: `Bearer ${token}` } });
+        if (old.status !== 401) throw new Error(`secret retiré : la session agence survit (HTTP ${old.status})`);
+        if (await agencyEnabled(srv.base) !== false) throw new Error('secret retiré : agencyEnabled devrait être false');
+      } finally { await srv.stop(); }
+      return 'sans secret : fermé · secret posé : lui seul ouvre · secret retiré : compte et session tombent';
+    });
+  }
+
   const ok = results.filter((r) => r.ok).length;
   const ko = results.length - ok;
   console.log(`\n${ko === 0 ? '\x1b[32m' : '\x1b[31m'}${ok}/${results.length} tests OK${ko ? ` · ${ko} en échec` : ''}\x1b[0m\n`);

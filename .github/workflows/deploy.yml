@@ -1,16 +1,17 @@
 # Déploiement automatique du CMS signage sur le serveur, puis tests live.
 #
 # Secrets requis (Settings → Secrets and variables → Actions) :
-#   SERVER_HOST         → 185.180.206.46
-#   SERVER_USER         → utilisateur SSH du serveur
-#   SERVER_SSH_KEY      → clé privée SSH (ed25519) dédiée au déploiement
-#   SIG_ADMIN_PASSWORD  → mot de passe admin du back office (pour les tests live)
+#   SERVER_HOST          → 185.180.206.46
+#   SERVER_USER          → root (le provisionnement installe le service et
+#                          écrit /etc/signage)
+#   SERVER_SSH_KEY       → clé privée SSH (ed25519) dédiée au déploiement
+#   SIG_ADMIN_PASSWORD   → mot de passe du compte admin du back office
+#   SIG_AGENCY_PASSWORD  → mot de passe du compte agence ; sans lui, l'espace
+#                          agence est FERMÉ (le défaut « agence » est refusé)
 #
-# Prérequis côté serveur (une seule fois, cf. README) :
-#   - Node ≥ 22.5, dossier /var/www/signage accessible à SERVER_USER
-#   - service systemd installé (deploy/signage.service)
-#   - sudo sans mot de passe pour le redémarrage du service :
-#       echo "SERVER_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart signage" | sudo tee /etc/sudoers.d/signage
+# Le provisionnement (étape « Provisionner ») refait le reste à chaque
+# livraison : Node ≥ 22, mots de passe dans /etc/signage/signage.env (root,
+# 0600), service systemd, reverse proxy Apache.
 name: Déploiement signage
 
 on:
@@ -73,21 +74,45 @@ jobs:
             exit 1
           fi
 
-      - name: Copier le code (rsync — la base data/ du serveur est préservée)
+      # Les contenus uploadés vivent DANS le dossier déployé — médiathèque
+      # agence, vidéos surprise, fichiers d'animation — et ne sont pas dans
+      # git. L'ancien « rsync --delete » les effaçait donc à chaque livraison.
+      # Comme dans les autres dépôts du réseau, le transfert n'efface plus rien
+      # sur le serveur, et ces dossiers ne sont même plus touchés. On compte
+      # leurs fichiers avant et après : une baisse fait échouer la livraison.
+      - name: Compter les fichiers uploadés (avant transfert)
+        id: uploads_before
         run: |
-          rsync -az --delete \
-            --exclude '.git' --exclude 'data' --exclude '.github' \
+          n=$(ssh -i ~/.ssh/id_deploy "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            "cd ${DEPLOY_PATH} 2>/dev/null && find public/media public/surprise public/anim -type f 2>/dev/null | wc -l || echo 0" | tr -dc '0-9')
+          echo "n=${n:-0}" >> "$GITHUB_OUTPUT"
+          echo "Fichiers uploadés sur le serveur avant transfert : ${n:-0}"
+
+      - name: Copier le code (rsync sans --delete — rien n'est effacé sur le serveur)
+        run: |
+          rsync -az \
+            --exclude '.git' --exclude '.github' --exclude 'data' \
+            --exclude '/public/media/' --exclude '/public/surprise/' --exclude '/public/anim/' \
             -e "ssh -i ~/.ssh/id_deploy" \
             ./ "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${DEPLOY_PATH}/"
 
       - name: Provisionner le serveur (si besoin) et redémarrer le service
         env:
           SIG_PW: ${{ secrets.SIG_ADMIN_PASSWORD }}
+          SIG_AG_PW: ${{ secrets.SIG_AGENCY_PASSWORD }}
         run: |
+          # Les mots de passe voyagent encodés en base64 : une apostrophe, un
+          # espace ou un « % » dans un secret ne cassent plus la commande.
+          B64_ADMIN=$(printf '%s' "$SIG_PW" | base64 -w0)
+          B64_AGENCY=$(printf '%s' "$SIG_AG_PW" | base64 -w0)
+          if [ -n "$B64_ADMIN" ]; then echo "::add-mask::$B64_ADMIN"; fi
+          if [ -n "$B64_AGENCY" ]; then echo "::add-mask::$B64_AGENCY"; fi
           ssh -i ~/.ssh/id_deploy "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
-            "SIG_PW='$SIG_PW' bash -s" <<'PROVISION'
+            "B64_ADMIN='$B64_ADMIN' B64_AGENCY='$B64_AGENCY' bash -s" <<'PROVISION'
           set -e
           cd /var/www/signage
+          SIG_PW=$(printf '%s' "$B64_ADMIN" | base64 -d)
+          SIG_AG_PW=$(printf '%s' "$B64_AGENCY" | base64 -d)
 
           echo "— Node.js"
           if ! command -v node >/dev/null 2>&1 || ! node -e 'process.exit(+process.versions.node.split(".")[0] >= 22 ? 0 : 1)'; then
@@ -98,14 +123,27 @@ jobs:
           fi
           node --version
 
+          echo "— Mots de passe : /etc/signage/signage.env (root, 0600)"
+          # Format EnvironmentFile de systemd : valeur entre guillemets doubles,
+          # « \\ » et « \" » échappés. Aucun secret n'est écrit dans l'unité.
+          envq() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+          install -d -m 0700 /etc/signage
+          install -m 0600 /dev/null /etc/signage/signage.env.new
+          if [ -n "$SIG_PW" ]; then printf 'SIG_ADMIN_PASSWORD="%s"\n' "$(envq "$SIG_PW")" >> /etc/signage/signage.env.new; fi
+          if [ -n "$SIG_AG_PW" ]; then printf 'SIG_AGENCY_PASSWORD="%s"\n' "$(envq "$SIG_AG_PW")" >> /etc/signage/signage.env.new; fi
+          mv -f /etc/signage/signage.env.new /etc/signage/signage.env
+          if [ -n "$SIG_AG_PW" ]; then echo "compte agence : ouvert"; else echo "compte agence : FERMÉ (secret SIG_AGENCY_PASSWORD absent)"; fi
+          # L'ancien drop-in portait le mot de passe admin en clair, lisible par tous.
+          rm -f /etc/systemd/system/signage.service.d/override.conf
+          rmdir /etc/systemd/system/signage.service.d 2>/dev/null || true
+
           echo "— Service systemd"
-          cp deploy/signage.service /etc/systemd/system/signage.service
-          sed -i 's/^User=www-data/User=root/' /etc/systemd/system/signage.service
-          mkdir -p /etc/systemd/system/signage.service.d
-          if [ -n "$SIG_PW" ]; then
-            printf '[Service]\nEnvironment=SIG_ADMIN_PASSWORD=%s\n' "$SIG_PW" > /etc/systemd/system/signage.service.d/override.conf
+          if [ -z "$SIG_PW" ]; then
+            echo "::warning::secret SIG_ADMIN_PASSWORD absent : le compte admin garde son mot de passe actuel"
           fi
-          mkdir -p /var/www/signage/data
+          cp deploy/signage.service /etc/systemd/system/signage.service
+          # Dossiers d'upload : jamais transférés (cf. rsync), créés ici sur un serveur neuf.
+          mkdir -p data public/media public/surprise public/anim
           systemctl daemon-reload
           systemctl enable signage >/dev/null 2>&1 || true
           systemctl restart signage
@@ -142,6 +180,18 @@ jobs:
             echo "⚠ Apache non détecté — configurer le reverse proxy manuellement (voir deploy/nginx-signage.conf)"
           fi
           PROVISION
+
+      - name: Vérifier qu'aucun fichier uploadé n'a disparu
+        env:
+          BEFORE: ${{ steps.uploads_before.outputs.n }}
+        run: |
+          after=$(ssh -i ~/.ssh/id_deploy "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            "cd ${DEPLOY_PATH} && find public/media public/surprise public/anim -type f 2>/dev/null | wc -l" | tr -dc '0-9')
+          echo "Fichiers uploadés : avant ${BEFORE:-0} · après ${after:-0}"
+          if [ "${after:-0}" -lt "${BEFORE:-0}" ]; then
+            echo "::error::Des fichiers uploadés ont disparu pendant la livraison (${BEFORE} → ${after})."
+            exit 1
+          fi
 
       - name: Attendre que le CMS réponde (URL publique)
         run: |
