@@ -9,8 +9,9 @@ import { getDb, getSetting, setSetting } from './db.js';
 import { pwaConfig, pwaBaseName } from './pwadb.js';
 
 // Non répliquées : volumineuses / sans intérêt / sensibles (sig_users contient
-// les empreintes de mots de passe — jamais dans la base PWA).
-const SKIP = new Set(['sig_sessions', 'sig_heartbeats', 'sig_snapshots', 'sig_users']);
+// les empreintes de mots de passe — jamais dans la base PWA). Exporté pour la
+// livraison, qui n'ouvre au compte MariaDB « signage » que les tables recopiées.
+export const MIRROR_SKIP = new Set(['sig_sessions', 'sig_heartbeats', 'sig_snapshots', 'sig_users']);
 const qid = (x) => '`' + String(x).replace(/`/g, '') + '`';
 
 function myType(sqliteType) {
@@ -43,7 +44,7 @@ function runMysql(cfg, script) {
   const attempt = (bin) => new Promise((resolve, reject) => {
     const args = [];
     if (cfg.user) args.push('-h', cfg.host || '127.0.0.1', '-P', String(cfg.port || 3306), '-u', cfg.user);
-    // pas de base par défaut : le script fait CREATE DATABASE / USE lui-même.
+    // pas de base par défaut : le script fait USE lui-même.
     const ch = spawn(bin, args, { env: { ...process.env, MYSQL_PWD: cfg.password || '' } });
     let err = '';
     ch.stderr.on('data', (d) => { err += d; });
@@ -78,9 +79,12 @@ export async function syncMirror() {
     const cfg = { ...pwaConfig(), db: '' };
 
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'sig\\_%' ESCAPE '\\'")
-      .all().map((r) => r.name).filter((n) => !SKIP.has(n));
+      .all().map((r) => r.name).filter((n) => !MIRROR_SKIP.has(n));
 
-    let script = `CREATE DATABASE IF NOT EXISTS ${qid(target)} CHARACTER SET utf8mb4;\nUSE ${qid(target)};\nSET FOREIGN_KEY_CHECKS=0;\n`;
+    // La base cible existe toujours (c'est la base PWA, détectée ou réglée) :
+    // pas de CREATE DATABASE, que le compte MariaDB du service n'a pas le
+    // droit de faire — il ne peut créer, remplir et supprimer que ses sig_*.
+    let script = `USE ${qid(target)};\nSET FOREIGN_KEY_CHECKS=0;\n`;
     let totalRows = 0;
     for (const t of tables) {
       const cols = db.prepare(`PRAGMA table_info(${qid(t)})`).all();

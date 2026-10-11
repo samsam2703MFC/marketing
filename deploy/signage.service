@@ -1,22 +1,27 @@
 # Unité systemd — CMS signage (à copier dans /etc/systemd/system/signage.service)
 #   sudo cp deploy/signage.service /etc/systemd/system/signage.service
 #   sudo systemctl daemon-reload && sudo systemctl enable --now signage
-# La livraison (.github/workflows/deploy.yml) l'installe telle quelle.
+# La livraison (.github/workflows/deploy.yml) l'installe telle quelle, crée le
+# compte système « signage », lui donne ses dossiers d'écriture et son accès
+# MariaDB (voir README, « Comptes & sécurité »).
 [Unit]
 Description=Signage CMS — Régie d'affichage L'Atelier By
-After=network.target
+After=network.target mariadb.service mysql.service
 
 [Service]
 Type=simple
-# Encore root, en attendant mieux : sans utilisateur MySQL réglé en régie,
-# l'import ERP et le miroir se connectent à MariaDB par la socket locale, où
-# seul root entre sans mot de passe. Passer à un compte dédié demande de lui
-# ouvrir un accès MariaDB — décision à prendre (README, « Comptes & sécurité »).
-User=root
+# Jamais root, ni www-data (partagé avec les applis PHP du serveur, qui
+# pourraient sinon réécrire la base de la régie) : un compte système dédié.
+# Il n'écrit que dans data/, public/media/, public/surprise/ et public/anim/,
+# qui lui appartiennent ; le code reste à root, en lecture seule pour lui.
+User=signage
+Group=signage
 WorkingDirectory=/var/www/signage
 ExecStart=/usr/bin/node server/index.js
 Restart=always
 RestartSec=3
+# Ni le service ni ce qu'il lance (client mysql) ne peuvent regagner des droits.
+NoNewPrivileges=yes
 # Écoute locale uniquement : c'est le reverse proxy qui expose l'application.
 Environment=HOST=127.0.0.1
 Environment=PORT=8080
@@ -28,8 +33,9 @@ Environment=SIG_DB=/var/www/signage/data/signage.db
 # serveur. Ils vivent dans /etc/signage/signage.env (root, 0600) :
 #   SIG_ADMIN_PASSWORD="…"    compte admin du back office
 #   SIG_AGENCY_PASSWORD="…"   compte agence — sans lui, l'espace agence est fermé
-# La livraison l'écrit à partir des secrets GitHub du même nom. Le « - » le
-# rend facultatif : sans lui, le service démarre, compte agence fermé.
+# La livraison l'écrit à partir des secrets GitHub du même nom. systemd le lit
+# en root, avant de passer au compte du service. Le « - » le rend facultatif :
+# sans lui, le service démarre, compte agence fermé.
 EnvironmentFile=-/etc/signage/signage.env
 
 [Install]

@@ -2,8 +2,9 @@
 #
 # Secrets requis (Settings → Secrets and variables → Actions) :
 #   SERVER_HOST          → 185.180.206.46
-#   SERVER_USER          → root (le provisionnement installe le service et
-#                          écrit /etc/signage)
+#   SERVER_USER          → root (le provisionnement installe le service, écrit
+#                          /etc/signage, crée le compte système « signage » et
+#                          son accès MariaDB)
 #   SERVER_SSH_KEY       → clé privée SSH (ed25519) dédiée au déploiement
 #   SIG_ADMIN_PASSWORD   → mot de passe du compte admin du back office
 #   SIG_AGENCY_PASSWORD  → mot de passe du compte agence ; sans lui, l'espace
@@ -11,7 +12,8 @@
 #
 # Le provisionnement (étape « Provisionner ») refait le reste à chaque
 # livraison : Node ≥ 22, mots de passe dans /etc/signage/signage.env (root,
-# 0600), service systemd, reverse proxy Apache.
+# 0600), service systemd sous le compte « signage » (jamais root), accès
+# MariaDB de ce compte pour l'import ERP, reverse proxy Apache.
 name: Déploiement signage
 
 on:
@@ -90,7 +92,9 @@ jobs:
 
       - name: Copier le code (rsync sans --delete — rien n'est effacé sur le serveur)
         run: |
-          rsync -az \
+          # --no-owner/--no-group : le code arrive à root, pas à l'utilisateur
+          # du runner GitHub (uid 1001), qui pourrait exister sur le serveur.
+          rsync -az --no-owner --no-group \
             --exclude '.git' --exclude '.github' --exclude 'data' \
             --exclude '/public/media/' --exclude '/public/surprise/' --exclude '/public/anim/' \
             -e "ssh -i ~/.ssh/id_deploy" \
@@ -137,16 +141,53 @@ jobs:
           rm -f /etc/systemd/system/signage.service.d/override.conf
           rmdir /etc/systemd/system/signage.service.d 2>/dev/null || true
 
-          echo "— Service systemd"
+          echo "— Compte du service : « signage » (plus root)"
+          if ! id -u signage >/dev/null 2>&1; then
+            useradd --system --user-group --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin signage
+          fi
+          # Si la bascule échoue, le service repasse en root — la régie et
+          # l'import ERP restent en marche — et la livraison échoue, pour
+          # qu'on le voie dans Actions.
+          back_to_root() {
+            echo "::error::$1 — le service repasse en root le temps de corriger"
+            sed -i -e 's/^User=signage$/User=root/' -e 's/^Group=signage$/Group=root/' /etc/systemd/system/signage.service
+            systemctl daemon-reload || true
+            systemctl restart signage || true
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              if curl -fsS http://127.0.0.1:8080/api/v1/health >/dev/null 2>&1; then echo "régie de nouveau en ligne (en root)"; exit 1; fi
+              sleep 2
+            done
+            echo "::error::la régie ne répond plus, même en root — journaux du service :"
+            journalctl -u signage -n 25 --no-pager || true
+            exit 1
+          }
+
+          echo "— Service systemd (arrêt → droits → démarrage)"
           if [ -z "$SIG_PW" ]; then
             echo "::warning::secret SIG_ADMIN_PASSWORD absent : le compte admin garde son mot de passe actuel"
           fi
           cp deploy/signage.service /etc/systemd/system/signage.service
-          # Dossiers d'upload : jamais transférés (cf. rsync), créés ici sur un serveur neuf.
-          mkdir -p data public/media public/surprise public/anim
           systemctl daemon-reload
           systemctl enable signage >/dev/null 2>&1 || true
-          systemctl restart signage
+          # Droits refaits service ARRÊTÉ (l'ancien processus root ne crée plus
+          # rien derrière nous) : le code appartient à root, en lecture seule
+          # pour le service ; seuls data/ et les trois dossiers d'upload sont à
+          # lui, et data/ (base, sessions, réglages d'import) n'est lisible que
+          # par lui. D'ici au redémarrage, toute erreur passe par back_to_root,
+          # qui relance le service : jamais de régie laissée à l'arrêt.
+          systemctl stop signage 2>/dev/null || true
+          # Dossiers d'upload : jamais transférés (cf. rsync), créés ici sur un serveur neuf.
+          { mkdir -p data public/media public/surprise public/anim \
+            && chown -hR root:root . \
+            && chmod -R go-w . \
+            && chown -hR signage:signage data public/media public/surprise public/anim \
+            && chmod 0750 data; } || back_to_root "droits des dossiers impossibles à poser"
+          for d in data public/media public/surprise public/anim; do
+            runuser -u signage -- test -w "$d" || back_to_root "$d n'est pas inscriptible par le compte signage"
+          done
+          if runuser -u signage -- test -w server; then back_to_root "le code est inscriptible par le compte signage"; fi
+          echo "droits : code à root (lecture seule) · data/ et dossiers d'upload au compte signage ✓"
+          systemctl start signage || true
 
           echo "— Santé locale (127.0.0.1:8080)"
           ok=""
@@ -157,7 +198,61 @@ jobs:
           if [ -z "$ok" ]; then
             echo "CMS local injoignable — journaux du service :"
             journalctl -u signage -n 25 --no-pager || true
-            exit 1
+            back_to_root "le service ne démarre pas sous le compte signage"
+          fi
+          u=$(ps -o user= -p "$(systemctl show -p MainPID --value signage)" 2>/dev/null | tr -d ' ')
+          echo "processus du service : ${u:-?}"
+          if [ "$u" != "signage" ]; then back_to_root "le service ne tourne pas sous le compte signage (${u:-inconnu})"; fi
+
+          echo "— Base PWA : accès MariaDB du compte « signage »"
+          # Sans utilisateur MySQL réglé en régie, l'import ERP et le miroir
+          # passent par la socket locale, où MariaDB reconnaît le compte
+          # système : root y entrait d'office. Le compte « signage » y reçoit
+          # le même type d'accès (socket, sans mot de passe), limité à la
+          # LECTURE de la base PWA et, pour le miroir, à ses propres tables
+          # sig_* — jamais le droit de toucher une table de l'ERP.
+          SQLC=$(command -v mariadb || command -v mysql || true)
+          # Même binaire que le service (ExecStart), sous le même compte.
+          INFO=$(runuser -u signage -- /usr/bin/node deploy/mysql-access.mjs "$PWD/data/signage.db" 2>/dev/null || true)
+          if [ -z "$SQLC" ]; then
+            echo "client MySQL absent — import ERP non utilisé ici, rien à ouvrir"
+          elif ! printf '%s\n' "$INFO" | grep -q '^mode '; then
+            back_to_root "réglages d'import de la régie illisibles (deploy/mysql-access.mjs)"
+          elif printf '%s\n' "$INFO" | grep -qx 'mode compte'; then
+            echo "l'import se connecte avec le compte MySQL réglé en régie — rien à ouvrir"
+          elif ! "$SQLC" -N -e 'SELECT 1' >/dev/null 2>&1; then
+            echo "MariaDB locale fermée à root par la socket — rien à ouvrir (l'import ERP utilisera un compte réglé en régie)"
+          else
+            sqlid() { printf '`%s`' "$(printf '%s' "$1" | sed 's/`/``/g')"; }
+            PWADB=$(printf '%s\n' "$INFO" | sed -n 's/^base //p' | head -n 1)
+            if [ -z "$PWADB" ]; then
+              # Même détection que la régie (server/pwadb.js) : la base qui a
+              # les trois tables du catalogue.
+              PWADB=$("$SQLC" -N -e "SELECT table_schema FROM information_schema.tables WHERE table_name IN ('product', 'product_category', 'shop_product') AND table_schema NOT IN ('mysql', 'sys', 'information_schema', 'performance_schema') GROUP BY table_schema HAVING COUNT(DISTINCT table_name) = 3 ORDER BY table_schema LIMIT 1")
+            fi
+            MIRDB=$(printf '%s\n' "$INFO" | sed -n 's/^miroir //p' | head -n 1)
+            MIRDB=${MIRDB:-$PWADB}
+            if [ -z "$PWADB" ]; then
+              echo "aucune base PWA locale (product / product_category / shop_product) — rien à ouvrir"
+            elif ! "$SQLC" -N -e "SELECT COUNT(*) FROM $(sqlid "$PWADB").$(sqlid product)" >/dev/null 2>&1; then
+              echo "::warning::base PWA « $PWADB » illisible, même par root : l'import ERP est déjà en panne, rien à préserver"
+            else
+              "$SQLC" -e "CREATE USER IF NOT EXISTS 'signage'@'localhost' IDENTIFIED VIA unix_socket" 2>/dev/null \
+                || "$SQLC" -e "CREATE USER IF NOT EXISTS 'signage'@'localhost' IDENTIFIED WITH auth_socket" 2>/dev/null \
+                || back_to_root "compte MariaDB 'signage'@'localhost' impossible à créer (authentification par socket indisponible)"
+              GRANTS="GRANT SELECT ON $(sqlid "$PWADB").* TO 'signage'@'localhost';"
+              ntab=0
+              for t in $(printf '%s\n' "$INFO" | sed -n 's/^table //p'); do
+                GRANTS="$GRANTS GRANT SELECT, INSERT, CREATE, DROP ON $(sqlid "$MIRDB").$(sqlid "$t") TO 'signage'@'localhost';"
+                ntab=$((ntab + 1))
+              done
+              "$SQLC" -e "$GRANTS" || back_to_root "droits MariaDB du compte signage impossibles à poser"
+              if runuser -u signage -- "$SQLC" -N -e "SELECT COUNT(*) FROM $(sqlid "$PWADB").$(sqlid product)" >/dev/null 2>&1; then
+                echo "compte MariaDB signage (socket) : lecture de « $PWADB » ✓ · miroir : $ntab table(s) sig_* dans « $MIRDB »"
+              else
+                back_to_root "le compte signage ne lit pas la base PWA « $PWADB » par la socket — l'import ERP échouerait"
+              fi
+            fi
           fi
 
           echo "— Reverse proxy public (/signage/) — ancien /pwa_consultant/signage/ redirigé"

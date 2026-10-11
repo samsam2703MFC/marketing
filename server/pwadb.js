@@ -59,7 +59,8 @@ export function publicPwaConfig() {
 function mysqlRows(cfg, sql) {
   const run = (bin) => new Promise((resolve, reject) => {
     // Sans utilisateur configuré : connexion par la socket locale (la régie
-    // tourne sur le serveur des bases, en root → auth unix_socket).
+    // tourne sur le serveur des bases, sous le compte système « signage », que
+    // la livraison déclare dans MariaDB → auth unix_socket, lecture seule).
     const args = [];
     if (cfg.user) {
       args.push('-h', cfg.host || '127.0.0.1', '-P', String(cfg.port || 3306), '-u', cfg.user);

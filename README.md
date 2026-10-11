@@ -38,8 +38,8 @@ d'exemple ci-dessus) et le compte `agence` garde son mot de passe de démo `agen
 ## Déploiement sur http://185.180.206.46/signage/
 
 **Automatique** : chaque push sur la branche lance `.github/workflows/deploy.yml` —
-transfert du code, provisionnement (Node ≥ 22, mots de passe, service systemd, proxy
-Apache), puis tests live. Secrets GitHub (Settings → Secrets and variables → Actions) :
+transfert du code, provisionnement (Node ≥ 22, mots de passe, compte système `signage` et
+son accès MariaDB, service systemd, proxy Apache), puis tests live. Secrets GitHub (Settings → Secrets and variables → Actions) :
 `SERVER_HOST`, `SERVER_USER` (root), `SERVER_SSH_KEY`, `SIG_ADMIN_PASSWORD`,
 `SIG_AGENCY_PASSWORD` — détail en tête du workflow.
 
@@ -51,6 +51,10 @@ Apache), puis tests live. Secrets GitHub (Settings → Secrets and variables →
   `/etc/signage/signage.env` (root, 0600), que systemd lit via `EnvironmentFile=` ; l'unité
   versionnée n'en contient aucun, et l'ancien drop-in `signage.service.d/override.conf`
   (mot de passe admin en clair, lisible par tous) est supprimé.
+- **Jamais root.** Le service tourne sous le compte système `signage` (voir « Comptes &
+  sécurité »). Si la bascule échoue (droits, compte MariaDB, démarrage), la livraison
+  remet le service en root — la régie et l'import ERP restent en marche — et échoue,
+  pour qu'on le voie dans Actions ; la livraison suivante retente.
 
 Installation manuelle (sans GitHub Actions) — prérequis : Node.js ≥ 22.5 (`node --version`).
 
@@ -67,16 +71,27 @@ sudo nano /etc/signage/signage.env
 #   SIG_AGENCY_PASSWORD="…"    ← facultatif : sans lui, l'espace agence est fermé
 #   (entre guillemets doubles ; écrire \" pour un « " » et \\ pour un « \ »)
 
-# 3) Service systemd (écoute en local sur 127.0.0.1:8080)
+# 3) Compte du service (jamais root) : le code reste à root, seuls data/ et les
+#    dossiers d'upload sont au compte signage
+sudo useradd --system --user-group --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin signage
+cd /var/www/signage && sudo mkdir -p data public/media public/surprise public/anim
+sudo chown -R signage:signage data public/media public/surprise public/anim && sudo chmod 0750 data
+
+# 4) Import ERP sans utilisateur MySQL réglé en régie : accès MariaDB par la socket,
+#    en lecture seule (la livraison automatique ajoute les droits du miroir, table par table)
+sudo mariadb -e "CREATE USER IF NOT EXISTS 'signage'@'localhost' IDENTIFIED VIA unix_socket;
+                 GRANT SELECT ON atelierby_db.* TO 'signage'@'localhost';"
+
+# 5) Service systemd (écoute en local sur 127.0.0.1:8080)
 sudo cp /var/www/signage/deploy/signage.service /etc/systemd/system/signage.service
 sudo systemctl daemon-reload && sudo systemctl enable --now signage
 curl http://127.0.0.1:8080/api/v1/health        # → {"ok":true,...}
 
-# 4) Reverse proxy sur le site existant (Apache OU Nginx)
+# 6) Reverse proxy sur le site existant (Apache OU Nginx)
 #    → deploy/apache-signage.conf  ou  deploy/nginx-signage.conf
 #    montent l'app sous /signage/
 
-# 5) Tests live post-déploiement, depuis n'importe où :
+# 7) Tests live post-déploiement, depuis n'importe où :
 node test/live-test.js http://185.180.206.46/signage --password=VOTREMDP
 node test/live-test.js http://185.180.206.46/signage --password=VOTREMDP --mutate
 ```
@@ -98,11 +113,17 @@ reverse proxy expose l'application.
   ⚙ Paramètres → « Espace Vidéo — Agence » dit si l'accès est ouvert ou fermé.
 - Changer un mot de passe = changer le secret GitHub puis relancer le déploiement : au
   démarrage, le compte est réaligné sur la variable et ses sessions ouvertes sont coupées.
-- Le service tourne **encore en root** : sans utilisateur MySQL réglé en régie, l'import
-  ERP et le miroir se connectent à MariaDB par la socket locale, où seul root entre sans
-  mot de passe. Passer à un compte système dédié demande de lui ouvrir un accès MariaDB
-  (ou de régler un utilisateur MySQL dans ⚙ Paramètres → Catalogue PWA → Réglages avancés)
-  — décision en attente.
+- Le service tourne sous le compte système **`signage`** — ni root, ni `www-data`
+  (partagé avec les applis PHP du serveur). Le code appartient à root, en lecture seule
+  pour lui ; il n'écrit que dans `data/` et les trois dossiers d'upload, et `data/` (base,
+  sessions, réglages d'import) n'est lisible que par lui.
+- Import ERP et miroir MySQL : sans utilisateur MySQL réglé dans ⚙ Paramètres → Catalogue
+  PWA → Réglages avancés, ils passent par la socket MariaDB locale. La livraison y déclare
+  le compte **`signage`@`localhost`**, authentifié par la socket (aucun mot de passe), avec
+  la seule **lecture** de la base PWA et, pour le miroir, l'écriture de **ses** tables
+  `sig_*` recopiées (jamais `sig_users` ni `sig_sessions`). Il ne peut ni modifier ni
+  effacer une table de l'ERP, ni créer de base, ni s'attribuer de droits. Un utilisateur
+  MySQL réglé en régie reste prioritaire : la livraison n'ouvre alors rien.
 - Players : token `plyr_…` par écran (`sig_players.token`). Un player inconnu muni d'un
   token `plyr_…` s'auto-enregistre dans « Nouveaux écrans ».
 - Endpoints publics : uniquement `GET /api/v1/health` et les fichiers statiques.
