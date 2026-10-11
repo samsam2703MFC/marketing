@@ -4221,10 +4221,10 @@ class App extends Component {
           <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Connexion sécurisée (https)</h2>
           ${hs && hs.ok ? html`
             <p style="margin:0 0 10px;font-size:12px;color:#2E6E4E;font-weight:600;">● https actif — <a href=${hs.base} style="color:#2E6E4E;">${hs.base}</a></p>
-            <p style="margin:0 0 10px;font-size:12px;color:${late ? '#8D1D2C' : '#8A847C'};line-height:1.5;">Certificat ${hs.issuer || 'Let\'s Encrypt'} valable jusqu'au ${until}${late ? ' — renouvellement en retard : relancer le déploiement' : ' · renouvelé automatiquement (certificats de 6 jours)'}.</p>
+            <p style="margin:0 0 10px;font-size:12px;color:${late ? '#8D1D2C' : '#8A847C'};line-height:1.5;">Certificat ${hs.issuer || 'Let\'s Encrypt'} valable jusqu'au ${until}${late ? ' — renouvellement en retard : à vérifier sur le serveur (la livraison dit, à l\'étape HTTPS, qui le renouvelle et si son défi passe)' : ' · renouvelé automatiquement (certificats de 6 jours)'}.</p>
             <p style="margin:0 0 ${onHttp ? 12 : 0}px;font-size:12px;color:#8A847C;line-height:1.5;">Un écran ne <strong>redémarre sans réseau</strong> que s'il est ouvert en https : la page et son code restent alors sur l'écran. Ouvre la régie à cette adresse et ses liens (player, magasin, film) seront tous en https.</p>
             ${onHttp ? html`<a href=${hs.base} style="display:inline-flex;align-items:center;gap:6px;padding:9px 16px;font-size:12.5px;font-weight:600;color:#fff;background:#2E6E4E;border-radius:999px;">🔒 Ouvrir la régie en https ↗</a>` : ''}
-          ` : html`<p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">Pas encore de https sur ce serveur : la livraison le met en place (certificat Let's Encrypt pour l'adresse IP, renouvelé automatiquement). En http, les écrans tiennent une coupure réseau page ouverte, mais ne redémarrent pas sans réseau — le navigateur réserve le service worker au https.</p>`}
+          ` : html`<p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">Pas de https constaté sur ce serveur. La livraison s'appuie sur celui du serveur s'il en a un, et pose sinon un certificat Let's Encrypt pour l'adresse IP (renouvelé automatiquement). En http, les écrans tiennent une coupure réseau page ouverte, mais ne redémarrent pas sans réseau — le navigateur réserve le service worker au https.</p>`}
         </div>`;
       })()}
 

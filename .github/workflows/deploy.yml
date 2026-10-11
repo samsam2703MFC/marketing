@@ -258,7 +258,8 @@ jobs:
           echo "— Reverse proxy public (/signage/) — ancien /pwa_consultant/signage/ redirigé"
           if command -v apache2ctl >/dev/null 2>&1 && [ -d /etc/apache2/conf-available ]; then
             echo "Apache détecté → (ré)installation de la conf signage.conf sur /signage/…"
-            a2enmod proxy proxy_http >/dev/null
+            a2enmod proxy proxy_http headers >/dev/null
+            PREV_CONF=$(cat /etc/apache2/conf-available/signage.conf 2>/dev/null || true)
             cat > /etc/apache2/conf-available/signage.conf <<'ACONF'
           # Nouveau montage : /signage/ (l'ancien /pwa_consultant/signage/ y est redirigé)
           RedirectMatch 301 ^/pwa_consultant/signage(/.*)?$ /signage$1
@@ -266,35 +267,150 @@ jobs:
           ProxyPreserveHost On
           ProxyPass        /signage/ http://127.0.0.1:8080/
           ProxyPassReverse /signage/ http://127.0.0.1:8080/
+          # Le CMS doit savoir si la page est en https (cookie de session
+          # « Secure »), quel que soit l'hôte 443 du serveur qui la sert.
+          <IfModule mod_headers.c>
+            <Location /signage/>
+              RequestHeader set X-Forwarded-Proto "http"
+              RequestHeader set X-Forwarded-Proto "https" env=HTTPS
+            </Location>
+          </IfModule>
           ACONF
             a2enconf signage >/dev/null
+            if ! apache2ctl configtest >/dev/null 2>&1 && [ -n "$PREV_CONF" ]; then
+              apache2ctl configtest 2>&1 | tail -3
+              printf '%s\n' "$PREV_CONF" > /etc/apache2/conf-available/signage.conf
+              echo "::warning::nouvelle conf Apache signage.conf refusée — version précédente remise"
+            fi
             systemctl reload apache2
             sleep 1
             curl -fsS http://127.0.0.1/signage/api/v1/health >/dev/null 2>&1 && echo "proxy Apache OK ✓ (/signage/)" || echo "⚠ proxy Apache configuré mais la santé locale via port 80 ne répond pas encore"
           else
             echo "⚠ Apache non détecté — configurer le reverse proxy manuellement (voir deploy/nginx-signage.conf)"
           fi
-          echo "— HTTPS : certificat Let's Encrypt de l'adresse publique (6 jours, renouvelé seul)"
+          echo "— HTTPS : la régie sur l'adresse publique en https"
           # Sans https, le navigateur refuse le service worker : un écran ne
-          # peut pas redémarrer sans réseau. Le serveur n'a pas de nom de
-          # domaine : Let's Encrypt délivre depuis 2026 des certificats pour
-          # une adresse IP (profil « shortlived », 6 jours), que Certbot ≥ 5.4
-          # obtient par webroot. Tout échec ici est un AVERTISSEMENT : http
-          # reste intact, la livraison continue.
+          # peut pas redémarrer sans réseau. Le serveur est DÉJÀ servi en https
+          # sur son IP : certificat Let's Encrypt d'adresse IP, géré et
+          # renouvelé par le certbot du serveur, hors de ce dépôt (comme pour le
+          # cockpit consultant) ; /signage/ y répond par le proxy global. La
+          # livraison n'y touche pas : elle vérifie, et dit qui renouvelle.
+          # Seulement sur un serveur sans aucun https (ni port 443, ni
+          # certificat pour son adresse), elle pose le sien : Certbot ≥ 5.4
+          # isolé dans /opt/signage-certbot, profil « shortlived » (6 jours),
+          # défi webroot, minuterie de renouvellement.
+          # Tout échec ici est un AVERTISSEMENT : http reste intact.
+          https_up() {
+            curl -fsS --noproxy '*' --max-time 10 --connect-to "$PUBLIC_HOST:443:127.0.0.1:443" "https://$PUBLIC_HOST/signage/api/v1/health" >/dev/null 2>&1 \
+              || curl -fsS --noproxy '*' --max-time 10 "https://$PUBLIC_HOST/signage/api/v1/health" >/dev/null 2>&1
+          }
+          # Retire ce qu'un essai précédent de la livraison a pu laisser alors
+          # que le https n'est pas le sien : surtout l'Alias global du défi
+          # ACME, qui masquerait le chemin du certbot du serveur et ferait
+          # échouer son renouvellement.
+          https_forget_own() {
+            local changed=0
+            if [ -e /etc/apache2/conf-available/signage-acme.conf ] || [ -e /etc/apache2/conf-enabled/signage-acme.conf ]; then
+              a2disconf signage-acme >/dev/null 2>&1 || true
+              rm -f /etc/apache2/conf-available/signage-acme.conf /etc/apache2/conf-enabled/signage-acme.conf
+              echo "défi ACME de la livraison retiré — le certbot du serveur garde son propre chemin"
+              changed=1
+            fi
+            if [ -e /etc/apache2/sites-available/000-signage-ssl.conf ]; then
+              a2dissite 000-signage-ssl >/dev/null 2>&1 || true
+              rm -f /etc/apache2/sites-available/000-signage-ssl.conf
+              echo "hôte https inachevé de la livraison retiré"
+              changed=1
+            fi
+            if [ "$changed" = 1 ] && apache2ctl configtest >/dev/null 2>&1; then systemctl reload apache2 || true; sleep 1; fi
+            if [ -e /etc/systemd/system/signage-certbot.timer ] || [ -e /etc/systemd/system/signage-certbot.service ]; then
+              systemctl disable --now signage-certbot.timer >/dev/null 2>&1 || true
+              rm -f /etc/systemd/system/signage-certbot.timer /etc/systemd/system/signage-certbot.service
+              systemctl daemon-reload || true
+            fi
+            # Dossier du défi : retiré s'il est vide et qu'aucune conf de renouvellement ne s'en sert.
+            if ! grep -rqs '/var/www/letsencrypt' /etc/letsencrypt/renewal/; then
+              rmdir /var/www/letsencrypt/.well-known/acme-challenge /var/www/letsencrypt/.well-known /var/www/letsencrypt 2>/dev/null || true
+            fi
+          }
+          # Constat en lecture seule : le certificat servi, et qui le renouvelle.
+          https_report() {
+            local crt r wr d n got made p c auth
+            crt=$(echo | timeout 10 openssl s_client -connect 127.0.0.1:443 2>/dev/null | openssl x509 2>/dev/null || true)
+            if [ -n "$crt" ]; then
+              echo "certificat servi : $(printf '%s\n' "$crt" | openssl x509 -noout -ext subjectAltName 2>/dev/null | tail -n +2 | tr -d ' ') · $(printf '%s\n' "$crt" | openssl x509 -noout -issuer | sed 's/^issuer= *//') · valable jusqu'au $(printf '%s\n' "$crt" | openssl x509 -noout -enddate | cut -d= -f2)"
+            fi
+            for c in $(command -v certbot 2>/dev/null) /snap/bin/certbot /usr/bin/certbot /usr/local/bin/certbot /opt/certbot/bin/certbot; do
+              [ -x "$c" ] && echo "$c"
+            done | awk '!seen[$0]++' | while read -r c; do echo "certbot du serveur : $c ($("$c" --version 2>&1 | tail -1))"; done
+            systemctl list-timers --all --no-legend 2>/dev/null | grep -i -E 'certbot|letsencrypt|acme' | sed -E 's/[[:space:]]+/ /g; s/^/minuterie : /'
+            grep -l -s -i -E 'certbot|letsencrypt' /etc/crontab /etc/cron.d/* /var/spool/cron/crontabs/* 2>/dev/null | sed 's/^/tâche cron : /'
+            r="/etc/letsencrypt/renewal/$PUBLIC_HOST.conf"
+            if [ ! -r "$r" ]; then
+              echo "aucune conf de renouvellement pour $PUBLIC_HOST (présentes : $(ls /etc/letsencrypt/renewal 2>/dev/null | tr '\n' ' '))"
+              return 0
+            fi
+            echo "renouvellement : $r"
+            grep -E '^[[:space:]]*(authenticator|installer|webroot_path|preferred_profile|renew_before_expiry|pre_hook|post_hook|deploy_hook|renew_hook)[[:space:]]*=' "$r" | sed -E 's/^[[:space:]]*/  /'
+            auth=$(sed -n -E 's/^[[:space:]]*authenticator[[:space:]]*=[[:space:]]*([^[:space:]]+).*/\1/p' "$r" | head -1)
+            if [ "$auth" = standalone ] && ! grep -Eq '^[[:space:]]*pre_hook[[:space:]]*=' "$r"; then
+              echo "::warning::le certbot du serveur renouvelle en « standalone » sans arrêter Apache : le port 80 étant pris, son renouvellement échouera"
+            fi
+            [ "$auth" = webroot ] || return 0
+            # Défi webroot : un fichier témoin, posé là où certbot posera le
+            # sien, doit être servi sur http://<adresse>/.well-known/acme-challenge/.
+            wr=$(sed -n '/^\[\[webroot_map\]\]/,/^\[/p' "$r" | awk -F= -v h="$PUBLIC_HOST" '{ k = $1; gsub(/[[:space:]]/, "", k); if (k == h) { v = $2; gsub(/^[[:space:]]+|[[:space:]]+$/, "", v); print v; exit } }')
+            [ -n "$wr" ] || wr=$(sed -n -E 's/^[[:space:]]*webroot_path[[:space:]]*=[[:space:]]*([^,]*).*/\1/p' "$r" | head -1 | sed -E 's/[[:space:]]+$//')
+            [ -n "$wr" ] && [ -d "$wr" ] || { echo "dossier du défi webroot introuvable (${wr:-?})"; return 0; }
+            d="$wr/.well-known/acme-challenge"; n="signage-temoin-$(date +%s)-$$"; made=""
+            for p in "$wr/.well-known" "$d"; do [ -d "$p" ] || { mkdir -m 0755 "$p" && made="$p $made"; }; done
+            if printf 'ok %s\n' "$n" > "${d:?}/${n:?}" 2>/dev/null; then
+              chmod 0644 "${d:?}/${n:?}"
+              got=$(curl -fsS --noproxy '*' --max-time 10 "http://$PUBLIC_HOST/.well-known/acme-challenge/$n" 2>/dev/null \
+                || curl -fsS --noproxy '*' --max-time 10 --connect-to "$PUBLIC_HOST:80:127.0.0.1:80" "http://$PUBLIC_HOST/.well-known/acme-challenge/$n" 2>/dev/null || true)
+              rm -f -- "${d:?}/${n:?}"
+              if [ "$got" = "ok $n" ]; then
+                echo "défi webroot ($wr) servi sur le port 80 ✓ — le renouvellement du serveur peut passer"
+              else
+                echo "::warning::le défi webroot du certbot du serveur ($wr) n'est pas servi sur http://$PUBLIC_HOST/.well-known/acme-challenge/ — son renouvellement échouera"
+              fi
+            fi
+            for p in $made; do rmdir "$p" 2>/dev/null || true; done
+          }
           https_setup() {
             [ -n "$PUBLIC_HOST" ] || { echo "adresse publique inconnue — https ignoré"; return 1; }
             command -v apache2ctl >/dev/null 2>&1 || { echo "Apache absent — https ignoré"; return 1; }
+            OWN=/etc/signage/https-own   # témoin : certificat obtenu par la livraison elle-même
+            if [ ! -e "$OWN" ]; then
+              # La livraison n'a jamais obtenu son certificat : un https présent
+              # est celui du serveur, qu'on vérifie sans y toucher.
+              https_forget_own
+              if https_up; then
+                echo "https déjà fourni par le serveur (certificat géré hors de ce dépôt) — rien installé ✓"
+                https_report
+                return 0
+              fi
+              if [ -e "/etc/letsencrypt/live/$PUBLIC_HOST/fullchain.pem" ] || ss -ltn 2>/dev/null | grep -Eq '[:.]443[[:space:]]'; then
+                echo "::warning::le serveur a son propre https (port 443 ou certificat de $PUBLIC_HOST) mais /signage/ n'y répond pas — à régler côté serveur ; la livraison n'y touche pas"
+                https_report
+                return 1
+              fi
+              echo "aucun https sur ce serveur → la livraison pose le sien"
+            fi
             if ss -ltnp 2>/dev/null | grep -E '[:.]443[[:space:]]' | grep -vq apache2; then
               echo "::warning::port 443 déjà pris par un autre service — https ignoré"; return 1
             fi
             if printf '%s' "$PUBLIC_HOST" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then IDENT="--ip-address $PUBLIC_HOST"; else IDENT="-d $PUBLIC_HOST"; fi
-            CB=/opt/certbot/bin/certbot
-            # Certbot isolé dans /opt/certbot (les paquets des distributions sont trop anciens).
-            if ! "$CB" --version 2>/dev/null | awk '{ split($2, v, "."); exit !(v[1] > 5 || (v[1] == 5 && v[2] >= 4)) }'; then
-              echo "installation de Certbot ≥ 5.4 dans /opt/certbot…"
+            # Certbot isolé dans /opt/signage-certbot (les paquets des
+            # distributions sont trop anciens ; /opt/certbot reste à qui l'a).
+            CB=/opt/signage-certbot/bin/certbot
+            cb_ok() { [ -x "$CB" ] && "$CB" --version 2>/dev/null | awk '{ split($2, v, "."); ok = (v[1] > 5 || (v[1] == 5 && v[2] >= 4)) } END { exit !ok }'; }
+            if ! cb_ok; then
+              echo "installation de Certbot ≥ 5.4 dans /opt/signage-certbot…"
               python3 -m venv --help >/dev/null 2>&1 && python3 -c 'import ensurepip' 2>/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y python3-venv >/dev/null 2>&1 || true
-              { rm -rf /opt/certbot && python3 -m venv /opt/certbot && /opt/certbot/bin/pip install -q --upgrade pip && /opt/certbot/bin/pip install -q 'certbot>=5.4,<6'; } \
+              { rm -rf /opt/signage-certbot && python3 -m venv /opt/signage-certbot && /opt/signage-certbot/bin/pip install -q --upgrade pip && /opt/signage-certbot/bin/pip install -q 'certbot>=5.4,<6'; } \
                 || { echo "::warning::installation de Certbot impossible — https ignoré"; return 1; }
+              cb_ok || { echo "::warning::Certbot installé mais inutilisable — https ignoré"; return 1; }
             fi
             "$CB" --version
             # Défi ACME sur le port 80 : /.well-known/acme-challenge/ servi depuis /var/www/letsencrypt.
@@ -313,10 +429,11 @@ jobs:
             if [ ! -e "/etc/letsencrypt/live/$PUBLIC_HOST/fullchain.pem" ]; then
               # Essai à blanc d'abord : un échec ne compte pas dans les limites de Let's Encrypt.
               "$CB" certonly --dry-run $CBARGS >/dev/null 2>&1 \
-                || { echo "::warning::essai à blanc Let's Encrypt refusé (port 80 injoignable depuis Internet ?) — https ignoré"; return 1; }
+                || { https_forget_own; echo "::warning::essai à blanc Let's Encrypt refusé (port 80 injoignable depuis Internet ?) — https ignoré"; return 1; }
             fi
             "$CB" certonly -q --keep-until-expiring $CBARGS --deploy-hook "systemctl reload apache2" \
-              || { echo "::warning::certificat Let's Encrypt non obtenu — https ignoré"; return 1; }
+              || { [ -e "$OWN" ] || https_forget_own; echo "::warning::certificat Let's Encrypt non obtenu — https ignoré"; return 1; }
+            install -d -m 0755 /etc/signage && echo "$PUBLIC_HOST" > "$OWN"
             # Hôte https : /signage/ seulement. Nommé 000-… pour répondre aux
             # requêtes par adresse IP (sans SNI), même si un autre site 443 existe.
             SSL_BEFORE=$(apache2ctl -M 2>/dev/null | grep -c 'ssl_module' || true)
@@ -351,13 +468,14 @@ jobs:
               systemctl restart apache2 || true
               echo "::warning::Apache n'a pas accepté le port 443 — https retiré, http rétabli"; return 1
             fi
-            # Renouvellement : deux passages par jour (Certbot renouvelle à mi-vie).
-            cat > /etc/systemd/system/signage-certbot.service <<'UNIT'
+            # Renouvellement : deux passages par jour (Certbot renouvelle à
+            # mi-vie), de CE certificat seulement — jamais ceux d'autres outils.
+            cat > /etc/systemd/system/signage-certbot.service <<UNIT
           [Unit]
           Description=Renouvellement du certificat https de la régie signage (Let's Encrypt)
           [Service]
           Type=oneshot
-          ExecStart=/opt/certbot/bin/certbot renew -q
+          ExecStart=/opt/signage-certbot/bin/certbot renew -q --cert-name $PUBLIC_HOST
           UNIT
             cat > /etc/systemd/system/signage-certbot.timer <<'UNIT'
           [Unit]
@@ -412,6 +530,12 @@ jobs:
           if curl -fsS --max-time 15 "https://$H/signage/api/v1/health" >/dev/null 2>&1; then
             END=$(echo | openssl s_client -connect "$H:443" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
             echo "https public OK ✓ — certificat valable jusqu'au ${END:-?}"
+            # Certificat de 6 jours renouvelé à mi-vie : moins de 2 jours
+            # restants, c'est que son renouvellement ne passe plus.
+            LEFT=$(( ( $(date -d "$END" +%s 2>/dev/null || date +%s) - $(date +%s) ) / 3600 ))
+            if [ -n "$END" ] && [ "$LEFT" -lt 48 ]; then
+              echo "::warning::le certificat https expire dans ${LEFT} h — son renouvellement ne passe plus (voir l'étape HTTPS de la livraison : qui renouvelle, et le défi sur le port 80)"
+            fi
           else
             echo "::warning::https injoignable depuis Internet (port 443 fermé par le pare-feu de l'hébergeur ?) — http reste en service"
           fi

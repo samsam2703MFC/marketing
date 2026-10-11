@@ -1,8 +1,9 @@
 // La régie sait-elle répondre en https ? Elle le vérifie elle-même, sur la
 // machine : une requête vers le port 443 local, qui lit au passage le
-// certificat (adresse, date de fin). Rien à configurer : c'est la livraison
-// qui pose le certificat Let's Encrypt et l'hôte https d'Apache ; ici, on
-// constate. Résultat gardé 10 minutes.
+// certificat (adresse, date de fin). Rien à configurer : le certificat est
+// celui du serveur (son certbot, hors de ce dépôt) ou, sur un serveur qui
+// n'en avait aucun, celui que pose la livraison ; ici, on constate.
+// Résultat gardé 10 minutes.
 import https from 'node:https';
 
 const TTL_MS = 10 * 60 * 1000;

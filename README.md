@@ -52,15 +52,22 @@ son accès MariaDB, service systemd, proxy Apache, **https**), puis tests live. 
   `/etc/signage/signage.env` (root, 0600), que systemd lit via `EnvironmentFile=` ; l'unité
   versionnée n'en contient aucun, et l'ancien drop-in `signage.service.d/override.conf`
   (mot de passe admin en clair, lisible par tous) est supprimé.
-- **https sur l'adresse IP.** Le serveur n'a pas de nom de domaine : la livraison obtient un
-  certificat **Let's Encrypt pour l'adresse IP** (profil « shortlived », 6 jours — disponible
-  depuis 2026), avec Certbot ≥ 5.4 isolé dans `/opt/certbot` (défi webroot sur le port 80,
-  `/var/www/letsencrypt`). Hôte Apache `000-signage-ssl.conf` : port 443, **`/signage/`
-  seulement**. Renouvellement par la minuterie `signage-certbot.timer` (deux passages par jour ;
-  Certbot renouvelle à mi-vie). Tout échec est un **avertissement** et laisse http intact : port
-  443 déjà pris → rien n'est touché ; Apache qui refuserait le 443 → hôte https et module SSL
-  retirés, Apache relancé tel qu'avant. La livraison vérifie https depuis Internet (un port 443
-  fermé par l'hébergeur ne donne qu'un avertissement). La régie constate elle-même son https
+- **https sur l'adresse IP.** Le serveur est **déjà** servi en https sur son IP : certificat
+  Let's Encrypt d'adresse IP (profil « shortlived », 6 jours), géré et renouvelé par le
+  **certbot du serveur, hors de ce dépôt** — comme pour le cockpit consultant. `/signage/` y
+  répond par le proxy global `signage.conf`, qui pose aussi `X-Forwarded-Proto` d'après le vrai
+  schéma (cookie `Secure` en https ; en http, un en-tête usurpé est écrasé). La livraison **n'y
+  touche pas** : elle vérifie que `/signage/` répond en https et affiche qui renouvelle (certbot,
+  minuterie, conf de renouvellement). Si ce renouvellement passe par un défi webroot, elle pose
+  un fichier témoin là où certbot posera le sien et vérifie qu'il est servi sur le port 80 —
+  sinon, avertissement. Elle retire aussi l'Alias global du défi ACME qu'un essai précédent avait
+  posé : il masquait le chemin du certbot du serveur. Seulement sur un serveur **sans aucun
+  https** (ni port 443, ni certificat pour son adresse), elle pose le sien : Certbot ≥ 5.4 isolé
+  dans `/opt/signage-certbot`, défi webroot `/var/www/letsencrypt`, hôte Apache
+  `000-signage-ssl.conf` (`/signage/` seulement), minuterie `signage-certbot.timer` (ce
+  certificat seulement), témoin `/etc/signage/https-own`. Tout échec est un **avertissement** et
+  laisse http intact. La livraison vérifie https depuis Internet et avertit si le certificat
+  expire dans moins de 48 h (renouvellement en panne). La régie constate elle-même son https
   (adresse, fin du certificat) : **Paramètres → Connexion sécurisée**.
 - **Jamais root.** Le service tourne sous le compte système `signage` (voir « Comptes &
   sécurité »). Si la bascule échoue (droits, compte MariaDB, démarrage), la livraison
@@ -141,7 +148,7 @@ reverse proxy expose l'application.
   Le mot de passe est généré par le serveur et montré **une seule fois** ; « Nouveau mot de
   passe » coupe les sessions ouvertes. Le magasin d'un compte est fixé en base : le serveur
   refuse tout le reste (régie, autres magasins, médiathèque) — 403.
-- En https, le cookie de session est `Secure` (en-tête `X-Forwarded-Proto` posé par l'hôte https).
+- En https, le cookie de session est `Secure` (en-tête `X-Forwarded-Proto` posé par `signage.conf` d'après le vrai schéma, quel que soit l'hôte 443 qui sert la page).
 - Endpoints publics : uniquement `GET /api/v1/health` et les fichiers statiques.
 
 ## Fonctionnement
