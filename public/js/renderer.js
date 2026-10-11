@@ -74,14 +74,26 @@ export const MO = {
   m3: { w: 16, r: 1.0, osc: 1, slide: true, fspd: 1.4, pulse: true },
 };
 
+// Libellés d'un bundle à l'écran, dans la langue du magasin.
+export const BUNDLE_LABELS = {
+  fr: { bundle: 'Bundle', instead: 'au lieu de', save: 'Économisez' },
+  nl: { bundle: 'Bundel', instead: 'i.p.v.', save: 'U bespaart' },
+  en: { bundle: 'Bundle', instead: 'instead of', save: 'You save' },
+};
 export const newTag = () => ({ enabled: false, label: 'Nouveauté', img: 'assets/cherry.png' });
 export const newSched = () => ({ days: [true, true, true, true, true, true, true], from: '00:00', to: '23:59' });
 // vidX / vidY / vidZoom : cadrage d'une vidéo qui n'a pas le format de l'écran.
 export const newPos = () => ({ titleY: 0, listX: 0, listY: 0, illoX: 0, illoY: 0, illoScale: 1, vidX: 0, vidY: 0, vidZoom: 1 });
 
 export const activeItems = (m) => ((m && m.items) ? m.items : []).filter((x) => x.active);
-// Une liste de prix sans produit actif est sautée à la lecture du film.
-export const playable = (m) => (m && m.type === 'category' ? activeItems(m).length > 0 : true);
+// Une liste de prix sans produit actif est sautée à la lecture du film ; un
+// bundle n'est joué que résolu (actif dans TFBuddy, pour ce magasin, complet).
+export const playable = (m) => {
+  if (!m) return false;
+  if (m.type === 'category') return activeItems(m).length > 0;
+  if (m.type === 'bundle') return !!m.bundle && (m.items || []).length > 0;
+  return true;
+};
 export const moduleDur = (m, secPerLine) => {
   if (m.type === 'liaison') return LIAISON_DUR;
   if (m.type === 'produit') return m.dur > 0 ? m.dur : 8;
@@ -90,6 +102,7 @@ export const moduleDur = (m, secPerLine) => {
   if (m.type === 'promotion') return m.dur > 0 ? m.dur : 7;
   if (m.type === 'campagne') return m.dur > 0 ? m.dur : 8;
   if (m.type === 'html') return m.dur > 0 ? m.dur : 10;
+  if (m.type === 'bundle') return m.dur > 0 ? m.dur : 9;
   return Math.max(1, activeItems(m).length) * secPerLine;
 };
 
@@ -430,6 +443,79 @@ function renderModuleInner(h, m, lt, opts) {
     return kids;
   }
 
+  // ---- Bundle TFBuddy : nom, produits (photo, quantité), prix du bundle ----
+  // m.bundle = { name, descr, price, img, lang } résolu par magasin ; m.items =
+  // ses produits (nom, prix et photo du magasin, qty). « Au lieu de » = la
+  // somme des prix du magasin, montrée seulement si le bundle fait gagner.
+  if (m.type === 'bundle') {
+    const dur = moduleDur(m, secPerLine);
+    const b = m.bundle || { name: m.name || 'Bundle', descr: '', price: null, img: '', lang: 'fr' };
+    const L = BUNDLE_LABELS[b.lang] || BUNDLE_LABELS.fr;
+    const a = Math.min(easeIO(clx(lt / 0.5, 0, 1)), easeIO(clx((dur - lt) / 0.5, 0, 1)));
+    const its = (m.items || []).slice(0, 6);
+    const num = (v) => { const n = parseFloat(String(v == null ? '' : v).replace(/\s/g, '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
+    const eur = (n) => n.toFixed(2).replace('.', ',');
+    const price = num(b.price);
+    const parts = its.map((it) => num(it.price));
+    const worth = parts.length && parts.every((x) => x != null)
+      ? its.reduce((t, it, i) => t + parts[i] * (num(it.qty) || 1), 0) : null;
+    const save = price != null && worth != null && worth - price >= 0.05 ? worth - price : null;
+    const mo = MO[m.motion || 'm1'] || MO.m1;
+    const P0 = m.pos || newPos();
+    const cover = m.layout === 'cover' && !!b.img;
+    const hero = m.layout === 'hero-right';
+    const chip = (dark) => h('div', { key: 'bchip', style: { display: 'inline-flex', alignItems: 'center', gap: 30, alignSelf: (hero || cover) ? 'flex-start' : 'center', background: dark ? 'rgba(255,255,255,0.18)' : RUBY, color: '#fff', borderRadius: 999, padding: '28px 60px 28px 46px', fontFamily: FUI, fontWeight: 500, fontSize: 88, letterSpacing: '0.12em', textTransform: 'uppercase' } },
+      h('span', { style: { fontSize: 100, lineHeight: 1 } }, '🎁'), h('span', null, L.bundle));
+    const priceBlock = (dark) => (price == null ? null : h('div', { key: 'bprice', style: { display: 'flex', alignItems: 'baseline', gap: 70, flexWrap: 'wrap', justifyContent: (hero || cover) ? 'flex-start' : 'center' } },
+      h('div', { style: { fontFamily: FUI, fontWeight: 300, fontSize: 420, lineHeight: 1, color: dark ? '#fff' : RUBY } }, eur(price), h('span', { style: { fontSize: 190, verticalAlign: 'super', marginLeft: 14 } }, '€')),
+      save != null ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
+        h('div', { style: { fontFamily: FUI, fontWeight: 400, fontSize: 110, color: dark ? 'rgba(255,255,255,0.7)' : '#8A847C' } }, `${L.instead} `, h('span', { style: { textDecoration: 'line-through' } }, `${eur(worth)} €`)),
+        h('div', { style: { alignSelf: 'flex-start', background: dark ? '#fff' : '#2E6E4E', color: dark ? RUBY : '#fff', borderRadius: 999, padding: '20px 56px', fontFamily: FUI, fontWeight: 600, fontSize: 110, letterSpacing: '0.04em' } }, `${L.save} ${eur(save)} €`)) : null));
+    const title = (dark, size) => h('div', { key: 'btitle', style: { fontFamily: FVANK, fontWeight: 400, fontSize: size, letterSpacing: '0.01em', textTransform: 'uppercase', color: dark ? '#fff' : INK, lineHeight: 0.95 } }, String(b.name || m.name || 'Bundle').toUpperCase());
+    const descr = (dark) => (b.descr ? h('div', { key: 'bdescr', style: { fontFamily: FUI, fontWeight: 400, fontSize: 96, letterSpacing: '0.04em', color: dark ? 'rgba(255,255,255,0.86)' : '#6E675E', lineHeight: 1.15 } }, b.descr) : null);
+    // Une tuile produit : photo (ou illustration), quantité, nom.
+    const tile = (it, i, size) => {
+      const wob = mo.w * Math.sin(lt * Math.PI * (mo.fspd || 1) + i * 0.9);
+      const q = num(it.qty) || 1;
+      return h('div', { key: 'bt' + i, style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 40, width: size } },
+        h('div', { style: { position: 'relative', width: size, height: size, transform: `translateY(${wob}px)` } },
+          it.img ? h('img', { src: it.img, alt: '', style: { width: '100%', height: '100%', objectFit: it.src === 'photo' ? 'cover' : 'contain', borderRadius: it.src === 'photo' ? 60 : 0, boxShadow: it.src === 'photo' ? '0 50px 130px rgba(35,34,32,0.30)' : 'none' } })
+            : h('div', { style: { width: '100%', height: '100%', borderRadius: 60, background: '#EFE9E0' } }),
+          q !== 1 ? h('div', { style: { position: 'absolute', left: -30, top: -30, minWidth: 230, height: 230, borderRadius: 999, background: RUBY, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 40px', boxSizing: 'border-box', fontFamily: FUI, fontWeight: 600, fontSize: 120, boxShadow: '0 20px 50px rgba(141,29,44,0.35)' } }, `${String(q).replace('.', ',')}×`) : null),
+        h('div', { style: { fontFamily: FUI, fontWeight: 500, fontSize: 92, letterSpacing: '0.04em', textTransform: 'uppercase', color: INK, textAlign: 'center', lineHeight: 1.1 } }, it.name || ''));
+    };
+    // Le « + » entre deux produits, centré sur leurs photos.
+    const plus = (i, size) => h('div', { key: 'bp' + i, style: { fontFamily: FUI, fontWeight: 300, fontSize: 340, color: RUBY, lineHeight: 1, alignSelf: 'flex-start', marginTop: Math.round(size / 2 - 190) } }, '+');
+
+    if (cover) {
+      kids.push(h('div', { key: 'bbg', style: { position: 'absolute', inset: 0, background: '#1a1207' } }));
+      kids.push(h('img', { key: 'bimg', src: b.img, alt: '', style: { position: 'absolute', inset: 0, width: W, height: H, objectFit: 'cover', opacity: a, transform: `scale(${1 + 0.04 * (lt / dur)})`, transformOrigin: 'center' } }));
+      kids.push(h('div', { key: 'bshade', style: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 2100, background: 'linear-gradient(transparent, rgba(20,12,7,0.85))' } }));
+      kids.push(h('div', { key: 'btxt', style: { position: 'absolute', left: 300 + P0.listX, bottom: 300 - P0.titleY, width: 5600, display: 'flex', flexDirection: 'column', gap: 50, opacity: a } },
+        chip(true), title(true, 330), descr(true),
+        h('div', { style: { fontFamily: FUI, fontWeight: 500, fontSize: 100, letterSpacing: '0.04em', color: 'rgba(255,255,255,0.9)' } }, its.map((it) => `${(num(it.qty) || 1) !== 1 ? `${String(num(it.qty)).replace('.', ',')}× ` : ''}${it.name}`).join(' + ')),
+        priceBlock(true)));
+    } else if (hero) {
+      kids.push(h('div', { key: 'bbg', style: { position: 'absolute', inset: 0, background: '#F5EFE4', opacity: a } }));
+      kids.push(h('div', { key: 'btxt', style: { position: 'absolute', left: 300 + P0.listX, top: H / 2 - 900 + P0.titleY, width: 2700, display: 'flex', flexDirection: 'column', gap: 56, opacity: a } },
+        chip(false), title(false, 290), descr(false), h('div', { style: { width: 560, height: 16, background: RUBY, borderRadius: 8 } }), priceBlock(false)));
+      const size = its.length <= 2 ? 1250 : (its.length <= 4 ? 1000 : 780);
+      kids.push(h('div', { key: 'bgrid', style: { position: 'absolute', left: 3300 + P0.illoX, top: P0.illoY, width: 3000, height: H, display: 'flex', flexWrap: 'wrap', alignContent: 'center', justifyContent: 'center', gap: 120, opacity: a } },
+        ...its.map((it, i) => tile(it, i, size))));
+    } else {
+      const size = its.length <= 2 ? 1450 : (its.length <= 3 ? 1150 : (its.length <= 4 ? 900 : 720));
+      const row = [];
+      its.forEach((it, i) => { if (i) row.push(plus(i, size)); row.push(tile(it, i, size)); });
+      kids.push(h('div', { key: 'bbg', style: { position: 'absolute', inset: 0, background: '#F5EFE4' } }));
+      kids.push(h('div', { key: 'bwrap', style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 110, padding: '0 260px', opacity: a, transform: `translateY(${P0.titleY}px)` } },
+        h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 44, textAlign: 'center' } }, chip(false), title(false, 360), descr(false)),
+        h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 90 } }, ...row),
+        priceBlock(false)));
+    }
+    const te = tagEl(); if (te) kids.push(te);
+    return kids;
+  }
+
   // ---- Campagne marketing : contenu porté par la campagne choisie ----------
   // c = m.campaign { name, scope, productRef, theme, image, message, dateFrom,
   // dateTo, color }. Portée « produit » → photo/prix du produit lié (items[0]) ;
@@ -650,18 +736,32 @@ function renderModuleInner(h, m, lt, opts) {
   return kids;
 }
 
-// Un module est-il programmé pour être diffusé maintenant ? (jours + fenêtre horaire)
+// Un module est-il programmé pour être diffusé maintenant ? (jours + fenêtre
+// horaire de l'élément, puis — pour un bundle TFBuddy — SES créneaux.)
 export function scheduledNow(m, date = new Date()) {
-  const s = m.schedule;
-  if (!s) return true;
   const dow = (date.getDay() + 6) % 7; // 0 = lundi
-  if (s.days && s.days.length === 7 && !s.days[dow]) return false;
   const hm = date.getHours() * 60 + date.getMinutes();
   const parse = (t, fb) => {
-    const mm = /^(\d{1,2}):(\d{2})$/.exec(t || '');
+    const mm = /^(\d{1,2}):(\d{2})/.exec(t || '');
     return mm ? (+mm[1]) * 60 + (+mm[2]) : fb;
   };
-  const from = parse(s.from, 0);
-  const to = parse(s.to, 24 * 60 - 1);
-  return hm >= from && hm <= to;
+  const s = m.schedule;
+  if (s) {
+    if (s.days && s.days.length === 7 && !s.days[dow]) return false;
+    const from = parse(s.from, 0);
+    const to = parse(s.to, 24 * 60 - 1);
+    if (!(hm >= from && hm <= to)) return false;
+  }
+  // Créneaux TFBuddy : jour ISO (1 = lundi … 7 = dimanche), « de » inclus, « à » exclu.
+  const slots = m.bundle && Array.isArray(m.bundle.slots) ? m.bundle.slots : null;
+  if (slots && slots.length) {
+    return slots.some((x) => {
+      if (Number(x.dow) !== dow + 1) return false;
+      const a = parse(x.from, 0);
+      const b = parse(x.to, 24 * 60);
+      const end = b >= 23 * 60 + 59 ? 24 * 60 : b;   // « 23:59 » = jusqu'à minuit
+      return end > a ? (hm >= a && hm < end) : (hm >= a || hm < end);
+    });
+  }
+  return true;
 }

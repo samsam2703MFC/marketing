@@ -2,6 +2,7 @@
 // Toutes les tables sont préfixées `sig_`.
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hashPassword, verifyPassword, newSessionToken } from './auth.js';
@@ -328,6 +329,8 @@ function migrate(db) {
   if (!modCols2.includes('promo_type')) db.exec(`ALTER TABLE sig_modules ADD COLUMN promo_type TEXT NOT NULL DEFAULT ''`);
   // Élément « campagne » : référence une campagne marketing (sig_campaigns).
   if (!modCols2.includes('campaign_ref')) db.exec(`ALTER TABLE sig_modules ADD COLUMN campaign_ref TEXT NOT NULL DEFAULT ''`);
+  // Élément « bundle » : référence un bundle TFBuddy (sig_bundles).
+  if (!modCols2.includes('bundle_ref')) db.exec(`ALTER TABLE sig_modules ADD COLUMN bundle_ref TEXT NOT NULL DEFAULT ''`);
   // Élément « gabarit HTML » : code collé par la régie + taille de sa maquette
   // source (ex. 1920 × 1080 pour du 16:9, 840 × 1189 pour une affiche A1).
   // Orientation de l'élément : 'paysage' (16:9) ou 'portrait' (9:16) — un écran
@@ -402,6 +405,7 @@ function migrate(db) {
         watermark    TEXT NOT NULL DEFAULT 'none',
         promo_type   TEXT NOT NULL DEFAULT '',
         campaign_ref TEXT NOT NULL DEFAULT '',
+        bundle_ref   TEXT NOT NULL DEFAULT '',
         orient       TEXT NOT NULL DEFAULT 'paysage',
         moments      TEXT NOT NULL DEFAULT '[]',
         html         TEXT NOT NULL DEFAULT '',
@@ -561,6 +565,31 @@ function migrate(db) {
     active      INTEGER NOT NULL DEFAULT 1
   );
 
+  -- Bundles TFBuddy : reflet des promotions « bundle » lues sur l'API TFBuddy
+  -- (server/tfbuddy.js) — nom, prix du bundle, produits et quantités,
+  -- magasins, créneaux de la semaine. Chaque synchro remplace la table, sauf
+  -- le visuel choisi en régie (img). Un élément « bundle » pointe vers l'un
+  -- d'eux via sig_modules.bundle_ref.
+  CREATE TABLE IF NOT EXISTS sig_bundles (
+    id         TEXT PRIMARY KEY,
+    ext_id     TEXT NOT NULL DEFAULT '',
+    name       TEXT NOT NULL DEFAULT '',
+    descr      TEXT NOT NULL DEFAULT '',
+    status     TEXT NOT NULL DEFAULT 'ACTIVE',
+    activation TEXT NOT NULL DEFAULT 'AUTOMATIC',
+    priority   INTEGER NOT NULL DEFAULT 0,
+    price      REAL,
+    items      TEXT NOT NULL DEFAULT '[]',
+    scope      TEXT NOT NULL DEFAULT 'all',
+    shop_ids   TEXT NOT NULL DEFAULT '[]',
+    store_ids  TEXT NOT NULL DEFAULT '[]',
+    schedule   TEXT NOT NULL DEFAULT '[]',
+    date_from  TEXT NOT NULL DEFAULT '',
+    date_to    TEXT NOT NULL DEFAULT '',
+    img        TEXT NOT NULL DEFAULT '',
+    synced_at  TEXT NOT NULL DEFAULT ''
+  );
+
   -- Table de jointure produit ↔ période de vente (moment de la journée).
   -- Dit à quels moments un produit est vendu (matin/midi/aprem). « exception »
   -- = 1 inverse la règle (produit exclu à ce moment). Sert au mode « continu »
@@ -712,6 +741,20 @@ function ensureElementTypes(db) {
         campaignLayouts, 0, 7);
     }
   };
+  // Type « bundle » : un bundle TFBuddy (prix, composition, créneaux) choisi
+  // dans la liste synchronisée (Promotions → Bundles TFBuddy).
+  const bundleLayouts = JSON.stringify([
+    { id: 'composition', icon: '▦', label: 'Composition — les produits du bundle et son prix' },
+    { id: 'hero-right', icon: '▥', label: 'Offre à gauche · produits à droite' },
+    { id: 'cover', icon: '◼', label: 'Visuel plein écran + prix' },
+  ]);
+  const ensureBundle = () => {
+    if (!db.prepare('SELECT 1 FROM sig_element_types WHERE id = ?').get('bundle')) {
+      insType.run('bundle', 'Bundle — TFBuddy', '🎁',
+        'Diffuse un bundle de TFBuddy : son prix, ses produits (photos et prix du magasin) et ses créneaux. Il ne passe qu\'aux jours et heures du bundle, dans ses magasins, et disparaît si un de ses produits est épuisé.',
+        bundleLayouts, 0, 9);
+    }
+  };
   // Type « gabarit HTML » : on colle du code (maquette, affiche…) et il est mis
   // à l'échelle sur l'écran. Les variables {{…}} y sont résolues par magasin.
   const htmlLayouts = JSON.stringify([
@@ -735,7 +778,7 @@ function ensureElementTypes(db) {
         'Titre + accroche animés (avec un visuel de fond au besoin), ou un fichier d\'animation importé : GIF, vidéo, SVG animé, Lottie.');
   };
   const n = db.prepare('SELECT COUNT(*) AS n FROM sig_element_types').get().n;
-  if (n > 0) { ensureMedia(); ensurePromotion(); ensureCampaign(); ensureHtml(); ensureAnimFile(); return; }
+  if (n > 0) { ensureMedia(); ensurePromotion(); ensureCampaign(); ensureHtml(); ensureAnimFile(); ensureBundle(); return; }
   const catLayouts = [
     { id: 'illo-right', icon: '▤', label: 'Texte à gauche · illustration à droite' },
     { id: 'illo-left', icon: '▤', label: 'Texte à droite · illustration à gauche' },
@@ -768,6 +811,7 @@ function ensureElementTypes(db) {
   ensurePromotion();
   ensureCampaign();
   ensureHtml();
+  ensureBundle();
 }
 
 // ---------------------------------------------------------------------------
@@ -1998,6 +2042,83 @@ export function storeUnavailableStamp(storeId, now = new Date()) {
   return list.length ? list.map((r) => `${r.productId}@${r.until || '∞'}`).sort().join(',') : '';
 }
 
+// Empreinte de ce qu'un magasin diffuse au-delà du film publié : ses ruptures,
+// et les bundles TFBuddy (une synchro qui les change resynchronise les écrans).
+export function storeDataStamp(storeId, now = new Date()) {
+  const u = storeUnavailableStamp(storeId, now);
+  const b = getSetting('bundles_stamp', '');
+  return b ? `${u}|b:${b}` : u;
+}
+
+// ---------------------------------------------------------------------------
+// Bundles TFBuddy (voir server/tfbuddy.js) : la table est un REFLET de TFBuddy,
+// remplacé à chaque synchro ; seul le visuel choisi en régie (img) survit.
+const BUNDLE_STATUS = new Set(['ACTIVE', 'INACTIVE', 'DRAFT']);
+const jsonArr = (s) => { try { const a = JSON.parse(s || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } };
+function bundleRow(r) {
+  return {
+    id: r.id, extId: r.ext_id, name: r.name, descr: r.descr, status: r.status, activation: r.activation,
+    priority: r.priority, price: r.price == null ? null : Number(r.price),
+    items: jsonArr(r.items), scope: r.scope === 'selected' ? 'selected' : 'all',
+    shopIds: jsonArr(r.shop_ids), storeIds: jsonArr(r.store_ids), schedule: jsonArr(r.schedule),
+    dateFrom: r.date_from || '', dateTo: r.date_to || '', img: r.img || '', syncedAt: r.synced_at || '',
+  };
+}
+export function loadBundles() {
+  return getDb().prepare('SELECT * FROM sig_bundles ORDER BY priority DESC, name').all().map(bundleRow);
+}
+function refreshBundlesStamp() {
+  const body = JSON.stringify(loadBundles().map(({ syncedAt, ...b }) => b));
+  setSetting('bundles_stamp', body === '[]' ? '' : createHash('sha1').update(body).digest('hex').slice(0, 12));
+}
+// Remplace le reflet par la liste lue sur TFBuddy. `storeOf(idMagasinTFBuddy)`
+// rend le magasin de la régie, ou '' s'il n'est relié à aucun.
+export function saveSyncedBundles(list, storeOf) {
+  const db = getDb();
+  const known = new Set(db.prepare('SELECT id FROM sig_products').all().map((r) => r.id));
+  const imgs = new Map(db.prepare('SELECT id, img FROM sig_bundles').all().map((r) => [r.id, r.img]));
+  const now = new Date().toISOString();
+  const unmapped = new Set();
+  const unknown = new Set();
+  db.exec('BEGIN');
+  try {
+    db.exec('DELETE FROM sig_bundles');
+    const ins = db.prepare(`INSERT OR REPLACE INTO sig_bundles(id, ext_id, name, descr, status, activation, priority, price,
+      items, scope, shop_ids, store_ids, schedule, date_from, date_to, img, synced_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    for (const b of list) {
+      const id = `tfb${b.extId}`;
+      // Les produits TFBuddy sont ceux de la base PWA importée : id N → « pwpN ».
+      const items = (b.items || []).map((it) => {
+        const pid = `pwp${it.extProductId}`;
+        if (!known.has(pid)) unknown.add(it.extProductId);
+        return { extProductId: it.extProductId, productId: known.has(pid) ? pid : '', qty: it.qty, name: it.name || '', portionId: it.portionId ?? null };
+      });
+      const storeIds = [];
+      for (const s of b.shopIds || []) { const st = storeOf(s); if (st) storeIds.push(st); else unmapped.add(s); }
+      ins.run(id, String(b.extId), String(b.name || ''), String(b.descr || ''), BUNDLE_STATUS.has(b.status) ? b.status : 'ACTIVE',
+        String(b.activation || 'AUTOMATIC'), Number(b.priority) || 0, b.price == null ? null : Number(b.price),
+        JSON.stringify(items), b.scope === 'selected' ? 'selected' : 'all', JSON.stringify(b.shopIds || []),
+        JSON.stringify([...new Set(storeIds)]), JSON.stringify(b.schedule || []), b.dateFrom || '', b.dateTo || '',
+        imgs.get(id) || '', now);
+    }
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  refreshBundlesStamp();
+  return {
+    count: list.length,
+    active: list.filter((b) => b.status === 'ACTIVE').length,
+    unmappedShops: [...unmapped],
+    unknownProducts: [...unknown],
+  };
+}
+// Visuel d'un bundle, choisi en régie (TFBuddy n'en donne pas).
+export function setBundleImg(id, img) {
+  const r = getDb().prepare('UPDATE sig_bundles SET img = ? WHERE id = ?').run(String(img || '').slice(0, 2000), String(id));
+  if (r.changes) refreshBundlesStamp();
+  return r.changes > 0;
+}
+
 export function checkLogin(username, password) {
   const row = getDb().prepare('SELECT pass_salt, pass_hash FROM sig_users WHERE username = ?').get(String(username || ''));
   return !!row && verifyPassword(password, row.pass_salt, row.pass_hash);
@@ -2204,6 +2325,7 @@ export function loadModules() {
           : { type: m.promo_type || '', name: 'Offre', icon: '🏷️', color: '#C0392B' };
       })(),
       campaignRef: m.campaign_ref || '',
+      bundleRef: m.bundle_ref || '',
       orient: m.orient === 'portrait' ? 'portrait' : 'paysage',
       moments: (() => { try { const a = JSON.parse(m.moments || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } })(),
       html: m.html || '',
@@ -2283,10 +2405,10 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
     const insMod = db.prepare(`INSERT INTO sig_modules
       (id, type, name, sub, layout, motion, motion_title, motion_list, motion_illo,
        tag_enabled, tag_label, tag_img, sched_days, sched_from, sched_to, pos, sort_order, lib_tag,
-       cat_ref, product_ref, video, surprise, watermark, dur, promo_type, campaign_ref,
+       cat_ref, product_ref, video, surprise, watermark, dur, promo_type, campaign_ref, bundle_ref,
        orient, moments, html, html_vars, html_w, html_h,
        anim_mode, anim_bg, anim_dim, anim_file, anim_fit, bg_color, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
     const insItem = db.prepare(`INSERT INTO sig_module_items
       (module_id, position, name, price, img, src, active) VALUES (?, ?, ?, ?, ?, ?, ?)`);
     // Les types valides viennent de la table sig_element_types (rien en dur).
@@ -2306,7 +2428,7 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
         m.surprise ? 1 : 0,
         ['filigrane', 'logo', 'nouveau'].includes(m.watermark) ? m.watermark : 'none',
         Number.isFinite(parseFloat(m.dur)) ? Math.max(0, Math.min(120, parseFloat(m.dur))) : 0,
-        String(m.promoType || ''), String(m.campaignRef || ''),
+        String(m.promoType || ''), String(m.campaignRef || ''), String(m.bundleRef || ''),
         m.orient === 'portrait' ? 'portrait' : 'paysage',
         JSON.stringify((Array.isArray(m.moments) ? m.moments : []).filter((x) => ['matin', 'midi', 'aprem'].includes(x))),
         String(m.html || ''),
@@ -2320,8 +2442,8 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
         m.animFit === 'contain' ? 'contain' : 'cover',
         /^#[0-9a-fA-F]{3,8}$/.test(String(m.bgColor || '')) ? m.bgColor : ''
       );
-      // Un élément lié au catalogue (ou une campagne) ne stocke pas d'items propres.
-      if (!m.catRef && !m.productRef && m.type !== 'campagne') {
+      // Un élément lié au catalogue (ou une campagne, un bundle) ne stocke pas d'items propres.
+      if (!m.catRef && !m.productRef && m.type !== 'campagne' && m.type !== 'bundle') {
         (m.items || []).forEach((it, j) => insItem.run(
           m.id, j, String(it.name || ''), String(it.price || ''), String(it.img || ''),
           it.src === 'photo' ? 'photo' : 'illus', it.active ? 1 : 0

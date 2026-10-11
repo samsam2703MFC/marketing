@@ -234,6 +234,8 @@ class App extends Component {
       const pt = await api('GET', '/promo-types').catch(() => ({ promoTypes: [] }));
       // Campagnes marketing : liste d'entités à déposer comme item.
       const cmp = await api('GET', '/campaigns').catch(() => ({ campaigns: [] }));
+      // Bundles TFBuddy : lus sur l'API TFBuddy par le serveur (synchro 30 min).
+      const bdl = await api('GET', '/bundles').catch(() => ({ bundles: [], sync: {}, tfbuddy: {} }));
       // Catégories de la bibliothèque : le classement des éléments, en base.
       const lc = await api('GET', '/lib-categories').catch(() => ({ libCategories: [], libSources: [] }));
       // Matières premières : ingrédient ↔ animation.
@@ -257,6 +259,7 @@ class App extends Component {
         langs: lg.langs || [{ id: 'fr', label: 'Français' }],
         promoTypes: pt.promoTypes || [],
         campaigns: cmp.campaigns || [],
+        bundles: bdl.bundles || [], bundleSync: bdl.sync || {}, tfbuddy: bdl.tfbuddy || {}, bundleStores: bdl.stores || [],
         libCats: lc.libCategories || [], libSources: lc.libSources || [],
         ingredients: ing.ingredients || [],
         sequences: sq.sequences || [],
@@ -398,6 +401,140 @@ class App extends Component {
       ? { type: t.id, name: t.name, icon: t.icon, color: t.color }
       : { type: m.promoType || '', name: 'Offre', icon: '🏷️', color: '#C0392B' };
   }
+  // Bundle TFBuddy résolu pour l'aperçu : ses produits viennent du catalogue
+  // (prix de base — chaque magasin aura les siens à la diffusion).
+  bundleInfo(m) {
+    if (!m || m.type !== 'bundle') return null;
+    const b = (this.state.bundles || []).find((x) => x.id === m.bundleRef);
+    if (!b) return null;
+    const prods = this.state.catalog.products || [];
+    const items = (b.items || []).map((it) => {
+      const p = it.productId ? prods.find((x) => x.id === it.productId) : null;
+      return p
+        ? { name: p.name, price: p.price, img: p.img, src: p.src, active: true, productId: p.id, qty: it.qty }
+        : { name: it.name || `Produit ${it.extProductId}`, price: '', img: '', src: 'illus', active: true, qty: it.qty };
+    });
+    return { bundle: { id: b.id, name: b.name, descr: b.descr, price: b.price, img: b.img, slots: b.schedule, lang: 'fr' }, items, raw: b };
+  }
+  // Les créneaux d'un bundle, en mots : les jours qui se suivent avec les mêmes
+  // heures sont groupés (« lun → ven · 06:00–11:00 ; sam, dim · 08:00–12:00 »).
+  bundleWhen(schedule) {
+    const D = this.t('bundles.days').split(',');
+    const byDay = {};
+    for (const x of schedule || []) {
+      if (!(x.dow >= 1 && x.dow <= 7)) continue;
+      (byDay[x.dow] = byDay[x.dow] || []).push(`${x.from}–${x.to}`);
+    }
+    const key = (d) => (byDay[d] || []).sort().join(' + ');
+    const runs = [];
+    for (let d = 1; d <= 7; d++) {
+      const k = key(d);
+      if (!k) continue;
+      const last = runs[runs.length - 1];
+      if (last && last.b === d - 1 && last.k === k) last.b = d; else runs.push({ a: d, b: d, k });
+    }
+    if (!runs.length) return this.t('bundles.always');
+    return runs.map((r) => {
+      const days = r.a === 1 && r.b === 7 ? this.t('bundles.everyDay')
+        : r.b - r.a >= 2 ? `${D[r.a - 1]} → ${D[r.b - 1]}` : (r.b > r.a ? `${D[r.a - 1]}, ${D[r.b - 1]}` : D[r.a - 1]);
+      return `${days} · ${r.k.replace(/00:00–23:59/g, this.t('bundles.allDay'))}`;
+    }).join(' ; ');
+  }
+  bundleVals(m, isBundle) {
+    const st = this.state;
+    const eur = (n) => Number(n).toFixed(2).replace('.', ',');
+    const num = (v) => { const n = parseFloat(String(v == null ? '' : v).replace(',', '.')); return Number.isFinite(n) ? n : null; };
+    const qty = (q) => (Number(q) && Number(q) !== 1 ? `${String(q).replace('.', ',')}× ` : '');
+    const prods = st.catalog.products || [];
+    const storeName = (id) => (((st.bundleStores || []).find((x) => x.id === id) || (st.fleet || []).find((x) => x.id === id)) || {}).name || id;
+    const describe = (b) => {
+      const comp = (b.items || []).map((it) => {
+        const p = it.productId ? prods.find((x) => x.id === it.productId) : null;
+        return { label: `${qty(it.qty)}${p ? p.name : (it.name || `Produit ${it.extProductId}`)}`, missing: !p, price: p ? num(p.price) : null, q: Number(it.qty) || 1 };
+      });
+      const worth = comp.length && comp.every((c) => c.price != null) ? comp.reduce((t, c) => t + c.price * c.q, 0) : null;
+      const unmapped = (b.shopIds || []).length - (b.storeIds || []).length;
+      return {
+        price: b.price != null ? `${eur(b.price)} €` : '—',
+        worth: worth != null && b.price != null && worth - b.price >= 0.05 ? `${eur(worth)} €` : '',
+        comp, when: this.bundleWhen(b.schedule),
+        shops: b.scope === 'all' ? this.t('bundles.allShops')
+          : `${(b.storeIds || []).map(storeName).join(', ') || '—'}${unmapped > 0 ? ` · ${this.t('bundles.shopsUnmapped', { n: unmapped })}` : ''}`,
+        dates: b.dateFrom || b.dateTo ? `${b.dateFrom || '…'} → ${b.dateTo || '…'}` : '',
+      };
+    };
+    const sync = st.bundleSync || {};
+    const tfb = st.tfbuddy || {};
+    const agoMin = sync.at ? Math.max(0, Math.round((Date.now() - Date.parse(sync.at)) / 60000)) : null;
+    const ago = agoMin == null ? '' : agoMin < 1 ? this.t('bundles.justNow') : agoMin < 120 ? this.t('bundles.minAgo', { n: agoMin }) : this.t('bundles.hAgo', { n: Math.round(agoMin / 60) });
+    const picked = isBundle ? (st.bundles || []).find((b) => b.id === m.bundleRef) : null;
+    return {
+      bundleOptions: (st.bundles || []).map((b) => ({
+        id: b.id,
+        label: `${b.status === 'ACTIVE' ? '🎁' : '⏸'} ${b.name}${b.price != null ? ` — ${eur(b.price)} €` : ''}${b.status !== 'ACTIVE' ? ` (${b.status.toLowerCase()})` : ''}`,
+      })),
+      curBundleRef: (m && m.bundleRef) || '',
+      hasBundles: (st.bundles || []).length > 0,
+      bundleSummary: isBundle ? ((picked && picked.name) || this.t('bundles.toPick')) : '',
+      bundlePicked: picked ? { name: picked.name, status: picked.status, active: picked.status === 'ACTIVE', ...describe(picked) } : null,
+      // Un seul passage sur la bibliothèque (deux setSelField d'affilée liraient
+      // un état périmé) ; le nom suit le bundle tant qu'il n'a pas été personnalisé.
+      onBundleRef: (e) => {
+        const id = e.target.value;
+        const b = (st.bundles || []).find((x) => x.id === id);
+        const lib = this.cloneLib();
+        const mm = lib.find((x) => x.id === st.selId);
+        if (!mm) return;
+        mm.bundleRef = id;
+        if (b && (!mm.name || mm.name === 'Bundle' || (st.bundles || []).some((x) => x.name === mm.name))) mm.name = b.name;
+        this.setLib(lib);
+      },
+      goBundles: () => this.openPromotions(),
+      // -- page Promotions : la liste synchronisée --
+      bundleRows: (st.bundles || []).map((b) => ({
+        id: b.id, name: b.name, descr: b.descr, status: b.status, active: b.status === 'ACTIVE',
+        voucher: b.activation === 'VOUCHER_ONLY', img: b.img || '',
+        used: (st.library || []).filter((x) => x.type === 'bundle' && x.bundleRef === b.id).length,
+        ...describe(b),
+        onImg: (e) => { const v = e.target.value.trim(); if (v !== (b.img || '')) this.setBundleImg(b.id, v); },
+        create: () => this.addBundleElement(b.id),
+      })),
+      bundleBusy: !!st.bundleBusy,
+      syncBundles: () => this.syncBundlesNow(),
+      bundleState: !tfb.configured ? 'off' : (sync.ok === false ? 'error' : (sync.ok ? 'ok' : 'never')),
+      bundleStatusText: !tfb.configured ? this.t('bundles.notConfigured')
+        : sync.ok === false ? `${sync.error || 'erreur'}${sync.lastOk ? ` · ${this.t('bundles.lastOk', { at: new Date(sync.lastOk).toLocaleString('fr-BE') })}` : ''}`
+        : sync.ok ? this.t('bundles.syncedAgo', { ago, n: sync.count || 0, a: sync.active || 0, account: tfb.role || sync.account || '?' })
+        : this.t('bundles.never'),
+      bundleWarnings: [
+        ...((sync.unmappedShops || []).length ? [this.t('bundles.warnShops', { ids: sync.unmappedShops.join(', ') })] : []),
+        ...((sync.unknownProducts || []).length ? [this.t('bundles.warnProducts', { ids: sync.unknownProducts.slice(0, 12).join(', ') + (sync.unknownProducts.length > 12 ? '…' : '') })] : []),
+        ...(sync.shopsError ? [sync.shopsError] : []),
+      ],
+    };
+  }
+  async syncBundlesNow() {
+    if (this.state.bundleBusy) return;
+    this.setState({ bundleBusy: true });
+    try {
+      const r = await api('POST', '/bundles/sync');
+      this.setState({ bundleBusy: false, bundles: r.bundles || [], bundleSync: r.sync || {}, tfbuddy: r.tfbuddy || {}, bundleStores: r.stores || this.state.bundleStores || [] });
+      this.showToast(r.ok ? this.t('bundles.synced', { n: (r.bundles || []).length }) : `TFBuddy : ${(r.sync && r.sync.error) || 'erreur'}`);
+    } catch (e) { this.setState({ bundleBusy: false }); this.showToast(`Erreur : ${e.message}`); }
+  }
+  async setBundleImg(id, img) {
+    try {
+      const r = await api('PATCH', `/bundles/${encodeURIComponent(id)}`, { img });
+      this.setState({ bundles: r.bundles || [] });
+    } catch (e) { this.showToast(`Erreur : ${e.message}`); }
+  }
+  // « Créer l'élément » depuis la liste : un élément « bundle » déjà relié.
+  addBundleElement(bundleId) {
+    const t = (this.state.elementTypes || []).find((x) => x.id === 'bundle');
+    if (!t) { this.showToast(this.t('bundles.noType')); return; }
+    this.setView('composer');
+    this.addElement(t, { bundleRef: bundleId });
+  }
   // Campagne résolue pour l'aperçu, depuis la liste sig_campaigns.
   campaignInfo(m) {
     if (!m || m.type !== 'campagne') return undefined;
@@ -501,6 +638,11 @@ class App extends Component {
     }
     // Élément « promotion » : annote le badge du sous-type pour l'aperçu.
     const promo = this.promoBadge(m);
+    // Élément « bundle » : le bundle TFBuddy et ses produits.
+    if (m && m.type === 'bundle') {
+      const bi = this.bundleInfo(m);
+      return bi ? { ...m, bundle: bi.bundle, items: bi.items } : { ...m, items: [] };
+    }
     // Élément « campagne » : contenu porté par la campagne (produit lié éventuel).
     const campaign = this.campaignInfo(m);
     if (campaign) {
@@ -858,6 +1000,7 @@ class App extends Component {
     if (mm.type === 'media') return 'media';
     if (mm.type === 'animation') return 'anim';
     if (mm.type === 'category') return 'items';
+    if (mm.type === 'bundle') return 'bundle';
     return 'tag';
   }
   // Les volets de l'éditeur s'ouvrent/ferment indépendamment : on peut garder
@@ -875,7 +1018,7 @@ class App extends Component {
   // Un nouveau module rejoint directement la playlist (retirable avec ✕) :
   // sinon il n'apparaîtrait pas dans le film publié et c'est trop facile à rater.
   // « + Élément » : le type est choisi parmi ceux de la table sig_element_types.
-  addElement(t) {
+  addElement(t, extra = {}) {
     const id = uid();
     const lib = this.cloneLib();
     const base = {
@@ -890,6 +1033,12 @@ class App extends Component {
     else if (t.id === 'film') { base.name = 'Vidéo'; base.dur = 10; base.libTag = 'promo'; }
     else if (t.id === 'media') { base.name = 'Média ciblé'; base.dur = 12; base.libTag = 'promo'; base.layout = 'cover'; }
     else if (t.id === 'animation') { base.name = 'Nouveauté'; base.sub = 'cette semaine'; base.dur = 6; base.libTag = 'promo'; }
+    else if (t.id === 'bundle') {
+      const b = (this.state.bundles || []).find((x) => x.id === extra.bundleRef)
+        || (this.state.bundles || []).find((x) => x.status === 'ACTIVE');
+      base.name = b ? b.name : 'Bundle'; base.libTag = 'promo'; base.layout = 'composition'; base.dur = 9;
+      base.bundleRef = b ? b.id : '';
+    }
     else { base.name = t.label || 'Élément'; }
     lib.push(base);
     this.setLib(lib, { selId: id, addPicker: false, composerTab: 'lib', openSec: [this.defaultSecFor(base)], ...this.playlistPatch([...this.state.playlist, id]) });
@@ -918,6 +1067,10 @@ class App extends Component {
     if (mm.type === 'html') return String(mm.html || '').trim() ? `gabarit HTML · ${mm.htmlW || 1920}×${mm.htmlH || 1080}` : 'gabarit HTML · code à coller';
     if (mm.type === 'promotion') return `promotion${mm.promo && mm.promo.name ? ' · ' + mm.promo.name : ''}`;
     if (mm.type === 'campagne') return `campagne${mm.campaign && mm.campaign.name ? ' · ' + mm.campaign.name : ''}`;
+    if (mm.type === 'bundle') {
+      const b = (this.state.bundles || []).find((x) => x.id === mm.bundleRef);
+      return b ? `bundle TFBuddy · ${b.name}${b.status !== 'ACTIVE' ? ` · ${b.status.toLowerCase()}` : ''}` : 'bundle à choisir';
+    }
     const n = this.activeItems(mm).length;
     return `${n} produits${mm.catRef ? ' · ⛓ table produits' : ''}`;
   }
@@ -2295,6 +2448,7 @@ class App extends Component {
     const isMedia = m.type === 'media';
     const isPromo = m.type === 'promotion';
     const isCampaign = m.type === 'campagne';
+    const isBundle = m.type === 'bundle';
     const isHtml = m.type === 'html';
     const selType = this.elementTypeOf(m);
     const total = this.total();
@@ -3323,7 +3477,7 @@ class App extends Component {
       deployStyle: `padding:11px 22px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:${tgtCount && !st.deploying ? 'pointer' : 'not-allowed'};${tgtCount ? 'background:#8D1D2C;color:#fff;' : 'background:rgba(35,34,32,0.10);color:#8A847C;'}opacity:${st.deploying ? 0.7 : 1};`,
       hasToast: !!st.toast, toast: st.toast,
       playlistEmpty: st.playlist.length === 0,
-      isCategory: isCat, isLiaison: isLia, isProduit, isFilmEl, isAnim, isMedia, isPromo, isCampaign, isHtml,
+      isCategory: isCat, isLiaison: isLia, isProduit, isFilmEl, isAnim, isMedia, isPromo, isCampaign, isBundle, isHtml,
       selId: m.id,
       // -- gabarit HTML : code collé, format source, variables, exemple --
       htmlCode: m.html || '',
@@ -3404,6 +3558,8 @@ class App extends Component {
         return `${ok}/${names.length} résolue(s)`;
       })(),
       mediaAgencyUrl: new URL('agence', location.href).toString(),
+      // -- bundle TFBuddy : on choisit un bundle dans la liste synchronisée --
+      ...this.bundleVals(m, isBundle),
       // -- campagne marketing : on choisit une campagne dans la liste --
       campaignInfo: isCampaign ? this.campaignInfo(m) : null,
       campaignOptions: (st.campaigns || []).filter((c) => c.active !== false || c.id === m.campaignRef).map((c) => ({
@@ -4724,6 +4880,49 @@ class App extends Component {
         </div>
         <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Supprimer un sous-type ne casse pas les éléments qui l'utilisaient : ils retombent sur un badge neutre « Offre » jusqu'à ce que tu leur en réassignes un. L'ordre ci-dessus est celui proposé dans le Compositeur.</p>
       </div>
+
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;" data-bundles>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+          <div style="min-width:0;flex:1 1 320px;">
+            <h3 style="margin:0 0 4px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${v.t('bundles.title', { n: v.bundleRows.length })}</h3>
+            <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;max-width:760px;">${v.t('bundles.subtitle')}</p>
+          </div>
+          <button onClick=${v.syncBundles} disabled=${v.bundleBusy || v.bundleState === 'off'} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.bundleBusy || v.bundleState === 'off' ? 'not-allowed' : 'pointer'};background:${v.bundleState === 'off' ? 'rgba(35,34,32,0.08)' : '#8D1D2C'};color:${v.bundleState === 'off' ? '#8A847C' : '#fff'};">${v.bundleBusy ? v.t('bundles.syncing') : v.t('bundles.sync')}</button>
+        </div>
+        <div style="padding:9px 12px;border-radius:10px;font-size:12px;line-height:1.5;margin-bottom:12px;background:${v.bundleState === 'ok' ? 'rgba(46,110,78,0.08)' : (v.bundleState === 'error' ? 'rgba(141,29,44,0.07)' : 'rgba(35,34,32,0.05)')};color:${v.bundleState === 'ok' ? '#2E6E4E' : (v.bundleState === 'error' ? '#8D1D2C' : '#6E675E')};" data-bundle-status=${v.bundleState}>
+          ${v.bundleState === 'ok' ? '● ' : (v.bundleState === 'error' ? '⚠ ' : '○ ')}${v.bundleStatusText}
+          ${v.bundleWarnings.map((w) => html`<div style="color:#6E4A2B;margin-top:3px;">⚠ ${w}</div>`)}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          ${v.bundleRows.map((b) => html`
+            <div style="border:1px solid rgba(35,34,32,0.1);border-radius:12px;padding:13px 15px;background:${b.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};opacity:${b.active ? 1 : 0.75};" data-bundle=${b.id}>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span style="font-size:18px;">🎁</span>
+                <strong style="font-size:14px;color:#232220;flex:1 1 200px;min-width:0;overflow-wrap:anywhere;">${b.name}</strong>
+                <span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:0.06em;color:#fff;background:${b.active ? '#2E6E4E' : (b.status === 'DRAFT' ? '#B8860B' : '#8A847C')};">${b.status}</span>
+                ${b.voucher && html`<span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:600;color:#6E4A2B;background:rgba(201,123,74,0.15);">${v.t('bundles.voucher')}</span>`}
+                <span style="font-size:16px;font-weight:700;color:#8D1D2C;white-space:nowrap;">${b.price}</span>
+                ${b.worth && html`<span style="font-size:12px;color:#8A847C;text-decoration:line-through;white-space:nowrap;">${b.worth}</span>`}
+              </div>
+              ${b.descr && html`<div style="margin-top:4px;font-size:12px;color:#6E675E;">${b.descr}</div>`}
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;">
+                ${b.comp.map((c) => html`<span title=${c.missing ? v.t('bundles.missingProduct') : ''} style="padding:4px 10px;border-radius:999px;font-size:12px;background:${c.missing ? 'rgba(141,29,44,0.07)' : '#fff'};border:1px solid ${c.missing ? 'rgba(141,29,44,0.3)' : 'rgba(35,34,32,0.12)'};color:${c.missing ? '#8D1D2C' : '#232220'};">${c.label}${c.missing ? ' ?' : ''}</span>`)}
+              </div>
+              <div style="margin-top:8px;font-size:12px;color:#4A4640;line-height:1.6;">
+                <div>🕒 ${b.when}${b.dates ? ` · 📅 ${b.dates}` : ''}</div>
+                <div>🏬 ${b.shops}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;">
+                <input value=${b.img} onChange=${b.onImg} placeholder=${v.t('bundles.imgPlaceholder')} style="flex:1 1 260px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;color:#4A4640;" />
+                <span style="font-size:11px;color:${b.used ? '#6E4A2B' : '#B8B2A8'};">${b.used ? v.t('common.usedBy', { n: b.used }) : v.t('common.unused')}</span>
+                <button onClick=${b.create} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.25);border-radius:999px;cursor:pointer;">${v.t('bundles.create')}</button>
+              </div>
+            </div>
+          `)}
+          ${!v.bundleRows.length && html`<p style="margin:0;font-size:12.5px;color:#8A847C;padding:6px 0;">${v.bundleState === 'off' ? v.t('bundles.emptyOff') : v.t('bundles.empty')}</p>`}
+        </div>
+        <p style="margin:12px 0 0;font-size:11.5px;color:#8A847C;line-height:1.5;">${v.t('bundles.footer')}</p>
+      </div>
     </div>
   </div>
   `}
@@ -5445,6 +5644,35 @@ class App extends Component {
             <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
               ${v.motionSimple.map((o) => html`<button onClick=${o.pick} style=${o.style}>${o.label}</button>`)}
             </div>
+            </div>`}
+          </div>
+        `}
+
+        ${v.isBundle && html`
+          <div style=${secCard}>
+            ${secHead('bundle', v.t('bundles.editorTitle'), v.bundleSummary)}
+            ${secOpen('bundle') && html`<div style=${secBody}>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
+              <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">${v.t('bundles.editorHelp')}</p>
+              <button onClick=${v.goBundles} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.25);border-radius:999px;cursor:pointer;">${v.t('bundles.manage')}</button>
+            </div>
+            ${v.hasBundles ? html`
+              <select value=${v.curBundleRef} onChange=${v.onBundleRef} style="width:100%;box-sizing:border-box;padding:11px 12px;font-size:14px;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#FBF8F2;cursor:pointer;">
+                <option value="">${v.t('bundles.pick')}</option>
+                ${v.bundleOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
+              </select>
+              ${v.bundlePicked && html`
+                <div style="margin-top:12px;padding:11px 13px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.10);font-size:12px;color:#4A4640;line-height:1.6;">
+                  <div style="font-size:14px;font-weight:700;color:#232220;">${v.bundlePicked.name} · ${v.bundlePicked.price}${v.bundlePicked.worth ? html` <span style="color:#8A847C;font-weight:400;text-decoration:line-through;">${v.bundlePicked.worth}</span>` : ''}</div>
+                  <div>${v.bundlePicked.comp.map((c) => c.label).join(' + ')}</div>
+                  <div>🕒 ${v.bundlePicked.when}</div>
+                  <div>🏬 ${v.bundlePicked.shops}</div>
+                  ${!v.bundlePicked.active && html`<div style="margin-top:4px;color:#8D1D2C;font-weight:600;">${v.t('bundles.inactiveNote')}</div>`}
+                </div>
+              `}
+            ` : html`
+              <div style="padding:12px 14px;border-radius:10px;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.2);font-size:12.5px;color:#8D1D2C;line-height:1.5;">${v.t('bundles.noneYet')} <button onClick=${v.goBundles} style="background:none;border:none;padding:0;color:#8D1D2C;font-weight:700;text-decoration:underline;cursor:pointer;font-size:12.5px;">${v.t('bundles.goSync')}</button></div>
+            `}
             </div>`}
           </div>
         `}

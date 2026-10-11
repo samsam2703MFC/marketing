@@ -38,6 +38,7 @@ export function moduleAssets(m) {
   add(m.animBg);           // fond d'une animation « texte »
   add(m.catImg);           // illustration de catégorie
   if (m.campaign) add(m.campaign.image);
+  if (m.bundle) add(m.bundle.img);     // visuel d'un bundle TFBuddy (choisi en régie)
   if (m.type === 'html') for (const u of htmlAssetUrls(m.html)) add(u);
   return out;
 }

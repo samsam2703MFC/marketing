@@ -11,6 +11,8 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { snapshotAssets } from '../public/js/assets.js';
+import { scheduledNow } from '../public/js/renderer.js';
+import { startTfbMock, MOCK_ACCOUNTS } from './tfbuddy-mock.js';
 
 const args = process.argv.slice(2);
 const MUTATE = args.includes('--mutate');
@@ -27,6 +29,7 @@ let BASE = (baseArg || process.env.BASE_URL || 'http://localhost:8080').replace(
 const results = [];
 let child = null;
 let authToken = null;
+let tfbMock = null;   // TFBuddy simulé (serveur jetable seulement)
 
 function report(label, ok, ms, detail = '') {
   results.push({ label, ok });
@@ -74,10 +77,13 @@ async function main() {
     const root = join(dirname(fileURLToPath(import.meta.url)), '..');
     const port = 8123 + Math.floor(Math.random() * 500);
     BASE = `http://127.0.0.1:${port}`;
+    tfbMock = await startTfbMock();
     // Le serveur jetable démarre avec le seed de démonstration (SIG_DEMO=1)
     // pour disposer de modules / magasins / players à tester.
     child = spawn(process.execPath, [join(root, 'server', 'index.js')], {
-      env: { ...process.env, PORT: String(port), SIG_DB: join(dir, 'test.db'), SIG_DEMO: '1' },
+      // TFBuddy simulé : le serveur jetable y lit ses bundles comme en production.
+      env: { ...process.env, PORT: String(port), SIG_DB: join(dir, 'test.db'), SIG_DEMO: '1',
+        TFBUDDY_API_BASE: tfbMock.url, TFBUDDY_PHONE: MOCK_ACCOUNTS.admin.phone, TFBUDDY_PASSWORD: MOCK_ACCOUNTS.admin.password, TFBUDDY_ROLE: '' },
       stdio: 'ignore',
     });
     console.log(`▶ Serveur jetable : ${BASE} (BDD ${join(dir, 'test.db')})`);
@@ -135,6 +141,24 @@ async function main() {
     if (!Array.isArray(p.promoTypes) || p.promoTypes.length < 3) throw new Error('sous-types de promotion manquants (sig_promo_types)');
     for (const x of p.promoTypes) if (!x.id || !x.name || !x.icon) throw new Error(`sous-type ${x.id} incomplet`);
     return p.promoTypes.map((x) => `${x.icon} ${x.name}`).join(' · ');
+  });
+  await step('GET /api/v1/bundles — bundles TFBuddy (état de la synchro)', async () => {
+    const r = await call('GET', '/api/v1/bundles');
+    if (!Array.isArray(r.bundles) || !r.sync || !r.tfbuddy) throw new Error('réponse incomplète');
+    if (JSON.stringify(r.tfbuddy).toLowerCase().includes('password')) throw new Error('la réponse parle de mot de passe');
+    if (!r.tfbuddy.configured) return 'compte TFBuddy non configuré (secrets TFBUDDY_PHONE / TFBUDDY_PASSWORD)';
+    if (r.sync.ok === false) return `synchro en erreur : ${r.sync.error}`;
+    if (!r.sync.at) return 'compte configuré · première synchro en attente';
+    return `${r.bundles.length} bundle(s) · ${r.bundles.filter((b) => b.status === 'ACTIVE').length} actif(s) · synchro ${r.sync.at.slice(0, 16).replace('T', ' ')}`;
+  });
+  await step('Créneaux d’un bundle — jour ISO, heure de fin exclue (rendu des écrans)', async () => {
+    const m = { bundle: { slots: [1, 2, 3, 4, 5].map((d) => ({ dow: d, from: '06:00', to: '11:00' })) } };
+    const at = (d, h, mi) => new Date(2026, 9, d, h, mi);   // octobre 2026 : le 12 est un lundi
+    const cases = [[at(12, 8, 0), true], [at(12, 11, 0), false], [at(12, 5, 59), false], [at(16, 10, 59), true], [at(11, 8, 0), false]];
+    for (const [d, want] of cases) if (scheduledNow(m, d) !== want) throw new Error(`${d.toString().slice(0, 21)} → ${!want} au lieu de ${want}`);
+    if (!scheduledNow({ bundle: { slots: [{ dow: 7, from: '00:00', to: '23:59' }] } }, at(11, 23, 59))) throw new Error('« 23:59 » doit courir jusqu’à minuit');
+    if (!scheduledNow({ bundle: { slots: [] } }, at(11, 3, 0))) throw new Error('un bundle sans créneau passe tout le temps');
+    return 'lun 08:00 ✓ · lun 11:00 ✗ · 05:59 ✗ · ven 10:59 ✓ · dim ✗ · « 23:59 » = minuit';
   });
   await step('GET /api/v1/campaigns — campagnes marketing (liste)', async () => {
     const c = await call('GET', '/api/v1/campaigns');
@@ -1369,10 +1393,92 @@ async function main() {
     });
   }
 
+  if (MUTATE && tfbMock) {
+    await step('Bundles TFBuddy — synchro : pagination, détail, magasins, produits', async () => {
+      // Les produits TFBuddy 901 et 902 = « pwp901 », « pwp902 » (ids de l'import PWA).
+      const cat = await call('GET', '/api/v1/catalog');
+      const cid = cat.categories[0].id;
+      cat.products = cat.products.filter((p) => !/^pwp90[12]$/.test(p.id));
+      cat.products.push({ id: 'pwp901', categoryId: cid, name: 'Croissant LT', price: '1,40', img: 'assets/cookies.png', src: 'illus', active: true, prices: { st2: '1,50' }, aliases: {} });
+      cat.products.push({ id: 'pwp902', categoryId: cid, name: 'Café LT', price: '2,60', img: 'assets/cherry.png', src: 'illus', active: true, prices: {}, aliases: {} });
+      await call('PUT', '/api/v1/catalog', cat);
+      const r = await call('POST', '/api/v1/bundles/sync');
+      const s = r.sync;
+      if (!r.ok || !s.ok) throw new Error(`synchro en échec : ${s.error}`);
+      if (s.count !== 3 || s.active !== 2) throw new Error(`3 bundles dont 2 actifs attendus, reçu ${s.count}/${s.active}`);
+      if (!tfbMock.calls.some((c) => c.includes('/admin/promotions/bundles?page=2'))) throw new Error('page 2 de la liste non lue');
+      if (!tfbMock.calls.some((c) => c.endsWith('/admin/promotions/bundles/32'))) throw new Error('détail d’un bundle non lu');
+      const b31 = r.bundles.find((b) => b.id === 'tfb31');
+      const b32 = r.bundles.find((b) => b.id === 'tfb32');
+      if (!b31 || b31.items.map((i) => i.productId).join() !== 'pwp901,pwp902') throw new Error('produits du bundle non reliés au catalogue');
+      if (b31.schedule.length !== 5 || b31.schedule[0].dow !== 1 || b31.schedule[0].from !== '06:00' || b31.schedule[0].to !== '11:00') throw new Error(`créneaux mal relus : ${JSON.stringify(b31.schedule[0])}`);
+      if (!b32 || b32.price !== 6.9 || b32.scope !== 'selected' || JSON.stringify(b32.storeIds) !== '["st2"]') throw new Error(`bundle magasin mal relu : ${JSON.stringify(b32)}`);
+      if (JSON.stringify(s.unmappedShops) !== '["77"]' || JSON.stringify(s.unknownProducts) !== '["903"]') throw new Error(`signalements inattendus : ${JSON.stringify(s)}`);
+      if (!r.stores.some((x) => x.id === 'st2' && x.name)) throw new Error('noms des magasins absents');
+      // Le visuel choisi en régie survit à la synchro suivante.
+      await call('PATCH', '/api/v1/bundles/tfb31', { img: 'assets/cookies.png' });
+      const again = await call('POST', '/api/v1/bundles/sync');
+      if (again.bundles.find((b) => b.id === 'tfb31').img !== 'assets/cookies.png') throw new Error('visuel perdu à la resynchro');
+      return `${s.count} bundles (${s.active} actifs) · 2 pages + détails · magasin TFBuddy 4 → st2 · signalés : magasin 77, produit 903`;
+    });
+    await step('Bundles TFBuddy — à l’écran : son magasin, ses prix, tombé si épuisé', async () => {
+      const st = await call('GET', '/api/v1/state');
+      const sched = { days: [1, 1, 1, 1, 1, 1, 1], from: '00:00', to: '23:59' };
+      const extra = [['lt_b31', 'tfb31'], ['lt_b32', 'tfb32'], ['lt_b33', 'tfb33']].map(([id, ref]) => (
+        { id, type: 'bundle', name: id, bundleRef: ref, layout: 'composition', schedule: sched, items: [], tag: {}, pos: {} }));
+      const pls = st.playlists.map((p) => (p.id === st.activePlaylistId ? { ...p, items: [...extra.map((m) => m.id), ...p.items] } : p));
+      await call('PUT', '/api/v1/draft', { modules: [...st.modules, ...extra], playlists: pls, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      let acc = null;
+      try {
+        const back = await call('GET', '/api/v1/state');
+        if ((back.modules.find((m) => m.id === 'lt_b32') || {}).bundleRef !== 'tfb32') throw new Error('bundleRef non enregistré');
+        await call('POST', '/api/v1/publish', { mode: 'full', targets: [] });
+        const bundlesOf = async (store) => (await call('GET', `/api/v1/film?store=${store}`)).modules.filter((m) => m.type === 'bundle');
+        const gare = await bundlesOf('st2');
+        const nord = await bundlesOf('st3');
+        if (gare.map((m) => m.id).sort().join() !== 'lt_b31,lt_b32') throw new Error(`Gare : ${gare.map((m) => m.id).join() || 'aucun'} (inactif exclu, bundle du magasin inclus)`);
+        if (nord.map((m) => m.id).join() !== 'lt_b31') throw new Error(`Nord : ${nord.map((m) => m.id).join() || 'aucun'} (bundle d’un autre magasin exclu)`);
+        const g31 = gare.find((m) => m.id === 'lt_b31');
+        if (g31.items[0].price !== '1,50' || nord[0].items[0].price !== '1,40') throw new Error('prix du magasin non appliqués aux produits du bundle');
+        if (g31.bundle.price !== 3.5 || g31.bundle.slots.length !== 5 || g31.bundle.img !== 'assets/cookies.png') throw new Error('bundle mal résolu pour l’écran');
+        const snap = await call('GET', '/api/v1/film?store=st2');
+        if (!snap.media.includes('assets/cookies.png')) throw new Error('visuels du bundle absents du cache des écrans');
+        if (!String(snap.storeStamp || '').includes('|b:')) throw new Error('l’empreinte du magasin ignore les bundles');
+        // Rupture déclarée par la Gare sur le croissant : ses deux bundles tombent, chez elle seulement.
+        acc = await call('POST', '/api/v1/stores/st2/account', { username: 'livetest-bundles' });
+        const login = await (await fetch(BASE + '/api/v1/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: acc.username, password: acc.password }) })).json();
+        const H = { authorization: `Bearer ${login.token}`, 'content-type': 'application/json' };
+        const out = async (on) => fetch(BASE + '/api/v1/my-store/unavailable', { method: 'POST', headers: H, body: JSON.stringify({ productId: 'pwp901', unavailable: on }) });
+        await out(true);
+        if ((await bundlesOf('st2')).length) throw new Error('croissant épuisé à la Gare : ses bundles passent encore');
+        if ((await bundlesOf('st3')).length !== 1) throw new Error('la rupture de la Gare a touché le Nord');
+        await out(false);
+        if ((await bundlesOf('st2')).length !== 2) throw new Error('bundles non rétablis après la rupture');
+        // Le compte magasin n'atteint pas les bundles de la régie.
+        if ((await fetch(BASE + '/api/v1/bundles', { headers: H })).status !== 403) throw new Error('compte magasin : /bundles non refusé');
+        return 'Gare : 2 bundles (prix Gare) · Nord : 1 · inactif exclu · épuisé → retirés puis rétablis · cache + empreinte';
+      } finally {
+        if (acc) await call('DELETE', '/api/v1/stores/st2/account').catch(() => {});
+        await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      }
+    });
+    await step('Bundles TFBuddy — compte sans MENU.BUNDLE.MANAGE : erreur dite, bundles gardés', async () => {
+      tfbMock.revoke(true);
+      try {
+        const r = await call('POST', '/api/v1/bundles/sync');
+        if (r.ok || r.sync.ok) throw new Error('synchro réussie malgré le droit retiré');
+        if (!/403/.test(r.sync.error) || !/MENU\.BUNDLE\.MANAGE/.test(r.sync.error)) throw new Error(`message peu clair : ${r.sync.error}`);
+        if (r.bundles.length !== 3) throw new Error('les bundles déjà lus ont été effacés');
+        return r.sync.error;
+      } finally { tfbMock.revoke(false); }
+    });
+  }
+
   const ok = results.filter((r) => r.ok).length;
   const ko = results.length - ok;
   console.log(`\n${ko === 0 ? '\x1b[32m' : '\x1b[31m'}${ok}/${results.length} tests OK${ko ? ` · ${ko} en échec` : ''}\x1b[0m\n`);
   if (child) child.kill();
+  if (tfbMock) tfbMock.close();
   process.exit(ko === 0 ? 0 : 1);
 }
 

@@ -42,7 +42,8 @@ d'exemple ci-dessus) et le compte `agence` garde son mot de passe de démo `agen
 transfert du code, provisionnement (Node ≥ 22, mots de passe, compte système `signage` et
 son accès MariaDB, service systemd, proxy Apache, **https**), puis tests live. Secrets GitHub (Settings → Secrets and variables → Actions) :
 `SERVER_HOST`, `SERVER_USER` (root), `SERVER_SSH_KEY`, `SIG_ADMIN_PASSWORD`,
-`SIG_AGENCY_PASSWORD` — détail en tête du workflow.
+`SIG_AGENCY_PASSWORD`, et pour les bundles `TFBUDDY_PHONE` + `TFBUDDY_PASSWORD` — détail en
+tête du workflow.
 
 - **Les fichiers uploadés ne sont jamais effacés.** Le transfert se fait sans `--delete`
   et ne touche ni `data/` ni `public/media/`, `public/surprise/`, `public/anim/` (médiathèque
@@ -491,6 +492,38 @@ contenu vient d'une **liste d'entités** — on n'a qu'à en **déposer une comm
   gauche/droite + texte). Supprimer une campagne ne casse pas les éléments qui la diffusaient.
   API : `GET /campaigns`, `PUT /campaigns`.
 
+### Bundles TFBuddy (lus sur l'API)
+Les bundles se gèrent dans **TFBuddy** (le panel, `https://atelierby.tfbuddy.com`) ; la régie
+les **lit sur son API**, comme le cockpit consultant (`consultant_bo`, `src/panel_api.php`) :
+`POST /<rôle>/auth/login {phone, password}` → jeton, puis `GET /admin/promotions/bundles`
+(toutes les pages) et le détail de chacun (`/admin/promotions/bundles/{id}`) : nom, **prix du
+bundle**, **produits et quantités**, **magasins** (tous ou une sélection), **créneaux** de la
+semaine (jour ISO 1 = lundi … 7, heure de début incluse, de fin exclue), statut.
+
+- **Compte** : secrets `TFBUDDY_PHONE` + `TFBUDDY_PASSWORD`, écrits par la livraison dans
+  `/etc/signage/signage.env` (jamais en base : le miroir MySQL la recopie). Le compte doit avoir
+  le droit **`MENU.BUNDLE.MANAGE`** — sans lui, TFBuddy répond 403 (c'est le cas du compte
+  consultant au 10/10/2026). Les rôles `admin`, `consultant`, `owner` sont essayés dans cet ordre,
+  puis celui qui a marché passe en premier. Identifiants refusés : la synchro automatique attend
+  6 h (pas de blocage du compte) ; le bouton de la régie, non.
+- **Synchro** : au démarrage, puis toutes les **30 min**, ou **Promotions → Bundles TFBuddy →
+  Synchroniser**. La table `sig_bundles` est un **reflet** remplacé à chaque synchro (seul le
+  visuel choisi en régie est gardé). Produits TFBuddy `N` = produits de l'import PWA `pwpN` ;
+  magasins reliés par la correspondance de l'import PWA, sinon par slug/nom (`GET /shops`). Ce qui
+  ne se relie pas est **signalé** dans la régie (magasin TFBuddy non relié, produit absent du
+  catalogue). Une erreur (403, compte refusé, TFBuddy injoignable) est dite telle quelle ; les
+  bundles déjà lus restent.
+- **À l'écran** : **＋ Élément → « Bundle — TFBuddy » 🎁** (ou « Créer l'élément » depuis la
+  liste), puis on choisit le bundle. Rendu : nom, **photos des produits** avec leurs quantités,
+  **prix du bundle**, « **au lieu de** » (somme des prix **du magasin**) et l'économie — en FR / NL /
+  EN selon la langue du magasin. Trois mises en page : composition, offre + produits, visuel plein
+  écran. Par magasin (`finishSnapshot` → `applyBundles`), un bundle **tombe** s'il n'est pas
+  `ACTIVE`, pas pour ce magasin, hors de ses dates, ou si **un de ses produits est épuisé** ici ;
+  l'écran ne le joue qu'**à ses créneaux** (vérifié sur l'écran, même hors ligne). Une synchro qui
+  change un bundle change l'empreinte du magasin (`storeStamp`) : les écrans se resynchronisent
+  sans republier.
+- API : `GET /bundles` · `POST /bundles/sync` · `PATCH /bundles/{id}` (visuel).
+
 ### Paramètres
 URL du CMS, IP / hôte player, token — persistés en base. **« Tester la connexion (live) »**
 exécute côté serveur : ping TCP de l'hôte, `GET assignment`, `GET dataset prix`,
@@ -513,7 +546,7 @@ qui la portent restent visibles ; la liste ne peut pas être vidée.
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + cycle complet — 72 tests
+npm test              # serveur jetable (BDD temporaire) + TFBuddy simulé + cycle complet — 77 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
 node test/live-test.js http://185.180.206.46/signage --password=… --mutate
@@ -537,6 +570,7 @@ session admin  : POST /api/v1/login · /logout · GET /me
                  GET /catalog · PUT /catalog (produits · prix · rupture)
                  GET /promo-types · PUT /promo-types (sous-types de promotion)
                  GET /campaigns · PUT /campaigns (campagnes marketing)
+                 GET /bundles · POST /bundles/sync · PATCH /bundles/{id} (bundles TFBuddy)
                  GET /lib-categories · PUT /lib-categories (classement + table liée)
                  GET /ingredients · PUT /ingredients (matière première ↔ animation)
                  POST /anim-assets · GET /anim-assets (fichiers d'animation)

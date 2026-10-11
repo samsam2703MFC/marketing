@@ -17,14 +17,16 @@ import {
   loadPlan, savePlan, planFilmAt, setActiveWeek, duplicateWeek,
   checkLogin, createSession, sessionUser, destroySession, agencyAccountEnabled,
   userInfo, listStoreAccounts, setStoreAccount, deleteStoreAccount, STORE_LOGIN_RE,
-  storeUnavailable, setStoreUnavailable, storeUnavailableStamp, endOfDayBrussels,
+  storeUnavailable, setStoreUnavailable, storeDataStamp, endOfDayBrussels,
+  loadBundles, saveSyncedBundles, setBundleImg,
 } from './db.js';
+import { tfbConfigured, tfbPublicConfig, fetchBundles, fetchShops, tfbAuthBackoff } from './tfbuddy.js';
 import { randomBytes } from 'node:crypto';
 import { httpsStatus } from './https-status.js';
 import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
 // Liste des fichiers d'un snapshot — la même que celle du cache des écrans.
 import { snapshotAssets } from '../public/js/assets.js';
-import { publicPwaConfig, savePwaConfig, resetPwaConfig, testPwa, importPwa, pwaBaseName, importSeasons, inspectSeasons, inspectIngredients } from './pwadb.js';
+import { publicPwaConfig, savePwaConfig, resetPwaConfig, testPwa, importPwa, pwaBaseName, importSeasons, inspectSeasons, inspectIngredients, pwaConfig, matchStore } from './pwadb.js';
 import { scheduleMirror, syncMirror, mirrorStatus } from './mirror.js';
 import { runConnectionTest, runDeployTests, tcpPing } from './livetest.js';
 
@@ -218,11 +220,109 @@ function appearanceOf(productId, date = new Date()) {
 // pioche des vidéos surprise et des médias ciblés. UN SEUL endroit, appelé par
 // la visionneuse ET les écrans, pour qu'ils ne divergent jamais (la boucle
 // continue, elle, est régénérée juste avant par applyContinuous).
+// Bundles TFBuddy : chaque élément « bundle » reçoit SON bundle, résolu pour
+// ce magasin — ses produits viennent du catalogue (photo ; prix et nom du
+// magasin posés ensuite par applyStorePrices / applyStoreLang), ses créneaux
+// partent avec lui (l'écran ne le montre qu'à ses jours et heures). Il tombe
+// s'il n'est pas actif dans TFBuddy, pas pour ce magasin, hors de ses dates,
+// ou si un de ses produits est épuisé ici.
+const brusselsDay = (date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Brussels', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+function applyBundles(snap, storeId, date) {
+  if (!snap.modules.some((m) => m.type === 'bundle')) return;
+  const db = getDb();
+  const bundles = new Map(loadBundles().map((b) => [b.id, b]));
+  const off = new Set(storeId ? storeUnavailable(storeId, date).map((r) => r.productId) : []);
+  const prods = new Map(db.prepare('SELECT id, name, price, img, src FROM sig_products').all().map((p) => [p.id, p]));
+  const lang = (storeId && (db.prepare('SELECT lang FROM sig_stores WHERE id = ?').get(storeId) || {}).lang) || 'fr';
+  const today = brusselsDay(date);
+  const keep = [];
+  for (const m of snap.modules) {
+    if (m.type !== 'bundle') { keep.push(m); continue; }
+    const b = bundles.get(m.bundleRef);
+    if (!b || b.status !== 'ACTIVE') continue;
+    if (storeId && b.scope === 'selected' && !b.storeIds.includes(storeId)) continue;
+    if ((b.dateFrom && today < b.dateFrom) || (b.dateTo && today > b.dateTo)) continue;
+    if (b.items.some((it) => it.productId && off.has(it.productId))) continue;
+    m.items = b.items.map((it) => {
+      const p = prods.get(it.productId);
+      return p
+        ? { name: p.name, price: p.price, img: p.img, src: p.src, active: true, productId: p.id, qty: it.qty }
+        : { name: it.name || `Produit ${it.extProductId}`, price: '', img: '', src: 'illus', active: true, qty: it.qty };
+    });
+    m.bundle = { id: b.id, name: b.name, descr: b.descr, price: b.price, img: b.img, slots: b.schedule, lang };
+    keep.push(m);
+  }
+  const ids = new Set(keep.map((m) => m.id));
+  snap.modules = keep;
+  snap.playlist = (snap.playlist || []).filter((id) => ids.has(id));
+}
+
+// ---- Synchro des bundles TFBuddy -------------------------------------------
+// Toutes les 30 min (et à la demande en régie). Le résultat — ou l'erreur,
+// dite telle quelle — reste dans sig_settings (tfbuddy_bundles).
+export function bundleSyncStatus() {
+  try { return JSON.parse(getSetting('tfbuddy_bundles', '{}')) || {}; } catch { return {}; }
+}
+let bundleSyncRun = null;
+export function syncBundles({ manual = false } = {}) {
+  if (bundleSyncRun) return bundleSyncRun;
+  bundleSyncRun = (async () => {
+    const t0 = Date.now();
+    const prev = bundleSyncStatus();
+    if (!tfbConfigured()) {
+      const st = { ok: false, at: nowIso(), configured: false, error: 'compte TFBuddy non configuré — secrets TFBUDDY_PHONE et TFBUDDY_PASSWORD' };
+      setSetting('tfbuddy_bundles', JSON.stringify(st));
+      return st;
+    }
+    // Identifiants refusés : la synchro automatique attend (pas de blocage du compte).
+    if (!manual && tfbAuthBackoff()) return prev;
+    let st;
+    try {
+      const list = await fetchBundles();
+      // Magasins : la correspondance manuelle de l'import PWA d'abord (mêmes
+      // ids), puis par slug / nom, comme l'import.
+      const manualMap = {};
+      for (const [storeId, extId] of Object.entries(pwaConfig().shopMap || {})) manualMap[String(extId)] = storeId;
+      let shops = [];
+      let shopsError = '';
+      if (list.some((b) => (b.shopIds || []).some((x) => !manualMap[x]))) {
+        try { shops = await fetchShops(); } catch (e) { shopsError = String(e.message || e); }
+      }
+      const byExt = new Map(shops.map((x) => [x.id, x]));
+      const sigStores = getDb().prepare('SELECT id, name FROM sig_stores').all();
+      const storeOf = (ext) => manualMap[ext] || (byExt.has(ext) ? ((matchStore(byExt.get(ext), sigStores).match || {}).id || '') : '');
+      const r = saveSyncedBundles(list, storeOf);
+      st = {
+        ok: true, at: nowIso(), configured: true, ms: Date.now() - t0, account: tfbPublicConfig().role,
+        count: r.count, active: r.active, unmappedShops: r.unmappedShops, unknownProducts: r.unknownProducts,
+        ...(shopsError ? { shopsError } : {}),
+      };
+    } catch (e) {
+      st = { ok: false, at: nowIso(), configured: true, ms: Date.now() - t0, error: String(e.message || e), httpStatus: e.status || 0,
+        count: prev.count || 0, active: prev.active || 0, lastOk: prev.ok ? prev.at : (prev.lastOk || null) };
+    }
+    setSetting('tfbuddy_bundles', JSON.stringify(st));
+    scheduleMirror();
+    return st;
+  })().finally(() => { bundleSyncRun = null; });
+  return bundleSyncRun;
+}
+export function startBundleSync() {
+  if (!tfbConfigured()) return;
+  setTimeout(() => { syncBundles().catch(() => {}); }, 15000);
+  setInterval(() => { syncBundles().catch(() => {}); }, 30 * 60000);
+}
+const bundlesJson = () => ({
+  bundles: loadBundles(), sync: bundleSyncStatus(), tfbuddy: tfbPublicConfig(),
+  // Noms des magasins : la page Promotions les montre sans charger le réseau.
+  stores: getDb().prepare('SELECT id, name FROM sig_stores ORDER BY name').all(),
+});
+
 // Ruptures déclarées par le magasin : ses écrans ne montrent plus ces
 // produits — ni dans les listes, ni en « produit seul », promo ou campagne.
 function applyStoreUnavailable(snap, storeId, date) {
   const off = new Set(storeId ? storeUnavailable(storeId, date).map((r) => r.productId) : []);
-  snap.storeStamp = storeId ? storeUnavailableStamp(storeId, date) : '';
+  snap.storeStamp = storeId ? storeDataStamp(storeId, date) : '';
   if (!off.size) return;
   const keep = [];
   for (const m of snap.modules) {
@@ -238,6 +338,7 @@ function applyStoreUnavailable(snap, storeId, date) {
 
 function finishSnapshot(snap, storeId, date = new Date()) {
   if (!snap || !Array.isArray(snap.modules)) return snap;
+  applyBundles(snap, storeId, date);
   applyStoreUnavailable(snap, storeId, date);
   applyStorePrices(snap.modules, storeId);
   applyStoreLang(snap.modules, storeId);
@@ -548,8 +649,8 @@ function heartbeat(id, body, url) {
       dataVer: getIntSetting('data_ver', 1),
       // Film continu : révision courante (change au moment/saison) → resync écran.
       revision: continuousRevisionForVer(playerRow(id).assigned_ver),
-      // Ruptures du magasin : l'écran se resynchronise quand elles changent.
-      storeStamp: storeUnavailableStamp(playerRow(id).store_id),
+      // Ruptures du magasin et bundles TFBuddy : l'écran se resynchronise quand ils changent.
+      storeStamp: storeDataStamp(playerRow(id).store_id),
       override: getSetting('override', '0') === '1',
       serverTime: nowIso(),
     },
@@ -918,7 +1019,7 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
         if (!loadCatalog().products.some((p) => p.id === productId)) return send(404, { error: 'produit inconnu' });
         const until = body.mode === 'manuel' ? null : endOfDayBrussels();
         const list = setStoreUnavailable(st.id, productId, !!body.unavailable, { until, by: user });
-        return send(200, { ok: true, unavailable: list, storeStamp: storeUnavailableStamp(st.id) });
+        return send(200, { ok: true, unavailable: list, storeStamp: storeDataStamp(st.id) });
       }
       return send(403, { error: 'Compte magasin : réservé à l\'espace magasin' });
     }
@@ -1000,6 +1101,22 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       const libCategories = saveLibCategories(body.libCategories);
       scheduleMirror();
       return send(200, { ok: true, libCategories, libSources: LIB_SOURCES, savedAt: nowIso() });
+    }
+
+    // ---- bundles TFBuddy (lus sur l'API TFBuddy, déposables comme item) ----
+    if (req.method === 'GET' && path === '/bundles') return send(200, bundlesJson());
+    if (req.method === 'POST' && path === '/bundles/sync') {
+      const sync = await syncBundles({ manual: true });
+      return send(200, { ok: !!sync.ok, ...bundlesJson() });
+    }
+    {
+      const mb = /^\/bundles\/([A-Za-z0-9_-]+)$/.exec(path);
+      if (mb && req.method === 'PATCH') {
+        const body = await readBody();
+        if (!setBundleImg(mb[1], body.img)) return send(404, { error: 'bundle inconnu' });
+        scheduleMirror();
+        return send(200, { ok: true, ...bundlesJson() });
+      }
     }
 
     // ---- campagnes marketing (liste d'entités déposables comme item) --------

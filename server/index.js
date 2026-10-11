@@ -11,7 +11,7 @@ import { join, extname, normalize } from 'node:path';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getDb, DB_PATH } from './db.js';
-import { handleApi } from './api.js';
+import { handleApi, startBundleSync } from './api.js';
 import { serviceWorkerSource } from './sw.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -197,5 +197,7 @@ if (isMain) {
     import('./mirror.js').then(({ syncMirror }) => syncMirror().then((r) => {
       if (r && r.ok) console.log(`  miroir MySQL : ${r.tables} tables · ${r.rows} lignes → base « ${r.db} »`);
     }).catch(() => {})).catch(() => {});
+    // Bundles TFBuddy : synchro au démarrage puis toutes les 30 min (si un compte est configuré).
+    startBundleSync();
   });
 }

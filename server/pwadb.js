@@ -221,6 +221,19 @@ async function langMap(cfg, db) {
   return null;
 }
 
+// Une boutique de la base PWA (ou de TFBuddy, mêmes ids) → magasin de la
+// régie : par slug, puis par nom, puis par inclusion. La même règle sert à
+// l'import des prix et aux magasins des bundles TFBuddy.
+export function matchStore(sh, sigStores) {
+  const key = sh.slug || slugify(sh.name) || `shop${sh.id}`;
+  return {
+    key,
+    match: sigStores.find((x) => x.id === key)
+      || sigStores.find((x) => slugify(x.name) === key)
+      || (key.length >= 3 ? sigStores.find((x) => slugify(x.name).includes(key) || key.includes(slugify(x.name))) : null),
+  };
+}
+
 async function detectShops(cfg, db) {
   for (const t of ['shops', 'shop']) {
     try {
@@ -624,15 +637,7 @@ async function doImport(cfg, queries) {
         VALUES (?, ?, 'Boutiques PWA', 'fibre', 1, 55, 'paysage', ?)`);
       const setActive = db0.prepare('UPDATE sig_stores SET active = ? WHERE id = ?');
       const setLang = db0.prepare('UPDATE sig_stores SET lang = ? WHERE id = ?');
-      const findMatch = (sh) => {
-        const key = sh.slug || slugify(sh.name) || `shop${sh.id}`;
-        return {
-          key,
-          match: sigStores.find((x) => x.id === key)
-            || sigStores.find((x) => slugify(x.name) === key)
-            || (key.length >= 3 ? sigStores.find((x) => slugify(x.name).includes(key) || key.includes(slugify(x.name))) : null),
-        };
-      };
+      const findMatch = (sh) => matchStore(sh, sigStores);
       // Boutiques inactives : on désactive le magasin correspondant s'il
       // existe (sans le créer) — il disparaît de la grille produits / planning.
       for (const sh of shops.filter((s) => !s.active)) {
