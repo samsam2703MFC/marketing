@@ -112,7 +112,7 @@ jobs:
           if [ -n "$B64_ADMIN" ]; then echo "::add-mask::$B64_ADMIN"; fi
           if [ -n "$B64_AGENCY" ]; then echo "::add-mask::$B64_AGENCY"; fi
           ssh -i ~/.ssh/id_deploy "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
-            "B64_ADMIN='$B64_ADMIN' B64_AGENCY='$B64_AGENCY' bash -s" <<'PROVISION'
+            "B64_ADMIN='$B64_ADMIN' B64_AGENCY='$B64_AGENCY' PUBLIC_HOST='${{ secrets.SERVER_HOST }}' bash -s" <<'PROVISION'
           set -e
           cd /var/www/signage
           SIG_PW=$(printf '%s' "$B64_ADMIN" | base64 -d)
@@ -274,6 +274,113 @@ jobs:
           else
             echo "⚠ Apache non détecté — configurer le reverse proxy manuellement (voir deploy/nginx-signage.conf)"
           fi
+          echo "— HTTPS : certificat Let's Encrypt de l'adresse publique (6 jours, renouvelé seul)"
+          # Sans https, le navigateur refuse le service worker : un écran ne
+          # peut pas redémarrer sans réseau. Le serveur n'a pas de nom de
+          # domaine : Let's Encrypt délivre depuis 2026 des certificats pour
+          # une adresse IP (profil « shortlived », 6 jours), que Certbot ≥ 5.4
+          # obtient par webroot. Tout échec ici est un AVERTISSEMENT : http
+          # reste intact, la livraison continue.
+          https_setup() {
+            [ -n "$PUBLIC_HOST" ] || { echo "adresse publique inconnue — https ignoré"; return 1; }
+            command -v apache2ctl >/dev/null 2>&1 || { echo "Apache absent — https ignoré"; return 1; }
+            if ss -ltnp 2>/dev/null | grep -E '[:.]443[[:space:]]' | grep -vq apache2; then
+              echo "::warning::port 443 déjà pris par un autre service — https ignoré"; return 1
+            fi
+            if printf '%s' "$PUBLIC_HOST" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then IDENT="--ip-address $PUBLIC_HOST"; else IDENT="-d $PUBLIC_HOST"; fi
+            CB=/opt/certbot/bin/certbot
+            # Certbot isolé dans /opt/certbot (les paquets des distributions sont trop anciens).
+            if ! "$CB" --version 2>/dev/null | awk '{ split($2, v, "."); exit !(v[1] > 5 || (v[1] == 5 && v[2] >= 4)) }'; then
+              echo "installation de Certbot ≥ 5.4 dans /opt/certbot…"
+              python3 -m venv --help >/dev/null 2>&1 && python3 -c 'import ensurepip' 2>/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y python3-venv >/dev/null 2>&1 || true
+              { rm -rf /opt/certbot && python3 -m venv /opt/certbot && /opt/certbot/bin/pip install -q --upgrade pip && /opt/certbot/bin/pip install -q 'certbot>=5.4,<6'; } \
+                || { echo "::warning::installation de Certbot impossible — https ignoré"; return 1; }
+            fi
+            "$CB" --version
+            # Défi ACME sur le port 80 : /.well-known/acme-challenge/ servi depuis /var/www/letsencrypt.
+            install -d -m 0755 /var/www/letsencrypt/.well-known/acme-challenge
+            cat > /etc/apache2/conf-available/signage-acme.conf <<'ACME'
+          # Défi Let's Encrypt (webroot) du certificat https de la régie signage
+          Alias /.well-known/acme-challenge/ /var/www/letsencrypt/.well-known/acme-challenge/
+          <Directory /var/www/letsencrypt/.well-known/acme-challenge/>
+            Require all granted
+          </Directory>
+          ACME
+            a2enconf signage-acme >/dev/null
+            if ! apache2ctl configtest >/dev/null 2>&1; then a2disconf signage-acme >/dev/null; echo "::warning::conf du défi ACME refusée par Apache — https ignoré"; return 1; fi
+            systemctl reload apache2
+            CBARGS="--non-interactive --agree-tos --register-unsafely-without-email --preferred-profile shortlived --webroot --webroot-path /var/www/letsencrypt $IDENT"
+            if [ ! -e "/etc/letsencrypt/live/$PUBLIC_HOST/fullchain.pem" ]; then
+              # Essai à blanc d'abord : un échec ne compte pas dans les limites de Let's Encrypt.
+              "$CB" certonly --dry-run $CBARGS >/dev/null 2>&1 \
+                || { echo "::warning::essai à blanc Let's Encrypt refusé (port 80 injoignable depuis Internet ?) — https ignoré"; return 1; }
+            fi
+            "$CB" certonly -q --keep-until-expiring $CBARGS --deploy-hook "systemctl reload apache2" \
+              || { echo "::warning::certificat Let's Encrypt non obtenu — https ignoré"; return 1; }
+            # Hôte https : /signage/ seulement. Nommé 000-… pour répondre aux
+            # requêtes par adresse IP (sans SNI), même si un autre site 443 existe.
+            SSL_BEFORE=$(apache2ctl -M 2>/dev/null | grep -c 'ssl_module' || true)
+            a2enmod ssl headers >/dev/null
+            cat > /etc/apache2/sites-available/000-signage-ssl.conf <<SSL
+          # Régie signage en https (certificat Let's Encrypt de l'adresse publique)
+          <VirtualHost *:443>
+            ServerName $PUBLIC_HOST
+            SSLEngine on
+            SSLCertificateFile /etc/letsencrypt/live/$PUBLIC_HOST/fullchain.pem
+            SSLCertificateKeyFile /etc/letsencrypt/live/$PUBLIC_HOST/privkey.pem
+            RequestHeader set X-Forwarded-Proto "https"
+            ProxyPreserveHost On
+            RedirectMatch 301 ^/signage$ /signage/
+            ProxyPass        /signage/ http://127.0.0.1:8080/
+            ProxyPassReverse /signage/ http://127.0.0.1:8080/
+          </VirtualHost>
+          SSL
+            a2ensite 000-signage-ssl >/dev/null
+            if ! apache2ctl configtest >/dev/null 2>&1; then
+              a2dissite 000-signage-ssl >/dev/null; systemctl reload apache2
+              echo "::warning::hôte https refusé par Apache — retiré, http intact"; return 1
+            fi
+            systemctl reload apache2 || true
+            sleep 1
+            # Garde-fou : si Apache n'a pas survécu à l'ouverture du port 443,
+            # on retire l'hôte https (et le module SSL s'il vient de nous), et
+            # on le relance tel qu'avant — http d'abord, pour tout le serveur.
+            if ! curl -fsS --noproxy '*' http://127.0.0.1/signage/api/v1/health >/dev/null 2>&1; then
+              a2dissite 000-signage-ssl >/dev/null 2>&1 || true
+              [ "${SSL_BEFORE:-0}" = "0" ] && a2dismod -f ssl >/dev/null 2>&1 || true
+              systemctl restart apache2 || true
+              echo "::warning::Apache n'a pas accepté le port 443 — https retiré, http rétabli"; return 1
+            fi
+            # Renouvellement : deux passages par jour (Certbot renouvelle à mi-vie).
+            cat > /etc/systemd/system/signage-certbot.service <<'UNIT'
+          [Unit]
+          Description=Renouvellement du certificat https de la régie signage (Let's Encrypt)
+          [Service]
+          Type=oneshot
+          ExecStart=/opt/certbot/bin/certbot renew -q
+          UNIT
+            cat > /etc/systemd/system/signage-certbot.timer <<'UNIT'
+          [Unit]
+          Description=Renouvellement du certificat https de la régie signage, deux fois par jour
+          [Timer]
+          OnCalendar=*-*-* 03,15:00:00
+          RandomizedDelaySec=1h
+          Persistent=true
+          [Install]
+          WantedBy=timers.target
+          UNIT
+            systemctl daemon-reload
+            systemctl enable --now signage-certbot.timer >/dev/null 2>&1 || true
+            for i in 1 2 3 4 5; do
+              if curl -fsS --noproxy '*' --connect-to "$PUBLIC_HOST:443:127.0.0.1:443" "https://$PUBLIC_HOST/signage/api/v1/health" >/dev/null 2>&1; then
+                echo "https OK ✓ — certificat valable jusqu'au $(openssl x509 -enddate -noout -in "/etc/letsencrypt/live/$PUBLIC_HOST/fullchain.pem" | cut -d= -f2)"
+                return 0
+              fi
+              sleep 2
+            done
+            echo "::warning::https configuré mais la santé en https ne répond pas en local"; return 1
+          }
+          https_setup || echo "https : non disponible pour cette livraison — la régie reste servie en http"
           PROVISION
 
       - name: Vérifier qu'aucun fichier uploadé n'a disparu
@@ -298,6 +405,16 @@ jobs:
           done
           echo "::error::Le service tourne mais $PUBLIC_URL/api/v1/health ne répond pas — reverse proxy à vérifier (deploy/apache-signage.conf ou nginx-signage.conf)." >&2
           exit 1
+
+      - name: Vérifier https depuis Internet (avertissement seulement)
+        run: |
+          H="${{ secrets.SERVER_HOST }}"
+          if curl -fsS --max-time 15 "https://$H/signage/api/v1/health" >/dev/null 2>&1; then
+            END=$(echo | openssl s_client -connect "$H:443" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+            echo "https public OK ✓ — certificat valable jusqu'au ${END:-?}"
+          else
+            echo "::warning::https injoignable depuis Internet (port 443 fermé par le pare-feu de l'hébergeur ?) — http reste en service"
+          fi
 
       - uses: actions/setup-node@v4
         with:

@@ -138,7 +138,8 @@ class Film extends Component {
       // Film continu : la boucle est régénérée en direct ; on l'applique quand la
       // révision change (changement de moment/saison), en repartant du début.
       const newRevision = snap.continuous && (!cur || cur.revision !== snap.revision);
-      const changed = newVersion || newRevision || cur.dataVer !== snap.dataVer || cur.override !== snap.override;
+      const changed = newVersion || newRevision || cur.dataVer !== snap.dataVer || cur.override !== snap.override
+        || (cur.storeStamp || '') !== (snap.storeStamp || ''); // ruptures du magasin
       if (changed || first || this.state.fromCache) await this.apply(snap, newVersion || newRevision);
     } catch (e) {
       this.setState({ offline: true });

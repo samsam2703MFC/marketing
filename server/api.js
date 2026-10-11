@@ -16,7 +16,11 @@ import {
   loadScreenGroups, screenGroupById, saveScreenGroup, deleteScreenGroup, setPlayerGroup,
   loadPlan, savePlan, planFilmAt, setActiveWeek, duplicateWeek,
   checkLogin, createSession, sessionUser, destroySession, agencyAccountEnabled,
+  userInfo, listStoreAccounts, setStoreAccount, deleteStoreAccount, STORE_LOGIN_RE,
+  storeUnavailable, setStoreUnavailable, storeUnavailableStamp, endOfDayBrussels,
 } from './db.js';
+import { randomBytes } from 'node:crypto';
+import { httpsStatus } from './https-status.js';
 import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
 // Liste des fichiers d'un snapshot — la même que celle du cache des écrans.
 import { snapshotAssets } from '../public/js/assets.js';
@@ -214,8 +218,27 @@ function appearanceOf(productId, date = new Date()) {
 // pioche des vidéos surprise et des médias ciblés. UN SEUL endroit, appelé par
 // la visionneuse ET les écrans, pour qu'ils ne divergent jamais (la boucle
 // continue, elle, est régénérée juste avant par applyContinuous).
+// Ruptures déclarées par le magasin : ses écrans ne montrent plus ces
+// produits — ni dans les listes, ni en « produit seul », promo ou campagne.
+function applyStoreUnavailable(snap, storeId, date) {
+  const off = new Set(storeId ? storeUnavailable(storeId, date).map((r) => r.productId) : []);
+  snap.storeStamp = storeId ? storeUnavailableStamp(storeId, date) : '';
+  if (!off.size) return;
+  const keep = [];
+  for (const m of snap.modules) {
+    if (m.productRef && off.has(m.productRef)) continue;
+    if (Array.isArray(m.items)) m.items = m.items.filter((it) => !(it && it.productId && off.has(it.productId)));
+    if (m.type === 'produit' && !(m.items || []).length) continue;
+    keep.push(m);
+  }
+  const ids = new Set(keep.map((m) => m.id));
+  snap.modules = keep;
+  snap.playlist = (snap.playlist || []).filter((id) => ids.has(id));
+}
+
 function finishSnapshot(snap, storeId, date = new Date()) {
   if (!snap || !Array.isArray(snap.modules)) return snap;
+  applyStoreUnavailable(snap, storeId, date);
   applyStorePrices(snap.modules, storeId);
   applyStoreLang(snap.modules, storeId);
   // Variables liées d'un gabarit HTML d'abord, puis les jetons magasin pour
@@ -301,9 +324,12 @@ export function fleetJson() {
   // et lien avant de brancher l'écran) — seul le bac interne « st-new » vide
   // est masqué.
   const out = [...byStore.values()].filter((s) => s.players.length > 0 || s.id !== 'st-new');
+  const accounts = new Map(listStoreAccounts().map((a) => [a.storeId, a.username]));
   for (const s of out) {
     const anyOnline = s.players.some((p) => p.state !== 'offline');
     if (!anyOnline) s.conn = 'offline';
+    s.account = accounts.get(s.id) || null;
+    s.unavailable = storeUnavailable(s.id);
   }
   return {
     stores: out,
@@ -522,6 +548,8 @@ function heartbeat(id, body, url) {
       dataVer: getIntSetting('data_ver', 1),
       // Film continu : révision courante (change au moment/saison) → resync écran.
       revision: continuousRevisionForVer(playerRow(id).assigned_ver),
+      // Ruptures du magasin : l'écran se resynchronise quand elles changent.
+      storeStamp: storeUnavailableStamp(playerRow(id).store_id),
       override: getSetting('override', '0') === '1',
       serverTime: nowIso(),
     },
@@ -728,6 +756,61 @@ function latestDataset(url) {
 }
 
 // ---------------------------------------------------------------------------
+// Espace magasin
+function storeRow(id) {
+  return id ? getDb().prepare('SELECT * FROM sig_stores WHERE id = ?').get(String(id)) : null;
+}
+// Mot de passe lisible (ni 0/O ni 1/l) : xxxx-xxxx-xxxx, 60 bits d'aléa.
+function newStorePassword() {
+  const A = 'abcdefghjkmnpqrstuvwxyz23456789';
+  const b = randomBytes(12);
+  let out = '';
+  for (let i = 0; i < 12; i++) out += A[b[i] % A.length] + (i === 3 || i === 7 ? '-' : '');
+  return out;
+}
+// Identifiant proposé pour un magasin : son nom, sans la marque, en minuscules.
+function suggestStoreLogin(st) {
+  const base = String(st.name || st.id).replace(/^\s*(l['’]\s*)?atelier\s+by\s*/i, '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 36) || 'magasin';
+  const taken = (u) => !!getDb().prepare('SELECT 1 AS x FROM sig_users WHERE username = ?').get(u);
+  let login = base.length >= 3 ? base : `magasin-${base}`;
+  for (let i = 2; taken(login); i++) login = `${base}-${i}`;
+  return login;
+}
+// Ce qu'un magasin voit : ses écrans (état réel, cache), ses liens, ses
+// produits (noms dans SA langue) et ses ruptures en cours.
+function myStoreJson(st) {
+  const fleet = fleetJson();
+  const mine = fleet.stores.find((s) => s.id === st.id) || { players: [] };
+  const cat = loadCatalog();
+  const lang = st.lang || 'fr';
+  const off = new Map(storeUnavailable(st.id).map((r) => [r.productId, r]));
+  const catName = new Map(cat.categories.map((c) => [c.id, (c.aliases && c.aliases[lang]) || c.name]));
+  const priced = cat.products.some((p) => p.prices && p.prices[st.id] != null);
+  const products = cat.products
+    .filter((p) => p.active && !p.unavailable && (!priced || (p.prices && p.prices[st.id] != null)))
+    .map((p) => ({
+      id: p.id, name: (p.aliases && p.aliases[lang]) || p.name, category: catName.get(p.categoryId) || '',
+      price: (p.prices && p.prices[st.id] != null) ? p.prices[st.id] : p.price,
+      unavailable: off.has(p.id), until: off.has(p.id) ? off.get(p.id).until : null,
+    }));
+  return {
+    store: { id: st.id, name: st.name, lang, address: st.address || '', hours: st.hours || '', format: storeFormat(st) },
+    screens: mine.players.map((p) => ({
+      id: p.id, name: p.name, state: p.state, playedVer: p.playedVer, assignedVer: p.assignedVer,
+      cache: p.cache, detail: p.detail, syncAgo: p.syncAgo, media: p.media,
+      link: `player.html?id=${encodeURIComponent(p.id)}&token=${encodeURIComponent(p.token)}`,
+    })),
+    links: { film: `film?store=${encodeURIComponent(st.id)}` },
+    version: fleet.version,
+    products,
+    unavailable: storeUnavailable(st.id),
+    endOfDay: endOfDayBrussels(),
+    now: nowIso(),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Routage
 export async function handleApi(req, res, url, readBody, ctx, pathname) {
   const setCookies = [];
@@ -750,6 +833,8 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
         ok: dbOk, service: 'signage-cms', now: nowIso(),
         version: getIntSetting('version', 1), dataVer: getIntSetting('data_ver', 1),
         tablePrefix: 'sig_',
+        // Adresse https de la régie si le serveur en a une (null sinon).
+        https: httpsStatus(ctx.basePath) || null,
       });
     }
 
@@ -764,8 +849,11 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       }
       loginSucceeded(ip);
       const token = createSession(String(body.username));
-      setCookies.push(`sig_session=${token}; Path=${ctx.cookiePath}; HttpOnly; SameSite=Lax; Max-Age=2592000`);
-      return send(200, { ok: true, user: String(body.username), token });
+      // Derrière l'hôte https d'Apache : cookie « Secure », jamais envoyé en clair.
+      const secure = String(req.headers['x-forwarded-proto'] || '').toLowerCase() === 'https' ? '; Secure' : '';
+      setCookies.push(`sig_session=${token}; Path=${ctx.cookiePath}; HttpOnly; SameSite=Lax; Max-Age=2592000${secure}`);
+      const who = userInfo(body.username) || { role: 'admin', storeId: '' };
+      return send(200, { ok: true, user: String(body.username), token, role: who.role, storeId: who.storeId || undefined });
     }
     if (req.method === 'POST' && path === '/logout') {
       destroySession(sessionToken(req));
@@ -808,9 +896,32 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
     // ---- tout le reste exige une session back office ------------------------
     const user = sessionUser(sessionToken(req));
     if (!user) return send(401, { error: 'Authentification requise' });
-    const role = user === 'agence' ? 'agence' : 'admin';
+    const who = userInfo(user);
+    if (!who) return send(401, { error: 'Authentification requise' });
+    const role = who.role;
 
-    if (req.method === 'GET' && path === '/me') return send(200, { ok: true, user, role });
+    if (req.method === 'GET' && path === '/me') {
+      const st = who.storeId ? storeRow(who.storeId) : null;
+      return send(200, { ok: true, user, role, store: st ? { id: st.id, name: st.name, lang: st.lang || 'fr' } : null });
+    }
+
+    // ---- espace magasin : SON magasin, rien d'autre ---------------------------
+    // Le magasin vient du compte (base), jamais de la requête : un compte
+    // magasin ne peut ni lire ni modifier un autre magasin.
+    if (role === 'magasin') {
+      const st = storeRow(who.storeId);
+      if (!st) return send(403, { error: 'Compte magasin sans magasin — à recréer depuis la régie' });
+      if (req.method === 'GET' && path === '/my-store') return send(200, { ...myStoreJson(st), https: httpsStatus(ctx.basePath) || null });
+      if (req.method === 'POST' && path === '/my-store/unavailable') {
+        const body = await readBody();
+        const productId = String(body.productId || '');
+        if (!loadCatalog().products.some((p) => p.id === productId)) return send(404, { error: 'produit inconnu' });
+        const until = body.mode === 'manuel' ? null : endOfDayBrussels();
+        const list = setStoreUnavailable(st.id, productId, !!body.unavailable, { until, by: user });
+        return send(200, { ok: true, unavailable: list, storeStamp: storeUnavailableStamp(st.id) });
+      }
+      return send(403, { error: 'Compte magasin : réservé à l\'espace magasin' });
+    }
 
     // ---- médiathèque agence (upload vidéos/photos taguées) -----------------
     // Accessible admin ET agence ; l'agence n'a accès QU'À ça (+ catalogue &
@@ -852,7 +963,7 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       if (!okAgency) return send(403, { error: 'Accès agence : réservé à la médiathèque vidéo' });
     }
 
-    if (req.method === 'GET' && path === '/state') return send(200, stateJson());
+    if (req.method === 'GET' && path === '/state') return send(200, { ...stateJson(), https: httpsStatus(ctx.basePath) || null });
     if (req.method === 'GET' && path === '/fleet') return send(200, fleetJson());
 
     // ---- types d'éléments & table produits (rien en dur : tout en base) ----
@@ -1137,6 +1248,27 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
     }
     if (req.method === 'GET' && path === '/hd-storage') {
       return send(200, { hdUrl: getSetting('hd_url', ''), hdUser: getSetting('hd_user', ''), hasHdPass: !!getSetting('hd_pass', '') });
+    }
+
+    // Comptes magasin (admin) : un magasin = un compte, mot de passe généré et
+    // montré UNE fois ; le réinitialiser coupe les sessions ouvertes.
+    if (req.method === 'GET' && path === '/store-accounts') return send(200, { accounts: listStoreAccounts() });
+    {
+      const mAcc = path.match(/^\/stores\/([A-Za-z0-9_-]+)\/account$/);
+      if (mAcc && (req.method === 'POST' || req.method === 'DELETE')) {
+        const st = storeRow(mAcc[1]);
+        if (!st) return send(404, { error: `magasin inconnu : ${mAcc[1]}` });
+        if (req.method === 'DELETE') return send(200, { ok: deleteStoreAccount(st.id) });
+        const body = await readBody();
+        const wanted = String(body.username || '').trim().toLowerCase() || suggestStoreLogin(st);
+        if (!STORE_LOGIN_RE.test(wanted)) return send(400, { error: 'identifiant : 3 à 40 caractères, minuscules, chiffres et tirets' });
+        if (['admin', 'agence'].includes(wanted)) return send(400, { error: 'identifiant réservé' });
+        const password = newStorePassword();
+        try {
+          const out = setStoreAccount(st.id, wanted, password);
+          return send(200, { ok: true, storeId: st.id, username: out.username, password, created: out.created });
+        } catch (e) { return send(409, { error: String(e.message || e) }); }
+      }
     }
 
     // Configuration d'un magasin : nom + combo d'écrans (ex. 3 × 55″ portrait).

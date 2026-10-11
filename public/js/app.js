@@ -252,6 +252,7 @@ class App extends Component {
         loading: false, authRequired: false,
         library: st.modules,
         agencyEnabled: !!st.agencyEnabled,
+        https: st.https || null,
         elementTypes: et.types || [],
         langs: lg.langs || [{ id: 'fr', label: 'Français' }],
         promoTypes: pt.promoTypes || [],
@@ -294,7 +295,13 @@ class App extends Component {
       if (this.activeFilm().mode === 'continu') this.loadContPreview(); // aperçu réel de la boucle
     } catch (e) {
       if (e.status === 401) this.setState({ loading: false, authRequired: true });
-      else this.setState({ loading: false, loadError: String(e.message || e) });
+      else if (e.status === 403) {
+        // Session d'un compte magasin ou agence : chacun dans SON espace.
+        const me = await api('GET', '/me').catch(() => null);
+        if (me && me.role === 'magasin') { location.href = 'magasin'; return; }
+        if (me && me.role === 'agence') { location.href = 'agence'; return; }
+        this.setState({ loading: false, loadError: String(e.message || e) });
+      } else this.setState({ loading: false, loadError: String(e.message || e) });
     }
   }
 
@@ -306,12 +313,32 @@ class App extends Component {
     } catch { /* serveur momentanément indisponible : on garde l'état local */ }
   }
 
+  // Compte d'un magasin : création, nouveau mot de passe (montré une seule
+  // fois), suppression. Le serveur génère le mot de passe.
+  async storeAccount(storeId, action) {
+    try {
+      if (action === 'delete') {
+        if (!window.confirm('Supprimer le compte de ce magasin ? Ses sessions ouvertes sont coupées.')) return;
+        await api('DELETE', `/stores/${encodeURIComponent(storeId)}/account`);
+        this.setState({ storeCred: null });
+        this.showToast('Compte magasin supprimé ✓');
+      } else {
+        if (action === 'reset' && !window.confirm('Générer un nouveau mot de passe ? L\'ancien ne fonctionnera plus et les sessions ouvertes du magasin seront coupées.')) return;
+        const out = await api('POST', `/stores/${encodeURIComponent(storeId)}/account`, {});
+        this.setState({ storeCred: { storeId, username: out.username, password: out.password, url: new URL('magasin', location.href).toString() } });
+      }
+      this.refreshFleet();
+    } catch (e) { this.showToast(`Erreur : ${e.message}`); }
+  }
+
   doLogin = async (e) => {
     e.preventDefault();
     if (this.state.loggingIn) return;
     this.setState({ loggingIn: true, loginError: '' });
     try {
-      await api('POST', '/login', { username: this.state.loginUser, password: this.state.loginPass });
+      const who = await api('POST', '/login', { username: this.state.loginUser, password: this.state.loginPass });
+      if (who.role === 'magasin') { location.href = 'magasin'; return; }
+      if (who.role === 'agence') { location.href = 'agence'; return; }
       this.setState({ loading: true, authRequired: false, loginPass: '' });
       await this.loadState();
       this.refreshFleet();
@@ -2611,6 +2638,13 @@ class App extends Component {
         del: () => this.delGroup(g.id),
       })),
       addGroup: () => this.addGroup(s.id),
+      // Compte magasin + ruptures que le magasin a déclarées pour SES écrans.
+      account: s.account || null,
+      unavailableNames: (s.unavailable || []).map((u) => (((st.catalog && st.catalog.products) || []).find((p) => p.id === u.productId) || {}).name || u.productId),
+      createAccount: () => this.storeAccount(s.id, 'create'),
+      resetAccount: () => this.storeAccount(s.id, 'reset'),
+      deleteAccount: () => this.storeAccount(s.id, 'delete'),
+      cred: st.storeCred && st.storeCred.storeId === s.id ? st.storeCred : null,
       connColor: s.conn === 'offline' ? '#8D1D2C' : s.conn === '4G' ? '#B8860B' : '#2E7D32',
       connLabel: s.conn === 'offline' ? 'Magasin injoignable' : s.conn === '4G' ? 'Connectivité 4G' : 'Fibre',
       players: s.players.map((p) => {
@@ -4177,6 +4211,23 @@ class App extends Component {
         <button onClick=${v.saveLibCats} disabled=${v.libCatBusy || !v.libCatDirty} style="margin-top:16px;padding:11px 22px;font-size:13.5px;font-weight:600;color:#fff;background:${v.libCatDirty ? '#8D1D2C' : 'rgba(141,29,44,0.35)'};border:none;border-radius:999px;cursor:${v.libCatBusy ? 'wait' : (v.libCatDirty ? 'pointer' : 'default')};">${v.libCatBusy ? 'Enregistrement…' : 'Enregistrer les catégories'}</button>
       </div>
 
+      <!-- Connexion sécurisée (https) -->
+      ${(() => {
+        const hs = st.https;
+        const onHttp = location.protocol === 'http:';
+        const until = hs && hs.validTo ? new Date(hs.validTo).toLocaleString('fr-BE', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '';
+        const late = hs && hs.daysLeft != null && hs.daysLeft < 2;
+        return html`<div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;margin-top:20px;">
+          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Connexion sécurisée (https)</h2>
+          ${hs && hs.ok ? html`
+            <p style="margin:0 0 10px;font-size:12px;color:#2E6E4E;font-weight:600;">● https actif — <a href=${hs.base} style="color:#2E6E4E;">${hs.base}</a></p>
+            <p style="margin:0 0 10px;font-size:12px;color:${late ? '#8D1D2C' : '#8A847C'};line-height:1.5;">Certificat ${hs.issuer || 'Let\'s Encrypt'} valable jusqu'au ${until}${late ? ' — renouvellement en retard : relancer le déploiement' : ' · renouvelé automatiquement (certificats de 6 jours)'}.</p>
+            <p style="margin:0 0 ${onHttp ? 12 : 0}px;font-size:12px;color:#8A847C;line-height:1.5;">Un écran ne <strong>redémarre sans réseau</strong> que s'il est ouvert en https : la page et son code restent alors sur l'écran. Ouvre la régie à cette adresse et ses liens (player, magasin, film) seront tous en https.</p>
+            ${onHttp ? html`<a href=${hs.base} style="display:inline-flex;align-items:center;gap:6px;padding:9px 16px;font-size:12.5px;font-weight:600;color:#fff;background:#2E6E4E;border-radius:999px;">🔒 Ouvrir la régie en https ↗</a>` : ''}
+          ` : html`<p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">Pas encore de https sur ce serveur : la livraison le met en place (certificat Let's Encrypt pour l'adresse IP, renouvelé automatiquement). En http, les écrans tiennent une coupure réseau page ouverte, mais ne redémarrent pas sans réseau — le navigateur réserve le service worker au https.</p>`}
+        </div>`;
+      })()}
+
       <!-- Espace Vidéo — Agence -->
       <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;margin-top:20px;">
         <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Espace Vidéo — Agence</h2>
@@ -4986,6 +5037,23 @@ class App extends Component {
             <input key=${'hr-' + s.id} defaultValue=${s.hours} onChange=${s.setHours} placeholder="Horaires — {{horaires}}" title="Horaires d'ouverture — jeton {{horaires}}" style="flex:1 1 160px;min-width:0;padding:7px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
             <input key=${'ph-' + s.id} defaultValue=${s.phone} onChange=${s.setPhone} placeholder="Téléphone — {{tel}}" title="Téléphone — jeton {{tel}}" style="flex:1 1 140px;min-width:0;padding:7px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
           </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 22px;border-bottom:1px solid rgba(35,34,32,0.06);background:#fff;">
+            <span style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">Compte magasin</span>
+            ${infoTip('Un accès propre au magasin, en français ou en néerlandais (…/magasin) : il y voit SES écrans (état, cache réel), le lien d\'écran du magasin, et y déclare ses ruptures du jour — le produit quitte SES écrans seulement. La portée est décidée par le serveur : le compte ne peut ni lire ni modifier un autre magasin.')}
+            ${s.account ? html`
+              <span style="font-size:12.5px;color:#4A4640;">identifiant <strong style="font-family:ui-monospace,monospace;">${s.account}</strong></span>
+              <button onClick=${s.resetAccount} style="padding:6px 12px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">Nouveau mot de passe</button>
+              <button onClick=${s.deleteAccount} style="padding:6px 12px;font-size:12px;font-weight:600;color:#8D1D2C;background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:999px;cursor:pointer;">Supprimer</button>
+            ` : html`<button onClick=${s.createAccount} style="padding:6px 12px;font-size:12px;font-weight:600;color:#fff;background:#8D1D2C;border:none;border-radius:999px;cursor:pointer;">Créer le compte magasin</button>`}
+            ${s.unavailableNames.length ? html`<span title="Déclarés épuisés par le magasin : retirés de SES écrans jusqu'à ce soir (ou jusqu'à remise en vente)." style="font-size:12px;color:#8D1D2C;">Épuisés aujourd'hui : <strong>${s.unavailableNames.join(', ')}</strong></span>` : ''}
+          </div>
+          ${s.cred ? html`
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 22px;border-bottom:1px solid rgba(35,34,32,0.06);background:rgba(46,125,50,0.07);">
+              <span style="font-size:12.5px;color:#1F5B2A;line-height:1.6;flex:1 1 320px;">À transmettre au magasin — <strong>le mot de passe ne sera plus affiché</strong> : lien <strong>${s.cred.url}</strong> · identifiant <strong style="font-family:ui-monospace,monospace;">${s.cred.username}</strong> · mot de passe <strong style="font-family:ui-monospace,monospace;">${s.cred.password}</strong></span>
+              <button onClick=${() => this.copyLink(`${s.cred.url}\nIdentifiant / Gebruikersnaam : ${s.cred.username}\nMot de passe / Wachtwoord : ${s.cred.password}`)} style="padding:7px 13px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(46,125,50,0.35);background:#fff;color:#1F5B2A;cursor:pointer;">Copier</button>
+              <button onClick=${() => this.setState({ storeCred: null })} style="padding:7px 11px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(35,34,32,0.14);background:#fff;color:#4A4640;cursor:pointer;">Masquer</button>
+            </div>
+          ` : ''}
           <div style="padding:12px 22px;border-bottom:1px solid rgba(35,34,32,0.06);background:#FBF8F2;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;${s.groups.length ? 'margin-bottom:10px;' : ''}">
               <div style="display:flex;align-items:center;gap:7px;">

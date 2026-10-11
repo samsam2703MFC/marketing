@@ -166,6 +166,22 @@ async function main() {
     const txt = await res.text();
     if (!txt.includes('Régie d\'affichage')) throw new Error('HTML inattendu');
   });
+  await step('GET /magasin — espace magasin servi (FR/NL)', async () => {
+    const res = await fetch(BASE + '/magasin');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const txt = await res.text();
+    if (!txt.includes('js/magasin.js')) throw new Error('HTML inattendu');
+    const anon = await fetch(BASE + '/api/v1/my-store');
+    if (anon.status !== 401) throw new Error(`espace magasin sans session → HTTP ${anon.status} au lieu de 401`);
+  });
+  await step('https — certificat de la régie (si le serveur en a un)', async () => {
+    let hs = null;
+    for (let i = 0; i < 3 && !hs; i++) { hs = (await call('GET', '/api/v1/health')).https; if (!hs) await new Promise((r) => setTimeout(r, 1500)); }
+    if (!hs) return 'http seulement sur ce serveur';
+    if (!hs.ok || !/^https:\/\//.test(hs.base) || !hs.validTo) throw new Error(`état https incohérent : ${JSON.stringify(hs)}`);
+    if (hs.daysLeft != null && hs.daysLeft < 1) throw new Error(`certificat bientôt expiré (${hs.validTo}) — renouvellement en panne`);
+    return `${hs.base} · valable jusqu'au ${hs.validTo.slice(0, 16).replace('T', ' ')} (${hs.daysLeft} j)`;
+  });
   await step('GET /player.html — player servi', async () => {
     const res = await fetch(BASE + '/player.html');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1246,6 +1262,49 @@ async function main() {
       if (!p.publications.length) throw new Error('aucune publication archivée');
       if (!p.publications[0].tests.length) throw new Error('tests non archivés');
       return `${p.publications.length} publication(s)`;
+    });
+  }
+
+  // --- compte magasin : portée décidée par le serveur ------------------------
+  if (MUTATE) {
+    await step('Compte magasin — portée limitée à SON magasin, ruptures sur SES écrans', async () => {
+      const fleet = await call('GET', '/api/v1/fleet');
+      const store = fleet.stores.find((x) => x.id !== 'st-new' && x.players.length) || fleet.stores.find((x) => x.id !== 'st-new');
+      const other = fleet.stores.find((x) => x.id !== store.id && x.id !== 'st-new');
+      if (!store) throw new Error('aucun magasin');
+      const acc = await call('POST', `/api/v1/stores/${store.id}/account`, { username: 'livetest-magasin' });
+      if (!acc.ok || !acc.password) throw new Error('compte non créé');
+      try {
+        const login = await (await fetch(BASE + '/api/v1/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: acc.username, password: acc.password }) })).json();
+        if (login.role !== 'magasin' || login.storeId !== store.id) throw new Error(`rôle ${login.role} / magasin ${login.storeId}`);
+        const H = { authorization: `Bearer ${login.token}`, 'content-type': 'application/json' };
+        const as = (method, path, body) => fetch(BASE + path, { method, headers: H, body: body ? JSON.stringify(body) : undefined });
+        // tout ce qui n'est pas SON espace : refusé
+        for (const [m, path] of [['GET', '/api/v1/state'], ['GET', '/api/v1/fleet'], ['PUT', '/api/v1/draft'], ['POST', '/api/v1/publish'], ['GET', '/api/v1/media'], ['GET', '/api/v1/pwa-config'], ['POST', `/api/v1/stores/${other ? other.id : store.id}`], ['POST', `/api/v1/stores/${store.id}/account`]]) {
+          const r = await as(m, path, m === 'GET' ? undefined : {});
+          if (r.status !== 403) throw new Error(`${m} ${path} → HTTP ${r.status} au lieu de 403`);
+        }
+        const mine = await (await as('GET', '/api/v1/my-store')).json();
+        if (!mine.store || mine.store.id !== store.id) throw new Error('/my-store ne renvoie pas son magasin');
+        const prod = mine.products[0];
+        if (!prod) return `${acc.username} · aucun produit à déclarer (catalogue vide)`;
+        const set = await (await as('POST', '/api/v1/my-store/unavailable', { productId: prod.id, unavailable: true })).json();
+        if (!set.ok || !set.storeStamp.includes(prod.id)) throw new Error('rupture non enregistrée');
+        const film = await call('GET', `/api/v1/film?store=${store.id}`);
+        if (!String(film.storeStamp || '').includes(prod.id)) throw new Error('le film du magasin ignore la rupture');
+        if (film.modules.some((m) => (m.items || []).some((it) => it.productId === prod.id) || m.productRef === prod.id)) throw new Error('produit épuisé encore à l\'écran du magasin');
+        if (other) {
+          const f2 = await call('GET', `/api/v1/film?store=${other.id}`);
+          if (String(f2.storeStamp || '').includes(prod.id)) throw new Error('la rupture déborde sur un autre magasin');
+        }
+        await as('POST', '/api/v1/my-store/unavailable', { productId: prod.id, unavailable: false });
+        // nouveau mot de passe : l'ancienne session tombe
+        await call('POST', `/api/v1/stores/${store.id}/account`, {});
+        if ((await as('GET', '/api/v1/my-store')).status !== 401) throw new Error('session conservée après réinitialisation');
+        return `${acc.username} → ${store.store} · 8 accès refusés · « ${prod.name} » retiré de SES écrans puis rétabli`;
+      } finally {
+        await call('DELETE', `/api/v1/stores/${store.id}/account`);
+      }
     });
   }
 

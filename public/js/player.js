@@ -194,6 +194,9 @@ class Player extends Component {
       } else if (hb.revision && hb.revision !== this.state.revision && !this.state.syncing && due) {
         // Film continu : la boucle a changé (moment/saison) → on régénère.
         await this.syncTo(this.state.playedVer || hb.assignedVer);
+      } else if ((hb.storeStamp || '') !== ((this.raw && this.raw.storeStamp) || '') && this.raw && !this.state.syncing && due) {
+        // Rupture déclarée (ou levée, ou expirée) par le magasin → resynchro.
+        await this.syncTo(this.state.playedVer || hb.assignedVer);
       }
       if (hb.dataVer !== this.state.dataVer && this.raw && !this.state.syncing) {
         await this.syncPrices();

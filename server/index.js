@@ -64,6 +64,7 @@ function serveStatic(req, res, pathname) {
   if (pathname === '/film') pathname = '/film.html';
   if (pathname === '/report') pathname = '/report.html';
   if (pathname === '/agence') pathname = '/agence.html';
+  if (pathname === '/magasin') pathname = '/magasin.html';
   const safe = normalize(pathname).replace(/^(\.\.[/\\])+/, '');
   const file = join(PUBLIC_DIR, safe);
   if (!file.startsWith(PUBLIC_DIR) || !existsSync(file) || !statSync(file).isFile()) {

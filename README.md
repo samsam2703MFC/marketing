@@ -10,7 +10,8 @@ avec CMS, base de données, player d'écran et **tests live exécutés à chaque
 - **Front** : Preact + HTM embarqués (`public/js/vendor/`), aucun build.
 - **Accès protégé** : le back office demande une connexion (`admin` / mot de passe
   `SIG_ADMIN_PASSWORD`, défaut `signage`) ; l'espace agence a son propre compte (`agence`),
-  fermé tant que `SIG_AGENCY_PASSWORD` n'est pas défini ; les players s'authentifient par token.
+  fermé tant que `SIG_AGENCY_PASSWORD` n'est pas défini ; chaque magasin peut avoir **son**
+  compte (espace `/magasin`, FR/NL) ; les players s'authentifient par token.
 
 ## Démarrer
 
@@ -39,7 +40,7 @@ d'exemple ci-dessus) et le compte `agence` garde son mot de passe de démo `agen
 
 **Automatique** : chaque push sur la branche lance `.github/workflows/deploy.yml` —
 transfert du code, provisionnement (Node ≥ 22, mots de passe, compte système `signage` et
-son accès MariaDB, service systemd, proxy Apache), puis tests live. Secrets GitHub (Settings → Secrets and variables → Actions) :
+son accès MariaDB, service systemd, proxy Apache, **https**), puis tests live. Secrets GitHub (Settings → Secrets and variables → Actions) :
 `SERVER_HOST`, `SERVER_USER` (root), `SERVER_SSH_KEY`, `SIG_ADMIN_PASSWORD`,
 `SIG_AGENCY_PASSWORD` — détail en tête du workflow.
 
@@ -51,6 +52,16 @@ son accès MariaDB, service systemd, proxy Apache), puis tests live. Secrets Git
   `/etc/signage/signage.env` (root, 0600), que systemd lit via `EnvironmentFile=` ; l'unité
   versionnée n'en contient aucun, et l'ancien drop-in `signage.service.d/override.conf`
   (mot de passe admin en clair, lisible par tous) est supprimé.
+- **https sur l'adresse IP.** Le serveur n'a pas de nom de domaine : la livraison obtient un
+  certificat **Let's Encrypt pour l'adresse IP** (profil « shortlived », 6 jours — disponible
+  depuis 2026), avec Certbot ≥ 5.4 isolé dans `/opt/certbot` (défi webroot sur le port 80,
+  `/var/www/letsencrypt`). Hôte Apache `000-signage-ssl.conf` : port 443, **`/signage/`
+  seulement**. Renouvellement par la minuterie `signage-certbot.timer` (deux passages par jour ;
+  Certbot renouvelle à mi-vie). Tout échec est un **avertissement** et laisse http intact : port
+  443 déjà pris → rien n'est touché ; Apache qui refuserait le 443 → hôte https et module SSL
+  retirés, Apache relancé tel qu'avant. La livraison vérifie https depuis Internet (un port 443
+  fermé par l'hébergeur ne donne qu'un avertissement). La régie constate elle-même son https
+  (adresse, fin du certificat) : **Paramètres → Connexion sécurisée**.
 - **Jamais root.** Le service tourne sous le compte système `signage` (voir « Comptes &
   sécurité »). Si la bascule échoue (droits, compte MariaDB, démarrage), la livraison
   remet le service en root — la régie et l'import ERP restent en marche — et échoue,
@@ -126,16 +137,36 @@ reverse proxy expose l'application.
   MySQL réglé en régie reste prioritaire : la livraison n'ouvre alors rien.
 - Players : token `plyr_…` par écran (`sig_players.token`). Un player inconnu muni d'un
   token `plyr_…` s'auto-enregistre dans « Nouveaux écrans ».
+- **Comptes magasin** : un compte par magasin, créé dans **Réseau → magasin → Compte magasin**.
+  Le mot de passe est généré par le serveur et montré **une seule fois** ; « Nouveau mot de
+  passe » coupe les sessions ouvertes. Le magasin d'un compte est fixé en base : le serveur
+  refuse tout le reste (régie, autres magasins, médiathèque) — 403.
+- En https, le cookie de session est `Secure` (en-tête `X-Forwarded-Proto` posé par l'hôte https).
 - Endpoints publics : uniquement `GET /api/v1/health` et les fichiers statiques.
 
 ## Fonctionnement
 
-### Langue de l'interface (FR / EN / IT)
+### Langue de l'interface (FR / NL / EN / IT)
 Un **sélecteur de langue** en en-tête (et sur l'écran de connexion) bascule toute la régie
-entre **français, anglais et italien**. Le choix est **mémorisé par navigateur**
+entre **français, néerlandais, anglais et italien**. Le choix est **mémorisé par navigateur**
 (`localStorage: sig_ui_lang`) — c'est une préférence d'affichage de l'outil, indépendante des
-données. Les libellés vivent dans `public/js/i18n.js` (dictionnaire `{ clé: { fr, en, it } }`,
+données. Les libellés vivent dans `public/js/i18n.js` (dictionnaire `{ clé: { fr, nl, en, it } }`,
 repli sur le français) ; `App.t('clé')` les résout à la volée selon la langue courante.
+L'**espace magasin** est entièrement en français et en néerlandais (langue du magasin par
+défaut). À l'écran, l'attente sans programme ne montre que le logo — aucun texte à traduire.
+
+### Espace magasin (`/magasin`)
+Un compte par magasin (voir « Comptes & sécurité »), utilisable sur tablette ou téléphone :
+
+- **Ses écrans** : état réel (en ligne, version jouée, fichiers sur l'écran, absents du serveur,
+  redémarrage hors ligne possible), lien d'installation de chaque écran.
+- **Le lien d'écran du magasin** (`film?store=…`), en https dès que le serveur l'offre.
+- **Ruptures du jour** : « Épuisé » retire le produit de **ses** écrans — listes, « produit
+  seul », promotions et campagnes liées — en moins d'une minute, sans toucher aux autres
+  magasins. La rupture s'efface **à minuit, heure de Bruxelles** (indépendant du fuseau du
+  serveur), ou dure jusqu'à remise en vente si on le demande. Les écrans se resynchronisent
+  d'eux-mêmes (empreinte des ruptures du magasin, `storeStamp`). La régie voit les ruptures
+  déclarées dans **Réseau**.
 
 > À ne pas confondre avec la **langue diffusée à l'écran** par magasin (`sig_stores.lang`, réglée
 > dans Réseau), qui traduit le *contenu* (noms de produits…) affiché au client, pas l'interface.
@@ -475,7 +506,7 @@ qui la portent restent visibles ; la liste ne peut pas être vidée.
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + cycle complet — 66 tests
+npm test              # serveur jetable (BDD temporaire) + cycle complet — 72 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
 node test/live-test.js http://185.180.206.46/signage --password=… --mutate

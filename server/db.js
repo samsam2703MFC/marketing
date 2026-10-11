@@ -262,6 +262,25 @@ function migrate(db) {
   // État réel du cache hors ligne remonté par l'écran (JSON : fichiers en
   // cache / absents, stockage persistant, service worker, durée hors ligne).
   if (plColsG.length && !plColsG.includes('detail')) db.exec(`ALTER TABLE sig_players ADD COLUMN detail TEXT NOT NULL DEFAULT ''`);
+  // Comptes : un vrai rôle (admin | agence | magasin) et, pour un compte
+  // magasin, SON magasin — la portée est décidée ici, côté serveur, jamais
+  // par ce que le navigateur envoie.
+  const userCols = db.prepare('PRAGMA table_info(sig_users)').all().map((c) => c.name);
+  if (!userCols.includes('role')) {
+    db.exec(`ALTER TABLE sig_users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'`);
+    db.exec(`UPDATE sig_users SET role = 'agence' WHERE username = 'agence'`);
+  }
+  if (!userCols.includes('store_id')) db.exec(`ALTER TABLE sig_users ADD COLUMN store_id TEXT NOT NULL DEFAULT ''`);
+  // Rupture déclarée PAR UN MAGASIN : le produit disparaît de SES écrans
+  // seulement, jusqu'à until (fin de journée) ou jusqu'à réactivation (NULL).
+  db.exec(`CREATE TABLE IF NOT EXISTS sig_store_unavailable (
+    store_id   TEXT NOT NULL,
+    product_id TEXT NOT NULL,
+    until      TEXT,
+    by_user    TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (store_id, product_id)
+  )`);
 
   // Ce que le SECTEUR filtre, explicitement : les périodes de vente (matin /
   // midi / après-midi) et les catégories. Historiquement, un secteur avec des
@@ -1867,7 +1886,7 @@ export function setPlayerGroup(playerId, groupId) {
 // Mot de passe : SIG_ADMIN_PASSWORD (env) — défaut « signage ». Si la variable
 // est définie au démarrage, le mot de passe du compte admin est aligné dessus.
 function ensureAdmin(db) {
-  ensureUser(db, 'admin', process.env.SIG_ADMIN_PASSWORD, 'signage');
+  ensureUser(db, 'admin', process.env.SIG_ADMIN_PASSWORD, 'signage', 'admin');
   // Compte « agence » (upload de vidéos/photos uniquement). En PRODUCTION il
   // n'existe que si SIG_AGENCY_PASSWORD est fourni : un mot de passe par défaut
   // connu de tous ouvrait l'écriture de fichiers sur le serveur. Sans mot de
@@ -1875,7 +1894,7 @@ function ensureAdmin(db) {
   // de compte » ; il revient tel quel dès que la variable est posée. En démo et
   // en test (SIG_DEMO=1), le défaut « agence » reste, pour la commodité.
   if (agencyAccountEnabled()) {
-    ensureUser(db, 'agence', process.env.SIG_AGENCY_PASSWORD, 'agence');
+    ensureUser(db, 'agence', process.env.SIG_AGENCY_PASSWORD, 'agence', 'agence');
   } else {
     const had = db.prepare(`SELECT 1 AS x FROM sig_users WHERE username = 'agence'`).get();
     db.prepare(`DELETE FROM sig_sessions WHERE username = 'agence'`).run();
@@ -1888,16 +1907,95 @@ function ensureAdmin(db) {
 export function agencyAccountEnabled() {
   return !!process.env.SIG_AGENCY_PASSWORD || process.env.SIG_DEMO === '1';
 }
-function ensureUser(db, username, envPw, fallback) {
+function ensureUser(db, username, envPw, fallback, role) {
   const row = db.prepare('SELECT pass_salt, pass_hash FROM sig_users WHERE username = ?').get(username);
   if (!row) {
     const { salt, hash } = hashPassword(envPw || fallback);
-    db.prepare('INSERT INTO sig_users(username, pass_salt, pass_hash) VALUES (?, ?, ?)').run(username, salt, hash);
+    db.prepare('INSERT INTO sig_users(username, pass_salt, pass_hash, role) VALUES (?, ?, ?, ?)').run(username, salt, hash, role);
   } else if (envPw && !verifyPassword(envPw, row.pass_salt, row.pass_hash)) {
     const { salt, hash } = hashPassword(envPw);
     db.prepare(`UPDATE sig_users SET pass_salt = ?, pass_hash = ?, updated_at = datetime('now') WHERE username = ?`).run(salt, hash, username);
     db.prepare(`DELETE FROM sig_sessions WHERE username = ?`).run(username);
   }
+}
+
+// Rôle et magasin d'un compte connecté (null si le compte n'existe plus).
+export function userInfo(username) {
+  const r = getDb().prepare('SELECT username, role, store_id FROM sig_users WHERE username = ?').get(String(username || ''));
+  if (!r) return null;
+  const role = ['admin', 'agence', 'magasin'].includes(r.role) ? r.role : (r.username === 'agence' ? 'agence' : 'admin');
+  return { username: r.username, role, storeId: role === 'magasin' ? r.store_id : '' };
+}
+
+// ---- comptes magasin ------------------------------------------------------
+export const STORE_LOGIN_RE = /^[a-z0-9][a-z0-9-]{2,39}$/;
+export function listStoreAccounts() {
+  return getDb().prepare(`SELECT username, store_id, created_at, updated_at FROM sig_users WHERE role = 'magasin' ORDER BY store_id`).all()
+    .map((r) => ({ username: r.username, storeId: r.store_id, createdAt: r.created_at, updatedAt: r.updated_at }));
+}
+// Crée le compte d'un magasin, ou lui donne un nouveau mot de passe (les
+// sessions ouvertes sont alors coupées). Un magasin = un compte.
+export function setStoreAccount(storeId, username, password) {
+  const db = getDb();
+  const cur = db.prepare(`SELECT username FROM sig_users WHERE role = 'magasin' AND store_id = ?`).get(storeId);
+  const login = cur ? cur.username : username;
+  const clash = db.prepare('SELECT role, store_id FROM sig_users WHERE username = ?').get(login);
+  if (!cur && clash) throw new Error(`l'identifiant « ${login} » est déjà pris`);
+  const { salt, hash } = hashPassword(password);
+  if (cur) {
+    db.prepare(`UPDATE sig_users SET pass_salt = ?, pass_hash = ?, updated_at = datetime('now') WHERE username = ?`).run(salt, hash, login);
+    db.prepare('DELETE FROM sig_sessions WHERE username = ?').run(login);
+  } else {
+    db.prepare(`INSERT INTO sig_users(username, pass_salt, pass_hash, role, store_id) VALUES (?, ?, ?, 'magasin', ?)`).run(login, salt, hash, storeId);
+  }
+  return { username: login, created: !cur };
+}
+export function deleteStoreAccount(storeId) {
+  const db = getDb();
+  const cur = db.prepare(`SELECT username FROM sig_users WHERE role = 'magasin' AND store_id = ?`).get(storeId);
+  if (!cur) return false;
+  db.prepare('DELETE FROM sig_sessions WHERE username = ?').run(cur.username);
+  db.prepare('DELETE FROM sig_users WHERE username = ?').run(cur.username);
+  return true;
+}
+
+// ---- ruptures déclarées par un magasin ---------------------------------------
+// Fin de la journée en cours, heure de Bruxelles (indépendant du fuseau du
+// serveur) : une rupture « aujourd'hui » s'efface seule à minuit.
+function tzOffsetMs(tz, ts) {
+  const p = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' })
+    .formatToParts(new Date(ts));
+  const g = (t) => +p.find((x) => x.type === t).value;
+  return Date.UTC(g('year'), g('month') - 1, g('day'), g('hour'), g('minute'), g('second')) - Math.floor(ts / 1000) * 1000;
+}
+export function endOfDayBrussels(now = new Date()) {
+  const [y, m, d] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Brussels', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .format(now).split('-').map(Number);
+  const midnightUtc = Date.UTC(y, m - 1, d + 1, 0, 0, 0);
+  return new Date(midnightUtc - tzOffsetMs('Europe/Brussels', midnightUtc)).toISOString();
+}
+export function storeUnavailable(storeId, now = new Date()) {
+  const iso = now.toISOString();
+  return getDb().prepare(`SELECT product_id, until, by_user, created_at FROM sig_store_unavailable
+    WHERE store_id = ? AND (until IS NULL OR until > ?) ORDER BY created_at`).all(String(storeId || ''), iso)
+    .map((r) => ({ productId: r.product_id, until: r.until, by: r.by_user, at: r.created_at }));
+}
+export function setStoreUnavailable(storeId, productId, on, { until = null, by = '' } = {}) {
+  const db = getDb();
+  if (on) {
+    db.prepare(`INSERT INTO sig_store_unavailable(store_id, product_id, until, by_user) VALUES (?, ?, ?, ?)
+      ON CONFLICT(store_id, product_id) DO UPDATE SET until = excluded.until, by_user = excluded.by_user, created_at = datetime('now')`)
+      .run(storeId, productId, until, by);
+  } else {
+    db.prepare('DELETE FROM sig_store_unavailable WHERE store_id = ? AND product_id = ?').run(storeId, productId);
+  }
+  return storeUnavailable(storeId);
+}
+// Empreinte des ruptures en cours d'un magasin : change dès qu'une rupture
+// est posée, levée ou expire — les écrans du magasin se resynchronisent.
+export function storeUnavailableStamp(storeId, now = new Date()) {
+  const list = storeUnavailable(storeId, now);
+  return list.length ? list.map((r) => `${r.productId}@${r.until || '∞'}`).sort().join(',') : '';
 }
 
 export function checkLogin(username, password) {
