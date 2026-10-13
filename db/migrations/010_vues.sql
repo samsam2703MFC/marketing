@@ -149,17 +149,32 @@ GROUP BY cs.campaign_id, cs.shop_id, s.name, st.code, st.label, st.color_hex, st
 -- Coût pour +1 000 € de CA, par trimestre.
 -- Le sens de variation (▼ vert = coût en baisse) se dérive côté appelant en
 -- comparant au trimestre précédent.
-CREATE OR REPLACE VIEW mar_v_roi_quarterly AS
+--
+-- L'expression du libellé figure dans le GROUP BY : MySQL en mode
+-- ONLY_FULL_GROUP_BY — actif par défaut depuis la 5.7 — ne reconnaît pas
+-- qu'un CONCAT des mêmes fonctions dépend des colonnes groupées, et rejette
+-- la vue à l'exécution. MariaDB l'acceptait, d'où un défaut invisible en
+-- développement.
+--
+-- La vue n'est créée que si mar_roi_cost existe. Sur le serveur, la base est
+-- partagée avec le cockpit (BO consultant), dont le « nettoyage marketing » a
+-- supprimé cette table : ce fichier, rejoué à chaque passage, faisait alors
+-- échouer tous les déploiements. Sans la table, l'écran ROI reste sans données,
+-- comme il l'était déjà — rien n'est recréé ici à la place du cockpit.
+SET @a_des_couts = (SELECT COUNT(*) FROM information_schema.tables
+                    WHERE table_schema = DATABASE() AND table_name = 'mar_roi_cost');
+SET @ordre = IF(@a_des_couts > 0,
+'CREATE OR REPLACE VIEW mar_v_roi_quarterly AS
 SELECT
-  YEAR(c.starts_on)                                     AS period_year,
-  QUARTER(c.starts_on)                                  AS period_quarter,
-  CONCAT(YEAR(c.starts_on), '-T', QUARTER(c.starts_on)) AS period_label,
-  SUM(rc.amount)                                        AS total_cost_amount,
-  SUM(COALESCE(clt.actual_value, 0))                    AS generated_revenue,
+  YEAR(c.starts_on)                                       AS period_year,
+  QUARTER(c.starts_on)                                    AS period_quarter,
+  CONCAT(YEAR(c.starts_on), ''-T'', QUARTER(c.starts_on)) AS period_label,
+  SUM(rc.amount)                                          AS total_cost_amount,
+  SUM(COALESCE(clt.actual_value, 0))                      AS generated_revenue,
   CASE
     WHEN SUM(COALESCE(clt.actual_value, 0)) = 0 THEN NULL
     ELSE ROUND(SUM(rc.amount) / (SUM(COALESCE(clt.actual_value, 0)) / 1000), 2)
-  END                                                   AS cost_per_1000_revenue
+  END                                                     AS cost_per_1000_revenue
 FROM mar_roi_cost rc
 JOIN mar_campaign c ON c.id = rc.campaign_id
 LEFT JOIN (
@@ -168,10 +183,9 @@ LEFT JOIN (
   GROUP BY campaign_id
 ) clt ON clt.campaign_id = c.id
 WHERE c.starts_on IS NOT NULL
--- L'expression du libellé figure dans le GROUP BY : MySQL en mode
--- ONLY_FULL_GROUP_BY — actif par défaut depuis la 5.7 — ne reconnaît pas
--- qu'un CONCAT des mêmes fonctions dépend des colonnes groupées, et rejette
--- la vue à l'exécution. MariaDB l'acceptait, d'où un défaut invisible en
--- développement.
 GROUP BY YEAR(c.starts_on), QUARTER(c.starts_on),
-         CONCAT(YEAR(c.starts_on), '-T', QUARTER(c.starts_on));
+         CONCAT(YEAR(c.starts_on), ''-T'', QUARTER(c.starts_on))',
+'DO 0');
+PREPARE vue_roi FROM @ordre;
+EXECUTE vue_roi;
+DEALLOCATE PREPARE vue_roi;
