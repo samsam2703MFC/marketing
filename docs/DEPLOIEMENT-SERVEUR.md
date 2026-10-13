@@ -22,10 +22,12 @@ qui inscrit cet identifiant dans `mar_brand.erp_brand_id`. Le module n'offre
 donc aucun sélecteur de marque — il en offrait un, et travailler une heure sur
 l'enseigne du voisin sans s'en apercevoir y était possible.
 
-La vue Réseau affiche aussi, dans un cadre, l'écran « Créer un post » du module
-Social & Ads (menu « Social & Ads », et bouton « Créer un post pour cette
-campagne » du suivi). Il est servi par ce module, sur le même serveur, à
-`/social/` : rien à installer ici. Une autre adresse se donne au build par
+La vue Réseau affiche aussi, dans un cadre, les écrans du module Social & Ads
+(groupes « Social & Ads » du menu : calendrier Meta & Instagram, grille, création
+et contrôle des posts, publicités, suivi, retour sur opération, espace franchisé,
+leads, paramètres ; et bouton « Créer un post pour cette campagne » du suivi).
+Ils sont servis par ce module, sur le même serveur, à `/social/` : rien à
+installer ici. Une autre adresse se donne au build par
 `VITE_SOCIAL_BASE`.
 
 Une adresse sans `brand` n'applique aucun filtre, ce qui convient à un réseau

@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import * as api from './lib/api/module'
 import { useAsync } from './lib/useAsync'
-import { titleFor } from './lib/navigation'
+import { SOCIAL_PAGES, socialRoute, titleFor } from './lib/navigation'
 import type { Role, Route } from './lib/navigation'
 import Sidebar from './components/Sidebar'
 import DashboardView from './views/DashboardView'
@@ -21,7 +21,7 @@ import CampaignTypesView from './views/CampaignTypesView'
 import LocalPresenceView from './views/LocalPresenceView'
 import DamView from './views/DamView'
 import CampaignBuilder from './views/builder/CampaignBuilder'
-import SocialPostView from './views/SocialPostView'
+import SocialView from './views/SocialView'
 import { ReferencesProvider } from './state/references'
 
 export default function App() {
@@ -167,6 +167,15 @@ function Workspace() {
   }
 
   /**
+   * Navigation à l'intérieur du cadre du module Social : le menu suit l'écran
+   * affiché, sans recharger le cadre (même instance, adresse inchangée).
+   */
+  const followSocial = useCallback((key: string) => {
+    const next = socialRoute(key)
+    if (next !== null) setRoute(next)
+  }, [])
+
+  /**
    * « Créer un post » du module Social depuis le suivi d'une campagne, qui est
    * présélectionnée comme opération liée. Ici comme depuis le menu, le cadre
    * est rechargé à chaque ouverture : on repart d'un post vierge, pas de
@@ -211,6 +220,7 @@ function Workspace() {
   }
 
   const refs = references.data
+  const social = SOCIAL_PAGES[route]
 
   // Une adresse qui nomme une enseigne inconnue n'affiche pas « tout » : les
   // écrans se rempliraient d'un périmètre que personne n'a demandé, et
@@ -260,7 +270,7 @@ function Workspace() {
         </header>
 
         <main
-          className={`app__body${route === 'builder' ? ' app__body--wide' : ''}${route === 'social-post' ? ' app__body--frame' : ''}`}
+          className={`app__body${route === 'builder' ? ' app__body--wide' : ''}${social ? ' app__body--frame' : ''}`}
         >
           {route === 'dashboard' ? (
             <DashboardView
@@ -301,7 +311,9 @@ function Workspace() {
           {route === 'local' ? <LocalPresenceView /> : null}
           {route === 'dam' ? <DamView role={role} /> : null}
 
-          {route === 'social-post' ? <SocialPostView key={frameKey} campaignId={postFor} /> : null}
+          {social ? (
+            <SocialView key={frameKey} file={social.file} campaignId={postFor} onPage={followSocial} />
+          ) : null}
 
           {route === 'builder' ? (
             <CampaignBuilder
