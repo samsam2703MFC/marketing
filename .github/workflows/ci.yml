@@ -6,6 +6,15 @@ on:
   pull_request:
   # Permet de relancer après avoir renseigné les secrets, sans commit vide.
   workflow_dispatch:
+    inputs:
+      baseline:
+        # Une base dont les tables mar_* existent déjà mais dont le registre est
+        # vide (créée hors de ce runner) fait échouer la première migration sur
+        # « table already exists ». Cocher une fois, après avoir vérifié que le
+        # schéma est bien à jour : les fichiers sont inscrits, rien n'est exécuté.
+        description: 'Inscrire les migrations au registre sans les exécuter (--baseline)'
+        type: boolean
+        default: false
 
 jobs:
   # Le service MySQL 8 fait ici ce que l'environnement de développement ne
@@ -549,6 +558,7 @@ jobs:
         if: steps.check.outputs.configured == 'true'
         env:
           SSHPASS: ${{ secrets.SSH_PASSWORD }}
+          BASELINE: ${{ github.event_name == 'workflow_dispatch' && inputs.baseline && '--baseline' || '' }}
         run: |
           # Sortie capturée : sans cela l'étape ne laissait qu'un code de retour,
           # et un 255 de ssh ne dit rien de ce que la migration a rencontré.
@@ -566,7 +576,7 @@ jobs:
             a=\$(ls /usr/bin/php* 2>/dev/null | tr '\\n' ','); echo \"DIAG php=\$(php -r 'echo PHP_VERSION;' 2>/dev/null) retenu=\${P:-aucun} autres=\$a\"
             [ -n "\$P" ] || { echo 'PDO_MYSQL_MISSING'; exit 93; }
             [ -f db/migrate.php ] || { echo 'MIGRATE_ABSENT'; exit 92; }
-            \$P db/migrate.php 2>&1
+            \$P db/migrate.php $BASELINE 2>&1
           " 2>&1)
           rc=$?
           set -e
