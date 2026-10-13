@@ -20,6 +20,11 @@ interface ImportMetaEnv {
    * Le cloisonnement des données, lui, reste appliqué par l'API.
    */
   readonly VITE_ROLE?: 'BRAND_ADMIN' | 'FRANCHISEE'
+  /**
+   * Racine du module Social & Ads, dont l'écran « Créer un post » est affiché
+   * dans un cadre. Par défaut `/social/`, sur le même serveur.
+   */
+  readonly VITE_SOCIAL_BASE?: string
 }
 
 interface ImportMeta {

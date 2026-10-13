@@ -3806,3 +3806,57 @@ table select,
 .photos--gammes .photos__item { background: var(--paper, #fbf9f6); }
 .photos--gammes .photos__vignette { background: #fff; }
 .photos--gammes .photos__vignette img { object-fit: contain; padding: 8px; }
+
+/* Écran d'un autre module affiché dans un cadre (« Créer un post » du module
+   Social & Ads) : il prend toute la surface de contenu, et c'est lui qui
+   défile — deux barres de défilement imbriquées rendraient la page illisible. */
+.app__body--frame {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.app__body--frame > * {
+  max-width: none;
+}
+
+.social-frame {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.social-frame__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+}
+
+.social-frame__bar a {
+  color: var(--accent);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.social-frame__page {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  display: block;
+  background: #EAE4DC;
+}
+
+.monitor-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}

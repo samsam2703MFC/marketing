@@ -21,6 +21,7 @@ import CampaignTypesView from './views/CampaignTypesView'
 import LocalPresenceView from './views/LocalPresenceView'
 import DamView from './views/DamView'
 import CampaignBuilder from './views/builder/CampaignBuilder'
+import SocialPostView from './views/SocialPostView'
 import { ReferencesProvider } from './state/references'
 
 export default function App() {
@@ -138,6 +139,8 @@ function Workspace() {
   const role = ROLE
   const [route, setRoute] = useState<Route>('dashboard')
   const [campaignId, setCampaignId] = useState<number | null>(null)
+  const [postFor, setPostFor] = useState<number | null>(null)
+  const [frameKey, setFrameKey] = useState(0)
   const requested = brandFromUrl()
 
   // Les référentiels sont chargés une fois et traversent tous les écrans :
@@ -158,7 +161,22 @@ function Workspace() {
 
   function navigate(next: Route) {
     setCampaignId(null)
+    setPostFor(null)
+    setFrameKey((key) => key + 1)
     setRoute(next)
+  }
+
+  /**
+   * « Créer un post » du module Social depuis le suivi d'une campagne, qui est
+   * présélectionnée comme opération liée. Ici comme depuis le menu, le cadre
+   * est rechargé à chaque ouverture : on repart d'un post vierge, pas de
+   * l'écran laissé la fois précédente.
+   */
+  function createPost(id: number) {
+    setCampaignId(null)
+    setPostFor(id)
+    setFrameKey((key) => key + 1)
+    setRoute('social-post')
   }
 
   /**
@@ -241,7 +259,9 @@ function Workspace() {
           </div>
         </header>
 
-        <main className={`app__body${route === 'builder' ? ' app__body--wide' : ''}`}>
+        <main
+          className={`app__body${route === 'builder' ? ' app__body--wide' : ''}${route === 'social-post' ? ' app__body--frame' : ''}`}
+        >
           {route === 'dashboard' ? (
             <DashboardView
               statuses={refs.campaignStatuses}
@@ -281,6 +301,8 @@ function Workspace() {
           {route === 'local' ? <LocalPresenceView /> : null}
           {route === 'dam' ? <DamView role={role} /> : null}
 
+          {route === 'social-post' ? <SocialPostView key={frameKey} campaignId={postFor} /> : null}
+
           {route === 'builder' ? (
             <CampaignBuilder
               refs={refs}
@@ -297,6 +319,7 @@ function Workspace() {
               campaignId={campaignId}
               leadStatuses={refs.leadStatuses}
               onBack={() => navigate('campaigns')}
+              onCreatePost={role === 'BRAND_ADMIN' ? () => createPost(campaignId) : undefined}
             />
           ) : null}
         </main>

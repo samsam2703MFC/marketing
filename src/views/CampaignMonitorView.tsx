@@ -9,12 +9,14 @@ interface MonitorProps {
   campaignId: number
   leadStatuses: LeadStatus[]
   onBack: () => void
+  /** Ouvre « Créer un post » (module Social & Ads) avec cette campagne comme opération liée — réseau seul. */
+  onCreatePost?: () => void
 }
 
 /**
  * Suivi en direct d'une campagne : KPI, classement des boutiques, base CRM.
  */
-export default function CampaignMonitorView({ campaignId, leadStatuses, onBack }: MonitorProps) {
+export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, onCreatePost }: MonitorProps) {
   const campaign = useAsync(() => api.getCampaign(campaignId), [campaignId])
   const monitor = useAsync(() => api.getMonitor(campaignId), [campaignId])
   const [reloadKey, setReloadKey] = useState(0)
@@ -54,9 +56,16 @@ export default function CampaignMonitorView({ campaignId, leadStatuses, onBack }
 
   return (
     <>
-      <button type="button" className="filter back" onClick={onBack}>
-        ← Retour aux campagnes
-      </button>
+      <div className="monitor-actions">
+        <button type="button" className="filter back" onClick={onBack}>
+          ← Retour aux campagnes
+        </button>
+        {onCreatePost ? (
+          <button type="button" className="filter is-on back" onClick={onCreatePost}>
+            Créer un post pour cette campagne →
+          </button>
+        ) : null}
+      </div>
 
       {campaign.error ? <p className="error">{campaign.error}</p> : null}
       {campaign.data ? <h2 className="screen-subtitle">{campaign.data.name}</h2> : null}

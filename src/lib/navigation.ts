@@ -30,6 +30,8 @@ export type Route =
   | 'funds'
   | 'local'
   | 'dam'
+  /** « Créer un post » du module Social & Ads, affiché dans un cadre — réseau seul. */
+  | 'social-post'
 
 export type Role = 'BRAND_ADMIN' | 'FRANCHISEE'
 
@@ -61,6 +63,7 @@ const ICONS: Record<string, string> = {
   funds: 'M3 7h18v12H3zM3 7l3-4h12l3 4M16 13h.5',
   local: 'M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11zM12 8a2 2 0 1 0 .01 0',
   dam: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
+  'social-post': 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
 }
 
 function item(route: Route, label: string): NavItem {
@@ -84,6 +87,9 @@ const NETWORK: NavGroup[] = [
     label: 'Diffusion',
     items: [item('physical', 'Pub physique & PLV'), item('digital', 'Pub digitale'), item('agencies', 'Agences & prestataires')],
   },
+  // L'écran vit dans le module Social & Ads (/social) : il est affiché tel quel,
+  // dans un cadre, et publie avec les Pages et le token Meta de ce module.
+  { label: 'Social & Ads', items: [item('social-post', 'Créer un post')] },
   { label: 'Performance', items: [item('analysis', 'Marketing Analyse'), item('roi', 'ROI & rentabilité')] },
   {
     label: 'Réseau',
