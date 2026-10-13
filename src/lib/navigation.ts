@@ -41,7 +41,18 @@ export type Route =
   | 'social-suivi'
   | 'social-fr'
   | 'social-leads'
-  | 'social-set'
+  /** Paramètres du module Social : un écran, ouvert sur un onglet ou une section. */
+  | 'social-set-conn'
+  | 'social-set-cles'
+  | 'social-set-ids'
+  | 'social-set-pf'
+  | 'social-set-version'
+  | 'social-set-dsa'
+  | 'social-set-tpl'
+  | 'social-set-grp'
+  | 'social-set-rights'
+  | 'social-set-log'
+  | 'social-set-tfb'
 
 export type Role = 'BRAND_ADMIN' | 'FRANCHISEE'
 
@@ -83,7 +94,17 @@ const ICONS: Record<string, string> = {
   'social-suivi': 'M4 20V10M10 20V4M16 20v-7M22 20H2',
   'social-fr': 'M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.9',
   'social-leads': 'M4 4h16v16H4zM8 8h8M8 12h8M8 16h5',
-  'social-set': 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6',
+  'social-set-conn': 'M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7',
+  'social-set-cles': 'M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.8 7.8 5.5 5.5 0 0 1 7.8-7.8zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4',
+  'social-set-ids': 'M4 6h16M4 12h16M4 18h10',
+  'social-set-pf': 'M3 7h18v13H3zM8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',
+  'social-set-version': 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+  'social-set-dsa': 'M12 3v18M5 7h14M5 7l-3 7a4 4 0 0 0 6 0zM19 7l-3 7a4 4 0 0 0 6 0z',
+  'social-set-tpl': 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h5',
+  'social-set-grp': 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
+  'social-set-rights': 'M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21v-1a6 6 0 0 1 12 0v1M19 8v6M22 11h-6',
+  'social-set-log': 'M12 8v4l3 3M3 12a9 9 0 1 0 9-9 9 9 0 0 0-9 9',
+  'social-set-tfb': 'M4 17l6-6-6-6M12 19h8',
 }
 
 /**
@@ -91,7 +112,7 @@ const ICONS: Record<string, string> = {
  * page de ce module (`SA.href`) et son fichier. Le module renvoie la clé de
  * l'écran ouvert dans le cadre, ce qui permet au menu de suivre.
  */
-export const SOCIAL_PAGES: Partial<Record<Route, { key: string; file: string }>> = {
+export const SOCIAL_PAGES: Partial<Record<Route, { key: string; file: string; query?: string }>> = {
   'social-cal': { key: 'cal', file: 'SA Calendrier.dc.html' },
   'social-grid': { key: 'grid', file: 'SA Grille.dc.html' },
   'social-post': { key: 'post', file: 'SA Post.dc.html' },
@@ -102,11 +123,26 @@ export const SOCIAL_PAGES: Partial<Record<Route, { key: string; file: string }>>
   'social-suivi': { key: 'suivi', file: 'SA Suivi.dc.html' },
   'social-fr': { key: 'fr', file: 'SA Franchise.dc.html' },
   'social-leads': { key: 'leads', file: 'SA Leads.dc.html' },
-  'social-set': { key: 'set', file: 'SA Parametres.dc.html' },
+  'social-set-conn': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=conn' },
+  'social-set-cles': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=api&section=cles' },
+  'social-set-ids': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=api&section=ids' },
+  'social-set-pf': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=api&section=pf' },
+  'social-set-version': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=api&section=version' },
+  'social-set-dsa': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=api&section=dsa' },
+  'social-set-tpl': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=tpl' },
+  'social-set-grp': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=grp' },
+  'social-set-rights': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=rights' },
+  'social-set-log': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=log' },
+  'social-set-tfb': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=tfb' },
 }
 
-/** La route qui affiche l'écran `key` du module Social, s'il en a une. */
-export function socialRoute(key: string): Route | null {
+/**
+ * La route qui affiche l'écran `key` du module Social, s'il en a une. Plusieurs
+ * routes ouvrent le même écran (les Paramètres, sur un onglet ou une section) :
+ * la route courante est gardée si elle l'affiche déjà.
+ */
+export function socialRoute(key: string, current?: Route): Route | null {
+  if (current !== undefined && SOCIAL_PAGES[current]?.key === key) return current
   for (const [route, page] of Object.entries(SOCIAL_PAGES)) {
     if (page?.key === key) return route as Route
   }
@@ -155,7 +191,24 @@ const NETWORK: NavGroup[] = [
       item('social-roi', 'Retour sur opération'),
       item('social-fr', 'Espace franchisé'),
       item('social-leads', 'Formulaires de leads'),
-      item('social-set', 'Paramètres Social & Ads'),
+    ],
+  },
+  // Le paramétrage du module Social, Meta en tête : chaque entrée ouvre l'écran
+  // Paramètres sur son onglet, ou sur sa section de l'onglet « API Meta ».
+  {
+    label: 'Paramètres Meta & Social',
+    items: [
+      item('social-set-conn', 'Connexions Meta'),
+      item('social-set-cles', 'Clés d’accès & token'),
+      item('social-set-ids', 'Identifiants par boutique'),
+      item('social-set-pf', 'Portefeuille Business Manager'),
+      item('social-set-version', 'Version & permissions'),
+      item('social-set-dsa', 'Transparence UE (DSA)'),
+      item('social-set-tpl', 'Modèles de posts'),
+      item('social-set-grp', 'Groupes de boutiques'),
+      item('social-set-rights', 'Droits'),
+      item('social-set-log', 'Journal d’activité'),
+      item('social-set-tfb', 'API TFBuddy'),
     ],
   },
   { label: 'Performance', items: [item('analysis', 'Marketing Analyse'), item('roi', 'ROI & rentabilité')] },

@@ -171,8 +171,7 @@ function Workspace() {
    * affiché, sans recharger le cadre (même instance, adresse inchangée).
    */
   const followSocial = useCallback((key: string) => {
-    const next = socialRoute(key)
-    if (next !== null) setRoute(next)
+    setRoute((current) => socialRoute(key, current) ?? current)
   }, [])
 
   /**
@@ -312,7 +311,7 @@ function Workspace() {
           {route === 'dam' ? <DamView role={role} /> : null}
 
           {social ? (
-            <SocialView key={frameKey} file={social.file} campaignId={postFor} onPage={followSocial} />
+            <SocialView key={frameKey} file={social.file} query={social.query} campaignId={postFor} onPage={followSocial} />
           ) : null}
 
           {route === 'builder' ? (

@@ -25,7 +25,10 @@ l'enseigne du voisin sans s'en apercevoir y était possible.
 La vue Réseau affiche aussi, dans un cadre, les écrans du module Social & Ads
 (groupes « Social & Ads » du menu : calendrier Meta & Instagram, grille, création
 et contrôle des posts, publicités, suivi, retour sur opération, espace franchisé,
-leads, paramètres ; et bouton « Créer un post pour cette campagne » du suivi).
+leads ; groupe « Paramètres Meta & Social » : connexions, clés d'accès, identifiants
+par boutique, portefeuille Business Manager, version et permissions, DSA, modèles,
+groupes, droits, journal, API TFBuddy ; et bouton « Créer un post pour cette
+campagne » du suivi).
 Ils sont servis par ce module, sur le même serveur, à `/social/` : rien à
 installer ici. Une autre adresse se donne au build par
 `VITE_SOCIAL_BASE`.
