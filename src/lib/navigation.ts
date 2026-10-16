@@ -57,6 +57,18 @@ export type Route =
   | 'social-set-rights'
   | 'social-set-log'
   | 'social-set-tfb'
+  /**
+   * Espace franchisé du module Social (/social_franchisee), affiché dans un cadre —
+   * version franchisé seule. La boutique et les droits viennent de la session de
+   * ce module (l'ERP), jamais de l'adresse.
+   */
+  | 'sf-cal'
+  | 'sf-pub'
+  | 'sf-com'
+  | 'sf-msg'
+  | 'sf-google'
+  | 'sf-camp'
+  | 'sf-ig'
 
 export type Role = 'BRAND_ADMIN' | 'FRANCHISEE'
 
@@ -113,6 +125,13 @@ const ICONS: Record<string, string> = {
   'social-set-rights': 'M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21v-1a6 6 0 0 1 12 0v1M19 8v6M22 11h-6',
   'social-set-log': 'M12 8v4l3 3M3 12a9 9 0 1 0 9-9 9 9 0 0 0-9 9',
   'social-set-tfb': 'M4 17l6-6-6-6M12 19h8',
+  'sf-cal': 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01',
+  'sf-pub': 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
+  'sf-com': 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2zM8 9h8M8 13h5',
+  'sf-msg': 'M4 4h16v12H5.17L4 17.17V4zM22 2H2v22l4-4h16V2z',
+  'sf-google': 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
+  'sf-camp': 'M4 4h16v12H4zM2 20h20M9 8l4 2-4 2z',
+  'sf-ig': 'M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18',
 }
 
 /**
@@ -120,7 +139,15 @@ const ICONS: Record<string, string> = {
  * page de ce module (`SA.href`) et son fichier. Le module renvoie la clé de
  * l'écran ouvert dans le cadre, ce qui permet au menu de suivre.
  */
-export const SOCIAL_PAGES: Partial<Record<Route, { key: string; file: string; query?: string }>> = {
+export interface SocialPage {
+  key: string
+  file: string
+  query?: string
+  /** `franchise` : une page de l'espace franchisé (/social_franchisee), sinon un écran du réseau (/social). */
+  space?: 'franchise'
+}
+
+export const SOCIAL_PAGES: Partial<Record<Route, SocialPage>> = {
   'social-cal': { key: 'cal', file: 'SA Calendrier.dc.html' },
   'social-grid': { key: 'grid', file: 'SA Grille.dc.html' },
   'social-post': { key: 'post', file: 'SA Post.dc.html' },
@@ -146,6 +173,21 @@ export const SOCIAL_PAGES: Partial<Record<Route, { key: string; file: string; qu
   'social-set-rights': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=rights' },
   'social-set-log': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=log' },
   'social-set-tfb': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=tfb' },
+  // Espace franchisé : ses pages sous leur adresse propre ; ses clés sont préfixées « f: » (le module les annonce ainsi).
+  'sf-cal': { key: 'f:cal', file: 'calendrier', space: 'franchise' },
+  'sf-pub': { key: 'f:pub', file: 'publier', space: 'franchise' },
+  'sf-com': { key: 'f:com', file: 'commentaires', space: 'franchise' },
+  'sf-msg': { key: 'f:msg', file: 'messages', space: 'franchise' },
+  'sf-google': { key: 'f:google', file: 'avis-google', space: 'franchise' },
+  'sf-camp': { key: 'f:camp', file: 'operations', space: 'franchise' },
+  'sf-ig': { key: 'f:ig', file: 'instagram', space: 'franchise' },
+}
+
+/** La page Social d'une route, si ce périmètre peut l'ouvrir : le réseau ses écrans, la boutique son espace. */
+export function socialPageFor(role: Role, route: Route): SocialPage | null {
+  const page = SOCIAL_PAGES[route]
+  if (!page) return null
+  return (page.space === 'franchise') === (role === 'FRANCHISEE') ? page : null
 }
 
 /**
@@ -243,6 +285,19 @@ const FRANCHISE: NavGroup[] = [
   { label: 'Ma boutique', items: [item('dashboard', 'Tableau de bord'), item('calendar', 'Calendrier réseau')] },
   { label: 'Mes actions', items: [item('campaigns', 'Mes campagnes')] },
   { label: 'Outils de campagne', items: [item('promotions', 'Promotions'), item('vouchers', 'Vouchers / Bons')] },
+  // L'espace franchisé du module Social & Ads : les réseaux sociaux de la boutique, dans le même menu.
+  {
+    label: 'Mes réseaux sociaux',
+    items: [
+      item('sf-cal', 'Calendrier & publications'),
+      item('sf-pub', 'Créer un post'),
+      item('sf-com', 'Commentaires'),
+      item('sf-msg', 'Messages privés'),
+      item('sf-google', 'Avis Google'),
+      item('sf-camp', 'Publicités & opérations'),
+      item('sf-ig', 'Grille Instagram'),
+    ],
+  },
   { label: 'Terrain', items: [item('dam', 'Kit clé-en-main'), item('local', 'Ma présence locale')] },
   { label: 'Budget', items: [item('funds', 'Ma contribution')] },
 ]
