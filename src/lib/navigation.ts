@@ -35,6 +35,7 @@ export type Route =
   | 'social-grid'
   | 'social-post'
   | 'social-ctrl'
+  | 'social-com'
   | 'social-ads'
   | 'social-camp'
   | 'social-roi'
@@ -94,6 +95,7 @@ const ICONS: Record<string, string> = {
   'social-suivi': 'M4 20V10M10 20V4M16 20v-7M22 20H2',
   'social-fr': 'M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.9',
   'social-leads': 'M4 4h16v16H4zM8 8h8M8 12h8M8 16h5',
+  'social-com': 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2zM8 9h8M8 13h5',
   'social-set-conn': 'M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7',
   'social-set-cles': 'M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.8 7.8 5.5 5.5 0 0 1 7.8-7.8zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4',
   'social-set-ids': 'M4 6h16M4 12h16M4 18h10',
@@ -117,6 +119,7 @@ export const SOCIAL_PAGES: Partial<Record<Route, { key: string; file: string; qu
   'social-grid': { key: 'grid', file: 'SA Grille.dc.html' },
   'social-post': { key: 'post', file: 'SA Post.dc.html' },
   'social-ctrl': { key: 'ctrl', file: 'SA Controle.dc.html' },
+  'social-com': { key: 'com', file: 'SA Commentaires.dc.html' },
   'social-ads': { key: 'ads', file: 'SA Publicites.dc.html' },
   'social-camp': { key: 'camp', file: 'SA Campagnes.dc.html' },
   'social-roi': { key: 'roi', file: 'SA Retour.dc.html' },
@@ -180,6 +183,7 @@ const NETWORK: NavGroup[] = [
       item('social-grid', 'Grille Instagram'),
       item('social-post', 'Créer un post'),
       item('social-ctrl', 'Contrôle des posts'),
+      item('social-com', 'Commentaires (vert, orange, rouge)'),
       item('social-ads', 'Publicités Meta'),
       item('social-camp', 'Posts & pubs par campagne'),
     ],
