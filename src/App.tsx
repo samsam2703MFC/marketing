@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import * as api from './lib/api/module'
 import { useAsync } from './lib/useAsync'
-import { SOCIAL_PAGES, socialRoute, titleFor } from './lib/navigation'
+import { socialPageFor, socialRoute, titleFor } from './lib/navigation'
 import type { Role, Route } from './lib/navigation'
 import Sidebar from './components/Sidebar'
 import DashboardView from './views/DashboardView'
@@ -219,7 +219,7 @@ function Workspace() {
   }
 
   const refs = references.data
-  const social = SOCIAL_PAGES[route]
+  const social = socialPageFor(role, route)
 
   // Une adresse qui nomme une enseigne inconnue n'affiche pas « tout » : les
   // écrans se rempliraient d'un périmètre que personne n'a demandé, et
@@ -311,7 +311,7 @@ function Workspace() {
           {route === 'dam' ? <DamView role={role} /> : null}
 
           {social ? (
-            <SocialView key={frameKey} file={social.file} query={social.query} campaignId={postFor} onPage={followSocial} />
+            <SocialView key={frameKey} file={social.file} query={social.query} space={social.space} campaignId={postFor} onPage={followSocial} />
           ) : null}
 
           {route === 'builder' ? (

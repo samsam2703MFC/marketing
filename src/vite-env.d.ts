@@ -25,6 +25,8 @@ interface ImportMetaEnv {
    * dans un cadre. Par défaut `/social/`, sur le même serveur.
    */
   readonly VITE_SOCIAL_BASE?: string
+  /** Espace franchisé du module Social (défaut /social_franchisee/), affiché dans la version franchisé. */
+  readonly VITE_SOCIAL_FRANCHISEE_BASE?: string
 }
 
 interface ImportMeta {

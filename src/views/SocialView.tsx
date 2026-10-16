@@ -5,6 +5,8 @@ interface SocialViewProps {
   file: string
   /** Paramètres de l'écran (ex. `tab=api&section=cles` pour les Paramètres). */
   query?: string
+  /** `franchise` : une page de l'espace franchisé (/social_franchisee) ; sinon un écran du réseau (/social). */
+  space?: 'franchise'
   /**
    * Campagne à présélectionner comme « Opération liée » d'un nouveau post. Le
    * module Social lit les campagnes de ce module par l'API : l'opération `bo-19`
@@ -24,8 +26,8 @@ interface SocialViewProps {
  * le garde — on reste dans le cadre. L'écran ouvert est annoncé par message,
  * pour que le menu de gauche suive sans recharger le cadre.
  */
-export default function SocialView({ file, query, campaignId, onPage }: SocialViewProps) {
-  const base = (import.meta.env.VITE_SOCIAL_BASE || '/social/').replace(/\/?$/, '/')
+export default function SocialView({ file, query, space, campaignId, onPage }: SocialViewProps) {
+  const base = (space === 'franchise' ? import.meta.env.VITE_SOCIAL_FRANCHISEE_BASE || '/social_franchisee/' : import.meta.env.VITE_SOCIAL_BASE || '/social/').replace(/\/?$/, '/')
   const params = [query, campaignId !== null ? `op=${campaignId}` : ''].filter(Boolean).join('&')
   // L'adresse du cadre est fixée à l'ouverture : la suite de la navigation
   // appartient au cadre, et la recalculer le rechargerait.
@@ -55,7 +57,7 @@ export default function SocialView({ file, query, campaignId, onPage }: SocialVi
     <div className="social-frame">
       <div className="social-frame__bar">
         <span className="muted">
-          Écran du module Social &amp; Ads
+          {space === 'franchise' ? 'Espace boutique du module Social & Ads' : 'Écran du module Social & Ads'}
           {campaignId !== null ? ' — campagne présélectionnée comme opération liée' : ''}
         </span>
         <a href={full} target="_blank" rel="noopener">
