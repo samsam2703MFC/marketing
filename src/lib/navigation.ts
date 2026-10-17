@@ -35,8 +35,6 @@ export type Route =
   | 'social-grid'
   | 'social-post'
   | 'social-ctrl'
-  | 'social-com'
-  | 'social-msg'
   | 'social-google'
   | 'social-ads'
   | 'social-camp'
@@ -110,8 +108,6 @@ const ICONS: Record<string, string> = {
   'social-suivi': 'M4 20V10M10 20V4M16 20v-7M22 20H2',
   'social-fr': 'M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.9',
   'social-leads': 'M4 4h16v16H4zM8 8h8M8 12h8M8 16h5',
-  'social-com': 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2zM8 9h8M8 13h5',
-  'social-msg': 'M4 4h16v12H5.17L4 17.17V4zM22 2H2v22l4-4h16V2z',
   'social-bilan': 'M3 3v18h18M7 15l4-4 3 3 5-6',
   'social-google': 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
   'social-set-conn': 'M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7',
@@ -152,8 +148,6 @@ export const SOCIAL_PAGES: Partial<Record<Route, SocialPage>> = {
   'social-grid': { key: 'grid', file: 'SA Grille.dc.html' },
   'social-post': { key: 'post', file: 'SA Post.dc.html' },
   'social-ctrl': { key: 'ctrl', file: 'SA Controle.dc.html' },
-  'social-com': { key: 'com', file: 'SA Commentaires.dc.html' },
-  'social-msg': { key: 'msg', file: 'SA Messages.dc.html' },
   'social-google': { key: 'google', file: 'SA Google.dc.html' },
   'social-ads': { key: 'ads', file: 'SA Publicites.dc.html' },
   'social-camp': { key: 'camp', file: 'SA Campagnes.dc.html' },
@@ -226,7 +220,8 @@ const NETWORK: NavGroup[] = [
   },
   // Les écrans vivent dans le module Social & Ads (/social) : ils sont affichés
   // tels quels, dans un cadre, et publient avec les Pages et le token Meta de ce
-  // module. Leur menu propre est masqué, celui-ci le remplace.
+  // module. Leur menu propre est masqué, celui-ci le remplace. Les commentaires et
+  // les messages privés n'y sont pas : ils se traitent dans l'espace franchisé.
   {
     label: 'Social & Ads',
     items: [
@@ -234,8 +229,6 @@ const NETWORK: NavGroup[] = [
       item('social-grid', 'Grille Instagram'),
       item('social-post', 'Créer un post'),
       item('social-ctrl', 'Contrôle des posts'),
-      item('social-com', 'Commentaires (vert, orange, rouge)'),
-      item('social-msg', 'Messages privés Instagram'),
       item('social-google', 'Avis Google (réputation digitale)'),
       item('social-ads', 'Publicités Meta'),
       item('social-camp', 'Posts & pubs par campagne'),
