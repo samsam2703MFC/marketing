@@ -181,10 +181,22 @@ function Workspace() {
    * l'écran laissé la fois précédente.
    */
   function createPost(id: number) {
+    openSocialFor(id, 'social-post')
+  }
+
+  /**
+   * Le plan de posts de la campagne (durée, réseaux, mix → brouillons au
+   * calendrier) : l'écran des opérations du module Social, ouvert sur elle.
+   */
+  function planPosts(id: number) {
+    openSocialFor(id, 'social-camp')
+  }
+
+  function openSocialFor(id: number, next: Route) {
     setCampaignId(null)
     setPostFor(id)
     setFrameKey((key) => key + 1)
-    setRoute('social-post')
+    setRoute(next)
   }
 
   /**
@@ -332,6 +344,7 @@ function Workspace() {
               leadStatuses={refs.leadStatuses}
               onBack={() => navigate('campaigns')}
               onCreatePost={role === 'BRAND_ADMIN' ? () => createPost(campaignId) : undefined}
+              onPlanPosts={role === 'BRAND_ADMIN' ? () => planPosts(campaignId) : undefined}
             />
           ) : null}
         </main>

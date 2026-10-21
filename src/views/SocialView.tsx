@@ -65,7 +65,7 @@ export default function SocialView({ file, query, space, campaignId, onPage }: S
       <div className="social-frame__bar">
         <span className="muted">
           {space === 'franchise' ? 'Espace boutique du module Social & Ads' : 'Écran du module Social & Ads'}
-          {campaignId !== null ? ' — campagne présélectionnée comme opération liée' : ''}
+          {campaignId === null ? '' : file === 'SA Campagnes.dc.html' ? ' — ouvert sur la campagne (plan de posts)' : ' — campagne présélectionnée comme opération liée'}
         </span>
         <a href={full} target="_blank" rel="noopener">
           Ouvrir dans le module Social &amp; Ads ↗
