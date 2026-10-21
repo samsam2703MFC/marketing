@@ -21,11 +21,11 @@ interface ImportMetaEnv {
    */
   readonly VITE_ROLE?: 'BRAND_ADMIN' | 'FRANCHISEE'
   /**
-   * Racine du module Social & Ads, dont l'écran « Créer un post » est affiché
-   * dans un cadre. Par défaut `/social/`, sur le même serveur.
+   * Racine du module Social & Ads, dont les écrans sont affichés dans un cadre.
+   * Par défaut `/marketing/social/`, sur le même serveur.
    */
   readonly VITE_SOCIAL_BASE?: string
-  /** Espace franchisé du module Social (défaut /social_franchisee/), affiché dans la version franchisé. */
+  /** Espace franchisé du module Social (défaut /marketing/franchise/), affiché dans la version franchisé. */
   readonly VITE_SOCIAL_FRANCHISEE_BASE?: string
 }
 
