@@ -23,6 +23,8 @@ export type Route =
   | 'vouchers'
   | 'physical'
   | 'digital'
+  /** Canal « Newsletter, SMS & PWA » : les canaux de message activés par campagne (famille digitale). */
+  | 'canal-messages'
   | 'agencies'
   | 'analysis'
   | 'roi'
@@ -79,6 +81,8 @@ export interface NavItem {
 export interface NavGroup {
   label: string
   items: NavItem[]
+  /** Bouton en tête du groupe (« Nouvelle campagne »). */
+  action?: { label: string; route: Route }
 }
 
 const ICONS: Record<string, string> = {
@@ -91,6 +95,7 @@ const ICONS: Record<string, string> = {
   vouchers: 'M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4zM13 6v12',
   physical: 'M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM8 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM21 15l-5-5L5 21',
   digital: 'M4 4h16v12H4zM2 20h20M9 8l4 2-4 2z',
+  'canal-messages': 'M4 4h16v16H4zM4 4l8 8 8-8',
   agencies: 'M4 7h16v13H4zM9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 12h18',
   analysis: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
   roi: 'M3 17l6-6 4 4 8-8M15 7h6v6',
@@ -144,7 +149,8 @@ export interface SocialPage {
 }
 
 export const SOCIAL_PAGES: Partial<Record<Route, SocialPage>> = {
-  'social-cal': { key: 'cal', file: 'SA Calendrier.dc.html' },
+  // Le canal « Facebook » : le calendrier des publications, déjà filtré sur Facebook.
+  'social-cal': { key: 'cal', file: 'SA Calendrier.dc.html', query: 'reseau=facebook' },
   'social-grid': { key: 'grid', file: 'SA Grille.dc.html' },
   'social-post': { key: 'post', file: 'SA Post.dc.html' },
   'social-ctrl': { key: 'ctrl', file: 'SA Controle.dc.html' },
@@ -203,75 +209,64 @@ function item(route: Route, label: string): NavItem {
 
 const NETWORK: NavGroup[] = [
   { label: 'Pilotage', items: [item('dashboard', 'Tableau de bord'), item('calendar', 'Calendrier marketing')] },
+  // La campagne au centre : on la crée par l'assistant, et tout ce qui se publie
+  // s'y rattache (posts, publicités, envois, PLV). L'éditeur des types reste ici :
+  // c'est la grille de la première étape de l'assistant.
   {
     label: 'Campagnes',
-    // L'éditeur des types vit à côté des campagnes, et non dans un réglage à
-    // part : c'est la grille qu'on voit à la première étape de l'assistant, et
-    // on y revient en pensant « campagnes », pas « paramètres ».
-    items: [item('campaigns', 'Campagnes'), item('campaign-types', 'Types de campagne')],
-  },
-  {
-    label: 'Outils de campagne',
-    items: [item('promotions', 'Promotions'), item('bundles', 'Bundles & Menus'), item('vouchers', 'Vouchers / Bons')],
-  },
-  {
-    label: 'Diffusion',
-    items: [item('physical', 'Pub physique & PLV'), item('digital', 'Pub digitale'), item('agencies', 'Agences & prestataires')],
-  },
-  // Les écrans vivent dans le module Social & Ads (/social) : ils sont affichés
-  // tels quels, dans un cadre, et publient avec les Pages et le token Meta de ce
-  // module. Leur menu propre est masqué, celui-ci le remplace. Les commentaires et
-  // les messages privés n'y sont pas : ils se traitent dans l'espace franchisé.
-  {
-    label: 'Social & Ads',
+    action: { label: 'Nouvelle campagne', route: 'builder' },
     items: [
-      item('social-cal', 'Calendrier Meta & Instagram'),
-      item('social-grid', 'Grille Instagram'),
-      item('social-post', 'Créer un post'),
-      item('social-ctrl', 'Contrôle des posts'),
-      item('social-google', 'Avis Google (réputation digitale)'),
-      item('social-ads', 'Publicités Meta'),
+      item('campaigns', 'Toutes les campagnes'),
       item('social-camp', 'Posts & pubs par campagne'),
+      item('social-post', 'Créer un post'),
+      item('campaign-types', 'Types de campagne'),
+    ],
+  },
+  // Chaque canal à part : ce qui y a été fait, campagne par campagne. Les écrans
+  // Facebook, Instagram, Publicités Meta et Google vivent dans le module Social &
+  // Ads (/social), affichés dans un cadre avec ses Pages et son token Meta ; les
+  // commentaires et les messages privés se traitent dans l'espace franchisé.
+  {
+    label: 'Canaux',
+    items: [
+      item('social-cal', 'Facebook'),
+      item('social-grid', 'Instagram'),
+      item('social-ads', 'Publicités Meta'),
+      item('social-google', 'Google · avis & fiches'),
+      item('canal-messages', 'Newsletter, SMS & PWA'),
+      item('physical', 'Print & PLV'),
     ],
   },
   {
-    label: 'Social & Ads · pilotage',
+    label: 'Outils',
     items: [
-      item('social-bilan', 'Bilan des boutiques (semaine)'),
-      item('social-suivi', 'Suivi des boutiques'),
-      item('social-roi', 'Retour sur opération'),
-      item('social-fr', 'Espace franchisé'),
-      item('social-leads', 'Formulaires de leads'),
+      item('promotions', 'Promotions'),
+      item('bundles', 'Bundles & Menus'),
+      item('vouchers', 'Vouchers / Bons'),
+      item('dam', 'Médiathèque & kit local'),
+      item('agencies', 'Agences & prestataires'),
     ],
   },
-  // Le paramétrage du module Social, Meta en tête : chaque entrée ouvre l'écran
-  // Paramètres sur son onglet, ou sur sa section de l'onglet « API Meta ».
-  {
-    label: 'Paramètres Meta & Social',
-    items: [
-      item('social-set-conn', 'Connexions Meta'),
-      item('social-set-cles', 'Clés d’accès & token'),
-      item('social-set-ids', 'Identifiants par boutique'),
-      item('social-set-pf', 'Portefeuille Business Manager'),
-      item('social-set-version', 'Version & permissions'),
-      item('social-set-dsa', 'Transparence UE (DSA)'),
-      item('social-set-tpl', 'Modèles de posts'),
-      item('social-set-grp', 'Groupes de boutiques'),
-      item('social-set-rights', 'Droits'),
-      item('social-set-log', 'Journal d’activité'),
-      item('social-set-tfb', 'API TFBuddy'),
-    ],
-  },
-  { label: 'Performance', items: [item('analysis', 'Marketing Analyse'), item('roi', 'ROI & rentabilité')] },
   {
     label: 'Réseau',
     items: [
+      item('social-bilan', 'Bilan des boutiques'),
+      item('social-suivi', 'Suivi des boutiques'),
+      item('social-ctrl', 'Contrôle des posts'),
+      item('social-fr', 'Espace franchisé'),
+      item('social-leads', 'Formulaires de leads'),
       item('crm', 'Fidélité & CRM'),
       item('funds', 'Fonds marketing'),
       item('local', 'Présence locale'),
-      item('dam', 'Kit local & DAM'),
     ],
   },
+  {
+    label: 'Performance',
+    items: [item('analysis', 'Marketing Analyse'), item('roi', 'ROI & rentabilité'), item('social-roi', 'Retour sur opération')],
+  },
+  // Un seul écran de réglages (Meta, Google, TFBuddy, modèles, droits…) : ses onglets
+  // remplacent les entrées une à une.
+  { label: 'Paramètres', items: [item('social-set-conn', 'Paramètres & connexions')] },
 ]
 
 const FRANCHISE: NavGroup[] = [

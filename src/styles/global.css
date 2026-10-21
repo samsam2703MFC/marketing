@@ -339,6 +339,29 @@ tbody td {
   padding: 0 10px 8px;
 }
 
+/* Le bouton en tête d'un groupe (« Nouvelle campagne ») : l'entrée principale du module. */
+.sidebar__action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 2px 12px 8px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 500;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.sidebar__action:hover,
+.sidebar__action.is-active {
+  background: #6f1622;
+  color: #fff;
+}
+
+
 .sidebar__item {
   display: flex;
   align-items: center;

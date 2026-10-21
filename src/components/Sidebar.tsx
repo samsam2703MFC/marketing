@@ -62,6 +62,19 @@ export default function Sidebar({ role, route, brandName, onNavigate }: SidebarP
         {navFor(role).map((group) => (
           <div key={group.label} className="sidebar__group">
             <div className="sidebar__group-label">{group.label}</div>
+            {group.action ? (
+              <a
+                href="#"
+                className={`sidebar__action${route === group.action.route ? ' is-active' : ''}`}
+                onClick={(event) => {
+                  event.preventDefault()
+                  onNavigate(group.action!.route)
+                }}
+              >
+                <Icon path="M12 5v14M5 12h14" />
+                {group.action.label}
+              </a>
+            ) : null}
             {group.items.map((entry) => (
               <a
                 key={entry.route}
