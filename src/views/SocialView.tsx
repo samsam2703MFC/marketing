@@ -20,14 +20,18 @@ interface SocialViewProps {
 /**
  * Un écran du module Social & Ads, affiché dans un cadre.
  *
- * Les écrans ne sont pas recopiés : ils vivent dans /social, qui détient les
+ * Les écrans ne sont pas recopiés : ils vivent dans le module Social, servi sous
+ * /marketing/social, qui détient les
  * Pages, le token Meta, la médiathèque, le calendrier et les publicités. Le
  * paramètre `embed=1` leur retire leur propre menu, et chaque lien qu'on y suit
  * le garde — on reste dans le cadre. L'écran ouvert est annoncé par message,
  * pour que le menu de gauche suive sans recharger le cadre.
  */
 export default function SocialView({ file, query, space, campaignId, onPage }: SocialViewProps) {
-  const base = (space === 'franchise' ? import.meta.env.VITE_SOCIAL_FRANCHISEE_BASE || '/social_franchisee/' : import.meta.env.VITE_SOCIAL_BASE || '/social/').replace(/\/?$/, '/')
+  // Le module Social est servi sous /marketing (même serveur) : ses écrans à /marketing/social,
+  // son espace boutique à /marketing/franchise. Les anciennes adresses (/social, /social_franchisee)
+  // restent servies pour les liens de l'ERP, les QR codes imprimés et les notifications de Meta.
+  const base = (space === 'franchise' ? import.meta.env.VITE_SOCIAL_FRANCHISEE_BASE || '/marketing/franchise/' : import.meta.env.VITE_SOCIAL_BASE || '/marketing/social/').replace(/\/?$/, '/')
   // La boutique de l'adresse (`/marketingc/?shop=2`) passe à l'espace boutique : sans elle, il ouvre la
   // première boutique de la session. L'espace vérifie lui-même qu'elle est ouverte à ce visiteur.
   const shop = space === 'franchise' ? new URLSearchParams(window.location.search).get('shop')?.trim() ?? '' : ''
