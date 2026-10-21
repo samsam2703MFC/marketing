@@ -11,14 +11,16 @@ import type { CampaignChannel, AssetRender, CampaignUniform } from '../lib/api/m
  * l'autre). Deux fichiers presque identiques auraient divergé à la première
  * évolution.
  */
-export default function DiffusionView({ family }: { family: 'PHYSIQUE' | 'DIGITAL' }) {
+export default function DiffusionView({ family, codes }: { family: 'PHYSIQUE' | 'DIGITAL'; codes?: string[] }) {
   const { data, error, loading } = useAsync(() => api.getDiffusion(family), [family])
 
   if (error) return <p className="error">{error}</p>
   if (loading) return <p className="muted">Chargement…</p>
   if (!data) return null
 
-  const enabled = data.channels.filter((channel) => channel.is_enabled)
+  // Un canal du menu (« Newsletter, SMS & PWA ») : seulement ses canaux, sans les déclinaisons de visuels.
+  const channels = codes ? data.channels.filter((channel) => codes.includes(channel.channel_code)) : data.channels
+  const enabled = channels.filter((channel) => channel.is_enabled)
   const budget = enabled.reduce((sum, channel) => sum + (channel.budget_amount ?? 0), 0)
 
   return (
@@ -28,7 +30,7 @@ export default function DiffusionView({ family }: { family: 'PHYSIQUE' | 'DIGITA
           <h2>Canaux activés</h2>
           <p className="metric">{enabled.length}</p>
           <p className="muted">
-            sur {data.channels.length} rattachement{data.channels.length > 1 ? 's' : ''} de campagne
+            sur {channels.length} rattachement{channels.length > 1 ? 's' : ''} de campagne
           </p>
         </section>
 
@@ -38,18 +40,20 @@ export default function DiffusionView({ family }: { family: 'PHYSIQUE' | 'DIGITA
           <p className="muted">Somme des budgets par canal</p>
         </section>
 
+        {codes ? null : (
         <section className="card">
           <h2>{family === 'PHYSIQUE' ? 'Tenues & accessoires' : 'Déclinaisons produites'}</h2>
           <p className="metric">
             {family === 'PHYSIQUE' ? data.uniforms.length : data.renders.length}
           </p>
         </section>
+        )}
       </div>
 
-      <ChannelTable channels={data.channels} />
+      <ChannelTable channels={channels} />
 
       {family === 'PHYSIQUE' ? <Uniforms uniforms={data.uniforms} /> : null}
-      {family === 'DIGITAL' ? <Renders renders={data.renders} /> : null}
+      {family === 'DIGITAL' && !codes ? <Renders renders={data.renders} /> : null}
     </>
   )
 }

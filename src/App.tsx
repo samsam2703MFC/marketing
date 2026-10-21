@@ -301,6 +301,7 @@ function Workspace() {
           {/* La famille de canal distingue les deux écrans de diffusion. */}
           {route === 'physical' ? <DiffusionView family="PHYSIQUE" /> : null}
           {route === 'digital' ? <DiffusionView family="DIGITAL" /> : null}
+          {route === 'canal-messages' ? <DiffusionView family="DIGITAL" codes={['email', 'sms', 'pwa_push']} /> : null}
 
           {route === 'agencies' ? <AgenciesView /> : null}
           {route === 'analysis' ? <AnalysisView /> : null}
