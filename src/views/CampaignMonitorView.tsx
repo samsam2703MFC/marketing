@@ -11,12 +11,14 @@ interface MonitorProps {
   onBack: () => void
   /** Ouvre « Créer un post » (module Social & Ads) avec cette campagne comme opération liée — réseau seul. */
   onCreatePost?: () => void
+  /** Ouvre le plan de posts de la campagne (module Social & Ads) : durée, réseaux, mix → brouillons au calendrier. */
+  onPlanPosts?: () => void
 }
 
 /**
  * Suivi en direct d'une campagne : KPI, classement des boutiques, base CRM.
  */
-export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, onCreatePost }: MonitorProps) {
+export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, onCreatePost, onPlanPosts }: MonitorProps) {
   const campaign = useAsync(() => api.getCampaign(campaignId), [campaignId])
   const monitor = useAsync(() => api.getMonitor(campaignId), [campaignId])
   const [reloadKey, setReloadKey] = useState(0)
@@ -63,6 +65,11 @@ export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, 
         {onCreatePost ? (
           <button type="button" className="filter is-on back" onClick={onCreatePost}>
             Créer un post pour cette campagne →
+          </button>
+        ) : null}
+        {onPlanPosts ? (
+          <button type="button" className="filter is-on back" onClick={onPlanPosts}>
+            Planifier les posts de la campagne →
           </button>
         ) : null}
       </div>
