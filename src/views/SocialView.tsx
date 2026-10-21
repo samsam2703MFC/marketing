@@ -28,7 +28,10 @@ interface SocialViewProps {
  */
 export default function SocialView({ file, query, space, campaignId, onPage }: SocialViewProps) {
   const base = (space === 'franchise' ? import.meta.env.VITE_SOCIAL_FRANCHISEE_BASE || '/social_franchisee/' : import.meta.env.VITE_SOCIAL_BASE || '/social/').replace(/\/?$/, '/')
-  const params = [query, campaignId !== null ? `op=${campaignId}` : ''].filter(Boolean).join('&')
+  // La boutique de l'adresse (`/marketingc/?shop=2`) passe à l'espace boutique : sans elle, il ouvre la
+  // première boutique de la session. L'espace vérifie lui-même qu'elle est ouverte à ce visiteur.
+  const shop = space === 'franchise' ? new URLSearchParams(window.location.search).get('shop')?.trim() ?? '' : ''
+  const params = [query, campaignId !== null ? `op=${campaignId}` : '', /^[\w-]{1,32}$/.test(shop) ? `shop=${shop}` : ''].filter(Boolean).join('&')
   // L'adresse du cadre est fixée à l'ouverture : la suite de la navigation
   // appartient au cadre, et la recalculer le rechargerait.
   const [src] = useState(() => `${base}${encodeURIComponent(file)}?embed=1${params ? `&${params}` : ''}`)
