@@ -652,11 +652,7 @@ export default function CampaignBuilder({
     suivante === null ? '' : hubIndexOf(suivante.key) === hub ? suivante.label : HUBS[hubIndexOf(suivante.key)].label
 
   return (
-    <>
-      <button type="button" className="filter back" onClick={onCancel}>
-        ← Annuler
-      </button>
-
+    <div className="builder">
       <HubHeader draft={draft} refs={refs} shops={shops.data ?? []} statut={statutServeur} />
 
       {campaignId !== null && statutServeur !== 'draft' ? (
@@ -712,41 +708,52 @@ export default function CampaignBuilder({
           {blocking ? <p className="muted wizard__hint">{blocking}</p> : null}
           {failure ? <p className="error">{failure}</p> : null}
 
-          {/* Classe propre, et non la rangée de filtres générique : ce sont des
-              actions, pas des pastilles — détachées du formulaire qui les précède. */}
+          {/* Une seule barre d'actions, toujours visible en bas de l'écran : les deux
+              façons de quitter à gauche, le retour puis l'avancée à droite — l'action
+              principale en dernier, seule en bordeaux plein. L'« Annuler » qui
+              flottait au-dessus de l'en-tête y est rapatrié : quitter se faisait à
+              deux endroits, sous deux noms, avec deux effets. */}
           <div className="wizard-actions">
-            <span className="muted hub-count">
-              Étape {hub + 1} sur {HUBS.length}
-            </span>
-            <button type="button" className="filter" onClick={() => setStep(step - 1)} disabled={step === 0}>
-              ← Précédent
-            </button>
-
-            {suivante !== null ? (
-              <button type="button" className="filter is-on" onClick={nextStep} disabled={blocking !== null || saving}>
-                {saving ? 'Enregistrement…' : `Suivant : ${libelleSuivant} →`}
+            <div className="wizard-actions__group">
+              <button type="button" className="btn btn--ghost" onClick={onCancel}>
+                Quitter sans enregistrer
               </button>
-            ) : (
-              <button type="button" className="filter is-on" onClick={submit} disabled={submitting}>
-                {submitting ? 'Validation…' : 'Valider la campagne'}
+              {/* Quitter en cours de route devient normal plutôt qu'accidentel : le
+                  brouillon est en base, on le retrouve dans la liste. */}
+              <button
+                type="button"
+                className="btn"
+                onClick={saveAndLeave}
+                disabled={saving || blocking !== null}
+                title={blocking ?? 'Enregistrer le brouillon et revenir à la liste'}
+              >
+                Enregistrer et quitter
               </button>
-            )}
+            </div>
 
-            {/* Quitter en cours de route devient normal plutôt qu'accidentel : le
-                brouillon est en base, on le retrouve dans la liste. */}
-            <button
-              type="button"
-              className="filter"
-              onClick={saveAndLeave}
-              disabled={saving || blocking !== null}
-              title={blocking ?? 'Enregistrer le brouillon et revenir à la liste'}
-            >
-              Enregistrer et quitter
-            </button>
+            {/* Le rang de l'étape est déjà dans le fil, en tête : la barre ne garde que
+                l'heure du dernier enregistrement, qui rassure au moment de quitter. */}
+            <div className="wizard-actions__group wizard-actions__group--nav">
+              {savedAt !== null ? (
+                <span className="muted wizard-actions__state">Brouillon enregistré à {savedAt}</span>
+              ) : null}
 
-            {savedAt !== null ? (
-              <span className="muted wizard-actions__saved">Brouillon enregistré à {savedAt}</span>
-            ) : null}
+              {step > 0 ? (
+                <button type="button" className="btn" onClick={() => setStep(step - 1)}>
+                  ← Précédent
+                </button>
+              ) : null}
+
+              {suivante !== null ? (
+                <button type="button" className="btn btn--primary" onClick={nextStep} disabled={blocking !== null || saving}>
+                  {saving ? 'Enregistrement…' : `Suivant : ${libelleSuivant} →`}
+                </button>
+              ) : (
+                <button type="button" className="btn btn--primary" onClick={submit} disabled={submitting}>
+                  {submitting ? 'Validation…' : 'Valider la campagne'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -757,7 +764,7 @@ export default function CampaignBuilder({
           <HubAttached campaignId={savedId} voirClics={role === 'BRAND_ADMIN'} />
         </aside>
       </div>
-    </>
+    </div>
   )
 }
 
@@ -1443,7 +1450,7 @@ function FramingStep({
             c'est son adresse qui est enregistrée avec la campagne. Rien de
             particulier à relire ensuite — un visuel envoyé et un visuel lié
             se comportent pareil. */}
-        <label className={uploading ? 'filter is-busy' : 'filter'}>
+        <label className={uploading ? 'btn is-busy' : 'btn'}>
           {uploading ? 'Envoi…' : 'Envoyer un fichier'}
           <input
             type="file"
@@ -1586,7 +1593,7 @@ function FramingStep({
                 {choisie === '' ? null : (
                   <button
                     type="button"
-                    className="palette__reset"
+                    className="btn btn--danger btn--icon"
                     title="Revenir à la couleur par défaut"
                     onClick={() => patch({ [couleur.champ]: '' })}
                   >
@@ -2100,7 +2107,7 @@ function OfferStep({ draft, patch }: StepProps) {
           {' · '}
           {checkedIds.size} produit{checkedIds.size > 1 ? 's' : ''}
         </span>
-        <button type="button" className="filter offer-summary__reset" onClick={resetOffer}>
+        <button type="button" className="btn btn--danger btn--sm offer-summary__reset" onClick={resetOffer}>
           Réinitialiser
         </button>
       </div>
@@ -2612,7 +2619,7 @@ function CommunicationStep({
                     </label>
                     <button
                       type="button"
-                      className="filter"
+                      className="btn btn--danger btn--sm"
                       onClick={() =>
                         patch({
                           pos_questions: draft.pos_questions.filter((_, i) => i !== index),
@@ -2641,7 +2648,7 @@ function CommunicationStep({
 
           <button
             type="button"
-            className="filter"
+            className="btn btn--sm"
             onClick={() =>
               patch({
                 pos_questions: [
@@ -2746,7 +2753,7 @@ function PlanningStep({ refs, draft, patch }: StepProps) {
                 <td>
                   <button
                     type="button"
-                    className="filter"
+                    className="btn btn--danger btn--sm"
                     onClick={() => patch({ retro: draft.retro.filter((_, i) => i !== index) })}
                   >
                     Retirer
@@ -2760,7 +2767,7 @@ function PlanningStep({ refs, draft, patch }: StepProps) {
 
       <button
         type="button"
-        className="filter"
+        className="btn btn--sm"
         onClick={() =>
           patch({ retro: [...draft.retro, { label: '', days_before_launch: 0, position_id: null }] })
         }

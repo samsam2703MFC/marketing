@@ -220,7 +220,7 @@ export default function PhotosStep({
                 </label>
 
                 <div className="photos__actions">
-                  <label className="filter photos__envoi">
+                  <label className="btn btn--sm photos__envoi">
                     {encours === index ? 'Envoi…' : propre ? 'Remplacer' : 'Déposer une photo'}
                     <input
                       type="file"
@@ -235,7 +235,7 @@ export default function PhotosStep({
                   {propre ? (
                     <button
                       type="button"
-                      className="filter"
+                      className="btn btn--danger btn--sm"
                       onClick={() => majItem(index, { image_url: '' })}
                     >
                       {duCatalogue === null ? 'Retirer la photo' : 'Reprendre celle du catalogue'}

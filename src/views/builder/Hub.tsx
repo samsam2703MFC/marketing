@@ -133,7 +133,7 @@ export function HubStepper({
         })}
       </nav>
       {sous.length > 1 ? (
-        <div className="hub-sub filters__row">
+        <nav className="hub-sub" aria-label="Sous-étapes">
           {sous.map((key) => {
             const index = steps.findIndex((entry) => entry.key === key)
 
@@ -141,7 +141,8 @@ export function HubStepper({
               <button
                 key={key}
                 type="button"
-                className={`filter${index === step ? ' is-on' : ''}`}
+                className={`hub-sub__tab${index === step ? ' is-on' : ''}`}
+                aria-current={index === step ? 'step' : undefined}
                 disabled={!atteignable(steps, index, step, draft)}
                 onClick={() => onGo(index)}
               >
@@ -149,7 +150,7 @@ export function HubStepper({
               </button>
             )
           })}
-        </div>
+        </nav>
       ) : null}
     </>
   )
@@ -343,10 +344,10 @@ export function SocialChannels({ campaignId, voirClics }: { campaignId: number |
                 : 'Module Social injoignable.'}
           </p>
           <p className="filters__row">
-            <a className="filter is-on" href={api.socialScreen('SA Campagnes.dc.html', campaignId)} target="_blank" rel="noopener">
+            <a className="btn btn--sm" href={api.socialScreen('SA Campagnes.dc.html', campaignId)} target="_blank" rel="noopener">
               Planifier les posts ↗
             </a>
-            <a className="filter" href={api.socialScreen('SA Post.dc.html', campaignId)} target="_blank" rel="noopener">
+            <a className="btn btn--sm" href={api.socialScreen('SA Post.dc.html', campaignId)} target="_blank" rel="noopener">
               Créer un post ↗
             </a>
           </p>
@@ -364,7 +365,7 @@ export function SocialChannels({ campaignId, voirClics }: { campaignId: number |
                 : 'Module Social injoignable.'}
           </p>
           <p className="filters__row">
-            <a className="filter" href={`${api.socialScreen('SA Publicites.dc.html', null)}?new=1&c=bo-${campaignId}`} target="_blank" rel="noopener">
+            <a className="btn btn--sm" href={`${api.socialScreen('SA Publicites.dc.html', null)}?new=1&c=bo-${campaignId}`} target="_blank" rel="noopener">
               Nouvelle publicité ↗
             </a>
           </p>
