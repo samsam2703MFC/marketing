@@ -266,6 +266,7 @@ existantes acceptent quelques champs de plus, ce qui ne casse aucun client (§20
 | `GET …/references` | `trackingActions` : `{id, code, label, unit_label, source_label, cockpit_measure}` | migration 036 |
 | `GET …/b2b/prospects`, `…/b2b/prospects/count` | `?offices_only=1` ; le compte rend `offices` (`null` tant que le vivier ne le sait pas) | assistant du BO |
 | `POST …/campaigns` | un brouillon identique (même marque, nom et dates) n'est pas recréé : son identifiant est rendu | assistant du BO |
+| `PATCH …/campaigns/{id}` | `color_primary_hex`, `color_secondary_hex`, `color_accent_hex`, `color_ink_hex` : l'assistant enregistre une campagne **lancée** en `PATCH`, colonnes seules (il ne réécrit plus ses rattachements) | assistant « hub » |
 
 Écart résiduel, inchangé : `snake_case`, pas d'enveloppe `{success, data, meta}`
 (module antérieur au standard, bascule en `v2` à décider).
@@ -276,3 +277,9 @@ joints (`/api/cockpit/marketing/campagne/{id}/annexes`, `…/annexe/{id}`) sont
 servis par le cockpit du BO, pas par ce module : ils lisent la caisse et le
 disque du BO. Leur racine vient de la configuration (`VITE_COCKPIT_BASE`,
 `/consulant_bo` sur le serveur ; variable `COCKPIT_PATH` du déploiement).
+
+**Module Social appelé par l'assistant.** La colonne « Rattaché » et les étapes
+« Canaux » et « Récap » lisent `GET {VITE_SOCIAL_BASE}api/v1/social/operations/bo-{id}/rattache`
+(module Social & Ads, `/marketing/social/` sur le serveur) : posts, publications et
+publicités Meta rattachés, et l'adresse du webshop des liens suivis. Lecture seule.
+

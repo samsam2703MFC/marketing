@@ -16,12 +16,14 @@ interface MonitorProps {
   onPlanPosts?: () => void
   /** Le réseau change le suivi de toute campagne ; une boutique, celui de ses campagnes locales (l'API tranche). */
   brandAdmin?: boolean
+  /** Ouvre l'assistant de campagne (sept étapes) sur cette campagne. */
+  onOpenAssistant?: () => void
 }
 
 /**
  * Suivi en direct d'une campagne : KPI, classement des boutiques, base CRM.
  */
-export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, onCreatePost, onPlanPosts, brandAdmin = false }: MonitorProps) {
+export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, onCreatePost, onPlanPosts, brandAdmin = false, onOpenAssistant }: MonitorProps) {
   // Relue après un changement du suivi : la carte montre ce que la base a gardé, pas ce qu'on a tapé.
   const [reloadCampaign, setReloadCampaign] = useState(0)
   const campaign = useAsync(() => api.getCampaign(campaignId), [campaignId, reloadCampaign])
@@ -67,6 +69,11 @@ export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, 
         <button type="button" className="filter back" onClick={onBack}>
           ← Retour aux campagnes
         </button>
+        {onOpenAssistant ? (
+          <button type="button" className="filter is-on back" onClick={onOpenAssistant}>
+            Ouvrir l’assistant de la campagne →
+          </button>
+        ) : null}
         {onCreatePost ? (
           <button type="button" className="filter is-on back" onClick={onCreatePost}>
             Créer un post pour cette campagne →

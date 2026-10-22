@@ -132,7 +132,7 @@ export default function LeverKpi({
 
       {!periode ? (
         <p className="muted wizard__hint">
-          La période n'est pas encore posée. Renseignez-la à l'étape « Type &amp; cadrage » : la
+          La période n'est pas encore posée. Renseignez-la à l'étape « Cadrage » : la
           référence de l'an dernier s'affichera ici, aux mêmes dates.
         </p>
       ) : kpi.loading ? (

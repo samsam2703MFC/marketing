@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import * as api from './lib/api/module'
 import { useAsync } from './lib/useAsync'
 import { socialPageFor, socialRoute, titleFor } from './lib/navigation'
@@ -115,20 +115,19 @@ function brandFromUrl(): number | 'all' | 'invalide' {
  * Campagne désignée par l'adresse : c'est par elle que les autres écrans y
  * renvoient — le module Social (« Voir dans le Marketing »), le cockpit du BO,
  * un lien envoyé à un collègue. `?campagne=19` ouvre son suivi,
- * `?campagne=19&assistant=1` l'assistant sur elle si c'est encore un brouillon, `?nouvelle=1` l'assistant
+ * `?campagne=19&assistant=1` l'assistant sur elle (une campagne lancée n'y enregistre que ses
+ * colonnes), `?nouvelle=1` l'assistant
  * sur une campagne neuve. Un numéro illisible est ignoré : on arrive alors sur
  * le tableau de bord, comme sans paramètre.
  */
-function campaignFromUrl(): { route: Route; campaignId: number | null; assistant: boolean } | null {
+function campaignFromUrl(): { route: Route; campaignId: number | null } | null {
   const params = new URLSearchParams(window.location.search)
-  if (params.get('nouvelle') === '1') return { route: 'builder', campaignId: null, assistant: true }
+  if (params.get('nouvelle') === '1') return { route: 'builder', campaignId: null }
 
   const id = Number(params.get('campagne') ?? '')
   if (!Number.isInteger(id) || id <= 0) return null
 
-  // L'assistant ne réécrit qu'un brouillon : une campagne lancée s'ouvre sur son
-  // suivi, et ne passe à l'assistant qu'une fois son statut lu (voir Workspace).
-  return { route: 'campaign', campaignId: id, assistant: params.get('assistant') === '1' }
+  return { route: params.get('assistant') === '1' ? 'builder' : 'campaign', campaignId: id }
 }
 
 /**
@@ -185,19 +184,6 @@ function Workspace() {
     setFrameKey((key) => key + 1)
     setRoute(next)
   }
-
-  // `?campagne=…&assistant=1` : l'assistant, si la campagne est encore un brouillon.
-  // Une campagne lancée reste sur son suivi — l'assistant ne la réécrirait pas, et
-  // il vaut mieux le voir d'emblée que se le faire dire à la première étape.
-  useEffect(() => {
-    const demande = campaignFromUrl()
-    if (!demande?.assistant || demande.campaignId === null) return
-    api.getCampaign(demande.campaignId)
-      .then((campaign) => {
-        if (campaign.status_code === 'draft') setRoute((current) => (current === 'campaign' ? 'builder' : current))
-      })
-      .catch(() => undefined)
-  }, [])
 
   /**
    * Navigation à l'intérieur du cadre du module Social : le menu suit l'écran
@@ -378,6 +364,7 @@ function Workspace() {
               onBack={() => navigate('campaigns')}
               onCreatePost={role === 'BRAND_ADMIN' ? () => createPost(campaignId) : undefined}
               onPlanPosts={role === 'BRAND_ADMIN' ? () => planPosts(campaignId) : undefined}
+              onOpenAssistant={() => setRoute('builder')}
               brandAdmin={role === 'BRAND_ADMIN'}
             />
           ) : null}

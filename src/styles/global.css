@@ -3964,3 +3964,88 @@ table.annexes td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--row-l
 table.annexes a { color: var(--ink); }
 .annexes__perdu { font-size: 11px; margin-top: 3px; }
 .annexes__retirer { margin: 0; padding: 0 2px; border: none; background: none; color: var(--muted); font-size: 12px; cursor: pointer; }
+
+/* --- Assistant « hub » : sept étapes, colonne de droite --------------------
+   La maquette validée : l'en-tête dit quelle campagne on tient, le fil relie les
+   sept étapes, et la colonne de droite garde la campagne sous les yeux. */
+.hub-head { margin: 4px 0 14px; }
+.hub-head__crumb {
+  font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+}
+.hub-head__name {
+  margin: 2px 0 6px; font-size: 26px; font-weight: 500; letter-spacing: .02em; text-transform: uppercase; color: var(--ink);
+}
+.hub-head__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; font-size: 13px; color: var(--muted-2); }
+.hub-chip { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+
+.hub-steps {
+  display: flex; align-items: center; flex-wrap: wrap; row-gap: 4px;
+  background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px;
+}
+.hub-steps__item { display: flex; align-items: center; flex: 0 0 auto; }
+.hub-steps__line { width: 14px; height: 1px; background: var(--line); margin: 0 3px; }
+.hub-steps__line.is-done { background: var(--green); }
+/* La règle `button` globale pose un fond bordeaux et une marge haute : remise à zéro. */
+.hub-step {
+  margin: 0; display: inline-flex; align-items: center; gap: 6px; padding: 5px 6px;
+  border: none; background: none; color: var(--muted-2); font: inherit; font-size: 13px; font-weight: 500;
+  cursor: pointer; white-space: nowrap; border-radius: 8px;
+}
+.hub-step i {
+  font-style: normal; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 999px;
+  border: 1px solid var(--line); background: #fff; font-size: 12px; font-weight: 600; color: var(--muted-2);
+}
+.hub-step.is-cur { color: var(--accent); }
+.hub-step.is-cur i { background: var(--accent); border-color: var(--accent); color: #fff; }
+.hub-step.is-done i { background: var(--green); border-color: var(--green); color: #fff; }
+.hub-step:disabled { cursor: default; color: var(--faint); }
+.hub-step:hover:not(:disabled) { background: var(--table-head); }
+.hub-sub { margin: 0 0 12px; }
+
+/* Formulaire à gauche, la campagne en un coup d'œil à droite ; empilés sur écran étroit. */
+.hub-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .hub-layout { grid-template-columns: minmax(0, 1fr); } }
+.hub-aside { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 12px; }
+.hub-aside__card { padding: 16px 18px; }
+.hub-aside__card h3 { margin: 4px 0 10px; font-size: 15px; font-weight: 500; }
+.hub-aside__card p { margin: 6px 0 0; font-size: 12.5px; font-weight: 400; line-height: 1.45; }
+.hub-aside__kicker { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.hub-kv { margin: 0; }
+.hub-kv > div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--row-line); font-size: 12.5px; }
+.hub-kv dt { color: var(--muted); font-weight: 500; flex: 0 0 auto; }
+.hub-kv dd { margin: 0; text-align: right; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.hub-kv code { font-size: 11px; background: var(--table-head); padding: 2px 5px; border-radius: 4px; font-weight: 500; }
+.hub-attached__ad { display: flex; flex-direction: column; gap: 2px; margin: 8px 0 0; font-size: 12.5px; }
+.hub-count { margin-right: auto; font-size: 12px; }
+
+/* Canaux : ce que le module Social fait pour la campagne. */
+.hub-social { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.hub-social__card { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 10px; padding: 12px; background: #fff; }
+.hub-social__card p { margin: 4px 0 0; font-size: 12.5px; }
+.hub-social__card .filters__row { margin-top: 8px; }
+.hub-social__card a.filter { text-decoration: none; }
+.hub-social__ic { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 13px; }
+.hub-social__ic--fb { background: #1877F2; }
+.hub-social__ic--meta { background: #0866FF; }
+
+/* Traçabilité : un lien par canal, lisible et copiable. */
+table.hub-links code { font-size: 11.5px; overflow-wrap: anywhere; word-break: break-all; }
+
+/* Récap : tableau de bord, puis ce qui manque. */
+.hub-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.hub-kpi { display: flex; flex-direction: column; gap: 4px; background: var(--table-head); border-radius: 10px; padding: 12px; }
+.hub-kpi b { font-size: 20px; font-weight: 500; color: var(--ink); }
+.hub-kpi .muted { font-size: 11.5px; }
+.hub-check { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px 16px; }
+.hub-check li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted-2); }
+.hub-check li span { width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--faint); display: inline-grid; place-items: center; font-size: 11px; color: #fff; }
+.hub-check li.is-ok { color: var(--ink); }
+.hub-check li.is-ok span { background: var(--green); border-color: var(--green); }
+/* Le tableau de bord ouvre le récap : sans marge haute, et détaché du récapitulatif qui suit. */
+.hub-board { display: flex; flex-direction: column; gap: 12px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.wizard-card > .hub-board > .section-label { margin: 0; }
+.wizard-card > .hub-board > .section-label:first-child { margin-top: 0; }
+.wizard-card .hub-board + h2 { margin-top: 18px; }
+/* Campagne déjà lancée : ce que l'assistant enregistre, et ce qu'il laisse tel quel. */
+.hub-banner { margin: 0 0 12px; padding: 10px 14px; border-radius: 10px; background: #FCE7C8; color: #6b3d0a; font-size: 12.5px; line-height: 1.5; }
+
