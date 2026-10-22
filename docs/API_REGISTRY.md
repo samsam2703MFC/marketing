@@ -182,7 +182,9 @@ entière, pour attraper une colonne ajoutée plus tard.
   pour respecter la lettre du §4.3.
 - `GET …/session` est la seule route publique, et elle est explicite dans la
   déclaration (troisième argument `true`). Elle ne rend aucune donnée métier :
-  seulement si l'appelant est authentifié et sous quel rôle.
+  seulement si l'appelant est authentifié et sous quel rôle. Authentifié, elle
+  dit aussi `dev_auth` (identité de développement, `MAR_DEV_AUTH`, ou de l'ERP) :
+  un état, aucune valeur — champ ajouté, rien de retiré ni renommé.
 
 ---
 

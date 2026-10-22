@@ -16,6 +16,8 @@ export type Route =
   | 'campaign'
   /** Éditeur des types de campagne — réseau seul, absent du menu franchisé. */
   | 'campaign-types'
+  /** Les adresses du module et les réglages de cette version — réseau seul, lecture seule. */
+  | 'addresses'
   /** Assistant de création — ouvert depuis « Campagnes », pas depuis le menu. */
   | 'builder'
   | 'promotions'
@@ -90,6 +92,7 @@ const ICONS: Record<string, string> = {
   calendar: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
   campaigns: 'M3 11l14-7v16L3 13zM7 14v5',
   'campaign-types': 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7zM8 8h0M17 8h0',
+  addresses: 'M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12zM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
   promotions: 'M19 5L5 19M7 7a1.5 1.5 0 1 0 .01 0M17 17a1.5 1.5 0 1 0 .01 0',
   bundles: 'M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8M12 13v8',
   vouchers: 'M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4zM13 6v12',
@@ -264,6 +267,8 @@ const NETWORK: NavGroup[] = [
       // Google à part : un compte qui sert trois outils (fiches, Ads, Analytics), à raccorder avant tout usage.
       item('social-set-google', 'Compte Google'),
       item('campaign-types', 'Types de campagne'),
+      // Où vit chaque écran et avec quels réglages cette version a été construite (sans secret).
+      item('addresses', 'Adresses et réglages'),
     ],
   },
 ]

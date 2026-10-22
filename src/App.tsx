@@ -18,6 +18,7 @@ import AnalysisView from './views/AnalysisView'
 import RoiView from './views/RoiView'
 import CrmView from './views/CrmView'
 import CampaignTypesView from './views/CampaignTypesView'
+import AddressesView from './views/AddressesView'
 import CampaignBuilder from './views/builder/CampaignBuilder'
 import SocialView from './views/SocialView'
 import { ReferencesProvider } from './state/references'
@@ -357,6 +358,7 @@ function Workspace() {
           {route === 'roi' ? <RoiView /> : null}
           {route === 'crm' ? <CrmView /> : null}
           {route === 'campaign-types' ? <CampaignTypesView /> : null}
+          {route === 'addresses' ? <AddressesView /> : null}
 
           {social ? (
             <SocialView key={frameKey} file={social.file} query={social.query} space={social.space} campaignId={postFor} onPage={followSocial} />

@@ -40,6 +40,18 @@ const BASE = `${API_ROOT}/api/v1/marketing`
 const COCKPIT_ROOT = (import.meta.env.VITE_COCKPIT_BASE ?? API_ROOT).replace(/\/+$/, '')
 // Le module Social & Ads (posts, publicités Meta), servi sous /marketing/social sur le même serveur.
 const SOCIAL_ROOT = (import.meta.env.VITE_SOCIAL_BASE || '/marketing/social/').replace(/\/+$/, '')
+// Son espace boutique, affiché dans la version franchisé.
+const SOCIAL_FRANCHISE_ROOT = (import.meta.env.VITE_SOCIAL_FRANCHISEE_BASE || '/marketing/franchise/').replace(/\/+$/, '')
+
+/** Les racines que ce build appelle ou ouvre, telles que résolues : l'écran « Adresses et réglages » les montre. */
+export const ROOTS = {
+  /** L'API de ce module. */
+  api: BASE,
+  /** Le cockpit du BO (sans `/api/cockpit`). */
+  cockpit: COCKPIT_ROOT,
+  social: `${SOCIAL_ROOT}/`,
+  socialFranchise: `${SOCIAL_FRANCHISE_ROOT}/`,
+}
 
 /**
  * Le module est servi par l'application elle-même, pas derrière le proxy `/erp`
@@ -66,6 +78,10 @@ export interface Session {
   brand_id?: number | null
   shop_ids?: number[] | null
   login_hint?: string
+  /** Identité de développement (MAR_DEV_AUTH) plutôt que celle de l'ERP. */
+  dev_auth?: boolean
+  /** Sans identité : le fichier de configuration du serveur a-t-il été trouvé. */
+  config_found?: boolean
 }
 
 export function getSession(): Promise<Session> {

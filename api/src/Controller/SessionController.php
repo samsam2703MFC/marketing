@@ -51,6 +51,10 @@ final class SessionController
             'role'          => $auth->role,
             'brand_id'      => $auth->brandId,
             'shop_ids'      => Scope::shopIds($auth),
+            // D'où vient cette identité : de l'ERP, ou de l'identité de développement
+            // (MAR_DEV_AUTH). L'écran « Adresses et réglages » le montre, parce qu'un
+            // serveur ouvert en mode développement doit se voir. Un état, aucune valeur.
+            'dev_auth'      => \Marketing\Support\Env::get('MAR_DEV_AUTH') === '1',
         ]);
     }
 }

@@ -379,6 +379,9 @@ check('la diffusion ne montre que ses campagnes', $campaignIds === [10], implode
 echo "\nAssistant de création\n";
 AuthContext::set(1, 'BRAND_ADMIN', 1);
 
+$response = call($router, 'GET', '/api/v1/marketing/session');
+check('la session dit d\'où vient l\'identité', is_bool($response['body']['dev_auth'] ?? null), var_export($response['body']['dev_auth'] ?? null, true));
+
 $channelId = (int) $pdo->query("SELECT id FROM mar_channel WHERE code = 'plv'")->fetchColumn();
 
 // Une référence de catalogue, comme la reprise ERP en écrit : l'étape « Offre »
