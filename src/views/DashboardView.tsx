@@ -1,6 +1,7 @@
 import { module as api } from '../lib/api'
 import { useAsync, formatEur } from '../lib/useAsync'
 import type { CampaignStatus, Lever } from '../lib/api/module'
+import TrafficInvestment from './TrafficInvestment'
 
 interface DashboardProps {
   statuses: CampaignStatus[]
@@ -13,7 +14,7 @@ interface DashboardProps {
   onPerformance: () => void
 }
 
-/** Vue d'entrée : volumétrie des campagnes, budget engagé, campagnes en cours. */
+/** Vue d'entrée : volumétrie des campagnes, budget engagé, trafic et investissement, campagnes en cours. */
 export default function DashboardView({ statuses, levers, brandId, network, onOpen, onPerformance }: DashboardProps) {
   const campaigns = useAsync(
     () => api.listCampaigns(brandId === 'all' ? {} : { brand_id: brandId }),
@@ -75,6 +76,10 @@ export default function DashboardView({ statuses, levers, brandId, network, onOp
           </ul>
         </section>
       </div>
+
+      {/* Le trafic, le panier moyen et l'investissement pour vendre plus, magasin par magasin. Réseau seulement :
+          la lecture du cockpit rend tous les magasins, et un périmètre ne se filtre pas dans le navigateur. */}
+      {network ? <TrafficInvestment /> : null}
 
       <section className="card table-card">
         <h2>Campagnes en cours</h2>

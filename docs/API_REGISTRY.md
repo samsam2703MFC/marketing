@@ -296,3 +296,16 @@ publicités Meta rattachés, et l'adresse du webshop des liens suivis. Lecture s
 `GET /api/v1/marketing/campaigns/calendar` n'est plus lu par le front : la frise
 place les campagnes elle-même, au jour près.
 
+**Routes lues par le Tableau de bord, bloc « Trafic clients et panier moyen »**
+(vue Réseau seule, lecture seule) :
+
+| Route | Ce que le bloc en tire |
+|---|---|
+| `GET /api/v1/marketing/shops` | les boutiques du périmètre (ce module) ; `erp-N` donne le numéro `N` au panel |
+| `GET {VITE_COCKPIT_BASE}/api/cockpit/stores/perf?annees=` | CA, tickets et panier moyen par magasin et par mois (P&L mensuel du panel, la lecture du levier Trafic du cockpit ; 10 à 30 secondes) |
+| `GET /api/v1/marketing/funds/ledger?granularity=month` | les sorties du fonds marketing, en repère pour le coût par client (ce module) |
+
+La route du cockpit rend **tous** les magasins du panel : le bloc n'est donc pas
+servi en vue franchisé, où il faudrait filtrer dans le navigateur. L'ouvrir aux
+franchisés demande une route de ce module, filtrée par périmètre côté serveur.
+

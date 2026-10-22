@@ -1899,3 +1899,31 @@ export function socialAsset(path: string | null): string | null {
 
   return /^(https?:)?\/\//.test(path) || path.startsWith('data:') ? path : `${SOCIAL_ROOT}/${path.replace(/^\.?\//, '')}`
 }
+
+// ---------------------------------------------------------------------------
+// Ventes mensuelles par boutique, lues par le cockpit
+// ---------------------------------------------------------------------------
+
+/**
+ * Un mois d'une boutique tel que le panel le rend : CA, tickets et panier moyen.
+ * Les champs restent à null tant que le mois n'a rien de vendu.
+ */
+export interface StoreMonth {
+  /** Le numéro de la boutique au panel et en caisse : le `N` de son code `erp-N` ici. */
+  storeId: string
+  annee: number
+  /** 1 à 12 */
+  mois: number
+  ca: number | null
+  tickets: number | null
+  panierMoyen: number | null
+}
+
+/**
+ * Les mois des années demandées, toutes boutiques du panel (`GET /api/cockpit/stores/perf`,
+ * la lecture du tableau des magasins et des leviers du cockpit). Le mois en cours y est,
+ * à date ; c'est à l'écran de l'écarter s'il ne veut que des mois clos.
+ */
+export function getStoreMonths(years: number[]): Promise<StoreMonth[]> {
+  return request(`${COCKPIT}/stores/perf`, { query: { annees: years.join(',') } })
+}
