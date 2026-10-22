@@ -122,11 +122,15 @@ final class CampaignRepository
 
         $statement = Database::connection()->prepare(sprintf(
             'SELECT c.*, b.name AS brand_name, t.label AS type_label,
-                    st.label AS status_label, st.text_hex AS status_text_hex, st.bg_rgba AS status_bg_rgba
+                    st.label AS status_label, st.text_hex AS status_text_hex, st.bg_rgba AS status_bg_rgba,
+                    ta.code AS tracking_action_code, ta.label AS tracking_action_label,
+                    ta.unit_label AS tracking_unit_label, ta.source_label AS tracking_source_label,
+                    ta.cockpit_measure AS tracking_cockpit_measure
                FROM mar_campaign c
                JOIN mar_brand b            ON b.id = c.brand_id
                JOIN mar_campaign_status st ON st.code = c.status_code
                LEFT JOIN mar_campaign_type t ON t.id = c.type_id
+               LEFT JOIN mar_tracking_action ta ON ta.id = c.tracking_action_id
               WHERE c.id = :id AND %s',
             $scopeSql
         ));
@@ -278,12 +282,42 @@ final class CampaignRepository
         $brandId = $this->resolveBrandId($auth, $data['brand_id'] ?? null);
 
         $connection = Database::connection();
-        $statement  = $connection->prepare(
+
+        // Un BROUILLON identique existe déjà ? On le reprend au lieu d'en
+        // créer un deuxième. L'assistant crée à sa première écriture et
+        // réécrit ensuite ; mais rouvrir l'assistant repart d'un écran vide,
+        // sans savoir qu'un brouillon du même nom et des mêmes dates dort
+        // déjà. Trois « Bleuet » identiques se sont ainsi empilés.
+        $nom = (string) $data['name'];
+        $du = $data['starts_on'] ?? null;
+        $au = $data['ends_on'] ?? null;
+        if ((string) ($data['status_code'] ?? 'draft') === 'draft' && $du !== null) {
+            $dej = $connection->prepare(
+                'SELECT id FROM mar_campaign
+                  WHERE brand_id = :brand_id AND name = :name AND status_code = \'draft\'
+                    AND starts_on <=> :starts_on AND ends_on <=> :ends_on
+                  ORDER BY id DESC LIMIT 1'
+            );
+            $dej->execute([':brand_id' => $brandId, ':name' => $nom, ':starts_on' => $du, ':ends_on' => $au]);
+            $idDej = $dej->fetchColumn();
+            if ($idDej !== false && $idDej !== null) {
+                // Le brouillon retrouvé est mis à jour par l'appel suivant de
+                // l'assistant (replaceCampaignDraft) : on rend son identifiant.
+                return (int) $idDej;
+            }
+        }
+
+        // « Bureaux à livrer » n'entre dans l'écriture que si la base porte la
+        // colonne : sur une installation qui n'a pas encore reçu le rejeu des
+        // référentiels, une campagne doit continuer de s'enregistrer.
+        $bureaux    = Database::hasColumn('mar_campaign', 'b2b_offices_only');
+        $statement  = $connection->prepare(sprintf(
             'INSERT INTO mar_campaign
                 (brand_id, type_id, parent_campaign_id, name, scope, client_target, tone,
                  status_code, draft_step, starts_on, ends_on, budget_amount, objective_coef_pct,
                  agency_note, b2b_webshop_enabled, show_web_shop, pos_survey_enabled, owner_user_id,
-                 create_crm_leads, image_url,
+                 tracking_action_id, tracking_scope, tracking_target, tracking_baseline,
+                 create_crm_leads, %1$s image_url,
                  challenge_enabled, challenge_metric, challenge_trigger_pct,
                  margin_pct_default,
                  color_primary_hex, color_secondary_hex, color_accent_hex, color_ink_hex,
@@ -292,14 +326,17 @@ final class CampaignRepository
                 (:brand_id, :type_id, :parent_campaign_id, :name, :scope, :client_target, :tone,
                  :status_code, :draft_step, :starts_on, :ends_on, :budget_amount, :objective_coef_pct,
                  :agency_note, :b2b_webshop_enabled, :show_web_shop, :pos_survey_enabled, :owner_user_id,
-                 :create_crm_leads, :image_url,
+                 :tracking_action_id, :tracking_scope, :tracking_target, :tracking_baseline,
+                 :create_crm_leads, %2$s :image_url,
                  :challenge_enabled, :challenge_metric, :challenge_trigger_pct,
                  :margin_pct_default,
                  :color_primary_hex, :color_secondary_hex, :color_accent_hex, :color_ink_hex,
-                 :created_by)'
-        );
+                 :created_by)',
+            $bureaux ? 'b2b_offices_only,' : '',
+            $bureaux ? ':b2b_offices_only,' : ''
+        ));
 
-        $statement->execute([
+        $valeurs = [
             'brand_id'           => $brandId,
             'client_target'      => $data['client_target'],
             'type_id'            => $data['type_id'] ?? null,
@@ -322,6 +359,11 @@ final class CampaignRepository
             'show_web_shop'      => !empty($data['show_web_shop']) ? 1 : 0,
             'pos_survey_enabled' => !empty($data['pos_survey_enabled']) ? 1 : 0,
             'create_crm_leads'   => !empty($data['create_crm_leads']) ? 1 : 0,
+            // Le suivi (action, portée, cible, comparaison) : normalisé par validated(), NULL s'il manque.
+            'tracking_action_id' => $data['tracking_action_id'] ?? null,
+            'tracking_scope'     => $data['tracking_scope'] ?? null,
+            'tracking_target'    => $data['tracking_target'] ?? null,
+            'tracking_baseline'  => $data['tracking_baseline'] ?? null,
             'image_url'          => $data['image_url'] ?? null,
             // Le challenge se règle à l'étape « Objectifs », donc bien après la
             // première écriture. Ces colonnes sont ici pour que le premier
@@ -340,7 +382,11 @@ final class CampaignRepository
             'color_accent_hex'    => $data['color_accent_hex'] ?? null,
             'color_ink_hex'       => $data['color_ink_hex'] ?? null,
             'created_by'         => $auth->userId,
-        ]);
+        ];
+        if ($bureaux) {
+            $valeurs['b2b_offices_only'] = !empty($data['b2b_offices_only']) ? 1 : 0;
+        }
+        $statement->execute($valeurs);
 
         return (int) $connection->lastInsertId();
     }
@@ -422,6 +468,7 @@ final class CampaignRepository
 
         $data = $this->validatedChallenge($data);
         $data = $this->validatedColors($data);
+        $data = $this->validatedTracking($data);
 
         $connection = Database::connection();
 
@@ -544,6 +591,65 @@ final class CampaignRepository
      * @param  array<string,mixed> $data
      * @return array<string,mixed>
      */
+    /**
+     * Le suivi de la campagne : quelle action elle doit faire bouger, jugée par boutique
+     * ou pour le réseau, avec quelle cible et contre quelle référence.
+     *
+     * Tout est facultatif, mais rien n'est accepté à l'aveugle : une action absente
+     * du référentiel, une portée ou une référence inconnue, une cible négative sont
+     * refusées avec ce qu'il faut corriger. Une valeur vide redevient NULL — « pas de
+     * suivi » —, jamais une chaîne que MySQL refuserait en mode strict.
+     *
+     * @param  array<string,mixed> $data
+     * @return array<string,mixed>
+     */
+    private function validatedTracking(array $data): array
+    {
+        $vide = static fn (mixed $v): bool => $v === null || $v === '';
+
+        if (array_key_exists('tracking_action_id', $data)) {
+            if ($vide($data['tracking_action_id'])) {
+                $data['tracking_action_id'] = null;
+            } else {
+                $action = Database::connection()->prepare(
+                    'SELECT id FROM mar_tracking_action WHERE id = :id AND is_active = 1'
+                );
+                $action->execute(['id' => (int) $data['tracking_action_id']]);
+                if ($action->fetchColumn() === false) {
+                    throw new RuntimeException('Action suivie inconnue : choisissez-la dans la liste.');
+                }
+                $data['tracking_action_id'] = (int) $data['tracking_action_id'];
+            }
+        }
+
+        if (array_key_exists('tracking_scope', $data)) {
+            $data['tracking_scope'] = $vide($data['tracking_scope']) ? null : (string) $data['tracking_scope'];
+            if ($data['tracking_scope'] !== null && !in_array($data['tracking_scope'], ['SHOP', 'NETWORK'], true)) {
+                throw new RuntimeException('Suivi : attendu SHOP (par boutique) ou NETWORK (pour le réseau).');
+            }
+        }
+
+        if (array_key_exists('tracking_baseline', $data)) {
+            $data['tracking_baseline'] = $vide($data['tracking_baseline']) ? null : (string) $data['tracking_baseline'];
+            if ($data['tracking_baseline'] !== null && !in_array($data['tracking_baseline'], ['N1', 'AVANT'], true)) {
+                throw new RuntimeException('Référence du suivi : attendu N1 (l\'an dernier) ou AVANT (juste avant le lancement).');
+            }
+        }
+
+        if (array_key_exists('tracking_target', $data)) {
+            if ($vide($data['tracking_target'])) {
+                $data['tracking_target'] = null;
+            } elseif (!is_numeric($data['tracking_target']) || (float) $data['tracking_target'] < 0
+                || (float) $data['tracking_target'] > 9999999999.99) {
+                throw new RuntimeException('La cible du suivi est un nombre positif.');
+            } else {
+                $data['tracking_target'] = round((float) $data['tracking_target'], 2);
+            }
+        }
+
+        return $data;
+    }
+
     /**
      * Couleurs de la campagne : `#RRGGBB`, ou rien.
      *
@@ -971,7 +1077,7 @@ final class CampaignRepository
             $statement = $connection->prepare(
                 'INSERT INTO mar_campaign_channel
                     (campaign_id, channel_id, agency_id, budget_amount, is_enabled, created_by)
-                 VALUES (:campaign_id, :channel_id, :agency_id, :budget_amount, 1, :created_by)'
+                 VALUES (:campaign_id, :channel_id, :agency_id, :budget_amount, :is_enabled, :created_by)'
             );
             foreach ($channels as $channel) {
                 $channelId = (int) ($channel['channel_id'] ?? 0);
@@ -991,6 +1097,14 @@ final class CampaignRepository
                         ? (int) $channel['agency_id']
                         : null,
                     'budget_amount' => $budget === null || $budget === '' ? 0 : $budget,
+                    // `is_enabled` était écrit à 1 sans jamais être demandé :
+                    // un canal retenu et un canal VALIDÉ ne pouvaient pas se
+                    // distinguer, et « Pub physique » recevait des supports
+                    // qu'on envisageait encore. L'absence de clé vaut validé,
+                    // pour que les campagnes écrites avant ne changent pas de
+                    // sens en se rouvrant.
+                    'is_enabled'    => array_key_exists('is_enabled', $channel)
+                        ? (int) (bool) $channel['is_enabled'] : 1,
                     'created_by'    => $auth->userId,
                 ]);
             }
@@ -1368,7 +1482,14 @@ final class CampaignRepository
             'challenge_enabled', 'challenge_metric', 'challenge_trigger_pct',
             'margin_pct_default',
             'color_primary_hex', 'color_secondary_hex', 'color_accent_hex', 'color_ink_hex',
+            'tracking_action_id', 'tracking_scope', 'tracking_target', 'tracking_baseline',
         ];
+
+        // Même prudence qu'à la création : tant que la colonne n'est pas là,
+        // la mise à jour l'ignore au lieu d'échouer entièrement.
+        if (Database::hasColumn('mar_campaign', 'b2b_offices_only')) {
+            $columns[] = 'b2b_offices_only';
+        }
 
         // Colonnes TINYINT. PDO lie un `false` PHP comme chaîne vide, que MySQL
         // en mode strict refuse : « Incorrect integer value: '' ». La création
@@ -1376,7 +1497,7 @@ final class CampaignRepository
         // tant que personne n'envoyait un booléen à cette route.
         $flags = [
             'b2b_webshop_enabled', 'show_web_shop', 'pos_survey_enabled', 'create_crm_leads',
-            'challenge_enabled',
+            'b2b_offices_only', 'challenge_enabled',
         ];
 
         $assignments = [];
@@ -1426,7 +1547,7 @@ final class CampaignRepository
         );
 
         $channels = Database::connection()->prepare(
-            'SELECT channel_id, agency_id, budget_amount
+            'SELECT channel_id, agency_id, budget_amount, is_enabled
                FROM mar_campaign_channel WHERE campaign_id = :id'
         );
         $channels->execute(['id' => $id]);
@@ -1490,11 +1611,19 @@ final class CampaignRepository
             'client_target'      => $campaign['client_target'],
             'budget_amount'      => $campaign['budget_amount'],
             'objective_coef_pct' => $campaign['objective_coef_pct'],
+            'tracking_action_id' => $campaign['tracking_action_id'] ?? null,
+            'tracking_scope'     => $campaign['tracking_scope'] ?? null,
+            'tracking_target'    => isset($campaign['tracking_target']) ? (float) $campaign['tracking_target'] : null,
+            'tracking_baseline'  => $campaign['tracking_baseline'] ?? null,
             'agency_note'        => $campaign['agency_note'],
             'b2b_webshop_enabled' => (bool) $campaign['b2b_webshop_enabled'],
             'show_web_shop'      => (bool) $campaign['show_web_shop'],
             'pos_survey_enabled' => (bool) $campaign['pos_survey_enabled'],
             'create_crm_leads'   => (bool) $campaign['create_crm_leads'],
+            // Absente de la base tant que le rejeu n'a pas eu lieu : le
+            // brouillon rend alors « non », et l'écran dit que le filtre n'est
+            // pas disponible plutôt que de le montrer sans effet.
+            'b2b_offices_only'   => (bool) ($campaign['b2b_offices_only'] ?? false),
             'image_url'          => $asset === false ? '' : (string) $asset['file_url'],
             'focal_point_y'      => $asset === false ? 50 : (int) $asset['focal_point_y'],
             'image_fit'          => $asset === false ? 'cover' : (string) $asset['fit'],
@@ -1835,6 +1964,14 @@ final class CampaignRepository
 
         if (array_key_exists('create_crm_leads', $row)) {
             $row['create_crm_leads'] = (bool) $row['create_crm_leads'];
+        }
+
+        if (array_key_exists('b2b_offices_only', $row)) {
+            $row['b2b_offices_only'] = (bool) $row['b2b_offices_only'];
+        }
+
+        if (isset($row['tracking_target']) && is_string($row['tracking_target'])) {
+            $row['tracking_target'] = (float) $row['tracking_target'];
         }
 
         return $row;

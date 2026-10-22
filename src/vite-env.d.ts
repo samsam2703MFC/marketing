@@ -27,6 +27,11 @@ interface ImportMetaEnv {
   readonly VITE_SOCIAL_BASE?: string
   /** Espace franchisé du module Social (défaut /marketing/franchise/), affiché dans la version franchisé. */
   readonly VITE_SOCIAL_FRANCHISEE_BASE?: string
+  /**
+   * Racine du cockpit du BO (`/consulant_bo`), qui sert le KPI d'une période et les documents
+   * joints d'une campagne. Par défaut la racine de l'API du module (installation dans le BO).
+   */
+  readonly VITE_COCKPIT_BASE?: string
 }
 
 interface ImportMeta {

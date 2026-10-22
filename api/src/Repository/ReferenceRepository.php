@@ -39,6 +39,11 @@ final class ReferenceRepository
             'agencyAsks'      => $this->agencyAsks(),
             'b2bOptions'      => $this->b2bOptions(),
             'retroplanningDefaults' => $this->retroplanningDefaults(),
+            // Les actions qu'une campagne peut suivre (migration 036) : leur unité et où elles se lisent.
+            'trackingActions'    => $this->fetch(
+                'SELECT id, code, label, unit_label, source_label, cockpit_measure
+                   FROM mar_tracking_action WHERE is_active = 1 ORDER BY sort_order'
+            ),
             'clientTargets'      => $this->codeLabels('mar_client_target'),
             'costKinds'          => $this->codeLabels('mar_cost_kind'),
             'fundSources'        => $this->codeLabels('mar_fund_source'),

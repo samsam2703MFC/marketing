@@ -3,7 +3,8 @@ import { module as api } from '../lib/api'
 import { useAsync, formatEur, formatNumber } from '../lib/useAsync'
 import { describeError } from '../state/auth'
 import CampaignBrief from '../components/CampaignBrief'
-import type { FunnelStep, Lead, LeadStatus } from '../lib/api/module'
+import type { CampaignDetail, FunnelStep, Lead, LeadStatus, TrackingBaseline, TrackingScope } from '../lib/api/module'
+import { useReferences } from '../state/references'
 
 interface MonitorProps {
   campaignId: number
@@ -13,13 +14,17 @@ interface MonitorProps {
   onCreatePost?: () => void
   /** Ouvre le plan de posts de la campagne (module Social & Ads) : durée, réseaux, mix → brouillons au calendrier. */
   onPlanPosts?: () => void
+  /** Le réseau change le suivi de toute campagne ; une boutique, celui de ses campagnes locales (l'API tranche). */
+  brandAdmin?: boolean
 }
 
 /**
  * Suivi en direct d'une campagne : KPI, classement des boutiques, base CRM.
  */
-export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, onCreatePost, onPlanPosts }: MonitorProps) {
-  const campaign = useAsync(() => api.getCampaign(campaignId), [campaignId])
+export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, onCreatePost, onPlanPosts, brandAdmin = false }: MonitorProps) {
+  // Relue après un changement du suivi : la carte montre ce que la base a gardé, pas ce qu'on a tapé.
+  const [reloadCampaign, setReloadCampaign] = useState(0)
+  const campaign = useAsync(() => api.getCampaign(campaignId), [campaignId, reloadCampaign])
   const monitor = useAsync(() => api.getMonitor(campaignId), [campaignId])
   const [reloadKey, setReloadKey] = useState(0)
   const leads = useAsync(() => api.getLeads(campaignId), [campaignId, reloadKey])
@@ -79,6 +84,9 @@ export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, 
 
       {/* a. Cadrage : ce que l'assistant a fait saisir à la création. */}
       {campaign.data ? <CampaignBrief campaign={campaign.data} /> : null}
+
+      {/* Le suivi : l'action que la campagne doit faire bouger, et comment on la juge. */}
+      {campaign.data ? <TrackingCard key={reloadCampaign} campaign={campaign.data} canEdit={brandAdmin || campaign.data.scope === 'LOCALE'} onSaved={() => setReloadCampaign((key) => key + 1)} /> : null}
 
       {/* b. KPI et classement des boutiques */}
       <div className="grid">
@@ -289,5 +297,136 @@ function LeadRow({
         </select>
       </td>
     </tr>
+  )
+}
+
+/**
+ * Le suivi de la campagne : l'action qu'elle doit faire bouger, sa portée (par
+ * boutique ou pour le réseau), sa cible et sa référence, avec l'endroit où elle
+ * se lit. Il se choisit à l'assistant (étape « Suivi ») et se change ici, même
+ * campagne lancée : l'assistant ne réécrit qu'un brouillon, alors qu'une campagne
+ * planifiée peut encore préciser ce qu'on en attend. Sans suivi, la carte le dit
+ * au lieu de disparaître : c'est un choix qui manque, pas une donnée.
+ */
+function TrackingCard({ campaign, canEdit, onSaved }: { campaign: CampaignDetail; canEdit: boolean; onSaved: () => void }) {
+  const refs = useReferences()
+  const actions = refs.trackingActions ?? []
+  const [edit, setEdit] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
+  const [form, setForm] = useState({
+    action: campaign.tracking_action_id ?? null,
+    scope: (campaign.tracking_scope ?? (campaign.scope === 'LOCALE' ? 'SHOP' : 'NETWORK')) as TrackingScope,
+    target: campaign.tracking_target === null || campaign.tracking_target === undefined ? '' : String(campaign.tracking_target),
+    baseline: (campaign.tracking_baseline ?? 'N1') as TrackingBaseline,
+  })
+  const choisie = actions.find((entry) => entry.id === form.action) ?? null
+
+  const save = async () => {
+    setBusy(true)
+    setFailure(null)
+    try {
+      await api.updateCampaign(campaign.id, {
+        tracking_action_id: form.action,
+        tracking_scope: form.action === null ? null : form.scope,
+        tracking_target: form.action === null || form.target.trim() === '' ? null : Number(form.target),
+        tracking_baseline: form.action === null ? null : form.baseline,
+      })
+      setEdit(false)
+      onSaved()
+    } catch (error) {
+      setFailure(describeError(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (edit) {
+    return (
+      <section className="card">
+        <h2>Suivi</h2>
+        <div className="filters__row">
+          <label className="field">
+            Action suivie
+            <select
+              value={form.action ?? ''}
+              onChange={(event) => setForm({ ...form, action: event.target.value === '' ? null : Number(event.target.value) })}
+            >
+              <option value="">— Pas de suivi —</option>
+              {actions.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {choisie !== null ? (
+            <>
+              <label className="field">
+                Mesurée
+                <select value={form.scope} onChange={(event) => setForm({ ...form, scope: event.target.value as TrackingScope })}>
+                  <option value="NETWORK">Pour le réseau</option>
+                  <option value="SHOP">Par boutique</option>
+                </select>
+              </label>
+              <label className="field">
+                Cible ({choisie.unit_label})
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={form.target}
+                  placeholder="à fixer"
+                  onChange={(event) => setForm({ ...form, target: event.target.value })}
+                />
+              </label>
+              <label className="field">
+                Comparée à
+                <select value={form.baseline} onChange={(event) => setForm({ ...form, baseline: event.target.value as TrackingBaseline })}>
+                  <option value="N1">Mêmes dates l'an dernier</option>
+                  <option value="AVANT">Même durée juste avant le lancement</option>
+                </select>
+              </label>
+            </>
+          ) : null}
+        </div>
+        {choisie !== null ? <p className="muted">Se lit : {choisie.source_label}.</p> : null}
+        {failure ? <p className="error">{failure}</p> : null}
+        <div className="filters__row">
+          <button type="button" className="filter is-on" disabled={busy} onClick={() => void save()}>
+            {busy ? 'Enregistrement…' : 'Enregistrer le suivi'}
+          </button>
+          <button type="button" className="filter" disabled={busy} onClick={() => setEdit(false)}>
+            Annuler
+          </button>
+        </div>
+      </section>
+    )
+  }
+
+  return (
+    <section className="card">
+      <h2>Suivi</h2>
+      {campaign.tracking_action_label ? (
+        <>
+          <p className="metric">{campaign.tracking_action_label}</p>
+          <p className="muted">
+            {campaign.tracking_scope === 'SHOP' ? 'Par boutique' : 'Pour le réseau'} ·{' '}
+            {campaign.tracking_target === null || campaign.tracking_target === undefined
+              ? 'cible à fixer'
+              : `cible ${formatNumber(campaign.tracking_target)} ${campaign.tracking_unit_label ?? ''}`}{' '}
+            · comparé {campaign.tracking_baseline === 'AVANT' ? 'à la même durée juste avant le lancement' : 'aux mêmes dates l’an dernier'}
+          </p>
+          <p className="muted">Se lit : {campaign.tracking_source_label}.</p>
+        </>
+      ) : (
+        <p className="muted">Aucune action suivie pour cette campagne.</p>
+      )}
+      {canEdit ? (
+        <button type="button" className="filter" onClick={() => setEdit(true)}>
+          {campaign.tracking_action_label ? 'Changer le suivi' : 'Choisir l’action suivie'}
+        </button>
+      ) : null}
+    </section>
   )
 }

@@ -19,6 +19,8 @@ import type { Prospect } from '../../lib/api/module'
 export default function ProspectList({
   sectorIds,
   shopIds = [],
+  officesOnly = false,
+  onOfficesOnly,
 }: {
   sectorIds: number[]
   /**
@@ -28,24 +30,62 @@ export default function ProspectList({
    * vise tout le vivier.
    */
   shopIds?: number[]
+  /**
+   * Ne montrer que les bureaux à livrer. Ce n'est pas un filtre d'affichage :
+   * c'est le choix de la campagne, et la génération des leads applique le
+   * même. L'écran ne peut donc pas annoncer autre chose que ce qui sera créé.
+   */
+  officesOnly?: boolean
+  /** Absent = le choix ne se modifie pas ici (récapitulatif, relecture). */
+  onOfficesOnly?: (value: boolean) => void
 }) {
   const [query, setQuery] = useState('')
 
   const { data, error, loading } = useAsync(
-    () => api.listProspects(sectorIds, shopIds),
-    [sectorIds.join(','), shopIds.join(',')],
+    () => api.listProspects(sectorIds, shopIds, officesOnly),
+    [sectorIds.join(','), shopIds.join(','), String(officesOnly)],
   )
 
   // L'effectif vient de la base, pas de la longueur de la liste : celle-ci est
   // bornée, et compter ses lignes annoncerait deux cents comptes à qui va en
   // démarcher neuf cents. L'écart, quand il existe, est écrit noir sur blanc.
   const count = useAsync(
-    () => api.countProspects(sectorIds, shopIds),
-    [sectorIds.join(','), shopIds.join(',')],
+    () => api.countProspects(sectorIds, shopIds, officesOnly),
+    [sectorIds.join(','), shopIds.join(','), String(officesOnly)],
   )
   const total = count.data?.total ?? data?.length ?? 0
   const reseau = count.data?.network ?? 0
   const sansBoutique = count.data?.without_shop ?? 0
+  // `null` : le vivier ne sait pas encore dire qui est un bureau — la colonne
+  // arrive avec le rejeu des référentiels, et se remplit à la reprise ERP.
+  const bureaux = count.data?.offices ?? null
+
+  /* Le filtre « bureaux à livrer ».
+     Il est rendu AVANT les retours anticipés : un filtre qui ne ramène aucun
+     compte disparaîtrait avec la liste, et on ne pourrait plus l'éteindre —
+     l'écran resterait vide sans qu'on sache pourquoi.
+     Éteint et désactivé tant que le vivier ne porte pas l'information : mieux
+     vaut un bouton qui dit ce qui lui manque qu'un bouton qui ne fait rien. */
+  const filtreBureaux =
+    onOfficesOnly === undefined ? null : (
+      <div className="filters__row">
+        <button
+          type="button"
+          className={`filter${officesOnly ? ' is-on' : ''}`}
+          disabled={bureaux === null}
+          onClick={() => onOfficesOnly(!officesOnly)}
+          title={
+            bureaux === null
+              ? 'Le vivier ne sait pas encore quels comptes sont livrés au bureau : la reprise ERP le renseigne une fois la colonne posée.'
+              : officesOnly
+                ? 'Reprendre tous les comptes des secteurs retenus'
+                : `Ne viser que les ${bureaux} compte(s) livré(s) au bureau`
+          }
+        >
+          Bureaux à livrer{bureaux === null ? '' : ` · ${bureaux}`}
+        </button>
+      </div>
+    )
 
   if (sectorIds.length === 0) {
     return (
@@ -59,11 +99,29 @@ export default function ProspectList({
   if (loading && data === null) return <p className="muted">Lecture du vivier…</p>
   if (data === null) return null
 
+  if (data.length === 0 && officesOnly) {
+    // Le filtre est actif et ne ramène rien : c'est LUI qu'il faut nommer,
+    // sinon on accuse le vivier ou les secteurs.
+    return (
+      <>
+        {filtreBureaux}
+        <p className="muted">
+          Aucun compte livré au bureau dans ces secteurs
+          {shopIds.length > 0 ? (shopIds.length > 1 ? ' pour les boutiques choisies' : ' pour la boutique choisie') : ''}.
+          Le filtre « bureaux à livrer » les écarte tous : retirez-le pour voir les {reseau} compte(s)
+          de ces secteurs.
+        </p>
+      </>
+    )
+  }
+
   if (data.length === 0) {
     // Deux vides très différents : « ces secteurs n'ont personne » appelle un
     // autre secteur, « personne n'est rattaché à ces boutiques » appelle une
     // autre boutique. Les confondre envoie chercher au mauvais endroit.
     return shopIds.length > 0 && reseau > 0 ? (
+      <>
+        {filtreBureaux}
       <p className="muted">
         Aucun compte de ces secteurs n’est rattaché {shopIds.length > 1
           ? `aux ${shopIds.length} boutiques choisies`
@@ -73,11 +131,15 @@ export default function ProspectList({
              rattachement dans l’ERP : la génération les répartira quand même sur vos boutiques.`
           : ''}
       </p>
+      </>
     ) : (
-      <p className="muted">
-        Aucun compte dans le vivier pour ces secteurs. La génération de leads ne créera rien tant
-        que la reprise ERP n’a pas rattaché de comptes à ces secteurs.
-      </p>
+      <>
+        {filtreBureaux}
+        <p className="muted">
+          Aucun compte dans le vivier pour ces secteurs. La génération de leads ne créera rien tant
+          que la reprise ERP n’a pas rattaché de comptes à ces secteurs.
+        </p>
+      </>
     )
   }
 
@@ -104,6 +166,7 @@ export default function ProspectList({
 
   return (
     <>
+      {filtreBureaux}
       <div className="prospects__head">
         <p className="muted">
           {total} compte{total > 1 ? 's' : ''}

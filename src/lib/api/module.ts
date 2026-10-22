@@ -21,9 +21,23 @@ import type {
  * ce préfixe, les appels partiraient à la racine du domaine et tomberaient à
  * côté. Vide en développement, où le proxy Vite sert `/api`.
  */
-const API_ROOT = (import.meta.env.VITE_API_BASE ?? '').replace(/\/+$/, '')
+// « auto » : la racine d'API est le RÉPERTOIRE PARENT de la page, résolu à
+// l'exécution. La page vit à /<install>/assistant/, l'API à
+// /<install>/api/v1/marketing/… — le préfixe d'installation suit tout seul,
+// qu'il soit /consulant_bo ou la racine du domaine. Un chemin relatif dans
+// VITE_API_BASE ne suffit pas : buildUrl le préfixe de « / » et le navigateur
+// normalise « /../ » en avalant le sous-répertoire.
+const CONFIGURE = import.meta.env.VITE_API_BASE ?? ''
+const API_ROOT = (CONFIGURE === 'auto'
+  ? new URL('..', window.location.href).pathname.replace(/\/$/, '')
+  : CONFIGURE
+).replace(/\/+$/, '')
 
 const BASE = `${API_ROOT}/api/v1/marketing`
+// Le cockpit du BO, qui sert le KPI d'une période et les documents joints. Dans le BO, il est à côté de
+// l'API du module (même racine) ; le Marketing, servi à part (/marketing), le trouve à VITE_COCKPIT_BASE
+// (`/consulant_bo` sur le serveur, fixé au build).
+const COCKPIT_ROOT = (import.meta.env.VITE_COCKPIT_BASE ?? API_ROOT).replace(/\/+$/, '')
 
 /**
  * Le module est servi par l'application elle-même, pas derrière le proxy `/erp`
@@ -209,7 +223,28 @@ export interface OfferTemplate {
  * lignes et l'application en a besoin dès le premier écran. C'est ce jeu qui
  * remplace les constantes que le prototype portait en dur — couleurs comprises.
  */
+/**
+ * Une action qu'une campagne peut suivre (référentiel, migration 036) : ce qu'elle
+ * doit faire bouger, dans quelle unité, et où cela se lit. `cockpit_measure` dit la
+ * mesure que le cockpit sait calculer en caisse ; `null` = hors caisse (webshop, CRM).
+ */
+export interface TrackingAction {
+  id: number
+  code: string
+  label: string
+  unit_label: string
+  source_label: string
+  cockpit_measure: 'trafic' | 'panier' | 'ca' | null
+}
+
+/** SHOP = jugée boutique par boutique ; NETWORK = sur le total du réseau. */
+export type TrackingScope = 'SHOP' | 'NETWORK'
+/** N1 = mêmes dates l'an dernier ; AVANT = même durée juste avant le lancement. */
+export type TrackingBaseline = 'N1' | 'AVANT'
+
 export interface References {
+  /** Les actions qu'une campagne peut suivre, dans l'ordre de la liste. */
+  trackingActions: TrackingAction[]
   levers: Lever[]
   campaignStatuses: CampaignStatus[]
   campaignTypes: CampaignType[]
@@ -311,6 +346,16 @@ export function listCampaigns(filters: CampaignFilters = {}): Promise<Campaign[]
 export interface CampaignDetail extends Campaign {
   tone: string | null
   tone_label: string | null
+  /** Le suivi, en clair : l'action, son unité, où elle se lit, et la mesure du cockpit s'il y en a une. */
+  tracking_action_id?: number | null
+  tracking_action_code?: string | null
+  tracking_action_label?: string | null
+  tracking_unit_label?: string | null
+  tracking_source_label?: string | null
+  tracking_cockpit_measure?: 'trafic' | 'panier' | 'ca' | null
+  tracking_scope?: TrackingScope | null
+  tracking_target?: number | null
+  tracking_baseline?: TrackingBaseline | null
   objective_coef_pct: number | null
   agency_note: string | null
   b2b_webshop_enabled: number | boolean
@@ -443,6 +488,14 @@ export interface CampaignDraft {
   budget_amount?: number
   image_url?: string | null
   create_crm_leads?: boolean
+  /** Ne viser que les comptes marqués « bureau à livrer ». */
+  b2b_offices_only?: boolean
+  /** Le suivi : l'action que la campagne doit faire bouger (null = aucune). */
+  tracking_action_id?: number | null
+  tracking_scope?: TrackingScope | null
+  /** La cible, dans l'unité de l'action. */
+  tracking_target?: number | null
+  tracking_baseline?: TrackingBaseline | null
   tone?: string | null
   /** Objectif exprimé en écart au N-1 : « N-1 + 12 % ». */
   objective_coef_pct?: number | null
@@ -582,7 +635,16 @@ export interface CampaignDraftState
   b2b_option_ids: number[]
   uniform_ids: number[]
   format_ids: number[]
-  channels: Array<{ channel_id: number; agency_id: number | null; budget_amount: number | null }>
+  /**
+   * `is_enabled` : le canal est VALIDÉ, pas seulement retenu. Ce sont les
+   * canaux validés qui alimentent « Pub physique » et « Pub digitale ».
+   */
+  channels: Array<{
+    channel_id: number
+    agency_id: number | null
+    budget_amount: number | null
+    is_enabled?: boolean
+  }>
   /** `target_value` peut être nul : un levier retenu sans chiffre est légitime. */
   lever_targets: Array<{ lever_id: number; target_value: number | null }>
   retroplanning: Array<{ label: string; days_before_launch: number; position_id: number | null }>
@@ -970,6 +1032,8 @@ export interface Prospect {
   shop_id: number | null
   shop_name: string | null
   sector_label: string | null
+  /** La fiche client de l'ERP porte la livraison au bureau. */
+  is_office: boolean
 }
 
 /**
@@ -991,17 +1055,40 @@ export interface ProspectCount {
   total: number
   network: number
   without_shop: number
+  /**
+   * Bureaux à livrer dans ce périmètre — comptés SANS le filtre, sinon le
+   * chiffre vaudrait toujours le total et n'apprendrait rien avant le clic.
+   * `null` : le vivier ne sait pas encore le dire (rejeu des référentiels ou
+   * reprise ERP en attente), et le bouton reste éteint plutôt que menteur.
+   */
+  offices: number | null
 }
 
-export function countProspects(sectorIds: number[], shopIds: number[] = []): Promise<ProspectCount> {
+export function countProspects(
+  sectorIds: number[],
+  shopIds: number[] = [],
+  officesOnly = false,
+): Promise<ProspectCount> {
   return request<ProspectCount>(`${BASE}/b2b/prospects/count`, {
-    query: { sector_ids: sectorIds.join(','), shop_ids: shopIds.join(',') },
+    query: {
+      sector_ids: sectorIds.join(','),
+      shop_ids: shopIds.join(','),
+      offices_only: officesOnly ? '1' : '',
+    },
   })
 }
 
-export function listProspects(sectorIds: number[], shopIds: number[] = []): Promise<Prospect[]> {
+export function listProspects(
+  sectorIds: number[],
+  shopIds: number[] = [],
+  officesOnly = false,
+): Promise<Prospect[]> {
   return request<Prospect[]>(`${BASE}/b2b/prospects`, {
-    query: { sector_ids: sectorIds.join(','), shop_ids: shopIds.join(',') },
+    query: {
+      sector_ids: sectorIds.join(','),
+      shop_ids: shopIds.join(','),
+      offices_only: officesOnly ? '1' : '',
+    },
   })
 }
 
@@ -1512,3 +1599,195 @@ export function listKits(): Promise<Kit[]> {
 
 // Réexport pour les écrans d'alias, qui restent servis par l'ERP.
 export type { AliasType, LangCode }
+
+// ---------------------------------------------------------------------------
+// KPI d'une période — lu par le cockpit, pas par le module
+// ---------------------------------------------------------------------------
+
+/**
+ * Le KPI du levier sur la période choisie, comparé à N-1.
+ *
+ * Servi par le COCKPIT (`/api/cockpit/marketing/kpi-periode`) et non par le
+ * module : c'est lui qui tient le compte du panel, et c'est la même mécanique
+ * que son écran « Mesure des campagnes ». La refaire ici donnerait deux
+ * réponses à « combien a fait septembre l'an dernier », sans moyen de savoir
+ * laquelle croire.
+ */
+export interface KpiDefinition {
+  cle: string
+  nom: string
+  unite: string
+  decimales: number
+  calcul: string
+}
+
+export interface KpiBloc {
+  ca: number
+  tickets: number
+  jours: number
+  caJour: number | null
+  ticketsJour: number | null
+  panier: number | null
+}
+
+export interface KpiLigne {
+  id: string
+  nom: string
+  avant: KpiBloc
+  pendant: KpiBloc
+  valeurAvant: number | null
+  valeurPendant: number | null
+  variation: number | null
+  /** Aucun relevé sur les mêmes dates l'an dernier. */
+  sansN1: boolean
+  /**
+   * Repli quand N-1 manque : la moyenne des trois derniers mois clos. Un
+   * magasin ouvert cette année a une activité — elle vaut mieux qu'une case
+   * vide, à condition de dire que c'en est une.
+   */
+  repli: { valeur: number; du: string; au: string; jours: number; libelle: string } | null
+  /** La valeur affichée, quelle que soit sa provenance. */
+  valeurRetenue: number | null
+  /** `n1` | `repli` | null — jamais un chiffre sans sa provenance. */
+  source: 'n1' | 'repli' | null
+}
+
+export interface KpiLevier {
+  id: number
+  code: string
+  nom: string
+  couleur: string
+  /** `null` : rien de mesurable en caisse — `raison` dit pourquoi. */
+  mesure: string | null
+  kpi: KpiDefinition | null
+  raison: string | null
+}
+
+export interface KpiPeriode {
+  fenetres: {
+    du: string
+    au: string
+    jours: number
+    avantDu: string
+    avantAu: string
+    avantN1Du: string
+    avantN1Au: string
+    pendantN1Du: string
+    pendantN1Au: string
+    decalage: number
+    repliDu: string
+    repliAu: string
+  }
+  mesure: string
+  kpi: KpiDefinition
+  catalogue: Record<string, KpiDefinition>
+  leviers: KpiLevier[]
+  levierDemande: string | null
+  levierMesurable: boolean | null
+  magasins: KpiLigne[]
+  reseau: {
+    avant: KpiBloc
+    pendant: KpiBloc
+    valeurAvant: number | null
+    /** Cumul N-1 seul — sert à la variation, pas au total affiché. */
+    valeurPendant: number | null
+    /** Le total qui ÉGALE la somme des lignes, replis compris. */
+    valeurRetenue: number | null
+    source: 'n1' | 'repli' | 'mixte'
+    nN1: number
+    nRepli: number
+    nSans: number
+    variation: number | null
+    sansN1: boolean
+  }
+  motifs: string[]
+  source: string
+}
+
+export function getKpiPeriode(query: {
+  from: string
+  to: string
+  lever?: string | null
+  metric?: string | null
+  shopIds?: string[]
+}): Promise<KpiPeriode> {
+  const params = new URLSearchParams({ du: query.from, au: query.to })
+  if (query.lever) params.set('levier', query.lever)
+  if (query.metric) params.set('mesure', query.metric)
+  if (query.shopIds && query.shopIds.length > 0) params.set('magasins', query.shopIds.join(','))
+
+  return request<KpiPeriode>(`${COCKPIT_ROOT}/api/cockpit/marketing/kpi-periode?${params.toString()}`)
+}
+
+// ---------------------------------------------------------------------------
+// Annexes d'une campagne — servies par le cockpit
+// ---------------------------------------------------------------------------
+
+/**
+ * Les documents joints à une campagne : plan de publication, liste des
+ * produits, bon de commande. Ceux qui portent `enMail` partent avec la note
+ * envoyée aux franchisés.
+ *
+ * Servis par le COCKPIT, comme le KPI et la note : c'est lui qui écrit sur le
+ * disque et qui envoie les courriels. Le module n'aurait qu'une copie du
+ * fichier et une seconde vérité sur ce qui est joint.
+ */
+export interface Annexe {
+  id: number
+  nom: string
+  type: string
+  typeId: number | null
+  fichier: string
+  taille: number
+  tailleTxt: string
+  enMail: boolean
+  depuis: string
+  /** Le fichier est-il encore sur le serveur ? Une ligne peut lui survivre. */
+  existe: boolean
+}
+
+export interface AnnexeType {
+  id: number
+  nom: string
+  /** Nombre d'annexes rangées sous ce type — retirer n'efface pas l'historique. */
+  utilise: number
+}
+
+export interface AnnexesEtat {
+  annexes: Annexe[]
+  types: AnnexeType[]
+  maxOctets: number
+}
+
+const COCKPIT = `${COCKPIT_ROOT}/api/cockpit`
+
+export function getAnnexes(campaignId: number): Promise<AnnexesEtat> {
+  return request<AnnexesEtat>(`${COCKPIT}/marketing/campagne/${campaignId}/annexes`)
+}
+
+export function addAnnexe(
+  campaignId: number,
+  body: { nom: string; typeId?: number | null; typeNom?: string; fichier: string; enMail?: boolean },
+): Promise<AnnexesEtat & { ok?: boolean; error?: string }> {
+  return request(`${COCKPIT}/marketing/campagne/${campaignId}/annexe`, { method: 'POST', body })
+}
+
+export function updateAnnexe(
+  annexeId: number,
+  body: { enMail?: boolean; nom?: string; typeId?: number | null; typeNom?: string },
+): Promise<AnnexesEtat> {
+  return request(`${COCKPIT}/marketing/annexe/${annexeId}`, { method: 'PATCH', body })
+}
+
+export function removeAnnexe(annexeId: number): Promise<AnnexesEtat> {
+  return request(`${COCKPIT}/marketing/annexe/${annexeId}`, { method: 'DELETE' })
+}
+
+export function removeAnnexeType(typeId: number): Promise<{ types: AnnexeType[] }> {
+  return request(`${COCKPIT}/marketing/annexe-type/${typeId}`, { method: 'DELETE' })
+}
+
+/** L'adresse du fichier, pour l'ouvrir dans un onglet. */
+export function annexeHref(annexeId: number): string {
+  return `${COCKPIT}/marketing/annexe/${annexeId}/fichier`
+}

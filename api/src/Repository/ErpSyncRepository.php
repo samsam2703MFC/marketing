@@ -97,6 +97,11 @@ final class ErpSyncRepository
         // B2B » signifie « en avoir un ». D'où un nom de notion neutre et un
         // test déduit du type réel de la colonne, plus bas.
         'b2b_flag'     => ['b2b_client_type', 'is_b2b', 'b2b', 'is_professional', 'professionnel'],
+        // « Bureau à livrer » : la fiche client porte la livraison au bureau.
+        // C'est ce que le webshop écrit quand un client B2B choisit d'être
+        // livré sur son lieu de travail — le module ne le déduit pas d'un nom
+        // de société ni d'une adresse, il le lit.
+        'office_flag'  => ['office_delivery', 'is_office', 'livraison_bureau'],
         // Un compte fermé ou bloqué ne se démarche pas : l'appel tomberait sur
         // une entreprise qui n'est plus cliente, ou qui l'est mal.
         'active'       => ['active', 'is_active', 'actif', 'enabled'],
@@ -864,13 +869,21 @@ final class ErpSyncRepository
         $connection->beginTransaction();
 
         try {
-            $upsert = $connection->prepare(
+            /* Le marqueur « bureau à livrer » ne se reprend que si les DEUX
+               côtés le portent : la colonne du vivier (rejeu des référentiels)
+               et celle de l'ERP. S'il manque d'un côté, la reprise se fait
+               comme avant et ne touche pas `is_office` — elle ne le remet
+               surtout pas à zéro, ce qui viderait le filtre en silence. */
+            $bureaux = Database::hasColumn('mar_b2b_prospect', 'is_office')
+                && isset($columns['office_flag']);
+
+            $upsert = $connection->prepare(sprintf(
                 'INSERT INTO mar_b2b_prospect
                     (brand_id, external_ref, company_name, contact_name, contact_email,
-                     contact_phone, city, postal_code, shop_id, source, created_by)
+                     contact_phone, city, postal_code, shop_id, %1$s source, created_by)
                  VALUES
                     (:brand_id, :external_ref, :company_name, :contact_name, :contact_email,
-                     :contact_phone, :city, :postal_code, :shop_id, :source, :created_by)
+                     :contact_phone, :city, :postal_code, :shop_id, %2$s :source, :created_by)
                  ON DUPLICATE KEY UPDATE
                     company_name  = VALUES(company_name),
                     contact_name  = VALUES(contact_name),
@@ -879,8 +892,12 @@ final class ErpSyncRepository
                     city          = VALUES(city),
                     postal_code   = VALUES(postal_code),
                     shop_id       = VALUES(shop_id),
-                    is_active     = 1'
-            );
+                    %3$s
+                    is_active     = 1',
+                $bureaux ? 'is_office,' : '',
+                $bureaux ? ':is_office,' : '',
+                $bureaux ? 'is_office = VALUES(is_office),' : ''
+            ));
 
             $created   = 0;
             $updated   = 0;
@@ -915,7 +932,7 @@ final class ErpSyncRepository
 
                 $erpShopId = isset($row['shop_id']) ? (int) $row['shop_id'] : 0;
 
-                $upsert->execute([
+                $valeurs = [
                     'brand_id'      => $brandId,
                     // Préfixée : le vivier accepte aussi des imports de
                     // fichiers, et deux origines peuvent numéroter pareil.
@@ -929,7 +946,15 @@ final class ErpSyncRepository
                     'shop_id'       => $shopByErpId[$erpShopId] ?? null,
                     'source'        => 'ERP',
                     'created_by'    => $auth->userId ?: null,
-                ]);
+                ];
+
+                if ($bureaux) {
+                    // Un drapeau ERP peut être 0/1, '0'/'1' ou NULL : tout ce
+                    // qui n'est ni vide ni zéro vaut « oui ».
+                    $valeurs['is_office'] = !empty($row['office_flag']) ? 1 : 0;
+                }
+
+                $upsert->execute($valeurs);
 
                 $upsert->rowCount() === 1 ? $created++ : $updated++;
             }

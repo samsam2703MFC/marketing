@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import { module as api } from '../../lib/api'
 import { useAsync, formatDate, formatEur } from '../../lib/useAsync'
-import type { CampaignDraft, ClientTarget, ImageFit, OfferItem, References } from '../../lib/api/module'
+import type { CampaignDraft, ClientTarget, ImageFit, OfferItem, References, TrackingBaseline, TrackingScope } from '../../lib/api/module'
 import type { Role } from '../../lib/navigation'
 import { describeError } from '../../state/auth'
 import ObjectivesStep from './ObjectivesStep'
+import LeverKpi from './LeverKpi'
+import Annexes from './Annexes'
+import TrackingStep from './TrackingStep'
 import PricingStep from './PricingStep'
 import PhotosStep from './PhotosStep'
 import ProspectList from './ProspectList'
@@ -210,8 +213,20 @@ export interface Draft {
   objective_coef_pct: string
   targets: Record<number, string>
 
+  // Suivi — l'action que la campagne doit faire bouger (null : pas de suivi)
+  tracking_action_id: number | null
+  tracking_scope: TrackingScope
+  /** La cible, dans l'unité de l'action ; vide = à fixer. */
+  tracking_target: string
+  tracking_baseline: TrackingBaseline
+
   // 4 — Communication
-  channels: Record<number, { budget: string; agencyId: number | null }>
+  /**
+   * Un canal RETENU porte une entrée ; `valide` dit s'il est arrêté. Retenir
+   * n'est pas valider : un support qu'on envisage encore n'a rien à faire dans
+   * « Pub physique », et son budget n'est pas engagé.
+   */
+  channels: Record<number, { budget: string; agencyId: number | null; valide: boolean }>
   uniform_ids: number[]
   b2b_webshop_enabled: boolean
   b2b_option_ids: number[]
@@ -231,6 +246,11 @@ export interface Draft {
   // 6 / 7
   status_code: string
   create_crm_leads: boolean
+  /**
+   * Ne viser que les comptes livrés au bureau. Ce n'est pas un filtre
+   * d'affichage : la génération des leads applique le même choix.
+   */
+  b2b_offices_only: boolean
 }
 
 /** `AAAA-MM-JJ` local — les bornes de la période d'analyse des objectifs. */
@@ -297,6 +317,11 @@ function emptyDraft(refs: References, role: Role): Draft {
     objective_coef_pct: '',
     targets: {},
 
+    tracking_action_id: null,
+    tracking_scope: 'NETWORK',
+    tracking_target: '',
+    tracking_baseline: 'N1',
+
     channels: {},
     uniform_ids: [],
     b2b_webshop_enabled: false,
@@ -320,8 +345,13 @@ function emptyDraft(refs: References, role: Role): Draft {
       position_id: step.position_id,
     })),
 
-    status_code: 'draft',
+    // L'état À LA VALIDATION, pas l'état pendant la saisie : tant qu'on
+    // avance dans l'assistant la campagne reste un brouillon en base. Le
+    // défaut était « Brouillon », si bien que finaliser ne changeait rien —
+    // deux campagnes finies restaient « Brouillon » côte à côte.
+    status_code: 'planned',
     create_crm_leads: false,
+    b2b_offices_only: false,
   }
 }
 
@@ -405,6 +435,16 @@ const STEPS: Step[] = [
         : null,
   },
   {
+    // Après le budget : on dit ce que la campagne doit faire bouger une fois
+    // qu'on sait ce qu'elle coûte. Facultatif, comme l'offre et les objectifs.
+    key: 'tracking',
+    label: 'Suivi',
+    blocking: (d) =>
+      d.tracking_action_id !== null && d.tracking_target.trim() !== '' && !(Number(d.tracking_target) >= 0)
+        ? 'La cible du suivi est un nombre positif.'
+        : null,
+  },
+  {
     key: 'communication',
     label: 'Communication',
     blocking: (d) => {
@@ -481,10 +521,21 @@ export default function CampaignBuilder({
   )
 
   const [restored, setRestored] = useState(campaignId === null)
+  /**
+   * Le statut TEL QU'IL EST EN BASE.
+   *
+   * L'enregistrement d'étape écrivait « draft » sans regarder : rouvrir une
+   * campagne planifiée pour corriger un budget la faisait retomber en
+   * brouillon, et elle disparaissait des écrans qui ne lisent que les
+   * campagnes lancées. On réécrit donc le statut qu'elle a — c'est l'étape
+   * « Récap » qui le change, elle seule.
+   */
+  const [statutServeur, setStatutServeur] = useState('draft')
 
   if (!restored && loaded.data) {
     const next = fromState(loaded.data, refs, role)
     setDraft(next)
+    setStatutServeur(loaded.data.status_code ?? 'draft')
     setStep(resumeStep(loaded.data.draft_step ?? null, next))
     setRestored(true)
   }
@@ -514,7 +565,7 @@ export default function CampaignBuilder({
         return inserted_id
       }
 
-      await api.replaceCampaignDraft(savedId, { ...payload, status_code: 'draft' })
+      await api.replaceCampaignDraft(savedId, { ...payload, status_code: statutServeur })
       setSavedAt(new Date().toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' }))
 
       return savedId
@@ -629,8 +680,9 @@ export default function CampaignBuilder({
         {here === 'objectives' ? <ObjectivesStep {...shared} /> : null}
         {here === 'pricing' ? <PricingStep {...shared} /> : null}
         {here === 'photos' ? <PhotosStep {...shared} /> : null}
-        {here === 'budget' ? <BudgetStep {...shared} /> : null}
-        {here === 'communication' ? <CommunicationStep {...shared} agencies={agencies.data ?? []} /> : null}
+        {here === 'budget' ? <BudgetStep {...shared} shops={shops.data ?? []} /> : null}
+        {here === 'tracking' ? <TrackingStep {...shared} shops={shops.data ?? []} /> : null}
+        {here === 'communication' ? <CommunicationStep {...shared} agencies={agencies.data ?? []} campaignId={savedId} /> : null}
         {here === 'planning' ? <PlanningStep {...shared} /> : null}
         {here === 'review' ? <ReviewStep {...shared} shops={shops.data ?? []} /> : null}
         {here === 'leads' ? <LeadsStep {...shared} /> : null}
@@ -708,6 +760,9 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
     channels[channel.channel_id] = {
       budget: channel.budget_amount === null ? '' : String(channel.budget_amount),
       agencyId: channel.agency_id,
+      // Absent : les campagnes écrites avant la case ne doivent pas changer de
+      // sens en se rouvrant — elles étaient toutes enregistrées « activées ».
+      valide: channel.is_enabled ?? true,
     }
   }
 
@@ -805,6 +860,13 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
       : String(state.objective_coef_pct),
     targets,
 
+    tracking_action_id: state.tracking_action_id ?? null,
+    tracking_scope: state.tracking_scope ?? (state.scope === 'LOCALE' ? 'SHOP' : 'NETWORK'),
+    tracking_target: state.tracking_target === undefined || state.tracking_target === null
+      ? ''
+      : String(state.tracking_target),
+    tracking_baseline: state.tracking_baseline ?? 'N1',
+
     channels,
     uniform_ids: state.uniform_ids,
     b2b_webshop_enabled: state.b2b_webshop_enabled ?? false,
@@ -833,6 +895,7 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
 
     status_code: state.status_code ?? 'draft',
     create_crm_leads: state.create_crm_leads ?? false,
+    b2b_offices_only: state.b2b_offices_only ?? false,
   }
 }
 
@@ -912,6 +975,13 @@ function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): Cam
     ends_on: draft.ends_on || null,
     budget_amount: draft.budget_amount === '' ? 0 : Number(draft.budget_amount),
     objective_coef_pct: draft.objective_coef_pct === '' ? null : Number(draft.objective_coef_pct),
+    // Sans action, rien du suivi ne part : une portée ou une cible orphelines ne
+    // voudraient rien dire.
+    tracking_action_id: draft.tracking_action_id,
+    tracking_scope: draft.tracking_action_id === null ? null : draft.tracking_scope,
+    tracking_target:
+      draft.tracking_action_id === null || draft.tracking_target.trim() === '' ? null : Number(draft.tracking_target),
+    tracking_baseline: draft.tracking_action_id === null ? null : draft.tracking_baseline,
     agency_note: draft.agency_note.trim() || null,
     b2b_webshop_enabled: draft.b2b_webshop_enabled,
     show_web_shop: draft.show_web_shop,
@@ -919,6 +989,9 @@ function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): Cam
     focal_point_y: draft.image_url.trim() === '' ? null : draft.focal_point_y,
     image_fit: draft.image_fit,
     create_crm_leads: draft.create_crm_leads,
+    // Le filtre part avec la campagne : c'est lui que la génération relira,
+    // pas l'état de l'écran au moment du clic.
+    b2b_offices_only: draft.b2b_offices_only,
     margin_pct_default: draft.margin_pct_default.trim() === ''
       ? null
       : Number(draft.margin_pct_default.trim()),
@@ -994,6 +1067,7 @@ function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): Cam
       channel_id: Number(channelId),
       agency_id: entry.agencyId,
       budget_amount: entry.budget === '' ? null : Number(entry.budget),
+      is_enabled: entry.valide,
     })),
     lever_targets: Object.entries(draft.targets)
       .filter(([, value]) => value !== '' && Number(value) !== 0)
@@ -1623,6 +1697,7 @@ function FramingStep({
                 client_target: target.value,
                 sector_ids: target.value === 'b2c' ? [] : draft.sector_ids,
                 create_crm_leads: target.value === 'b2c' ? false : draft.create_crm_leads,
+                b2b_offices_only: target.value === 'b2c' ? false : draft.b2b_offices_only,
               })
             }
           >
@@ -1688,7 +1763,12 @@ function FramingStep({
               </span>
             )}
           </h3>
-          <ProspectList sectorIds={draft.sector_ids} shopIds={perimetre} />
+          <ProspectList
+            sectorIds={draft.sector_ids}
+            shopIds={perimetre}
+            officesOnly={draft.b2b_offices_only}
+            onOfficesOnly={(value) => patch({ b2b_offices_only: value })}
+          />
         </>
       ) : null}
 
@@ -1701,6 +1781,15 @@ function FramingStep({
 // ---------------------------------------------------------------------------
 
 function OfferStep({ draft, patch }: StepProps) {
+  // La recherche par produit : soixante-dix-sept tartes se parcourent mal à
+  // l'œil. Elle filtre l'affichage, jamais la sélection — ce qui est coché
+  // hors filtre le reste.
+  const [rechercheProduit, setRechercheProduit] = useState('')
+  // Les catégories OUVERTES. Sans cette mémoire, une catégorie n'existait que
+  // par ses produits cochés : tout décocher la refermait, et il devenait
+  // impossible de n'en sélectionner qu'un seul — il fallait tout recocher pour
+  // revoir la liste.
+  const [famillesOuvertes, setFamillesOuvertes] = useState<string[]>([])
   // Le catalogue repris de l'ERP (`mar_offer_item`) : gammes saisonnières et
   // produits avec leur famille. Vide tant que la reprise n'a pas tourné —
   // l'écran le dit plutôt que de laisser trois colonnes muettes.
@@ -1744,9 +1833,10 @@ function OfferStep({ draft, patch }: StepProps) {
   // Une famille est active dès qu'un de ses produits est coché : la cocher
   // présélectionne tout, la décocher retire tout — et la reprise d'un
   // brouillon retrouve cet état sans rien stocker de plus.
-  const activeFamilies = new Set(
-    [...checkedIds].map((id) => familyOf(productById.get(id) as OfferItem)),
-  )
+  const activeFamilies = new Set([
+    ...[...checkedIds].map((id) => familyOf(productById.get(id) as OfferItem)),
+    ...famillesOuvertes,
+  ])
   const visibleProducts = seasonProducts.filter((item) => activeFamilies.has(familyOf(item)))
 
   const pickSeason = (item: OfferItem) => {
@@ -1777,8 +1867,12 @@ function OfferStep({ draft, patch }: StepProps) {
     const others = draft.offer_items.filter(
       (element) => element.offer_item_id === null || !ids.has(element.offer_item_id),
     )
+    const ouverte = activeFamilies.has(name)
+    setFamillesOuvertes((liste) =>
+      ouverte ? liste.filter((x) => x !== name) : [...liste.filter((x) => x !== name), name],
+    )
     patch({
-      offer_items: activeFamilies.has(name)
+      offer_items: ouverte
         ? others
         : [
             ...others,
@@ -1795,11 +1889,55 @@ function OfferStep({ draft, patch }: StepProps) {
     })
   }
 
+  // Ce que la recherche laisse voir. La sélection, elle, ne bouge pas : on
+  // filtre l'affichage, pas le panier.
+  const q = rechercheProduit.trim().toLowerCase()
+  const produitsAffiches =
+    q === ''
+      ? visibleProducts
+      : visibleProducts.filter(
+          (item) =>
+            item.name.toLowerCase().includes(q) || familyOf(item).toLowerCase().includes(q),
+        )
+
   const selectAllVisible = () => {
-    const additions = visibleProducts
+    const additions = produitsAffiches
       .filter((item) => !checkedIds.has(item.id))
       .map((item) => ({ offer_item_id: item.id, label: item.name, category: 'produit', ...blankPricing() }))
     if (additions.length > 0) patch({ offer_items: [...draft.offer_items, ...additions] })
+  }
+
+  const deselectAllVisible = () => {
+    const ids = new Set(produitsAffiches.map((item) => item.id))
+    // Les catégories restent OUVERTES : on vide la sélection pour en choisir
+    // un ou deux, pas pour perdre la liste de vue.
+    setFamillesOuvertes([...activeFamilies])
+    patch({
+      offer_items: draft.offer_items.filter(
+        (element) => element.offer_item_id === null || !ids.has(element.offer_item_id),
+      ),
+    })
+  }
+
+  // Toutes les catégories d'un coup — et le contraire. Sans elles, composer
+  // une offre « tout le catalogue » demandait trente clics.
+  const toutesCategories = () => {
+    setFamillesOuvertes(families.map((f) => f.name))
+    const additions = seasonProducts
+      .filter((item) => !checkedIds.has(item.id))
+      .map((item) => ({ offer_item_id: item.id, label: item.name, category: 'produit', ...blankPricing() }))
+    if (additions.length > 0) patch({ offer_items: [...draft.offer_items, ...additions] })
+  }
+
+  // Celui-ci REFERME tout : c'est le geste « je repars de zéro », distinct du
+  // « Tout désélectionner » des produits, qui garde les catégories ouvertes.
+  const aucuneCategorie = () => {
+    setFamillesOuvertes([])
+    patch({
+      offer_items: draft.offer_items.filter(
+        (element) => element.offer_item_id === null || seasonIds.has(element.offer_item_id),
+      ),
+    })
   }
 
   const resetOffer = () =>
@@ -1862,6 +2000,18 @@ function OfferStep({ draft, patch }: StepProps) {
             {activeFamilies.size > 0 ? (
               <span className="muted"> ({activeFamilies.size} sélectionnées)</span>
             ) : null}
+            {families.length > 0 ? (
+              <span className="offer-selectall" style={{ display: 'inline-flex', gap: '12px', marginLeft: '12px' }}>
+                <button type="button" className="offer-selectall" onClick={toutesCategories}>
+                  Tout sélectionner
+                </button>
+                {activeFamilies.size > 0 ? (
+                  <button type="button" className="offer-selectall" onClick={aucuneCategorie}>
+                    Tout désélectionner
+                  </button>
+                ) : null}
+              </span>
+            ) : null}
           </h3>
           {families.length === 0 && !catalog.loading ? (
             <p className="muted">
@@ -1907,16 +2057,33 @@ function OfferStep({ draft, patch }: StepProps) {
               <span className="muted"> ({checkedIds.size} sélectionnés)</span>
             ) : null}
             {visibleProducts.length > 0 ? (
-              <button type="button" className="offer-selectall" onClick={selectAllVisible}>
-                Tout sélectionner
-              </button>
+              <span className="offer-selectall" style={{ display: 'inline-flex', gap: '12px', marginLeft: '12px' }}>
+                <button type="button" className="offer-selectall" onClick={selectAllVisible}>
+                  Tout sélectionner
+                </button>
+                <button type="button" className="offer-selectall" onClick={deselectAllVisible}>
+                  Tout désélectionner
+                </button>
+              </span>
             ) : null}
           </h3>
+          {visibleProducts.length > 0 ? (
+            <input
+              type="search"
+              className="prospects__search"
+              value={rechercheProduit}
+              placeholder="Chercher un produit…"
+              aria-label="Chercher un produit dans les catégories cochées"
+              onChange={(event) => setRechercheProduit(event.target.value)}
+            />
+          ) : null}
           {visibleProducts.length === 0 ? (
             <p className="muted">Cochez une catégorie pour lister ses produits.</p>
+          ) : produitsAffiches.length === 0 ? (
+            <p className="muted">Aucun produit ne répond à « {rechercheProduit.trim()} ».</p>
           ) : (
             <div className="product-rows">
-              {visibleProducts.map((item) => {
+              {produitsAffiches.map((item) => {
                 const checked = checkedIds.has(item.id)
                 return (
                   <button
@@ -1958,7 +2125,12 @@ function OfferStep({ draft, patch }: StepProps) {
 // 5 — Budget & leviers
 // ---------------------------------------------------------------------------
 
-function BudgetStep({ refs, draft, patch }: StepProps) {
+function BudgetStep({
+  refs,
+  draft,
+  patch,
+  shops,
+}: StepProps & { shops: Array<{ id: number; code: string; name: string }> }) {
   return (
     <>
       <h2>Budget & leviers</h2>
@@ -1994,7 +2166,9 @@ function BudgetStep({ refs, draft, patch }: StepProps) {
           : `Objectif : N-1 ${Number(draft.objective_coef_pct) < 0 ? '−' : '+'} ${Math.abs(Number(draft.objective_coef_pct))} %`}
       </p>
 
-      <h3 className="section-label">Objectifs par levier</h3>
+      <LeverKpi draft={draft} refs={refs} shops={shops} />
+
+      <h3 className="section-label">Objectifs par levier — montants visés</h3>
       <p className="muted">
         Facultatif. Les leviers renseignés alimentent le ROI mesuré ; ceux laissés vides ne
         sont pas rattachés à la campagne.
@@ -2036,25 +2210,31 @@ function BudgetStep({ refs, draft, patch }: StepProps) {
 // 4 — Communication
 // ---------------------------------------------------------------------------
 
+/** `1 250` — le séparateur de milliers du reste de l'assistant. */
+const fr = (value: number): string => value.toLocaleString('fr-BE')
+
 function CommunicationStep({
   refs,
   draft,
   patch,
   agencies,
-}: StepProps & { agencies: Array<{ id: number; name: string }> }) {
+  campaignId,
+}: StepProps & { agencies: Array<{ id: number; name: string }>; campaignId: number | null }) {
   const toggleChannel = (channelId: number) => {
     const next = { ...draft.channels }
     if (channelId in next) {
       delete next[channelId]
     } else {
-      next[channelId] = { budget: '', agencyId: null }
+      // Retenu, pas encore validé : la case « validé » se coche quand le
+      // support est arrêté et son budget engagé.
+      next[channelId] = { budget: '', agencyId: null, valide: false }
     }
     patch({ channels: next })
   }
 
   const updateChannel = (
     channelId: number,
-    change: Partial<{ budget: string; agencyId: number | null }>,
+    change: Partial<{ budget: string; agencyId: number | null; valide: boolean }>,
   ) =>
     patch({
       channels: { ...draft.channels, [channelId]: { ...draft.channels[channelId], ...change } },
@@ -2093,11 +2273,30 @@ function CommunicationStep({
         </span>
       </label>
 
-      {families.map((family) => (
+      {families.map((family) => {
+        const retenus = refs.channels
+          .filter((channel) => channel.family === family.key)
+          .filter((channel) => draft.channels[channel.id] !== undefined)
+        const engage = retenus
+          .filter((channel) => draft.channels[channel.id]?.valide)
+          .reduce((total, channel) => total + Number(draft.channels[channel.id]?.budget || 0), 0)
+        const envisage = retenus
+          .filter((channel) => !draft.channels[channel.id]?.valide)
+          .reduce((total, channel) => total + Number(draft.channels[channel.id]?.budget || 0), 0)
+
+        return (
         <div key={family.key}>
           <h3 className="section-label">{family.label}</h3>
           <div className="table-scroll">
             <table>
+              <thead>
+                <tr>
+                  <th>Canal</th>
+                  <th className="num">Budget</th>
+                  <th className="num">Validé</th>
+                  <th>Réalisé par</th>
+                </tr>
+              </thead>
               <tbody>
                 {refs.channels
                   .filter((channel) => channel.family === family.key)
@@ -2127,6 +2326,19 @@ function CommunicationStep({
                             onChange={(e) => updateChannel(channel.id, { budget: e.target.value })}
                           />
                         </td>
+                        {/* Retenir n'est pas valider : tant que la case est
+                            vide, le canal reste une intention — il n'alimente
+                            pas « Pub physique » / « Pub digitale » et son
+                            budget compte comme envisagé, pas comme engagé. */}
+                        <td className="num">
+                          <input
+                            type="checkbox"
+                            aria-label={`Valider ${channel.label}`}
+                            disabled={entry === undefined}
+                            checked={entry?.valide ?? false}
+                            onChange={(e) => updateChannel(channel.id, { valide: e.target.checked })}
+                          />
+                        </td>
                         <td>
                           <select
                             disabled={entry === undefined}
@@ -2151,13 +2363,23 @@ function CommunicationStep({
               </tbody>
             </table>
           </div>
+          {retenus.length === 0 ? null : (
+            <p className="muted wizard__hint">
+              {fr(engage)} € validés
+              {envisage > 0 ? ` · ${fr(envisage)} € encore à valider` : ''} sur{' '}
+              {retenus.length} {retenus.length > 1 ? 'canaux retenus' : 'canal retenu'}.
+            </p>
+          )}
         </div>
-      ))}
+        )
+      })}
 
       {/* Le ton rejoint la communication, comme le brief d'agence : l'étape 1
           décide ce que la campagne est, celle-ci comment elle parle. « Festif »
           ou « Premium » n'engage ni le périmètre ni la cible — cela engage la
           création, qui se décide ici, à côté de ceux qui la produiront. */}
+      <Annexes campaignId={campaignId} />
+
       <h3 className="section-label">Ton</h3>
       <ChipList
         items={refs.tones.map((tone) => ({ id: tone.id, label: tone.label }))}
@@ -2540,6 +2762,19 @@ function PlanningStep({ refs, draft, patch }: StepProps) {
 // 6 — Récap & validation
 // ---------------------------------------------------------------------------
 
+/** « Commandes en ligne (webshop) · pour le réseau · cible 120 commandes · vs l'an dernier ». */
+function trackingSummary(refs: References, draft: Draft): string {
+  const action = (refs.trackingActions ?? []).find((entry) => entry.id === draft.tracking_action_id)
+  if (!action) return 'Aucun'
+
+  return [
+    action.label,
+    draft.tracking_scope === 'SHOP' ? 'par boutique' : 'pour le réseau',
+    draft.tracking_target.trim() === '' ? 'cible à fixer' : `cible ${draft.tracking_target} ${action.unit_label}`,
+    draft.tracking_baseline === 'AVANT' ? 'vs juste avant le lancement' : 'vs l’an dernier',
+  ].join(' · ')
+}
+
 function ReviewStep({
   refs,
   shops,
@@ -2582,6 +2817,7 @@ function ReviewStep({
           : formatEur(targetTotal)
         : `N-1 ${Number(draft.objective_coef_pct) < 0 ? '−' : '+'} ${Math.abs(Number(draft.objective_coef_pct))} %`,
     ],
+    ['Suivi', trackingSummary(refs, draft)],
     ['Canaux', channelCount === 0 ? 'Aucun' : `${channelCount} activé(s)`],
     ['Tenues', draft.uniform_ids.length === 0 ? '—' : `${draft.uniform_ids.length} élément(s)`],
     [
@@ -2628,7 +2864,12 @@ function ReviewStep({
         </table>
       </div>
 
-      <h3 className="section-label">État à la création</h3>
+      <h3 className="section-label">
+        État à la validation
+        <span className="muted">
+          {' '}— tant que vous éditez, la campagne reste un brouillon ; c’est en validant qu’elle prend cet état.
+        </span>
+      </h3>
       <div className="choice-row">
         {refs.campaignStatuses.map((status) => (
           <button
@@ -2789,7 +3030,7 @@ function LeadsStep({ draft, patch }: StepProps) {
           {/* Les comptes eux-mêmes, comme à l'étape 1 : on décide de générer en
               voyant qui sera appelé, et par quelle boutique. */}
           <h3 className="section-label">Comptes concernés</h3>
-          <ProspectList sectorIds={draft.sector_ids} />
+          <ProspectList sectorIds={draft.sector_ids} officesOnly={draft.b2b_offices_only} />
         </>
       )}
     </>

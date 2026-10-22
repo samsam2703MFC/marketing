@@ -54,7 +54,8 @@ final class LeadController
         return Response::data($this->prospects->listBySectors(
             AuthContext::current(),
             self::sectorIds($request),
-            self::shopIds($request)
+            self::shopIds($request),
+            self::bureauxSeuls($request)
         ));
     }
 
@@ -70,7 +71,8 @@ final class LeadController
         return Response::data($this->prospects->countBySectors(
             AuthContext::current(),
             self::sectorIds($request),
-            self::shopIds($request)
+            self::shopIds($request),
+            self::bureauxSeuls($request)
         ));
     }
 
@@ -92,6 +94,18 @@ final class LeadController
             array_map('intval', explode(',', $raw)),
             static fn (int $v): bool => $v > 0
         ));
+    }
+
+    /**
+     * « Bureaux à livrer » seulement.
+     *
+     * Le brouillon de la campagne porte le même choix (`b2b_offices_only`) :
+     * l'écran et la génération lisent donc la même règle, et la liste ne peut
+     * pas montrer autre chose que ce qui sera créé.
+     */
+    private static function bureauxSeuls(Request $request): bool
+    {
+        return in_array($request->queryString('offices_only'), ['1', 'true', 'yes'], true);
     }
 
     /** @return list<int> */
