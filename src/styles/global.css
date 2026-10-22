@@ -3884,22 +3884,6 @@ table select,
   flex-direction: column;
 }
 
-.social-frame__bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 8px 24px;
-  border-bottom: 1px solid var(--line);
-  font-size: 12.5px;
-}
-
-.social-frame__bar a {
-  color: var(--accent);
-  font-weight: 500;
-  text-decoration: none;
-}
-
 .social-frame__page {
   flex: 1;
   min-height: 0;
@@ -4234,8 +4218,8 @@ button.mc-tag { cursor: pointer; }
 .mc-more { display: grid; place-items: center; width: 70px; border: 1px dashed var(--faint); border-radius: 10px; background: var(--table-head); font-size: 12px; font-weight: 500; color: var(--muted-2); }
 .mc-none { margin: 0; font-size: 12px; color: var(--muted); }
 
-/* Onglets d'une entrée du menu qui regroupe plusieurs écrans (Diffusion, Offres,
-   Performance, Bilan) : soulignés comme les sous-étapes de l'assistant, jamais en
+/* Onglets d'une entrée du menu qui regroupe plusieurs écrans (Offres, Performance,
+   Bilan) : soulignés comme les sous-étapes de l'assistant, jamais en
    bordeaux plein. Au-dessus d'un écran du module Social, ils gardent la marge. */
 .page-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 16px; border-bottom: 1px solid var(--line); }
 .app__body--frame > .page-tabs { margin: 0; padding: 6px 24px 0; background: #fff; }

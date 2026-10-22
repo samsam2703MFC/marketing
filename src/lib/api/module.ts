@@ -1443,58 +1443,6 @@ export function getRoiQuarterly(): Promise<RoiQuarter[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Diffusion : supports physiques et déclinaisons digitales
-// ---------------------------------------------------------------------------
-
-export interface CampaignChannel {
-  id: number
-  channel_code: string
-  channel_label: string
-  family: 'PHYSIQUE' | 'DIGITAL'
-  budget_amount: number | null
-  is_enabled: boolean
-  campaign_id: number
-  campaign_name: string
-  status_label: string
-  status_text_hex: string
-  status_bg_rgba: string
-  agency_name: string | null
-}
-
-export interface AssetRender {
-  id: number
-  format_code: string
-  format_name: string
-  width_px: number
-  height_px: number
-  note: string | null
-  /** Le recadrage manuel prime sur le rendu automatique quand il existe. */
-  file_url: string | null
-  override_file_url: string | null
-  master_file_url: string | null
-  focal_point_y: number | null
-  status: string
-  campaign_id: number
-  campaign_name: string
-}
-
-export interface CampaignUniform extends Uniform {
-  campaign_id: number | null
-  campaign_name: string | null
-}
-
-export interface Diffusion {
-  channels: CampaignChannel[]
-  renders: AssetRender[]
-  uniforms: CampaignUniform[]
-}
-
-/** Un seul point d'entrée pour les deux écrans : seule la famille change. */
-export function getDiffusion(family: 'PHYSIQUE' | 'DIGITAL'): Promise<Diffusion> {
-  return request<Diffusion>(`${BASE}/diffusion`, { query: { family } })
-}
-
-// ---------------------------------------------------------------------------
 // Agences et prestataires
 // ---------------------------------------------------------------------------
 

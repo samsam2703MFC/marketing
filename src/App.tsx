@@ -12,7 +12,6 @@ import CampaignMonitorView from './views/CampaignMonitorView'
 import PromotionsView from './views/PromotionsView'
 import BundlesView from './views/BundlesView'
 import VouchersView from './views/VouchersView'
-import DiffusionView from './views/DiffusionView'
 import AgenciesView from './views/AgenciesView'
 import AnalysisView from './views/AnalysisView'
 import RoiView from './views/RoiView'
@@ -303,14 +302,17 @@ function Workspace() {
       <Sidebar role={role} route={route} brandName={scope?.name ?? null} onNavigate={navigate} />
 
       <div className="workspace__main">
-        <header className="topbar">
-          <div>
-            <p className="topbar__kicker">
-              {role === 'BRAND_ADMIN' ? 'Vue Réseau' : 'Vue Franchisé'}
-            </p>
-            <h1>{titleFor(role, route, campaignId !== null) || 'Suivi de campagne'}</h1>
-          </div>
-        </header>
+        {/* Un écran du module Social porte son propre titre : rien au-dessus du cadre. */}
+        {social ? null : (
+          <header className="topbar">
+            <div>
+              <p className="topbar__kicker">
+                {role === 'BRAND_ADMIN' ? 'Vue Réseau' : 'Vue Franchisé'}
+              </p>
+              <h1>{titleFor(role, route, campaignId !== null) || 'Suivi de campagne'}</h1>
+            </div>
+          </header>
+        )}
 
         <main
           className={`app__body${route === 'builder' ? ' app__body--wide' : ''}${social ? ' app__body--frame' : ''}`}
@@ -361,11 +363,6 @@ function Workspace() {
           {route === 'promotions' ? <PromotionsView /> : null}
           {route === 'bundles' ? <BundlesView /> : null}
           {route === 'vouchers' ? <VouchersView /> : null}
-
-          {/* La famille de canal distingue les deux écrans de diffusion. */}
-          {route === 'physical' ? <DiffusionView family="PHYSIQUE" /> : null}
-          {route === 'digital' ? <DiffusionView family="DIGITAL" /> : null}
-          {route === 'canal-messages' ? <DiffusionView family="DIGITAL" codes={['email', 'sms', 'pwa_push']} /> : null}
 
           {route === 'agencies' ? <AgenciesView /> : null}
           {route === 'analysis' ? <AnalysisView /> : null}
