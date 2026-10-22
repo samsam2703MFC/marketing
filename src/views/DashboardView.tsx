@@ -1,5 +1,5 @@
 import { module as api } from '../lib/api'
-import { useAsync, formatEur, formatNumber } from '../lib/useAsync'
+import { useAsync, formatEur } from '../lib/useAsync'
 import type { CampaignStatus, Lever } from '../lib/api/module'
 
 interface DashboardProps {
@@ -9,15 +9,16 @@ interface DashboardProps {
   /** Vue Réseau : la performance par levier couvre tout le réseau, un franchisé ne la lit pas. */
   network: boolean
   onOpen: (campaignId: number) => void
+  /** Ouvre « Performance » : le tableau par levier y vit, il n'est plus recopié ici. */
+  onPerformance: () => void
 }
 
-/** Vue d'entrée : volumétrie des campagnes, budget engagé, performance par levier. */
-export default function DashboardView({ statuses, levers, brandId, network, onOpen }: DashboardProps) {
+/** Vue d'entrée : volumétrie des campagnes, budget engagé, campagnes en cours. */
+export default function DashboardView({ statuses, levers, brandId, network, onOpen, onPerformance }: DashboardProps) {
   const campaigns = useAsync(
     () => api.listCampaigns(brandId === 'all' ? {} : { brand_id: brandId }),
     [brandId],
   )
-  const leverPerf = useAsync(() => (network ? api.getLeverSummary() : Promise.resolve([])), [network])
 
   const rows = campaigns.data ?? []
   // Le budget exclut les brouillons. L'assistant enregistre à chaque étape,
@@ -107,39 +108,17 @@ export default function DashboardView({ statuses, levers, brandId, network, onOp
         )}
       </section>
 
-      {leverPerf.data && leverPerf.data.some((l) => l.spent_amount > 0) ? (
-        <section className="card table-card">
-          <h2>Performance par levier</h2>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Levier</th>
-                  <th className="num">Dépense</th>
-                  <th className="num">Ventes générées</th>
-                  <th className="num">ROI</th>
-                  <th className="num">Pénétration CA</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leverPerf.data
-                  .filter((lever) => lever.spent_amount > 0)
-                  .map((lever) => (
-                    <tr key={lever.lever_code}>
-                      <td>
-                        <span className="dot" style={{ background: lever.color_hex }} /> {lever.lever_label}
-                      </td>
-                      <td className="num">{formatEur(lever.spent_amount)}</td>
-                      <td className="num">{formatEur(lever.actual_value)}</td>
-                      <td className="num">{formatNumber(lever.roi_value)}</td>
-                      <td className="num">
-                        {lever.penetration_pct !== null ? `${formatNumber(lever.penetration_pct)} %` : '—'}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
+      {/* La performance par levier vit dans « Performance » : la recopier ici en faisait
+          deux écrans à tenir d'accord. Elle couvre tout le réseau, la marque seule la voit. */}
+      {network ? (
+        <section className="card dashboard-link">
+          <div>
+            <h2>Performance par levier</h2>
+            <p className="muted">Dépense, ventes générées et ROI de chaque levier, par trimestre et par opération.</p>
           </div>
+          <button type="button" className="btn btn--sm" onClick={onPerformance}>
+            Voir la performance →
+          </button>
         </section>
       ) : null}
     </>

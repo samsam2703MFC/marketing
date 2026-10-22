@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import * as api from './lib/api/module'
 import { useAsync } from './lib/useAsync'
-import { socialPageFor, socialRoute, titleFor } from './lib/navigation'
+import { socialPageFor, socialRoute, tabsFor, titleFor } from './lib/navigation'
 import type { Role, Route } from './lib/navigation'
 import Sidebar from './components/Sidebar'
 import DashboardView from './views/DashboardView'
@@ -18,8 +18,6 @@ import AnalysisView from './views/AnalysisView'
 import RoiView from './views/RoiView'
 import CrmView from './views/CrmView'
 import CampaignTypesView from './views/CampaignTypesView'
-import LocalPresenceView from './views/LocalPresenceView'
-import DamView from './views/DamView'
 import CampaignBuilder from './views/builder/CampaignBuilder'
 import SocialView from './views/SocialView'
 import { ReferencesProvider } from './state/references'
@@ -251,6 +249,7 @@ function Workspace() {
 
   const refs = references.data
   const social = socialPageFor(role, route)
+  const tabs = tabsFor(role, route)
 
   // Une adresse qui nomme une enseigne inconnue n'affiche pas « tout » : les
   // écrans se rempliraient d'un périmètre que personne n'a demandé, et
@@ -302,6 +301,23 @@ function Workspace() {
         <main
           className={`app__body${route === 'builder' ? ' app__body--wide' : ''}${social ? ' app__body--frame' : ''}`}
         >
+          {/* Une entrée à onglets : les écrans qui montraient la même donnée sous plusieurs entrées du menu. */}
+          {tabs ? (
+            <nav className="page-tabs" aria-label="Onglets">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.route}
+                  type="button"
+                  className={`page-tabs__tab${tab.route === route ? ' is-on' : ''}`}
+                  aria-current={tab.route === route ? 'page' : undefined}
+                  onClick={() => navigate(tab.route)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+          ) : null}
+
           {route === 'dashboard' ? (
             <DashboardView
               statuses={refs.campaignStatuses}
@@ -309,6 +325,7 @@ function Workspace() {
               brandId={brandId}
               network={role === 'BRAND_ADMIN'}
               onOpen={openCampaign}
+              onPerformance={() => navigate('analysis')}
             />
           ) : null}
 
@@ -340,8 +357,6 @@ function Workspace() {
           {route === 'roi' ? <RoiView /> : null}
           {route === 'crm' ? <CrmView /> : null}
           {route === 'campaign-types' ? <CampaignTypesView /> : null}
-          {route === 'local' ? <LocalPresenceView /> : null}
-          {route === 'dam' ? <DamView role={role} /> : null}
 
           {social ? (
             <SocialView key={frameKey} file={social.file} query={social.query} space={social.space} campaignId={postFor} onPage={followSocial} />

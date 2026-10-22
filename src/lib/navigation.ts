@@ -30,8 +30,6 @@ export type Route =
   | 'roi'
   | 'crm'
   | 'funds'
-  | 'local'
-  | 'dam'
   /** Écrans du module Social & Ads, affichés dans un cadre — réseau seul (voir SOCIAL_PAGES). */
   | 'social-cal'
   | 'social-grid'
@@ -47,6 +45,8 @@ export type Route =
   | 'social-leads'
   /** Paramètres du module Social : un écran, ouvert sur un onglet ou une section. */
   | 'social-set-conn'
+  /** Le compte Google : fiches des boutiques (Business Profile), Google Ads, Analytics 4. */
+  | 'social-set-google'
   | 'social-set-cles'
   | 'social-set-ids'
   | 'social-set-pf'
@@ -101,8 +101,6 @@ const ICONS: Record<string, string> = {
   roi: 'M3 17l6-6 4 4 8-8M15 7h6v6',
   crm: 'M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.9',
   funds: 'M3 7h18v12H3zM3 7l3-4h12l3 4M16 13h.5',
-  local: 'M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11zM12 8a2 2 0 1 0 .01 0',
-  dam: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
   'social-cal': 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01',
   'social-grid': 'M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18',
   'social-post': 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
@@ -116,6 +114,7 @@ const ICONS: Record<string, string> = {
   'social-bilan': 'M3 3v18h18M7 15l4-4 3 3 5-6',
   'social-google': 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
   'social-set-conn': 'M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7',
+  'social-set-google': 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-5.2-5.2',
   'social-set-cles': 'M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.8 7.8 5.5 5.5 0 0 1 7.8-7.8zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4',
   'social-set-ids': 'M4 6h16M4 12h16M4 18h10',
   'social-set-pf': 'M3 7h18v13H3zM8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',
@@ -149,8 +148,9 @@ export interface SocialPage {
 }
 
 export const SOCIAL_PAGES: Partial<Record<Route, SocialPage>> = {
-  // Le canal « Facebook » : le calendrier des publications, déjà filtré sur Facebook.
-  'social-cal': { key: 'cal', file: 'SA Calendrier.dc.html', query: 'reseau=facebook' },
+  // Le calendrier éditorial : Facebook et Instagram ensemble, sans préfiltre (il s'ouvrait
+  // filtré sur Facebook sous l'entrée « Facebook », et le filtre se remettait à zéro).
+  'social-cal': { key: 'cal', file: 'SA Calendrier.dc.html' },
   'social-grid': { key: 'grid', file: 'SA Grille.dc.html' },
   'social-post': { key: 'post', file: 'SA Post.dc.html' },
   'social-ctrl': { key: 'ctrl', file: 'SA Controle.dc.html' },
@@ -163,6 +163,7 @@ export const SOCIAL_PAGES: Partial<Record<Route, SocialPage>> = {
   'social-fr': { key: 'fr', file: 'SA Franchise.dc.html' },
   'social-leads': { key: 'leads', file: 'SA Leads.dc.html' },
   'social-set-conn': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=conn' },
+  'social-set-google': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=google' },
   'social-set-cles': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=api&section=cles' },
   'social-set-ids': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=api&section=ids' },
   'social-set-pf': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=api&section=pf' },
@@ -207,72 +208,70 @@ function item(route: Route, label: string): NavItem {
   return { route, label, icon: ICONS[route] ?? '' }
 }
 
+/*
+ * Le menu (22/10/2026) : chaque donnée à une seule place. Ce qui se montrait
+ * sous plusieurs entrées — trois écrans de ROI, deux de diffusion, trois
+ * d'offres, Bilan et Suivi — devient une entrée à onglets (TABS, plus bas).
+ * Sortis du menu : « Posts & pubs par campagne », ouvert depuis la campagne
+ * elle-même ; « Présence locale » et « Médiathèque & kit », vides (rien ne
+ * remplit leurs tables) et doublés par les avis Google et le kit de l'espace
+ * franchisé.
+ */
 const NETWORK: NavGroup[] = [
+  // Le calendrier marketing réunit tout ce qui est prévu ou en cours, tous canaux confondus.
   { label: 'Pilotage', items: [item('dashboard', 'Tableau de bord'), item('calendar', 'Calendrier marketing')] },
-  // La campagne au centre : on la crée par l'assistant, et tout ce qui se publie
-  // s'y rattache (posts, publicités, envois, PLV). L'éditeur des types reste ici :
-  // c'est la grille de la première étape de l'assistant.
+  // La campagne au centre : on la crée par l'assistant ; ses posts, pubs et son
+  // retour s'ouvrent depuis sa fiche.
   {
     label: 'Campagnes',
     action: { label: 'Nouvelle campagne', route: 'builder' },
+    items: [item('campaigns', 'Campagnes')],
+  },
+  // Les écrans du module Social & Ads, affichés dans un cadre avec ses Pages et
+  // son token Meta ; les commentaires et les messages privés se traitent dans
+  // l'espace franchisé.
+  {
+    label: 'Réseaux sociaux',
     items: [
-      item('campaigns', 'Toutes les campagnes'),
-      item('social-camp', 'Posts & pubs par campagne'),
+      item('social-cal', 'Calendrier éditorial'),
       item('social-post', 'Créer un post'),
+      item('social-grid', 'Grille Instagram'),
+      item('social-ads', 'Publicités Meta'),
+      item('social-leads', 'Formulaires de leads'),
+    ],
+  },
+  { label: 'Diffusion & offres', items: [item('physical', 'Diffusion'), item('promotions', 'Offres')] },
+  {
+    label: 'Boutiques',
+    items: [
+      item('social-bilan', 'Bilan des boutiques'),
+      item('social-google', 'Avis & fiches Google'),
+      item('social-ctrl', 'Contrôle des posts'),
+      item('social-fr', 'Espace franchisé'),
+      item('crm', 'Fidélité & CRM'),
+    ],
+  },
+  {
+    label: 'Budget & performance',
+    items: [item('funds', 'Fonds marketing'), item('analysis', 'Performance'), item('agencies', 'Agences & prestataires')],
+  },
+  // Un seul écran de réglages (Meta, Google, TFBuddy, modèles, droits…) ; les types
+  // de campagne, la grille de la première étape de l'assistant, y rejoignent.
+  {
+    label: 'Paramètres',
+    items: [
+      item('social-set-conn', 'Paramètres & connexions'),
+      // Google à part : un compte qui sert trois outils (fiches, Ads, Analytics), à raccorder avant tout usage.
+      item('social-set-google', 'Compte Google'),
       item('campaign-types', 'Types de campagne'),
     ],
   },
-  // Chaque canal à part : ce qui y a été fait, campagne par campagne. Les écrans
-  // Facebook, Instagram, Publicités Meta et Google vivent dans le module Social &
-  // Ads (/social), affichés dans un cadre avec ses Pages et son token Meta ; les
-  // commentaires et les messages privés se traitent dans l'espace franchisé.
-  {
-    label: 'Canaux',
-    items: [
-      item('social-cal', 'Facebook'),
-      item('social-grid', 'Instagram'),
-      item('social-ads', 'Publicités Meta'),
-      item('social-google', 'Google · avis & fiches'),
-      item('canal-messages', 'Newsletter, SMS & PWA'),
-      item('physical', 'Print & PLV'),
-    ],
-  },
-  {
-    label: 'Outils',
-    items: [
-      item('promotions', 'Promotions'),
-      item('bundles', 'Bundles & Menus'),
-      item('vouchers', 'Vouchers / Bons'),
-      item('dam', 'Médiathèque & kit local'),
-      item('agencies', 'Agences & prestataires'),
-    ],
-  },
-  {
-    label: 'Réseau',
-    items: [
-      item('social-bilan', 'Bilan des boutiques'),
-      item('social-suivi', 'Suivi des boutiques'),
-      item('social-ctrl', 'Contrôle des posts'),
-      item('social-fr', 'Espace franchisé'),
-      item('social-leads', 'Formulaires de leads'),
-      item('crm', 'Fidélité & CRM'),
-      item('funds', 'Fonds marketing'),
-      item('local', 'Présence locale'),
-    ],
-  },
-  {
-    label: 'Performance',
-    items: [item('analysis', 'Marketing Analyse'), item('roi', 'ROI & rentabilité'), item('social-roi', 'Retour sur opération')],
-  },
-  // Un seul écran de réglages (Meta, Google, TFBuddy, modèles, droits…) : ses onglets
-  // remplacent les entrées une à une.
-  { label: 'Paramètres', items: [item('social-set-conn', 'Paramètres & connexions')] },
 ]
 
 const FRANCHISE: NavGroup[] = [
   { label: 'Ma boutique', items: [item('dashboard', 'Tableau de bord'), item('calendar', 'Calendrier réseau')] },
   { label: 'Mes actions', items: [item('campaigns', 'Mes campagnes')] },
-  { label: 'Outils de campagne', items: [item('promotions', 'Promotions'), item('vouchers', 'Vouchers / Bons')] },
+  { label: 'Outils de campagne', items: [item('promotions', 'Promotions & bons')] },
   // L'espace franchisé du module Social & Ads : les réseaux sociaux de la boutique, dans le même menu.
   {
     label: 'Mes réseaux sociaux',
@@ -286,7 +285,6 @@ const FRANCHISE: NavGroup[] = [
       item('sf-ig', 'Grille Instagram'),
     ],
   },
-  { label: 'Terrain', items: [item('dam', 'Kit clé-en-main'), item('local', 'Ma présence locale')] },
   { label: 'Budget', items: [item('funds', 'Ma contribution')] },
 ]
 
@@ -294,13 +292,65 @@ export function navFor(role: Role): NavGroup[] {
   return role === 'FRANCHISEE' ? FRANCHISE : NETWORK
 }
 
+export interface Tab {
+  route: Route
+  label: string
+}
+
+/**
+ * Entrées à onglets : la première route est celle du menu, les suivantes ses
+ * onglets. Un écran n'appartient qu'à un groupe par périmètre.
+ */
+const TABS: Record<Role, Tab[][]> = {
+  BRAND_ADMIN: [
+    [
+      { route: 'physical', label: 'Print & PLV' },
+      { route: 'canal-messages', label: 'Newsletter, SMS & PWA' },
+    ],
+    [
+      { route: 'promotions', label: 'Promotions' },
+      { route: 'bundles', label: 'Bundles & menus' },
+      { route: 'vouchers', label: 'Bons' },
+    ],
+    [
+      { route: 'analysis', label: 'Par levier' },
+      { route: 'roi', label: 'Par trimestre' },
+      { route: 'social-roi', label: 'Par opération' },
+    ],
+    [
+      { route: 'social-bilan', label: 'Classement de la semaine' },
+      { route: 'social-suivi', label: 'Abonnés & budget' },
+    ],
+  ],
+  FRANCHISEE: [
+    [
+      { route: 'promotions', label: 'Promotions' },
+      { route: 'vouchers', label: 'Bons' },
+    ],
+  ],
+}
+
+/** Les onglets de l'entrée qui affiche cette route, s'il y en a. */
+export function tabsFor(role: Role, route: Route): Tab[] | null {
+  return TABS[role].find((group) => group.some((tab) => tab.route === route)) ?? null
+}
+
+/** L'entrée du menu qui affiche cette route : elle-même, ou la tête de son groupe d'onglets. */
+export function menuRoute(role: Role, route: Route): Route {
+  return tabsFor(role, route)?.[0].route ?? route
+}
+
 /** Titre de page, qui suit le rôle : « Campagnes » côté réseau, « Mes campagnes » côté boutique. */
 export function titleFor(role: Role, route: Route, resuming = false): string {
+  const head = menuRoute(role, route)
   for (const group of navFor(role)) {
     for (const entry of group.items) {
-      if (entry.route === route) return entry.label
+      if (entry.route === head) return entry.label
     }
   }
+
+  // Ouvert depuis la fiche d'une campagne, plus depuis le menu.
+  if (route === 'social-camp') return 'Posts & pubs par campagne'
 
   if (route === 'campaign') return 'Suivi de campagne'
   // Reprendre un brouillon et en créer un ne se ressemblent pas : sans cette

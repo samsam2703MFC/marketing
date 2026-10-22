@@ -1,4 +1,4 @@
-import { navFor } from '../lib/navigation'
+import { menuRoute, navFor } from '../lib/navigation'
 import type { Role, Route } from '../lib/navigation'
 
 interface SidebarProps {
@@ -29,6 +29,9 @@ function Icon({ path }: { path: string }) {
 }
 
 export default function Sidebar({ role, route, brandName, onNavigate }: SidebarProps) {
+  // Un onglet allume l'entrée qui le porte (« Par trimestre » → « Performance »).
+  const current = menuRoute(role, route)
+
   return (
     <nav className="sidebar" aria-label="Navigation principale">
       <div className="sidebar__head">
@@ -79,8 +82,8 @@ export default function Sidebar({ role, route, brandName, onNavigate }: SidebarP
               <a
                 key={entry.route}
                 href="#"
-                className={`sidebar__item${route === entry.route ? ' is-active' : ''}`}
-                aria-current={route === entry.route ? 'page' : undefined}
+                className={`sidebar__item${current === entry.route ? ' is-active' : ''}`}
+                aria-current={current === entry.route ? 'page' : undefined}
                 onClick={(event) => {
                   event.preventDefault()
                   onNavigate(entry.route)
