@@ -145,6 +145,30 @@ unset($report['inventory'], $report['links']);
 $titles = ['shops' => 'Boutiques', 'prospects' => 'Comptes', 'sectors' => 'Secteurs'];
 
 foreach ($report as $label => $result) {
+    // Une partie de la reprise peut échouer seule (catalogue, gammes, liens) : elle
+    // rend alors son seul message. L'afficher comme un compte rendu faisait planter
+    // tout le script sur des clés absentes — et la reprise, pourtant écrite, passait
+    // pour « non effectuée ».
+    if (isset($result['error'])) {
+        printf("%-10s ÉCHEC : %s\n", $titles[$label] ?? $label, $result['error']);
+        continue;
+    }
+
+    // Les liens produit ↔ gamme comptent des rattachements, pas des fiches.
+    if (isset($result['linked'])) {
+        printf(
+            "%-10s source %s — %d lue(s), %d rattachée(s), %d produit(s) inconnu(s), %d gamme(s) inconnue(s)\n",
+            $titles[$label] ?? $label,
+            $result['source'],
+            $result['read'],
+            $result['linked'],
+            $result['unknown_product'] ?? 0,
+            $result['unknown_season'] ?? 0
+        );
+        printf("           colonnes retenues : %s\n", json_encode($result['columns'], JSON_UNESCAPED_UNICODE));
+        continue;
+    }
+
     printf(
         "%-10s source %s — %d lue(s), %d créée(s), %d mise(s) à jour, %d écartée(s)%s\n",
         $titles[$label] ?? $label,
@@ -246,7 +270,13 @@ if ($unlinked > 0) {
 // porte un nom auquel la liste des candidates n'a pas pensé ».
 foreach ($inventory as $table => $detail) {
     printf("\n%s\n", $table);
-    printf("  notions non reconnues : %s\n", implode(', ', $detail['non reconnues']) ?: 'aucune');
+    // Aucune colonne visible : la table manque, ou le compte MySQL du module n'a pas
+    // le droit de la lire (information_schema ne montre que les tables autorisées).
+    if (($detail['disponibles'] ?? []) === []) {
+        printf("  illisible : table absente, ou SELECT non accordé au compte MySQL du module\n");
+        continue;
+    }
+    printf("  notions non reconnues : %s\n", implode(', ', $detail['non reconnues'] ?? []) ?: 'aucune');
     printf("  colonnes présentes    : %s\n", implode(', ', $detail['disponibles']));
 }
 

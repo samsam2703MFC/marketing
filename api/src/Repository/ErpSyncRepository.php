@@ -1696,7 +1696,12 @@ final class ErpSyncRepository
      */
     private function resolve(string $schema, string $table, array $candidates, array $required): array
     {
-        $this->inventory[$schema . '.' . $table] = [];
+        // Même forme que l'entrée complète : une table illisible n'a aucune colonne
+        // présente, et rien de ce qu'on y cherchait n'est reconnu.
+        $this->inventory[$schema . '.' . $table] = [
+            'non reconnues' => array_keys($candidates),
+            'disponibles'   => [],
+        ];
 
         $statement = Database::connection()->prepare(
             'SELECT column_name FROM information_schema.columns

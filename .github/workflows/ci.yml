@@ -723,6 +723,12 @@ jobs:
                 ;;
             esac
 
+            # Le catalogue, les gammes ou leurs liens peuvent échouer seuls (table
+            # ERP non accordée au compte du module, par exemple) : la reprise du
+            # reste a eu lieu, mais ce qui manque doit se voir.
+            partiel=$(printf '%s\n' "$out" | grep -E '^[a-z_]+ +ÉCHEC : ' | tr '\n' ' | ' | cut -c1-900)
+            [ -n "$partiel" ] && echo "::warning title=Reprise partielle::$partiel"
+
             # Le catalogue produit a rejoint la reprise : sans sa propre
             # annotation, ses trois lignes ne vivent que dans le résumé
             # complet, au-delà des neuf cents caractères qu'une annotation
