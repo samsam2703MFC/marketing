@@ -75,6 +75,8 @@ return static function (Router $router): void {
     $router->put('/api/v1/marketing/campaigns/{id}/draft',      [$campaigns, 'replace']);
     $router->post('/api/v1/marketing/campaigns',                [$campaigns, 'store']);
     $router->patch('/api/v1/marketing/campaigns/{id}',          [$campaigns, 'update']);
+    $router->put('/api/v1/marketing/campaigns/{id}/lever-targets', [$campaigns, 'leverTargets']);
+    $router->post('/api/v1/marketing/campaigns/{id}/offer-items', [$campaigns, 'addOfferItems']);
     $router->delete('/api/v1/marketing/campaigns/{id}',         [$campaigns, 'destroy']);
 
     // Ventes réelles — l'historique qui éclaire l'étape « Objectifs »

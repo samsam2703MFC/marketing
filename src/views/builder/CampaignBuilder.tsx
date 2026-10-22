@@ -492,6 +492,7 @@ export default function CampaignBuilder({
   role,
   brandId,
   campaignId,
+  startStep = null,
   onCreated,
   onCancel,
 }: {
@@ -505,6 +506,8 @@ export default function CampaignBuilder({
   brandId: number | 'all'
   /** Brouillon repris. `null` pour une campagne neuve. */
   campaignId: number | null
+  /** Étape où ouvrir le brouillon repris (depuis « Compléter les campagnes ») ; sinon là où il s'était arrêté. */
+  startStep?: string | null
   onCreated: (campaignId: number) => void
   onCancel: () => void
 }) {
@@ -546,7 +549,7 @@ export default function CampaignBuilder({
     const next = fromState(loaded.data, refs, role)
     setDraft(next)
     setStatutServeur(loaded.data.status_code ?? 'draft')
-    setStep(resumeStep(loaded.data.draft_step ?? null, next))
+    setStep(resumeStep(startStep ?? loaded.data.draft_step ?? null, next))
     setRestored(true)
   }
 

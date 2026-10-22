@@ -79,6 +79,8 @@ entière, pour attraper une colonne ajoutée plus tard.
 | DELETE | `…/campaigns/{id}` | tenant | `{status, message}` |
 | GET | `…/campaigns/{id}/draft` | tenant | objet (brouillon complet de l'assistant) |
 | PUT | `…/campaigns/{id}/draft` | tenant | `{status, message}` |
+| PUT | `…/campaigns/{id}/lever-targets` | tenant (écriture : marque, ou boutique sur sa campagne locale) | `{status, message}` — objectifs par levier seuls, tout statut ; idempotent |
+| POST | `…/campaigns/{id}/offer-items` | tenant (même règle d'écriture) | `{status, message}` — produits du catalogue ajoutés à l'offre, tout statut ; ajout seul, idempotent |
 | GET | `…/campaigns/{id}/monitor` | tenant | objet |
 | GET | `…/campaigns/{id}/print` | tenant | objet (dossier d'impression) |
 | GET | `…/campaigns/{id}/roi-costs` | marque | tableau |
@@ -297,6 +299,25 @@ publicités Meta rattachés, et l'adresse du webshop des liens suivis. Lecture s
 
 `GET /api/v1/marketing/campaigns/calendar` n'est plus lu par le front : la frise
 place les campagnes elle-même, au jour près.
+
+**Compléter une campagne** (`PUT …/lever-targets`, `POST …/offer-items`, octobre 2026).
+Une campagne lancée ne se réécrit plus en bloc (`PUT …/draft` est réservé aux
+brouillons, `PATCH` ne porte que ses colonnes) : ses objectifs par levier — ce
+que le Retour sur opération du module Social lit comme objectif — ne se
+complétaient donc plus. Cette route ne touche qu'eux. Corps
+`{ "lever_targets": [{ "lever_id", "target_value" }] }` ; un montant vide ou nul
+détache le levier (ou vide seulement sa cible s'il porte déjà un réalisé), les
+leviers non envoyés ne bougent pas. Levier inconnu, montant négatif ou corps
+illisible : 422, rien d'écrit.
+
+`POST …/campaigns/{id}/offer-items` (`{ "offer_item_ids": [462] }`) ajoute des
+produits du catalogue à l'offre : le Retour sur opération compte les ventes de
+ces produits, et sans eux ne mesure rien. **Ajout seul** — réécrire l'offre
+d'une campagne lancée effacerait en cascade ses objectifs par boutique et par
+produit et ses bundles. Un produit déjà présent n'est pas rajouté ; une
+campagne sans offre en reçoit une, à son nom. Produit inconnu ou liste vide :
+422, rien d'écrit. Écart résiduel des deux routes, comme le reste du module :
+pas d'enveloppe `{success, data, meta}`, `snake_case`.
 
 **Routes lues par le Tableau de bord, bloc « Trafic clients et panier moyen »**
 (vue Réseau seule, lecture seule) :

@@ -179,6 +179,53 @@ final class CampaignController
     }
 
     /**
+     * Les objectifs chiffrés par levier, seuls (`PUT …/campaigns/{id}/lever-targets`).
+     *
+     * Le complément d'une campagne lancée : l'assistant n'y réécrit plus que
+     * ses colonnes, et ses objectifs ne se saisissaient donc plus. Corps :
+     * `{ "lever_targets": [{ "lever_id": 1, "target_value": 3000 }] }`.
+     */
+    public function leverTargets(Request $request): array
+    {
+        $id = $request->intParam('id');
+        if ($id === null) {
+            return Response::error('Identifiant de campagne invalide.');
+        }
+
+        $targets = $request->input('lever_targets');
+        if (!is_array($targets) || !array_is_list($targets)) {
+            return Response::error('lever_targets attendu : une liste de {lever_id, target_value}.', 422);
+        }
+
+        return $this->campaigns->setLeverTargets(AuthContext::current(), $id, $targets)
+            ? Response::mutated('Objectifs enregistrés.')
+            : Response::notFound('Campagne introuvable.');
+    }
+
+    /**
+     * Des produits du catalogue ajoutés à l'offre (`POST …/campaigns/{id}/offer-items`).
+     *
+     * Ajout seul, tout statut : ce qui est déjà dans l'offre ne bouge pas. Corps :
+     * `{ "offer_item_ids": [462, 518] }`.
+     */
+    public function addOfferItems(Request $request): array
+    {
+        $id = $request->intParam('id');
+        if ($id === null) {
+            return Response::error('Identifiant de campagne invalide.');
+        }
+
+        $itemIds = $request->input('offer_item_ids');
+        if (!is_array($itemIds) || !array_is_list($itemIds) || $itemIds === []) {
+            return Response::error('offer_item_ids attendu : une liste non vide d\'identifiants du catalogue.', 422);
+        }
+
+        return $this->campaigns->addOfferItems(AuthContext::current(), $id, $itemIds)
+            ? Response::mutated('Produits ajoutés à l\'offre.')
+            : Response::notFound('Campagne introuvable.');
+    }
+
+    /**
      * Dossier d'impression : un fichier général, ou un par franchise.
      *
      * `shop_id` absent rend le général ; un identifiant rend celui d'une

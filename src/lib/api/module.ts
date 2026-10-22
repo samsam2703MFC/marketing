@@ -362,6 +362,7 @@ export function listCampaigns(filters: CampaignFilters = {}): Promise<Campaign[]
  * enregistrée et illisible ne vaut guère mieux qu'une fiche perdue.
  */
 export interface CampaignDetail extends Campaign {
+  type_id: number | null
   tone: string | null
   tone_label: string | null
   /** Le suivi, en clair : l'action, son unité, où elle se lit, et la mesure du cockpit s'il y en a une. */
@@ -690,6 +691,19 @@ export function replaceCampaignDraft(id: number, draft: CampaignDraft): Promise<
 /** Colonnes de la campagne seules — le statut au moment du lancement, par exemple. */
 export function updateCampaign(id: number, change: Partial<CampaignDraft>): Promise<{ ok: boolean }> {
   return request(`${BASE}/campaigns/${id}`, { method: 'PATCH', body: change })
+}
+
+/**
+ * Les objectifs par levier d'une campagne, seuls, quel que soit son statut : un montant vide
+ * détache le levier, les leviers non envoyés ne bougent pas.
+ */
+export function setLeverTargets(id: number, targets: Array<{ lever_id: number; target_value: number | null }>): Promise<{ message: string }> {
+  return request(`${BASE}/campaigns/${id}/lever-targets`, { method: 'PUT', body: { lever_targets: targets } })
+}
+
+/** Des produits du catalogue ajoutés à l'offre, quel que soit le statut : ajout seul, sans doublon. */
+export function addOfferItems(id: number, offerItemIds: number[]): Promise<{ message: string }> {
+  return request(`${BASE}/campaigns/${id}/offer-items`, { method: 'POST', body: { offer_item_ids: offerItemIds } })
 }
 
 /**

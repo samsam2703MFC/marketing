@@ -20,6 +20,8 @@ export type Route =
   | 'addresses'
   /** Assistant de création — ouvert depuis « Campagnes », pas depuis le menu. */
   | 'builder'
+  /** Compléter les campagnes à qui il manque une donnée pour mesurer leur retour — ouvert depuis « Campagnes ». */
+  | 'campaign-fix'
   | 'promotions'
   | 'bundles'
   | 'vouchers'
@@ -342,11 +344,15 @@ export function tabsFor(role: Role, route: Route): Tab[] | null {
 
 /** L'entrée du menu qui affiche cette route : elle-même, ou la tête de son groupe d'onglets. */
 export function menuRoute(role: Role, route: Route): Route {
+  if (route === 'campaign-fix') return 'campaigns'
+
   return tabsFor(role, route)?.[0].route ?? route
 }
 
 /** Titre de page, qui suit le rôle : « Campagnes » côté réseau, « Mes campagnes » côté boutique. */
 export function titleFor(role: Role, route: Route, resuming = false): string {
+  if (route === 'campaign-fix') return 'Compléter les campagnes'
+
   const head = menuRoute(role, route)
   for (const group of navFor(role)) {
     for (const entry of group.items) {

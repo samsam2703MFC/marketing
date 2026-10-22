@@ -5,6 +5,7 @@ import { describeError } from '../state/auth'
 import CampaignBrief from '../components/CampaignBrief'
 import type { CampaignDetail, FunnelStep, Lead, LeadStatus, TrackingBaseline, TrackingScope } from '../lib/api/module'
 import { useReferences } from '../state/references'
+import { campaignGaps } from '../lib/completeness'
 
 interface MonitorProps {
   campaignId: number
@@ -18,12 +19,14 @@ interface MonitorProps {
   brandAdmin?: boolean
   /** Ouvre l'assistant de campagne (sept étapes) sur cette campagne. */
   onOpenAssistant?: () => void
+  /** Ouvre « Compléter les campagnes » sur celle-ci. */
+  onComplete?: () => void
 }
 
 /**
  * Suivi en direct d'une campagne : KPI, classement des boutiques, base CRM.
  */
-export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, onCreatePost, onPlanPosts, brandAdmin = false, onOpenAssistant }: MonitorProps) {
+export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, onCreatePost, onPlanPosts, brandAdmin = false, onOpenAssistant, onComplete }: MonitorProps) {
   // Relue après un changement du suivi : la carte montre ce que la base a gardé, pas ce qu'on a tapé.
   const [reloadCampaign, setReloadCampaign] = useState(0)
   const campaign = useAsync(() => api.getCampaign(campaignId), [campaignId, reloadCampaign])
@@ -88,6 +91,9 @@ export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, 
 
       {campaign.error ? <p className="error">{campaign.error}</p> : null}
       {campaign.data ? <h2 className="screen-subtitle">{campaign.data.name}</h2> : null}
+
+      {/* Ce qui manque pour mesurer le retour de la campagne, nommé avant ses chiffres. */}
+      {campaign.data && onComplete && (brandAdmin || campaign.data.scope === 'LOCALE') ? <GapsNotice campaign={campaign.data} onComplete={onComplete} /> : null}
 
       {/* a. Cadrage : ce que l'assistant a fait saisir à la création. */}
       {campaign.data ? <CampaignBrief campaign={campaign.data} /> : null}
@@ -304,6 +310,24 @@ function LeadRow({
         </select>
       </td>
     </tr>
+  )
+}
+
+/** Les données qui manquent pour mesurer le retour, et l'accès à leur saisie. Rien ne manque : rien ne s'affiche. */
+function GapsNotice({ campaign, onComplete }: { campaign: CampaignDetail; onComplete: () => void }) {
+  const gaps = campaignGaps(campaign)
+  if (gaps.length === 0) return null
+
+  return (
+    <section className="card fix-notice">
+      <p>
+        <span className="tag-warn">À compléter</span> Son retour ne peut pas se mesurer : il manque{' '}
+        {gaps.map((g) => g.label.toLowerCase()).join(', ')}.
+      </p>
+      <button type="button" className="btn btn--sm" onClick={onComplete}>
+        Compléter la campagne →
+      </button>
+    </section>
   )
 }
 

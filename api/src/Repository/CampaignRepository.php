@@ -862,6 +862,187 @@ final class CampaignRepository
     }
 
     /**
+     * Les objectifs chiffrés par levier, seuls, quel que soit le statut.
+     *
+     * Une campagne lancée ne se réécrit plus en bloc (`updateWithRelations`) :
+     * ses objectifs, saisis à l'assistant, ne se complétaient donc plus nulle
+     * part, et une campagne lancée sans objectif ne se mesurait jamais. Cette
+     * écriture ne touche qu'à eux : chaque levier envoyé reçoit son montant
+     * visé ; un montant vide ou nul le détache, sauf s'il porte déjà un réalisé
+     * (`actual_value`), qu'on garde en ne vidant que la cible. Les leviers non
+     * envoyés ne bougent pas. Rejouer le même envoi donne le même état.
+     *
+     * Tout est contrôlé avant d'écrire : un levier inconnu ou un montant
+     * négatif refuse l'envoi entier, rien n'est écrit à moitié.
+     *
+     * @param list<mixed> $targets  `{lever_id, target_value}`
+     */
+    public function setLeverTargets(AuthContext $auth, int $id, array $targets): bool
+    {
+        $current = $this->find($auth, $id);
+        if ($current === null) {
+            return false;
+        }
+
+        $this->assertWritable($auth, $current);
+
+        $connection = Database::connection();
+        $known      = array_flip(array_map('intval', $connection->query('SELECT id FROM mar_lever')->fetchAll(PDO::FETCH_COLUMN)));
+
+        $clean = [];
+        foreach ($targets as $target) {
+            if (!is_array($target)) {
+                throw new RuntimeException('Objectif illisible : {lever_id, target_value} attendu.');
+            }
+            $leverId = (int) ($target['lever_id'] ?? 0);
+            if (!isset($known[$leverId])) {
+                throw new RuntimeException('Levier inconnu : ' . json_encode($target['lever_id'] ?? null) . '.');
+            }
+            $value = $target['target_value'] ?? null;
+            if ($value !== null && $value !== '' && (!is_numeric($value) || (float) $value < 0)) {
+                throw new RuntimeException('Le montant visé d\'un levier est un nombre positif.');
+            }
+            $clean[$leverId] = $value === null || $value === '' || (float) $value == 0.0 ? null : round((float) $value, 2);
+        }
+
+        $upsert = $connection->prepare(
+            'INSERT INTO mar_campaign_lever_target (campaign_id, lever_id, target_value, target_unit, created_by)
+             VALUES (:campaign_id, :lever_id, :target_value, \'EUR\', :created_by)
+             ON DUPLICATE KEY UPDATE target_value = :nouvelle'
+        );
+        $detach = $connection->prepare(
+            'DELETE FROM mar_campaign_lever_target
+              WHERE campaign_id = :campaign_id AND lever_id = :lever_id AND actual_value IS NULL'
+        );
+        $clear = $connection->prepare(
+            'UPDATE mar_campaign_lever_target SET target_value = NULL
+              WHERE campaign_id = :campaign_id AND lever_id = :lever_id'
+        );
+
+        $connection->beginTransaction();
+        try {
+            foreach ($clean as $leverId => $value) {
+                $keys = ['campaign_id' => $id, 'lever_id' => $leverId];
+                if ($value === null) {
+                    $detach->execute($keys);
+                    $clear->execute($keys);
+                } else {
+                    $upsert->execute($keys + ['target_value' => $value, 'created_by' => $auth->userId, 'nouvelle' => $value]);
+                }
+            }
+            $connection->commit();
+        } catch (\Throwable $failure) {
+            $connection->rollBack();
+
+            throw $failure;
+        }
+
+        return true;
+    }
+
+    /**
+     * Des produits du catalogue ajoutés à l'offre d'une campagne, quel que soit son statut.
+     *
+     * Le Retour sur opération du module Social compte les ventes des produits
+     * de l'offre ; sans produit, il répond « Aucun produit rattaché à la
+     * campagne » et ne mesure rien. Or l'offre d'une campagne lancée ne se
+     * réécrivait plus : la réécrire effacerait, en cascade, les objectifs par
+     * boutique et par produit et les bundles qui pointent ses lignes. On ne fait
+     * donc qu'AJOUTER : les lignes existantes ne bougent pas, un produit déjà
+     * présent n'est pas rajouté (rejouer l'envoi ne change rien), et une
+     * campagne sans offre en reçoit une, à son nom.
+     *
+     * Un identifiant inconnu du catalogue refuse l'envoi entier.
+     *
+     * @param list<mixed> $itemIds  identifiants de `mar_offer_item`
+     */
+    public function addOfferItems(AuthContext $auth, int $id, array $itemIds): bool
+    {
+        $current = $this->find($auth, $id);
+        if ($current === null) {
+            return false;
+        }
+
+        $this->assertWritable($auth, $current);
+
+        $wanted = [];
+        foreach ($itemIds as $itemId) {
+            if (!is_int($itemId) && !(is_string($itemId) && ctype_digit($itemId))) {
+                throw new RuntimeException('Produit illisible : un identifiant du catalogue est attendu.');
+            }
+            $wanted[(int) $itemId] = true;
+        }
+        $wanted = array_keys($wanted);
+
+        $connection = Database::connection();
+        $names      = [];
+        if ($wanted !== []) {
+            $lookup = $connection->prepare(sprintf(
+                'SELECT id, name FROM mar_offer_item WHERE is_active = 1 AND id IN (%s)',
+                implode(',', array_fill(0, count($wanted), '?'))
+            ));
+            $lookup->execute($wanted);
+            $names = $lookup->fetchAll(PDO::FETCH_KEY_PAIR);
+        }
+        foreach ($wanted as $itemId) {
+            if (!isset($names[$itemId])) {
+                throw new RuntimeException('Produit inconnu du catalogue : ' . $itemId . '.');
+            }
+        }
+
+        $connection->beginTransaction();
+        try {
+            $offer = $connection->prepare('SELECT id FROM mar_campaign_offer WHERE campaign_id = :id ORDER BY id LIMIT 1');
+            $offer->execute(['id' => $id]);
+            $offerId = (int) $offer->fetchColumn();
+            if ($offerId === 0) {
+                $connection->prepare(
+                    'INSERT INTO mar_campaign_offer (campaign_id, title, created_by) VALUES (:campaign_id, :title, :created_by)'
+                )->execute(['campaign_id' => $id, 'title' => (string) $current['name'], 'created_by' => $auth->userId]);
+                $offerId = (int) $connection->lastInsertId();
+            }
+
+            $present = $connection->prepare(
+                'SELECT offer_item_id, COALESCE(MAX(sort_order), 0) FROM mar_campaign_offer_item
+                  WHERE campaign_offer_id = :offer_id GROUP BY offer_item_id'
+            );
+            $present->execute(['offer_id' => $offerId]);
+            $rows  = $present->fetchAll(PDO::FETCH_KEY_PAIR);
+            $order = $rows === [] ? 0 : max(array_map('intval', $rows));
+
+            $insert = $connection->prepare(
+                'INSERT INTO mar_campaign_offer_item
+                    (campaign_offer_id, offer_item_id, label, sort_order,
+                     mechanic_type, discount_pct, fixed_price, buy_qty, get_qty,
+                     baseline_price, margin_pct, target_pieces, show_photo, image_url)
+                 VALUES
+                    (:offer_id, :offer_item_id, :label, :sort_order,
+                     :mechanic_type, :discount_pct, :fixed_price, :buy_qty, :get_qty,
+                     :baseline_price, :margin_pct, :target_pieces, :show_photo, :image_url)'
+            );
+            foreach ($wanted as $itemId) {
+                if (array_key_exists($itemId, $rows)) {
+                    continue;
+                }
+                $insert->execute([
+                    'offer_id'      => $offerId,
+                    'offer_item_id' => $itemId,
+                    'label'         => (string) $names[$itemId],
+                    'sort_order'    => ++$order,
+                ] + $this->pricingOf([]));
+            }
+
+            $connection->commit();
+        } catch (\Throwable $failure) {
+            $connection->rollBack();
+
+            throw $failure;
+        }
+
+        return true;
+    }
+
+    /**
      * Boutiques hors périmètre : on refuse avant d'ouvrir la transaction.
      *
      * Inutile d'écrire quoi que ce soit pour l'annuler ensuite.

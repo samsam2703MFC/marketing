@@ -10,6 +10,8 @@ interface CampaignsViewProps {
   onCreate: () => void
   /** Rouvre un brouillon dans l'assistant, là où il s'était arrêté. */
   onResume: (campaignId: number) => void
+  /** Les campagnes à qui il manque une donnée pour mesurer leur retour, une à une. */
+  onComplete: () => void
 }
 
 /**
@@ -24,6 +26,7 @@ export default function CampaignsView({
   onOpen,
   onCreate,
   onResume,
+  onComplete,
 }: CampaignsViewProps) {
   const [status, setStatus] = useState<string | null>(null)
   const [scope, setScope] = useState<'RESEAU' | 'LOCALE' | null>(null)
@@ -113,6 +116,9 @@ export default function CampaignsView({
             Locale
           </button>
 
+          <button type="button" className="btn btn--sm" onClick={onComplete}>
+            Compléter les données
+          </button>
           <button type="button" className="filter is-on" onClick={onCreate}>
             + Nouvelle campagne
           </button>

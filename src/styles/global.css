@@ -4286,3 +4286,27 @@ button.mc-tag { cursor: pointer; }
 .addresses .card > p.muted { margin: 2px 0 12px; font-size: 12.5px; }
 .addresses__session p { margin: 6px 0 0; }
 .addresses td .muted { font-size: 12px; margin-top: 2px; }
+
+/* Compléter les campagnes : une liste de contrôle, un manque = une saisie, à côté de ce qui lui manque. */
+.fix__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.fix__name { margin: 4px 0 0; font-size: 20px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.fix .card > p.muted { margin: 8px 0 0; font-size: 12.5px; }
+.fix__head .muted { margin: 0; font-size: 12px; }
+.fix__links { display: flex; flex-wrap: wrap; gap: 8px; }
+.fix__list { display: grid; gap: 0; margin: 12px 0 0; padding: 0; list-style: none; }
+.fix__list > li { padding: 12px 0; border-top: 1px solid var(--row-line); }
+.fix__list > li.is-ok { opacity: 0.75; }
+.fix__label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-size: 13px; }
+.fix__label .muted { font-size: 12px; }
+.fix__why { margin: 4px 0 8px; font-size: 12px; }
+.fix__inline, .fix__levers, .fix__found { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.fix__levers input { width: 6.5rem; text-align: right; }
+.fix__products input[type='search'] { width: min(28rem, 100%); padding: 6px 10px; font-size: 13px; }
+.fix__list input:not([type='search']), .fix__list select { font-size: 13px; }
+.fix__found { margin-top: 8px; }
+.fix__chosen { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 0; padding: 0; list-style: none; font-size: 13px; }
+.fix__chosen li { display: inline-flex; align-items: center; gap: 4px; }
+.fix__rest { margin: 8px 0 14px; padding-left: 1rem; }
+.fix__rest li { margin: 4px 0; }
+.fix-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.fix-notice p { margin: 0; font-size: 13px; }
