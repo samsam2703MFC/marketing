@@ -185,7 +185,7 @@ function TrackingReference({
   if (!periode) {
     return (
       <p className="muted wizard__hint">
-        La période n'est pas encore posée (étape « Type &amp; cadrage ») : la référence de l'an
+        La période n'est pas encore posée (étape « Cadrage ») : la référence de l'an
         dernier s'affichera ici, aux mêmes dates.
       </p>
     )

@@ -38,6 +38,8 @@ const BASE = `${API_ROOT}/api/v1/marketing`
 // l'API du module (même racine) ; le Marketing, servi à part (/marketing), le trouve à VITE_COCKPIT_BASE
 // (`/consulant_bo` sur le serveur, fixé au build).
 const COCKPIT_ROOT = (import.meta.env.VITE_COCKPIT_BASE ?? API_ROOT).replace(/\/+$/, '')
+// Le module Social & Ads (posts, publicités Meta), servi sous /marketing/social sur le même serveur.
+const SOCIAL_ROOT = (import.meta.env.VITE_SOCIAL_BASE || '/marketing/social/').replace(/\/+$/, '')
 
 /**
  * Le module est servi par l'application elle-même, pas derrière le proxy `/erp`
@@ -1791,3 +1793,46 @@ export function removeAnnexeType(typeId: number): Promise<{ types: AnnexeType[] 
 export function annexeHref(annexeId: number): string {
   return `${COCKPIT}/marketing/annexe/${annexeId}/fichier`
 }
+
+// ---------------------------------------------------------------------------
+// Ce que le module Social & Ads a rattaché à une campagne
+// ---------------------------------------------------------------------------
+
+/** Une publicité Meta rattachée à la campagne, avec les chiffres gardés par le module Social. */
+export interface SocialAd {
+  id: string
+  nom: string
+  statut: string
+  origine: 'meta' | 'module'
+  debut: string | null
+  fin: string | null
+  clics: number | null
+  affichages: number | null
+  depense: number
+  devise: string
+}
+
+/**
+ * Posts, publications et publicités rattachés à une campagne dans le module Social
+ * (`GET /operations/bo-{id}/rattache`), et l'adresse du webshop d'où partent les liens
+ * suivis. Lecture seule : le module Social ne demande rien à Meta pour répondre.
+ */
+export interface SocialAttached {
+  operation: string
+  posts: { total: number; parStatut: Record<string, number> }
+  publicationsMeta: number
+  publicites: SocialAd[]
+  /** `devise` null : plusieurs devises, la somme n'a pas de sens. */
+  totaux: { clics: number; affichages: number; depense: number; devise: string | null }
+  webshop: string
+}
+
+export function getSocialAttached(campaignId: number): Promise<SocialAttached> {
+  return request<SocialAttached>(`${SOCIAL_ROOT}/api/v1/social/operations/bo-${campaignId}/rattache`)
+}
+
+/** Un écran du module Social, ouvert sur la campagne (`op` : identifiant de la campagne ici). */
+export function socialScreen(file: string, campaignId: number | null): string {
+  return `${SOCIAL_ROOT}/${encodeURIComponent(file)}${campaignId === null ? '' : `?op=${campaignId}`}`
+}
+

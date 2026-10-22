@@ -168,6 +168,9 @@ final class CampaignController
             'starts_on', 'ends_on', 'budget_amount', 'objective_coef_pct', 'agency_note',
             'b2b_webshop_enabled', 'show_web_shop', 'pos_survey_enabled', 'spent_amount', 'approval_status',
             'create_crm_leads', 'b2b_offices_only', 'tracking_action_id', 'tracking_scope', 'tracking_target', 'tracking_baseline', 'image_url',
+            // Les couleurs sont des colonnes de la campagne : l'assistant les enregistre aussi sur
+            // une campagne lancée, qu'il ne réécrit plus en bloc.
+            'color_primary_hex', 'color_secondary_hex', 'color_accent_hex', 'color_ink_hex',
         ]);
 
         return $this->campaigns->update(AuthContext::current(), $id, $payload)

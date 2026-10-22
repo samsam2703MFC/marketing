@@ -844,7 +844,7 @@ export default function PricingStep({
           <span className="cond-card__label">Période</span>
           <span className="cond-card__value">
             {draft.starts_on === '' || draft.ends_on === ''
-              ? 'À définir à l’étape « Type & cadrage »'
+              ? 'À définir à l’étape « Cadrage »'
               : `Du ${draft.starts_on.split('-').reverse().join('/')} au ${draft.ends_on
                   .split('-')
                   .reverse()
@@ -900,7 +900,7 @@ export default function PricingStep({
           <h3 className="section-label">
             Ce que ça demande au réseau
             <span className="section-label__aside">
-              Volumes de la période analysée à l’étape « Objectifs »
+              Volumes de la période analysée à l’étape « Objectifs de vente »
             </span>
           </h3>
 
@@ -922,7 +922,7 @@ export default function PricingStep({
               <div className="kpi__value">{fr(objectif)}</div>
               <div className="kpi__label">Objectif du réseau</div>
               <div className="kpi__note">
-                {objectif === 0 ? 'pas encore posé' : 'posé à l’étape « Objectifs »'}
+                {objectif === 0 ? 'pas encore posé' : 'posé à l’étape « Objectifs de vente »'}
               </div>
             </div>
             <div className="kpi" style={{ borderLeftColor: 'var(--accent)' }}>

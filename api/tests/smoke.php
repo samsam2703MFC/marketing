@@ -1097,6 +1097,13 @@ foreach ([
     check('suivi refusé (' . $cas . ') : 422, rien d\'écrit', $refus['status'] === 422
         && call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d', $idSuivi))['body']['tracking_scope'] === 'SHOP', 'statut ' . $refus['status']);
 }
+// L'assistant enregistre une campagne lancée en PATCH, colonnes seules : les couleurs en font partie.
+call($router, 'PATCH', sprintf('/api/v1/marketing/campaigns/%d', $idSuivi), [], ['status_code' => 'planned']);
+$couleurs = call($router, 'PATCH', sprintf('/api/v1/marketing/campaigns/%d', $idSuivi), [], ['color_primary_hex' => '#8D1D2C', 'name' => 'Suivi renommé']);
+$fiche = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d', $idSuivi))['body'];
+check('campagne lancée : couleurs et nom se changent en PATCH, sans toucher au reste', $couleurs['status'] === 200
+    && strtoupper((string) ($fiche['color_primary_hex'] ?? '')) === '#8D1D2C' && $fiche['name'] === 'Suivi renommé' && $fiche['status_code'] === 'planned'
+    && ($fiche['tracking_action_code'] ?? '') === 'trafic', json_encode([$couleurs['status'], $fiche['color_primary_hex'] ?? null, $fiche['name'] ?? null]));
 call($router, 'DELETE', sprintf('/api/v1/marketing/campaigns/%d', $idSuivi));
 
 // Réécriture en bloc : les rattachements sont remplacés, pas empilés. Les
