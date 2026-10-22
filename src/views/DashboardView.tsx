@@ -6,16 +6,18 @@ interface DashboardProps {
   statuses: CampaignStatus[]
   levers: Lever[]
   brandId: number | 'all'
+  /** Vue Réseau : la performance par levier couvre tout le réseau, un franchisé ne la lit pas. */
+  network: boolean
   onOpen: (campaignId: number) => void
 }
 
 /** Vue d'entrée : volumétrie des campagnes, budget engagé, performance par levier. */
-export default function DashboardView({ statuses, levers, brandId, onOpen }: DashboardProps) {
+export default function DashboardView({ statuses, levers, brandId, network, onOpen }: DashboardProps) {
   const campaigns = useAsync(
     () => api.listCampaigns(brandId === 'all' ? {} : { brand_id: brandId }),
     [brandId],
   )
-  const leverPerf = useAsync(() => api.getLeverSummary(), [])
+  const leverPerf = useAsync(() => (network ? api.getLeverSummary() : Promise.resolve([])), [network])
 
   const rows = campaigns.data ?? []
   // Le budget exclut les brouillons. L'assistant enregistre à chaque étape,

@@ -307,6 +307,7 @@ function Workspace() {
               statuses={refs.campaignStatuses}
               levers={refs.levers}
               brandId={brandId}
+              network={role === 'BRAND_ADMIN'}
               onOpen={openCampaign}
             />
           ) : null}

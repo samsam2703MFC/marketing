@@ -25,9 +25,17 @@ final class FundController
         ]));
     }
 
+    /**
+     * Performance par levier, ROI trimestriel, postes de coût : des agrégats du
+     * réseau entier, sans boutique à laquelle les restreindre. Un franchisé n'y
+     * a pas accès — il y lisait les chiffres de ses confrères.
+     */
     public function leverSummary(Request $request): array
     {
         unset($request);
+        if (!AuthContext::current()->isBrandAdmin()) {
+            return Response::forbidden('Les chiffres de performance couvrent tout le réseau : ils sont réservés à la marque.');
+        }
 
         return Response::data($this->funds->leverSummary());
     }
@@ -35,12 +43,19 @@ final class FundController
     public function roiQuarterly(Request $request): array
     {
         unset($request);
+        if (!AuthContext::current()->isBrandAdmin()) {
+            return Response::forbidden('Les chiffres de performance couvrent tout le réseau : ils sont réservés à la marque.');
+        }
 
         return Response::data($this->funds->roiQuarterly());
     }
 
     public function roiCosts(Request $request): array
     {
+        if (!AuthContext::current()->isBrandAdmin()) {
+            return Response::forbidden('Les chiffres de performance couvrent tout le réseau : ils sont réservés à la marque.');
+        }
+
         $id = $request->intParam('id');
         if ($id === null) {
             return Response::error('Identifiant de campagne invalide.');

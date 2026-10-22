@@ -57,6 +57,10 @@ final class NetworkController
     public function analysis(Request $request): array
     {
         unset($request);
+        // Agrégats du réseau entier (leviers, postes de coût) : la marque seule.
+        if (!AuthContext::current()->isBrandAdmin()) {
+            return Response::forbidden('Les chiffres de performance couvrent tout le réseau : ils sont réservés à la marque.');
+        }
 
         return Response::data([
             'levers' => $this->funds->leverSummary(),
@@ -68,6 +72,9 @@ final class NetworkController
     public function roi(Request $request): array
     {
         unset($request);
+        if (!AuthContext::current()->isBrandAdmin()) {
+            return Response::forbidden('Les chiffres de performance couvrent tout le réseau : ils sont réservés à la marque.');
+        }
 
         return Response::data([
             'quarterly' => $this->funds->roiQuarterly(),
