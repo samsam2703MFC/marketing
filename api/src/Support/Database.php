@@ -78,6 +78,39 @@ final class Database
     }
 
     /**
+     * Cette colonne existe-t-elle vraiment ?
+     *
+     * Les tables du module sont posées par `sql/mar-referentiels.sql`, rejoué à
+     * la main : une colonne récente manque tant que le rejeu n'a pas eu lieu.
+     * Le code qui s'en sert demande donc avant d'écrire, plutôt que de faire
+     * échouer TOUTES les écritures d'une table pour une colonne absente — et
+     * l'écran dit alors ce qui lui manque au lieu de rendre une erreur nue.
+     *
+     * Mémorisé le temps de la requête HTTP : information_schema ne bouge pas
+     * sous nos pieds pendant un appel.
+     *
+     * @var array<string,bool>
+     */
+    private static array $columns = [];
+
+    public static function hasColumn(string $table, string $column): bool
+    {
+        $key = $table . '.' . $column;
+        if (array_key_exists($key, self::$columns)) {
+            return self::$columns[$key];
+        }
+
+        $statement = self::connection()->prepare(
+            'SELECT 1 FROM information_schema.columns
+              WHERE table_schema = DATABASE() AND table_name = :t AND column_name = :c
+              LIMIT 1'
+        );
+        $statement->execute(['t' => $table, 'c' => $column]);
+
+        return self::$columns[$key] = (bool) $statement->fetchColumn();
+    }
+
+    /**
      * Construit une liste de placeholders nommés pour une clause IN.
      * Retourne le fragment SQL et les paramètres à lier.
      *

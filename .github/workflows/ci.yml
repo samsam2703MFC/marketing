@@ -181,18 +181,21 @@ jobs:
       - name: Typecheck et build — Réseau
         env:
           DEPLOY_DIR: ${{ vars.DEPLOY_DIR || vars.DEPLOY_PATH || '/var/www/html/marketing' }}
+          # Le cockpit du BO (KPI d'une période, documents joints d'une campagne), sur le même serveur.
+          COCKPIT_PATH: ${{ vars.COCKPIT_PATH || '/consulant_bo' }}
         run: |
           URL_PATH=$(printf '%s' "$DEPLOY_DIR" | sed 's|^/var/www/html||; s|/$||')
-          VITE_ROLE=BRAND_ADMIN VITE_BASE="$URL_PATH/" VITE_API_BASE="$URL_PATH" npm run build
+          VITE_ROLE=BRAND_ADMIN VITE_BASE="$URL_PATH/" VITE_API_BASE="$URL_PATH" VITE_COCKPIT_BASE="$COCKPIT_PATH" npm run build
           rm -rf dist-reseau && mv dist dist-reseau
           echo "Réseau : base=$URL_PATH/"
 
       - name: Build — Franchisé
         env:
           DEPLOY_DIR_FRANCHISE: ${{ vars.DEPLOY_DIR_FRANCHISE || '/var/www/html/marketingc' }}
+          COCKPIT_PATH: ${{ vars.COCKPIT_PATH || '/consulant_bo' }}
         run: |
           URL_PATH=$(printf '%s' "$DEPLOY_DIR_FRANCHISE" | sed 's|^/var/www/html||; s|/$||')
-          VITE_ROLE=FRANCHISEE VITE_BASE="$URL_PATH/" VITE_API_BASE="$URL_PATH" npm run build
+          VITE_ROLE=FRANCHISEE VITE_BASE="$URL_PATH/" VITE_API_BASE="$URL_PATH" VITE_COCKPIT_BASE="$COCKPIT_PATH" npm run build
           rm -rf dist-franchise && mv dist dist-franchise
           echo "Franchisé : base=$URL_PATH/"
 

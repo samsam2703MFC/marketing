@@ -3883,3 +3883,84 @@ table select,
   gap: 1rem;
   flex-wrap: wrap;
 }
+
+/* --- KPI du levier, étape « Budget & leviers » -----------------------------
+   Le bandeau porte le KPI et sa référence ; le tableau porte le détail par
+   magasin. Deux blocs, pas un : la valeur réseau se lit d'un coup d'œil sans
+   avoir à additionner cinq lignes de tête. */
+
+.kpi__intro { font-size: 12.5px; }
+.kpi__bascule { margin: 10px 0 12px; }
+.kpi__fenetres { font-size: 12.5px; margin: 14px 0 2px; }
+
+.kpi-band {
+  display: flex; align-items: flex-start; flex-wrap: wrap; gap: 16px;
+  padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--table-head);
+}
+.kpi-band__main { flex: 1 1 20rem; min-width: 16rem; }
+.kpi-band__nom { font-size: 15px; font-weight: 500; margin-right: 8px; }
+.kpi-band__src { font-size: 11.5px; color: var(--muted); margin: 6px 0 0; }
+.kpi-band__val { text-align: right; min-width: 8rem; }
+.kpi-band__val b { display: block; font-size: 22px; font-weight: 500; line-height: 1.15; }
+.kpi-band__val span { font-size: 11.5px; color: var(--muted); }
+
+/* La pastille dit d'où sort le chiffre. Sans elle, une valeur relevée à la
+   main et une valeur lue en caisse se ressemblent — et seule la première se
+   discute. */
+.badge {
+  display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px;
+  font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; font-weight: 600;
+  vertical-align: 2px;
+}
+.badge--mesure { background: rgba(63, 122, 82, .12); color: var(--green); }
+
+table.kpi-ref { width: 100%; min-width: 0; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+table.kpi-ref th {
+  font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+  text-align: left; font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line);
+}
+table.kpi-ref th.num, table.kpi-ref td.num { text-align: right; }
+table.kpi-ref td { padding: 9px 10px; border-bottom: 1px solid var(--row-line); }
+table.kpi-ref tr.total td { background: var(--total-line); font-weight: 500; border-bottom: none; }
+table.kpi-ref .up { color: var(--green); }
+table.kpi-ref .down { color: var(--accent); }
+table.kpi-ref .nil { color: var(--faint); }
+table.kpi-ref .objectif { font-weight: 500; }
+
+.kpi-leviers {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 8px; margin-top: 10px;
+}
+.kpi-levier { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fff; }
+.kpi-levier.is-on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.kpi-levier__t { display: flex; align-items: center; gap: 7px; font-size: 12.5px; }
+.kpi-levier__k { font-size: 12.5px; margin: 6px 0 2px; }
+.kpi-levier__s { font-size: 11px; color: var(--muted); }
+
+/* Les bornes sous l'intitulé : « Avant » et « Pendant » ne disent pas de
+   quand ils parlent, et la phrase qui portait les quatre dates obligeait à
+   faire l'aller-retour entre elle et la colonne. */
+table.kpi-ref th small { display: block; margin-top: 2px; font-size: 10px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--faint); }
+
+/* Le renvoi d'un chiffre qui n'est pas la référence demandée. Discret mais
+   pas invisible : sans lui, une moyenne de trois mois se lirait comme un N-1. */
+table.kpi-ref sup.repli, .wizard-card sup.repli { color: var(--accent); font-weight: 600; font-size: 9px; margin-left: 2px; cursor: help; }
+
+/* --- Documents joints à une campagne ---------------------------------------
+   Le dépôt est une rangée de champs, pas un formulaire : le type se choisit ou
+   s'écrit, et le fichier part aussitôt choisi. */
+.annexes__depot { margin: 10px 0 6px; align-items: flex-end; }
+.annexes__bouton { position: relative; overflow: hidden; cursor: pointer; }
+.annexes__bouton input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.annexes__bouton.is-busy { opacity: .6; cursor: progress; }
+.annexes__types { font-size: 11.5px; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.annexes__type { gap: 4px; }
+.annexes__type button { margin: 0; padding: 0 0 0 3px; border: none; background: none; color: var(--muted); font-size: 11px; cursor: pointer; line-height: 1; }
+table.annexes { width: 100%; min-width: 0; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+table.annexes th { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); text-align: left; font-weight: 600; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--line); }
+table.annexes th.num, table.annexes td.num { text-align: right; }
+table.annexes td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--row-line); }
+table.annexes a { color: var(--ink); }
+.annexes__perdu { font-size: 11px; margin-top: 3px; }
+.annexes__retirer { margin: 0; padding: 0 2px; border: none; background: none; color: var(--muted); font-size: 12px; cursor: pointer; }

@@ -246,3 +246,33 @@ Ce qui n'est **pas** concerné, et pourquoi :
 Côté écran, l'entrée de menu « Fonds & Royalties » devient **« Fonds marketing »** :
 le fonds est ce que l'écran gère, les royalties n'en sont qu'une origine de
 recette parmi cinq.
+
+---
+
+## 6. L'assistant de campagne regroupé ici (octobre 2026)
+
+L'assistant avait deux copies : celle-ci et celle du BO (`consultant_BO`,
+`tools/assistant-src` et `public/api/marketing`), qui avait évolué de son côté.
+Tout est désormais ici ; la page de l'assistant du BO renvoie vers le Marketing
+(`/marketing/?campagne={id}&assistant=1`). **Aucune route nouvelle** : les routes
+existantes acceptent quelques champs de plus, ce qui ne casse aucun client (§20).
+
+| Route | Ce qui s'ajoute | D'où |
+|---|---|---|
+| `POST …/campaigns`, `PUT …/campaigns/{id}/draft`, `PATCH …/campaigns/{id}` | `b2b_offices_only` (booléen) ; `channels[].is_enabled` (canal retenu ≠ validé ; absent = validé) | assistant du BO, migration 035 |
+| idem | `tracking_action_id`, `tracking_scope` (`SHOP` \| `NETWORK`), `tracking_target` (≥ 0), `tracking_baseline` (`N1` \| `AVANT`) — le **suivi** de la campagne ; valeurs inconnues → `422` | migration 036 |
+| `GET …/campaigns/{id}` | `tracking_action_code`, `tracking_action_label`, `tracking_unit_label`, `tracking_source_label`, `tracking_cockpit_measure` | migration 036 |
+| `GET …/campaigns/{id}/draft` | `b2b_offices_only`, `channels[].is_enabled`, les quatre champs du suivi | — |
+| `GET …/references` | `trackingActions` : `{id, code, label, unit_label, source_label, cockpit_measure}` | migration 036 |
+| `GET …/b2b/prospects`, `…/b2b/prospects/count` | `?offices_only=1` ; le compte rend `offices` (`null` tant que le vivier ne le sait pas) | assistant du BO |
+| `POST …/campaigns` | un brouillon identique (même marque, nom et dates) n'est pas recréé : son identifiant est rendu | assistant du BO |
+
+Écart résiduel, inchangé : `snake_case`, pas d'enveloppe `{success, data, meta}`
+(module antérieur au standard, bascule en `v2` à décider).
+
+**Routes du cockpit appelées par l'assistant.** Le KPI du levier et la référence
+du suivi (`GET /api/cockpit/marketing/kpi-periode`) ainsi que les documents
+joints (`/api/cockpit/marketing/campagne/{id}/annexes`, `…/annexe/{id}`) sont
+servis par le cockpit du BO, pas par ce module : ils lisent la caisse et le
+disque du BO. Leur racine vient de la configuration (`VITE_COCKPIT_BASE`,
+`/consulant_bo` sur le serveur ; variable `COCKPIT_PATH` du déploiement).

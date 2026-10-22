@@ -1012,6 +1012,93 @@ check(
 check('les canaux reviennent avec leur budget', ($etat['channels'][0]['budget_amount'] ?? null) == 400);
 check('le rétroplanning enregistré revient', count($etat['retroplanning']) === 1);
 
+// Repris de l'assistant du BO quand tout l'assistant est revenu ici : le filtre
+// « bureaux à livrer » part avec la campagne, un canal peut être retenu sans être
+// validé, et rouvrir l'assistant sur un brouillon identique ne l'empile pas.
+$bureaux = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name'             => 'Bureaux à livrer',
+    'status_code'      => 'draft',
+    'scope'            => 'RESEAU',
+    'client_target'    => 'b2b',
+    'type_id'          => (int) $types['ouverture']['id'],
+    'starts_on'        => '2031-03-02',
+    'ends_on'          => '2031-03-29',
+    'b2b_offices_only' => true,
+    'sector_ids'       => [(int) $secteurs['offices']],
+    'channels'         => [
+        ['channel_id' => (int) $refs['channels'][0]['id'], 'budget_amount' => 300, 'is_enabled' => false],
+        ['channel_id' => (int) $refs['channels'][1]['id'], 'budget_amount' => 120],
+    ],
+]);
+$idBureaux = (int) $bureaux['body']['inserted_id'];
+$etatBureaux = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $idBureaux))['body'];
+check('« bureaux à livrer » revient avec le brouillon', ($etatBureaux['b2b_offices_only'] ?? null) === true, json_encode($etatBureaux['b2b_offices_only'] ?? null));
+$canaux = array_column($etatBureaux['channels'] ?? [], 'is_enabled', 'channel_id');
+check(
+    'un canal retenu n\'est pas validé ; sans précision, il l\'est (campagnes d\'avant)',
+    isset($canaux[(int) $refs['channels'][0]['id']]) && !$canaux[(int) $refs['channels'][0]['id']]
+        && !empty($canaux[(int) $refs['channels'][1]['id']]),
+    json_encode($canaux)
+);
+$encore = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name' => 'Bureaux à livrer', 'status_code' => 'draft', 'scope' => 'RESEAU', 'client_target' => 'b2b',
+    'type_id' => (int) $types['ouverture']['id'], 'starts_on' => '2031-03-02', 'ends_on' => '2031-03-29',
+]);
+check('le même brouillon (nom et dates) n\'est pas créé deux fois', (int) ($encore['body']['inserted_id'] ?? 0) === $idBureaux);
+call($router, 'DELETE', sprintf('/api/v1/marketing/campaigns/%d', $idBureaux));
+
+echo "\nSuivi d'une campagne : action suivie, par boutique ou pour le réseau\n";
+$actions = array_column($refs['trackingActions'] ?? [], null, 'code');
+check(
+    'les actions suivies viennent du référentiel, avec unité et source',
+    isset($actions['trafic'], $actions['commandes_web'], $actions['clients_b2b'], $actions['panier'])
+        && $actions['trafic']['cockpit_measure'] === 'trafic' && $actions['commandes_web']['cockpit_measure'] === null
+        && $actions['trafic']['unit_label'] !== '',
+    json_encode(array_keys($actions))
+);
+$suivi = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name' => 'Suivi des commandes en ligne', 'status_code' => 'draft', 'scope' => 'RESEAU', 'client_target' => 'b2b',
+    'type_id' => (int) $types['ouverture']['id'],
+    'tracking_action_id' => (int) $actions['commandes_web']['id'], 'tracking_scope' => 'NETWORK',
+    'tracking_target' => '120', 'tracking_baseline' => 'N1',
+]);
+$idSuivi = (int) ($suivi['body']['inserted_id'] ?? 0);
+$etatSuivi = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $idSuivi))['body'];
+check(
+    'le suivi revient avec le brouillon (action, réseau, cible, l\'an dernier)',
+    ($etatSuivi['tracking_action_id'] ?? null) === (int) $actions['commandes_web']['id'] && $etatSuivi['tracking_scope'] === 'NETWORK'
+        && $etatSuivi['tracking_target'] === 120.0 && $etatSuivi['tracking_baseline'] === 'N1',
+    json_encode(array_intersect_key($etatSuivi, array_flip(['tracking_action_id', 'tracking_scope', 'tracking_target', 'tracking_baseline'])))
+);
+$fiche = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d', $idSuivi))['body'];
+check(
+    'la fiche dit l\'action suivie en clair, son unité et où elle se lit',
+    ($fiche['tracking_action_label'] ?? '') === 'Commandes en ligne (webshop)' && ($fiche['tracking_unit_label'] ?? '') === 'commandes'
+        && ($fiche['tracking_source_label'] ?? '') === 'Webshop' && $fiche['tracking_cockpit_measure'] === null,
+    json_encode(array_intersect_key($fiche, array_flip(['tracking_action_label', 'tracking_unit_label', 'tracking_source_label'])))
+);
+$maj = call($router, 'PATCH', sprintf('/api/v1/marketing/campaigns/%d', $idSuivi), [], [
+    'tracking_action_id' => (int) $actions['trafic']['id'], 'tracking_scope' => 'SHOP', 'tracking_target' => '', 'tracking_baseline' => 'AVANT',
+]);
+$fiche = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d', $idSuivi))['body'];
+check(
+    'le suivi se change : trafic en magasin, par boutique, sans cible, juste avant le lancement',
+    $maj['status'] === 200 && ($fiche['tracking_action_code'] ?? '') === 'trafic' && $fiche['tracking_scope'] === 'SHOP'
+        && $fiche['tracking_target'] === null && $fiche['tracking_baseline'] === 'AVANT' && $fiche['tracking_cockpit_measure'] === 'trafic',
+    json_encode([$maj['status'], $fiche['tracking_action_code'] ?? null, $fiche['tracking_scope'] ?? null, $fiche['tracking_target'] ?? 'x'])
+);
+foreach ([
+    'action inconnue'   => ['tracking_action_id' => 999999],
+    'portée inconnue'   => ['tracking_scope' => 'MONDE'],
+    'référence inconnue'=> ['tracking_baseline' => 'HIER'],
+    'cible négative'    => ['tracking_target' => -5],
+] as $cas => $corps) {
+    $refus = call($router, 'PATCH', sprintf('/api/v1/marketing/campaigns/%d', $idSuivi), [], $corps);
+    check('suivi refusé (' . $cas . ') : 422, rien d\'écrit', $refus['status'] === 422
+        && call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d', $idSuivi))['body']['tracking_scope'] === 'SHOP', 'statut ' . $refus['status']);
+}
+call($router, 'DELETE', sprintf('/api/v1/marketing/campaigns/%d', $idSuivi));
+
 // Réécriture en bloc : les rattachements sont remplacés, pas empilés. Les
 // ajouter aux précédents laisserait les canaux d'avant à côté des nouveaux, et
 // les budgets doubleraient sans que rien ne le signale.

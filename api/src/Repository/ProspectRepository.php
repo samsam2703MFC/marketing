@@ -36,6 +36,25 @@ final class ProspectRepository
     private const LIST_MAX = 2000;
 
     /**
+     * Le vivier sait-il dire qui est un bureau à livrer ?
+     *
+     * La colonne vient du rejeu de `sql/mar-referentiels.sql` et de la reprise
+     * ERP qui la remplit. Tant que l'un des deux n'a pas eu lieu, le filtre ne
+     * peut pas être proposé : l'écran l'affiche éteint et dit pourquoi, plutôt
+     * que de rendre une liste vide qu'on lirait comme « aucun bureau ».
+     */
+    public static function bureauxConnus(): bool
+    {
+        return Database::hasColumn('mar_b2b_prospect', 'is_office');
+    }
+
+    /** Fragment SQL du filtre, ou rien s'il ne s'applique pas. */
+    private static function filtreBureaux(bool $bureauxSeuls): string
+    {
+        return $bureauxSeuls && self::bureauxConnus() ? ' AND p.is_office = 1' : '';
+    }
+
+    /**
      * Effectif du vivier par secteur, en regard du chiffre de cadrage.
      *
      * Les deux sont affichés côte à côte parce qu'ils ne disent pas la même
@@ -93,6 +112,7 @@ final class ProspectRepository
         AuthContext $auth,
         array $sectorIds,
         array $shopIds = [],
+        bool $bureauxSeuls = false,
         int $limit = self::LIST_MAX,
     ): array {
         if ($sectorIds === []) {
@@ -115,7 +135,7 @@ final class ProspectRepository
         // de l'événementiel est aussi un client horeca.
         $statement = Database::connection()->prepare(sprintf(
             'SELECT p.id, p.company_name, p.contact_name, p.contact_email, p.city,
-                    p.postal_code, p.shop_id, s.name AS shop_name,
+                    p.postal_code, p.shop_id, s.name AS shop_name, %s AS is_office,
                     (SELECT GROUP_CONCAT(sec.label ORDER BY sec.sort_order SEPARATOR \', \')
                        FROM mar_b2b_prospect_sector ls
                        JOIN mar_b2b_sector sec ON sec.id = ls.sector_id
@@ -128,20 +148,23 @@ final class ProspectRepository
                        WHERE ps.prospect_id = p.id AND ps.sector_id IN (%s)
                 )
                 AND (p.shop_id IS NULL OR %s)
-                %s
+                %s%s
               ORDER BY p.company_name
               LIMIT %d',
+            self::bureauxConnus() ? 'p.is_office' : '0',
             $placeholders,
             $scopeSql,
             $shopSql,
+            self::filtreBureaux($bureauxSeuls),
             $limit
         ));
         $statement->execute($sectorBindings + $bindings + $shopBindings);
 
         $rows = $statement->fetchAll();
         foreach ($rows as &$row) {
-            $row['id']      = (int) $row['id'];
-            $row['shop_id'] = $row['shop_id'] === null ? null : (int) $row['shop_id'];
+            $row['id']        = (int) $row['id'];
+            $row['shop_id']   = $row['shop_id'] === null ? null : (int) $row['shop_id'];
+            $row['is_office'] = (bool) $row['is_office'];
         }
 
         return $rows;
@@ -159,10 +182,15 @@ final class ProspectRepository
      *
      * @param list<int> $sectorIds
      */
-    public function countBySectors(AuthContext $auth, array $sectorIds, array $shopIds = []): array
-    {
+    public function countBySectors(
+        AuthContext $auth,
+        array $sectorIds,
+        array $shopIds = [],
+        bool $bureauxSeuls = false,
+    ): array {
         if ($sectorIds === []) {
-            return ['total' => 0, 'network' => 0, 'without_shop' => 0];
+            return ['total' => 0, 'network' => 0, 'without_shop' => 0,
+                    'offices' => self::bureauxConnus() ? 0 : null];
         }
 
         [$scopeSql, $bindings]           = Scope::shopFilter($auth, 'p.shop_id');
@@ -194,17 +222,26 @@ final class ProspectRepository
         };
 
         [$shopSql, $shopBindings] = self::attachedTo($shopIds);
+        $bureaux = self::filtreBureaux($bureauxSeuls);
 
         return [
-            // Ce que la campagne démarchera réellement.
-            'total'   => $compter($shopSql, $shopBindings),
+            // Ce que la campagne démarchera réellement — filtre des bureaux
+            // compris, puisqu'il commande aussi la génération.
+            'total'   => $compter($shopSql . $bureaux, $shopBindings),
             // Le vivier entier des mêmes secteurs : c'est l'écart entre les deux
             // qui dit ce que le choix des boutiques a écarté.
-            'network' => $compter('', []),
+            'network' => $compter($bureaux, []),
             // Rattachés à aucune boutique. Ils ne relèvent d'aucun périmètre
             // local, et les taire ferait passer un trou de données pour un
             // vivier vide.
-            'without_shop' => $shopIds === [] ? 0 : $compter('AND p.shop_id IS NULL', []),
+            'without_shop' => $shopIds === [] ? 0 : $compter('AND p.shop_id IS NULL' . $bureaux, []),
+            // Combien, dans ce périmètre, sont des bureaux à livrer : c'est le
+            // chiffre que porte le bouton du filtre. Il se compte SANS le
+            // filtre, sinon il vaudrait toujours le total et n'apprendrait
+            // rien avant le clic. `null` = le vivier ne le sait pas encore.
+            'offices' => self::bureauxConnus()
+                ? $compter($shopSql . ' AND p.is_office = 1', $shopBindings)
+                : null,
         ];
     }
 
@@ -464,11 +501,15 @@ final class ProspectRepository
                       SELECT 1 FROM mar_crm_lead ld
                        WHERE ld.campaign_id = :campaign_id AND ld.prospect_id = p.id
                 )
-                %s
+                %s%s
               ORDER BY p.company_name',
             $pickPlaceholders,
             $placeholders,
-            $shopSql
+            $shopSql,
+            // Le choix fait dans l'assistant COMMANDE la génération : sans
+            // cette ligne, l'écran montrerait douze bureaux et la campagne
+            // créerait huit cents leads.
+            self::filtreBureaux(!empty($campaign['b2b_offices_only']))
         ));
         $statement->execute($bindings);
         $prospects = $statement->fetchAll();
@@ -615,9 +656,12 @@ final class ProspectRepository
         $bindings['id']        = $campaignId;
 
         $statement = Database::connection()->prepare(sprintf(
-            'SELECT c.id, c.brand_id, c.scope, c.client_target
+            'SELECT c.id, c.brand_id, c.scope, c.client_target%s
                FROM mar_campaign c
               WHERE c.id = :id AND %s',
+            // La colonne n'existe que si le rejeu des référentiels a eu lieu :
+            // une installation en retard génère comme avant, sans filtre.
+            Database::hasColumn('mar_campaign', 'b2b_offices_only') ? ', c.b2b_offices_only' : '',
             $scopeSql
         ));
         $statement->execute($bindings);
