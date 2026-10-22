@@ -321,7 +321,7 @@ function Workspace() {
             />
           ) : null}
 
-          {route === 'calendar' ? <CalendarView onOpen={openCampaign} /> : null}
+          {route === 'calendar' ? <CalendarView onOpen={openCampaign} role={role} brandId={brandId} /> : null}
 
           {route === 'funds' ? <FundsView /> : null}
 

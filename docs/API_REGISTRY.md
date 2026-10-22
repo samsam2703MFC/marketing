@@ -283,3 +283,16 @@ disque du BO. Leur racine vient de la configuration (`VITE_COCKPIT_BASE`,
 (module Social & Ads, `/marketing/social/` sur le serveur) : posts, publications et
 publicités Meta rattachés, et l'adresse du webshop des liens suivis. Lecture seule.
 
+**Routes lues par le Calendrier marketing** (vue Réseau seule, lecture seule) :
+
+| Route | Ce que la frise en tire |
+|---|---|
+| `GET /api/v1/marketing/campaigns` | les campagnes et leurs dates (ce module) |
+| `GET {VITE_SOCIAL_BASE}api/v1/social/state` | les posts du module Social (hors brouillons) et les publicités Meta qu'il suit |
+| `GET {VITE_SOCIAL_BASE}api/v1/social/meta/calendriers?du=&au=` | les publications des Pages et comptes Instagram hors module (100 jours au plus ; relues chez Meta, une dizaine de secondes) |
+| `GET {VITE_SOCIAL_BASE}api/v1/social/google` | les avis Google et la note du réseau face à la cible |
+| `GET {VITE_COCKPIT_BASE}/api/cockpit/marketing/hub` | les newsletters et SMS du cockpit (`emailing.liste`, sans les modèles `exemple` ni les brouillons) |
+
+`GET /api/v1/marketing/campaigns/calendar` n'est plus lu par le front : la frise
+place les campagnes elle-même, au jour près.
+

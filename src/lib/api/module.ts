@@ -689,16 +689,6 @@ export function deleteCampaign(id: number): Promise<{ status: string; message: s
   return request(`${BASE}/campaigns/${id}`, { method: 'DELETE' })
 }
 
-/** Barre de calendrier : le mois de départ et la portée viennent du serveur. */
-export interface CalendarBar extends Campaign {
-  start_month: number
-  span_months: number
-}
-
-export function getCalendar(year: number): Promise<CalendarBar[]> {
-  return request<CalendarBar[]>(`${BASE}/campaigns/calendar`, { query: { year } })
-}
-
 export interface MonitorKpi {
   kpi_code: string
   kpi_label: string | null
@@ -1836,3 +1826,121 @@ export function socialScreen(file: string, campaignId: number | null): string {
   return `${SOCIAL_ROOT}/${encodeURIComponent(file)}${campaignId === null ? '' : `?op=${campaignId}`}`
 }
 
+
+// ---------------------------------------------------------------------------
+// Le calendrier marketing : ce que les autres modules ont prévu ou publié
+// ---------------------------------------------------------------------------
+
+/** Un post du module Social (création, validation, programmation, publication). */
+export interface SocialPost {
+  id: string
+  date: string
+  time: string
+  type: string
+  title: string
+  /** Chemin relatif au module Social (`uploads/…`) ou adresse absolue. */
+  img: string | null
+  fb: boolean
+  ig: boolean
+  /** Canaux par boutique : `{ "4": { fb: true, ig: false } }`. */
+  ch: Record<string, { fb?: boolean; ig?: boolean }> | null
+  shops: string[] | null
+  status: string
+  /** `bo-19` : la campagne du Marketing à laquelle le post est rattaché. */
+  campaign: string | null
+}
+
+/** Une publicité Meta suivie par le module Social. */
+export interface SocialAdItem {
+  id: string
+  name: string
+  status: string
+  start: string | null
+  end: string | null
+  campaign: string | null
+  spent: number | null
+  devise: string | null
+  lienMeta: string | null
+  gone: boolean
+}
+
+export interface SocialState {
+  posts: SocialPost[]
+  ads: SocialAdItem[]
+}
+
+/** L'état du module Social : ses posts et les publicités Meta qu'il suit. */
+export function getSocialState(): Promise<SocialState> {
+  return request<SocialState>(`${SOCIAL_ROOT}/api/v1/social/state`)
+}
+
+/** Une publication lue sur une Page Facebook ou un compte Instagram, hors posts du module. */
+export interface MetaPost {
+  id: string
+  channel: 'Facebook' | 'Instagram'
+  accountName: string
+  date: string
+  time: string
+  type: string
+  title: string
+  img: string | null
+  status: string
+  permalink: string | null
+  campaign: string | null
+  stats: { reactions?: number | null; comments?: number | null; shares?: number | null } | null
+}
+
+/**
+ * Les publications des Pages et comptes Instagram sur une période (100 jours au plus).
+ * Le module Social les relit chez Meta à chaque appel : comptez une dizaine de secondes.
+ */
+export function getMetaCalendar(du: string, au: string): Promise<{ posts: MetaPost[]; erreurs: string[] }> {
+  return request<{ posts: MetaPost[]; erreurs: string[] }>(
+    `${SOCIAL_ROOT}/api/v1/social/meta/calendriers?du=${du}&au=${au}`,
+  )
+}
+
+/** Un avis Google d'une boutique, lu dans les fiches raccordées au BO. */
+export interface GoogleReview {
+  id: string
+  boutique: string
+  note: number | null
+  /** `2026-09-08 12:00` */
+  le: string
+  message: string
+}
+
+export interface GoogleOverview {
+  avis: GoogleReview[]
+  reputation: { cible: number | null; reseau: { moyenne: number | null } | null }
+}
+
+export function getGoogleOverview(): Promise<GoogleOverview> {
+  return request<GoogleOverview>(`${SOCIAL_ROOT}/api/v1/social/google`)
+}
+
+/** Une newsletter ou un SMS du cockpit. `exemple` : modèle de démonstration, jamais envoyé. */
+export interface CockpitNewsletter {
+  id: number
+  nom: string
+  objet: string | null
+  /** `draft` | `sched` | `live` | `sent` */
+  statut: string
+  /** `email` | `sms` | `both` */
+  canal: string | null
+  envoiLe: string | null
+  exemple: boolean
+}
+
+export function getCockpitNewsletters(): Promise<CockpitNewsletter[]> {
+  return request<{ emailing?: { liste?: CockpitNewsletter[] } }>(`${COCKPIT}/marketing/hub`).then(
+    (hub) => hub.emailing?.liste ?? [],
+  )
+}
+
+/** L'adresse d'un visuel du module Social, qu'il soit relatif à son dossier ou déjà absolu. */
+export function socialAsset(path: string | null): string | null {
+  if (!path) return null
+
+  return /^(https?:)?\/\//.test(path) || path.startsWith('data:') ? path : `${SOCIAL_ROOT}/${path.replace(/^\.?\//, '')}`
+}
