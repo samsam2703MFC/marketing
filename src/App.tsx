@@ -14,7 +14,6 @@ import BundlesView from './views/BundlesView'
 import VouchersView from './views/VouchersView'
 import AgenciesView from './views/AgenciesView'
 import AnalysisView from './views/AnalysisView'
-import RoiView from './views/RoiView'
 import CrmView from './views/CrmView'
 import CampaignTypesView from './views/CampaignTypesView'
 import AddressesView from './views/AddressesView'
@@ -366,7 +365,6 @@ function Workspace() {
 
           {route === 'agencies' ? <AgenciesView /> : null}
           {route === 'analysis' ? <AnalysisView /> : null}
-          {route === 'roi' ? <RoiView /> : null}
           {route === 'crm' ? <CrmView /> : null}
           {route === 'campaign-types' ? <CampaignTypesView /> : null}
           {route === 'addresses' ? <AddressesView /> : null}

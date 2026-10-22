@@ -27,7 +27,6 @@ export type Route =
   | 'vouchers'
   | 'agencies'
   | 'analysis'
-  | 'roi'
   | 'crm'
   | 'funds'
   /** Écrans du module Social & Ads, affichés dans un cadre — réseau seul (voir SOCIAL_PAGES). */
@@ -96,7 +95,6 @@ const ICONS: Record<string, string> = {
   vouchers: 'M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4zM13 6v12',
   agencies: 'M4 7h16v13H4zM9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 12h18',
   analysis: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
-  roi: 'M3 17l6-6 4 4 8-8M15 7h6v6',
   crm: 'M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.9',
   funds: 'M3 7h18v12H3zM3 7l3-4h12l3 4M16 13h.5',
   'social-cal': 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01',
@@ -252,7 +250,9 @@ const NETWORK: NavGroup[] = [
   },
   {
     label: 'Budget & performance',
-    items: [item('funds', 'Fonds marketing'), item('analysis', 'Performance'), item('agencies', 'Agences & prestataires')],
+    // Performance = le retour par opération (dépense Meta et ventes en caisse) ; la dépense par levier
+    // est un onglet du fonds, dont elle reprend les sorties ; « Par trimestre », sans données, est retiré.
+    items: [item('funds', 'Fonds marketing'), item('social-roi', 'Performance'), item('agencies', 'Agences & prestataires')],
   },
   // Un seul écran de réglages (Meta, Google, TFBuddy, modèles, droits…) ; les types
   // de campagne, la grille de la première étape de l'assistant, y rejoignent.
@@ -310,9 +310,8 @@ const TABS: Record<Role, Tab[][]> = {
       { route: 'vouchers', label: 'Bons' },
     ],
     [
+      { route: 'funds', label: 'Mouvements' },
       { route: 'analysis', label: 'Par levier' },
-      { route: 'roi', label: 'Par trimestre' },
-      { route: 'social-roi', label: 'Par opération' },
     ],
     [
       { route: 'social-bilan', label: 'Classement' },
