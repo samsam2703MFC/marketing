@@ -113,16 +113,16 @@ export default function DashboardView({ statuses, levers, brandId, network, onOp
         )}
       </section>
 
-      {/* La performance par levier vit dans « Performance » : la recopier ici en faisait
+      {/* La dépense par levier vit dans « Fonds marketing › Par levier » : la recopier ici en faisait
           deux écrans à tenir d'accord. Elle couvre tout le réseau, la marque seule la voit. */}
       {network ? (
         <section className="card dashboard-link">
           <div>
             <h2>Performance par levier</h2>
-            <p className="muted">Dépense, ventes générées et ROI de chaque levier, par trimestre et par opération.</p>
+            <p className="muted">Dépense, objectif, réalisé et ROI de chaque levier, dans le fonds marketing.</p>
           </div>
           <button type="button" className="btn btn--sm" onClick={onPerformance}>
-            Voir la performance →
+            Voir par levier →
           </button>
         </section>
       ) : null}

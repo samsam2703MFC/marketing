@@ -1428,20 +1428,6 @@ export interface LeverPerformance {
   penetration_pct: number | null
 }
 
-export interface RoiQuarter {
-  period_label: string
-  total_cost_amount: number
-  generated_revenue: number
-  cost_per_1000_revenue: number | null
-  trend: 'up' | 'down' | 'flat' | null
-  /** Un coût en baisse est une amélioration — d'où le champ explicite. */
-  is_improvement: boolean | null
-}
-
-export function getRoiQuarterly(): Promise<RoiQuarter[]> {
-  return request<RoiQuarter[]>(`${BASE}/roi/quarterly`)
-}
-
 // ---------------------------------------------------------------------------
 // Agences et prestataires
 // ---------------------------------------------------------------------------
@@ -1493,10 +1479,6 @@ export interface CostKind {
 
 export function getAnalysis(): Promise<{ levers: LeverPerformance[]; costs: CostKind[] }> {
   return request(`${BASE}/analysis`)
-}
-
-export function getRoi(): Promise<{ quarterly: RoiQuarter[]; costs: CostKind[] }> {
-  return request(`${BASE}/roi`)
 }
 
 // ---------------------------------------------------------------------------
