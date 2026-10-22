@@ -1398,10 +1398,6 @@ export interface LeverPerformance {
   penetration_pct: number | null
 }
 
-export function getLeverSummary(): Promise<LeverPerformance[]> {
-  return request<LeverPerformance[]>(`${BASE}/funds/levers`)
-}
-
 export interface RoiQuarter {
   period_label: string
   total_cost_amount: number
@@ -1546,47 +1542,6 @@ export interface CrmSummary {
 
 export function getCrm(): Promise<{ segments: CrmSegment[]; summary: CrmSummary }> {
   return request(`${BASE}/crm`)
-}
-
-export interface ShopPresence {
-  id: number
-  shop_name: string
-  platform: string
-  rating_avg: number | null
-  reviews_count: number
-  completeness_pct: number | null
-  last_synced_at: string | null
-  pending_replies: number
-}
-
-export interface Review {
-  id: number
-  author_name: string | null
-  rating: number | null
-  body: string | null
-  published_at: string | null
-  reply_status: string
-  shop_name: string
-  platform: string
-}
-
-export function getPresence(): Promise<{ shops: ShopPresence[]; reviews: Review[] }> {
-  return request(`${BASE}/presence`)
-}
-
-export interface Kit {
-  id: number
-  name: string
-  description: string | null
-  type_label: string | null
-  default_budget_amount: number | null
-  is_published: boolean
-  activations: number
-  assets_count: number
-}
-
-export function listKits(): Promise<Kit[]> {
-  return request<Kit[]>(`${BASE}/kits`)
 }
 
 // Réexport pour les écrans d'alias, qui restent servis par l'ERP.

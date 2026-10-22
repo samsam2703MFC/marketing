@@ -81,7 +81,7 @@ entière, pour attraper une colonne ajoutée plus tard.
 | PUT | `…/campaigns/{id}/draft` | tenant | `{status, message}` |
 | GET | `…/campaigns/{id}/monitor` | tenant | objet |
 | GET | `…/campaigns/{id}/print` | tenant | objet (dossier d'impression) |
-| GET | `…/campaigns/{id}/roi-costs` | tenant | tableau |
+| GET | `…/campaigns/{id}/roi-costs` | marque | tableau |
 | GET | `…/campaigns/{id}/leads` | tenant | tableau |
 | POST | `…/campaigns/{id}/leads/generate` | tenant | objet |
 | GET | `…/campaign-offers` | tenant | tableau |
@@ -98,9 +98,9 @@ entière, pour attraper une colonne ajoutée plus tard.
 | GET | `…/funds/recurrences` | tenant | tableau |
 | POST | `…/funds/recurrences` | tenant | objet |
 | DELETE | `…/funds/recurrences/{id}` | tenant | `{status, message}` |
-| GET | `…/funds/levers` | — | tableau |
-| GET | `…/roi` | tenant | objet |
-| GET | `…/roi/quarterly` | — | tableau |
+| GET | `…/funds/levers` | marque | tableau |
+| GET | `…/roi` | marque | objet |
+| GET | `…/roi/quarterly` | marque | tableau |
 
 ### 2.4 Outils de campagne et diffusion
 
@@ -127,7 +127,7 @@ entière, pour attraper une colonne ajoutée plus tard.
 | GET | `…/b2b/prospects/count` | tenant | objet |
 | POST | `…/b2b/prospects/import` | tenant | objet |
 | GET | `…/b2b/sectors` | — | tableau |
-| GET | `…/analysis` | tenant | objet |
+| GET | `…/analysis` | marque | objet |
 | GET | `…/sales/quantities` | tenant | tableau |
 | GET | `…/price-list` | tenant | objet |
 

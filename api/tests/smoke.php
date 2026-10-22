@@ -335,9 +335,28 @@ check('les derniers avis remontent', count($response['body']['reviews']) === 2);
 echo "\nPérimètre des écrans réseau (FRANCHISEE)\n";
 AuthContext::set(77, 'FRANCHISEE', 1, [1]);
 
+// Les agrégats de performance n'ont pas de boutique à laquelle se restreindre :
+// ils couvrent tout le réseau, et un franchisé y lisait les chiffres de ses
+// confrères (le « Performance par levier » de son tableau de bord). Refusés.
+$performanceRoutes = [
+    'performance par levier' => '/api/v1/marketing/funds/levers',
+    'marketing analyse'      => '/api/v1/marketing/analysis',
+    'roi & rentabilité'      => '/api/v1/marketing/roi',
+    'roi trimestriel'        => '/api/v1/marketing/roi/quarterly',
+    'coûts roi de campagne'  => '/api/v1/marketing/campaigns/10/roi-costs',
+];
+
 foreach ($aggregateRoutes as $label => [$path, $query]) {
+    if (in_array($path, $performanceRoutes, true)) {
+        continue;
+    }
     $response = call($router, 'GET', $path, $query);
     check(sprintf('%s répond au franchisé', $label), $response['status'] === 200, 'statut ' . $response['status']);
+}
+
+foreach ($performanceRoutes as $label => $path) {
+    $response = call($router, 'GET', $path);
+    check(sprintf('%s est refusé au franchisé', $label), $response['status'] === 403, 'statut ' . $response['status']);
 }
 
 $response = call($router, 'GET', '/api/v1/marketing/presence');

@@ -4233,3 +4233,19 @@ button.mc-tag { cursor: pointer; }
 .mc-card__tx i { font-size: 10.5px; font-style: normal; color: var(--muted-2); }
 .mc-more { display: grid; place-items: center; width: 70px; border: 1px dashed var(--faint); border-radius: 10px; background: var(--table-head); font-size: 12px; font-weight: 500; color: var(--muted-2); }
 .mc-none { margin: 0; font-size: 12px; color: var(--muted); }
+
+/* Onglets d'une entrée du menu qui regroupe plusieurs écrans (Diffusion, Offres,
+   Performance, Bilan) : soulignés comme les sous-étapes de l'assistant, jamais en
+   bordeaux plein. Au-dessus d'un écran du module Social, ils gardent la marge. */
+.page-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 16px; border-bottom: 1px solid var(--line); }
+.app__body--frame > .page-tabs { margin: 0; padding: 6px 24px 0; background: #fff; }
+.page-tabs__tab {
+  margin: 0 0 -1px; padding: 8px 12px; border: none; border-bottom: 2px solid transparent; border-radius: 0;
+  background: none; color: var(--muted-2); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.page-tabs__tab:hover { color: var(--ink); }
+.page-tabs__tab.is-on { color: var(--accent); border-bottom-color: var(--accent); }
+
+.dashboard-link { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.dashboard-link h2 { margin-bottom: 4px; }
+.dashboard-link p { margin: 0; }
