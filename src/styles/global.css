@@ -631,11 +631,6 @@ tbody td {
   font-size: 12.5px;
 }
 
-.year {
-  font-size: 21px;
-  padding: 0 6px;
-}
-
 /* Cartes de campagne */
 .campaign-grid {
   display: grid;
@@ -710,47 +705,6 @@ tbody td {
 .progress__fill {
   height: 100%;
   background: var(--accent);
-}
-
-/* Frise du calendrier */
-.frieze {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.frieze__months,
-.frieze__row {
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  gap: 4px;
-}
-
-.frieze__month {
-  font-size: 10.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-  text-align: center;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--row-line);
-}
-
-.frieze__bar {
-  margin: 0;
-  padding: 7px 10px;
-  font-size: 12px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  text-align: left;
-  overflow: hidden;
-}
-
-.frieze__bar-label {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* Grand livre */
@@ -4150,3 +4104,132 @@ table.hub-links code { font-size: 11.5px; overflow-wrap: anywhere; word-break: b
 /* Campagne déjà lancée : ce que l'assistant enregistre, et ce qu'il laisse tel quel. */
 .hub-banner { margin: 0 0 12px; padding: 10px 14px; border-radius: 10px; background: #FCE7C8; color: #6b3d0a; font-size: 12.5px; line-height: 1.5; }
 
+
+/* --- Calendrier marketing : la frise par canal, puis l'agenda de la semaine ---
+   Une ligne par canal sur deux mois ; tout se place en % de la fenêtre. Les
+   couleurs des canaux sont celles des marques (Facebook, Instagram, Meta,
+   Google) : elles se reconnaissent avant de se lire. */
+.mc {
+  --mc-fb: #1877F2;
+  --mc-ig: #D6286F;
+  --mc-meta: #0866FF;
+  --mc-gg: #1E8E3E;
+  --mc-nl: #6B4FBB;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mc-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mc-period { font-size: 17px; font-weight: 500; margin: 0 4px; min-width: 15rem; text-align: center; }
+.mc-spacer { flex: 1; }
+.mc-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.mc-filter { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+.mc-filter b { font-weight: 500; color: var(--muted); }
+/* Un canal masqué : la pastille reste, en retrait. La sélection, elle, suit la règle des pastilles. */
+.mc-filter:not(.is-on) { opacity: 0.55; }
+.mc-filter.is-on { background: rgba(141, 29, 44, 0.05); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); color: var(--ink); }
+
+.mc-ico { display: inline-grid; place-items: center; width: 18px; height: 18px; flex: none; border-radius: 5px; color: #fff; font-size: 10px; font-weight: 700; font-style: normal; }
+.mc-ico--campagnes { background: var(--accent); }
+.mc-ico--pubs { background: var(--mc-meta); }
+.mc-ico--facebook { background: var(--mc-fb); }
+.mc-ico--instagram { background: linear-gradient(135deg, #F58529, #DD2A7B 55%, #8134AF); }
+.mc-ico--google { background: #fff; color: var(--mc-gg); border: 1px solid var(--line); }
+.mc-ico--newsletter { background: var(--mc-nl); }
+
+/* Pas de overflow: hidden : l'aperçu d'une pastille doit pouvoir déborder de la carte. */
+.mc-frise { padding: 0; }
+.mc-legend { border-radius: 0 0 12px 12px; }
+.mc-grid { display: grid; grid-template-columns: 200px minmax(0, 1fr); border-radius: 12px 12px 0 0; }
+.mc-labels { border-right: 1px solid var(--line); }
+.mc-head { height: 54px; border-bottom: 1px solid var(--line); }
+.mc-label { display: flex; align-items: flex-start; gap: 9px; padding: 11px 14px; border-bottom: 1px solid var(--line); overflow: hidden; }
+.mc-label strong { display: block; font-size: 13px; font-weight: 500; }
+.mc-label span:not(.mc-ico) { display: block; font-size: 11.5px; color: var(--muted); line-height: 1.3; }
+.mc-tracks { position: relative; min-width: 0; }
+.mc-months { display: flex; height: 22px; border-bottom: 1px solid var(--row-line); }
+.mc-months div { border-left: 1px solid var(--line); padding: 4px 8px; font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; }
+.mc-months div:first-child { border-left: none; }
+.mc-days { display: flex; height: 31px; }
+/* Chaque jour est un bouton : il ouvre l'agenda de sa semaine. */
+.mc-day { flex: 1; min-width: 0; margin: 0; padding: 8px 0 0; border: none; border-left: 1px solid var(--row-line); border-radius: 0; background: none; color: var(--muted); font: 500 10px 'Gotham', system-ui, sans-serif; cursor: pointer; }
+.mc-day.is-we { background: rgba(34, 34, 34, 0.025); }
+.mc-day.is-mon { border-left-color: var(--line); color: var(--ink); }
+.mc-day.is-today { box-shadow: inset 0 -3px 0 var(--accent); }
+.mc-day:hover { background: rgba(141, 29, 44, 0.07); }
+.mc-lanes { position: relative; cursor: pointer; }
+.mc-lane { position: relative; border-bottom: 1px solid var(--line); }
+.mc-today { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); z-index: 3; pointer-events: none; }
+.mc-today span { position: absolute; top: 0; left: 3px; padding: 1px 6px; border-radius: 0 5px 5px 0; background: var(--accent); color: #fff; font-size: 10px; font-weight: 500; white-space: nowrap; }
+/* À droite d'aujourd'hui, ce qui est prévu : un fond hachuré à peine marqué. */
+.mc-future { position: absolute; top: 0; bottom: 0; right: 0; background: repeating-linear-gradient(135deg, transparent 0 8px, rgba(141, 29, 44, 0.03) 8px 16px); pointer-events: none; }
+.mc-week { position: absolute; top: 0; bottom: 0; background: rgba(141, 29, 44, 0.06); box-shadow: inset 1px 0 0 rgba(141, 29, 44, 0.3), inset -1px 0 0 rgba(141, 29, 44, 0.3); pointer-events: none; }
+.mc-msg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--muted); }
+.mc-msg.is-error { color: var(--danger); }
+
+.mc-bar { position: absolute; z-index: 2; display: block; height: 24px; margin: 0; padding: 4px 9px; border: 1px solid; border-radius: 7px; font: 500 11.5px/1.3 'Gotham', system-ui, sans-serif; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none; cursor: pointer; }
+.mc-bar small { margin-left: 6px; font-weight: 400; opacity: 0.8; }
+.mc-bar--ad { height: 22px; padding: 3px 8px; background: rgba(8, 102, 255, 0.09); border-color: rgba(8, 102, 255, 0.35); color: #0b4fbf; font-size: 11px; }
+/* Sans date de fin : la barre se dissout vers la droite au lieu de s'arrêter. */
+.mc-bar--ad.is-open { border-right: none; border-radius: 6px 0 0 6px; background: linear-gradient(to right, rgba(8, 102, 255, 0.10) 75%, rgba(8, 102, 255, 0)); }
+.mc-bar--ad.is-done { background: #f3f1ee; border-color: var(--line); color: var(--muted); }
+.mc-link { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 5px; background: rgba(141, 29, 44, 0.1); color: var(--accent); font-size: 10px; }
+
+.mc-dot { position: absolute; top: 14px; z-index: 2; width: 26px; height: 26px; border: 2px solid #fff; border-radius: 50%; background: var(--line) center / cover; box-shadow: 0 0 0 1px var(--line); cursor: pointer; }
+.mc-dot.is-planned { box-shadow: 0 0 0 2px var(--accent); }
+.mc-dot:hover { z-index: 6; transform: scale(1.15); }
+.mc-dot i { position: absolute; right: -7px; top: -7px; padding: 0 5px; border: 1.5px solid #fff; border-radius: 9px; background: var(--ink); color: #fff; font: 500 9.5px/14px 'Gotham', system-ui, sans-serif; font-style: normal; }
+.mc-pop { position: absolute; left: 50%; top: 32px; z-index: 10; width: 260px; transform: translateX(-50%) scale(0.87); transform-origin: top center; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 10px 30px rgba(34, 34, 34, 0.18); cursor: default; }
+.mc-pop img { display: block; width: 100%; height: 140px; object-fit: cover; }
+.mc-pop div { padding: 9px 11px; }
+.mc-pop b { font-size: 12.5px; font-weight: 500; }
+.mc-pop p { margin: 3px 0 0; font-size: 12px; color: var(--muted-2); }
+.mc-pop span { display: block; margin-top: 6px; font-size: 11px; color: var(--muted); }
+.mc-star { position: absolute; top: 16px; z-index: 2; padding: 2px 5px; border-radius: 6px; background: rgba(30, 142, 62, 0.1); color: var(--mc-gg); font-size: 10.5px; font-weight: 500; }
+.mc-star.is-mid { background: #FCE7C8; color: #8a4b00; }
+.mc-star.is-low { background: rgba(179, 38, 30, 0.1); color: var(--danger); }
+.mc-nl { position: absolute; top: 16px; z-index: 2; padding: 2px 8px; border-radius: 6px; background: rgba(107, 79, 187, 0.1); color: var(--mc-nl); font-size: 11px; font-weight: 500; white-space: nowrap; }
+.mc-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 9px 14px; background: var(--table-head); font-size: 11.5px; color: var(--muted); }
+
+/* L'agenda de la semaine cliquée : un jour par ligne, les visuels en bande. */
+.mc-anchor { scroll-margin-top: 12px; }
+.mc-agenda { padding: 0; overflow: hidden; }
+.mc-agenda__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.mc-agenda__head h2 { margin: 0; color: var(--ink); text-transform: none; letter-spacing: normal; font-size: 15px; }
+.mc-agenda__strip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--table-head); }
+.mc-kicker { margin-right: 4px; font-size: 10.5px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.mc-pill { margin: 0; padding: 3px 9px; border: 1px solid; border-radius: 7px; font: 500 11.5px 'Gotham', system-ui, sans-serif; cursor: pointer; }
+.mc-pill small { font-weight: 400; opacity: 0.8; }
+.mc-pill--ad { background: rgba(8, 102, 255, 0.07); border-color: rgba(8, 102, 255, 0.3); color: #0b4fbf; cursor: default; }
+.mc-pill--ad.is-done { background: #f3f1ee; border-color: var(--line); color: var(--muted); }
+.mc-agday { display: grid; grid-template-columns: 96px minmax(0, 1fr); border-bottom: 1px solid var(--line); }
+.mc-agday:last-child { border-bottom: none; }
+.mc-agday.is-future { background: repeating-linear-gradient(135deg, #fff 0 10px, #fdfbf8 10px 20px); }
+.mc-agday.is-picked { box-shadow: inset 3px 0 0 var(--accent); }
+.mc-agday__date { padding: 10px 12px; border-right: 1px solid var(--line); }
+.mc-agday__date span { display: block; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.mc-agday__date b { display: block; margin: 2px 0; font-size: 22px; font-weight: 500; line-height: 1; }
+.mc-agday.is-today .mc-agday__date { background: rgba(141, 29, 44, 0.05); }
+.mc-agday.is-today .mc-agday__date b { color: var(--accent); }
+.mc-agday__body { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 10px 12px; }
+.mc-agday__tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.mc-tag { margin: 0; padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; font: 500 11px 'Gotham', system-ui, sans-serif; color: var(--muted-2); }
+button.mc-tag { cursor: pointer; }
+.mc-tag--camp { border-color: rgba(141, 29, 44, 0.35); color: var(--accent); background: rgba(141, 29, 44, 0.05); }
+.mc-tag--ad { border-color: rgba(8, 102, 255, 0.3); color: #0b4fbf; background: rgba(8, 102, 255, 0.07); }
+.mc-tag--nl { border-color: rgba(107, 79, 187, 0.3); color: var(--mc-nl); background: rgba(107, 79, 187, 0.07); }
+.mc-tag--gg { border-color: rgba(30, 142, 62, 0.3); color: var(--mc-gg); background: rgba(30, 142, 62, 0.07); }
+.mc-tag--low { border-color: rgba(179, 38, 30, 0.3); color: var(--danger); background: rgba(179, 38, 30, 0.06); }
+.mc-cards { display: flex; flex-wrap: wrap; gap: 10px; }
+.mc-card { width: 148px; flex: none; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); text-decoration: none; }
+.mc-card:hover { border-color: var(--muted-2); }
+.mc-card__img { position: relative; height: 104px; background: var(--table-head) center / cover; }
+.mc-card__ch { position: absolute; left: 6px; top: 6px; display: flex; gap: 3px; }
+.mc-card__img em { position: absolute; right: 6px; top: 6px; padding: 1px 6px; border-radius: 5px; background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 10px; font-style: normal; }
+.mc-card__tx { padding: 6px 8px 7px; }
+.mc-card__tx b, .mc-card__tx span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-card__tx b { font-size: 11px; font-weight: 500; }
+.mc-card__tx span { font-size: 10.5px; color: var(--muted); }
+.mc-card__tx i { font-size: 10.5px; font-style: normal; color: var(--muted-2); }
+.mc-more { display: grid; place-items: center; width: 70px; border: 1px dashed var(--faint); border-radius: 10px; background: var(--table-head); font-size: 12px; font-weight: 500; color: var(--muted-2); }
+.mc-none { margin: 0; font-size: 12px; color: var(--muted); }
