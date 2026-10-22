@@ -811,7 +811,7 @@ export default function ObjectivesStep({
       ) : sales.error !== null ? (
         <p className="error">
           Ventes indisponibles : {sales.error}{' '}
-          <button type="button" className="filter" onClick={() => setAttempt(attempt + 1)}>
+          <button type="button" className="btn btn--sm" onClick={() => setAttempt(attempt + 1)}>
             Réessayer
           </button>
         </p>
@@ -1105,7 +1105,7 @@ export default function ObjectivesStep({
               décalait ces contrôles d'une demi-hauteur par rapport aux
               pastilles voisines. Ici tout est aligné sur une même ligne. */}
           <div className="objectives__tools">
-            <button type="button" className="filter" onClick={copyHistory}>
+            <button type="button" className="btn btn--sm" onClick={copyHistory}>
               Reprendre l’historique
             </button>
             <span className="objectives__sorts">
@@ -1139,7 +1139,7 @@ export default function ObjectivesStep({
             </span>
             <button
               type="button"
-              className="filter"
+              className="btn btn--sm"
               disabled={!/^-?\d+$/.test(growthPct.trim())}
               onClick={applyGrowth}
             >
@@ -1449,7 +1449,7 @@ export default function ObjectivesStep({
                           {detaille ? (
                             <button
                               type="button"
-                              className="shop-detail__clear"
+                              className="btn btn--danger btn--sm"
                               onClick={() =>
                                 writeCross(
                                   data.products.map((produit) => ({

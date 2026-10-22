@@ -154,6 +154,107 @@ button.ghost {
   color: var(--ink);
 }
 
+/* Boutons d'action — un seul système pour le module.
+   Un bouton FAIT quelque chose ; une pastille (.filter, .choice-pill, .choice-card)
+   CHOISIT. Les deux ne doivent jamais se ressembler : le bordeaux plein est
+   réservé à l'action principale de l'écran (une seule), et une sélection se lit
+   au liseré bordeaux sur fond teinté.
+     .btn            secondaire : blanc, filet, encre — la plupart des actions ;
+     .btn--primary   l'action qui fait avancer (Suivant, Valider) ;
+     .btn--ghost     sortie discrète, sans cadre (Quitter sans enregistrer) ;
+     .btn--danger    retirer, effacer, réinitialiser : discret, rouge au survol ;
+     .btn--sm        dans le contenu, à côté des champs ;
+     .btn--icon      un seul signe (✕), carré.
+   Les mêmes classes vont sur un <a> (lien externe ↗) ou un <label> (dépôt de
+   fichier) : l'aspect suit le rôle, pas la balise. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  margin: 0;
+  padding: 7px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font: 500 13px/1.2 'Gotham', system-ui, sans-serif;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--muted-2);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn.is-busy {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: #6f1622;
+  border-color: #6f1622;
+}
+
+.btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted-2);
+}
+
+.btn--ghost:hover:not(:disabled) {
+  border-color: transparent;
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.btn--danger {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted-2);
+}
+
+.btn--danger:hover:not(:disabled) {
+  border-color: transparent;
+  background: rgba(179, 38, 30, 0.07);
+  color: var(--danger);
+}
+
+.btn--sm {
+  min-height: 30px;
+  padding: 5px 11px;
+  font-size: 12px;
+}
+
+.btn--icon {
+  flex: none;
+  width: 28px;
+  min-height: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 12px;
+}
+
 /* Application */
 .app__header {
   display: flex;
@@ -1606,7 +1707,7 @@ select:disabled {
   margin: 0 0 0 5px;
   padding: 2px 7px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 6px;
   background: #fff;
   font: 500 9.5px 'Gotham', system-ui, sans-serif;
   color: var(--muted-2);
@@ -1617,6 +1718,7 @@ select:disabled {
 
 .objectives__sort.is-on {
   border-color: var(--accent);
+  background: rgba(141, 29, 44, 0.05);
   color: var(--accent);
 }
 
@@ -1720,14 +1822,8 @@ select:disabled {
   margin-top: 0.6rem;
 }
 
-.visual-source .filter {
+.visual-source .btn {
   margin-bottom: 1px;
-  cursor: pointer;
-}
-
-.visual-source .filter.is-busy {
-  opacity: 0.6;
-  cursor: progress;
 }
 
 /* Le champ natif reste dans le libellé pour garder le clavier et le clic,
@@ -3108,28 +3204,47 @@ table select,
   color: var(--faint);
 }
 
-/* Pied de l'assistant : les deux actions, détachées du formulaire.
-   Elles empruntaient `.filters__row`, dont l'écart de 8 px convient à des
-   pastilles qui se lisent en bloc, pas à deux boutons qu'on doit distinguer
-   avant de cliquer — et la rangée démarrait au ras du bord bas de la carte. */
+/* Pied de l'assistant : une barre d'actions collée au bas de l'écran.
+   Les étapes font jusqu'à 2 400 px de haut ; au bout de la page, « Suivant »
+   ne se trouvait qu'en défilant. La barre reste visible, dans un ordre fixe :
+   quitter (sans / en enregistrant) à gauche, l'état au milieu, puis
+   « Précédent » et l'action principale tout à droite. */
 .wizard-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 14px;
+  gap: 10px 16px;
   margin-top: 1.1rem;
-  padding-bottom: 0.35rem;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 -6px 18px rgba(34, 34, 34, 0.08);
 }
 
-/* L'action qui avance est plus large que celle qui recule : à taille égale et
-   à 8 px d'écart, le geste juste ne se distingue plus du retour en arrière. */
-.wizard-actions .filter {
-  padding: 9px 18px;
-  font-size: 13px;
+/* L'action qui avance est plus large que celle qui recule : à taille égale,
+   le geste juste ne se distingue plus du retour en arrière. */
+.wizard-actions .btn--primary {
+  padding-inline: 24px;
 }
 
-.wizard-actions .filter.is-on {
-  padding: 9px 26px;
+/* Deux blocs qui ne se mélangent pas : sortir à gauche, naviguer à droite. Sur
+   une colonne étroite, la navigation passe dessous, toujours calée à droite. */
+.wizard-actions__group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wizard-actions__group--nav {
+  margin-left: auto;
+}
+
+.wizard-actions__state {
+  font-size: 12px;
 }
 
 /* Un brouillon se termine, il ne se pilote pas : sa carte le dit d'un liseré
@@ -3145,12 +3260,6 @@ table select,
   color: var(--accent);
 }
 
-/* L'heure du dernier enregistrement, au bout de la rangée d'actions : quitter
-   en cours de route n'est rassurant que si l'on voit que c'est écrit. */
-.wizard-actions__saved {
-  margin-left: auto;
-  font-size: 12px;
-}
 
 /* Provenance d'un prix : discrète, mais toujours visible — un chiffre repris
    et un chiffre saisi ne se corrigent pas de la même façon. */
@@ -3271,21 +3380,6 @@ table select,
 
 .shop-detail__note {
   flex: 1;
-}
-
-.shop-detail__clear {
-  padding: 2px 7px;
-  font: 500 11px 'Gotham', system-ui, sans-serif;
-  color: var(--muted);
-  background: none;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.shop-detail__clear:hover {
-  color: var(--accent);
-  border-color: var(--accent);
 }
 
 .shop-detail__foot strong {
@@ -3437,21 +3531,6 @@ table select,
 }
 
 .palette__hex.is-invalid { border-color: var(--danger); }
-
-.palette__reset {
-  flex: none;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  font-size: 12px;
-  color: var(--muted);
-  background: none;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.palette__reset:hover { color: var(--accent); border-color: var(--line); }
 
 /* L'aperçu : un aplat, un titre, du texte courant et un prix. C'est la
    lisibilité du texte sur le fond qui décide d'une palette, et elle ne se voit
@@ -3963,7 +4042,6 @@ table.annexes th.num, table.annexes td.num { text-align: right; }
 table.annexes td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--row-line); }
 table.annexes a { color: var(--ink); }
 .annexes__perdu { font-size: 11px; margin-top: 3px; }
-.annexes__retirer { margin: 0; padding: 0 2px; border: none; background: none; color: var(--muted); font-size: 12px; cursor: pointer; }
 
 /* --- Assistant « hub » : sept étapes, colonne de droite --------------------
    La maquette validée : l'en-tête dit quelle campagne on tient, le fil relie les
@@ -4000,7 +4078,31 @@ table.annexes a { color: var(--ink); }
 .hub-step.is-done i { background: var(--green); border-color: var(--green); color: #fff; }
 .hub-step:disabled { cursor: default; color: var(--faint); }
 .hub-step:hover:not(:disabled) { background: var(--table-head); }
-.hub-sub { margin: 0 0 12px; }
+.hub-sub { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 12px; border-bottom: 1px solid var(--line); }
+/* Les sous-étapes sont des onglets : soulignés quand on y est, jamais en bordeaux
+   plein — c'est l'aspect de l'action principale, et le bouton « Offre » se
+   confondait avec « Suivant ». */
+.hub-sub__tab {
+  margin: 0 0 -1px; padding: 8px 12px; border: none; border-bottom: 2px solid transparent; border-radius: 0;
+  background: none; color: var(--muted-2); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.hub-sub__tab:hover:not(:disabled) { color: var(--ink); }
+.hub-sub__tab.is-on { color: var(--accent); border-bottom-color: var(--accent); }
+.hub-sub__tab:disabled { color: var(--faint); cursor: default; opacity: 1; }
+
+/* Dans l'assistant, une pastille sélectionnée se lit comme une carte de choix :
+   liseré bordeaux, fond teinté — plus jamais comme le bouton principal. Le
+   filet s'épaissit par une ombre intérieure pour ne pas décaler la rangée. */
+.builder .filter { cursor: pointer; }
+.builder .filter:hover:not(:disabled) { border-color: var(--muted-2); }
+.builder .filter.is-on {
+  background: rgba(141, 29, 44, 0.05);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--accent);
+  font-weight: 500;
+}
+.builder .filter:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* Formulaire à gauche, la campagne en un coup d'œil à droite ; empilés sur écran étroit. */
 .hub-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
@@ -4016,7 +4118,6 @@ table.annexes a { color: var(--ink); }
 .hub-kv dd { margin: 0; text-align: right; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
 .hub-kv code { font-size: 11px; background: var(--table-head); padding: 2px 5px; border-radius: 4px; font-weight: 500; }
 .hub-attached__ad { display: flex; flex-direction: column; gap: 2px; margin: 8px 0 0; font-size: 12.5px; }
-.hub-count { margin-right: auto; font-size: 12px; }
 
 /* Canaux : ce que le module Social fait pour la campagne. */
 .hub-social { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }

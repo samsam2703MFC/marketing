@@ -145,7 +145,7 @@ export default function Annexes({ campaignId }: { campaignId: number | null }) {
             onChange={(e) => setTypeLibre(e.target.value)}
           />
         </label>
-        <label className={`filter is-on annexes__bouton${occupe ? ' is-busy' : ''}`}>
+        <label className={`btn annexes__bouton${occupe ? ' is-busy' : ''}`}>
           {occupe ? 'Dépôt…' : 'Déposer un PDF'}
           <input
             ref={champ}
@@ -238,7 +238,7 @@ export default function Annexes({ campaignId }: { campaignId: number | null }) {
                   <td className="num">
                     <button
                       type="button"
-                      className="annexes__retirer"
+                      className="btn btn--danger btn--icon"
                       title="Retirer ce document"
                       onClick={() => {
                         if (!window.confirm(`Retirer « ${a.nom} » ? Le fichier sera effacé.`)) return
