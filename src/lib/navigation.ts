@@ -315,7 +315,7 @@ const TABS: Record<Role, Tab[][]> = {
       { route: 'social-roi', label: 'Par opération' },
     ],
     [
-      { route: 'social-bilan', label: 'Classement de la semaine' },
+      { route: 'social-bilan', label: 'Classement' },
       { route: 'social-suivi', label: 'Abonnés & budget' },
     ],
   ],
