@@ -221,8 +221,11 @@ function argent(montant: number, devise: string | null): string {
   return `${formatNumber(montant)} ${devise ?? ''}`.trim()
 }
 
-/** Colonne de droite : déjà rattaché à la campagne (posts, publications, publicités Meta). */
-export function HubAttached({ campaignId }: { campaignId: number | null }) {
+/**
+ * Colonne de droite : déjà rattaché à la campagne (posts, publications, publicités Meta).
+ * `voirClics` : les clics ne sont montrés qu'au réseau, pas dans l'espace boutique.
+ */
+export function HubAttached({ campaignId, voirClics }: { campaignId: number | null; voirClics: boolean }) {
   const attached = useAttached(campaignId)
 
   return (
@@ -246,7 +249,8 @@ export function HubAttached({ campaignId }: { campaignId: number | null }) {
             <p key={ad.id} className="hub-attached__ad">
               <strong>{ad.nom}</strong>
               <span className="muted">
-                {ad.statut} · {ad.clics === null ? '—' : `${formatNumber(ad.clics)} clics`} · {argent(ad.depense, ad.devise)}
+                {ad.statut}
+                {voirClics ? ` · ${ad.clics === null ? '—' : `${formatNumber(ad.clics)} clics`}` : ''} · {argent(ad.depense, ad.devise)}
               </span>
             </p>
           ))}
@@ -306,7 +310,7 @@ export function Traceability({ draft, campaignId }: { draft: Draft; campaignId: 
 }
 
 /** En tête de l'étape « Canaux » : ce que le module Social fait pour la campagne, et où le faire. */
-export function SocialChannels({ campaignId }: { campaignId: number | null }) {
+export function SocialChannels({ campaignId, voirClics }: { campaignId: number | null; voirClics: boolean }) {
   const attached = useAttached(campaignId)
 
   if (campaignId === null) {
@@ -354,7 +358,7 @@ export function SocialChannels({ campaignId }: { campaignId: number | null }) {
           <strong>Publicités Meta</strong>
           <p className="muted">
             {data
-              ? `${data.publicites.length} publicité${data.publicites.length > 1 ? 's' : ''} rattachée${data.publicites.length > 1 ? 's' : ''}${data.publicites.length ? ` · ${formatNumber(data.totaux.clics)} clics · ${argent(data.totaux.depense, data.totaux.devise)}` : ''}`
+              ? `${data.publicites.length} publicité${data.publicites.length > 1 ? 's' : ''} rattachée${data.publicites.length > 1 ? 's' : ''}${data.publicites.length ? `${voirClics ? ` · ${formatNumber(data.totaux.clics)} clics` : ''} · ${argent(data.totaux.depense, data.totaux.devise)}` : ''}`
               : attached.loading
                 ? 'Lecture du module Social…'
                 : 'Module Social injoignable.'}
@@ -371,20 +375,32 @@ export function SocialChannels({ campaignId }: { campaignId: number | null }) {
 }
 
 /** Récap : le tableau de bord de la campagne, puis ce qui manque avant le lancement. */
-export function LaunchBoard({ draft, refs, campaignId }: { draft: Draft; refs: References; campaignId: number | null }) {
+export function LaunchBoard({
+  draft,
+  refs,
+  campaignId,
+  voirClics,
+}: {
+  draft: Draft
+  refs: References
+  campaignId: number | null
+  voirClics: boolean
+}) {
   const attached = useAttached(campaignId)
   const data = attached.data
   const action = (refs.trackingActions ?? []).find((entry) => entry.id === draft.tracking_action_id)
   const tuiles: Array<[string, string, string]> = [
-    [
-      'Publicités Meta · clics',
-      data ? formatNumber(data.totaux.clics) : '—',
-      data ? `${formatNumber(data.totaux.affichages)} affichages` : 'module Social',
-    ],
+    voirClics
+      ? [
+          'Publicités Meta · clics',
+          data ? formatNumber(data.totaux.clics) : '—',
+          data ? `${formatNumber(data.totaux.affichages)} affichages` : 'module Social',
+        ]
+      : ['Publicités Meta · affichages', data ? formatNumber(data.totaux.affichages) : '—', 'module Social'],
     [
       'Publicités Meta · dépensé',
       data && data.totaux.devise !== null ? argent(data.totaux.depense, data.totaux.devise) : '—',
-      data && data.totaux.clics > 0 && data.totaux.devise !== null
+      voirClics && data && data.totaux.clics > 0 && data.totaux.devise !== null
         ? `coût par clic ${argent(Math.round((data.totaux.depense / data.totaux.clics) * 100) / 100, data.totaux.devise)}`
         : 'chiffres gardés par le module Social',
     ],

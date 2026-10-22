@@ -689,7 +689,7 @@ export default function CampaignBuilder({
                 agencies={agencies.data ?? []}
                 campaignId={savedId}
                 part="canaux"
-                social={<SocialChannels campaignId={savedId} />}
+                social={<SocialChannels campaignId={savedId} voirClics={role === 'BRAND_ADMIN'} />}
               />
             ) : null}
             {here === 'tracking' ? (
@@ -702,7 +702,7 @@ export default function CampaignBuilder({
             {here === 'planning' ? <PlanningStep {...shared} /> : null}
             {here === 'review' ? (
               <>
-                <LaunchBoard draft={draft} refs={refs} campaignId={savedId} />
+                <LaunchBoard draft={draft} refs={refs} campaignId={savedId} voirClics={role === 'BRAND_ADMIN'} />
                 <ReviewStep {...shared} shops={shops.data ?? []} />
               </>
             ) : null}
@@ -754,7 +754,7 @@ export default function CampaignBuilder({
             de quoi vérifier un choix sans revenir en arrière. */}
         <aside className="hub-aside">
           <HubSummary draft={draft} refs={refs} shops={shops.data ?? []} />
-          <HubAttached campaignId={savedId} />
+          <HubAttached campaignId={savedId} voirClics={role === 'BRAND_ADMIN'} />
         </aside>
       </div>
     </>
