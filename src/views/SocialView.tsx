@@ -40,8 +40,6 @@ export default function SocialView({ file, query, space, campaignId, onPage }: S
   // L'adresse du cadre est fixée à l'ouverture : la suite de la navigation
   // appartient au cadre, et la recalculer le rechargerait.
   const [src] = useState(() => `${base}${encodeURIComponent(file)}?embed=1${params ? `&${params}` : ''}`)
-  const [initial] = useState(file)
-  const [current, setCurrent] = useState(file)
   const frame = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
@@ -49,29 +47,16 @@ export default function SocialView({ file, query, space, campaignId, onPage }: S
       if (event.source !== frame.current?.contentWindow) return
       const data = event.data as { type?: string; page?: string } | null
       if (data?.type !== 'social:page' || typeof data.page !== 'string') return
-      const path = frame.current?.contentWindow?.location.pathname ?? ''
-      setCurrent(decodeURIComponent(path.split('/').pop() || initial))
       onPage(data.page)
     }
 
     window.addEventListener('message', listen)
     return () => window.removeEventListener('message', listen)
-  }, [initial, onPage])
+  }, [onPage])
 
-  // Le lien « ouvrir » suit l'écran affiché ; ses paramètres (onglet, présélection) ne valent que pour l'écran d'origine.
-  const full = `${base}${encodeURIComponent(current)}${params && current === initial ? `?${params}` : ''}`
-
+  // Pas de barre au-dessus du cadre : l'écran du module Social porte son titre, et il prend toute la surface.
   return (
     <div className="social-frame">
-      <div className="social-frame__bar">
-        <span className="muted">
-          {space === 'franchise' ? 'Espace boutique du module Social & Ads' : 'Écran du module Social & Ads'}
-          {campaignId === null ? '' : file === 'SA Campagnes.dc.html' ? ' — ouvert sur la campagne (plan de posts)' : ' — campagne présélectionnée comme opération liée'}
-        </span>
-        <a href={full} target="_blank" rel="noopener">
-          Ouvrir dans le module Social &amp; Ads ↗
-        </a>
-      </div>
       <iframe ref={frame} className="social-frame__page" title="Module Social & Ads" src={src} />
     </div>
   )

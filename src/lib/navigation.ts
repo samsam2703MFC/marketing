@@ -25,10 +25,6 @@ export type Route =
   | 'promotions'
   | 'bundles'
   | 'vouchers'
-  | 'physical'
-  | 'digital'
-  /** Canal « Newsletter, SMS & PWA » : les canaux de message activés par campagne (famille digitale). */
-  | 'canal-messages'
   | 'agencies'
   | 'analysis'
   | 'roi'
@@ -98,9 +94,6 @@ const ICONS: Record<string, string> = {
   promotions: 'M19 5L5 19M7 7a1.5 1.5 0 1 0 .01 0M17 17a1.5 1.5 0 1 0 .01 0',
   bundles: 'M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8M12 13v8',
   vouchers: 'M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4zM13 6v12',
-  physical: 'M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM8 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM21 15l-5-5L5 21',
-  digital: 'M4 4h16v12H4zM2 20h20M9 8l4 2-4 2z',
-  'canal-messages': 'M4 4h16v16H4zM4 4l8 8 8-8',
   agencies: 'M4 7h16v13H4zM9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 12h18',
   analysis: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
   roi: 'M3 17l6-6 4 4 8-8M15 7h6v6',
@@ -220,7 +213,8 @@ function item(route: Route, label: string): NavItem {
  * Sortis du menu : « Posts & pubs par campagne », ouvert depuis la campagne
  * elle-même ; « Présence locale » et « Médiathèque & kit », vides (rien ne
  * remplit leurs tables) et doublés par les avis Google et le kit de l'espace
- * franchisé.
+ * franchisé ; « Diffusion » (Print & PLV, Newsletter, SMS & PWA), retirée du
+ * menu et comme écran à la demande de la marque.
  */
 const NETWORK: NavGroup[] = [
   // Le calendrier marketing réunit tout ce qui est prévu ou en cours, tous canaux confondus.
@@ -245,7 +239,7 @@ const NETWORK: NavGroup[] = [
       item('social-leads', 'Formulaires de leads'),
     ],
   },
-  { label: 'Diffusion & offres', items: [item('physical', 'Diffusion'), item('promotions', 'Offres')] },
+  { label: 'Offres', items: [item('promotions', 'Offres')] },
   {
     label: 'Boutiques',
     items: [
@@ -311,10 +305,6 @@ export interface Tab {
 const TABS: Record<Role, Tab[][]> = {
   BRAND_ADMIN: [
     [
-      { route: 'physical', label: 'Print & PLV' },
-      { route: 'canal-messages', label: 'Newsletter, SMS & PWA' },
-    ],
-    [
       { route: 'promotions', label: 'Promotions' },
       { route: 'bundles', label: 'Bundles & menus' },
       { route: 'vouchers', label: 'Bons' },
@@ -325,7 +315,7 @@ const TABS: Record<Role, Tab[][]> = {
       { route: 'social-roi', label: 'Par opération' },
     ],
     [
-      { route: 'social-bilan', label: 'Classement de la semaine' },
+      { route: 'social-bilan', label: 'Classement' },
       { route: 'social-suivi', label: 'Abonnés & budget' },
     ],
   ],
