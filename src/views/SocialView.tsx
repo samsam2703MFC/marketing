@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { ROOTS } from '../lib/api/module'
 
 interface SocialViewProps {
   /** Fichier de l'écran du module Social & Ads à ouvrir (ex. `SA Calendrier.dc.html`). */
@@ -31,7 +32,7 @@ export default function SocialView({ file, query, space, campaignId, onPage }: S
   // Le module Social est servi sous /marketing (même serveur) : ses écrans à /marketing/social,
   // son espace boutique à /marketing/franchise. Les anciennes adresses (/social, /social_franchisee)
   // restent servies pour les liens de l'ERP, les QR codes imprimés et les notifications de Meta.
-  const base = (space === 'franchise' ? import.meta.env.VITE_SOCIAL_FRANCHISEE_BASE || '/marketing/franchise/' : import.meta.env.VITE_SOCIAL_BASE || '/marketing/social/').replace(/\/?$/, '/')
+  const base = space === 'franchise' ? ROOTS.socialFranchise : ROOTS.social
   // La boutique de l'adresse (`/marketingc/?shop=2`) passe à l'espace boutique : sans elle, il ouvre la
   // première boutique de la session. L'espace vérifie lui-même qu'elle est ouverte à ce visiteur.
   const shop = space === 'franchise' ? new URLSearchParams(window.location.search).get('shop')?.trim() ?? '' : ''

@@ -18,6 +18,8 @@ import AnalysisView from './views/AnalysisView'
 import RoiView from './views/RoiView'
 import CrmView from './views/CrmView'
 import CampaignTypesView from './views/CampaignTypesView'
+import AddressesView from './views/AddressesView'
+import CampaignFixView from './views/CampaignFixView'
 import CampaignBuilder from './views/builder/CampaignBuilder'
 import SocialView from './views/SocialView'
 import { ReferencesProvider } from './state/references'
@@ -123,6 +125,8 @@ function campaignFromUrl(): { route: Route; campaignId: number | null } | null {
   if (params.get('nouvelle') === '1') return { route: 'builder', campaignId: null }
 
   const id = Number(params.get('campagne') ?? '')
+  // `?completer=1` : les campagnes à compléter, en commençant par `?campagne=` s'il est donné.
+  if (params.get('completer') === '1') return { route: 'campaign-fix', campaignId: Number.isInteger(id) && id > 0 ? id : null }
   if (!Number.isInteger(id) || id <= 0) return null
 
   return { route: params.get('assistant') === '1' ? 'builder' : 'campaign', campaignId: id }
@@ -157,6 +161,8 @@ function Workspace() {
   const [route, setRoute] = useState<Route>(() => campaignFromUrl()?.route ?? 'dashboard')
   const [campaignId, setCampaignId] = useState<number | null>(() => campaignFromUrl()?.campaignId ?? null)
   const [postFor, setPostFor] = useState<number | null>(null)
+  // L'étape où rouvrir l'assistant, quand « Compléter les campagnes » y renvoie.
+  const [builderStep, setBuilderStep] = useState<string | null>(null)
   const [frameKey, setFrameKey] = useState(0)
   const requested = brandFromUrl()
 
@@ -179,6 +185,7 @@ function Workspace() {
   function navigate(next: Route) {
     setCampaignId(null)
     setPostFor(null)
+    setBuilderStep(null)
     setFrameKey((key) => key + 1)
     setRoute(next)
   }
@@ -224,7 +231,14 @@ function Workspace() {
    */
   function resumeCampaign(id: number) {
     setCampaignId(id)
+    setBuilderStep(null)
     setRoute('builder')
+  }
+
+  /** Les campagnes à compléter, en commençant par `id` s'il est donné (depuis son suivi). */
+  function completeCampaigns(id: number | null) {
+    setCampaignId(id)
+    setRoute('campaign-fix')
   }
 
   if (references.error) {
@@ -336,6 +350,7 @@ function Workspace() {
               onOpen={openCampaign}
               onCreate={() => navigate('builder')}
               onResume={resumeCampaign}
+              onComplete={() => completeCampaigns(null)}
             />
           ) : null}
 
@@ -357,6 +372,21 @@ function Workspace() {
           {route === 'roi' ? <RoiView /> : null}
           {route === 'crm' ? <CrmView /> : null}
           {route === 'campaign-types' ? <CampaignTypesView /> : null}
+          {route === 'addresses' ? <AddressesView /> : null}
+
+          {route === 'campaign-fix' ? (
+            <CampaignFixView
+              startId={campaignId}
+              brandAdmin={role === 'BRAND_ADMIN'}
+              onOpenBuilder={(id, step) => {
+                setCampaignId(id)
+                setBuilderStep(step)
+                setRoute('builder')
+              }}
+              onOpenCampaign={openCampaign}
+              onClose={() => navigate('campaigns')}
+            />
+          ) : null}
 
           {social ? (
             <SocialView key={frameKey} file={social.file} query={social.query} space={social.space} campaignId={postFor} onPage={followSocial} />
@@ -368,6 +398,7 @@ function Workspace() {
               role={role}
               brandId={brandId}
               campaignId={campaignId}
+              startStep={builderStep}
               onCreated={openCampaign}
               onCancel={() => navigate('campaigns')}
             />
@@ -381,6 +412,7 @@ function Workspace() {
               onCreatePost={role === 'BRAND_ADMIN' ? () => createPost(campaignId) : undefined}
               onPlanPosts={role === 'BRAND_ADMIN' ? () => planPosts(campaignId) : undefined}
               onOpenAssistant={() => setRoute('builder')}
+              onComplete={() => completeCampaigns(campaignId)}
               brandAdmin={role === 'BRAND_ADMIN'}
             />
           ) : null}

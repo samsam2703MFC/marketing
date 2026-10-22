@@ -4249,3 +4249,64 @@ button.mc-tag { cursor: pointer; }
 .dashboard-link { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .dashboard-link h2 { margin-bottom: 4px; }
 .dashboard-link p { margin: 0; }
+
+/* Tableau de bord : trafic clients, panier moyen, investissement pour vendre plus.
+   Le graphique suit les règles de lecture des données : fines lignes de 2 px,
+   grille et axes en retrait, une teinte par magasin dans un ordre fixe, une
+   légende, et le tableau des valeurs dessous (trois teintes passent sous 3:1 sur
+   le blanc : le tableau en est le relais). */
+.traffic { margin: 1rem 0; }
+.traffic__head h2 { margin-bottom: 2px; }
+.traffic__head p { margin: 0; font-size: 12.5px; }
+.traffic__legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 12px 0 4px; padding: 0; list-style: none; font-size: 12px; color: var(--muted-2); }
+.traffic__legend li { display: inline-flex; align-items: center; gap: 6px; }
+.traffic__swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: -1px; }
+.traffic__chart { position: relative; }
+.traffic__chart svg { display: block; width: 100%; height: auto; }
+.traffic__grid { stroke: var(--row-line); stroke-width: 1; }
+.traffic__axis { fill: var(--muted); font-size: 11px; font-family: 'Gotham', system-ui, sans-serif; }
+.traffic__cross { stroke: var(--muted-2); stroke-width: 1; stroke-dasharray: 3 3; }
+.traffic__tip {
+  position: absolute; top: 4px; z-index: 5; pointer-events: none; white-space: nowrap;
+  display: flex; flex-direction: column; gap: 3px; min-width: 15rem; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 8px 22px rgba(34, 34, 34, 0.14);
+  font-size: 11.5px; color: var(--ink);
+}
+.traffic__tip i { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 2px; }
+.traffic__goal { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.traffic__goal h3 { margin: 0 0 10px; font-size: 14px; font-weight: 500; }
+.traffic__inputs { display: flex; flex-wrap: wrap; gap: 10px 20px; }
+.traffic__inputs input { width: 7rem; text-align: right; }
+.traffic__method { margin: 10px 0 12px; font-size: 12px; line-height: 1.5; }
+.traffic tfoot td { padding: 13px 14px; font-weight: 500; border-top: 1px solid var(--line); }
+
+/* Adresses et réglages (Paramètres) : des chemins et des noms de variables, à lire et à copier. */
+.addresses { display: grid; gap: 1rem; }
+.addresses code { font-size: 12px; padding: 1px 6px; border-radius: 4px; background: var(--table-head); overflow-wrap: anywhere; }
+.addresses .card > p.muted { margin: 2px 0 12px; font-size: 12.5px; }
+.addresses__session p { margin: 6px 0 0; }
+.addresses td .muted { font-size: 12px; margin-top: 2px; }
+
+/* Compléter les campagnes : une liste de contrôle, un manque = une saisie, à côté de ce qui lui manque. */
+.fix__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.fix__name { margin: 4px 0 0; font-size: 20px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.fix .card > p.muted { margin: 8px 0 0; font-size: 12.5px; }
+.fix__head .muted { margin: 0; font-size: 12px; }
+.fix__links { display: flex; flex-wrap: wrap; gap: 8px; }
+.fix__list { display: grid; gap: 0; margin: 12px 0 0; padding: 0; list-style: none; }
+.fix__list > li { padding: 12px 0; border-top: 1px solid var(--row-line); }
+.fix__list > li.is-ok { opacity: 0.75; }
+.fix__label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-size: 13px; }
+.fix__label .muted { font-size: 12px; }
+.fix__why { margin: 4px 0 8px; font-size: 12px; }
+.fix__inline, .fix__levers, .fix__found { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.fix__levers input { width: 6.5rem; text-align: right; }
+.fix__products input[type='search'] { width: min(28rem, 100%); padding: 6px 10px; font-size: 13px; }
+.fix__list input:not([type='search']), .fix__list select { font-size: 13px; }
+.fix__found { margin-top: 8px; }
+.fix__chosen { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 0; padding: 0; list-style: none; font-size: 13px; }
+.fix__chosen li { display: inline-flex; align-items: center; gap: 4px; }
+.fix__rest { margin: 8px 0 14px; padding-left: 1rem; }
+.fix__rest li { margin: 4px 0; }
+.fix-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.fix-notice p { margin: 0; font-size: 13px; }

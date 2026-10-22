@@ -40,6 +40,18 @@ const BASE = `${API_ROOT}/api/v1/marketing`
 const COCKPIT_ROOT = (import.meta.env.VITE_COCKPIT_BASE ?? API_ROOT).replace(/\/+$/, '')
 // Le module Social & Ads (posts, publicités Meta), servi sous /marketing/social sur le même serveur.
 const SOCIAL_ROOT = (import.meta.env.VITE_SOCIAL_BASE || '/marketing/social/').replace(/\/+$/, '')
+// Son espace boutique, affiché dans la version franchisé.
+const SOCIAL_FRANCHISE_ROOT = (import.meta.env.VITE_SOCIAL_FRANCHISEE_BASE || '/marketing/franchise/').replace(/\/+$/, '')
+
+/** Les racines que ce build appelle ou ouvre, telles que résolues : l'écran « Adresses et réglages » les montre. */
+export const ROOTS = {
+  /** L'API de ce module. */
+  api: BASE,
+  /** Le cockpit du BO (sans `/api/cockpit`). */
+  cockpit: COCKPIT_ROOT,
+  social: `${SOCIAL_ROOT}/`,
+  socialFranchise: `${SOCIAL_FRANCHISE_ROOT}/`,
+}
 
 /**
  * Le module est servi par l'application elle-même, pas derrière le proxy `/erp`
@@ -66,6 +78,10 @@ export interface Session {
   brand_id?: number | null
   shop_ids?: number[] | null
   login_hint?: string
+  /** Identité de développement (MAR_DEV_AUTH) plutôt que celle de l'ERP. */
+  dev_auth?: boolean
+  /** Sans identité : le fichier de configuration du serveur a-t-il été trouvé. */
+  config_found?: boolean
 }
 
 export function getSession(): Promise<Session> {
@@ -346,6 +362,7 @@ export function listCampaigns(filters: CampaignFilters = {}): Promise<Campaign[]
  * enregistrée et illisible ne vaut guère mieux qu'une fiche perdue.
  */
 export interface CampaignDetail extends Campaign {
+  type_id: number | null
   tone: string | null
   tone_label: string | null
   /** Le suivi, en clair : l'action, son unité, où elle se lit, et la mesure du cockpit s'il y en a une. */
@@ -674,6 +691,19 @@ export function replaceCampaignDraft(id: number, draft: CampaignDraft): Promise<
 /** Colonnes de la campagne seules — le statut au moment du lancement, par exemple. */
 export function updateCampaign(id: number, change: Partial<CampaignDraft>): Promise<{ ok: boolean }> {
   return request(`${BASE}/campaigns/${id}`, { method: 'PATCH', body: change })
+}
+
+/**
+ * Les objectifs par levier d'une campagne, seuls, quel que soit son statut : un montant vide
+ * détache le levier, les leviers non envoyés ne bougent pas.
+ */
+export function setLeverTargets(id: number, targets: Array<{ lever_id: number; target_value: number | null }>): Promise<{ message: string }> {
+  return request(`${BASE}/campaigns/${id}/lever-targets`, { method: 'PUT', body: { lever_targets: targets } })
+}
+
+/** Des produits du catalogue ajoutés à l'offre, quel que soit le statut : ajout seul, sans doublon. */
+export function addOfferItems(id: number, offerItemIds: number[]): Promise<{ message: string }> {
+  return request(`${BASE}/campaigns/${id}/offer-items`, { method: 'POST', body: { offer_item_ids: offerItemIds } })
 }
 
 /**
@@ -1898,4 +1928,32 @@ export function socialAsset(path: string | null): string | null {
   if (!path) return null
 
   return /^(https?:)?\/\//.test(path) || path.startsWith('data:') ? path : `${SOCIAL_ROOT}/${path.replace(/^\.?\//, '')}`
+}
+
+// ---------------------------------------------------------------------------
+// Ventes mensuelles par boutique, lues par le cockpit
+// ---------------------------------------------------------------------------
+
+/**
+ * Un mois d'une boutique tel que le panel le rend : CA, tickets et panier moyen.
+ * Les champs restent à null tant que le mois n'a rien de vendu.
+ */
+export interface StoreMonth {
+  /** Le numéro de la boutique au panel et en caisse : le `N` de son code `erp-N` ici. */
+  storeId: string
+  annee: number
+  /** 1 à 12 */
+  mois: number
+  ca: number | null
+  tickets: number | null
+  panierMoyen: number | null
+}
+
+/**
+ * Les mois des années demandées, toutes boutiques du panel (`GET /api/cockpit/stores/perf`,
+ * la lecture du tableau des magasins et des leviers du cockpit). Le mois en cours y est,
+ * à date ; c'est à l'écran de l'écarter s'il ne veut que des mois clos.
+ */
+export function getStoreMonths(years: number[]): Promise<StoreMonth[]> {
+  return request(`${COCKPIT}/stores/perf`, { query: { annees: years.join(',') } })
 }

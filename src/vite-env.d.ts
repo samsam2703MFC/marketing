@@ -32,6 +32,12 @@ interface ImportMetaEnv {
    * joints d'une campagne. Par défaut la racine de l'API du module (installation dans le BO).
    */
   readonly VITE_COCKPIT_BASE?: string
+  /**
+   * Adresses des deux applications (`/marketing/`, `/marketingc/` sur le serveur), fixées au build
+   * par le déploiement. Elles ne servent qu'à l'écran « Adresses et réglages ».
+   */
+  readonly VITE_RESEAU_BASE?: string
+  readonly VITE_FRANCHISE_BASE?: string
 }
 
 interface ImportMeta {

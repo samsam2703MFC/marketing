@@ -379,6 +379,9 @@ check('la diffusion ne montre que ses campagnes', $campaignIds === [10], implode
 echo "\nAssistant de création\n";
 AuthContext::set(1, 'BRAND_ADMIN', 1);
 
+$response = call($router, 'GET', '/api/v1/marketing/session');
+check('la session dit d\'où vient l\'identité', is_bool($response['body']['dev_auth'] ?? null), var_export($response['body']['dev_auth'] ?? null, true));
+
 $channelId = (int) $pdo->query("SELECT id FROM mar_channel WHERE code = 'plv'")->fetchColumn();
 
 // Une référence de catalogue, comme la reprise ERP en écrit : l'étape « Offre »
@@ -1123,6 +1126,71 @@ $fiche = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d', $idSuivi
 check('campagne lancée : couleurs et nom se changent en PATCH, sans toucher au reste', $couleurs['status'] === 200
     && strtoupper((string) ($fiche['color_primary_hex'] ?? '')) === '#8D1D2C' && $fiche['name'] === 'Suivi renommé' && $fiche['status_code'] === 'planned'
     && ($fiche['tracking_action_code'] ?? '') === 'trafic', json_encode([$couleurs['status'], $fiche['color_primary_hex'] ?? null, $fiche['name'] ?? null]));
+
+// Les objectifs par levier se complètent sur une campagne lancée (PUT …/lever-targets) : seuls
+// eux bougent, rejouer l'envoi ne double rien, un envoi fautif n'écrit rien.
+$trafic    = (int) $pdo->query("SELECT id FROM mar_lever WHERE code = 'TRAFIC'")->fetchColumn();
+$objectifs = sprintf('/api/v1/marketing/campaigns/%d/lever-targets', $idSuivi);
+$objectifTrafic      = static function () use ($router, $idSuivi, $trafic): array {
+    $fiche = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d', $idSuivi))['body'];
+
+    return [array_values(array_filter($fiche['levers'] ?? [], static fn ($l) => (int) $l['lever_id'] === $trafic)), $fiche];
+};
+$pose   = call($router, 'PUT', $objectifs, [], ['lever_targets' => [['lever_id' => $trafic, 'target_value' => 3000]]]);
+$encore = call($router, 'PUT', $objectifs, [], ['lever_targets' => [['lever_id' => $trafic, 'target_value' => 3000]]]);
+[$lus, $fiche] = $objectifTrafic();
+check('campagne lancée : l\'objectif par levier se complète, rejoué sans doublon, le reste intact',
+    $pose['status'] === 200 && $encore['status'] === 200 && count($lus) === 1 && (float) $lus[0]['target_value'] === 3000.0
+        && $fiche['status_code'] === 'planned' && $fiche['name'] === 'Suivi renommé',
+    json_encode([$pose['status'], $encore['status'], $lus, $fiche['status_code'] ?? null]));
+foreach ([
+    'levier inconnu'  => [['lever_id' => 999999, 'target_value' => 10]],
+    'montant négatif' => [['lever_id' => $trafic, 'target_value' => -1]],
+    'pas une liste'   => 'tout',
+] as $cas => $corps) {
+    $refus = call($router, 'PUT', $objectifs, [], ['lever_targets' => $corps]);
+    check('objectif refusé (' . $cas . ') : 422, rien d\'écrit', $refus['status'] === 422 && (float) ($objectifTrafic()[0][0]['target_value'] ?? 0) === 3000.0,
+        'statut ' . $refus['status']);
+}
+check('objectif d\'une campagne inconnue : 404',
+    call($router, 'PUT', '/api/v1/marketing/campaigns/999999/lever-targets', [], ['lever_targets' => []])['status'] === 404);
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+$franchise = call($router, 'PUT', $objectifs, [], ['lever_targets' => [['lever_id' => $trafic, 'target_value' => 1]]]);
+AuthContext::clear();
+$anonyme = call($router, 'PUT', $objectifs, [], ['lever_targets' => [['lever_id' => $trafic, 'target_value' => 1]]]);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+check('l\'objectif d\'une campagne réseau ne se change ni par un franchisé, ni sans identité',
+    in_array($franchise['status'], [403, 404, 422], true) && $anonyme['status'] === 401 && (float) ($objectifTrafic()[0][0]['target_value'] ?? 0) === 3000.0,
+    json_encode([$franchise['status'], $anonyme['status']]));
+$retire = call($router, 'PUT', $objectifs, [], ['lever_targets' => [['lever_id' => $trafic, 'target_value' => '']]]);
+check('un montant vide détache le levier', $retire['status'] === 200 && $objectifTrafic()[0] === [], json_encode($objectifTrafic()[0]));
+
+// Des produits s'ajoutent à l'offre d'une campagne lancée (POST …/offer-items) : ajout seul,
+// une campagne sans offre en reçoit une, et rejouer l'envoi ne rajoute rien.
+$produits    = sprintf('/api/v1/marketing/campaigns/%d/offer-items', $idSuivi);
+$lignesOffre = static fn (): array => array_column(
+    call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d', $idSuivi))['body']['offer']['items'] ?? [],
+    'label'
+);
+$ajout   = call($router, 'POST', $produits, [], ['offer_item_ids' => [$catalogItemId]]);
+$rejoue  = call($router, 'POST', $produits, [], ['offer_item_ids' => [$catalogItemId, $seasonItemId]]);
+check('campagne lancée : les produits s\'ajoutent à l\'offre, sans doublon au second envoi',
+    $ajout['status'] === 200 && $rejoue['status'] === 200 && $lignesOffre() === ['Tarte du jour', 'Gamme Estivale (Juin à Août)'],
+    json_encode([$ajout['status'], $rejoue['status'], $lignesOffre()]));
+foreach (['produit inconnu' => [999999], 'liste vide' => [], 'pas une liste' => 'tout'] as $cas => $corps) {
+    $refus = call($router, 'POST', $produits, [], ['offer_item_ids' => $corps]);
+    check('produits refusés (' . $cas . ') : 422, rien d\'écrit', $refus['status'] === 422 && count($lignesOffre()) === 2, 'statut ' . $refus['status']);
+}
+check('produits d\'une campagne inconnue : 404',
+    call($router, 'POST', '/api/v1/marketing/campaigns/999999/offer-items', [], ['offer_item_ids' => [$catalogItemId]])['status'] === 404);
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+$franchise = call($router, 'POST', $produits, [], ['offer_item_ids' => [$catalogItemId]]);
+AuthContext::clear();
+$anonyme = call($router, 'POST', $produits, [], ['offer_item_ids' => [$catalogItemId]]);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+check('l\'offre d\'une campagne réseau ne se complète ni par un franchisé, ni sans identité',
+    in_array($franchise['status'], [403, 404, 422], true) && $anonyme['status'] === 401 && count($lignesOffre()) === 2,
+    json_encode([$franchise['status'], $anonyme['status']]));
 call($router, 'DELETE', sprintf('/api/v1/marketing/campaigns/%d', $idSuivi));
 
 // Réécriture en bloc : les rattachements sont remplacés, pas empilés. Les

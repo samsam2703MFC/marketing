@@ -79,6 +79,8 @@ entière, pour attraper une colonne ajoutée plus tard.
 | DELETE | `…/campaigns/{id}` | tenant | `{status, message}` |
 | GET | `…/campaigns/{id}/draft` | tenant | objet (brouillon complet de l'assistant) |
 | PUT | `…/campaigns/{id}/draft` | tenant | `{status, message}` |
+| PUT | `…/campaigns/{id}/lever-targets` | tenant (écriture : marque, ou boutique sur sa campagne locale) | `{status, message}` — objectifs par levier seuls, tout statut ; idempotent |
+| POST | `…/campaigns/{id}/offer-items` | tenant (même règle d'écriture) | `{status, message}` — produits du catalogue ajoutés à l'offre, tout statut ; ajout seul, idempotent |
 | GET | `…/campaigns/{id}/monitor` | tenant | objet |
 | GET | `…/campaigns/{id}/print` | tenant | objet (dossier d'impression) |
 | GET | `…/campaigns/{id}/roi-costs` | marque | tableau |
@@ -182,7 +184,9 @@ entière, pour attraper une colonne ajoutée plus tard.
   pour respecter la lettre du §4.3.
 - `GET …/session` est la seule route publique, et elle est explicite dans la
   déclaration (troisième argument `true`). Elle ne rend aucune donnée métier :
-  seulement si l'appelant est authentifié et sous quel rôle.
+  seulement si l'appelant est authentifié et sous quel rôle. Authentifié, elle
+  dit aussi `dev_auth` (identité de développement, `MAR_DEV_AUTH`, ou de l'ERP) :
+  un état, aucune valeur — champ ajouté, rien de retiré ni renommé.
 
 ---
 
@@ -295,4 +299,36 @@ publicités Meta rattachés, et l'adresse du webshop des liens suivis. Lecture s
 
 `GET /api/v1/marketing/campaigns/calendar` n'est plus lu par le front : la frise
 place les campagnes elle-même, au jour près.
+
+**Compléter une campagne** (`PUT …/lever-targets`, `POST …/offer-items`, octobre 2026).
+Une campagne lancée ne se réécrit plus en bloc (`PUT …/draft` est réservé aux
+brouillons, `PATCH` ne porte que ses colonnes) : ses objectifs par levier — ce
+que le Retour sur opération du module Social lit comme objectif — ne se
+complétaient donc plus. Cette route ne touche qu'eux. Corps
+`{ "lever_targets": [{ "lever_id", "target_value" }] }` ; un montant vide ou nul
+détache le levier (ou vide seulement sa cible s'il porte déjà un réalisé), les
+leviers non envoyés ne bougent pas. Levier inconnu, montant négatif ou corps
+illisible : 422, rien d'écrit.
+
+`POST …/campaigns/{id}/offer-items` (`{ "offer_item_ids": [462] }`) ajoute des
+produits du catalogue à l'offre : le Retour sur opération compte les ventes de
+ces produits, et sans eux ne mesure rien. **Ajout seul** — réécrire l'offre
+d'une campagne lancée effacerait en cascade ses objectifs par boutique et par
+produit et ses bundles. Un produit déjà présent n'est pas rajouté ; une
+campagne sans offre en reçoit une, à son nom. Produit inconnu ou liste vide :
+422, rien d'écrit. Écart résiduel des deux routes, comme le reste du module :
+pas d'enveloppe `{success, data, meta}`, `snake_case`.
+
+**Routes lues par le Tableau de bord, bloc « Trafic clients et panier moyen »**
+(vue Réseau seule, lecture seule) :
+
+| Route | Ce que le bloc en tire |
+|---|---|
+| `GET /api/v1/marketing/shops` | les boutiques du périmètre (ce module) ; `erp-N` donne le numéro `N` au panel |
+| `GET {VITE_COCKPIT_BASE}/api/cockpit/stores/perf?annees=` | CA, tickets et panier moyen par magasin et par mois (P&L mensuel du panel, la lecture du levier Trafic du cockpit ; 10 à 30 secondes) |
+| `GET /api/v1/marketing/funds/ledger?granularity=month` | les sorties du fonds marketing, en repère pour le coût par client (ce module) |
+
+La route du cockpit rend **tous** les magasins du panel : le bloc n'est donc pas
+servi en vue franchisé, où il faudrait filtrer dans le navigateur. L'ouvrir aux
+franchisés demande une route de ce module, filtrée par périmètre côté serveur.
 
