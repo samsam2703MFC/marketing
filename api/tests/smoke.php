@@ -3459,9 +3459,12 @@ check('bons : sans connexion, la création est refusée (503)',
     call($router, 'POST', '/api/v1/marketing/campaigns/10/vouchers', [], ['mechanic' => 'percent', 'value' => 10])['status'] === 503);
 
 $pdo->exec('UPDATE mar_shop SET erp_shop_id = 900 + id');
-$pdo->exec("INSERT INTO mar_campaign (id, brand_id, type_id, name, scope, status_code, starts_on, ends_on, budget_amount)
-    VALUES (12, 1, 7, 'Rentrée Namur', 'LOCALE', 'planned', '2026-09-01', '2026-09-30', 300)");
-$pdo->exec('INSERT INTO mar_campaign_shop (campaign_id, shop_id) VALUES (12, 1)');
+// Identifiant attribué par la base : les tests précédents créent déjà des
+// campagnes, et un identifiant posé en dur entrerait en collision avec elles.
+$pdo->exec("INSERT INTO mar_campaign (brand_id, type_id, name, scope, status_code, starts_on, ends_on, budget_amount)
+    VALUES (1, 7, 'Rentrée Namur', 'LOCALE', 'planned', '2026-09-01', '2026-09-30', 300)");
+$namur = (int) $pdo->lastInsertId();
+$pdo->exec(sprintf('INSERT INTO mar_campaign_shop (campaign_id, shop_id) VALUES (%d, 1)', $namur));
 $pdo->exec("INSERT INTO mar_offer_item (category, sku_ref, name, is_active) VALUES ('produit', 'erp-99501', 'Bûche d''essai', 1)");
 $buche = (int) $pdo->lastInsertId();
 
@@ -3653,12 +3656,12 @@ check('bons : franchisé, création sur la campagne réseau refusée (403)',
 check('bons : franchisé, campagne d\'une autre boutique invisible (404)',
     call($vouchersRouter, 'GET', $V . '11/vouchers')['status'] === 404);
 check('bons : franchisé, bon de la marque non rattachable (403)',
-    call($vouchersRouter, 'PUT', $V . '12/vouchers/LIVRE')['status'] === 404
-    && call($vouchersRouter, 'PUT', $V . '12/vouchers/BIENVENUE10')['status'] === 403);
-check('bons : franchisé, bon de sa boutique rattachable (201)', call($vouchersRouter, 'PUT', $V . '12/vouchers/NAMUR5')['status'] === 201);
+    call($vouchersRouter, 'PUT', $V . $namur . '/vouchers/LIVRE')['status'] === 404
+    && call($vouchersRouter, 'PUT', $V . $namur . '/vouchers/BIENVENUE10')['status'] === 403);
+check('bons : franchisé, bon de sa boutique rattachable (201)', call($vouchersRouter, 'PUT', $V . $namur . '/vouchers/NAMUR5')['status'] === 201);
 check('bons : franchisé, bon réservé à un bureau refusé (403)',
-    call($vouchersRouter, 'POST', $V . '12/vouchers', [], ['mechanic' => 'percent', 'value' => 5, 'target_kind' => 'OFFICE', 'target_id' => 7])['status'] === 403);
-$response = call($vouchersRouter, 'POST', $V . '12/vouchers', [], ['mechanic' => 'percent', 'value' => 5]);
+    call($vouchersRouter, 'POST', $V . $namur . '/vouchers', [], ['mechanic' => 'percent', 'value' => 5, 'target_kind' => 'OFFICE', 'target_id' => 7])['status'] === 403);
+$response = call($vouchersRouter, 'POST', $V . $namur . '/vouchers', [], ['mechanic' => 'percent', 'value' => 5]);
 check('bons : franchisé, bon de sa campagne locale, émis par sa boutique', $response['status'] === 201 && ($ws['last']['id_shop'] ?? null) === 901);
 $response = call($vouchersRouter, 'GET', '/api/v1/marketing/webshop-vouchers');
 check('bons : franchisé, ne liste que les bons de ses boutiques',
