@@ -11,6 +11,7 @@ import TrackingStep from './TrackingStep'
 import { HUBS, HubAttached, HubHeader, HubStepper, HubSummary, LaunchBoard, SocialChannels, Traceability, hubIndexOf } from './Hub'
 import PricingStep from './PricingStep'
 import PhotosStep from './PhotosStep'
+import { VoucherResults, VouchersStep, useCampaignVouchers } from './VouchersStep'
 import ProspectList from './ProspectList'
 import RangeCalendar from '../../components/RangeCalendar'
 import { familyImage, seasonImage, seasonLabel } from './illustrations'
@@ -420,6 +421,14 @@ const STEPS: Step[] = [
     },
   },
   {
+    // Les bons après le prix : une remise réservée à qui a le code se pense
+    // une fois les promotions de tous arrêtées — elle s'y ajoute au panier.
+    key: 'vouchers',
+    label: 'Bons',
+    // Jamais bloquante : une campagne sans bon est la règle, pas une lacune.
+    blocking: () => null,
+  },
+  {
     // Après le prix, avant le budget : on choisit les photos une fois que
     // l'offre et ses prix sont arrêtés, et avant de parler d'argent — c'est
     // le dernier geste qui touche encore aux produits eux-mêmes.
@@ -521,6 +530,10 @@ export default function CampaignBuilder({
   // le savoir autrement.
   const [savedId, setSavedId] = useState<number | null>(campaignId)
   const [saving, setSaving] = useState(false)
+  // Les bons vivent dans le webshop : lus une fois ici, pour la sous-étape, le
+  // résumé de droite et le récap ; relus après chaque changement.
+  const [bonsVersion, setBonsVersion] = useState(0)
+  const bons = useCampaignVouchers(savedId, bonsVersion)
   const [savedAt, setSavedAt] = useState<string | null>(null)
 
   const shops = useAsync(() => api.listShops(), [])
@@ -678,6 +691,15 @@ export default function CampaignBuilder({
             {here === 'offer' ? <OfferStep {...shared} /> : null}
             {here === 'objectives' ? <ObjectivesStep {...shared} /> : null}
             {here === 'pricing' ? <PricingStep {...shared} /> : null}
+            {here === 'vouchers' ? (
+              <VouchersStep
+                draft={draft}
+                campaignId={savedId}
+                isBrand={role === 'BRAND_ADMIN'}
+                state={bons}
+                onChanged={() => setBonsVersion((n) => n + 1)}
+              />
+            ) : null}
             {here === 'photos' ? <PhotosStep {...shared} /> : null}
             {here === 'medias' ? (
               <CommunicationStep {...shared} agencies={agencies.data ?? []} campaignId={savedId} part="medias" />
@@ -701,7 +723,13 @@ export default function CampaignBuilder({
             {here === 'planning' ? <PlanningStep {...shared} /> : null}
             {here === 'review' ? (
               <>
-                <LaunchBoard draft={draft} refs={refs} campaignId={savedId} voirClics={role === 'BRAND_ADMIN'} />
+                <LaunchBoard
+                  draft={draft}
+                  refs={refs}
+                  campaignId={savedId}
+                  voirClics={role === 'BRAND_ADMIN'}
+                  bons={<VoucherResults state={bons} />}
+                />
                 <ReviewStep {...shared} shops={shops.data ?? []} />
               </>
             ) : null}
@@ -763,7 +791,12 @@ export default function CampaignBuilder({
         {/* La campagne en un coup d'œil, et ce que le module Social y a déjà rattaché :
             de quoi vérifier un choix sans revenir en arrière. */}
         <aside className="hub-aside">
-          <HubSummary draft={draft} refs={refs} shops={shops.data ?? []} />
+          <HubSummary
+            draft={draft}
+            refs={refs}
+            shops={shops.data ?? []}
+            bons={bons.data === null ? null : bons.data.vouchers.map((v) => v.code).join(' · ') || 'aucun'}
+          />
           <HubAttached campaignId={savedId} voirClics={role === 'BRAND_ADMIN'} />
         </aside>
       </div>

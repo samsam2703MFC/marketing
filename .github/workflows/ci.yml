@@ -241,6 +241,7 @@ jobs:
       SSH_PORT: ${{ vars.SSH_PORT || '22' }}
       CONFIG_DIR: ${{ vars.CONFIG_DIR || '/var/www/private/marketing' }}
       MAR_DB_NAME: ${{ secrets.MAR_DB_NAME }}
+      MAR_WEBSHOP_API_TOKEN: ${{ secrets.MAR_WEBSHOP_API_TOKEN }}
       DEPLOY_DIR: ${{ vars.DEPLOY_DIR || vars.DEPLOY_PATH || '/var/www/html/marketing' }}
       DEPLOY_DIR_FRANCHISE: ${{ vars.DEPLOY_DIR_FRANCHISE || '/var/www/html/marketingc' }}
 
@@ -286,6 +287,7 @@ jobs:
             printf '| `DEPLOY_DIR` | `%s` |\n'                        "$DEPLOY_DIR"
             printf '| `CONFIG_DIR` | `%s` |\n'                        "$CONFIG_DIR"
             printf '| `MAR_DB_NAME` | %s |\n'                         "$([ -n "$MAR_DB_NAME" ] && echo 'présent — le .env sera écrit' || echo 'absent — .env laissé en place')"
+            printf '| `MAR_WEBSHOP_API_TOKEN` | %s |\n'               "$([ -n "$MAR_WEBSHOP_API_TOKEN" ] && echo 'présent — bons de campagne actifs' || echo 'absent — la sous-étape « Bons » le dira')"
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ]; then
@@ -503,6 +505,11 @@ jobs:
           MAR_ERP_ROYALTY_LINE_TABLE: ${{ vars.MAR_ERP_ROYALTY_LINE_TABLE }}
           MAR_ERP_PRODUCTS_TABLE: ${{ vars.MAR_ERP_PRODUCTS_TABLE }}
           MAR_ERP_CUSTOMERS_TABLE: ${{ vars.MAR_ERP_CUSTOMERS_TABLE }}
+          # API du webshop, pour les bons de campagne. L'adresse est une
+          # variable (le webshop vit sur ce même serveur) ; le jeton, un secret :
+          # c'est l'admin_token de la config.php du webshop.
+          MAR_WEBSHOP_API_BASE: ${{ vars.MAR_WEBSHOP_API_BASE || 'http://185.180.206.46/webshop/api' }}
+          MAR_WEBSHOP_API_TOKEN: ${{ secrets.MAR_WEBSHOP_API_TOKEN }}
         run: |
           umask 077
           # Valeurs entre guillemets et échappées : sans cela, un mot de passe
@@ -521,7 +528,7 @@ jobs:
             # repartirait en silence sur la table par défaut.
             for cle in MAR_ERP_SHOPS_TABLE MAR_ERP_ROYALTY_INVOICE_TABLE \
                        MAR_ERP_ROYALTY_LINE_TABLE MAR_ERP_PRODUCTS_TABLE \
-                       MAR_ERP_CUSTOMERS_TABLE; do
+                       MAR_ERP_CUSTOMERS_TABLE MAR_WEBSHOP_API_BASE MAR_WEBSHOP_API_TOKEN; do
               valeur="${!cle:-}"
               # Un `if`, pas un `&&` : le pas de la boucle sort en échec quand la
               # dernière variable est vide, et l'étape entière tomberait avec lui.
