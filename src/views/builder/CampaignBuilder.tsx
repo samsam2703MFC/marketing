@@ -534,6 +534,15 @@ export default function CampaignBuilder({
   // résumé de droite et le récap ; relus après chaque changement.
   const [bonsVersion, setBonsVersion] = useState(0)
   const bons = useCampaignVouchers(savedId, bonsVersion)
+  // Par ligne d'offre, les bons actifs qui déclenchent sa promotion : l'étape
+  // Prix le montre sous la mécanique.
+  const codesParLigne = new Map<number, string[]>()
+  for (const v of bons.data?.vouchers ?? []) {
+    if (v.active === false) continue
+    for (const p of v.promotions ?? []) {
+      if (p.offer_item_id !== null) codesParLigne.set(p.offer_item_id, [...(codesParLigne.get(p.offer_item_id) ?? []), v.code])
+    }
+  }
   const [savedAt, setSavedAt] = useState<string | null>(null)
 
   const shops = useAsync(() => api.listShops(), [])
@@ -690,7 +699,7 @@ export default function CampaignBuilder({
             {here === 'framing' ? <FramingStep {...shared} role={role} shops={shops.data ?? []} /> : null}
             {here === 'offer' ? <OfferStep {...shared} /> : null}
             {here === 'objectives' ? <ObjectivesStep {...shared} /> : null}
-            {here === 'pricing' ? <PricingStep {...shared} /> : null}
+            {here === 'pricing' ? <PricingStep {...shared} codes={codesParLigne} /> : null}
             {here === 'vouchers' ? (
               <VouchersStep
                 draft={draft}

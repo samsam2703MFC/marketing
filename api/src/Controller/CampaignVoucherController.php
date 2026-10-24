@@ -22,6 +22,8 @@ final class CampaignVoucherController
     private const FIELDS = [
         'mechanic', 'value', 'offer_item_id', 'max_qty', 'min_order', 'code',
         'starts_on', 'ends_on', 'usage_total', 'per_customer', 'target_kind', 'target_id',
+        // Mécanique « promotions » : les lignes de l'étape Prix cochées (offer_item_id).
+        'promotions',
     ];
 
     public function __construct(

@@ -3492,7 +3492,13 @@ $wsRow = static function (string $code, array $v): array {
         'usageLimit' => $v['max_uses'] ?? null, 'perCustomer' => $v['per_customer'] ?? null,
         'reasonKind' => null, 'reasonNote' => null, 'createdBy' => null,
         'marCampaignId' => $v['camp'] ?? null, 'marCampaignOrigin' => $v['origin'] ?? null, 'active' => $v['active'] ?? true,
-    ];
+    ] + (($v['type'] ?? '') === 'promos' ? [
+        // Type « promos » (API.md, migration 0136) : la liste et le cumul.
+        'value' => null, 'cumulative' => (bool) ($v['cumulative'] ?? false),
+        'promos' => array_map(static fn (array $p): array => $p + [
+            'productName' => 'Produit ' . $p['productId'], 'label' => 'Produit ' . $p['productId'] . ' : ' . $p['mechanic'],
+        ], $v['promos'] ?? []),
+    ] : []);
 };
 $fake = static function (string $method, string $url, array $headers, ?string $body, int $timeout) use (&$ws, $wsRow): array {
     unset($headers, $timeout);
@@ -3533,8 +3539,12 @@ $fake = static function (string $method, string $url, array $headers, ?string $b
         if (!empty($in['create_only']) && $existed) {
             return $json(409, ['error' => 'code déjà utilisé : ' . $code, 'code' => $code]);
         }
+        if (($in['type'] ?? '') === 'promos' && empty($in['promos'])) {
+            return $json(400, ['error' => 'promos : au moins une promotion']);
+        }
         $old = $ws['vouchers'][$code] ?? [];
         $ws['vouchers'][$code] = [
+            'promos' => $in['promos'] ?? null, 'cumulative' => $in['cumulative'] ?? false,
             'type' => $in['type'], 'value' => $in['value'], 'min_order' => $in['min_order'],
             'scope_product_id' => $in['scope_product_id'], 'scope_max_qty' => $in['scope_max_qty'],
             'shopId' => $in['id_shop'], 'shopName' => $in['id_shop'] !== null ? 'Boutique ' . $in['id_shop'] : null,
@@ -3692,6 +3702,81 @@ $response = call($vouchersRouter, 'GET', '/api/v1/marketing/webshop-vouchers', [
 check('bons : la marque voit qui suit un bon',
     ($response['body']['vouchers'][0]['campaign_name'] ?? '') === 'Rentrée Namur', json_encode($response['body']['vouchers'][0] ?? null));
 check('bons : bureaux (marque)', (call($vouchersRouter, 'GET', '/api/v1/marketing/webshop-offices')['body'][0]['name'] ?? '') === 'Bureau Dupont');
+
+// Un bon qui DÉCLENCHE les promotions de l'étape Prix. Une campagne réseau,
+// son offre et quatre lignes en promotion : deux que le panier du webshop sait
+// appliquer, un prix de formule (pas au webshop) et un produit hors ERP.
+$pdo->exec("INSERT INTO mar_campaign (brand_id, type_id, name, scope, status_code, starts_on, ends_on, budget_amount)
+    VALUES (1, 7, 'Noël bûches', 'RESEAU', 'planned', '2026-12-01', '2026-12-31', 800)");
+$noel = (int) $pdo->lastInsertId();
+$pdo->exec(sprintf("INSERT INTO mar_campaign_offer (campaign_id, title, max_qty_per_ticket, is_cumulative) VALUES (%d, 'Offre Noël', 4, 0)", $noel));
+$noelOffer = (int) $pdo->lastInsertId();
+$item = static function (?string $sku, string $name) use ($pdo): int {
+    $pdo->prepare("INSERT INTO mar_offer_item (category, sku_ref, name, is_active) VALUES ('produit', ?, ?, 1)")->execute([$sku, $name]);
+    return (int) $pdo->lastInsertId();
+};
+$praline = $item('erp-99601', 'Bûche Praliné');
+$choco   = $item('erp-99602', 'Bûche Chocolat');
+$formule = $item('erp-99603', 'Formule Réveillon');
+$libre   = $item(null, 'Bûche maison');   // saisie libre : aucune référence ERP
+$ligne = $pdo->prepare('INSERT INTO mar_campaign_offer_item (campaign_offer_id, offer_item_id, label, sort_order, mechanic_type,
+    discount_pct, fixed_price, buy_qty, get_qty, baseline_price) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+$ligne->execute([$noelOffer, $praline, 'Bûche Praliné', 1, 'BUY_X_GET_Y', null, null, 2, 1, 19.90]);
+$ligne->execute([$noelOffer, $choco, 'Bûche Chocolat', 2, 'PERCENT', 15, null, null, null, 19.90]);
+$ligne->execute([$noelOffer, $formule, 'Formule Réveillon', 3, 'BUNDLE_FIXED', null, 24.00, null, null, 29.00]);
+$ligne->execute([$noelOffer, $libre, 'Bûche maison', 4, 'CROSSED_PRICE', null, 15.00, null, null, 18.00]);
+
+$response = call($vouchersRouter, 'GET', $V . $noel . '/vouchers');
+$promos = array_column($response['body']['campaign_promotions'] ?? [], null, 'offer_item_id');
+check('promotions : l\'étape Prix est listée', $response['status'] === 200 && count($promos) === 4, json_encode($response['body']['campaign_promotions'] ?? null));
+check('promotions : offre liée et pourcentage partent au webshop, en clair',
+    ($promos[$praline]['webshop'] ?? false) === true && ($promos[$praline]['text'] ?? '') === '2 achetés → 1 offert'
+    && ($promos[$choco]['webshop'] ?? false) === true && ($promos[$choco]['text'] ?? '') === '−15 %');
+check('promotions : le prix de formule et le produit hors ERP disent pourquoi non',
+    ($promos[$formule]['webshop'] ?? true) === false && str_contains((string) ($promos[$formule]['reason'] ?? ''), 'Prix de formule')
+    && ($promos[$libre]['webshop'] ?? true) === false && str_contains((string) ($promos[$libre]['reason'] ?? ''), 'ERP'));
+
+check('promotions : sans promotion cochée, refusé (422)',
+    call($vouchersRouter, 'POST', $V . $noel . '/vouchers', [], ['mechanic' => 'promotions', 'promotions' => []])['status'] === 422);
+$response = call($vouchersRouter, 'POST', $V . $noel . '/vouchers', [], ['mechanic' => 'promotions', 'promotions' => [$praline, $formule]]);
+check('promotions : un prix de formule coché est refusé, nommé (422)', $response['status'] === 422
+    && str_contains((string) ($response['body']['description'] ?? ''), 'Formule Réveillon'));
+check('promotions : une ligne d\'une autre campagne est refusée (422)',
+    call($vouchersRouter, 'POST', $V . $noel . '/vouchers', [], ['mechanic' => 'promotions', 'promotions' => [$buche]])['status'] === 422);
+
+$response = call($vouchersRouter, 'POST', $V . $noel . '/vouchers', [], ['mechanic' => 'promotions', 'promotions' => [$praline, $choco], 'code' => 'reve-noel']);
+$sent = $ws['last'] ?? [];
+check('promotions : bon créé (201)', $response['status'] === 201 && ($response['body']['inserted_id'] ?? '') === 'REVE-NOEL', json_encode($response['body']));
+check('promotions : le webshop reçoit le type « promos », sans remise propre',
+    ($sent['type'] ?? '') === 'promos' && array_key_exists('value', $sent) && $sent['value'] === null
+    && array_key_exists('scope_product_id', $sent) && $sent['scope_product_id'] === null);
+check('promotions : chaque promotion part avec son produit ERP et ses valeurs',
+    json_encode($sent['promos'] ?? null) === json_encode([
+        ['productId' => 99601, 'mechanic' => 'BUY_X_GET_Y', 'percent' => null, 'price' => null, 'buy' => 2, 'get' => 1, 'maxQty' => 4],
+        ['productId' => 99602, 'mechanic' => 'PERCENT', 'percent' => 15, 'price' => null, 'buy' => null, 'get' => null, 'maxQty' => 4],
+    ]), json_encode($sent['promos'] ?? null));
+check('promotions : « non cumulable » de l\'étape Prix suit le bon', ($sent['cumulative'] ?? null) === false);
+
+$response = call($vouchersRouter, 'GET', $V . $noel . '/vouchers');
+$bon = array_column($response['body']['vouchers'] ?? [], null, 'code')['REVE-NOEL'] ?? [];
+check('promotions : relu comme un bon « promotions », rapproché des lignes de l\'offre',
+    ($bon['mechanic'] ?? '') === 'promotions' && array_column($bon['promotions'] ?? [], 'offer_item_id') === [$praline, $choco]
+    && ($bon['promotions_changed'] ?? null) === false, json_encode($bon));
+
+// L'étape Prix change après l'envoi : la liste le dit, « Mettre à jour » renvoie.
+$pdo->exec(sprintf('UPDATE mar_campaign_offer_item SET discount_pct = 20 WHERE campaign_offer_id = %d AND offer_item_id = %d', $noelOffer, $choco));
+$bon = array_column(call($vouchersRouter, 'GET', $V . $noel . '/vouchers')['body']['vouchers'] ?? [], null, 'code')['REVE-NOEL'] ?? [];
+check('promotions : un changement à l\'étape Prix est signalé', ($bon['promotions_changed'] ?? null) === true);
+$response = call($vouchersRouter, 'PATCH', $V . $noel . '/vouchers/REVE-NOEL', [], ['usage_total' => 300]);
+check('promotions : une modification renvoie les promotions du moment',
+    $response['status'] === 200 && ($ws['last']['promos'][1]['percent'] ?? 0) == 20 && ($ws['last']['max_uses'] ?? 0) === 300);
+$bon = array_column(call($vouchersRouter, 'GET', $V . $noel . '/vouchers')['body']['vouchers'] ?? [], null, 'code')['REVE-NOEL'] ?? [];
+check('promotions : … et le signal retombe', ($bon['promotions_changed'] ?? null) === false);
+$response = call($vouchersRouter, 'PATCH', $V . $noel . '/vouchers/REVE-NOEL', [], ['promotions' => [$choco]]);
+check('promotions : décocher une promotion', $response['status'] === 200 && count($ws['last']['promos'] ?? []) === 1);
+$response = call($vouchersRouter, 'PATCH', $V . $noel . '/vouchers/REVE-NOEL', [], ['mechanic' => 'percent', 'value' => 10]);
+check('promotions : repasser en pourcentage n\'envoie plus de promotions',
+    $response['status'] === 200 && ($ws['last']['type'] ?? '') === 'percent' && !array_key_exists('promos', $ws['last'] ?? []));
 
 // --- Résultat -------------------------------------------------------------
 printf("\n%d réussis, %d échoués\n", $passed, $failed);
