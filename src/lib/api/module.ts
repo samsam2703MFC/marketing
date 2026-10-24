@@ -987,7 +987,30 @@ export function listVouchers(): Promise<Voucher[]> {
 // ---------------------------------------------------------------------------
 
 /** `percent` · `fixed` (€) · `product` (produit offert) · `free_delivery`. */
-export type VoucherMechanic = 'percent' | 'fixed' | 'product' | 'free_delivery'
+export type VoucherMechanic = 'percent' | 'fixed' | 'product' | 'free_delivery' | 'promotions'
+
+/** Une promotion que déclenche un bon « promotions », telle que le webshop la garde. */
+export interface VoucherPromotion {
+  /** Ligne de l'offre (étape Prix) rapprochée ; null si elle n'y est plus. */
+  offer_item_id: number | null
+  product_name: string
+  mechanic: string
+  /** Libellé du panier : « Bûche : 2 achetés → 1 offert ». */
+  label: string
+}
+
+/** Une promotion de l'étape Prix, et si elle peut partir au webshop. */
+export interface CampaignPromotion {
+  offer_item_id: number
+  label: string
+  mechanic: string
+  mechanic_label: string
+  /** La valeur en clair : « −15 % », « 2 achetés → 1 offert » ; vide si rien n'est saisi. */
+  text: string
+  webshop: boolean
+  /** Pourquoi elle ne part pas au webshop, quand elle ne part pas. */
+  reason: string | null
+}
 
 /** Un bon tel que le webshop le sert. Null partout si le webshop ne l'a pas. */
 export interface WebshopVoucher {
@@ -1008,6 +1031,10 @@ export interface WebshopVoucher {
   usage_count: number | null
   usage_limit: number | null
   per_customer: number | null
+  /** Bon « promotions » : celles qu'il déclenche ; null pour les autres bons. */
+  promotions: VoucherPromotion[] | null
+  /** L'étape Prix a changé depuis l'envoi au webshop (null hors campagne). */
+  promotions_changed: boolean | null
 }
 
 export interface VoucherResults {
@@ -1031,6 +1058,8 @@ export interface CampaignVouchers {
   can_edit: boolean
   vouchers: CampaignVoucher[]
   totals: { orders: number; revenue: number; discount: number; average_basket: number | null } | null
+  /** Les promotions de l'étape Prix qu'un bon peut déclencher. */
+  campaign_promotions: CampaignPromotion[]
 }
 
 /** Ce que l'écran envoie pour créer ou modifier un bon. */
@@ -1047,6 +1076,8 @@ export interface VoucherInput {
   per_customer?: string
   target_kind?: 'NETWORK' | 'OFFICE'
   target_id?: number | null
+  /** Mécanique « promotions » : les lignes de l'étape Prix cochées. */
+  promotions?: number[]
 }
 
 export function campaignVouchers(campaignId: number): Promise<CampaignVouchers> {

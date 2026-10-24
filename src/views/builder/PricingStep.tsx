@@ -120,9 +120,15 @@ function simuler(
 export default function PricingStep({
   draft,
   patch,
+  codes,
 }: {
   draft: Draft
   patch: (change: Partial<Draft>) => void
+  /**
+   * Par ligne d'offre, les bons de la campagne qui déclenchent sa promotion
+   * (sous-étape « Bons ») : au webshop, elle ne vaut qu'avec l'un d'eux.
+   */
+  codes?: Map<number, string[]>
 }) {
   /**
    * Seuls les produits ont un prix.
@@ -725,6 +731,13 @@ export default function PricingStep({
                               onChange={(e) => patchItem(index, { get_qty: e.target.value })}
                             />
                             offert
+                          </span>
+                        ) : null}
+
+                        {element.mechanic_type !== '' && element.offer_item_id !== null
+                          && (codes?.get(element.offer_item_id)?.length ?? 0) > 0 ? (
+                          <span className="pricing__code">
+                            au webshop avec le code {codes?.get(element.offer_item_id)?.join(', ')}
                           </span>
                         ) : null}
                       </div>

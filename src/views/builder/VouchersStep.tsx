@@ -1,6 +1,14 @@
 import { useState } from 'react'
 import { module as api } from '../../lib/api'
-import type { AttachableVoucher, CampaignVoucher, CampaignVouchers, VoucherInput, VoucherMechanic, WebshopVoucher } from '../../lib/api/module'
+import type {
+  AttachableVoucher,
+  CampaignPromotion,
+  CampaignVoucher,
+  CampaignVouchers,
+  VoucherInput,
+  VoucherMechanic,
+  WebshopVoucher,
+} from '../../lib/api/module'
 import { describeError } from '../../state/auth'
 import { formatDate, formatEur, formatNumber, useAsync } from '../../lib/useAsync'
 import type { Draft } from './CampaignBuilder'
@@ -15,6 +23,10 @@ import { slugOf, useAttached } from './Hub'
  *
  * Il vit dans le moteur de bons du webshop, qui l'applique au panier. L'écran
  * ne garde rien : chaque geste part à l'API, chaque liste en revient.
+ *
+ * Mécanique « Promotions de la campagne » : le bon n'a pas de remise propre,
+ * il déclenche des promotions de l'étape « Prix », cochées une à une. Au
+ * webshop, elles ne valent qu'avec le code.
  */
 
 const MECHANICS: Array<[VoucherMechanic, string]> = [
@@ -22,6 +34,7 @@ const MECHANICS: Array<[VoucherMechanic, string]> = [
   ['fixed', 'Montant en €'],
   ['product', 'Produit offert'],
   ['free_delivery', 'Livraison offerte'],
+  ['promotions', 'Promotions de la campagne'],
 ]
 
 /** Les bons d'une campagne. `version` relance la lecture après un changement. */
@@ -37,6 +50,11 @@ export function remiseOf(v: WebshopVoucher): string {
   const produit = v.scope_product_name
   let texte: string
   switch (v.mechanic) {
+    case 'promotions': {
+      const n = v.promotions?.length ?? 0
+      texte = `Déclenche ${n} promotion${n > 1 ? 's' : ''} de la campagne`
+      break
+    }
     case 'product':
       texte = `${v.scope_max_qty ?? 1} × ${produit ?? 'produit'} offert`
       break
@@ -81,6 +99,7 @@ function codePropose(name: string, form: Form): string {
   if (form.mechanic === 'fixed' && /^\d{1,4}$/.test(form.value.trim())) return `${base}${form.value.trim()}E`
   if (form.mechanic === 'free_delivery') return `${base}-PORT`
   if (form.mechanic === 'product') return `${base}-CADEAU`
+  if (form.mechanic === 'promotions') return `${base}-PROMO`
 
   return base
 }
@@ -101,6 +120,8 @@ interface Form {
   target_kind: 'NETWORK' | 'OFFICE'
   target_id: number | null
   target_label: string
+  /** Mécanique « promotions » : lignes de l'étape Prix cochées. */
+  promotions: number[]
 }
 
 function blankForm(draft: Draft): Form {
@@ -120,6 +141,7 @@ function blankForm(draft: Draft): Form {
     target_kind: 'NETWORK',
     target_id: null,
     target_label: '',
+    promotions: [],
   }
 }
 
@@ -135,6 +157,7 @@ function formOf(v: CampaignVoucher, draft: Draft): Form {
     ends_on: v.ends_on ?? '',
     usage_total: v.usage_limit !== null ? String(v.usage_limit) : '',
     per_customer: v.per_customer !== null ? String(v.per_customer) : '',
+    promotions: (v.promotions ?? []).map((p) => p.offer_item_id).filter((id): id is number => id !== null),
   }
 }
 
@@ -167,6 +190,20 @@ export function VouchersStep({
   const slug = slugOf(draft.name)
   const webshop = attached.data?.webshop ?? null
 
+  /** Renvoie au webshop les promotions du bon, aux valeurs actuelles de l'étape Prix. */
+  async function mettreAJour(v: CampaignVoucher) {
+    setBusy(v.code)
+    setFailure(null)
+    try {
+      await api.updateCampaignVoucher(campaignId as number, v.code, {})
+      onChanged()
+    } catch (cause: unknown) {
+      setFailure(describeError(cause))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function retirer(v: CampaignVoucher) {
     const effet = v.origin === 'created'
       ? `Le bon ${v.code} sera suspendu dans le webshop : il ne vaudra plus. Ses commandes passées restent.`
@@ -188,9 +225,10 @@ export function VouchersStep({
     <>
       <h2>Bons</h2>
       <p className="muted">
-        Un bon est un code que le client tape au webshop. Contrairement à une promotion de l’étape « Prix », il ne
-        vaut que pour qui a le code : c’est ce qui dit ce qu’un flyer, un post ou un e-mail a vraiment rapporté.
-        Créez-le ici comme une promotion, ou rattachez un bon qui existe déjà.
+        Un bon est un code que le client tape au webshop. Il ne vaut que pour qui a le code : c’est ce qui dit ce
+        qu’un flyer, un post ou un e-mail a vraiment rapporté. Il porte sa propre remise, ou déclenche les promotions
+        posées à l’étape « Prix » : elles ne s’appliquent alors au webshop qu’avec le code. Créez-le ici, ou
+        rattachez un bon qui existe déjà.
       </p>
 
       {campaignId === null ? (
@@ -231,7 +269,22 @@ export function VouchersStep({
                           <span className="vouchers__code">{v.code}</span>
                           <span className="sub">Canal : webshop{v.active === false ? ' · suspendu' : ''}</span>
                         </td>
-                        <td>{v.found ? remiseOf(v) : <span className="muted">introuvable dans le webshop</span>}</td>
+                        <td>
+                          {v.found ? remiseOf(v) : <span className="muted">introuvable dans le webshop</span>}
+                          {v.promotions && v.promotions.length > 0 ? (
+                            <span className="sub vouchers__promos">{v.promotions.map((p) => p.label).join(' · ')}</span>
+                          ) : null}
+                          {v.promotions_changed ? (
+                            <span className="vouchers__changed">
+                              L’étape « Prix » a changé depuis l’envoi au webshop.
+                              {data.can_edit && v.origin === 'created' ? (
+                                <button type="button" className="linklike" disabled={busy === v.code} onClick={() => mettreAJour(v)}>
+                                  Mettre à jour le bon
+                                </button>
+                              ) : null}
+                            </span>
+                          ) : null}
+                        </td>
                         <td>
                           {cibleOf(v)}
                           {v.per_customer ? <span className="sub">{v.per_customer} fois par client</span> : null}
@@ -299,6 +352,8 @@ export function VouchersStep({
               campaignId={campaignId}
               isBrand={isBrand}
               editing={editing}
+              promotions={data.campaign_promotions}
+              usedBy={usedByOf(data.vouchers, editing?.code ?? null)}
               lien={(code) => `${webshop ?? ''}?voucher=${encodeURIComponent(code)}&utm_campaign=${slug}`}
               onClose={() => { setPanel('none'); setEditing(null) }}
               onSaved={() => { setPanel('none'); setEditing(null); onChanged() }}
@@ -313,11 +368,27 @@ export function VouchersStep({
   )
 }
 
+/** Pour chaque ligne de l'étape Prix, les autres bons de la campagne qui la déclenchent déjà. */
+function usedByOf(vouchers: CampaignVoucher[], except: string | null): Map<number, string[]> {
+  const out = new Map<number, string[]>()
+  for (const v of vouchers) {
+    if (v.code === except || v.active === false) continue
+    for (const p of v.promotions ?? []) {
+      if (p.offer_item_id === null) continue
+      out.set(p.offer_item_id, [...(out.get(p.offer_item_id) ?? []), v.code])
+    }
+  }
+
+  return out
+}
+
 function VoucherForm({
   draft,
   campaignId,
   isBrand,
   editing,
+  promotions,
+  usedBy,
   lien,
   onClose,
   onSaved,
@@ -326,6 +397,8 @@ function VoucherForm({
   campaignId: number
   isBrand: boolean
   editing: CampaignVoucher | null
+  promotions: CampaignPromotion[]
+  usedBy: Map<number, string[]>
   lien: (code: string) => string
   onClose: () => void
   onSaved: () => void
@@ -351,7 +424,9 @@ function VoucherForm({
       ends_on: form.ends_on,
       usage_total: form.usage_total,
       per_customer: form.per_customer,
-      ...(form.mechanic === 'product' || form.mechanic === 'free_delivery' ? {} : { value: form.value }),
+      ...(form.mechanic === 'promotions'
+        ? { promotions: form.promotions }
+        : form.mechanic === 'product' || form.mechanic === 'free_delivery' ? {} : { value: form.value }),
     }
     try {
       if (editing !== null) {
@@ -375,13 +450,17 @@ function VoucherForm({
   }
 
   const surProduit = form.mechanic === 'product' || form.scope === 'product'
+  const cocher = (id: number) =>
+    set({ promotions: form.promotions.includes(id) ? form.promotions.filter((x) => x !== id) : [...form.promotions, id] })
 
   return (
     <div className="vouchers__form">
       <h3>{editing ? `Modifier ${editing.code}` : 'Nouveau bon'}</h3>
       <p className="vouchers__hint">
         {editing
-          ? 'La mécanique et ce qu’elle touche restent : pour en changer, retirez ce bon et créez-en un autre.'
+          ? form.mechanic === 'promotions'
+            ? 'La mécanique reste : vous pouvez changer les promotions cochées, les dates et les limites.'
+            : 'La mécanique et ce qu’elle touche restent : pour en changer, retirez ce bon et créez-en un autre.'
           : 'Comme une promotion : la mécanique, ce qu’elle touche et quand elle vaut. Le bon est créé dans le webshop dès que vous l’ajoutez.'}
       </p>
       <div className="vouchers__grid">
@@ -408,7 +487,40 @@ function VoucherForm({
           </>
         ) : null}
 
-        {editing === null && form.mechanic !== 'free_delivery' ? (
+        {form.mechanic === 'promotions' ? (
+          <>
+            <span className="vouchers__label">Déclenche</span>
+            <div>
+              {promotions.length === 0 ? (
+                <p className="vouchers__hint">L’étape « Prix » ne pose encore aucune promotion : choisissez-y une mécanique pour un produit, puis revenez ici.</p>
+              ) : (
+                <div className="vouchers__promolist">
+                  {promotions.map((p) => {
+                    const on = form.promotions.includes(p.offer_item_id)
+                    const autres = usedBy.get(p.offer_item_id) ?? []
+                    return (
+                      <label key={p.offer_item_id} className={`vouchers__promo${on ? ' is-on' : ''}${p.webshop ? '' : ' is-off'}`}>
+                        <input type="checkbox" checked={on} disabled={!p.webshop} onChange={() => cocher(p.offer_item_id)} />
+                        <span>
+                          <b>{p.label}</b>
+                          <small>{p.mechanic_label}{p.text ? ` · ${p.text}` : ''}</small>
+                          {!p.webshop && p.reason ? <small className="vouchers__promo-why">Pas au webshop : {p.reason}</small> : null}
+                          {autres.length > 0 ? <small>déjà déclenchée par {autres.join(', ')}</small> : null}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+              )}
+              <p className="vouchers__hint vouchers__hint--after">
+                Les promotions posées produit par produit à l’étape « Prix » (telles qu’enregistrées). Cochées ici, elles ne
+                valent au webshop qu’avec le code ; le plafond par ticket et le cumul de l’étape Prix les suivent.
+              </p>
+            </div>
+          </>
+        ) : null}
+
+        {editing === null && form.mechanic !== 'free_delivery' && form.mechanic !== 'promotions' ? (
           <>
             <span className="vouchers__label">Sur</span>
             <div className="vouchers__row">
@@ -522,7 +634,14 @@ function VoucherForm({
           <strong>Lien prêt à partager</strong> (code déjà saisi au panier) :{' '}
           <code>{lien(editing?.code ?? (code || 'CODE'))}</code>
         </p>
-        <p><strong>Cumul</strong> : le bon s’ajoute aux promotions de l’étape « Prix » — la règle actuelle du webshop.</p>
+        {form.mechanic === 'promotions' ? (
+          <p>
+            <strong>Ce que voit le client</strong> : il tape le code au panier ; les promotions cochées s’appliquent aux
+            produits concernés et la ligne de remise porte leur nom. Sans le code, ces produits restent au prix normal.
+          </p>
+        ) : (
+          <p><strong>Cumul</strong> : le bon s’ajoute aux promotions de l’étape « Prix » — la règle actuelle du webshop.</p>
+        )}
       </div>
       {failure !== null ? <p className="error">{failure}</p> : null}
       <div className="vouchers__actions-bar">

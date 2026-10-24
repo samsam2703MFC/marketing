@@ -84,7 +84,7 @@ entière, pour attraper une colonne ajoutée plus tard.
 | GET | `…/campaigns/{id}/monitor` | tenant | objet |
 | GET | `…/campaigns/{id}/print` | tenant | objet (dossier d'impression) |
 | GET | `…/campaigns/{id}/roi-costs` | marque | tableau |
-| GET | `…/campaigns/{id}/vouchers` | tenant (résultats limités aux boutiques de l'appelant) | objet `{configured, message, can_edit, vouchers, totals}` |
+| GET | `…/campaigns/{id}/vouchers` | tenant (résultats limités aux boutiques de l'appelant) | objet `{configured, message, can_edit, vouchers, totals, campaign_promotions}` |
 | POST | `…/campaigns/{id}/vouchers` | tenant (écriture : marque, ou boutique sur sa campagne locale) | `{status, message, inserted_id}` — `inserted_id` = le code |
 | PATCH | `…/campaigns/{id}/vouchers/{code}` | même règle d'écriture | `{status, message}` — bon créé pour la campagne seulement |
 | PUT | `…/campaigns/{id}/vouchers/{code}` | même règle ; un franchisé ne rattache que les bons de ses boutiques | `201` rattaché, `200` déjà rattaché (idempotent), `409` suivi par une autre campagne |
@@ -363,9 +363,30 @@ secret GitHub du même nom. Sans eux, la lecture le dit (`configured: false`) et
 toute écriture répond `503` — jamais une liste vide qui ferait croire à
 l'absence de bon.
 
+**Mécanique « promotions » — un bon qui déclenche les promotions de l'étape
+Prix** (validée en octobre 2026). Le bon n'a pas de remise propre : il porte les
+promotions cochées parmi celles de l'étape « Prix » (`mar_campaign_offer_item`
+avec une mécanique), et au webshop elles ne valent **qu'avec le code**.
+- Entrée : `{ mechanic: "promotions", promotions: [offer_item_id, …] }`. Les
+  valeurs ne viennent pas de l'écran : le service relit l'étape Prix **en base**
+  au moment d'écrire, et envoie au webshop le type `promos` (migration webshop
+  0136) : produit ERP, mécanique, valeur, plafond par ticket, cumul.
+- Le panier du webshop applique `PERCENT`, `CROSSED_PRICE` et `BUY_X_GET_Y`.
+  Une ligne « Prix de formule », « Livraison offerte », sans produit ERP ou sans
+  valeur saisie est refusée en 422, nommée, avec la raison.
+- La lecture ajoute `campaign_promotions` (chaque promotion de l'étape Prix,
+  en clair, avec `webshop` et `reason`) et, par bon, `promotions` (celles qu'il
+  déclenche, rapprochées de leur ligne d'offre) et `promotions_changed` : l'étape
+  Prix a changé depuis l'envoi. Un `PATCH` sans champ renvoie les valeurs du
+  moment ; `promotions` change les cases cochées.
+- Le webshop chiffre ces promotions par la même fonction pour l'aperçu du
+  panier et pour la commande ; rien n'est écrit dans les tables de promotions
+  de l'ERP (la caisse ne les voit pas).
+
 Couches : contrôleur `CampaignVoucherController` (HTTP seul) → service
 `CampaignVoucherService` (règles) → dépôt `CampaignVoucherRepository` (seul SQL :
-boutique ERP, produit ERP, nom de campagne) et client du webshop. Écarts
+boutique ERP, produit ERP, nom de campagne, promotions de l'étape Prix — en
+lecture) et client du webshop. Écarts
 résiduels, comme le reste du module : pas d'enveloppe `{success, data, meta}`,
 `snake_case`, montants en euros décimaux, collections non paginées (la liste
 des bons rattachables est bornée à 200 par le webshop).
