@@ -3439,6 +3439,260 @@ if (function_exists('imagecreatetruecolor')) {
 array_map('unlink', glob($uploadDir . '/*') ?: []);
 @rmdir($uploadDir);
 
+// --- Bons de campagne -----------------------------------------------------
+// Les bons vivent dans le webshop ; le module n'en garde rien, pas même le
+// lien. Le webshop est donc simulé ici, au contrat que documente son API.md
+// (« Vouchers for the marketing module ») : rien de plus que ce qu'il promet.
+echo "\nBons de campagne\n";
+
+AuthContext::clear();
+check('bons : sans contexte, refusé', call($router, 'GET', '/api/v1/marketing/campaigns/10/vouchers')['status'] === 401);
+
+// Sans connexion au webshop configurée (le cas du routeur réel ici) : l'écran
+// le dit, la création est refusée en 503 — jamais une liste vide qui ferait
+// croire qu'il n'y a pas de bon.
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$response = call($router, 'GET', '/api/v1/marketing/campaigns/10/vouchers');
+check('bons : sans connexion, la lecture le dit', $response['status'] === 200
+    && ($response['body']['configured'] ?? null) === false && is_string($response['body']['message'] ?? null));
+check('bons : sans connexion, la création est refusée (503)',
+    call($router, 'POST', '/api/v1/marketing/campaigns/10/vouchers', [], ['mechanic' => 'percent', 'value' => 10])['status'] === 503);
+
+$pdo->exec('UPDATE mar_shop SET erp_shop_id = 900 + id');
+// Identifiant attribué par la base : les tests précédents créent déjà des
+// campagnes, et un identifiant posé en dur entrerait en collision avec elles.
+$pdo->exec("INSERT INTO mar_campaign (brand_id, type_id, name, scope, status_code, starts_on, ends_on, budget_amount)
+    VALUES (1, 7, 'Rentrée Namur', 'LOCALE', 'planned', '2026-09-01', '2026-09-30', 300)");
+$namur = (int) $pdo->lastInsertId();
+$pdo->exec(sprintf('INSERT INTO mar_campaign_shop (campaign_id, shop_id) VALUES (%d, 1)', $namur));
+$pdo->exec("INSERT INTO mar_offer_item (category, sku_ref, name, is_active) VALUES ('produit', 'erp-99501', 'Bûche d''essai', 1)");
+$buche = (int) $pdo->lastInsertId();
+
+// Le webshop simulé : ses bons, leurs commandes, et le dernier corps reçu.
+$ws = [
+    'vouchers' => [
+        'BIENVENUE10' => ['type' => 'percent', 'value' => 10.0, 'shopId' => null, 'shopName' => null],
+        'NAMUR5'      => ['type' => 'fixed', 'value' => 5.0, 'shopId' => 901, 'shopName' => 'Namur'],
+    ],
+    'orders' => [
+        'BIENVENUE10' => [
+            ['shopId' => 901, 'shopName' => 'Namur', 'orders' => 3, 'revenue' => 90.0, 'discount' => 9.0],
+            ['shopId' => 902, 'shopName' => 'Uccle', 'orders' => 2, 'revenue' => 50.0, 'discount' => 5.0],
+        ],
+    ],
+    'last' => null, 'calls' => [],
+];
+$wsRow = static function (string $code, array $v): array {
+    return [
+        'code' => $code, 'type' => $v['type'], 'value' => $v['value'], 'minOrder' => $v['min_order'] ?? 0.0,
+        'scopeProductId' => $v['scope_product_id'] ?? null, 'scopeProductName' => isset($v['scope_product_id']) ? 'Bûche d\'essai' : null,
+        'scopeMaxQty' => $v['scope_max_qty'] ?? null, 'shopId' => $v['shopId'] ?? null, 'shopName' => $v['shopName'] ?? null,
+        'targetKind' => $v['target_kind'] ?? 'NETWORK', 'targetId' => $v['target_id'] ?? null, 'targetLabel' => null,
+        'startsAt' => $v['starts_at'] ?? null, 'expiresAt' => $v['expires_at'] ?? null, 'usageCount' => 0,
+        'usageLimit' => $v['max_uses'] ?? null, 'perCustomer' => $v['per_customer'] ?? null,
+        'reasonKind' => null, 'reasonNote' => null, 'createdBy' => null,
+        'marCampaignId' => $v['camp'] ?? null, 'marCampaignOrigin' => $v['origin'] ?? null, 'active' => $v['active'] ?? true,
+    ];
+};
+$fake = static function (string $method, string $url, array $headers, ?string $body, int $timeout) use (&$ws, $wsRow): array {
+    unset($headers, $timeout);
+    $path = (string) parse_url($url, PHP_URL_PATH);
+    parse_str((string) parse_url($url, PHP_URL_QUERY), $q);
+    $in = $body !== null ? (array) json_decode($body, true) : [];
+    $ws['calls'][] = $method . ' ' . $path;
+    $json = static fn (int $status, $data): array => [$status, (string) json_encode($data)];
+
+    if ($method === 'GET' && $path === '/franchisor/voucher-codes') {
+        $codes = isset($q['codes']) ? explode(',', (string) $q['codes']) : null;
+        $shops = isset($q['shops']) ? array_map('intval', explode(',', (string) $q['shops'])) : null;
+        $out = [];
+        foreach ($ws['vouchers'] as $code => $v) {
+            if ($codes !== null && !in_array($code, $codes, true)) { continue; }
+            if ($shops !== null && !in_array($v['shopId'] ?? -1, $shops, true)) { continue; }
+            if (isset($q['campaign']) && ($v['camp'] ?? null) !== (int) $q['campaign']) { continue; }
+            if (($q['q'] ?? '') !== '' && stripos($code, (string) $q['q']) === false) { continue; }
+            $out[] = $wsRow($code, $v);
+        }
+        return $json(200, $out);
+    }
+    if ($method === 'GET' && $path === '/franchisor/voucher-usage') {
+        return $json(200, array_map(static function (string $code) use ($ws): array {
+            $rows = $ws['orders'][$code] ?? [];
+            return ['code' => $code, 'exists' => isset($ws['vouchers'][$code]), 'usageCount' => 0, 'usageLimit' => null,
+                    'orders' => array_sum(array_column($rows, 'orders')), 'revenue' => array_sum(array_column($rows, 'revenue')),
+                    'discount' => array_sum(array_column($rows, 'discount')), 'byShop' => $rows];
+        }, explode(',', (string) ($q['codes'] ?? ''))));
+    }
+    if ($method === 'GET' && $path === '/franchisor/offices') {
+        return $json(200, [['id' => 7, 'name' => 'Bureau Dupont', 'city' => 'Namur']]);
+    }
+    if ($method === 'POST' && $path === '/franchisor/voucher') {
+        $ws['last'] = $in;
+        $code = $in['code'] !== '' ? $in['code'] : 'M-GENERE';
+        $existed = isset($ws['vouchers'][$code]);
+        if (!empty($in['create_only']) && $existed) {
+            return $json(409, ['error' => 'code déjà utilisé : ' . $code, 'code' => $code]);
+        }
+        $old = $ws['vouchers'][$code] ?? [];
+        $ws['vouchers'][$code] = [
+            'type' => $in['type'], 'value' => $in['value'], 'min_order' => $in['min_order'],
+            'scope_product_id' => $in['scope_product_id'], 'scope_max_qty' => $in['scope_max_qty'],
+            'shopId' => $in['id_shop'], 'shopName' => $in['id_shop'] !== null ? 'Boutique ' . $in['id_shop'] : null,
+            'target_kind' => $in['target_kind'], 'target_id' => $in['target_id'],
+            'starts_at' => $in['starts_at'] !== '' ? $in['starts_at'] . ' 00:00:00' : null, 'expires_at' => $in['expires_at'],
+            'max_uses' => $in['max_uses'] !== '' ? $in['max_uses'] : null, 'per_customer' => $in['per_customer'],
+            'camp' => $existed ? ($old['camp'] ?? null) : ($in['campaign_id'] ?? null),
+            'origin' => $existed ? ($old['origin'] ?? null) : (isset($in['campaign_id']) ? 'created' : null),
+            'active' => (bool) $in['active'],
+        ];
+        return $json(200, ['ok' => true, 'code' => $code, 'created' => !$existed]);
+    }
+    if ($method === 'POST' && $path === '/franchisor/voucher-campaign') {
+        $code = (string) $in['code'];
+        if (!isset($ws['vouchers'][$code])) { return $json(404, ['error' => 'bon introuvable']); }
+        $current = $ws['vouchers'][$code]['camp'] ?? null;
+        if ($in['campaign_id'] !== null) {
+            if ($current === $in['campaign_id']) { return $json(200, ['ok' => true, 'created' => false]); }
+            if ($current !== null) { return $json(409, ['error' => 'bon déjà suivi par une autre campagne', 'campaignId' => $current]); }
+            $ws['vouchers'][$code]['camp'] = $in['campaign_id'];
+            $ws['vouchers'][$code]['origin'] = 'attached';
+            return $json(200, ['ok' => true, 'created' => true]);
+        }
+        if ($current !== $in['from_campaign']) { return $json(409, ['error' => 'ce bon ne suit pas cette campagne']); }
+        $ws['vouchers'][$code]['camp'] = null;
+        $ws['vouchers'][$code]['origin'] = null;
+        return $json(200, ['ok' => true]);
+    }
+    if ($method === 'POST' && $path === '/franchisor/voucher-active') {
+        if (!isset($ws['vouchers'][$in['code']])) { return $json(404, ['error' => 'bon introuvable']); }
+        $ws['vouchers'][$in['code']]['active'] = (bool) $in['active'];
+        return $json(200, ['ok' => true]);
+    }
+    return $json(404, ['error' => 'Not found']);
+};
+
+$vouchersRouter = new Router();
+$vc = new \Marketing\Controller\CampaignVoucherController(new \Marketing\Service\CampaignVoucherService(
+    new \Marketing\Repository\CampaignVoucherRepository(),
+    new \Marketing\Support\WebshopClient($fake)
+));
+$vouchersRouter->get('/api/v1/marketing/campaigns/{id}/vouchers', [$vc, 'index']);
+$vouchersRouter->post('/api/v1/marketing/campaigns/{id}/vouchers', [$vc, 'store']);
+$vouchersRouter->patch('/api/v1/marketing/campaigns/{id}/vouchers/{code}', [$vc, 'update']);
+$vouchersRouter->put('/api/v1/marketing/campaigns/{id}/vouchers/{code}', [$vc, 'attach']);
+$vouchersRouter->delete('/api/v1/marketing/campaigns/{id}/vouchers/{code}', [$vc, 'destroy']);
+$vouchersRouter->get('/api/v1/marketing/webshop-vouchers', [$vc, 'available']);
+$vouchersRouter->get('/api/v1/marketing/webshop-offices', [$vc, 'offices']);
+$V = '/api/v1/marketing/campaigns/';
+
+// Création, par la marque, sur une campagne réseau.
+$response = call($vouchersRouter, 'POST', $V . '10/vouchers', [], ['mechanic' => 'percent', 'value' => '10', 'min_order' => '25', 'code' => 'ete10', 'usage_total' => 500]);
+$sent = $ws['last'] ?? [];
+check('bons : création (201)', $response['status'] === 201 && ($response['body']['inserted_id'] ?? '') === 'ETE10', json_encode($response['body']));
+check('bons : créé strictement, suivi par la campagne, émis par la marque',
+    ($sent['create_only'] ?? false) === true && ($sent['campaign_id'] ?? 0) === 10 && array_key_exists('id_shop', $sent) && $sent['id_shop'] === null);
+check('bons : valable sur les dates de la campagne',
+    ($sent['starts_at'] ?? '') === '2026-07-01' && ($sent['expires_at'] ?? '') === '2026-08-31 23:59:59', json_encode([$sent['starts_at'] ?? null, $sent['expires_at'] ?? null]));
+check('bons : la remise part telle quelle', ($sent['type'] ?? '') === 'percent' && ($sent['value'] ?? 0) == 10 && ($sent['min_order'] ?? 0) == 25 && ($sent['max_uses'] ?? 0) === 500);
+check('bons : provenance marketing', ($sent['source'] ?? '') === 'marketing' && str_contains((string) ($sent['reason_note'] ?? ''), 'Barbecue été'));
+
+check('bons : un code déjà pris est refusé (409)',
+    call($vouchersRouter, 'POST', $V . '10/vouchers', [], ['mechanic' => 'percent', 'value' => 5, 'code' => 'ETE10'])['status'] === 409);
+check('bons : pourcentage au-delà de 100 refusé (422)',
+    call($vouchersRouter, 'POST', $V . '10/vouchers', [], ['mechanic' => 'percent', 'value' => 150])['status'] === 422);
+check('bons : code illisible refusé (422)',
+    call($vouchersRouter, 'POST', $V . '10/vouchers', [], ['mechanic' => 'fixed', 'value' => 5, 'code' => 'a'])['status'] === 422);
+check('bons : fin avant début refusée (422)',
+    call($vouchersRouter, 'POST', $V . '10/vouchers', [], ['mechanic' => 'fixed', 'value' => 5, 'starts_on' => '2026-08-10', 'ends_on' => '2026-08-01'])['status'] === 422);
+check('bons : produit offert sans produit refusé (422)',
+    call($vouchersRouter, 'POST', $V . '10/vouchers', [], ['mechanic' => 'product'])['status'] === 422);
+check('bons : mécanique inconnue refusée (422)',
+    call($vouchersRouter, 'POST', $V . '10/vouchers', [], ['mechanic' => 'magie'])['status'] === 422);
+check('bons : campagne inexistante (404)',
+    call($vouchersRouter, 'POST', $V . '999/vouchers', [], ['mechanic' => 'percent', 'value' => 10])['status'] === 404);
+
+$response = call($vouchersRouter, 'POST', $V . '10/vouchers', [], ['mechanic' => 'product', 'offer_item_id' => $buche, 'code' => 'ETE-BUCHE']);
+$sent = $ws['last'] ?? [];
+check('bons : produit offert = 100 % sur 1 pièce du produit ERP',
+    $response['status'] === 201 && ($sent['type'] ?? '') === 'percent' && ($sent['value'] ?? 0) == 100
+    && ($sent['scope_product_id'] ?? 0) === 99501 && ($sent['scope_max_qty'] ?? 0) === 1);
+
+check('bons : bon réservé à un bureau sans bureau refusé (422)',
+    call($vouchersRouter, 'POST', $V . '10/vouchers', [], ['mechanic' => 'free_delivery', 'target_kind' => 'OFFICE'])['status'] === 422);
+
+// Une campagne locale émet un bon de SA boutique.
+$response = call($vouchersRouter, 'POST', $V . '11/vouchers', [], ['mechanic' => 'free_delivery', 'code' => 'UCCLE-PORT']);
+check('bons : campagne locale → bon de sa boutique', $response['status'] === 201 && ($ws['last']['id_shop'] ?? null) === 902);
+
+// Rattacher un bon existant : idempotent, une seule campagne.
+$response = call($vouchersRouter, 'PUT', $V . '10/vouchers/bienvenue10');
+check('bons : rattacher un bon existant (201)', $response['status'] === 201, json_encode($response['body']));
+check('bons : le rattacher à nouveau ne fait rien (200)', call($vouchersRouter, 'PUT', $V . '10/vouchers/BIENVENUE10')['status'] === 200);
+$response = call($vouchersRouter, 'PUT', $V . '11/vouchers/BIENVENUE10');
+check('bons : une seule campagne par bon (409, nommée)', $response['status'] === 409
+    && str_contains((string) ($response['body']['description'] ?? ''), 'Barbecue été'));
+check('bons : bon inconnu du webshop (404)', call($vouchersRouter, 'PUT', $V . '10/vouchers/INCONNU')['status'] === 404);
+
+// Lecture : les bons suivis et ce qu'ils ont donné.
+$response = call($vouchersRouter, 'GET', $V . '10/vouchers');
+$list = array_column($response['body']['vouchers'] ?? [], null, 'code');
+check('bons : la campagne liste ses trois bons', $response['status'] === 200 && count($list) === 3, implode(',', array_keys($list)));
+check('bons : l\'origine est dite', ($list['ETE10']['origin'] ?? '') === 'created' && ($list['BIENVENUE10']['origin'] ?? '') === 'attached');
+check('bons : produit offert reconnu', ($list['ETE-BUCHE']['mechanic'] ?? '') === 'product' && ($list['ETE-BUCHE']['scope_max_qty'] ?? 0) === 1);
+check('bons : ce qu\'ils ont donné, tout le réseau pour la marque',
+    ($list['BIENVENUE10']['results']['orders'] ?? 0) === 5 && ($response['body']['totals']['revenue'] ?? 0) == 140
+    && ($response['body']['totals']['average_basket'] ?? 0) == 28);
+
+// Le franchisé : il lit la campagne réseau, ne la modifie pas, et ne voit
+// les résultats que de SA boutique.
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+$response = call($vouchersRouter, 'GET', $V . '10/vouchers');
+$list = array_column($response['body']['vouchers'] ?? [], null, 'code');
+check('bons : franchisé, lecture seule sur une campagne réseau', $response['status'] === 200 && ($response['body']['can_edit'] ?? true) === false);
+check('bons : franchisé, résultats de sa boutique seulement',
+    ($list['BIENVENUE10']['results']['orders'] ?? 0) === 3 && count($list['BIENVENUE10']['results']['by_shop'] ?? []) === 1);
+check('bons : franchisé, création sur la campagne réseau refusée (403)',
+    call($vouchersRouter, 'POST', $V . '10/vouchers', [], ['mechanic' => 'percent', 'value' => 10])['status'] === 403);
+check('bons : franchisé, campagne d\'une autre boutique invisible (404)',
+    call($vouchersRouter, 'GET', $V . '11/vouchers')['status'] === 404);
+check('bons : franchisé, bon de la marque non rattachable (403)',
+    call($vouchersRouter, 'PUT', $V . $namur . '/vouchers/LIVRE')['status'] === 404
+    && call($vouchersRouter, 'PUT', $V . $namur . '/vouchers/BIENVENUE10')['status'] === 403);
+check('bons : franchisé, bon de sa boutique rattachable (201)', call($vouchersRouter, 'PUT', $V . $namur . '/vouchers/NAMUR5')['status'] === 201);
+check('bons : franchisé, bon réservé à un bureau refusé (403)',
+    call($vouchersRouter, 'POST', $V . $namur . '/vouchers', [], ['mechanic' => 'percent', 'value' => 5, 'target_kind' => 'OFFICE', 'target_id' => 7])['status'] === 403);
+$response = call($vouchersRouter, 'POST', $V . $namur . '/vouchers', [], ['mechanic' => 'percent', 'value' => 5]);
+check('bons : franchisé, bon de sa campagne locale, émis par sa boutique', $response['status'] === 201 && ($ws['last']['id_shop'] ?? null) === 901);
+$response = call($vouchersRouter, 'GET', '/api/v1/marketing/webshop-vouchers');
+check('bons : franchisé, ne liste que les bons de ses boutiques',
+    $response['status'] === 200 && array_column($response['body']['vouchers'] ?? [], 'code') === ['NAMUR5', 'M-GENERE']);
+check('bons : franchisé, bureaux réservés à la marque (403)', call($vouchersRouter, 'GET', '/api/v1/marketing/webshop-offices')['status'] === 403);
+
+// Modifier, puis retirer.
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$response = call($vouchersRouter, 'PATCH', $V . '10/vouchers/ETE10', [], ['value' => 15]);
+check('bons : modifier un bon créé (200)', $response['status'] === 200 && ($ws['last']['value'] ?? 0) == 15 && empty($ws['last']['create_only']));
+check('bons : ce qui n\'est pas envoyé garde sa valeur',
+    ($ws['last']['min_order'] ?? 0) == 25 && ($ws['last']['starts_at'] ?? '') === '2026-07-01' && ($ws['last']['max_uses'] ?? 0) === 500);
+check('bons : un bon rattaché ne se modifie pas d\'ici (422)',
+    call($vouchersRouter, 'PATCH', $V . '10/vouchers/BIENVENUE10', [], ['value' => 20])['status'] === 422);
+
+check('bons : retirer un bon créé (200)', call($vouchersRouter, 'DELETE', $V . '10/vouchers/ETE10')['status'] === 200);
+check('bons : … il est suspendu dans le webshop, et ne suit plus la campagne',
+    ($ws['vouchers']['ETE10']['active'] ?? true) === false && array_key_exists('camp', $ws['vouchers']['ETE10'] ?? []) && $ws['vouchers']['ETE10']['camp'] === null);
+// Par référence : une fonction fléchée copierait $ws au moment de sa création.
+$suspensions = static function () use (&$ws): int {
+    return count(array_filter($ws['calls'], static fn (string $c): bool => str_ends_with($c, '/voucher-active')));
+};
+$avant = $suspensions();
+check('bons : retirer un bon rattaché le laisse actif',
+    call($vouchersRouter, 'DELETE', $V . '10/vouchers/BIENVENUE10')['status'] === 200 && $suspensions() === $avant);
+check('bons : retirer deux fois → 404', call($vouchersRouter, 'DELETE', $V . '10/vouchers/BIENVENUE10')['status'] === 404);
+$response = call($vouchersRouter, 'GET', '/api/v1/marketing/webshop-vouchers', ['q' => 'NAMUR']);
+check('bons : la marque voit qui suit un bon',
+    ($response['body']['vouchers'][0]['campaign_name'] ?? '') === 'Rentrée Namur', json_encode($response['body']['vouchers'][0] ?? null));
+check('bons : bureaux (marque)', (call($vouchersRouter, 'GET', '/api/v1/marketing/webshop-offices')['body'][0]['name'] ?? '') === 'Bureau Dupont');
+
 // --- Résultat -------------------------------------------------------------
 printf("\n%d réussis, %d échoués\n", $passed, $failed);
 exit($failed === 0 ? 0 : 1);

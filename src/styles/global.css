@@ -4294,3 +4294,49 @@ button.mc-tag { cursor: pointer; }
 .fix__rest li { margin: 4px 0; }
 .fix-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
 .fix-notice p { margin: 0; font-size: 13px; }
+
+/* ── Bons de campagne (sous-étape « Bons », Récap) ───────────────────────────
+   Le bon vit dans le webshop ; ces règles ne font que le montrer. Le tableau
+   garde ses colonnes à largeur fixe : un libellé de remise long ne doit pas
+   pousser les actions hors de la carte. */
+table.vouchers { min-width: 0; table-layout: fixed; }
+table.vouchers td { vertical-align: top; }
+table.vouchers td .sub { display: block; }
+table.vouchers th:first-child { width: 15%; }
+table.vouchers--list th:nth-child(2) { width: 26%; }
+table.vouchers--list th:nth-child(3) { width: 12%; }
+table.vouchers--list th:nth-child(4) { width: 16%; }
+table.vouchers--list th:nth-child(5) { width: 9%; }
+table.vouchers--list th:nth-child(6) { width: 13%; }
+table.vouchers--list th:nth-child(7) { width: 9%; }
+.vouchers__hint { margin: 0; font-size: 12px; font-weight: 400; color: var(--muted); }
+.vouchers__form > .vouchers__hint { margin-top: 2px; }
+.vouchers__code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; letter-spacing: .04em; color: var(--ink); word-break: break-all; }
+.vouchers__origin { display: inline-flex; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.vouchers__origin--created { background: rgba(141, 29, 44, .08); color: var(--accent); }
+.vouchers__origin--attached { background: rgba(63, 122, 82, .12); color: var(--green); }
+.vouchers__origin--none { background: var(--chip); color: var(--muted-2); white-space: normal; }
+.vouchers__actions { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.vouchers__bar { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 0; }
+.vouchers__notice { display: block; margin: 8px 0 0; padding: 8px 12px; border-radius: 10px; }
+.vouchers__form { border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px 20px; margin-top: 16px; background: #fffdfa; }
+.vouchers__form h3 { margin: 0 0 4px; font-size: 15px; }
+.vouchers__grid { display: grid; grid-template-columns: 150px 1fr; gap: 14px 20px; align-items: center; margin-top: 14px; }
+.vouchers__label { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.vouchers__row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.vouchers__input { border: 1px solid rgba(34, 34, 34, .16); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 13px; background: #fff; color: var(--ink); }
+.vouchers__input--n { width: 80px; text-align: right; }
+.vouchers__input--code { width: 170px; font-family: ui-monospace, Menlo, monospace; font-weight: 700; letter-spacing: .04em; }
+.vouchers__input--search { width: min(320px, 100%); }
+.vouchers__check { display: inline-flex; gap: 7px; align-items: center; font-size: 13px; color: var(--ink); }
+.vouchers__check--off { color: var(--faint); }
+.vouchers__info { margin-top: 16px; border-top: 1px dashed var(--line); padding-top: 14px; display: grid; gap: 8px; }
+.vouchers__info p { margin: 0; font-size: 12.5px; color: var(--muted-2); }
+.vouchers__info code { word-break: break-all; }
+.vouchers__actions-bar { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.vouchers__results { display: flex; flex-direction: column; gap: 10px; }
+.vouchers__results .table-card { margin-top: 0; }
+@media (max-width: 720px) {
+  .vouchers__grid { grid-template-columns: 1fr; gap: 6px; }
+  table.vouchers { table-layout: auto; min-width: 640px; }
+}

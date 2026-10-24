@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { module as api } from '../../lib/api'
 import { useAsync, formatDate, formatEur, formatNumber } from '../../lib/useAsync'
 import type { References, SocialAttached } from '../../lib/api/module'
@@ -15,7 +16,7 @@ import type { Draft } from './CampaignBuilder'
  */
 export const HUBS: Array<{ label: string; keys: string[] }> = [
   { label: 'Cadrage', keys: ['framing'] },
-  { label: 'Offre & promotions', keys: ['offer', 'objectives', 'pricing'] },
+  { label: 'Offre & promotions', keys: ['offer', 'objectives', 'pricing', 'vouchers'] },
   { label: 'Médias', keys: ['photos', 'medias'] },
   { label: 'Canaux', keys: ['communication'] },
   { label: 'Suivi & traçabilité', keys: ['tracking'] },
@@ -161,10 +162,13 @@ export function HubSummary({
   draft,
   refs,
   shops,
+  bons = null,
 }: {
   draft: Draft
   refs: References
   shops: Array<{ id: number; name: string }>
+  /** Codes des bons de la campagne, lus dans le webshop ; null tant qu'ils ne sont pas lus. */
+  bons?: string | null
 }) {
   const target = refs.clientTargets.find((entry) => entry.code === draft.client_target)
   const canaux = refs.channels.filter((channel) => draft.channels[channel.id] !== undefined).map((channel) => channel.label)
@@ -183,6 +187,7 @@ export function HubSummary({
       `${target?.label ?? draft.client_target}${draft.client_target !== 'b2c' && draft.sector_ids.length > 0 ? ` · ${draft.sector_ids.length} secteur${draft.sector_ids.length > 1 ? 's' : ''}` : ''}`,
     ],
     ['Offre', draft.offer_title.trim() || (produits > 0 ? `${produits} produit${produits > 1 ? 's' : ''}` : 'à choisir')],
+    ...(bons !== null ? [['Bons', bons] as [string, string]] : []),
     ['Canaux', canaux.length > 0 ? canaux.join(', ') : 'aucun'],
     ['Suivi', action ? `${action.label} · ${draft.tracking_scope === 'SHOP' ? 'par boutique' : 'réseau'}` : 'à choisir'],
     ['Budget', draft.budget_amount.trim() === '' ? 'à fixer' : formatEur(Number(draft.budget_amount))],
@@ -381,11 +386,14 @@ export function LaunchBoard({
   refs,
   campaignId,
   voirClics,
+  bons = null,
 }: {
   draft: Draft
   refs: References
   campaignId: number | null
   voirClics: boolean
+  /** Ce que les bons ont donné, sous les tuiles (rien si la campagne n'en a pas). */
+  bons?: ReactNode
 }) {
   const attached = useAttached(campaignId)
   const data = attached.data
@@ -442,6 +450,7 @@ export function LaunchBoard({
           </div>
         ))}
       </div>
+      {bons}
       <h3 className="section-label">
         Ce qui manque avant le lancement
         <span className="section-label__aside">

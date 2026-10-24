@@ -15,6 +15,7 @@ declare(strict_types=1);
  */
 
 use Marketing\Controller\CampaignController;
+use Marketing\Controller\CampaignVoucherController;
 use Marketing\Controller\CatalogController;
 use Marketing\Controller\FundController;
 use Marketing\Controller\LeadController;
@@ -37,6 +38,7 @@ return static function (Router $router): void {
     $sales      = new SalesController();
     $uploads    = new UploadController();
     $public     = new PublicController();
+    $campaignVouchers = new CampaignVoucherController();
 
     // Session — publique : elle ne dit que si l'appelant est authentifié.
     // Le front s'en sert pour savoir s'il est embarqué dans l'ERP, auquel cas
@@ -93,6 +95,17 @@ return static function (Router $router): void {
     $router->get('/api/v1/marketing/campaign-offers', [$catalog, 'campaignOffers']);
     $router->get('/api/v1/marketing/bundles',    [$catalog, 'bundles']);
     $router->get('/api/v1/marketing/vouchers',   [$catalog, 'vouchers']);
+
+    // Bons d'une campagne : ils vivent dans le webshop (son moteur les applique
+    // au panier) ; le module les crée, les rattache et les relit par son API,
+    // sans table de son côté — le bon porte la campagne qui le suit.
+    $router->get('/api/v1/marketing/campaigns/{id}/vouchers',           [$campaignVouchers, 'index']);
+    $router->post('/api/v1/marketing/campaigns/{id}/vouchers',          [$campaignVouchers, 'store']);
+    $router->patch('/api/v1/marketing/campaigns/{id}/vouchers/{code}',  [$campaignVouchers, 'update']);
+    $router->put('/api/v1/marketing/campaigns/{id}/vouchers/{code}',    [$campaignVouchers, 'attach']);
+    $router->delete('/api/v1/marketing/campaigns/{id}/vouchers/{code}', [$campaignVouchers, 'destroy']);
+    $router->get('/api/v1/marketing/webshop-vouchers', [$campaignVouchers, 'available']);
+    $router->get('/api/v1/marketing/webshop-offices',  [$campaignVouchers, 'offices']);
 
     // Leads B2B
     $router->get('/api/v1/marketing/campaigns/{id}/leads',      [$leads, 'index']);

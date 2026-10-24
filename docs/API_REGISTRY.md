@@ -84,6 +84,11 @@ entière, pour attraper une colonne ajoutée plus tard.
 | GET | `…/campaigns/{id}/monitor` | tenant | objet |
 | GET | `…/campaigns/{id}/print` | tenant | objet (dossier d'impression) |
 | GET | `…/campaigns/{id}/roi-costs` | marque | tableau |
+| GET | `…/campaigns/{id}/vouchers` | tenant (résultats limités aux boutiques de l'appelant) | objet `{configured, message, can_edit, vouchers, totals}` |
+| POST | `…/campaigns/{id}/vouchers` | tenant (écriture : marque, ou boutique sur sa campagne locale) | `{status, message, inserted_id}` — `inserted_id` = le code |
+| PATCH | `…/campaigns/{id}/vouchers/{code}` | même règle d'écriture | `{status, message}` — bon créé pour la campagne seulement |
+| PUT | `…/campaigns/{id}/vouchers/{code}` | même règle ; un franchisé ne rattache que les bons de ses boutiques | `201` rattaché, `200` déjà rattaché (idempotent), `409` suivi par une autre campagne |
+| DELETE | `…/campaigns/{id}/vouchers/{code}` | même règle d'écriture | `{status, message}` — un bon créé ici est suspendu |
 | GET | `…/campaigns/{id}/leads` | tenant | tableau |
 | POST | `…/campaigns/{id}/leads/generate` | tenant | objet |
 | GET | `…/campaign-offers` | tenant | tableau |
@@ -111,6 +116,8 @@ entière, pour attraper une colonne ajoutée plus tard.
 | GET | `…/promotions` | tenant | tableau |
 | GET | `…/bundles` | tenant | tableau |
 | GET | `…/vouchers` | tenant | tableau |
+| GET | `…/webshop-vouchers?q=` | marque ; franchisé : bons de ses boutiques | objet `{configured, message, vouchers}` (200 au plus) |
+| GET | `…/webshop-offices?q=` | marque | tableau |
 | GET | `…/diffusion` | tenant | objet |
 | GET | `…/agencies` | — | tableau |
 | GET | `…/agencies/{id}/campaigns` | tenant | tableau |
@@ -331,4 +338,35 @@ pas d'enveloppe `{success, data, meta}`, `snake_case`.
 La route du cockpit rend **tous** les magasins du panel : le bloc n'est donc pas
 servi en vue franchisé, où il faudrait filtrer dans le navigateur. L'ouvrir aux
 franchisés demande une route de ce module, filtrée par périmètre côté serveur.
+
+## 7. Les bons de campagne (octobre 2026)
+
+Un bon — code que le client tape au webshop — se crée dans l'assistant comme une
+promotion (sous-étape « Bons » de « Offre & promotions »), mais il vit dans le
+**moteur de bons du webshop**, qui l'applique au panier. Le module **n'a aucune
+table pour les bons**, pas même le lien : le bon porte la campagne qui le suit
+(`voucher_campaign.mar_campaign_id`, migration webshop 0135). Tout passe par
+l'API du webshop (`/franchisor/voucher*`, `API.md` du dépôt WebShop, « Vouchers
+for the marketing module »), par un seul client, `Support/WebshopClient`.
+
+Règles : un bon ne suit qu'**une** campagne ; **webshop seulement** (la caisse
+n'applique pas ces bons) ; les bons d'une campagne réseau se gèrent au niveau du
+réseau, une campagne locale émet des bons de **sa** boutique (une seule — sinon
+422) ; un bon réservé à un bureau se crée au niveau du réseau. Retirer un bon
+créé pour la campagne le **suspend** dans le webshop ; retirer un bon rattaché
+le laisse tel quel.
+
+Configuration du serveur : `MAR_WEBSHOP_API_BASE` (adresse de l'API du webshop)
+et `MAR_WEBSHOP_API_TOKEN` (le jeton du back-office du webshop, `admin_token`
+de sa `config.php`). La CI les écrit dans le `.env` depuis la variable et le
+secret GitHub du même nom. Sans eux, la lecture le dit (`configured: false`) et
+toute écriture répond `503` — jamais une liste vide qui ferait croire à
+l'absence de bon.
+
+Couches : contrôleur `CampaignVoucherController` (HTTP seul) → service
+`CampaignVoucherService` (règles) → dépôt `CampaignVoucherRepository` (seul SQL :
+boutique ERP, produit ERP, nom de campagne) et client du webshop. Écarts
+résiduels, comme le reste du module : pas d'enveloppe `{success, data, meta}`,
+`snake_case`, montants en euros décimaux, collections non paginées (la liste
+des bons rattachables est bornée à 200 par le webshop).
 
