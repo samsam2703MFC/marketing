@@ -4318,7 +4318,8 @@ table.vouchers--list th:nth-child(7) { width: 9%; }
 .vouchers__origin--none { background: var(--chip); color: var(--muted-2); white-space: normal; }
 .vouchers__actions { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .vouchers__bar { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 0; }
-.vouchers__notice { display: block; margin: 8px 0 0; padding: 8px 12px; border-radius: 10px; }
+/* tag-warn est une pastille d'une ligne : un message long doit pouvoir passer à la ligne. */
+.vouchers__notice { display: block; margin: 8px 0 0; padding: 8px 12px; border-radius: 10px; white-space: normal; line-height: 1.45; }
 .vouchers__form { border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px 20px; margin-top: 16px; background: #fffdfa; }
 .vouchers__form h3 { margin: 0 0 4px; font-size: 15px; }
 .vouchers__grid { display: grid; grid-template-columns: 150px 1fr; gap: 14px 20px; align-items: center; margin-top: 14px; }
