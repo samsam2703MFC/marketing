@@ -5,7 +5,8 @@ accueil : HTTP 200 · Module Marketing — L'Atelier By
   « Type & cadrage » introuvable — capture prise en l'état
   → 03-objectifs.png
   → 03b-magasins.png
-  → 03c-detail-objectifs.png
+  « Par catégorie ou produit » introuvable — capture prise en l'état
   → 04-prix.png
   → 04b-compensation.png
-  « Fonds & Royalties » introuvable — capture prise en l'état
+  → 05-fonds.png
+  → 05b-mouvement.png
