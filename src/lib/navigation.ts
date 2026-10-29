@@ -33,6 +33,8 @@ export type Route =
   | 'social-cal'
   | 'social-grid'
   | 'social-post'
+  /** Le repost automatique : les posts de la Page de la marque repris par les Pages des boutiques. */
+  | 'social-repost'
   | 'social-ctrl'
   | 'social-google'
   | 'social-ads'
@@ -100,6 +102,7 @@ const ICONS: Record<string, string> = {
   'social-cal': 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01',
   'social-grid': 'M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18',
   'social-post': 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
+  'social-repost': 'M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3',
   'social-ctrl': 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
   'social-ads': 'M4 4h16v12H4zM2 20h20M9 8l4 2-4 2z',
   'social-camp': 'M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7',
@@ -149,6 +152,7 @@ export const SOCIAL_PAGES: Partial<Record<Route, SocialPage>> = {
   'social-cal': { key: 'cal', file: 'SA Calendrier.dc.html' },
   'social-grid': { key: 'grid', file: 'SA Grille.dc.html' },
   'social-post': { key: 'post', file: 'SA Post.dc.html' },
+  'social-repost': { key: 'repost', file: 'SA Repost.dc.html' },
   'social-ctrl': { key: 'ctrl', file: 'SA Controle.dc.html' },
   'social-google': { key: 'google', file: 'SA Google.dc.html' },
   'social-ads': { key: 'ads', file: 'SA Publicites.dc.html' },
@@ -232,6 +236,7 @@ const NETWORK: NavGroup[] = [
     items: [
       item('social-cal', 'Calendrier éditorial'),
       item('social-post', 'Créer un post'),
+      item('social-repost', 'Repost automatique'),
       item('social-grid', 'Grille Instagram'),
       item('social-ads', 'Publicités Meta'),
       item('social-leads', 'Formulaires de leads'),
