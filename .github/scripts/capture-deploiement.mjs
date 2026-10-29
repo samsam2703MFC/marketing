@@ -51,6 +51,46 @@ page.on('response', (reponse) => {
   }
 })
 
+// Les requêtes en vol, avec leur heure de départ : quand la page tarde à se
+// calmer, le journal nomme celle qui traîne au lieu de dire « délai dépassé ».
+const enVol = new Map()
+page.on('request', (requete) => enVol.set(requete, Date.now()))
+page.on('requestfinished', (requete) => enVol.delete(requete))
+page.on('requestfailed', (requete) => enVol.delete(requete))
+
+/**
+ * Ouvre une adresse de l'application et lui laisse le temps de se peindre.
+ *
+ * Le document seul dit si la page répond : on attend `domcontentloaded`, pas le
+ * silence réseau. L'accueil lit dans l'ERP les ventes de deux ans, magasin par
+ * magasin, et cette lecture dépasse parfois 45 s : attendre `networkidle`
+ * faisait alors passer pour injoignable une page servie en HTTP 200, et tout le
+ * travail échouait sans une capture. Le silence réseau reste attendu, mais
+ * borné : passé le délai, la capture se prend en l'état et le journal dit
+ * quelles requêtes n'avaient pas répondu.
+ */
+const ouvrir = async (adresse, delai) => {
+  // Ce qui volait encore appartient à la page qu'on quitte.
+  enVol.clear()
+  const reponse = await page.goto(adresse, { waitUntil: 'domcontentloaded', timeout: delai })
+
+  try {
+    await page.waitForLoadState('networkidle', { timeout: 30_000 })
+  } catch {
+    const maintenant = Date.now()
+    const lentes = [...enVol.entries()]
+      .map(([requete, depart]) => {
+        const chemin = requete.url().replace(/^https?:\/\/[^/]+/, '')
+
+        return `${chemin} (${Math.round((maintenant - depart) / 1000)} s)`
+      })
+
+    note(`  réseau encore occupé après 30 s : ${lentes.join(', ') || 'requête inconnue'}`)
+  }
+
+  return reponse
+}
+
 const photographier = async (nom) => {
   const fichier = path.join(sortie, `${nom}.png`)
   await page.screenshot({ path: fichier, fullPage: false })
@@ -100,7 +140,7 @@ const cliquer = async (cible, libelle) => {
 //     mauvais côté.
 let reponse
 try {
-  reponse = await page.goto(`${base}/?brand=1`, { waitUntil: 'networkidle', timeout: 45_000 })
+  reponse = await ouvrir(`${base}/?brand=1`, 45_000)
 } catch (echec) {
   note(`accueil : injoignable — ${String(echec).split('\n')[0]}`)
   await navigateur.close()
@@ -188,13 +228,22 @@ if (repris) {
 // 4 — Le grand livre du fonds, et sa saisie. Le formulaire s'ouvre mais
 //     n'est jamais enregistré : la capture ne clique pas « Enregistrer », et
 //     quitter la page abandonne ce qui y a été tapé.
-await page.goto(`${base}/?brand=1`, { waitUntil: 'networkidle' })
-await page.waitForTimeout(1200)
+//     Une page qui ne se rouvre pas ici ne coûte que cette capture : celles
+//     déjà prises sont publiées quand même.
+let rouverte = true
 
-if (await cliquer(page.getByRole('link', { name: 'Fonds & Royalties' }), 'Fonds & Royalties')) {
+try {
+  await ouvrir(`${base}/?brand=1`, 45_000)
+  await page.waitForTimeout(1200)
+} catch (echec) {
+  rouverte = false
+  note(`accueil rouvert : injoignable — ${String(echec).split('\n')[0]}`)
+}
+
+if (rouverte && await cliquer(page.getByRole('link', { name: 'Fonds marketing' }), 'Fonds marketing')) {
   await photographier('05-fonds')
 
-  if (await cliquer(page.getByRole('button', { name: '+ Entrée ou sortie' }), 'Nouveau mouvement')) {
+  if (await cliquer(page.getByRole('button', { name: '+ Ajouter un mouvement' }), 'Nouveau mouvement')) {
     await cliquer(page.locator('.movement__periode .datefield'), 'Période couverte')
     await photographier('05b-mouvement')
   }
