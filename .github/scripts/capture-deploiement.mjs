@@ -230,22 +230,54 @@ if (repris) {
 //     quitter la page abandonne ce qui y a été tapé.
 //     Une page qui ne se rouvre pas ici ne coûte que cette capture : celles
 //     déjà prises sont publiées quand même.
-let rouverte = true
+const rouvrir = async () => {
+  try {
+    await ouvrir(`${base}/?brand=1`, 45_000)
+    await page.waitForTimeout(1200)
 
-try {
-  await ouvrir(`${base}/?brand=1`, 45_000)
-  await page.waitForTimeout(1200)
-} catch (echec) {
-  rouverte = false
-  note(`accueil rouvert : injoignable — ${String(echec).split('\n')[0]}`)
+    return true
+  } catch (echec) {
+    note(`accueil rouvert : injoignable — ${String(echec).split('\n')[0]}`)
+
+    return false
+  }
 }
 
-if (rouverte && await cliquer(page.getByRole('link', { name: 'Fonds marketing' }), 'Fonds marketing')) {
+if (await rouvrir() && await cliquer(page.getByRole('link', { name: 'Fonds marketing' }), 'Fonds marketing')) {
   await photographier('05-fonds')
 
   if (await cliquer(page.getByRole('button', { name: '+ Ajouter un mouvement' }), 'Nouveau mouvement')) {
     await cliquer(page.locator('.movement__periode .datefield'), 'Période couverte')
     await photographier('05b-mouvement')
+  }
+}
+
+// 5 — Le repost automatique : un écran du module Social, dans son cadre. Il lit la
+//     Page de la marque chez Meta, ce qui prend quelques secondes : on attend ses
+//     onglets. Le journal reprend le bandeau du guet et ce qui est à venir, de quoi
+//     lire l'état sans ouvrir l'image. Seul le menu est cliqué : rien n'est réglé.
+//     Depuis l'accueil rouvert : l'écran du fonds peut avoir laissé un formulaire ouvert.
+if (await rouvrir() && await cliquer(page.getByRole('link', { name: 'Repost automatique' }), 'Repost automatique')) {
+  const cadre = page.frameLocator('iframe.social-frame__page')
+
+  try {
+    await cadre.getByRole('tab', { name: 'Suivi' }).waitFor({ timeout: 45_000 })
+  } catch {
+    note('  repost : écran pas chargé après 45 s — capture prise en l\'état')
+  }
+
+  await page.waitForTimeout(800)
+  await photographier('06-repost')
+
+  try {
+    const texte = await cadre.locator('body').innerText({ timeout: 5000 })
+    const utiles = /^(Page « |En pause|Activé le|Dernière lecture|Token Meta|La Page de la marque|À VENIR|Sort le )|Aucun post programmé|illisibles chez Meta/
+
+    for (const ligne of texte.split('\n').map((l) => l.trim())) {
+      if (utiles.test(ligne)) note(`  repost : ${ligne}`)
+    }
+  } catch {
+    note('  repost : texte de l\'écran illisible')
   }
 }
 
