@@ -80,6 +80,94 @@ export const BUNDLE_LABELS = {
   nl: { bundle: 'Bundel', instead: 'i.p.v.', save: 'U bespaart' },
   en: { bundle: 'Bundle', instead: 'instead of', save: 'You save' },
 };
+// Promotions TFBuddy : la mécanique en clair, dans la langue de l'écran.
+// m.tfb = { kind, mech, lang } (posé par le serveur, applyTfbPromos).
+const fmtNum = (v, lang) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '';
+  const s = Number.isInteger(n) ? String(n) : n.toFixed(2);
+  return lang === 'en' ? s : s.replace('.', ',');
+};
+const fmtEur = (v, lang) => (lang === 'en' ? `€${fmtNum(v, lang)}` : `${fmtNum(v, lang)} €`);
+const PROMO_TXT = {
+  fr: {
+    bx: (x, y) => `${x} acheté${x > 1 ? 's' : ''} = ${y} offert${y > 1 ? 's' : ''}`,
+    bxPct: (x, y, v) => `${x} acheté${x > 1 ? 's' : ''} = ${y} à -${v} %`,
+    bxPrice: (x, y, v) => `${x} acheté${x > 1 ? 's' : ''} = ${y} à ${v}`,
+    bxOff: (x, y, v) => `${x} acheté${x > 1 ? 's' : ''} = ${y} à -${v}`,
+    qtyFree: (n, k) => `${n} pour le prix de ${k}`, qtyPrice: (n, v) => `${n} pour ${v}`,
+    qtyPct: (n, v) => `-${v} % dès ${n}`, qtyOff: (n, v) => `-${v} dès ${n}`,
+    pct: (v) => `-${v} %`, off: (v) => `-${v}`, price: (v) => `${v}`,
+    code: (c) => `Code « ${c} » en caisse`, voucher: 'Sur présentation de votre bon', instead: 'au lieu de',
+  },
+  nl: {
+    bx: (x, y) => `${x} gekocht = ${y} gratis`,
+    bxPct: (x, y, v) => `${x} gekocht = ${y} aan -${v} %`,
+    bxPrice: (x, y, v) => `${x} gekocht = ${y} voor ${v}`,
+    bxOff: (x, y, v) => `${x} gekocht = ${y} met ${v} korting`,
+    qtyFree: (n, k) => `${n} voor de prijs van ${k}`, qtyPrice: (n, v) => `${n} voor ${v}`,
+    qtyPct: (n, v) => `-${v} % vanaf ${n}`, qtyOff: (n, v) => `-${v} vanaf ${n}`,
+    pct: (v) => `-${v} %`, off: (v) => `-${v}`, price: (v) => `${v}`,
+    code: (c) => `Code « ${c} » aan de kassa`, voucher: 'Op vertoon van je bon', instead: 'i.p.v.',
+  },
+  en: {
+    bx: (x, y) => `Buy ${x}, get ${y} free`,
+    bxPct: (x, y, v) => `Buy ${x}, get ${y} at -${v}%`,
+    bxPrice: (x, y, v) => `Buy ${x}, get ${y} for ${v}`,
+    bxOff: (x, y, v) => `Buy ${x}, get ${y} ${v} off`,
+    qtyFree: (n, k) => `${n} for the price of ${k}`, qtyPrice: (n, v) => `${n} for ${v}`,
+    qtyPct: (n, v) => `-${v}% from ${n}`, qtyOff: (n, v) => `-${v} from ${n}`,
+    pct: (v) => `-${v}%`, off: (v) => `-${v}`, price: (v) => `${v}`,
+    code: (c) => `Code “${c}” at the till`, voucher: 'With your voucher', instead: 'instead of',
+  },
+};
+export function tfbPromoLabel(tfb, lang = 'fr') {
+  if (!tfb || !tfb.mech) return '';
+  const L = PROMO_TXT[lang] || PROMO_TXT.fr;
+  const m = tfb.mech;
+  const val = (type, v) => (type === 'PERCENTAGE_DISCOUNT' ? fmtNum(v, lang) : fmtEur(v, lang));
+  if (tfb.kind === 'buy_x_get_y') {
+    const x = Number(m.buy) || 1;
+    const y = Number(m.get) || 1;
+    const v = Number(m.rewardValue);
+    if (m.rewardType === 'PERCENTAGE_DISCOUNT' && Number.isFinite(v)) return v >= 100 ? L.bx(x, y) : L.bxPct(x, y, val(m.rewardType, v));
+    if (m.rewardType === 'FIXED_PRICE' && Number.isFinite(v)) return v === 0 ? L.bx(x, y) : L.bxPrice(x, y, val(m.rewardType, v));
+    if (m.rewardType === 'FIXED_AMOUNT_DISCOUNT' && Number.isFinite(v)) return L.bxOff(x, y, val(m.rewardType, v));
+    return L.bx(x, y);
+  }
+  if (tfb.kind === 'quantity') {
+    const n = Number(m.qty);
+    const f = Number(m.free);
+    const v = Number(m.discountValue);
+    if (!(n > 0)) return '';
+    if (f > 0 && f < n) return L.qtyFree(n, n - f);
+    if (Number.isFinite(Number(m.price)) && m.price !== null) return L.qtyPrice(n, fmtEur(m.price, lang));
+    if (m.discountType === 'PERCENTAGE_DISCOUNT' && Number.isFinite(v)) return L.qtyPct(n, fmtNum(v, lang));
+    if (m.discountType === 'FIXED_AMOUNT_DISCOUNT' && Number.isFinite(v)) return L.qtyOff(n, fmtEur(v, lang));
+    if (m.discountType === 'FIXED_PRICE' && Number.isFinite(v)) return L.qtyPrice(n, fmtEur(v, lang));
+    return '';
+  }
+  if (tfb.kind === 'scheduled_discount') {
+    const v = Number(m.discountValue);
+    if (!Number.isFinite(v) || m.discountValue === null) return '';
+    if (m.discountType === 'PERCENTAGE_DISCOUNT') return L.pct(fmtNum(v, lang));
+    if (m.discountType === 'FIXED_AMOUNT_DISCOUNT') return L.off(fmtEur(v, lang));
+    if (m.discountType === 'FIXED_PRICE') return L.price(fmtEur(v, lang));
+    return '';
+  }
+  if (tfb.kind === 'voucher') return m.codeType === 'SHARED' && m.code ? L.code(m.code) : L.voucher;
+  return '';
+}
+// Prix remisé d'un produit par une remise programmée (null si sans objet).
+export function tfbDiscountedPrice(tfb, price) {
+  if (!tfb || tfb.kind !== 'scheduled_discount' || !tfb.mech) return null;
+  const p = parseFloat(String(price == null ? '' : price).replace(/\s/g, '').replace(',', '.'));
+  const v = Number(tfb.mech.discountValue);
+  if (!Number.isFinite(p) || !Number.isFinite(v) || tfb.mech.discountValue === null) return null;
+  const t = tfb.mech.discountType;
+  const out = t === 'PERCENTAGE_DISCOUNT' ? p * (1 - v / 100) : t === 'FIXED_AMOUNT_DISCOUNT' ? p - v : t === 'FIXED_PRICE' ? v : null;
+  return out == null ? null : Math.max(0, Math.round(out * 100) / 100);
+}
 export const newTag = () => ({ enabled: false, label: 'Nouveauté', img: 'assets/cherry.png' });
 export const newSched = () => ({ days: [true, true, true, true, true, true, true], from: '00:00', to: '23:59' });
 // vidX / vidY / vidZoom : cadrage d'une vidéo qui n'a pas le format de l'écran.
@@ -360,7 +448,15 @@ function renderModuleInner(h, m, lt, opts) {
     const pt = m.promo || { name: 'Offre', icon: '🏷️', color: '#C0392B' };
     const col = pt.color || '#C0392B';
     const a = Math.min(easeIO(clx(lt / 0.5, 0, 1)), easeIO(clx((dur - lt) / 0.5, 0, 1)));
-    const it = activeItems(m)[0] || (m.items || [])[0];
+    const it0 = activeItems(m)[0] || (m.items || [])[0];
+    // Promotion TFBuddy : sa mécanique en sous-titre (sauf texte saisi en
+    // régie), son visuel s'il y en a un, et le prix remisé « au lieu de ».
+    const tfb = m.tfb || null;
+    const tfbLang = (tfb && tfb.lang) || 'fr';
+    const subTxt = m.sub || (tfb ? tfbPromoLabel(tfb, tfbLang) : '');
+    const it = it0 && tfb && tfb.img ? { ...it0, img: tfb.img, src: 'photo' } : (it0 || (tfb && tfb.img ? { img: tfb.img, src: 'photo', price: '' } : null));
+    const disc = it && tfb ? tfbDiscountedPrice(tfb, it.price) : null;
+    const shownPrice = tfb && tfb.kind === 'voucher' ? '' : (disc != null ? fmtNum(disc, tfbLang) : (it && it.price));
     const hero = (m.layout === 'hero-right' || m.layout === 'hero-left') && it;
     const band = m.layout === 'band';
     // Puce du sous-type : icône + libellé, aux couleurs de la promo.
@@ -379,8 +475,10 @@ function renderModuleInner(h, m, lt, opts) {
     badge(!onLight),
     h('div', { style: { fontFamily: FVANK, fontWeight: 400, fontSize: hero ? 300 : 360, letterSpacing: '0.01em', textTransform: 'uppercase', color: onLight ? INK : '#fff', lineHeight: 0.95 } }, (m.name || 'Offre spéciale').toUpperCase()),
     h('div', { style: { width: 560, height: 16, background: col, borderRadius: 8 } }),
-    m.sub ? h('div', { style: { fontFamily: FUI, fontWeight: 400, fontSize: hero ? 96 : 108, letterSpacing: '0.06em', color: onLight ? '#6E675E' : 'rgba(255,255,255,0.86)', lineHeight: 1.15 } }, m.sub) : null,
-    it && it.price ? h('div', { style: { fontFamily: FUI, fontWeight: 300, fontSize: 220, color: onLight ? col : '#fff' } }, it.price, h('span', { style: { fontSize: 110, verticalAlign: 'super' } }, '€')) : null);
+    subTxt ? h('div', { style: { fontFamily: FUI, fontWeight: 400, fontSize: hero ? 96 : 108, letterSpacing: '0.06em', color: onLight ? '#6E675E' : 'rgba(255,255,255,0.86)', lineHeight: 1.15 } }, subTxt) : null,
+    shownPrice ? h('div', { style: { fontFamily: FUI, fontWeight: 300, fontSize: 220, color: onLight ? col : '#fff' } }, shownPrice, h('span', { style: { fontSize: 110, verticalAlign: 'super' } }, '€')) : null,
+    disc != null && it && it.price ? h('div', { style: { fontFamily: FUI, fontWeight: 400, fontSize: 88, color: onLight ? '#8A847C' : 'rgba(255,255,255,0.75)', marginTop: -30 } },
+      `${(PROMO_TXT[tfbLang] || PROMO_TXT.fr).instead} `, h('span', { style: { textDecoration: 'line-through' } }, `${it.price} €`)) : null);
 
     if (hero) {
       const left = m.layout === 'hero-left';
@@ -752,8 +850,10 @@ export function scheduledNow(m, date = new Date()) {
     const to = parse(s.to, 24 * 60 - 1);
     if (!(hm >= from && hm <= to)) return false;
   }
-  // Créneaux TFBuddy : jour ISO (1 = lundi … 7 = dimanche), « de » inclus, « à » exclu.
-  const slots = m.bundle && Array.isArray(m.bundle.slots) ? m.bundle.slots : null;
+  // Créneaux TFBuddy (bundle ou promotion) : jour ISO (1 = lundi … 7 = dimanche),
+  // « de » inclus, « à » exclu.
+  const src = m.bundle || m.tfb;
+  const slots = src && Array.isArray(src.slots) ? src.slots : null;
   if (slots && slots.length) {
     return slots.some((x) => {
       if (Number(x.dow) !== dow + 1) return false;

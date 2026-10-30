@@ -4,6 +4,8 @@
 //   GET  /api/v1/admin/promotions/bundles?page&limit → {items, pagination}
 //        (403 « Bearer token lacks MENU.BUNDLE.MANAGE » sans le droit)
 //   GET  /api/v1/admin/promotions/bundles/{id}      → l'état complet du bundle
+//   GET  /api/v1/admin/promotions/{buy-x-get-y | quantity | scheduled-product-discount}[/{id}]
+//   GET  /api/v1/admin/voucher-campaigns            → campagnes de bons (liste complète)
 //   GET  /api/v1/shops                              → les magasins
 // Comptes : admin (0470000001 / admin-pass) a le droit ; consultant
 // (0470000002 / consult-pass) se connecte mais reçoit 403 sur les bundles.
@@ -42,6 +44,37 @@ export const MOCK_BUNDLES = [
     items: [{ id_product: 903, quantity: 2, sort_order: 0, product_name: 'Cookie' }], shop_ids: [], schedule: [],
   },
 ];
+// Les autres familles : la liste ne porte que l'en-tête, le détail le reste.
+const ALL_WEEK = [1, 2, 3, 4, 5, 6, 7].map((d) => ({ day_of_week: d, time_from: '00:00:00', time_to: '23:59:00' }));
+export const MOCK_PROMOS = {
+  'buy-x-get-y': [
+    { id: 41, name: 'Croissants 2 + 1', description: 'Le troisième est offert', promotion_type: 'BUY_X_GET_Y', status: 'ACTIVE', priority: 4,
+      shop_scope_type: 'ALL_SHOPS', activation_mode: 'AUTOMATIC', valid_from: '2026-01-01 00:00:00', valid_to: '2030-12-31 23:59:59',
+      trigger: { quantity: 2, product_ids: [901] }, reward: { quantity: 1, product_ids: [{ id_product: 901 }], type: 'FREE', value: null, selection_strategy: 'CHEAPEST' },
+      shop_ids: [], schedule: ALL_WEEK },
+    { id: 42, name: 'Brouillon 1 + 1', promotion_type: 'BUY_X_GET_Y', status: 'DRAFT', shop_scope_type: 'ALL_SHOPS',
+      trigger: { quantity: 1, category_ids: [5] }, reward: { quantity: 1, category_ids: [5], type: 'PERCENTAGE_DISCOUNT', value: 50 }, shop_ids: [], schedule: [] },
+  ],
+  quantity: [
+    { id: 51, name: '3 cookies pour 2', status: 'ACTIVE', shop_scope_type: 'SELECTED_SHOPS', shop_ids: [4],
+      quantity_promotion: { mechanism_type: 'BUY_X_GET_Y', bundle_quantity: 3, free_quantity: 1 }, eligible_product_ids: [903], schedule: ALL_WEEK },
+  ],
+  'scheduled-product-discount': [
+    { id: 61, name: 'Happy hour café', status: 'ACTIVE', shop_scope_type: 'ALL_SHOPS', shop_ids: [],
+      discount_type: 'PERCENTAGE_DISCOUNT', discount_value: 20, reward_product_ids: [902],
+      schedule: [1, 2, 3, 4, 5].map((d) => ({ day_of_week: d, time_from: '14:00', time_to: '16:00' })) },
+    { id: 62, name: 'Tartes à prix doux', status: 'INACTIVE', shop_scope_type: 'ALL_SHOPS', shop_ids: [],
+      discount_type: 'FIXED_PRICE', discount_value: 2.5, reward_category_ids: [5], schedule: [] },
+  ],
+};
+export const MOCK_VOUCHERS = [
+  { id: 71, name: 'Rentrée', description: 'Code à donner en caisse', status: 'ACTIVE', code_type: 'SHARED', shared_code: 'RENTREE10',
+    valid_from: '2026-09-01 00:00:00', valid_to: '2030-10-31 23:59:59', id_promotion: 41, promotion: { id: 41, name: 'Croissants 2 + 1' } },
+  { id: 72, name: 'Fidélité', status: 'ACTIVE', code_type: 'UNIQUE', requires_customer: true },
+];
+// Champs que la liste ne porte pas (le détail, si).
+const DETAIL_ONLY = ['trigger', 'reward', 'quantity_promotion', 'eligible_product_ids', 'discount_type', 'discount_value', 'reward_product_ids', 'reward_category_ids', 'schedule', 'shop_ids'];
+
 export const MOCK_SHOPS = [{ id: 4, name: 'Magasin Gare', slug: '' }, { id: 77, name: 'Boutique inconnue', slug: 'inconnue' }];
 
 export function startTfbMock() {
@@ -67,6 +100,22 @@ export function startTfbMock() {
       const role = tokens.get(String(req.headers.authorization || '').replace(/^Bearer /, ''));
       if (!role) return send(401, { status: 'error', description: 'Missing or invalid Bearer token' });
       if (url.pathname === '/api/v1/shops') return send(200, { data: MOCK_SHOPS });
+      // Autres familles de promotions, et campagnes de bons : même droit que les bundles.
+      const fam = /^\/api\/v1\/admin\/promotions\/(buy-x-get-y|quantity|scheduled-product-discount)(?:\/(\d+))?$/.exec(url.pathname);
+      const vouchers = url.pathname === '/api/v1/admin/voucher-campaigns';
+      if (fam || vouchers) {
+        if (role !== 'admin' || revoked) return send(403, { status: 'error', description: 'Bearer token lacks MENU.BUNDLE.MANAGE' });
+        const all = vouchers ? MOCK_VOUCHERS : MOCK_PROMOS[fam[1]];
+        if (fam && fam[2]) {
+          const p = all.find((x) => String(x.id) === fam[2]);
+          return p ? send(200, { status: 'success', data: p }) : send(404, { status: 'error', description: 'NOT_FOUND' });
+        }
+        const page = Math.max(1, +url.searchParams.get('page') || 1);
+        const limit = Math.min(100, Math.max(1, +url.searchParams.get('limit') || 25));
+        const slice = all.slice((page - 1) * limit, page * limit)
+          .map((x) => (vouchers ? x : Object.fromEntries(Object.entries(x).filter(([k]) => !DETAIL_ONLY.includes(k)))));
+        return send(200, { items: slice, pagination: { page, limit, total: all.length, pages: Math.max(1, Math.ceil(all.length / limit)) } });
+      }
       if (url.pathname.startsWith('/api/v1/admin/promotions/bundles')) {
         if (role !== 'admin' || revoked) return send(403, { status: 'error', description: 'Bearer token lacks MENU.BUNDLE.MANAGE' });
         const one = /\/bundles\/(\d+)$/.exec(url.pathname);

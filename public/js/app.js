@@ -5,7 +5,7 @@ import {
   RUBY, INK, FUI, W, H, LIAISON_DUR, LAYOUTS, MOTIONS,
   clx, fmtTime, newTag, newSched, newPos,
   activeItems as rActiveItems, moduleDur as rModuleDur, renderModule, playable, animAssetKind,
-  BRAND_COLORS, brandColorName,
+  BRAND_COLORS, brandColorName, tfbPromoLabel,
 } from './renderer.js';
 // Config du mode « continu » : source unique partagée avec le serveur.
 import { continuousDefaults, normContinuous } from './continuous.js';
@@ -260,6 +260,7 @@ class App extends Component {
         promoTypes: pt.promoTypes || [],
         campaigns: cmp.campaigns || [],
         bundles: bdl.bundles || [], bundleSync: bdl.sync || {}, tfbuddy: bdl.tfbuddy || {}, bundleStores: bdl.stores || [],
+        tfbPromos: bdl.promos || [],
         libCats: lc.libCategories || [], libSources: lc.libSources || [],
         ingredients: ing.ingredients || [],
         sequences: sq.sequences || [],
@@ -518,8 +519,8 @@ class App extends Component {
     this.setState({ bundleBusy: true });
     try {
       const r = await api('POST', '/bundles/sync');
-      this.setState({ bundleBusy: false, bundles: r.bundles || [], bundleSync: r.sync || {}, tfbuddy: r.tfbuddy || {}, bundleStores: r.stores || this.state.bundleStores || [] });
-      this.showToast(r.ok ? this.t('bundles.synced', { n: (r.bundles || []).length }) : `TFBuddy : ${(r.sync && r.sync.error) || 'erreur'}`);
+      this.setState({ bundleBusy: false, bundles: r.bundles || [], tfbPromos: r.promos || [], bundleSync: r.sync || {}, tfbuddy: r.tfbuddy || {}, bundleStores: r.stores || this.state.bundleStores || [] });
+      this.showToast(r.ok ? this.t('tfb.synced', { n: (r.bundles || []).length + (r.promos || []).length }) : `TFBuddy : ${(r.sync && r.sync.error) || 'erreur'}`);
     } catch (e) { this.setState({ bundleBusy: false }); this.showToast(`Erreur : ${e.message}`); }
   }
   async setBundleImg(id, img) {
@@ -690,6 +691,139 @@ class App extends Component {
       validateAllTr: () => this.validateTr(null),
     };
   }
+  // ---- Promotions TFBuddy (« X achetés = Y offert », quantité, remise
+  // programmée, bon d'achat) : un élément « promotion » peut en suivre une.
+  tfbPromoTypeFor(p) {
+    const want = p.kind === 'scheduled_discount' ? ((p.schedule || []).length ? 'happy-hour' : 'scheduled')
+      : p.kind === 'voucher' ? 'voucher' : 'bxgy';
+    const types = this.state.promoTypes || [];
+    return (types.find((t) => t.id === want) || types.find((t) => t.active !== false) || {}).id || '';
+  }
+  tfbPromoProducts(p) {
+    const prods = this.state.catalog.products || [];
+    let ids = (p.products || []).map((x) => x.productId).filter((id) => id && prods.some((q) => q.id === id));
+    if (!ids.length) {
+      const cats = new Set((p.categories || []).map((c) => c.categoryId).filter(Boolean));
+      ids = prods.filter((q) => q.active !== false && cats.has(q.categoryId)).map((q) => q.id);
+    }
+    return ids;
+  }
+  // Promotion TFBuddy résolue pour l'aperçu (prix de base, langue française).
+  tfbPromoInfo(m) {
+    if (!m || m.type !== 'promotion' || !m.tfbRef) return null;
+    const p = (this.state.tfbPromos || []).find((x) => x.id === m.tfbRef);
+    if (!p) return null;
+    const prods = this.state.catalog.products || [];
+    const ids = this.tfbPromoProducts(p);
+    const heroId = m.productRef && prods.some((q) => q.id === m.productRef) ? m.productRef : ids[0];
+    const hp = heroId ? prods.find((q) => q.id === heroId) : null;
+    return {
+      tfb: { id: p.id, kind: p.kind, name: p.name, descr: p.descr, mech: p.mech, slots: p.schedule, img: p.img, lang: 'fr' },
+      items: hp ? [{ name: hp.name, price: hp.price, img: hp.img, src: hp.src, active: true, productId: hp.id }] : [],
+    };
+  }
+  tfbPromoVals(m, isPromo) {
+    const st = this.state;
+    const prods = st.catalog.products || [];
+    const cats = st.catalog.categories || [];
+    const sync = st.bundleSync || {};
+    const kinds = sync.kinds || {};
+    const storeName = (id) => (((st.bundleStores || []).find((x) => x.id === id) || (st.fleet || []).find((x) => x.id === id)) || {}).name || id;
+    const ICON = { bundle: '🎁', buy_x_get_y: '➕', quantity: '🔢', scheduled_discount: '📅', voucher: '🎟️' };
+    const describe = (p) => {
+      const targets = [
+        ...(p.products || []).map((x) => {
+          const q = x.productId ? prods.find((y) => y.id === x.productId) : null;
+          return { label: q ? q.name : this.t('tfb.productN', { n: x.extProductId }), missing: !q };
+        }),
+        ...(p.categories || []).map((c) => {
+          const q = c.categoryId ? cats.find((y) => y.id === c.categoryId) : null;
+          return { label: `🗂 ${q ? q.name : this.t('tfb.categoryN', { n: c.extCategoryId })}`, missing: !q };
+        }),
+      ];
+      const unmapped = (p.shopIds || []).length - (p.storeIds || []).length;
+      const mech = p.mech || {};
+      return {
+        icon: ICON[p.kind] || '🏷️', kindLabel: this.t(`tfb.kind.${p.kind}`),
+        label: tfbPromoLabel({ kind: p.kind, mech }, 'fr') || '—',
+        targets,
+        when: (p.schedule || []).length ? this.bundleWhen(p.schedule) : this.t('tfb.always'),
+        shops: p.scope === 'all' ? this.t('bundles.allShops')
+          : `${(p.storeIds || []).map(storeName).join(', ') || '—'}${unmapped > 0 ? ` · ${this.t('bundles.shopsUnmapped', { n: unmapped })}` : ''}`,
+        dates: p.dateFrom || p.dateTo ? `${p.dateFrom || '…'} → ${p.dateTo || '…'}` : '',
+        voucher: p.kind === 'voucher'
+          ? `${mech.codeType === 'UNIQUE' ? this.t('tfb.codesUnique') : this.t('tfb.codeShared', { code: mech.code || '—' })}${mech.promotionName || mech.promotionId ? ` · ${this.t('tfb.linkedPromo', { name: mech.promotionName || `#${mech.promotionId}` })}` : ''}`
+          : '',
+      };
+    };
+    const filter = st.tfbFilter || 'all';
+    const all = st.tfbPromos || [];
+    const picked = isPromo && m.tfbRef ? all.find((x) => x.id === m.tfbRef) : null;
+    const count = (k) => (k === 'bundle' ? (st.bundles || []).length : all.filter((x) => x.kind === k).length);
+    return {
+      tfbFilters: [['all', (st.bundles || []).length + all.length], ...['bundle', 'buy_x_get_y', 'quantity', 'scheduled_discount', 'voucher'].map((k) => [k, count(k)])]
+        .map(([id, n]) => ({ id, label: `${id === 'all' ? this.t('tfb.all') : `${ICON[id]} ${this.t(`tfb.kind.${id}`)}`} · ${n}`, active: filter === id, pick: () => this.setState({ tfbFilter: id }) })),
+      tfbShowBundles: filter === 'all' || filter === 'bundle',
+      tfbTotal: (st.bundles || []).length + all.length,
+      tfbPromoRows: all.filter((p) => filter === 'all' || p.kind === filter).map((p) => ({
+        id: p.id, kind: p.kind, name: p.name, descr: p.descr, status: p.status, active: p.status === 'ACTIVE',
+        voucherOnly: p.activation === 'VOUCHER_ONLY', img: p.img || '',
+        used: (st.library || []).filter((x) => x.type === 'promotion' && x.tfbRef === p.id).length,
+        ...describe(p),
+        onImg: (e) => { const v = e.target.value.trim(); if (v !== (p.img || '')) this.setTfbPromoImg(p.id, v); },
+        create: () => this.addTfbPromoElement(p.id),
+      })),
+      // État de chaque famille (les bundles ont leur ligne à part).
+      tfbKindLines: ['buy_x_get_y', 'quantity', 'scheduled_discount', 'voucher'].filter((k) => kinds[k]).map((k) => {
+        const r = kinds[k];
+        return {
+          ok: r.ok !== false,
+          text: r.ok === false ? `${ICON[k]} ${this.t(`tfb.kind.${k}`)} : ${r.error || 'erreur'}`
+            : `${ICON[k]} ${this.t(`tfb.kind.${k}`)} : ${this.t('tfb.kindCount', { n: r.count || 0, a: r.active || 0 })}`
+              + `${(r.unknownProducts || []).length ? ` · ${this.t('bundles.warnProducts', { ids: r.unknownProducts.slice(0, 8).join(', ') })}` : ''}`
+              + `${(r.unmappedShops || []).length ? ` · ${this.t('bundles.warnShops', { ids: r.unmappedShops.join(', ') })}` : ''}`,
+        };
+      }),
+      // -- éditeur d'un élément « promotion » --
+      tfbOptions: all.map((p) => ({
+        id: p.id,
+        label: `${ICON[p.kind]} ${p.name} — ${tfbPromoLabel({ kind: p.kind, mech: p.mech || {} }, 'fr') || this.t(`tfb.kind.${p.kind}`)}${p.status !== 'ACTIVE' ? ` (${p.status.toLowerCase()})` : ''}`,
+      })),
+      hasTfbPromos: all.length > 0,
+      curTfbRef: (m && m.tfbRef) || '',
+      tfbPicked: picked ? { name: picked.name, status: picked.status, active: picked.status === 'ACTIVE', ...describe(picked) } : null,
+      onTfbRef: (e) => {
+        const id = e.target.value;
+        const p = all.find((x) => x.id === id);
+        const lib = this.cloneLib();
+        const mm = lib.find((x) => x.id === st.selId);
+        if (!mm) return;
+        mm.tfbRef = id;
+        if (p) {
+          // Le nom suit la promotion tant qu'il n'a pas été personnalisé.
+          if (!mm.name || mm.name === 'Promotion' || all.some((x) => x.name === mm.name)) mm.name = p.name;
+          const t = this.tfbPromoTypeFor(p);
+          if (t) mm.promoType = t;
+          const ids = this.tfbPromoProducts(p);
+          if (!mm.productRef || !ids.includes(mm.productRef)) mm.productRef = ids[0] || mm.productRef || '';
+        }
+        this.setLib(lib);
+      },
+    };
+  }
+  async setTfbPromoImg(id, img) {
+    try {
+      const r = await api('PATCH', `/tfb-promos/${encodeURIComponent(id)}`, { img });
+      this.setState({ tfbPromos: r.promos || [] });
+    } catch (e) { this.showToast(`Erreur : ${e.message}`); }
+  }
+  // « Créer l'élément » depuis la liste : un élément « promotion » relié.
+  addTfbPromoElement(promoId) {
+    const t = (this.state.elementTypes || []).find((x) => x.id === 'promotion');
+    if (!t) { this.showToast(this.t('tfb.noType')); return; }
+    this.setView('composer');
+    this.addElement(t, { tfbRef: promoId });
+  }
   // Campagne résolue pour l'aperçu, depuis la liste sig_campaigns.
   campaignInfo(m) {
     if (!m || m.type !== 'campagne') return undefined;
@@ -797,6 +931,11 @@ class App extends Component {
     if (m && m.type === 'bundle') {
       const bi = this.bundleInfo(m);
       return bi ? { ...m, bundle: bi.bundle, items: bi.items } : { ...m, items: [] };
+    }
+    // Élément « promotion » relié à TFBuddy : sa mécanique, son produit.
+    if (m && m.type === 'promotion' && m.tfbRef) {
+      const ti = this.tfbPromoInfo(m);
+      if (ti) return { ...m, promo, tfb: ti.tfb, items: ti.items };
     }
     // Élément « campagne » : contenu porté par la campagne (produit lié éventuel).
     const campaign = this.campaignInfo(m);
@@ -1156,6 +1295,7 @@ class App extends Component {
     if (mm.type === 'animation') return 'anim';
     if (mm.type === 'category') return 'items';
     if (mm.type === 'bundle') return 'bundle';
+    if (mm.type === 'promotion') return 'promo';
     return 'tag';
   }
   // Les volets de l'éditeur s'ouvrent/ferment indépendamment : on peut garder
@@ -1194,6 +1334,15 @@ class App extends Component {
       base.name = b ? b.name : 'Bundle'; base.libTag = 'promo'; base.layout = 'composition'; base.dur = 9;
       base.bundleRef = b ? b.id : '';
     }
+    else if (t.id === 'promotion' && extra.tfbRef) {
+      const p = (this.state.tfbPromos || []).find((x) => x.id === extra.tfbRef);
+      const ids = p ? this.tfbPromoProducts(p) : [];
+      base.name = p ? p.name : 'Promotion'; base.libTag = 'promo'; base.dur = 7;
+      base.tfbRef = p ? p.id : '';
+      base.promoType = p ? this.tfbPromoTypeFor(p) : '';
+      base.productRef = ids[0] || '';
+      base.layout = ids.length || (p && p.img) ? 'hero-right' : 'band';
+    }
     else { base.name = t.label || 'Élément'; }
     lib.push(base);
     this.setLib(lib, { selId: id, addPicker: false, composerTab: 'lib', openSec: [this.defaultSecFor(base)], ...this.playlistPatch([...this.state.playlist, id]) });
@@ -1220,6 +1369,10 @@ class App extends Component {
     if (mm.type === 'animation') return `animation · ${mm.dur || 6} s`;
     if (mm.type === 'produit') return mm.items && mm.items[0] ? `à la une : ${mm.items[0].name}` : 'produit à choisir';
     if (mm.type === 'html') return String(mm.html || '').trim() ? `gabarit HTML · ${mm.htmlW || 1920}×${mm.htmlH || 1080}` : 'gabarit HTML · code à coller';
+    if (mm.type === 'promotion' && mm.tfbRef) {
+      const p = (this.state.tfbPromos || []).find((x) => x.id === mm.tfbRef);
+      return p ? `promotion TFBuddy · ${p.name}${p.status !== 'ACTIVE' ? ` · ${p.status.toLowerCase()}` : ''}` : 'promotion TFBuddy introuvable';
+    }
     if (mm.type === 'promotion') return `promotion${mm.promo && mm.promo.name ? ' · ' + mm.promo.name : ''}`;
     if (mm.type === 'campagne') return `campagne${mm.campaign && mm.campaign.name ? ' · ' + mm.campaign.name : ''}`;
     if (mm.type === 'bundle') {
@@ -3724,6 +3877,8 @@ class App extends Component {
       mediaAgencyUrl: new URL('agence', location.href).toString(),
       // -- bundle TFBuddy : on choisit un bundle dans la liste synchronisée --
       ...this.bundleVals(m, isBundle),
+      // -- promotions TFBuddy (éditeur « promotion » + page Campagnes) --
+      ...this.tfbPromoVals(m, isPromo),
       // -- campagne marketing : on choisit une campagne dans la liste --
       campaignInfo: isCampaign ? this.campaignInfo(m) : null,
       campaignOptions: (st.campaigns || []).filter((c) => c.active !== false || c.id === m.campaignRef).map((c) => ({
@@ -5046,47 +5201,12 @@ class App extends Component {
         <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Supprimer un sous-type ne casse pas les éléments qui l'utilisaient : ils retombent sur un badge neutre « Offre » jusqu'à ce que tu leur en réassignes un. L'ordre ci-dessus est celui proposé dans le Compositeur.</p>
       </div>
 
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;" data-bundles>
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
-          <div style="min-width:0;flex:1 1 320px;">
-            <h3 style="margin:0 0 4px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${v.t('bundles.title', { n: v.bundleRows.length })}</h3>
-            <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;max-width:760px;">${v.t('bundles.subtitle')}</p>
-          </div>
-          <button onClick=${v.syncBundles} disabled=${v.bundleBusy || v.bundleState === 'off'} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.bundleBusy || v.bundleState === 'off' ? 'not-allowed' : 'pointer'};background:${v.bundleState === 'off' ? 'rgba(35,34,32,0.08)' : '#8D1D2C'};color:${v.bundleState === 'off' ? '#8A847C' : '#fff'};">${v.bundleBusy ? v.t('bundles.syncing') : v.t('bundles.sync')}</button>
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;" data-tfb-pointer>
+        <div style="min-width:0;flex:1 1 320px;">
+          <h3 style="margin:0 0 4px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${v.t('tfb.pointerTitle', { n: v.tfbTotal })}</h3>
+          <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">${v.t('tfb.pointerText')}</p>
         </div>
-        <div style="padding:9px 12px;border-radius:10px;font-size:12px;line-height:1.5;margin-bottom:12px;background:${v.bundleState === 'ok' ? 'rgba(46,110,78,0.08)' : (v.bundleState === 'error' ? 'rgba(141,29,44,0.07)' : 'rgba(35,34,32,0.05)')};color:${v.bundleState === 'ok' ? '#2E6E4E' : (v.bundleState === 'error' ? '#8D1D2C' : '#6E675E')};" data-bundle-status=${v.bundleState}>
-          ${v.bundleState === 'ok' ? '● ' : (v.bundleState === 'error' ? '⚠ ' : '○ ')}${v.bundleStatusText}
-          ${v.bundleWarnings.map((w) => html`<div style="color:#6E4A2B;margin-top:3px;">⚠ ${w}</div>`)}
-        </div>
-        <div style="display:flex;flex-direction:column;gap:10px;">
-          ${v.bundleRows.map((b) => html`
-            <div style="border:1px solid rgba(35,34,32,0.1);border-radius:12px;padding:13px 15px;background:${b.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};opacity:${b.active ? 1 : 0.75};" data-bundle=${b.id}>
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <span style="font-size:18px;">🎁</span>
-                <strong style="font-size:14px;color:#232220;flex:1 1 200px;min-width:0;overflow-wrap:anywhere;">${b.name}</strong>
-                <span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:0.06em;color:#fff;background:${b.active ? '#2E6E4E' : (b.status === 'DRAFT' ? '#B8860B' : '#8A847C')};">${b.status}</span>
-                ${b.voucher && html`<span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:600;color:#6E4A2B;background:rgba(201,123,74,0.15);">${v.t('bundles.voucher')}</span>`}
-                <span style="font-size:16px;font-weight:700;color:#8D1D2C;white-space:nowrap;">${b.price}</span>
-                ${b.worth && html`<span style="font-size:12px;color:#8A847C;text-decoration:line-through;white-space:nowrap;">${b.worth}</span>`}
-              </div>
-              ${b.descr && html`<div style="margin-top:4px;font-size:12px;color:#6E675E;">${b.descr}</div>`}
-              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;">
-                ${b.comp.map((c) => html`<span title=${c.missing ? v.t('bundles.missingProduct') : ''} style="padding:4px 10px;border-radius:999px;font-size:12px;background:${c.missing ? 'rgba(141,29,44,0.07)' : '#fff'};border:1px solid ${c.missing ? 'rgba(141,29,44,0.3)' : 'rgba(35,34,32,0.12)'};color:${c.missing ? '#8D1D2C' : '#232220'};">${c.label}${c.missing ? ' ?' : ''}</span>`)}
-              </div>
-              <div style="margin-top:8px;font-size:12px;color:#4A4640;line-height:1.6;">
-                <div>🕒 ${b.when}${b.dates ? ` · 📅 ${b.dates}` : ''}</div>
-                <div>🏬 ${b.shops}</div>
-              </div>
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;">
-                <input value=${b.img} onChange=${b.onImg} placeholder=${v.t('bundles.imgPlaceholder')} style="flex:1 1 260px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;color:#4A4640;" />
-                <span style="font-size:11px;color:${b.used ? '#6E4A2B' : '#B8B2A8'};">${b.used ? v.t('common.usedBy', { n: b.used }) : v.t('common.unused')}</span>
-                <button onClick=${b.create} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.25);border-radius:999px;cursor:pointer;">${v.t('bundles.create')}</button>
-              </div>
-            </div>
-          `)}
-          ${!v.bundleRows.length && html`<p style="margin:0;font-size:12.5px;color:#8A847C;padding:6px 0;">${v.bundleState === 'off' ? v.t('bundles.emptyOff') : v.t('bundles.empty')}</p>`}
-        </div>
-        <p style="margin:12px 0 0;font-size:11.5px;color:#8A847C;line-height:1.5;">${v.t('bundles.footer')}</p>
+        <button onClick=${v.goCampaigns} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;background:#8D1D2C;color:#fff;cursor:pointer;">${v.t('tfb.goCampaigns')}</button>
       </div>
     </div>
   </div>
@@ -5154,6 +5274,79 @@ class App extends Component {
           ${!v.campaignRows.length && html`<p style="margin:0;font-size:12.5px;color:#8A847C;padding:8px 0;">Aucune campagne. « + Ajouter une campagne » pour en créer une (ou importe-les depuis l'ERP plus tard).</p>`}
         </div>
         <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Portée <strong>produit</strong> = la campagne affiche la photo et le prix du produit lié. Portée <strong>gamme thématique</strong> = un thème libre (ex. « Viennoiseries »). Supprimer une campagne ne casse pas les éléments qui la diffusaient : ils affichent un repère neutre jusqu'à réassignation.</p>
+      </div>
+
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;" data-bundles data-tfb>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+          <div style="min-width:0;flex:1 1 320px;">
+            <h3 style="margin:0 0 4px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${v.t('tfb.title', { n: v.tfbTotal })}</h3>
+            <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;max-width:760px;">${v.t('tfb.subtitle')}</p>
+          </div>
+          <button onClick=${v.syncBundles} disabled=${v.bundleBusy || v.bundleState === 'off'} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.bundleBusy || v.bundleState === 'off' ? 'not-allowed' : 'pointer'};background:${v.bundleState === 'off' ? 'rgba(35,34,32,0.08)' : '#8D1D2C'};color:${v.bundleState === 'off' ? '#8A847C' : '#fff'};">${v.bundleBusy ? v.t('bundles.syncing') : v.t('bundles.sync')}</button>
+        </div>
+        <div style="padding:9px 12px;border-radius:10px;font-size:12px;line-height:1.5;margin-bottom:12px;background:${v.bundleState === 'ok' ? 'rgba(46,110,78,0.08)' : (v.bundleState === 'error' ? 'rgba(141,29,44,0.07)' : 'rgba(35,34,32,0.05)')};color:${v.bundleState === 'ok' ? '#2E6E4E' : (v.bundleState === 'error' ? '#8D1D2C' : '#6E675E')};" data-bundle-status=${v.bundleState}>
+          ${v.bundleState === 'ok' ? '● ' : (v.bundleState === 'error' ? '⚠ ' : '○ ')}${v.bundleStatusText}
+          ${v.bundleWarnings.map((w) => html`<div style="color:#6E4A2B;margin-top:3px;">⚠ ${w}</div>`)}
+          ${v.tfbKindLines.map((l) => html`<div style="margin-top:3px;color:${l.ok ? '#4A4640' : '#8D1D2C'};">${l.ok ? '' : '⚠ '}${l.text}</div>`)}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          ${v.tfbFilters.map((f) => html`<button onClick=${f.pick} data-tfb-filter=${f.id} style="padding:6px 13px;font-size:12px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${f.active ? '#232220' : 'rgba(35,34,32,0.12)'};background:${f.active ? '#232220' : '#fff'};color:${f.active ? '#fff' : '#4A4640'};">${f.label}</button>`)}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          ${v.tfbShowBundles && v.bundleRows.map((b) => html`
+            <div style="border:1px solid rgba(35,34,32,0.1);border-radius:12px;padding:13px 15px;background:${b.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};opacity:${b.active ? 1 : 0.75};" data-bundle=${b.id}>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span style="font-size:18px;">🎁</span>
+                <strong style="font-size:14px;color:#232220;flex:1 1 200px;min-width:0;overflow-wrap:anywhere;">${b.name}</strong>
+                <span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:0.06em;color:#fff;background:${b.active ? '#2E6E4E' : (b.status === 'DRAFT' ? '#B8860B' : '#8A847C')};">${b.status}</span>
+                ${b.voucher && html`<span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:600;color:#6E4A2B;background:rgba(201,123,74,0.15);">${v.t('bundles.voucher')}</span>`}
+                <span style="font-size:16px;font-weight:700;color:#8D1D2C;white-space:nowrap;">${b.price}</span>
+                ${b.worth && html`<span style="font-size:12px;color:#8A847C;text-decoration:line-through;white-space:nowrap;">${b.worth}</span>`}
+              </div>
+              ${b.descr && html`<div style="margin-top:4px;font-size:12px;color:#6E675E;">${b.descr}</div>`}
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;">
+                ${b.comp.map((c) => html`<span title=${c.missing ? v.t('bundles.missingProduct') : ''} style="padding:4px 10px;border-radius:999px;font-size:12px;background:${c.missing ? 'rgba(141,29,44,0.07)' : '#fff'};border:1px solid ${c.missing ? 'rgba(141,29,44,0.3)' : 'rgba(35,34,32,0.12)'};color:${c.missing ? '#8D1D2C' : '#232220'};">${c.label}${c.missing ? ' ?' : ''}</span>`)}
+              </div>
+              <div style="margin-top:8px;font-size:12px;color:#4A4640;line-height:1.6;">
+                <div>🕒 ${b.when}${b.dates ? ` · 📅 ${b.dates}` : ''}</div>
+                <div>🏬 ${b.shops}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;">
+                <input value=${b.img} onChange=${b.onImg} placeholder=${v.t('bundles.imgPlaceholder')} style="flex:1 1 260px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;color:#4A4640;" />
+                <span style="font-size:11px;color:${b.used ? '#6E4A2B' : '#B8B2A8'};">${b.used ? v.t('common.usedBy', { n: b.used }) : v.t('common.unused')}</span>
+                <button onClick=${b.create} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.25);border-radius:999px;cursor:pointer;">${v.t('bundles.create')}</button>
+              </div>
+            </div>
+          `)}
+          ${v.tfbPromoRows.map((p) => html`
+            <div style="border:1px solid rgba(35,34,32,0.1);border-radius:12px;padding:13px 15px;background:${p.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};opacity:${p.active ? 1 : 0.75};" data-tfb-promo=${p.id}>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span style="font-size:18px;">${p.icon}</span>
+                <strong style="font-size:14px;color:#232220;flex:1 1 200px;min-width:0;overflow-wrap:anywhere;">${p.name}</strong>
+                <span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:600;color:#4A4640;background:rgba(35,34,32,0.07);">${p.kindLabel}</span>
+                <span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:0.06em;color:#fff;background:${p.active ? '#2E6E4E' : (p.status === 'DRAFT' ? '#B8860B' : '#8A847C')};">${p.status}</span>
+                ${p.voucherOnly && html`<span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:600;color:#6E4A2B;background:rgba(201,123,74,0.15);">${v.t('bundles.voucher')}</span>`}
+                <span style="font-size:15px;font-weight:700;color:#8D1D2C;white-space:nowrap;" data-tfb-label>${p.label}</span>
+              </div>
+              ${p.descr && html`<div style="margin-top:4px;font-size:12px;color:#6E675E;">${p.descr}</div>`}
+              ${p.targets.length > 0 && html`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;">
+                ${p.targets.map((c) => html`<span title=${c.missing ? v.t('bundles.missingProduct') : ''} style="padding:4px 10px;border-radius:999px;font-size:12px;background:${c.missing ? 'rgba(141,29,44,0.07)' : '#fff'};border:1px solid ${c.missing ? 'rgba(141,29,44,0.3)' : 'rgba(35,34,32,0.12)'};color:${c.missing ? '#8D1D2C' : '#232220'};">${c.label}${c.missing ? ' ?' : ''}</span>`)}
+              </div>`}
+              <div style="margin-top:8px;font-size:12px;color:#4A4640;line-height:1.6;">
+                ${p.kind !== 'voucher' && html`<div>🕒 ${p.when}${p.dates ? ` · 📅 ${p.dates}` : ''}</div>`}
+                ${p.kind === 'voucher' && html`<div>🎟️ ${p.voucher}${p.dates ? ` · 📅 ${p.dates}` : ''}</div>`}
+                ${p.kind !== 'voucher' && html`<div>🏬 ${p.shops}</div>`}
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;">
+                <input value=${p.img} onChange=${p.onImg} placeholder=${v.t('bundles.imgPlaceholder')} style="flex:1 1 260px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;color:#4A4640;" />
+                <span style="font-size:11px;color:${p.used ? '#6E4A2B' : '#B8B2A8'};">${p.used ? v.t('common.usedBy', { n: p.used }) : v.t('common.unused')}</span>
+                <button onClick=${p.create} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.25);border-radius:999px;cursor:pointer;">${v.t('bundles.create')}</button>
+              </div>
+            </div>
+          `)}
+          ${!v.tfbTotal && html`<p style="margin:0;font-size:12.5px;color:#8A847C;padding:6px 0;">${v.bundleState === 'off' ? v.t('bundles.emptyOff') : v.t('tfb.empty')}</p>`}
+        </div>
+        <p style="margin:12px 0 0;font-size:11.5px;color:#8A847C;line-height:1.5;">${v.t('tfb.footer')}</p>
       </div>
     </div>
   </div>
@@ -5837,6 +6030,26 @@ class App extends Component {
           <div style=${secCard}>
             ${secHead('promo', 'Type de promotion', v.promoSummary)}
             ${secOpen('promo') && html`<div style=${secBody}>
+            <div style="margin-bottom:14px;padding:11px 13px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.10);" data-tfb-link>
+              <label style="display:block;font-size:12.5px;font-weight:600;color:#232220;margin-bottom:6px;">${v.t('tfb.editorTitle')}</label>
+              ${v.hasTfbPromos ? html`
+                <select value=${v.curTfbRef} onChange=${v.onTfbRef} style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:13.5px;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#fff;cursor:pointer;">
+                  <option value="">${v.t('tfb.pickNone')}</option>
+                  ${v.tfbOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
+                </select>
+                ${v.tfbPicked && html`
+                  <div style="margin-top:9px;font-size:12px;color:#4A4640;line-height:1.6;">
+                    <div style="font-size:13.5px;font-weight:700;color:#232220;">${v.tfbPicked.icon} ${v.tfbPicked.name} · <span style="color:#8D1D2C;">${v.tfbPicked.label}</span></div>
+                    ${v.tfbPicked.targets.length ? html`<div>${v.tfbPicked.targets.map((c) => c.label).join(' · ')}</div>` : ''}
+                    <div>🕒 ${v.tfbPicked.when}${v.tfbPicked.dates ? ` · 📅 ${v.tfbPicked.dates}` : ''}</div>
+                    <div>🏬 ${v.tfbPicked.shops}</div>
+                    ${v.tfbPicked.voucher && html`<div>🎟️ ${v.tfbPicked.voucher}</div>`}
+                    ${!v.tfbPicked.active && html`<div style="margin-top:4px;color:#8D1D2C;font-weight:600;">${v.t('tfb.inactiveNote')}</div>`}
+                  </div>
+                `}
+                <p style="margin:8px 0 0;font-size:11.5px;color:#8A847C;line-height:1.5;">${v.t('tfb.editorHelp')}</p>
+              ` : html`<p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">${v.t('tfb.editorNone')} <button onClick=${v.goCampaigns} style="background:none;border:none;padding:0;color:#8D1D2C;font-weight:700;text-decoration:underline;cursor:pointer;font-size:12px;">${v.t('tfb.goCampaigns')}</button></p>`}
+            </div>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
               <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">Le sous-type vient de la base (happy hour, vente flash, bundle…) — modifiable dans <strong>Promotions</strong>. Renseigne l'accroche dans « Nom du module » et le détail dans « Sous-titre ».</p>
               <button onClick=${v.goPromoTypes} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.25);border-radius:999px;cursor:pointer;">🏷️ Gérer les promotions</button>

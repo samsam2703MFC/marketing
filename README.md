@@ -529,6 +529,32 @@ semaine (jour ISO 1 = lundi … 7, heure de début incluse, de fin exclue), stat
   sans republier.
 - API : `GET /bundles` · `POST /bundles/sync` · `PATCH /bundles/{id}` (visuel).
 
+### Toutes les promotions TFBuddy, regroupées dans Campagnes
+La même synchro lit aussi les autres familles de promotions de TFBuddy, avec le même compte
+et le même droit (`MENU.BUNDLE.MANAGE`) : **« X achetés = Y offert »**
+(`/admin/promotions/buy-x-get-y`), **promotions de quantité** (`/admin/promotions/quantity`),
+**remises programmées** (`/admin/promotions/scheduled-product-discount`) et **campagnes de bons
+d'achat** (`/admin/voucher-campaigns`). Liste paginée puis détail de chaque promotion (sauf les
+bons, complets dans la liste) ; le détail n'étant pas décrit par le contrat de TFBuddy, la
+lecture accepte les formes vues dans ses contrats d'écriture (`trigger` / `reward`,
+`quantity_promotion`, `discount_type`…). Chaque famille est lue à part : une famille refusée
+n'empêche pas les autres, et son erreur est dite dans la régie.
+
+- **Régie → Campagnes → Promotions TFBuddy** : bundles et autres promotions sur une seule liste,
+  filtrable par famille, avec la mécanique en clair (« 2 achetés = 1 offert », « 3 pour le prix de
+  2 », « -20 % », « Code « RENTREE10 » en caisse »), les produits et catégories visés (signalés
+  s'ils manquent au catalogue), jours et heures, magasins, dates, visuel optionnel, et
+  **＋ Créer l'élément**. La page Promotions renvoie vers cette liste.
+- **À l'écran** : un élément « promotion » peut **suivre une promotion TFBuddy**
+  (`sig_modules.tfb_ref` → `sig_tfb_promos`). Elle passe à ses jours et heures, dans ses magasins,
+  entre ses dates, et tombe si elle n'est pas `ACTIVE` ou si tous ses produits sont épuisés au
+  magasin (`finishSnapshot` → `applyTfbPromos`). Sa mécanique s'affiche en sous-titre dans la
+  langue du magasin (FR / NL / EN), et une remise programmée montre le **prix remisé** « au lieu
+  de » le prix du magasin. Une synchro qui change une promotion change l'empreinte du magasin :
+  les écrans se resynchronisent sans republier.
+- API : la liste et l'état de chaque famille dans `GET /bundles` (`promos`, `sync.kinds`) ·
+  `POST /bundles/sync` lit tout · `PATCH /tfb-promos/{id}` (visuel).
+
 ### Traductions des écrans (néerlandais des magasins flamands)
 Un magasin dont la langue d'écran est le néerlandais (**Réseau → magasin → langue**) affiche ses
 textes en néerlandais : noms de produits et de catégories, titres et accroches des éléments,
@@ -580,7 +606,7 @@ qui la portent restent visibles ; la liste ne peut pas être vidée.
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + TFBuddy et Claude simulés + cycle complet — 83 tests
+npm test              # serveur jetable (BDD temporaire) + TFBuddy et Claude simulés + cycle complet — 85 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
 node test/live-test.js http://185.180.206.46/signage --password=… --mutate
@@ -605,6 +631,7 @@ session admin  : POST /api/v1/login · /logout · GET /me
                  GET /promo-types · PUT /promo-types (sous-types de promotion)
                  GET /campaigns · PUT /campaigns (campagnes marketing)
                  GET /bundles · POST /bundles/sync · PATCH /bundles/{id} (bundles TFBuddy)
+                 PATCH /tfb-promos/{id} (autres promotions TFBuddy : X + Y, quantité, remises, bons)
                  GET /translations?lang= · POST /translations/propose|validate|reject
                  PUT /translations (traductions des écrans, Claude propose)
                  GET /lib-categories · PUT /lib-categories (classement + table liée)

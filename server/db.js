@@ -331,6 +331,9 @@ function migrate(db) {
   if (!modCols2.includes('campaign_ref')) db.exec(`ALTER TABLE sig_modules ADD COLUMN campaign_ref TEXT NOT NULL DEFAULT ''`);
   // Élément « bundle » : référence un bundle TFBuddy (sig_bundles).
   if (!modCols2.includes('bundle_ref')) db.exec(`ALTER TABLE sig_modules ADD COLUMN bundle_ref TEXT NOT NULL DEFAULT ''`);
+  // Élément « promotion » relié à une promotion TFBuddy (sig_tfb_promos) : ses
+  // jours, heures, magasins et dates s'appliquent à la diffusion.
+  if (!modCols2.includes('tfb_ref')) db.exec(`ALTER TABLE sig_modules ADD COLUMN tfb_ref TEXT NOT NULL DEFAULT ''`);
   // Élément « gabarit HTML » : code collé par la régie + taille de sa maquette
   // source (ex. 1920 × 1080 pour du 16:9, 840 × 1189 pour une affiche A1).
   // Orientation de l'élément : 'paysage' (16:9) ou 'portrait' (9:16) — un écran
@@ -406,6 +409,7 @@ function migrate(db) {
         promo_type   TEXT NOT NULL DEFAULT '',
         campaign_ref TEXT NOT NULL DEFAULT '',
         bundle_ref   TEXT NOT NULL DEFAULT '',
+        tfb_ref      TEXT NOT NULL DEFAULT '',
         orient       TEXT NOT NULL DEFAULT 'paysage',
         moments      TEXT NOT NULL DEFAULT '[]',
         html         TEXT NOT NULL DEFAULT '',
@@ -607,6 +611,35 @@ function migrate(db) {
     schedule   TEXT NOT NULL DEFAULT '[]',
     date_from  TEXT NOT NULL DEFAULT '',
     date_to    TEXT NOT NULL DEFAULT '',
+    img        TEXT NOT NULL DEFAULT '',
+    synced_at  TEXT NOT NULL DEFAULT ''
+  );
+
+  -- Autres promotions TFBuddy : « X achetés = Y offert » (buy_x_get_y),
+  -- promotions de quantité (quantity), remises programmées
+  -- (scheduled_discount) et campagnes de bons d'achat (voucher). Même
+  -- principe que sig_bundles : un reflet remplacé à chaque synchro, famille
+  -- par famille, sauf le visuel choisi en régie. « mechanic » garde la
+  -- mécanique lue (quantités, type et valeur de remise, code…) ; « products »
+  -- et « categories » ses cibles, reliées au catalogue de la régie.
+  CREATE TABLE IF NOT EXISTS sig_tfb_promos (
+    id         TEXT PRIMARY KEY,
+    kind       TEXT NOT NULL,
+    ext_id     TEXT NOT NULL DEFAULT '',
+    name       TEXT NOT NULL DEFAULT '',
+    descr      TEXT NOT NULL DEFAULT '',
+    status     TEXT NOT NULL DEFAULT 'ACTIVE',
+    activation TEXT NOT NULL DEFAULT 'AUTOMATIC',
+    priority   INTEGER NOT NULL DEFAULT 0,
+    scope      TEXT NOT NULL DEFAULT 'all',
+    shop_ids   TEXT NOT NULL DEFAULT '[]',
+    store_ids  TEXT NOT NULL DEFAULT '[]',
+    schedule   TEXT NOT NULL DEFAULT '[]',
+    date_from  TEXT NOT NULL DEFAULT '',
+    date_to    TEXT NOT NULL DEFAULT '',
+    mechanic   TEXT NOT NULL DEFAULT '{}',
+    products   TEXT NOT NULL DEFAULT '[]',
+    categories TEXT NOT NULL DEFAULT '[]',
     img        TEXT NOT NULL DEFAULT '',
     synced_at  TEXT NOT NULL DEFAULT ''
   );
@@ -2068,8 +2101,9 @@ export function storeUnavailableStamp(storeId, now = new Date()) {
 export function storeDataStamp(storeId, now = new Date()) {
   const u = storeUnavailableStamp(storeId, now);
   const b = getSetting('bundles_stamp', '');
+  const p = getSetting('tfb_promos_stamp', '');
   const t = getSetting('translations_stamp', '');
-  return `${u}${b ? `|b:${b}` : ''}${t ? `|t:${t}` : ''}`;
+  return `${u}${b ? `|b:${b}` : ''}${p ? `|p:${p}` : ''}${t ? `|t:${t}` : ''}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -2138,6 +2172,80 @@ export function saveSyncedBundles(list, storeOf) {
 export function setBundleImg(id, img) {
   const r = getDb().prepare('UPDATE sig_bundles SET img = ? WHERE id = ?').run(String(img || '').slice(0, 2000), String(id));
   if (r.changes) refreshBundlesStamp();
+  return r.changes > 0;
+}
+
+// Autres promotions TFBuddy (voir server/tfbuddy.js, PROMO_KINDS).
+export const TFB_PROMO_KINDS = ['buy_x_get_y', 'quantity', 'scheduled_discount', 'voucher'];
+const TFB_PREFIX = { buy_x_get_y: 'bx', quantity: 'qt', scheduled_discount: 'sd', voucher: 'vc' };
+const jsonObj = (s) => { try { const o = JSON.parse(s || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch { return {}; } };
+function tfbPromoRow(r) {
+  return {
+    id: r.id, kind: r.kind, extId: r.ext_id, name: r.name, descr: r.descr, status: r.status, activation: r.activation,
+    priority: r.priority, scope: r.scope === 'selected' ? 'selected' : 'all',
+    shopIds: jsonArr(r.shop_ids), storeIds: jsonArr(r.store_ids), schedule: jsonArr(r.schedule),
+    dateFrom: r.date_from || '', dateTo: r.date_to || '',
+    mech: jsonObj(r.mechanic), products: jsonArr(r.products), categories: jsonArr(r.categories),
+    img: r.img || '', syncedAt: r.synced_at || '',
+  };
+}
+export function loadTfbPromos() {
+  return getDb().prepare(`SELECT * FROM sig_tfb_promos ORDER BY
+    CASE kind WHEN 'buy_x_get_y' THEN 0 WHEN 'quantity' THEN 1 WHEN 'scheduled_discount' THEN 2 ELSE 3 END,
+    priority DESC, name`).all().map(tfbPromoRow);
+}
+function refreshTfbPromosStamp() {
+  const body = JSON.stringify(loadTfbPromos().map(({ syncedAt, ...p }) => p));
+  setSetting('tfb_promos_stamp', body === '[]' ? '' : createHash('sha1').update(body).digest('hex').slice(0, 12));
+}
+// Remplace le reflet d'UNE famille par la liste lue sur TFBuddy (une famille
+// refusée ne vide pas les autres). Produits TFBuddy N → « pwpN », catégories
+// N → « pwN » (ids de l'import PWA).
+export function saveSyncedTfbPromos(kind, list, storeOf) {
+  if (!TFB_PREFIX[kind]) throw new Error(`famille inconnue : ${kind}`);
+  const db = getDb();
+  const knownP = new Set(db.prepare('SELECT id FROM sig_products').all().map((r) => r.id));
+  const knownC = new Set(db.prepare('SELECT id FROM sig_product_categories').all().map((r) => r.id));
+  const imgs = new Map(db.prepare('SELECT id, img FROM sig_tfb_promos WHERE kind = ?').all(kind).map((r) => [r.id, r.img]));
+  const now = new Date().toISOString();
+  const unmapped = new Set();
+  const unknown = new Set();
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM sig_tfb_promos WHERE kind = ?').run(kind);
+    const ins = db.prepare(`INSERT OR REPLACE INTO sig_tfb_promos(id, kind, ext_id, name, descr, status, activation, priority,
+      scope, shop_ids, store_ids, schedule, date_from, date_to, mechanic, products, categories, img, synced_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    for (const p of list) {
+      const id = `${TFB_PREFIX[kind]}${p.extId}`;
+      const products = (p.products || []).map((ext) => {
+        const pid = `pwp${ext}`;
+        if (!knownP.has(pid)) unknown.add(ext);
+        return { extProductId: String(ext), productId: knownP.has(pid) ? pid : '' };
+      });
+      const categories = (p.categories || []).map((ext) => ({ extCategoryId: String(ext), categoryId: knownC.has(`pw${ext}`) ? `pw${ext}` : '' }));
+      const storeIds = [];
+      for (const sId of p.shopIds || []) { const st = storeOf(sId); if (st) storeIds.push(st); else unmapped.add(sId); }
+      ins.run(id, kind, String(p.extId), String(p.name || ''), String(p.descr || ''), BUNDLE_STATUS.has(p.status) ? p.status : 'ACTIVE',
+        String(p.activation || 'AUTOMATIC'), Number(p.priority) || 0, p.scope === 'selected' ? 'selected' : 'all',
+        JSON.stringify(p.shopIds || []), JSON.stringify([...new Set(storeIds)]), JSON.stringify(p.schedule || []),
+        p.dateFrom || '', p.dateTo || '', JSON.stringify(p.mech || {}), JSON.stringify(products), JSON.stringify(categories),
+        imgs.get(id) || '', now);
+    }
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  refreshTfbPromosStamp();
+  return {
+    count: list.length,
+    active: list.filter((p) => p.status === 'ACTIVE').length,
+    unmappedShops: [...unmapped],
+    unknownProducts: [...unknown],
+  };
+}
+// Visuel d'une promotion, choisi en régie (TFBuddy n'en donne pas).
+export function setTfbPromoImg(id, img) {
+  const r = getDb().prepare('UPDATE sig_tfb_promos SET img = ? WHERE id = ?').run(String(img || '').slice(0, 2000), String(id));
+  if (r.changes) refreshTfbPromosStamp();
   return r.changes > 0;
 }
 
@@ -2571,6 +2679,7 @@ export function loadModules() {
       })(),
       campaignRef: m.campaign_ref || '',
       bundleRef: m.bundle_ref || '',
+      tfbRef: m.tfb_ref || '',
       orient: m.orient === 'portrait' ? 'portrait' : 'paysage',
       moments: (() => { try { const a = JSON.parse(m.moments || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } })(),
       html: m.html || '',
@@ -2650,10 +2759,10 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
     const insMod = db.prepare(`INSERT INTO sig_modules
       (id, type, name, sub, layout, motion, motion_title, motion_list, motion_illo,
        tag_enabled, tag_label, tag_img, sched_days, sched_from, sched_to, pos, sort_order, lib_tag,
-       cat_ref, product_ref, video, surprise, watermark, dur, promo_type, campaign_ref, bundle_ref,
+       cat_ref, product_ref, video, surprise, watermark, dur, promo_type, campaign_ref, bundle_ref, tfb_ref,
        orient, moments, html, html_vars, html_w, html_h,
        anim_mode, anim_bg, anim_dim, anim_file, anim_fit, bg_color, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
     const insItem = db.prepare(`INSERT INTO sig_module_items
       (module_id, position, name, price, img, src, active) VALUES (?, ?, ?, ?, ?, ?, ?)`);
     // Les types valides viennent de la table sig_element_types (rien en dur).
@@ -2674,6 +2783,7 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
         ['filigrane', 'logo', 'nouveau'].includes(m.watermark) ? m.watermark : 'none',
         Number.isFinite(parseFloat(m.dur)) ? Math.max(0, Math.min(120, parseFloat(m.dur))) : 0,
         String(m.promoType || ''), String(m.campaignRef || ''), String(m.bundleRef || ''),
+        m.type === 'promotion' ? String(m.tfbRef || '') : '',
         m.orient === 'portrait' ? 'portrait' : 'paysage',
         JSON.stringify((Array.isArray(m.moments) ? m.moments : []).filter((x) => ['matin', 'midi', 'aprem'].includes(x))),
         String(m.html || ''),

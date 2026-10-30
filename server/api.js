@@ -19,9 +19,10 @@ import {
   userInfo, listStoreAccounts, setStoreAccount, deleteStoreAccount, STORE_LOGIN_RE,
   storeUnavailable, setStoreUnavailable, storeDataStamp, endOfDayBrussels,
   loadBundles, saveSyncedBundles, setBundleImg,
+  loadTfbPromos, saveSyncedTfbPromos, setTfbPromoImg, TFB_PROMO_KINDS,
   translationSources, validateTranslations, rejectTranslations, setTranslation, applyTranslations,
 } from './db.js';
-import { tfbConfigured, tfbPublicConfig, fetchBundles, fetchShops, tfbAuthBackoff } from './tfbuddy.js';
+import { tfbConfigured, tfbPublicConfig, fetchBundles, fetchPromotions, fetchShops, tfbAuthBackoff } from './tfbuddy.js';
 import { TRANSLATE_MODEL, translateConfigured, translationJob, startTranslationJob } from './translate.js';
 import { randomBytes } from 'node:crypto';
 import { httpsStatus } from './https-status.js';
@@ -259,6 +260,47 @@ function applyBundles(snap, storeId, date) {
   snap.playlist = (snap.playlist || []).filter((id) => ids.has(id));
 }
 
+// Promotions TFBuddy (« X achetés = Y offert », quantité, remise programmée,
+// bon d'achat) : un élément « promotion » relié (tfbRef) suit SA promotion —
+// il tombe si elle n'est pas active, pas pour ce magasin, hors de ses dates,
+// ou si tous ses produits sont épuisés ici ; ses créneaux partent avec lui
+// (l'écran ne le montre qu'à ses jours et heures). Le produit montré (photo,
+// prix du magasin posé ensuite par applyStorePrices) est celui choisi en régie
+// s'il est disponible, sinon le premier disponible de la promotion.
+function applyTfbPromos(snap, storeId, date) {
+  if (!snap.modules.some((m) => m.tfbRef)) return;
+  const db = getDb();
+  const promos = new Map(loadTfbPromos().map((p) => [p.id, p]));
+  const off = new Set(storeId ? storeUnavailable(storeId, date).map((r) => r.productId) : []);
+  const prods = new Map(db.prepare('SELECT id, name, price, img, src, category_id, active FROM sig_products').all().map((p) => [p.id, p]));
+  const lang = (storeId && (db.prepare('SELECT lang FROM sig_stores WHERE id = ?').get(storeId) || {}).lang) || 'fr';
+  const today = brusselsDay(date);
+  const keep = [];
+  for (const m of snap.modules) {
+    if (!m.tfbRef) { keep.push(m); continue; }
+    const p = promos.get(m.tfbRef);
+    if (!p || p.status !== 'ACTIVE') continue;
+    if (storeId && p.scope === 'selected' && !p.storeIds.includes(storeId)) continue;
+    if ((p.dateFrom && today < p.dateFrom) || (p.dateTo && today > p.dateTo)) continue;
+    // Produits de la promotion ; à défaut, ceux de ses catégories.
+    let ids = p.products.map((x) => x.productId).filter((id) => id && prods.has(id));
+    if (!ids.length) {
+      const cats = new Set(p.categories.map((c) => c.categoryId).filter(Boolean));
+      ids = [...prods.values()].filter((x) => x.active && cats.has(x.category_id)).map((x) => x.id);
+    }
+    const avail = ids.filter((id) => !off.has(id));
+    if (ids.length && !avail.length) continue;
+    const heroId = m.productRef && !off.has(m.productRef) && prods.has(m.productRef) ? m.productRef : (avail[0] || '');
+    const hp = heroId ? prods.get(heroId) : null;
+    m.items = hp ? [{ name: hp.name, price: hp.price, img: hp.img, src: hp.src, active: true, productId: hp.id }] : [];
+    m.tfb = { id: p.id, kind: p.kind, name: p.name, descr: p.descr, mech: p.mech, slots: p.schedule, img: p.img, lang };
+    keep.push(m);
+  }
+  const keptIds = new Set(keep.map((m) => m.id));
+  snap.modules = keep;
+  snap.playlist = (snap.playlist || []).filter((id) => keptIds.has(id));
+}
+
 // ---- Synchro des bundles TFBuddy -------------------------------------------
 // Toutes les 30 min (et à la demande en régie). Le résultat — ou l'erreur,
 // dite telle quelle — reste dans sig_settings (tfbuddy_bundles).
@@ -279,29 +321,50 @@ export function syncBundles({ manual = false } = {}) {
     // Identifiants refusés : la synchro automatique attend (pas de blocage du compte).
     if (!manual && tfbAuthBackoff()) return prev;
     let st;
+    // Chaque famille est lue à part : une famille refusée (403) n'empêche pas
+    // les autres ; des identifiants refusés (401), si — inutile d'insister.
+    const lists = {};
+    const failed = {};
+    for (const kind of ['bundle', ...TFB_PROMO_KINDS]) {
+      try {
+        lists[kind] = kind === 'bundle' ? await fetchBundles() : await fetchPromotions(kind);
+      } catch (e) {
+        failed[kind] = { ok: false, error: String(e.message || e), httpStatus: e.status || 0 };
+        if (e.status === 401 || !e.status) { for (const k of ['bundle', ...TFB_PROMO_KINDS]) if (!lists[k] && !failed[k]) failed[k] = failed[kind]; break; }
+      }
+    }
     try {
-      const list = await fetchBundles();
       // Magasins : la correspondance manuelle de l'import PWA d'abord (mêmes
       // ids), puis par slug / nom, comme l'import.
       const manualMap = {};
       for (const [storeId, extId] of Object.entries(pwaConfig().shopMap || {})) manualMap[String(extId)] = storeId;
       let shops = [];
       let shopsError = '';
-      if (list.some((b) => (b.shopIds || []).some((x) => !manualMap[x]))) {
+      if (Object.values(lists).some((l) => l.some((b) => (b.shopIds || []).some((x) => !manualMap[x])))) {
         try { shops = await fetchShops(); } catch (e) { shopsError = String(e.message || e); }
       }
       const byExt = new Map(shops.map((x) => [x.id, x]));
       const sigStores = getDb().prepare('SELECT id, name FROM sig_stores').all();
       const storeOf = (ext) => manualMap[ext] || (byExt.has(ext) ? ((matchStore(byExt.get(ext), sigStores).match || {}).id || '') : '');
-      const r = saveSyncedBundles(list, storeOf);
+      const kinds = {};
+      for (const kind of ['bundle', ...TFB_PROMO_KINDS]) {
+        if (lists[kind]) kinds[kind] = { ok: true, ...(kind === 'bundle' ? saveSyncedBundles(lists[kind], storeOf) : saveSyncedTfbPromos(kind, lists[kind], storeOf)) };
+        else kinds[kind] = { ...failed[kind], count: ((prev.kinds || {})[kind] || {}).count || (kind === 'bundle' ? prev.count || 0 : 0) };
+      }
+      const firstError = Object.values(kinds).find((k) => !k.ok);
+      const b = kinds.bundle;
       st = {
-        ok: true, at: nowIso(), configured: true, ms: Date.now() - t0, account: tfbPublicConfig().role,
-        count: r.count, active: r.active, unmappedShops: r.unmappedShops, unknownProducts: r.unknownProducts,
+        ok: !firstError, at: nowIso(), configured: true, ms: Date.now() - t0, account: tfbPublicConfig().role,
+        // Les champs de premier niveau restent ceux des bundles.
+        count: b.ok ? b.count : (prev.count || 0), active: b.ok ? b.active : (prev.active || 0),
+        unmappedShops: b.unmappedShops || [], unknownProducts: b.unknownProducts || [],
+        kinds,
+        ...(firstError ? { error: firstError.error, httpStatus: firstError.httpStatus, lastOk: prev.ok ? prev.at : (prev.lastOk || null) } : {}),
         ...(shopsError ? { shopsError } : {}),
       };
     } catch (e) {
       st = { ok: false, at: nowIso(), configured: true, ms: Date.now() - t0, error: String(e.message || e), httpStatus: e.status || 0,
-        count: prev.count || 0, active: prev.active || 0, lastOk: prev.ok ? prev.at : (prev.lastOk || null) };
+        count: prev.count || 0, active: prev.active || 0, kinds: prev.kinds || {}, lastOk: prev.ok ? prev.at : (prev.lastOk || null) };
     }
     setSetting('tfbuddy_bundles', JSON.stringify(st));
     scheduleMirror();
@@ -315,7 +378,7 @@ export function startBundleSync() {
   setInterval(() => { syncBundles().catch(() => {}); }, 30 * 60000);
 }
 const bundlesJson = () => ({
-  bundles: loadBundles(), sync: bundleSyncStatus(), tfbuddy: tfbPublicConfig(),
+  bundles: loadBundles(), promos: loadTfbPromos(), sync: bundleSyncStatus(), tfbuddy: tfbPublicConfig(),
   // Noms des magasins : la page Promotions les montre sans charger le réseau.
   stores: getDb().prepare('SELECT id, name FROM sig_stores ORDER BY name').all(),
 });
@@ -368,6 +431,7 @@ function applyStoreUnavailable(snap, storeId, date) {
 function finishSnapshot(snap, storeId, date = new Date()) {
   if (!snap || !Array.isArray(snap.modules)) return snap;
   applyBundles(snap, storeId, date);
+  applyTfbPromos(snap, storeId, date);
   applyStoreUnavailable(snap, storeId, date);
   applyStorePrices(snap.modules, storeId);
   // Traductions validées en régie, puis les noms de l'ERP (qui gardent la main).
@@ -1145,6 +1209,14 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       if (mb && req.method === 'PATCH') {
         const body = await readBody();
         if (!setBundleImg(mb[1], body.img)) return send(404, { error: 'bundle inconnu' });
+        scheduleMirror();
+        return send(200, { ok: true, ...bundlesJson() });
+      }
+      // Visuel d'une autre promotion TFBuddy (même liste, même synchro).
+      const mp = /^\/tfb-promos\/([A-Za-z0-9_-]+)$/.exec(path);
+      if (mp && req.method === 'PATCH') {
+        const body = await readBody();
+        if (!setTfbPromoImg(mp[1], body.img)) return send(404, { error: 'promotion inconnue' });
         scheduleMirror();
         return send(200, { ok: true, ...bundlesJson() });
       }

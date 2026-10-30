@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { snapshotAssets } from '../public/js/assets.js';
-import { scheduledNow } from '../public/js/renderer.js';
+import { scheduledNow, tfbPromoLabel, tfbDiscountedPrice } from '../public/js/renderer.js';
 import { startTfbMock, MOCK_ACCOUNTS } from './tfbuddy-mock.js';
 import { startAnthropicMock, MOCK_KEY } from './anthropic-mock.js';
 
@@ -149,12 +149,12 @@ async function main() {
   });
   await step('GET /api/v1/bundles — bundles TFBuddy (état de la synchro)', async () => {
     const r = await call('GET', '/api/v1/bundles');
-    if (!Array.isArray(r.bundles) || !r.sync || !r.tfbuddy) throw new Error('réponse incomplète');
+    if (!Array.isArray(r.bundles) || !Array.isArray(r.promos) || !r.sync || !r.tfbuddy) throw new Error('réponse incomplète');
     if (JSON.stringify(r.tfbuddy).toLowerCase().includes('password')) throw new Error('la réponse parle de mot de passe');
     if (!r.tfbuddy.configured) return 'compte TFBuddy non configuré (secrets TFBUDDY_PHONE / TFBUDDY_PASSWORD)';
     if (r.sync.ok === false) return `synchro en erreur : ${r.sync.error}`;
     if (!r.sync.at) return 'compte configuré · première synchro en attente';
-    return `${r.bundles.length} bundle(s) · ${r.bundles.filter((b) => b.status === 'ACTIVE').length} actif(s) · synchro ${r.sync.at.slice(0, 16).replace('T', ' ')}`;
+    return `${r.bundles.length} bundle(s) · ${r.bundles.filter((b) => b.status === 'ACTIVE').length} actif(s) · ${r.promos.length} autre(s) promotion(s) · synchro ${r.sync.at.slice(0, 16).replace('T', ' ')}`;
   });
   await step('Créneaux d’un bundle — jour ISO, heure de fin exclue (rendu des écrans)', async () => {
     const m = { bundle: { slots: [1, 2, 3, 4, 5].map((d) => ({ dow: d, from: '06:00', to: '11:00' })) } };
@@ -1477,6 +1477,72 @@ async function main() {
         await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
       }
     });
+    await step('Promotions TFBuddy — synchro : X achetés = Y offert, quantité, remises, bons', async () => {
+      const r = await call('POST', '/api/v1/bundles/sync');
+      const k = r.sync.kinds || {};
+      for (const [kind, n] of [['bundle', 3], ['buy_x_get_y', 2], ['quantity', 1], ['scheduled_discount', 2], ['voucher', 2]]) {
+        if (!k[kind] || !k[kind].ok || k[kind].count !== n) throw new Error(`${kind} : ${JSON.stringify(k[kind])}`);
+      }
+      if (!tfbMock.calls.some((c) => c.endsWith('/admin/promotions/buy-x-get-y/41'))) throw new Error('détail d’une promotion non lu');
+      if (tfbMock.calls.some((c) => /voucher-campaigns\/\d+/.test(c))) throw new Error('les bons ne demandent pas de détail');
+      const by = new Map(r.promos.map((p) => [p.id, p]));
+      const [bx, qt, sd, sd2, vc] = ['bx41', 'qt51', 'sd61', 'sd62', 'vc71'].map((id) => by.get(id));
+      if (!bx || bx.mech.buy !== 2 || bx.mech.get !== 1 || bx.mech.rewardType !== 'FREE' || bx.products[0].productId !== 'pwp901') throw new Error(`X + Y mal relue : ${JSON.stringify(bx)}`);
+      if (tfbPromoLabel(bx, 'fr') !== '2 achetés = 1 offert' || tfbPromoLabel(bx, 'nl') !== '2 gekocht = 1 gratis') throw new Error(`libellé X + Y : ${tfbPromoLabel(bx, 'fr')}`);
+      if (!qt || qt.scope !== 'selected' || JSON.stringify(qt.storeIds) !== '["st2"]' || tfbPromoLabel(qt, 'fr') !== '3 pour le prix de 2') throw new Error(`quantité mal relue : ${JSON.stringify(qt)}`);
+      if (!(k.quantity.unknownProducts || []).includes('903')) throw new Error('produit 903 (absent du catalogue) non signalé');
+      if (!sd || sd.schedule.length !== 5 || sd.schedule[0].from !== '14:00' || tfbPromoLabel(sd, 'fr') !== '-20 %') throw new Error(`remise mal relue : ${JSON.stringify(sd)}`);
+      if (!sd2 || sd2.status !== 'INACTIVE' || sd2.categories[0].extCategoryId !== '5') throw new Error('remise par catégorie mal relue');
+      if (!vc || vc.mech.code !== 'RENTREE10' || vc.mech.promotionId !== '41' || tfbPromoLabel(vc, 'fr') !== 'Code « RENTREE10 » en caisse') throw new Error(`bon mal relu : ${JSON.stringify(vc)}`);
+      // Le visuel choisi en régie survit à la synchro suivante.
+      await call('PATCH', '/api/v1/tfb-promos/sd61', { img: 'media/happy-hour.jpg' });
+      const again = await call('POST', '/api/v1/bundles/sync');
+      if (again.promos.find((p) => p.id === 'sd61').img !== 'media/happy-hour.jpg') throw new Error('visuel perdu à la resynchro');
+      return `X + Y 2 · quantité 1 · remises 2 · bons 2 · « ${tfbPromoLabel(bx, 'fr')} » · « ${tfbPromoLabel(qt, 'fr')} » · « ${tfbPromoLabel(sd, 'fr')} » · « ${tfbPromoLabel(vc, 'fr')} »`;
+    });
+    await step('Promotions TFBuddy — à l’écran : magasin, créneaux, prix remisé, rupture', async () => {
+      const st = await call('GET', '/api/v1/state');
+      const sched = { days: [1, 1, 1, 1, 1, 1, 1], from: '00:00', to: '23:59' };
+      const mk = (id, ref, productRef) => ({ id, type: 'promotion', name: id, tfbRef: ref, promoType: 'bxgy', productRef, layout: 'hero-right', schedule: sched, items: [], tag: {}, pos: {} });
+      const extra = [mk('lt_bx41', 'bx41', 'pwp901'), mk('lt_qt51', 'qt51', ''), mk('lt_sd61', 'sd61', 'pwp902'), mk('lt_sd62', 'sd62', ''), mk('lt_vc71', 'vc71', '')];
+      const pls = st.playlists.map((p) => (p.id === st.activePlaylistId ? { ...p, items: [...extra.map((m) => m.id), ...p.items] } : p));
+      await call('PUT', '/api/v1/draft', { modules: [...st.modules, ...extra], playlists: pls, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      let acc = null;
+      try {
+        const back = await call('GET', '/api/v1/state');
+        if ((back.modules.find((m) => m.id === 'lt_bx41') || {}).tfbRef !== 'bx41') throw new Error('tfbRef non enregistré');
+        await call('POST', '/api/v1/publish', { mode: 'full', targets: [] });
+        const promosOf = async (store) => (await call('GET', `/api/v1/film?store=${store}`)).modules.filter((m) => m.tfb);
+        const ids = (l) => l.map((m) => m.id).sort().join();
+        const gare = await promosOf('st2');
+        const nord = await promosOf('st3');
+        if (ids(gare) !== 'lt_bx41,lt_qt51,lt_sd61,lt_vc71') throw new Error(`Gare : ${ids(gare) || 'aucune'} (inactive exclue, promotion du magasin incluse)`);
+        if (ids(nord) !== 'lt_bx41,lt_sd61,lt_vc71') throw new Error(`Nord : ${ids(nord) || 'aucune'} (promotion d’un autre magasin exclue)`);
+        const sd = gare.find((m) => m.id === 'lt_sd61');
+        if (tfbDiscountedPrice(sd.tfb, sd.items[0].price) !== 2.08) throw new Error(`prix remisé : ${sd.items[0].price} → ${tfbDiscountedPrice(sd.tfb, sd.items[0].price)} au lieu de 2,08`);
+        const at = (d, hh) => new Date(2026, 9, d, hh, 0);   // octobre 2026 : le 12 est un lundi
+        if (!scheduledNow(sd, at(12, 15)) || scheduledNow(sd, at(12, 17)) || scheduledNow(sd, at(17, 15))) throw new Error('créneaux de la remise non respectés à l’écran');
+        const bx = gare.find((m) => m.id === 'lt_bx41');
+        if (bx.items[0].price !== '1,50' || bx.tfb.kind !== 'buy_x_get_y') throw new Error('produit de la promotion sans le prix du magasin');
+        const snap = await call('GET', '/api/v1/film?store=st2');
+        if (!snap.media.includes('media/happy-hour.jpg')) throw new Error('visuel de la promotion absent du cache des écrans');
+        if (!String(snap.storeStamp || '').includes('|p:')) throw new Error('l’empreinte du magasin ignore les promotions');
+        // Croissant épuisé à la Gare : « 2 + 1 » tombe chez elle seulement.
+        acc = await call('POST', '/api/v1/stores/st2/account', { username: 'livetest-promos' });
+        const login = await (await fetch(BASE + '/api/v1/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: acc.username, password: acc.password }) })).json();
+        const H = { authorization: `Bearer ${login.token}`, 'content-type': 'application/json' };
+        const out = async (on) => fetch(BASE + '/api/v1/my-store/unavailable', { method: 'POST', headers: H, body: JSON.stringify({ productId: 'pwp901', unavailable: on }) });
+        await out(true);
+        if ((await promosOf('st2')).some((m) => m.id === 'lt_bx41')) throw new Error('croissant épuisé à la Gare : « 2 + 1 » passe encore');
+        if (!(await promosOf('st3')).some((m) => m.id === 'lt_bx41')) throw new Error('la rupture de la Gare a touché le Nord');
+        await out(false);
+        if (!(await promosOf('st2')).some((m) => m.id === 'lt_bx41')) throw new Error('promotion non rétablie après la rupture');
+        return `Gare : 4 promotions · Nord : 3 · inactive exclue · remise 2,60 → 2,08 de 14 h à 16 h en semaine · épuisé → retirée puis rétablie`;
+      } finally {
+        if (acc) await call('DELETE', '/api/v1/stores/st2/account').catch(() => {});
+        await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      }
+    });
     await step('Bundles TFBuddy — compte sans MENU.BUNDLE.MANAGE : erreur dite, bundles gardés', async () => {
       tfbMock.revoke(true);
       try {
@@ -1484,6 +1550,8 @@ async function main() {
         if (r.ok || r.sync.ok) throw new Error('synchro réussie malgré le droit retiré');
         if (!/403/.test(r.sync.error) || !/MENU\.BUNDLE\.MANAGE/.test(r.sync.error)) throw new Error(`message peu clair : ${r.sync.error}`);
         if (r.bundles.length !== 3) throw new Error('les bundles déjà lus ont été effacés');
+        if (r.promos.length !== 7) throw new Error('les promotions déjà lues ont été effacées');
+        if (!r.sync.kinds || r.sync.kinds.buy_x_get_y.ok !== false || r.sync.kinds.voucher.ok !== false) throw new Error('refus des autres familles non signalé');
         return r.sync.error;
       } finally { tfbMock.revoke(false); }
     });

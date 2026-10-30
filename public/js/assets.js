@@ -39,6 +39,7 @@ export function moduleAssets(m) {
   add(m.catImg);           // illustration de catégorie
   if (m.campaign) add(m.campaign.image);
   if (m.bundle) add(m.bundle.img);     // visuel d'un bundle TFBuddy (choisi en régie)
+  if (m.tfb) add(m.tfb.img);           // visuel d'une promotion TFBuddy (idem)
   if (m.type === 'html') for (const u of htmlAssetUrls(m.html)) add(u);
   return out;
 }
