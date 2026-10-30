@@ -203,7 +203,8 @@ async function main() {
     const res = await fetch(BASE + '/');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const txt = await res.text();
-    if (!txt.includes('Régie d\'affichage')) throw new Error('HTML inattendu');
+    // La régie est le « Marketing en magasin » du module Marketing (titre de la page).
+    if (!txt.includes('Marketing en magasin') || !txt.includes('js/app.js')) throw new Error('HTML inattendu');
   });
   await step('GET /magasin — espace magasin servi (FR/NL)', async () => {
     const res = await fetch(BASE + '/magasin');
