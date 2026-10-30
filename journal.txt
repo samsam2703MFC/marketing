@@ -12,5 +12,5 @@ accueil : HTTP 200 · Module Marketing — L'Atelier By
   → 05-fonds.png
   → 05b-mouvement.png
   → 06-repost.png
-  repost : Page « L'Atelier By » relue le 29/10 12:45 · 1 publication depuis l’activation (29/10 11:01) · relue toutes les 5 minutes.
+  repost : Page « L'Atelier By » relue le 30/10 22:00 · 1 publication depuis l’activation (29/10 11:01) · relue toutes les 5 minutes.
   repost : À VENIR · POSTS PROGRAMMÉS SUR LA PAGE DE LA MARQUE
