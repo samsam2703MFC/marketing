@@ -28,6 +28,11 @@ interface ImportMetaEnv {
   /** Espace franchisé du module Social (défaut /marketing/franchise/), affiché dans la version franchisé. */
   readonly VITE_SOCIAL_FRANCHISEE_BASE?: string
   /**
+   * Racine de la régie d'affichage des écrans des magasins (« Marketing en magasin »), affichée
+   * dans un cadre. Par défaut `/signage/`, sur le même serveur.
+   */
+  readonly VITE_SIGNAGE_BASE?: string
+  /**
    * Racine du cockpit du BO (`/consulant_bo`), qui sert le KPI d'une période et les documents
    * joints d'une campagne. Par défaut la racine de l'API du module (installation dans le BO).
    */

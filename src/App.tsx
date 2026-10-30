@@ -20,6 +20,7 @@ import AddressesView from './views/AddressesView'
 import CampaignFixView from './views/CampaignFixView'
 import CampaignBuilder from './views/builder/CampaignBuilder'
 import SocialView from './views/SocialView'
+import InStoreView from './views/InStoreView'
 import { ReferencesProvider } from './state/references'
 
 export default function App() {
@@ -261,6 +262,8 @@ function Workspace() {
 
   const refs = references.data
   const social = socialPageFor(role, route)
+  // Un écran d'une autre application, dans un cadre : il porte son propre titre et prend toute la surface.
+  const framed = social !== null || route === 'instore'
   const tabs = tabsFor(role, route)
 
   // Une adresse qui nomme une enseigne inconnue n'affiche pas « tout » : les
@@ -301,8 +304,8 @@ function Workspace() {
       <Sidebar role={role} route={route} brandName={scope?.name ?? null} onNavigate={navigate} />
 
       <div className="workspace__main">
-        {/* Un écran du module Social porte son propre titre : rien au-dessus du cadre. */}
-        {social ? null : (
+        {/* Un écran du module Social ou la régie portent leur propre titre : rien au-dessus du cadre. */}
+        {framed ? null : (
           <header className="topbar">
             <div>
               <p className="topbar__kicker">
@@ -314,7 +317,7 @@ function Workspace() {
         )}
 
         <main
-          className={`app__body${route === 'builder' ? ' app__body--wide' : ''}${social ? ' app__body--frame' : ''}`}
+          className={`app__body${route === 'builder' ? ' app__body--wide' : ''}${framed ? ' app__body--frame' : ''}`}
         >
           {/* Une entrée à onglets : les écrans qui montraient la même donnée sous plusieurs entrées du menu. */}
           {tabs ? (
@@ -362,6 +365,7 @@ function Workspace() {
           {route === 'promotions' ? <PromotionsView /> : null}
           {route === 'bundles' ? <BundlesView /> : null}
           {route === 'vouchers' ? <VouchersView /> : null}
+          {route === 'instore' ? <InStoreView role={role} /> : null}
 
           {route === 'agencies' ? <AgenciesView /> : null}
           {route === 'analysis' ? <AnalysisView /> : null}

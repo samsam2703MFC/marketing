@@ -116,6 +116,7 @@ entière, pour attraper une colonne ajoutée plus tard.
 | GET | `…/promotions` | tenant | tableau |
 | GET | `…/bundles` | tenant | tableau |
 | GET | `…/vouchers` | tenant | tableau |
+| GET | `…/erp-promotions?family=&page=&perPage=` | tenant (franchisé : réseau + ses boutiques) | enveloppe + `data[]` paginé — §8 |
 | GET | `…/webshop-vouchers?q=` | marque ; franchisé : bons de ses boutiques | objet `{configured, message, vouchers}` (200 au plus) |
 | GET | `…/webshop-offices?q=` | marque | tableau |
 | GET | `…/diffusion` | tenant | objet |
@@ -165,7 +166,7 @@ entière, pour attraper une colonne ajoutée plus tard.
 
 | § | Écart | Portée |
 |---|---|---|
-| 2.3 | Pas de segment `{app}`. Le préfixe est `/api/v1/marketing/…`, où `marketing` est un **module**, pas un contexte d'appel. Les deux consommateurs (réseau, franchisé) partagent le même préfixe et se distinguent par le rôle. | 54 routes |
+| 2.3 | Pas de segment `{app}`. Le préfixe est `/api/v1/marketing/…`, où `marketing` est un **module**, pas un contexte d'appel. Les deux consommateurs (réseau, franchisé) partagent le même préfixe et se distinguent par le rôle. | 55 routes (dont `…/erp-promotions`, au format du standard pour le reste, §8) |
 | 6 | Enveloppe absente. Les lectures renvoient la donnée brute (souvent un tableau nu à la racine, interdit par §6.3), les écritures `{status, message, inserted_id}`. Pas de `meta`, pas de `requestId`. | 54 routes |
 | 7 | Format d'erreur différent : `{status: "error", description, errors?}`. Pas de `code` machine-readable — le front lit le message. | toutes les erreurs |
 | 3 | Champs JSON en `snake_case`, alignés sur les colonnes. Le standard impose `camelCase` avec traduction dans le mapper. | 54 routes |
@@ -391,3 +392,57 @@ résiduels, comme le reste du module : pas d'enveloppe `{success, data, meta}`,
 `snake_case`, montants en euros décimaux, collections non paginées (la liste
 des bons rattachables est bornée à 200 par le webshop).
 
+## 8. Les promotions de l'ERP (octobre 2026)
+
+`GET …/erp-promotions` montre, dans les onglets de l'offre (Promotions, Bundles &
+menus, Bons — rangés sous **Campagnes** dans le menu), les promotions que l'ERP
+applique en caisse : **bundles**, **« X achetés = Y »**, **promotions de quantité**,
+**remises programmées** et **campagnes de bons**. Elles se créent et se modifient
+dans l'ERP ; le module les **lit sur son API** (`ErpClient`), jamais dans ses tables.
+
+Lectures faites à l'ERP, toutes en `GET` du réalm admin, toutes soumises au droit
+`MENU.BUNDLE.MANAGE` : `/api/v1/admin/promotions/{bundles | buy-x-get-y | quantity |
+scheduled-product-discount}` (liste paginée `{items, pagination}`, puis le détail de
+chaque promotion) et `/api/v1/admin/voucher-campaigns` (complètes dans la liste).
+
+**Contrat.** Écrit au format du standard autant que le permet la cohabitation :
+
+- Paramètres (liste blanche, un paramètre inconnu → `422 VALIDATION_FAILED`) :
+  `family` ∈ `bundle | buyXGetY | quantity | scheduledDiscount | voucher`,
+  `page` (≥ 1), `perPage` (≥ 1, ramené à 100).
+- Réponse : `{ success, data[], meta: { requestId, pagination, sources, configured } }`.
+  `sources.{famille}` = `{ ok, count, error }` : une famille refusée par l'ERP
+  (droit manquant, ERP injoignable) est dite, sans empêcher les autres.
+  `configured` est faux sans `MAR_ERP_API_BASE` — rien n'est alors tenté.
+- Une promotion : `id` (« famille-idERP »), `family`, `erpId`, `name`,
+  `description`, `status` (`DRAFT | ACTIVE | INACTIVE`), `activationMode`,
+  `priority`, `shopScope` (`all | selected`), `shops[] {erpShopId, name}`,
+  `schedule[] {dayOfWeek (ISO), from, to}`, `validFrom`, `validTo` (dates ISO),
+  `mechanic` (propre à la famille, montants en **centimes** : `priceCents`,
+  `reward {type: free | percentage | amountOff | fixedPrice, percent, amountCents}`,
+  `buyQuantity`, `getQuantity`, `quantity`, `freeQuantity`, `codeType`,
+  `sharedCode`…), `products[] {erpProductId, name, quantity, role}`,
+  `categories[] {erpCategoryId}`. Noms lus dans le module : `mar_shop.erp_shop_id`,
+  `mar_offer_item.sku_ref` (« erp-<id> ») ; à défaut, celui que donne l'ERP.
+- Périmètre, appliqué dans le dépôt (`ErpPromotionRepository::visibleTo`) : la
+  marque voit tout ; un franchisé, les promotions de tout le réseau et celles qui
+  visent une de ses boutiques. `403` sans objet : la lecture est ouverte aux deux
+  rôles, filtrée.
+- Accès à l'ERP : `MAR_ERP_API_TOKEN` s'il est posé ; sinon une connexion au réalm
+  admin (`POST /api/v1/admin/auth/login`) avec `MAR_ERP_API_PHONE` et
+  `MAR_ERP_API_PASSWORD` — le jeton de l'ERP expire en 30 minutes
+  (`expires_in: 1800`) : un jeton collé en configuration finit refusé.
+
+Tests (`api/tests/smoke.php`, « Promotions de l'ERP ») : 200 et enveloppe, 401,
+422 (famille inconnue, paramètre inconnu, page 0), pagination, `perPage` ramené,
+filtre par famille, isolation franchisé, idempotence, famille refusée par l'ERP,
+ERP non configuré, connexion et reconnexion sur 401. Les réponses de l'ERP y sont
+les **exemples que son swagger documente** (`BundlePromotionWrite`,
+`QuantityPromotionWrite`, enveloppe de liste, `AuthUserLoginSuccess`) : rien n'est
+inventé sur leur forme.
+
+Couches : contrôleur `ErpPromotionController` (HTTP, validation, enveloppe) →
+service `ErpPromotionService` (mise en forme des cinq familles) → dépôt
+`ErpPromotionRepository` (lectures de l'ERP par `ErpClient`, noms et périmètre en
+SQL sur les tables `mar_`). Écart résiduel : le préfixe reste `/api/v1/marketing/`,
+sans segment `{app}`, comme toutes les routes du module (§3.2).

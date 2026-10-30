@@ -3778,6 +3778,170 @@ $response = call($vouchersRouter, 'PATCH', $V . $noel . '/vouchers/REVE-NOEL', [
 check('promotions : repasser en pourcentage n\'envoie plus de promotions',
     $response['status'] === 200 && ($ws['last']['type'] ?? '') === 'percent' && !array_key_exists('promos', $ws['last'] ?? []));
 
+// --- Promotions de l'ERP (route erp-promotions) ---------------------------
+// La lecture passe par l'API de l'ERP. Les corps rendus par le transport sont
+// les exemples que le swagger de l'ERP documente lui-même (BundlePromotionWrite,
+// QuantityPromotionWrite), dans l'enveloppe de liste qu'il décrit pour ces
+// routes ({items, pagination}) : rien n'est inventé sur la forme d'une
+// promotion. Les familles sans exemple documenté répondent une liste vide, ou
+// le refus 403 que le swagger documente (« Requires MENU.BUNDLE.MANAGE »).
+echo "\nPromotions de l'ERP\n";
+
+$swaggerErp = json_decode((string) file_get_contents(__DIR__ . '/../../swagger'), true);
+$exempleErp = static fn (string $schema): array => (array) ($swaggerErp['components']['schemas'][$schema]['example'] ?? []);
+$bundleDoc   = $exempleErp('BundlePromotionWrite');
+$quantiteDoc = $exempleErp('QuantityPromotionWrite');
+check('le swagger de l\'ERP documente les deux exemples lus', $bundleDoc !== [] && $quantiteDoc !== []);
+
+$appelsErp = [];
+$transportPromos = static function (string $url, array $entetes, int $delai, string $methode = 'GET', ?string $corps = null) use (&$appelsErp, $bundleDoc, $quantiteDoc): array {
+    $appelsErp[] = $methode . ' ' . $url;
+    $chemin = (string) parse_url($url, PHP_URL_PATH);
+    $liste  = static fn (array $items): array => [200, (string) json_encode([
+        'items'      => $items,
+        'pagination' => ['page' => 1, 'limit' => 100, 'total' => count($items), 'pages' => 1],
+    ])];
+
+    return match ($chemin) {
+        '/api/v1/admin/promotions/bundles'           => $liste([['id' => 1] + $bundleDoc]),
+        '/api/v1/admin/promotions/bundles/1'         => [200, (string) json_encode(['data' => ['id' => 1] + $bundleDoc])],
+        '/api/v1/admin/promotions/quantity'          => $liste([['id' => 2] + $quantiteDoc]),
+        '/api/v1/admin/promotions/quantity/2'        => [200, (string) json_encode(['data' => ['id' => 2] + $quantiteDoc])],
+        '/api/v1/admin/promotions/buy-x-get-y',
+        '/api/v1/admin/promotions/scheduled-product-discount' => $liste([]),
+        '/api/v1/admin/voucher-campaigns'            => [403, (string) json_encode(['status' => 'error', 'description' => 'Requires MENU.BUNDLE.MANAGE'])],
+        default                                      => [404, ''],
+    };
+};
+$controleurPromos = new \Marketing\Controller\ErpPromotionController(new \Marketing\Service\ErpPromotionService(
+    new \Marketing\Repository\ErpPromotionRepository(new \Marketing\Support\ErpClient($transportPromos))
+));
+$lirePromos = static fn (array $query = []): array => $avecErp(
+    $transportPromos,
+    static fn () => $controleurPromos->index(new Request('GET', '/api/v1/marketing/erp-promotions', $query))
+);
+
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$response = $lirePromos();
+$corps = $response['body'] ?? [];
+$parId = array_column($corps['data'] ?? [], null, 'id');
+check('erp-promotions : 200, enveloppe du standard', $response['status'] === 200 && ($corps['success'] ?? null) === true
+    && isset($corps['meta']['requestId'], $corps['meta']['pagination'], $corps['meta']['sources']), json_encode($corps['meta'] ?? null));
+check('erp-promotions : le bundle documenté, prix en centimes', ($parId['bundle-1']['mechanic']['priceCents'] ?? null) === 1290
+    && ($parId['bundle-1']['mechanic']['currency'] ?? null) === 'EUR' && ($parId['bundle-1']['name'] ?? '') === 'Breakfast bundle',
+    json_encode($parId['bundle-1'] ?? null));
+check('erp-promotions : sa composition, produit ERP et quantité', ($parId['bundle-1']['products'][0]['erpProductId'] ?? null) === 11
+    && ($parId['bundle-1']['products'][0]['quantity'] ?? null) == 1 && ($parId['bundle-1']['products'][0]['role'] ?? '') === 'item');
+check('erp-promotions : la promotion de quantité documentée (3 pour 2)', ($parId['quantity-2']['mechanic']['mechanism'] ?? '') === 'BUY_X_GET_Y'
+    && ($parId['quantity-2']['mechanic']['quantity'] ?? null) === 3 && ($parId['quantity-2']['mechanic']['freeQuantity'] ?? null) === 1,
+    json_encode($parId['quantity-2']['mechanic'] ?? null));
+check('erp-promotions : sans magasins désignés, la promotion vaut pour le réseau', ($parId['bundle-1']['shopScope'] ?? '') === 'all');
+check('erp-promotions : camelCase, aucun champ brut de l\'ERP', !array_key_exists('shop_ids', $parId['bundle-1'] ?? [])
+    && !array_key_exists('bundle_promotion', $parId['bundle-1'] ?? []) && array_key_exists('validFrom', $parId['bundle-1'] ?? []));
+check('erp-promotions : le détail d\'une promotion est lu, pas celui d\'une campagne de bons',
+    in_array('GET https://erp.test/api/v1/admin/promotions/bundles/1', $appelsErp, true)
+    && count(array_filter($appelsErp, static fn ($a) => str_contains($a, 'voucher-campaigns/'))) === 0, json_encode($appelsErp));
+$sources = $corps['meta']['sources'] ?? [];
+check('erp-promotions : une famille refusée par l\'ERP est dite, les autres passent',
+    ($sources['voucher']['ok'] ?? null) === false && str_contains((string) ($sources['voucher']['error'] ?? ''), 'MENU.BUNDLE.MANAGE')
+    && ($sources['bundle']['ok'] ?? null) === true && ($sources['bundle']['count'] ?? null) === 1
+    && ($sources['buyXGetY']['ok'] ?? null) === true && ($sources['buyXGetY']['count'] ?? null) === 0, json_encode($sources));
+
+$response = $lirePromos(['perPage' => 1]);
+check('erp-promotions : pagination (perPage = 1)', count($response['body']['data'] ?? []) === 1
+    && ($response['body']['meta']['pagination']['total'] ?? null) === 2 && ($response['body']['meta']['pagination']['totalPages'] ?? null) === 2);
+$response = $lirePromos(['perPage' => 1, 'page' => 2]);
+check('erp-promotions : la deuxième page porte la promotion de quantité', ($response['body']['data'][0]['id'] ?? '') === 'quantity-2');
+$response = $lirePromos(['perPage' => 500]);
+check('erp-promotions : perPage ramené à 100', ($response['body']['meta']['pagination']['perPage'] ?? null) === 100);
+$response = $lirePromos(['family' => 'quantity']);
+check('erp-promotions : filtre par famille', array_column($response['body']['data'] ?? [], 'id') === ['quantity-2']
+    && array_keys($response['body']['meta']['sources'] ?? []) === ['quantity']);
+foreach ([['family' => 'remise'], ['tri' => 'nom'], ['page' => 0]] as $mauvais) {
+    $response = $lirePromos($mauvais);
+    check('erp-promotions : 422 sur ' . json_encode($mauvais), $response['status'] === 422
+        && ($response['body']['error']['code'] ?? '') === 'VALIDATION_FAILED' && ($response['body']['success'] ?? null) === false);
+}
+$premiere = json_encode($lirePromos()['body']['data'] ?? null);
+check('erp-promotions : deux lectures, la même réponse', $premiere === json_encode($lirePromos()['body']['data'] ?? null));
+
+// Le périmètre : un franchisé voit le réseau et ses boutiques, pas celles des autres.
+$pdo->exec('UPDATE mar_shop SET erp_shop_id = 4 WHERE id = 1');
+$pdo->exec('UPDATE mar_shop SET erp_shop_id = 9 WHERE id = 2');
+try {
+    AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+    $visibles = (new \Marketing\Repository\ErpPromotionRepository())->visibleTo(AuthContext::current(), [
+        ['id' => 'reseau', 'shopScope' => 'all', 'shops' => []],
+        ['id' => 'namur', 'shopScope' => 'selected', 'shops' => [['erpShopId' => 4, 'name' => null]]],
+        ['id' => 'uccle', 'shopScope' => 'selected', 'shops' => [['erpShopId' => 9, 'name' => null]]],
+    ]);
+    check('erp-promotions : un franchisé ne voit pas la promotion d\'une autre boutique', array_column($visibles, 'id') === ['reseau', 'namur'],
+        json_encode(array_column($visibles, 'id')));
+    check('erp-promotions : les promotions documentées (réseau) restent visibles au franchisé', count($lirePromos()['body']['data'] ?? []) === 2);
+    AuthContext::set(1, 'BRAND_ADMIN', 1);
+    check('erp-promotions : la marque voit tout', count((new \Marketing\Repository\ErpPromotionRepository())->visibleTo(AuthContext::current(), [
+        ['id' => 'uccle', 'shopScope' => 'selected', 'shops' => [['erpShopId' => 9, 'name' => null]]],
+    ])) === 1);
+    $pdo->exec("INSERT INTO mar_offer_item (category, sku_ref, name, is_active) VALUES ('produit', 'erp-11', 'Croissant beurre', 1)");
+    $response = $lirePromos();
+    check('erp-promotions : le nom du produit vient du catalogue repris', (array_column($response['body']['data'] ?? [], null, 'id')['bundle-1']['products'][0]['name'] ?? '') === 'Croissant beurre');
+} finally {
+    $pdo->exec("DELETE FROM mar_offer_item WHERE sku_ref = 'erp-11'");
+    $pdo->exec('UPDATE mar_shop SET erp_shop_id = NULL WHERE id IN (1, 2)');
+    AuthContext::set(1, 'BRAND_ADMIN', 1);
+}
+
+// Par le routeur : sans adresse d'ERP, rien n'est tenté et chaque famille le dit ; sans identité, 401.
+$response = call($router, 'GET', '/api/v1/marketing/erp-promotions');
+check('erp-promotions : sans ERP configuré, 200 et la raison par famille', $response['status'] === 200
+    && ($response['body']['data'] ?? null) === [] && ($response['body']['meta']['configured'] ?? null) === false
+    && str_contains((string) ($response['body']['meta']['sources']['bundle']['error'] ?? ''), 'MAR_ERP_API_BASE'));
+AuthContext::clear();
+check('erp-promotions : 401 sans identité', call($router, 'GET', '/api/v1/marketing/erp-promotions')['status'] === 401);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+// --- Connexion de l'ERP par téléphone et mot de passe -----------------------
+// Le corps de connexion suit le schéma documenté (AuthUserLoginSuccess :
+// access_token, refresh_token, token_type, session_id, expires_in).
+$avecCompte = static function (callable $essai) {
+    \Marketing\Support\Env::set('MAR_ERP_API_PHONE', '+32470000000');
+    \Marketing\Support\Env::set('MAR_ERP_API_PASSWORD', 'secret-de-test');
+    \Marketing\Support\ErpClient::forgetSession();
+    try {
+        return $essai();
+    } finally {
+        \Marketing\Support\Env::set('MAR_ERP_API_PHONE', null);
+        \Marketing\Support\Env::set('MAR_ERP_API_PASSWORD', null);
+        \Marketing\Support\ErpClient::forgetSession();
+    }
+};
+$journal = [];
+$jetons = 0;
+$transportCompte = static function (string $url, array $entetes, int $delai, string $methode = 'GET', ?string $corps = null) use (&$journal, &$jetons): array {
+    $auth = array_values(array_filter($entetes, static fn ($e) => str_starts_with($e, 'Authorization: ')))[0] ?? '';
+    $journal[] = [$methode, (string) parse_url($url, PHP_URL_PATH), $auth, $corps];
+    if ($methode === 'POST') {
+        $jetons++;
+        return [200, (string) json_encode(['access_token' => 'jeton-' . $jetons, 'refresh_token' => 'r', 'token_type' => 'Bearer', 'session_id' => 1, 'expires_in' => 1800])];
+    }
+    // Le premier jeton est refusé comme périmé : une seule reconnexion doit suivre.
+    return $auth === 'Authorization: Bearer jeton-1' ? [401, ''] : [200, '{"items":[],"pagination":{"page":1,"limit":100,"total":0,"pages":1}}'];
+};
+$avecCompte(static fn () => $avecErp($transportCompte, static fn ($client) => $client->get('/api/v1/admin/promotions/bundles')));
+check('connexion ERP : POST /api/v1/admin/auth/login avec le téléphone et le mot de passe',
+    ($journal[0][0] ?? '') === 'POST' && ($journal[0][1] ?? '') === '/api/v1/admin/auth/login'
+    && json_decode((string) ($journal[0][3] ?? ''), true) === ['phone' => '+32470000000', 'password' => 'secret-de-test'], json_encode($journal[0] ?? null));
+check('connexion ERP : le jeton part en Bearer, un 401 relance UNE connexion',
+    array_map(static fn ($l) => $l[0] . ' ' . $l[2], $journal) === ['POST ', 'GET Authorization: Bearer jeton-1', 'POST ', 'GET Authorization: Bearer jeton-2'],
+    json_encode(array_map(static fn ($l) => $l[0] . ' ' . $l[2], $journal)));
+$message = '';
+try {
+    $avecCompte(static fn () => $avecErp(static fn (): array => [401, '{"status":"error","description":"INVALID_CREDENTIALS"}'], static fn ($client) => $client->get('/api/v1/shops')));
+} catch (RuntimeException $echec) {
+    $message = $echec->getMessage();
+}
+check('connexion ERP : un compte refusé dit quoi vérifier', str_contains($message, 'MAR_ERP_API_PHONE'), $message);
+
 // --- Résultat -------------------------------------------------------------
 printf("\n%d réussis, %d échoués\n", $passed, $failed);
 exit($failed === 0 ? 0 : 1);

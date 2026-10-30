@@ -42,6 +42,8 @@ const COCKPIT_ROOT = (import.meta.env.VITE_COCKPIT_BASE ?? API_ROOT).replace(/\/
 const SOCIAL_ROOT = (import.meta.env.VITE_SOCIAL_BASE || '/marketing/social/').replace(/\/+$/, '')
 // Son espace boutique, affiché dans la version franchisé.
 const SOCIAL_FRANCHISE_ROOT = (import.meta.env.VITE_SOCIAL_FRANCHISEE_BASE || '/marketing/franchise/').replace(/\/+$/, '')
+// La régie d'affichage des écrans des magasins (« Marketing en magasin »), servie à /signage sur le même serveur.
+const SIGNAGE_ROOT = (import.meta.env.VITE_SIGNAGE_BASE || '/signage/').replace(/\/+$/, '')
 
 /** Les racines que ce build appelle ou ouvre, telles que résolues : l'écran « Adresses et réglages » les montre. */
 export const ROOTS = {
@@ -51,6 +53,7 @@ export const ROOTS = {
   cockpit: COCKPIT_ROOT,
   social: `${SOCIAL_ROOT}/`,
   socialFranchise: `${SOCIAL_FRANCHISE_ROOT}/`,
+  signage: `${SIGNAGE_ROOT}/`,
 }
 
 /**
@@ -980,6 +983,85 @@ export interface Voucher {
 
 export function listVouchers(): Promise<Voucher[]> {
   return request<Voucher[]>(`${BASE}/vouchers`)
+}
+
+// ---------------------------------------------------------------------------
+// Promotions de l'ERP — lues sur son API par le module (route au format du
+// standard : enveloppe, camelCase, montants en centimes)
+// ---------------------------------------------------------------------------
+
+export type ErpPromotionFamily = 'bundle' | 'buyXGetY' | 'quantity' | 'scheduledDiscount' | 'voucher'
+
+/** Une récompense : offerte, en pourcentage, montant retiré ou prix fixe. */
+export interface ErpReward {
+  type: 'free' | 'percentage' | 'amountOff' | 'fixedPrice'
+  percent: number | null
+  amountCents: number | null
+}
+
+export interface ErpPromotion {
+  id: string
+  family: ErpPromotionFamily
+  erpId: number
+  name: string
+  description: string | null
+  /** DRAFT · ACTIVE · INACTIVE, tel que l'ERP le dit. */
+  status: string
+  /** AUTOMATIC · VOUCHER_ONLY (la promotion ne joue qu'avec un bon). */
+  activationMode: string | null
+  priority: number
+  shopScope: 'all' | 'selected'
+  shops: { erpShopId: number; name: string | null }[]
+  /** Jours ISO (1 = lundi … 7 = dimanche), heure de début incluse, de fin exclue. */
+  schedule: { dayOfWeek: number; from: string; to: string }[]
+  validFrom: string | null
+  validTo: string | null
+  mechanic: {
+    priceCents?: number | null
+    currency?: string
+    buyQuantity?: number | null
+    getQuantity?: number | null
+    reward?: ErpReward | null
+    mechanism?: string | null
+    quantity?: number | null
+    freeQuantity?: number | null
+    codeType?: string
+    sharedCode?: string | null
+    plannedPromotionType?: string | null
+    promotionErpId?: number | null
+    requiresCustomer?: boolean
+  }
+  products: { erpProductId: number; name: string | null; quantity: number | null; role: 'item' | 'trigger' | 'reward' | 'eligible' }[]
+  categories: { erpCategoryId: number }[]
+}
+
+/** Ce qu'une famille a donné — ou pourquoi elle n'a rien donné (droit manquant, ERP injoignable). */
+export interface ErpPromotionSource {
+  ok: boolean
+  count: number
+  error: string | null
+}
+
+export interface ErpPromotionList {
+  promotions: ErpPromotion[]
+  sources: Partial<Record<ErpPromotionFamily, ErpPromotionSource>>
+  /** Faux : l'adresse de l'ERP n'est pas renseignée sur le serveur, rien n'a été tenté. */
+  configured: boolean
+}
+
+interface ErpPromotionEnvelope {
+  success: boolean
+  data: ErpPromotion[]
+  meta: { sources?: ErpPromotionList['sources']; configured?: boolean }
+}
+
+/** Les promotions de l'ERP (une famille, ou toutes) — cent au plus, l'écran n'en montre pas davantage. */
+export async function listErpPromotions(family?: ErpPromotionFamily): Promise<ErpPromotionList> {
+  const body = await request<ErpPromotionEnvelope>(`${BASE}/erp-promotions`, {
+    query: family ? { family, perPage: 100 } : { perPage: 100 },
+  })
+
+  return { promotions: body.data ?? [], sources: body.meta?.sources ?? {}, configured: body.meta?.configured === true }
 }
 
 // ---------------------------------------------------------------------------

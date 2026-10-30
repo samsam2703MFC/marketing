@@ -70,6 +70,13 @@ function addresses(): Address[] {
       screen: true,
     },
     {
+      label: 'Marketing en magasin — régie d’affichage',
+      role: 'Les écrans des magasins : films, promotions de l’ERP à l’écran, planning, réseau d’écrans (dépôt signage)',
+      path: api.ROOTS.signage,
+      setting: 'VITE_SIGNAGE_BASE',
+      screen: true,
+    },
+    {
       label: 'Cockpit du BO',
       role: 'Ventes et P&L des magasins, KPI d’une période, documents joints, newsletters',
       path: `${api.ROOTS.cockpit}/`,
@@ -95,6 +102,7 @@ function buildSettings(): Array<{ name: string; value: string | undefined; fallb
     { name: 'VITE_COCKPIT_BASE', value: env.VITE_COCKPIT_BASE, fallback: 'celui de l’API du module', role: 'Racine du cockpit du BO' },
     { name: 'VITE_SOCIAL_BASE', value: env.VITE_SOCIAL_BASE, fallback: '/marketing/social/', role: 'Module Social & Ads, écrans du réseau' },
     { name: 'VITE_SOCIAL_FRANCHISEE_BASE', value: env.VITE_SOCIAL_FRANCHISEE_BASE, fallback: '/marketing/franchise/', role: 'Module Social & Ads, espace boutique' },
+    { name: 'VITE_SIGNAGE_BASE', value: env.VITE_SIGNAGE_BASE, fallback: '/signage/', role: 'Régie d’affichage des écrans des magasins (Marketing en magasin)' },
     { name: 'VITE_RESEAU_BASE', value: env.VITE_RESEAU_BASE, fallback: 'non connue', role: 'Adresse de la version réseau' },
     { name: 'VITE_FRANCHISE_BASE', value: env.VITE_FRANCHISE_BASE, fallback: 'non connue', role: 'Adresse de la version franchisé' },
     { name: 'VITE_TFBUDDY_BASE_URL', value: env.VITE_TFBUDDY_BASE_URL, fallback: `${DEV_PROXY_PREFIX} (relais de développement)`, role: 'API de l’ERP TFBuddy' },

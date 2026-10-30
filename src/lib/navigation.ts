@@ -25,6 +25,11 @@ export type Route =
   | 'promotions'
   | 'bundles'
   | 'vouchers'
+  /**
+   * Le marketing en magasin : la régie d'affichage des écrans des magasins (dépôt signage),
+   * affichée dans un cadre — l'espace magasin de la régie dans la version franchisé.
+   */
+  | 'instore'
   | 'agencies'
   | 'analysis'
   | 'crm'
@@ -95,6 +100,7 @@ const ICONS: Record<string, string> = {
   promotions: 'M19 5L5 19M7 7a1.5 1.5 0 1 0 .01 0M17 17a1.5 1.5 0 1 0 .01 0',
   bundles: 'M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8M12 13v8',
   vouchers: 'M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4zM13 6v12',
+  instore: 'M3 4h18v12H3zM8 20h8M12 16v4',
   agencies: 'M4 7h16v13H4zM9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 12h18',
   analysis: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
   crm: 'M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.9',
@@ -222,11 +228,13 @@ const NETWORK: NavGroup[] = [
   // Le calendrier marketing réunit tout ce qui est prévu ou en cours, tous canaux confondus.
   { label: 'Pilotage', items: [item('dashboard', 'Tableau de bord'), item('calendar', 'Calendrier marketing')] },
   // La campagne au centre : on la crée par l'assistant ; ses posts, pubs et son
-  // retour s'ouvrent depuis sa fiche.
+  // retour s'ouvrent depuis sa fiche. Les offres et le marketing en magasin en
+  // font partie (30/10/2026) : les promotions de l'ERP (bundles, X achetés = Y,
+  // quantité, remises, bons) et la régie des écrans des magasins.
   {
     label: 'Campagnes',
     action: { label: 'Nouvelle campagne', route: 'builder' },
-    items: [item('campaigns', 'Campagnes')],
+    items: [item('campaigns', 'Campagnes'), item('promotions', 'Offres'), item('instore', 'Marketing en magasin')],
   },
   // Les écrans du module Social & Ads, affichés dans un cadre avec ses Pages et
   // son token Meta ; les commentaires et les messages privés se traitent dans
@@ -242,7 +250,6 @@ const NETWORK: NavGroup[] = [
       item('social-leads', 'Formulaires de leads'),
     ],
   },
-  { label: 'Offres', items: [item('promotions', 'Offres')] },
   {
     label: 'Boutiques',
     items: [
@@ -276,8 +283,11 @@ const NETWORK: NavGroup[] = [
 
 const FRANCHISE: NavGroup[] = [
   { label: 'Ma boutique', items: [item('dashboard', 'Tableau de bord'), item('calendar', 'Calendrier réseau')] },
-  { label: 'Mes actions', items: [item('campaigns', 'Mes campagnes')] },
-  { label: 'Outils de campagne', items: [item('promotions', 'Promotions & bons')] },
+  // Ses offres et ses écrans en boutique font partie de ses actions.
+  {
+    label: 'Mes actions',
+    items: [item('campaigns', 'Mes campagnes'), item('promotions', 'Promotions & bons'), item('instore', 'Marketing en magasin')],
+  },
   // L'espace franchisé du module Social & Ads : les réseaux sociaux de la boutique, dans le même menu.
   {
     label: 'Mes réseaux sociaux',

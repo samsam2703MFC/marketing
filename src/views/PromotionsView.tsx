@@ -3,6 +3,7 @@ import { useAsync, formatDate } from '../lib/useAsync'
 import type { CampaignOffer } from '../lib/api/module'
 import LinkBadge from '../components/LinkBadge'
 import { useLabel } from '../state/references'
+import ErpPromotions from '../components/ErpPromotions'
 
 
 export default function PromotionsView() {
@@ -14,6 +15,7 @@ export default function PromotionsView() {
 
   return (
     <>
+      <ErpPromotions families={['buyXGetY', 'quantity', 'scheduledDiscount']} title="Promotions de l’ERP" />
       {data?.length ? <CatalogTable promotions={data} /> : <EmptyCatalog />}
       {offers.error ? <p className="error">{offers.error}</p> : null}
       {offers.data?.length ? <OfferTable offers={offers.data} /> : null}
