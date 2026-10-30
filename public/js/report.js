@@ -126,7 +126,7 @@ class Report extends Component {
           <div style="display:flex;align-items:center;gap:16px;">
             <img src="assets/logo.png" alt="" style="height:52px;width:auto;" />
             <div>
-              <div style="font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${d.meta.brand} — Régie d'affichage</div>
+              <div style="font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${d.meta.brand} — Marketing en magasin</div>
               <div style="font-size:26px;font-weight:500;letter-spacing:-0.01em;">Rapport de diffusion</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Généré le ${fmtDate(d.meta.generatedAt)} · version v${d.meta.version} · prix d${d.meta.dataVer}</div>
             </div>
@@ -219,7 +219,7 @@ class Report extends Component {
         </div>
 
         <div style="margin-top:34px;text-align:center;font-size:11.5px;color:var(--faint);">
-          ${d.meta.brand} · Régie d'affichage — rapport généré automatiquement.
+          ${d.meta.brand} · Marketing en magasin — rapport généré automatiquement.
         </div>
       </div>
     `;

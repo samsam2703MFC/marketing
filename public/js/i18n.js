@@ -20,7 +20,7 @@ export const I18N = {
   'app.loading': { fr: 'Chargement de la régie…', nl: 'Console laden…', en: 'Loading the console…', it: 'Caricamento della console…' },
   'app.cmsUnreachable': { fr: 'Impossible de joindre le CMS : {err}', nl: 'Kan het CMS niet bereiken: {err}', en: 'Cannot reach the CMS: {err}', it: 'Impossibile raggiungere il CMS: {err}' },
   'app.retry': { fr: 'Réessayer', nl: 'Opnieuw proberen', en: 'Retry', it: 'Riprova' },
-  'login.title': { fr: 'Régie d\'affichage', nl: 'Schermbeheer', en: 'Signage console', it: 'Console di gestione' },
+  'login.title': { fr: 'Marketing en magasin', nl: 'Marketing in de winkel', en: 'In-store marketing', it: 'Marketing in negozio' },
   'login.subtitle': { fr: 'Connexion requise pour piloter le réseau', nl: 'Meld je aan om het netwerk te beheren', en: 'Sign in to manage the network', it: 'Accedi per gestire la rete' },
   'login.user': { fr: 'Utilisateur', nl: 'Gebruiker', en: 'Username', it: 'Utente' },
   'login.password': { fr: 'Mot de passe', nl: 'Wachtwoord', en: 'Password', it: 'Password' },
@@ -29,7 +29,6 @@ export const I18N = {
   'login.viewFilm': { fr: '▶ Visualiser le film (sans connexion)', nl: '▶ Film bekijken (zonder aanmelding)', en: '▶ View the film (no sign-in)', it: '▶ Guarda il film (senza accesso)' },
 
   // -- en-tête / navigation --
-  'header.console': { fr: 'Régie d\'affichage', nl: 'Schermbeheer', en: 'Signage console', it: 'Console di gestione' },
   'nav.home': { fr: 'Accueil', nl: 'Start', en: 'Home', it: 'Home' },
   'nav.composer': { fr: 'Compositeur', nl: 'Samensteller', en: 'Composer', it: 'Compositore' },
   'nav.products': { fr: 'Produits', nl: 'Producten', en: 'Products', it: 'Prodotti' },

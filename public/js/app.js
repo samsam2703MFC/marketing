@@ -4279,9 +4279,10 @@ class App extends Component {
     if (st.authRequired) {
       return html`<div style="height:100vh;display:flex;align-items:center;justify-content:center;background:var(--paper);padding:24px;">
         <form onSubmit=${this.doLogin} style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:36px 38px;width:360px;max-width:100%;display:flex;flex-direction:column;gap:13px;">
-          <img src="assets/logo.png" alt="L'Atelier By" style="height:44px;width:auto;align-self:center;margin-bottom:4px;" />
-          <div style="text-align:center;font-weight:500;font-size:16px;">${this.t('login.title')}</div>
-          <div style="text-align:center;font-size:12px;color:var(--muted);margin-bottom:6px;">${this.t('login.subtitle')}</div>
+          ${EMBEDDED ? '' : html`
+            <img src="assets/logo.png" alt="L'Atelier By" style="height:44px;width:auto;align-self:center;margin-bottom:4px;" />
+            <div style="text-align:center;font-weight:500;font-size:16px;">${this.t('login.title')}</div>`}
+          <div style=${EMBEDDED ? 'text-align:center;font-weight:500;font-size:16px;margin-bottom:6px;' : 'text-align:center;font-size:12px;color:var(--muted);margin-bottom:6px;'}>${this.t('login.subtitle')}</div>
           <div style="display:flex;justify-content:center;margin-bottom:4px;">
             <div class="role-switch">
               ${UI_LANGS.map((l) => html`<button type="button" title=${l.label} onClick=${() => this.setUiLang(l.id)} class=${l.id === st.uiLang ? 'is-on' : ''}>${l.short}</button>`)}
