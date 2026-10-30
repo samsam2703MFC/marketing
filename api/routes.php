@@ -17,6 +17,7 @@ declare(strict_types=1);
 use Marketing\Controller\CampaignController;
 use Marketing\Controller\CampaignVoucherController;
 use Marketing\Controller\CatalogController;
+use Marketing\Controller\ErpPromotionController;
 use Marketing\Controller\FundController;
 use Marketing\Controller\LeadController;
 use Marketing\Controller\NetworkController;
@@ -34,6 +35,7 @@ return static function (Router $router): void {
     $leads      = new LeadController();
     $session    = new SessionController();
     $catalog    = new CatalogController();
+    $erpPromotions = new ErpPromotionController();
     $network    = new NetworkController();
     $sales      = new SalesController();
     $uploads    = new UploadController();
@@ -95,6 +97,9 @@ return static function (Router $router): void {
     $router->get('/api/v1/marketing/campaign-offers', [$catalog, 'campaignOffers']);
     $router->get('/api/v1/marketing/bundles',    [$catalog, 'bundles']);
     $router->get('/api/v1/marketing/vouchers',   [$catalog, 'vouchers']);
+    // Les promotions de l'ERP (bundles, X achetés = Y, quantité, remises programmées, campagnes de bons),
+    // lues sur son API — au format du standard (enveloppe, camelCase, centimes, pagination).
+    $router->get('/api/v1/marketing/erp-promotions', [$erpPromotions, 'index']);
 
     // Bons d'une campagne : ils vivent dans le webshop (son moteur les applique
     // au panier) ; le module les crée, les rattache et les relit par son API,

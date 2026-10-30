@@ -1,8 +1,19 @@
 import * as api from '../lib/api/module'
 import { useAsync, formatEur, formatNumber } from '../lib/useAsync'
+import ErpPromotions from '../components/ErpPromotions'
+
+/** Les bundles de l'ERP (ceux que la caisse applique), puis les menus du catalogue du module. */
+export default function BundlesView() {
+  return (
+    <>
+      <ErpPromotions families={['bundle']} title="Bundles de l’ERP" />
+      <CatalogBundles />
+    </>
+  )
+}
 
 /** Menus et formules, avec leur composition et leur marge. */
-export default function BundlesView() {
+function CatalogBundles() {
   const { data, error, loading } = useAsync(() => api.listBundles(), [])
 
   if (error) return <p className="error">{error}</p>

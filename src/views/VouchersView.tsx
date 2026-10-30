@@ -2,7 +2,17 @@ import * as api from '../lib/api/module'
 import { useAsync, formatEur } from '../lib/useAsync'
 import LinkBadge from '../components/LinkBadge'
 import { useLabel } from '../state/references'
+import ErpPromotions from '../components/ErpPromotions'
 
+/** Les campagnes de bons de l'ERP, puis les bons et codes suivis par le module. */
+export default function VouchersView() {
+  return (
+    <>
+      <ErpPromotions families={['voucher']} title="Campagnes de bons de l’ERP" />
+      <CatalogVouchers />
+    </>
+  )
+}
 
 /**
  * Bons et codes.
@@ -11,7 +21,7 @@ import { useLabel } from '../state/references'
  * franchisé voit les utilisations de ses boutiques, pas celles du réseau. Ce
  * n'est pas cosmétique — c'est le même chiffre qui alimente le ROI.
  */
-export default function VouchersView() {
+function CatalogVouchers() {
   const { data, error, loading } = useAsync(() => api.listVouchers(), [])
   const channelLabel = useLabel((refs) => refs.salesChannels)
 

@@ -355,3 +355,32 @@ curl -s "http://localhost/marketing/api/v1/marketing/price-list?item_ids=101,102
 Si `erp.errors` mentionne « réponse illisible en JSON », c'est que la route rend
 un document binaire (PDF) et non des lignes : il faudra alors une variante JSON
 côté ERP, ou `MAR_ERP_PRICE_LIST_PATH` pointant vers elle.
+
+### Promotions de l'ERP (onglets Promotions, Bundles & menus, Bons)
+
+Les promotions que l'ERP applique en caisse — bundles, « X achetés = Y »,
+promotions de quantité, remises programmées, campagnes de bons — se lisent sur
+son API (`GET …/erp-promotions`, registre §8). Mêmes variables que le tarif
+ci-dessus, avec un compte plutôt qu'un jeton : un jeton de l'ERP expire en
+30 minutes, le compte se reconnecte de lui-même.
+
+```
+MAR_ERP_API_BASE=http://127.0.0.1
+MAR_ERP_API_PHONE=+32…          # compte du réalm admin de l'ERP
+MAR_ERP_API_PASSWORD=…
+```
+
+Le compte doit avoir le droit **`MENU.BUNDLE.MANAGE`** : sans lui, l'ERP répond
+403 et l'onglet le dit, famille par famille. Vérification depuis le serveur :
+
+```bash
+curl -s "http://localhost/marketing/api/v1/marketing/erp-promotions?perPage=5" \
+  | python3 -m json.tool | grep -A3 '"sources"'
+```
+
+### Marketing en magasin
+
+Le menu Campagnes ouvre la **régie d'affichage** des écrans des magasins (dépôt
+signage), servie à `/signage/` sur le même serveur, dans un cadre — l'espace
+magasin (`/signage/magasin`) dans la version franchisé. Une autre adresse se
+fixe au build par `VITE_SIGNAGE_BASE`.
