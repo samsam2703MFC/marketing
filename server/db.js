@@ -565,6 +565,27 @@ function migrate(db) {
     active      INTEGER NOT NULL DEFAULT 1
   );
 
+  -- Traductions des textes affichés à l'écran, par langue de magasin :
+  -- proposées par Claude (server/translate.js) ou écrites en régie, et
+  -- VALIDÉES avant d'atteindre un écran. « source » est le texte français
+  -- traduit, dans la clé : un texte modifié redevient à traduire, et la
+  -- traduction de l'ancien texte sert encore aux écrans tant que le film
+  -- publié le montre. Table à part : sig_aliases (noms de l'ERP) est réécrite
+  -- à chaque import.
+  CREATE TABLE IF NOT EXISTS sig_translations (
+    kind       TEXT NOT NULL,
+    ref_id     TEXT NOT NULL,
+    field      TEXT NOT NULL,
+    lang       TEXT NOT NULL,
+    source     TEXT NOT NULL DEFAULT '',
+    text       TEXT NOT NULL DEFAULT '',
+    status     TEXT NOT NULL DEFAULT 'propose',
+    origin     TEXT NOT NULL DEFAULT 'ia',
+    model      TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (kind, ref_id, field, lang, source)
+  );
+
   -- Bundles TFBuddy : reflet des promotions « bundle » lues sur l'API TFBuddy
   -- (server/tfbuddy.js) — nom, prix du bundle, produits et quantités,
   -- magasins, créneaux de la semaine. Chaque synchro remplace la table, sauf
@@ -2047,7 +2068,8 @@ export function storeUnavailableStamp(storeId, now = new Date()) {
 export function storeDataStamp(storeId, now = new Date()) {
   const u = storeUnavailableStamp(storeId, now);
   const b = getSetting('bundles_stamp', '');
-  return b ? `${u}|b:${b}` : u;
+  const t = getSetting('translations_stamp', '');
+  return `${u}${b ? `|b:${b}` : ''}${t ? `|t:${t}` : ''}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -2117,6 +2139,229 @@ export function setBundleImg(id, img) {
   const r = getDb().prepare('UPDATE sig_bundles SET img = ? WHERE id = ?').run(String(img || '').slice(0, 2000), String(id));
   if (r.changes) refreshBundlesStamp();
   return r.changes > 0;
+}
+
+// ---------------------------------------------------------------------------
+// Traductions (voir server/translate.js). Chaque texte affiché à l'écran a une
+// clé « kind:refId:field » ; une traduction ne vaut que pour le texte français
+// qu'elle a traduit (source) — d'où une ligne par version du texte.
+const TR_LABELS = {
+  'product/name': 'nom de produit', 'category/name': 'nom de catégorie',
+  'module/name': 'titre à l\'écran', 'module/sub': 'accroche à l\'écran',
+  'campaign/name': 'nom de campagne', 'campaign/message': 'message de campagne', 'campaign/theme': 'thème de campagne',
+  'promo_type/name': 'libellé de promotion', 'bundle/name': 'nom de bundle', 'bundle/descr': 'description de bundle',
+  'item/name': 'ligne de liste',
+};
+// Ligne propre à un élément (sans produit du catalogue) : sa clé est son
+// texte — la même ligne dans deux listes partage sa traduction.
+const itemRef = (text) => createHash('sha1').update(String(text || '').trim()).digest('hex').slice(0, 12);
+// Éléments dont le titre (et l'accroche) passent à l'écran.
+const TR_MODULE_TYPES = { category: ['name'], liaison: ['name', 'sub'], produit: ['name', 'sub'], animation: ['name', 'sub'], promotion: ['name', 'sub'] };
+
+export function translationSources(lang) {
+  const db = getDb();
+  const erp = new Map(db.prepare('SELECT kind, ref_id, name FROM sig_aliases WHERE lang = ?').all(lang).map((r) => [`${r.kind}:${r.ref_id}`, r.name]));
+  // Par clé : la traduction de chaque version du texte français, et la
+  // dernière validée (« avant », montrée quand le texte a changé).
+  const tr = new Map();
+  const last = new Map();
+  for (const r of db.prepare('SELECT * FROM sig_translations WHERE lang = ? ORDER BY updated_at, rowid').all(lang)) {
+    const k = `${r.kind}:${r.ref_id}:${r.field}`;
+    tr.set(`${k}\u0000${r.source}`, r);
+    if (r.status === 'valide') last.set(k, r);
+  }
+  const out = [];
+  const seen = new Set();
+  const add = (kind, refId, field, source, extra = {}) => {
+    const src = String(source || '').trim();
+    const key = `${kind}:${refId}:${field}`;
+    if (!src || seen.has(key)) return;
+    seen.add(key);
+    const t = tr.get(`${key}\u0000${src}`);
+    const before = last.get(key);
+    const fresh = !!t;
+    // Nom déjà donné par l'ERP dans cette langue : c'est lui qui passe à l'écran.
+    const fromErp = (kind === 'product' || kind === 'category') && erp.has(`${kind}:${refId}`);
+    out.push({
+      key, kind, refId, field, source: src, kindLabel: TR_LABELS[`${kind}/${field}`] || kind,
+      context: extra.context || '', where: extra.where || '',
+      fromErp, erpText: fromErp ? erp.get(`${kind}:${refId}`) : '',
+      translation: fresh ? { text: t.text, status: t.status, origin: t.origin, model: t.model, updatedAt: t.updated_at } : null,
+      // Le français a changé depuis la dernière traduction validée.
+      stale: !fresh && !!before,
+      previous: !fresh && before ? { source: before.source, text: before.text } : null,
+      missing: !fromErp && !fresh,
+    });
+  };
+  const cats = new Map(db.prepare('SELECT id, name FROM sig_product_categories').all().map((c) => [c.id, c.name]));
+  for (const c of db.prepare('SELECT id, name FROM sig_product_categories WHERE active = 1 ORDER BY sort_order, name').all()) add('category', c.id, 'name', c.name);
+  for (const p of db.prepare('SELECT id, name, category_id FROM sig_products WHERE active = 1 ORDER BY sort_order, name').all()) {
+    add('product', p.id, 'name', p.name, { context: cats.get(p.category_id) ? `catégorie « ${cats.get(p.category_id)} »` : '' });
+  }
+  const ownItems = db.prepare('SELECT name FROM sig_module_items WHERE module_id = ? ORDER BY position');
+  for (const m of db.prepare('SELECT id, type, name, sub, cat_ref, product_ref FROM sig_modules ORDER BY sort_order').all()) {
+    const fields = TR_MODULE_TYPES[m.type];
+    if (!fields) continue;
+    for (const f of fields) {
+      // Le titre d'une liste liée à sa catégorie : c'est la traduction de la catégorie qui s'applique.
+      if (f === 'name' && m.cat_ref && m.name === cats.get(m.cat_ref)) continue;
+      add('module', m.id, f, m[f], { where: `élément « ${m.name || m.type} »` });
+    }
+    // Lignes propres à l'élément (liste non liée au catalogue).
+    if (!m.cat_ref && !m.product_ref) {
+      for (const it of ownItems.all(m.id)) add('item', itemRef(it.name), 'name', it.name, { where: `liste « ${m.name || m.type} »` });
+    }
+  }
+  for (const c of db.prepare('SELECT id, name, message, theme FROM sig_campaigns WHERE active = 1 ORDER BY sort_order').all()) {
+    add('campaign', c.id, 'name', c.name);
+    add('campaign', c.id, 'message', c.message, { where: `campagne « ${c.name} »` });
+    add('campaign', c.id, 'theme', c.theme, { where: `campagne « ${c.name} »` });
+  }
+  for (const t of db.prepare('SELECT id, name FROM sig_promo_types WHERE active = 1 ORDER BY sort_order').all()) add('promo_type', t.id, 'name', t.name);
+  for (const b of db.prepare("SELECT id, name, descr FROM sig_bundles WHERE status = 'ACTIVE' ORDER BY name").all()) {
+    add('bundle', b.id, 'name', b.name);
+    add('bundle', b.id, 'descr', b.descr, { where: `bundle « ${b.name} »` });
+  }
+  return out;
+}
+
+function refreshTranslationsStamp() {
+  const rows = getDb().prepare("SELECT kind, ref_id, field, lang, source, text FROM sig_translations WHERE status = 'valide' ORDER BY kind, ref_id, field, lang, source").all();
+  setSetting('translations_stamp', rows.length ? createHash('sha1').update(JSON.stringify(rows)).digest('hex').slice(0, 12) : '');
+}
+
+// Anciennes versions : les 3 dernières traductions validées d'un texte restent
+// (un écran peut montrer un film publié avant la modification) ; au-delà, elles partent.
+function pruneTranslations(db, lang) {
+  db.prepare(`DELETE FROM sig_translations WHERE lang = ? AND status = 'valide' AND rowid NOT IN (
+      SELECT rowid FROM (SELECT rowid, ROW_NUMBER() OVER (PARTITION BY kind, ref_id, field ORDER BY updated_at DESC, rowid DESC) AS rn
+        FROM sig_translations WHERE lang = ? AND status = 'valide') WHERE rn <= 3)`).run(lang, lang);
+}
+
+// Propositions de Claude : elles n'écrasent jamais une traduction validée du
+// même texte ; une proposition faite pour un ancien texte part.
+export function saveTranslationProposals(lang, rows, model) {
+  const db = getDb();
+  const up = db.prepare(`INSERT INTO sig_translations(kind, ref_id, field, lang, source, text, status, origin, model, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, 'propose', 'ia', ?, datetime('now'))
+    ON CONFLICT(kind, ref_id, field, lang, source) DO UPDATE SET text = excluded.text,
+      status = 'propose', origin = 'ia', model = excluded.model, updated_at = excluded.updated_at
+    WHERE sig_translations.status != 'valide'`);
+  const oldProposals = db.prepare("DELETE FROM sig_translations WHERE kind = ? AND ref_id = ? AND field = ? AND lang = ? AND status = 'propose' AND source != ?");
+  db.exec('BEGIN');
+  try {
+    for (const r of rows) {
+      oldProposals.run(r.kind, String(r.refId), r.field, lang, r.source);
+      up.run(r.kind, String(r.refId), r.field, lang, r.source, String(r.text).slice(0, 2000), model);
+    }
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+}
+
+const splitKey = (key) => {
+  const m = /^([a-z_]+):(.+):([a-z]+)$/.exec(String(key || ''));
+  return m ? { kind: m[1], refId: m[2], field: m[3] } : null;
+};
+
+// Valider des propositions (toutes, ou les clés données), avec d'éventuelles
+// retouches ; une retouche devient une traduction « régie ».
+export function validateTranslations(lang, { keys = null, edits = {} } = {}) {
+  const db = getDb();
+  const sources = new Map(translationSources(lang).map((s) => [s.key, s]));
+  const rows = db.prepare("SELECT * FROM sig_translations WHERE lang = ? AND status = 'propose'").all(lang);
+  const set = db.prepare("UPDATE sig_translations SET status = 'valide', text = ?, origin = ?, updated_at = datetime('now') WHERE kind = ? AND ref_id = ? AND field = ? AND lang = ? AND source = ?");
+  let n = 0;
+  db.exec('BEGIN');
+  try {
+    for (const r of rows) {
+      const key = `${r.kind}:${r.ref_id}:${r.field}`;
+      if (keys && !keys.includes(key)) continue;
+      const src = sources.get(key);
+      if (!src || src.source !== r.source) continue;   // le français a changé depuis : à retraduire
+      const edited = Object.prototype.hasOwnProperty.call(edits, key) ? String(edits[key] || '').trim() : '';
+      set.run(edited || r.text, edited && edited !== r.text ? 'regie' : r.origin, r.kind, r.ref_id, r.field, lang, r.source);
+      n++;
+    }
+    if (n) pruneTranslations(db, lang);
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  if (n) refreshTranslationsStamp();
+  return n;
+}
+
+// Écrire (ou corriger) une traduction à la main : validée d'office.
+export function setTranslation(lang, key, text) {
+  const k = splitKey(key);
+  const src = translationSources(lang).find((s) => s.key === key);
+  if (!k || !src) return false;
+  const value = String(text || '').trim();
+  const db = getDb();
+  if (!value) {
+    // Effacer : ce texte-ci repasse en français à l'écran.
+    db.prepare('DELETE FROM sig_translations WHERE kind = ? AND ref_id = ? AND field = ? AND lang = ? AND source = ?').run(k.kind, k.refId, k.field, lang, src.source);
+  } else {
+    db.prepare(`INSERT INTO sig_translations(kind, ref_id, field, lang, source, text, status, origin, model, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'valide', 'regie', '', datetime('now'))
+      ON CONFLICT(kind, ref_id, field, lang, source) DO UPDATE SET text = excluded.text,
+        status = 'valide', origin = 'regie', model = '', updated_at = excluded.updated_at`)
+      .run(k.kind, k.refId, k.field, lang, src.source, value.slice(0, 2000));
+    db.prepare("DELETE FROM sig_translations WHERE kind = ? AND ref_id = ? AND field = ? AND lang = ? AND status = 'propose'").run(k.kind, k.refId, k.field, lang);
+    pruneTranslations(db, lang);
+  }
+  refreshTranslationsStamp();
+  return true;
+}
+
+export function rejectTranslations(lang, keys) {
+  const db = getDb();
+  const del = db.prepare('DELETE FROM sig_translations WHERE kind = ? AND ref_id = ? AND field = ? AND lang = ? AND status = \'propose\'');
+  let n = 0;
+  for (const key of keys || []) { const k = splitKey(key); if (k) n += del.run(k.kind, k.refId, k.field, lang).changes; }
+  return n;
+}
+
+// À l'écran d'un magasin dont la langue n'est pas le français : les textes
+// traduits ET validés remplacent les textes français — la traduction de CE
+// texte-là (celui du film publié). Les noms de l'ERP (sig_aliases), posés
+// ensuite par applyStoreLang, gardent la main.
+export function applyTranslations(modules, storeId) {
+  if (!storeId) return;
+  const db = getDb();
+  const lang = (db.prepare('SELECT lang FROM sig_stores WHERE id = ?').get(storeId) || {}).lang;
+  if (!lang || lang === 'fr') return;
+  const rows = db.prepare("SELECT kind, ref_id, field, source, text FROM sig_translations WHERE lang = ? AND status = 'valide'").all(lang);
+  if (!rows.length) return;
+  const tr = new Map(rows.map((r) => [`${r.kind}:${r.ref_id}:${r.field}\u0000${r.source}`, r.text]));
+  const pick = (kind, id, field, current) => tr.get(`${kind}:${id}:${field}\u0000${String(current || '').trim()}`) || null;
+  const catNames = new Map(db.prepare('SELECT id, name FROM sig_product_categories').all().map((c) => [c.id, c.name]));
+  const erpCats = new Set(db.prepare("SELECT ref_id FROM sig_aliases WHERE kind = 'category' AND lang = ?").all(lang).map((r) => r.ref_id));
+  for (const m of modules || []) {
+    for (const it of m.items || []) {
+      if (!it) continue;
+      const t = it.productId ? pick('product', it.productId, 'name', it.name) : pick('item', itemRef(it.name), 'name', it.name);
+      if (t) it.name = t;
+    }
+    if (m.catRef && m.name === catNames.get(m.catRef)) {
+      const t = erpCats.has(m.catRef) ? null : pick('category', m.catRef, 'name', m.name);
+      if (t) m.name = t;
+    } else {
+      const t = pick('module', m.id, 'name', m.name);
+      if (t) m.name = t;
+    }
+    const sub = pick('module', m.id, 'sub', m.sub);
+    if (sub) m.sub = sub;
+    if (m.campaign && m.campaign.id) {
+      const c = { ...m.campaign };
+      for (const f of ['name', 'message', 'theme']) { const t = pick('campaign', c.id, f, c[f]); if (t) c[f] = t; }
+      m.campaign = c;
+    }
+    if (m.promo && m.promo.type) { const t = pick('promo_type', m.promo.type, 'name', m.promo.name); if (t) m.promo = { ...m.promo, name: t }; }
+    if (m.bundle && m.bundle.id) {
+      const b = { ...m.bundle };
+      for (const f of ['name', 'descr']) { const t = pick('bundle', b.id, f, b[f]); if (t) b[f] = t; }
+      m.bundle = b;
+    }
+  }
 }
 
 export function checkLogin(username, password) {

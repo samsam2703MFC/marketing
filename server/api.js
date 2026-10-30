@@ -19,8 +19,10 @@ import {
   userInfo, listStoreAccounts, setStoreAccount, deleteStoreAccount, STORE_LOGIN_RE,
   storeUnavailable, setStoreUnavailable, storeDataStamp, endOfDayBrussels,
   loadBundles, saveSyncedBundles, setBundleImg,
+  translationSources, validateTranslations, rejectTranslations, setTranslation, applyTranslations,
 } from './db.js';
 import { tfbConfigured, tfbPublicConfig, fetchBundles, fetchShops, tfbAuthBackoff } from './tfbuddy.js';
+import { TRANSLATE_MODEL, translateConfigured, translationJob, startTranslationJob } from './translate.js';
 import { randomBytes } from 'node:crypto';
 import { httpsStatus } from './https-status.js';
 import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
@@ -318,6 +320,33 @@ const bundlesJson = () => ({
   stores: getDb().prepare('SELECT id, name FROM sig_stores ORDER BY name').all(),
 });
 
+// ---- Traductions (voir server/translate.js) --------------------------------
+// Langues cibles : celles de la régie, sauf le français (langue source).
+const trLang = (x) => {
+  const l = String(x || 'nl');
+  return l !== 'fr' && loadLangs().some((g) => g.id === l) ? l : null;
+};
+function translationsJson(lang) {
+  const items = translationSources(lang);
+  const n = (f) => items.filter(f).length;
+  const job = translationJob();
+  return {
+    lang, items,
+    langs: loadLangs().filter((l) => l.id !== 'fr'),
+    stores: getDb().prepare('SELECT id, name FROM sig_stores WHERE lang = ? ORDER BY name').all(lang),
+    counts: {
+      total: items.length,
+      erp: n((s) => s.fromErp),
+      validated: n((s) => !s.fromErp && s.translation && s.translation.status === 'valide'),
+      proposed: n((s) => !s.fromErp && s.translation && s.translation.status === 'propose'),
+      missing: n((s) => s.missing),
+      stale: n((s) => s.missing && s.stale),
+    },
+    claude: { configured: translateConfigured(), model: TRANSLATE_MODEL },
+    job: job && job.lang === lang ? job : null,
+  };
+}
+
 // Ruptures déclarées par le magasin : ses écrans ne montrent plus ces
 // produits — ni dans les listes, ni en « produit seul », promo ou campagne.
 function applyStoreUnavailable(snap, storeId, date) {
@@ -341,6 +370,8 @@ function finishSnapshot(snap, storeId, date = new Date()) {
   applyBundles(snap, storeId, date);
   applyStoreUnavailable(snap, storeId, date);
   applyStorePrices(snap.modules, storeId);
+  // Traductions validées en régie, puis les noms de l'ERP (qui gardent la main).
+  applyTranslations(snap.modules, storeId);
   applyStoreLang(snap.modules, storeId);
   // Variables liées d'un gabarit HTML d'abord, puis les jetons magasin pour
   // tout ce qui n'a pas été lié explicitement.
@@ -1117,6 +1148,42 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
         scheduleMirror();
         return send(200, { ok: true, ...bundlesJson() });
       }
+    }
+
+    // ---- traductions des textes affichés (néerlandais des magasins flamands) --
+    // Claude PROPOSE, la régie VALIDE : seule une traduction validée — et qui
+    // traduit le texte français actuel — atteint un écran.
+    if (path === '/translations' || path.startsWith('/translations/')) {
+      const body = req.method === 'GET' ? {} : await readBody();
+      const lang = trLang(req.method === 'GET' ? url.searchParams.get('lang') : body.lang);
+      if (!lang) return send(400, { error: 'langue cible inconnue (le français est la langue source)' });
+      if (req.method === 'GET' && path === '/translations') return send(200, translationsJson(lang));
+      if (req.method === 'POST' && path === '/translations/propose') {
+        if (!translateConfigured()) return send(409, { error: 'clé API Anthropic absente — ajouter le secret ANTHROPIC_API_KEY puis relancer la livraison', ...translationsJson(lang) });
+        const kinds = Array.isArray(body.kinds) && body.kinds.length ? body.kinds.map(String) : null;
+        const running = translationJob();
+        if (running && running.running && running.lang !== lang) return send(409, { error: `une proposition est déjà en cours (${running.lang})`, ...translationsJson(lang) });
+        startTranslationJob(lang, { kinds });
+        return send(202, { ok: true, ...translationsJson(lang) });
+      }
+      if (req.method === 'POST' && path === '/translations/validate') {
+        const keys = Array.isArray(body.keys) ? body.keys.map(String) : null;
+        const edits = body.edits && typeof body.edits === 'object' ? body.edits : {};
+        const validated = validateTranslations(lang, { keys, edits });
+        scheduleMirror();
+        return send(200, { ok: true, validated, ...translationsJson(lang) });
+      }
+      if (req.method === 'POST' && path === '/translations/reject') {
+        const rejected = rejectTranslations(lang, Array.isArray(body.keys) ? body.keys.map(String) : []);
+        scheduleMirror();
+        return send(200, { ok: true, rejected, ...translationsJson(lang) });
+      }
+      if (req.method === 'PUT' && path === '/translations') {
+        if (!setTranslation(lang, String(body.key || ''), body.text)) return send(404, { error: 'texte inconnu (supprimé, ou son français a changé)' });
+        scheduleMirror();
+        return send(200, { ok: true, ...translationsJson(lang) });
+      }
+      return send(404, { error: 'route inconnue' });
     }
 
     // ---- campagnes marketing (liste d'entités déposables comme item) --------

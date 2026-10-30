@@ -3,7 +3,9 @@
 Back office de pilotage du signage (implémentation de la maquette **Back Office.dc.html**),
 avec CMS, base de données, player d'écran et **tests live exécutés à chaque déploiement**.
 
-- **Zéro dépendance** : Node.js ≥ 22.5 uniquement (`node:http` + `node:sqlite`). Pas de `npm install`.
+- **Une seule dépendance** : Node.js ≥ 22.5 (`node:http` + `node:sqlite`) et le SDK Anthropic
+  (`npm ci`), chargé seulement pour proposer des traductions — sans lui, la régie démarre et
+  tourne normalement.
 - **Base SQLite** : toutes les tables sont préfixées **`sig_`** (`sig_modules`, `sig_module_items`,
   `sig_playlist`, `sig_stores`, `sig_players`, `sig_snapshots`, `sig_publications`,
   `sig_heartbeats`, `sig_settings`, `sig_users`, `sig_sessions`).
@@ -42,8 +44,10 @@ d'exemple ci-dessus) et le compte `agence` garde son mot de passe de démo `agen
 transfert du code, provisionnement (Node ≥ 22, mots de passe, compte système `signage` et
 son accès MariaDB, service systemd, proxy Apache, **https**), puis tests live. Secrets GitHub (Settings → Secrets and variables → Actions) :
 `SERVER_HOST`, `SERVER_USER` (root), `SERVER_SSH_KEY`, `SIG_ADMIN_PASSWORD`,
-`SIG_AGENCY_PASSWORD`, et pour les bundles `TFBUDDY_PHONE` + `TFBUDDY_PASSWORD` — détail en
-tête du workflow.
+`SIG_AGENCY_PASSWORD`, pour les bundles `TFBUDDY_PHONE` + `TFBUDDY_PASSWORD`, et pour les
+traductions proposées par Claude `ANTHROPIC_API_KEY` — détail en tête du workflow. Les
+dépendances npm (le SDK Anthropic) sont installées par la livraison (`npm ci --omit=dev`) et
+copiées avec le code : le serveur n'a besoin ni de npm ni du registre.
 
 - **Les fichiers uploadés ne sont jamais effacés.** Le transfert se fait sans `--delete`
   et ne touche ni `data/` ni `public/media/`, `public/surprise/`, `public/anim/` (médiathèque
@@ -88,6 +92,7 @@ sudo install -m 0600 /dev/null /etc/signage/signage.env
 sudo nano /etc/signage/signage.env
 #   SIG_ADMIN_PASSWORD="…"
 #   SIG_AGENCY_PASSWORD="…"    ← facultatif : sans lui, l'espace agence est fermé
+#   ANTHROPIC_API_KEY="…"      ← facultatif : traductions proposées par Claude
 #   (entre guillemets doubles ; écrire \" pour un « " » et \\ pour un « \ »)
 
 # 3) Compte du service (jamais root) : le code reste à root, seuls data/ et les
@@ -524,6 +529,35 @@ semaine (jour ISO 1 = lundi … 7, heure de début incluse, de fin exclue), stat
   sans republier.
 - API : `GET /bundles` · `POST /bundles/sync` · `PATCH /bundles/{id}` (visuel).
 
+### Traductions des écrans (néerlandais des magasins flamands)
+Un magasin dont la langue d'écran est le néerlandais (**Réseau → magasin → langue**) affiche ses
+textes en néerlandais : noms de produits et de catégories, titres et accroches des éléments,
+lignes de liste, campagnes (nom, message, thème), badges de promotion, bundles (nom,
+description). **Claude propose, la régie valide** : onglet **Traductions** →
+**✨ Proposer avec Claude** traduit les textes qui n'en ont pas, puis on relit, on retouche, on
+**valide** (une à une ou toutes) ou on **rejette**. Rien n'atteint un écran avant validation.
+
+- **Modèle** : Claude Haiku 5.5 (`claude-haiku-5-5`, textes courts en volume, effort bas,
+  sortie JSON structurée) ; un autre via `SIG_TRANSLATE_MODEL`. Lots de 60 textes, 3 en
+  parallèle, en tâche de fond (progression et jetons consommés affichés). Consignes : usage
+  des boulangeries flamandes (« Pain au chocolat » → « Chocoladebroodje »), marques, prix,
+  quantités et jetons `{{…}}` gardés tels quels, longueur proche du français.
+- **Clé** : secret `ANTHROPIC_API_KEY`, écrit par la livraison dans `/etc/signage/signage.env`
+  (jamais en base, jamais renvoyée par l'API). Sans clé, l'onglet le dit et les traductions se
+  saisissent à la main. Clé refusée, modèle inconnu, limite de débit : message clair, rien d'écrit.
+- **Une traduction vaut pour un texte** : `sig_translations` garde le texte français traduit
+  dans sa clé. Un texte modifié redevient **à retraduire** (l'ancienne traduction est montrée) ;
+  la traduction de l'ancien texte sert encore aux écrans tant que le film publié le montre.
+  Saisir ou corriger un texte dans l'onglet le valide d'office ; l'effacer remet le français.
+- **Noms de l'ERP prioritaires** : un produit ou une catégorie qui a déjà un nom néerlandais dans
+  l'ERP (`sig_aliases`) le garde ; l'onglet le montre sans rien proposer.
+- **À l'écran** : `finishSnapshot` → `applyTranslations` (avant les noms ERP), par magasin. Une
+  validation change l'empreinte du magasin (`storeStamp`) : ses écrans se resynchronisent sans
+  republier. Les magasins francophones ne changent pas.
+- API : `GET /translations?lang=nl` · `POST /translations/propose` · `POST /translations/validate`
+  (`keys`, `edits`) · `POST /translations/reject` · `PUT /translations` (saisie) — régie seule
+  (compte magasin et agence : 403).
+
 ### Paramètres
 URL du CMS, IP / hôte player, token — persistés en base. **« Tester la connexion (live) »**
 exécute côté serveur : ping TCP de l'hôte, `GET assignment`, `GET dataset prix`,
@@ -546,7 +580,7 @@ qui la portent restent visibles ; la liste ne peut pas être vidée.
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + TFBuddy simulé + cycle complet — 77 tests
+npm test              # serveur jetable (BDD temporaire) + TFBuddy et Claude simulés + cycle complet — 83 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
 node test/live-test.js http://185.180.206.46/signage --password=… --mutate
@@ -571,6 +605,8 @@ session admin  : POST /api/v1/login · /logout · GET /me
                  GET /promo-types · PUT /promo-types (sous-types de promotion)
                  GET /campaigns · PUT /campaigns (campagnes marketing)
                  GET /bundles · POST /bundles/sync · PATCH /bundles/{id} (bundles TFBuddy)
+                 GET /translations?lang= · POST /translations/propose|validate|reject
+                 PUT /translations (traductions des écrans, Claude propose)
                  GET /lib-categories · PUT /lib-categories (classement + table liée)
                  GET /ingredients · PUT /ingredients (matière première ↔ animation)
                  POST /anim-assets · GET /anim-assets (fichiers d'animation)

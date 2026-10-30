@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { snapshotAssets } from '../public/js/assets.js';
 import { scheduledNow } from '../public/js/renderer.js';
 import { startTfbMock, MOCK_ACCOUNTS } from './tfbuddy-mock.js';
+import { startAnthropicMock, MOCK_KEY } from './anthropic-mock.js';
 
 const args = process.argv.slice(2);
 const MUTATE = args.includes('--mutate');
@@ -30,6 +31,7 @@ const results = [];
 let child = null;
 let authToken = null;
 let tfbMock = null;   // TFBuddy simulé (serveur jetable seulement)
+let aiMock = null;    // API Claude simulée (idem)
 
 function report(label, ok, ms, detail = '') {
   results.push({ label, ok });
@@ -78,12 +80,15 @@ async function main() {
     const port = 8123 + Math.floor(Math.random() * 500);
     BASE = `http://127.0.0.1:${port}`;
     tfbMock = await startTfbMock();
+    aiMock = await startAnthropicMock();
     // Le serveur jetable démarre avec le seed de démonstration (SIG_DEMO=1)
     // pour disposer de modules / magasins / players à tester.
     child = spawn(process.execPath, [join(root, 'server', 'index.js')], {
       // TFBuddy simulé : le serveur jetable y lit ses bundles comme en production.
       env: { ...process.env, PORT: String(port), SIG_DB: join(dir, 'test.db'), SIG_DEMO: '1',
-        TFBUDDY_API_BASE: tfbMock.url, TFBUDDY_PHONE: MOCK_ACCOUNTS.admin.phone, TFBUDDY_PASSWORD: MOCK_ACCOUNTS.admin.password, TFBUDDY_ROLE: '' },
+        TFBUDDY_API_BASE: tfbMock.url, TFBUDDY_PHONE: MOCK_ACCOUNTS.admin.phone, TFBUDDY_PASSWORD: MOCK_ACCOUNTS.admin.password, TFBUDDY_ROLE: '',
+        // API Claude simulée : les traductions sont proposées comme en production.
+        ANTHROPIC_API_KEY: MOCK_KEY, ANTHROPIC_BASE_URL: aiMock.url, ANTHROPIC_AUTH_TOKEN: '', SIG_TRANSLATE_MODEL: '' },
       stdio: 'ignore',
     });
     console.log(`▶ Serveur jetable : ${BASE} (BDD ${join(dir, 'test.db')})`);
@@ -159,6 +164,16 @@ async function main() {
     if (!scheduledNow({ bundle: { slots: [{ dow: 7, from: '00:00', to: '23:59' }] } }, at(11, 23, 59))) throw new Error('« 23:59 » doit courir jusqu’à minuit');
     if (!scheduledNow({ bundle: { slots: [] } }, at(11, 3, 0))) throw new Error('un bundle sans créneau passe tout le temps');
     return 'lun 08:00 ✓ · lun 11:00 ✗ · 05:59 ✗ · ven 10:59 ✓ · dim ✗ · « 23:59 » = minuit';
+  });
+  await step('GET /api/v1/translations — traductions des écrans (néerlandais)', async () => {
+    const r = await call('GET', '/api/v1/translations?lang=nl');
+    if (!Array.isArray(r.items) || !r.counts || !r.claude) throw new Error('réponse incomplète');
+    if (/sk-ant-/.test(JSON.stringify(r))) throw new Error('la réponse expose une clé API');
+    const fr = await fetch(BASE + '/api/v1/translations?lang=fr', { headers: { authorization: `Bearer ${authToken}` } });
+    if (fr.status !== 400) throw new Error(`français (langue source) : HTTP ${fr.status} au lieu de 400`);
+    const c = r.counts;
+    return `${c.total} texte(s) · ${c.validated} validé(s) · ${c.proposed} à valider · ${c.missing} à traduire · ${c.erp} nom(s) ERP · `
+      + `${r.stores.length} magasin(s) en nl · Claude ${r.claude.configured ? `prêt (${r.claude.model})` : 'non configuré (secret ANTHROPIC_API_KEY)'}`;
   });
   await step('GET /api/v1/campaigns — campagnes marketing (liste)', async () => {
     const c = await call('GET', '/api/v1/campaigns');
@@ -1474,11 +1489,125 @@ async function main() {
     });
   }
 
+  if (MUTATE && aiMock) {
+    const texts = (f) => JSON.stringify(f.modules.map((m) => [m.name, m.sub, (m.items || []).map((i) => i.name)]));
+    const filmOf = (store) => call('GET', `/api/v1/film?store=${encodeURIComponent(store)}`);
+    const waitJob = async (t, lang) => {
+      for (let i = 0; i < 150 && t.job && t.job.running; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        t = await call('GET', `/api/v1/translations?lang=${lang}`);
+      }
+      if (!t.job || t.job.running) throw new Error('proposition jamais terminée');
+      return t;
+    };
+    const fleet = await call('GET', '/api/v1/fleet');
+    const nlStore = fleet.stores[0];
+    const frStore = fleet.stores.find((x) => x.id !== nlStore.id && (x.lang || 'fr') === 'fr');
+    const langBefore = nlStore.lang || 'fr';
+    const st0 = await call('GET', '/api/v1/state');
+    let modKey = null;
+    await step('Traductions — Claude propose, rien à l’écran avant validation', async () => {
+      await call('POST', `/api/v1/stores/${nlStore.id}`, { lang: 'nl' });
+      const t0 = await call('GET', '/api/v1/translations?lang=nl');
+      if (!t0.claude.configured) throw new Error('Claude non configuré sur le serveur jetable');
+      if (!t0.stores.some((x) => x.id === nlStore.id)) throw new Error('le magasin passé en néerlandais n’est pas listé');
+      const todo = t0.counts.missing;
+      const t = await waitJob(await call('POST', '/api/v1/translations/propose', { lang: 'nl' }), 'nl');
+      if (t.job.errors.length) throw new Error(`proposition en erreur : ${t.job.errors[0]}`);
+      if (t.counts.proposed !== todo || t.counts.missing !== 0) throw new Error(`${t.counts.proposed} proposition(s) pour ${todo} texte(s) à traduire`);
+      const req = aiMock.calls[aiMock.calls.length - 1];
+      if (req.model !== 'claude-haiku-5-5' || req.lang !== 'nl' || !/Flanders/.test(req.system)) throw new Error(`requête Claude inattendue : ${req.model} / ${req.lang}`);
+      const f0 = await filmOf(nlStore.id);
+      if (/\[nl\]/.test(texts(f0))) throw new Error('une proposition non validée est passée à l’écran');
+      const inFilm = new Set(f0.modules.map((m) => m.id));
+      const mod = t.items.find((x) => x.kind === 'module' && x.field === 'name' && inFilm.has(x.refId));
+      if (!mod) throw new Error('aucun titre d’élément du film à traduire');
+      modKey = mod.key;
+      return `${todo} texte(s) → ${t.counts.proposed} proposition(s) · ${aiMock.calls.length} requête(s) · ${t.job.usage.input_tokens} jetons lus`;
+    });
+    await step('Traductions — validées (retouche comprise) : l’écran flamand change, pas le francophone', async () => {
+      if (!modKey) throw new Error('étape précédente en échec');
+      const f0 = await filmOf(nlStore.id);
+      const v = await call('POST', '/api/v1/translations/validate', { lang: 'nl', edits: { [modKey]: 'Retouche régie' } });
+      if (!v.validated || v.counts.proposed !== 0) throw new Error(`${v.validated} validée(s), ${v.counts.proposed} restante(s)`);
+      if (v.items.find((x) => x.key === modKey).translation.origin !== 'regie') throw new Error('retouche non marquée « régie »');
+      const f1 = await filmOf(nlStore.id);
+      if (!/\[nl\]/.test(texts(f1)) || !texts(f1).includes('Retouche régie')) throw new Error(`écran flamand non traduit : ${texts(f1).slice(0, 160)}`);
+      if (f1.storeStamp === f0.storeStamp || !String(f1.storeStamp).includes('|t:')) throw new Error('empreinte du magasin inchangée : ses écrans ne se resynchroniseraient pas');
+      if (frStore && /\[nl\]|Retouche régie/.test(texts(await filmOf(frStore.id)))) throw new Error('un magasin francophone reçoit le néerlandais');
+      return `${v.validated} validée(s) · empreinte ${f0.storeStamp || '∅'} → ${f1.storeStamp}`;
+    });
+    await step('Traductions — texte français modifié : à retraduire, l’écran garde la sienne jusqu’à la republication', async () => {
+      if (!modKey) throw new Error('étape précédente en échec');
+      const id = modKey.split(':')[1];
+      const name0 = st0.modules.find((m) => m.id === id).name;
+      const renamed = st0.modules.map((m) => (m.id === id ? { ...m, name: `${m.name} bis` } : m));
+      await call('PUT', '/api/v1/draft', { modules: renamed, playlists: st0.playlists, activePlaylistId: st0.activePlaylistId, secPerLine: st0.secPerLine, loop: st0.loop });
+      try {
+        const it = (await call('GET', '/api/v1/translations?lang=nl')).items.find((x) => x.key === modKey);
+        if (!it || !it.missing || !it.stale || !it.previous || it.previous.text !== 'Retouche régie') throw new Error(`texte modifié non signalé : ${JSON.stringify(it)}`);
+        // Une nouvelle proposition ne retire pas la traduction du film publié.
+        await waitJob(await call('POST', '/api/v1/translations/propose', { lang: 'nl' }), 'nl');
+        if (!texts(await filmOf(nlStore.id)).includes('Retouche régie')) throw new Error('la traduction du film publié est tombée avant la republication');
+        // Republier le nouveau texte, non validé : le français passe.
+        await call('POST', '/api/v1/publish', { mode: 'full', targets: [] });
+        const f = texts(await filmOf(nlStore.id));
+        if (!f.includes(`${name0} bis`) || f.includes('Retouche régie')) throw new Error('le nouveau texte non validé devrait passer en français');
+        // Validé : le néerlandais revient.
+        await call('POST', '/api/v1/translations/validate', { lang: 'nl', keys: [modKey] });
+        if (!texts(await filmOf(nlStore.id)).includes(`${name0} bis [nl]`)) throw new Error('nouvelle traduction validée absente de l’écran');
+        return `« ${name0} » → « ${name0} bis » : à retraduire · film publié inchangé · republié en français · validé → néerlandais`;
+      } finally {
+        await call('PUT', '/api/v1/draft', { modules: st0.modules, playlists: st0.playlists, activePlaylistId: st0.activePlaylistId, secPerLine: st0.secPerLine, loop: st0.loop });
+        await call('POST', '/api/v1/publish', { mode: 'full', targets: [] }).catch(() => {});
+      }
+    });
+    await step('Traductions — saisie en régie, nom ERP prioritaire, accès réservé à la régie', async () => {
+      const t = await call('GET', '/api/v1/translations?lang=nl');
+      const prod = t.items.find((x) => x.kind === 'product');
+      if (!prod) throw new Error('aucun produit dans la liste');
+      const put = await call('PUT', '/api/v1/translations', { lang: 'nl', key: prod.key, text: 'Handmatig' });
+      const p1 = put.items.find((x) => x.key === prod.key);
+      if (!p1.translation || p1.translation.text !== 'Handmatig' || p1.translation.status !== 'valide' || p1.translation.origin !== 'regie') throw new Error('saisie en régie non validée d’office');
+      // Nom donné par l'ERP dans la langue : il prime, rien à traduire.
+      const cat = await call('GET', '/api/v1/catalog');
+      const pid = prod.refId;
+      const withAlias = { ...cat, products: cat.products.map((p) => (p.id === pid ? { ...p, aliases: { ...(p.aliases || {}), nl: 'Naam uit ERP' } } : p)) };
+      await call('PUT', '/api/v1/catalog', withAlias);
+      try {
+        const p2 = (await call('GET', '/api/v1/translations?lang=nl')).items.find((x) => x.key === prod.key);
+        if (!p2 || !p2.fromErp || p2.erpText !== 'Naam uit ERP' || p2.missing) throw new Error(`nom ERP non reconnu : ${JSON.stringify(p2)}`);
+      } finally { await call('PUT', '/api/v1/catalog', cat); }
+      if ((await fetch(BASE + '/api/v1/translations', { method: 'PUT', headers: { authorization: `Bearer ${authToken}`, 'content-type': 'application/json' }, body: JSON.stringify({ lang: 'nl', key: 'product:inconnu:name', text: 'x' }) })).status !== 404) throw new Error('texte inconnu : 404 attendu');
+      // Un compte magasin n'atteint pas les traductions.
+      const acc = await call('POST', `/api/v1/stores/${nlStore.id}/account`, { username: 'livetest-traductions' });
+      try {
+        const login = await (await fetch(BASE + '/api/v1/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: acc.username, password: acc.password }) })).json();
+        const r = await fetch(BASE + '/api/v1/translations?lang=nl', { headers: { authorization: `Bearer ${login.token}` } });
+        if (r.status !== 403) throw new Error(`compte magasin : HTTP ${r.status} au lieu de 403`);
+      } finally { await call('DELETE', `/api/v1/stores/${nlStore.id}/account`).catch(() => {}); }
+      return 'saisie validée d’office · nom ERP prioritaire · texte inconnu 404 · compte magasin 403';
+    });
+    await step('Traductions — clé API refusée : erreur dite, rien d’écrit', async () => {
+      aiMock.revoke(true);
+      try {
+        const t = await waitJob(await call('POST', '/api/v1/translations/propose', { lang: 'de' }), 'de');
+        if (!t.job.errors.length || !/ANTHROPIC_API_KEY/.test(t.job.errors[0])) throw new Error(`message peu clair : ${JSON.stringify(t.job.errors)}`);
+        if (t.counts.proposed !== 0) throw new Error('des propositions ont été écrites malgré le refus');
+        return t.job.errors[0];
+      } finally {
+        aiMock.revoke(false);
+        await call('POST', `/api/v1/stores/${nlStore.id}`, { lang: langBefore }).catch(() => {});
+      }
+    });
+  }
+
   const ok = results.filter((r) => r.ok).length;
   const ko = results.length - ok;
   console.log(`\n${ko === 0 ? '\x1b[32m' : '\x1b[31m'}${ok}/${results.length} tests OK${ko ? ` · ${ko} en échec` : ''}\x1b[0m\n`);
   if (child) child.kill();
   if (tfbMock) tfbMock.close();
+  if (aiMock) aiMock.close();
   process.exit(ko === 0 ? 0 : 1);
 }
 

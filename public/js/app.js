@@ -535,6 +535,161 @@ class App extends Component {
     this.setView('composer');
     this.addElement(t, { bundleRef: bundleId });
   }
+  // ---- Traductions des écrans (néerlandais des magasins flamands…) --------
+  // Claude propose, la régie valide : seule une traduction validée passe à
+  // l'écran (le serveur l'applique aux magasins de cette langue).
+  openTranslations() { this.setView('translations'); this.loadTranslations(); }
+  async loadTranslations(lang) {
+    const l = lang || (this.state.tr && this.state.tr.lang) || 'nl';
+    try { this.applyTr(await api('GET', `/translations?lang=${encodeURIComponent(l)}`)); }
+    catch (e) { this.showToast(`Erreur : ${e.message}`); }
+  }
+  applyTr(r, { keepEdits = true } = {}) {
+    const prev = this.state.tr;
+    const sameLang = prev && prev.lang === r.lang;
+    this.setState({ tr: r, trEdits: keepEdits && sameLang ? (this.state.trEdits || {}) : {} });
+    // Fin d'une proposition suivie depuis cet écran.
+    if (sameLang && prev.job && prev.job.running && r.job && !r.job.running) {
+      this.showToast(r.job.errors.length && !r.job.proposed ? `Claude : ${r.job.errors[0]}` : this.t('tr.done', { n: r.job.proposed }));
+    }
+    clearTimeout(this._trPoll);
+    if (r.job && r.job.running && this.state.view === 'translations') this._trPoll = setTimeout(() => this.loadTranslations(r.lang), 1500);
+  }
+  async proposeTranslations() {
+    const tr = this.state.tr;
+    if (!tr || this.state.trBusy) return;
+    this.setState({ trBusy: true });
+    try {
+      const r = await api('POST', '/translations/propose', { lang: tr.lang });
+      this.setState({ trBusy: false });
+      this.applyTr(r);
+      this.showToast(this.t('tr.started', { n: (r.job && r.job.total) || 0 }));
+    } catch (e) { this.setState({ trBusy: false }); this.showToast(`Erreur : ${e.message}`); }
+  }
+  // Valider des propositions (toutes si keys est absent), retouches comprises.
+  async validateTr(keys) {
+    const tr = this.state.tr;
+    if (!tr || this.state.trBusy) return;
+    const edits = { ...(this.state.trEdits || {}) };
+    const sent = {};
+    for (const s of tr.items) {
+      if (s.translation && s.translation.status === 'propose' && (!keys || keys.includes(s.key)) && Object.prototype.hasOwnProperty.call(edits, s.key)) {
+        sent[s.key] = edits[s.key];
+        delete edits[s.key];
+      }
+    }
+    this.setState({ trBusy: true });
+    try {
+      const r = await api('POST', '/translations/validate', { lang: tr.lang, ...(keys ? { keys } : {}), edits: sent });
+      this.setState({ trBusy: false, trEdits: edits });
+      this.applyTr(r);
+      this.showToast(this.t('tr.validated', { n: r.validated || 0 }));
+    } catch (e) { this.setState({ trBusy: false }); this.showToast(`Erreur : ${e.message}`); }
+  }
+  async rejectTr(key) {
+    const tr = this.state.tr;
+    if (!tr) return;
+    try {
+      const r = await api('POST', '/translations/reject', { lang: tr.lang, keys: [key] });
+      const edits = { ...(this.state.trEdits || {}) };
+      delete edits[key];
+      this.setState({ trEdits: edits });
+      this.applyTr(r);
+      this.showToast(this.t('tr.rejected'));
+    } catch (e) { this.showToast(`Erreur : ${e.message}`); }
+  }
+  // Saisie directe (texte à traduire, ou traduction validée corrigée) : validée d'office.
+  async saveTrText(key, text) {
+    const tr = this.state.tr;
+    if (!tr) return;
+    const cur = tr.items.find((s) => s.key === key);
+    if (!cur || String(text).trim() === ((cur.translation && cur.translation.text) || '')) return;
+    try {
+      const r = await api('PUT', '/translations', { lang: tr.lang, key, text });
+      const edits = { ...(this.state.trEdits || {}) };
+      delete edits[key];
+      this.setState({ trEdits: edits });
+      this.applyTr(r);
+      this.showToast(this.t(String(text).trim() ? 'tr.saved' : 'tr.cleared'));
+    } catch (e) { this.showToast(`Erreur : ${e.message}`); }
+  }
+  trVals() {
+    const st = this.state;
+    const tr = st.tr || { lang: 'nl', items: [], counts: {}, claude: {}, job: null, stores: [], langs: [] };
+    const edits = st.trEdits || {};
+    const has = (k) => Object.prototype.hasOwnProperty.call(edits, k);
+    const stateOf = (s) => (s.fromErp ? 'erp' : !s.translation ? 'missing' : s.translation.status === 'valide' ? 'validated' : 'proposed');
+    const filter = st.trFilter || 'todo';
+    const q = (st.trSearch || '').trim().toLowerCase();
+    const shown = (s) => {
+      const k = stateOf(s);
+      if (filter === 'todo' && k !== 'missing' && k !== 'proposed') return false;
+      if (filter !== 'todo' && filter !== 'all' && k !== filter) return false;
+      return !q || `${s.source} ${(s.translation && s.translation.text) || ''} ${s.erpText || ''} ${s.where} ${s.context}`.toLowerCase().includes(q);
+    };
+    // Nom de la langue dans la langue de l'interface (« néerlandais », « Dutch »…).
+    const langName = (id) => {
+      try { return new Intl.DisplayNames([st.uiLang || 'fr'], { type: 'language' }).of(id) || id; }
+      catch { return ((tr.langs || []).find((l) => l.id === id) || {}).label || id; }
+    };
+    const langLabel = langName(tr.lang);
+    const row = (s) => {
+      const k = stateOf(s);
+      const origin = s.translation ? s.translation.origin : '';
+      return {
+        key: s.key, source: s.source, label: s.kindLabel, where: s.where || s.context || '', state: k,
+        // Le français a changé : l'ancienne traduction, pour repartir d'elle.
+        before: s.previous ? this.t('tr.before', { src: s.previous.source, tr: s.previous.text }) : '',
+        value: has(s.key) ? edits[s.key] : (k === 'erp' ? s.erpText : ((s.translation && s.translation.text) || '')),
+        edited: has(s.key),
+        badge: k === 'erp' ? this.t('tr.sErp') : k === 'missing' ? (s.stale ? this.t('tr.sStale') : this.t('tr.sMissing'))
+          : k === 'proposed' ? this.t('tr.sProposed') : (origin === 'regie' ? this.t('tr.sManual') : this.t('tr.sValidated')),
+        onInput: (e) => this.setState({ trEdits: { ...(this.state.trEdits || {}), [s.key]: e.target.value } }),
+        // Texte à traduire ou traduction validée : enregistrée en quittant le champ.
+        // Une proposition retouchée attend « Valider ».
+        onChange: k === 'missing' || k === 'validated' ? (e) => this.saveTrText(s.key, e.target.value) : null,
+        validate: () => this.validateTr([s.key]),
+        reject: () => this.rejectTr(s.key),
+      };
+    };
+    const GROUPS = [['category', 'tr.gCategories'], ['product', 'tr.gProducts'], ['module', 'tr.gElements'], ['item', 'tr.gItems'],
+      ['campaign', 'tr.gCampaigns'], ['promo_type', 'tr.gPromos'], ['bundle', 'tr.gBundles']];
+    const visible = (tr.items || []).filter(shown);
+    const c = tr.counts || {};
+    const job = tr.job;
+    const secs = job && job.endedAt ? Math.max(1, Math.round((Date.parse(job.endedAt) - Date.parse(job.startedAt)) / 1000)) : 0;
+    const fmt = (n) => Number(n || 0).toLocaleString('fr-BE');
+    return {
+      trLang: tr.lang, trLangLabel: langLabel,
+      trLangs: (tr.langs || []).map((l) => ({ id: l.id, label: langName(l.id) })),
+      onTrLang: (e) => { this.setState({ trEdits: {} }); this.loadTranslations(e.target.value); },
+      trGroups: GROUPS.map(([kind, label]) => {
+        const rows = visible.filter((s) => s.kind === kind).map(row);
+        return { kind, label: this.t(label), n: rows.length, rows };
+      }).filter((g) => g.rows.length),
+      trFilters: [['todo', 'tr.fTodo', (c.missing || 0) + (c.proposed || 0)], ['proposed', 'tr.fProposed', c.proposed], ['validated', 'tr.fValidated', c.validated],
+        ['erp', 'tr.fErp', c.erp], ['all', 'tr.fAll', c.total]].map(([id, label, n]) => ({
+        id, label: this.t(label, { n: n || 0 }), active: filter === id, pick: () => this.setState({ trFilter: id }),
+      })),
+      trSearch: st.trSearch || '',
+      onTrSearch: (e) => this.setState({ trSearch: e.target.value }),
+      trMissing: c.missing || 0, trProposed: c.proposed || 0,
+      trConfigured: !!(tr.claude && tr.claude.configured),
+      trModel: (tr.claude && tr.claude.model) || '',
+      trRunning: !!(job && job.running),
+      trBusy: !!st.trBusy,
+      trProgress: job && job.running ? this.t('tr.proposing', { d: job.done, n: job.total }) : '',
+      trJobText: job && !job.running ? this.t('tr.jobDone', { n: job.proposed, s: secs, i: fmt(job.usage && job.usage.input_tokens), o: fmt(job.usage && job.usage.output_tokens) }) : '',
+      trJobErrors: job && job.errors && job.errors.length ? this.t('tr.jobErrors', { n: job.errors.length, err: job.errors[0] }) : '',
+      trStoresText: (tr.stores || []).length ? this.t('tr.stores', { lang: langLabel, list: tr.stores.map((x) => x.name).join(', ') }) : this.t('tr.noStores', { lang: langLabel }),
+      trHasStores: (tr.stores || []).length > 0,
+      trPlaceholder: this.t('tr.placeholder', { lang: langLabel }),
+      trEmpty: filter === 'todo' && !q ? this.t('tr.emptyTodo') : this.t('tr.empty'),
+      trLoaded: !!st.tr,
+      proposeTr: () => this.proposeTranslations(),
+      validateAllTr: () => this.validateTr(null),
+    };
+  }
   // Campagne résolue pour l'aperçu, depuis la liste sig_campaigns.
   campaignInfo(m) {
     if (!m || m.type !== 'campagne') return undefined;
@@ -3076,6 +3231,11 @@ class App extends Component {
         arr.push(crumb(T('nav.composer'), () => this.setView('composer'), false));
         arr.push(crumb(T('nav.campaigns'), null, false));
         arr.push(crumb(T('crumb.campaigns', { n: (st.campaignDraft || st.campaigns || []).length }) + unsaved(st.campaignDirty), null, true));
+      } else if (st.view === 'translations') {
+        const c = (st.tr && st.tr.counts) || {};
+        arr.push(crumb(T('nav.composer'), () => this.setView('composer'), false));
+        arr.push(crumb(T('nav.translations'), null, false));
+        arr.push(crumb(T('crumb.translations', { n: c.total || 0, p: c.proposed || 0 }), null, true));
       } else if (st.view === 'planning') {
         arr.push(crumb(T('nav.composer'), () => this.setView('composer'), false));
         arr.push(crumb(T('planning.weekCrumb'), null, false));
@@ -3430,6 +3590,10 @@ class App extends Component {
       tabPromotionsStyle: stTab + (st.view === 'promotions' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       isCampaignsView: st.view === 'campaigns',
       setViewCampaigns: () => this.openCampaigns(),
+      isTranslationsView: st.view === 'translations',
+      setViewTranslations: () => this.openTranslations(),
+      tabTranslationsStyle: stTab + (st.view === 'translations' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
+      ...(st.view === 'translations' ? this.trVals() : {}),
       tabCampaignsStyle: stTab + (st.view === 'campaigns' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
       setViewHome: () => this.openHome(),
       tabHomeStyle: stTab + (st.view === 'home' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
@@ -4197,6 +4361,7 @@ class App extends Component {
         <button onClick=${v.setViewCampaigns} style=${v.tabCampaignsStyle}>${v.t('nav.campaigns')}</button>
         <button onClick=${v.setViewSeasons} style=${v.tabSeasonsStyle}>${v.t('nav.seasons')}</button>
         <button onClick=${v.setViewPlanning} style=${v.tabPlanningStyle}>${v.t('nav.planning')}</button>
+        <button onClick=${v.setViewTranslations} style=${v.tabTranslationsStyle} data-nav-translations>${v.t('nav.translations')}</button>
         <button onClick=${v.setViewFleet} style=${v.tabFleetStyle}>${v.t('nav.fleet')}</button>
       </div>
     </div>
@@ -4989,6 +5154,71 @@ class App extends Component {
           ${!v.campaignRows.length && html`<p style="margin:0;font-size:12.5px;color:#8A847C;padding:8px 0;">Aucune campagne. « + Ajouter une campagne » pour en créer une (ou importe-les depuis l'ERP plus tard).</p>`}
         </div>
         <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Portée <strong>produit</strong> = la campagne affiche la photo et le prix du produit lié. Portée <strong>gamme thématique</strong> = un thème libre (ex. « Viennoiseries »). Supprimer une campagne ne casse pas les éléments qui la diffusaient : ils affichent un repère neutre jusqu'à réassignation.</p>
+      </div>
+    </div>
+  </div>
+  `}
+
+  ${v.isTranslationsView && html`
+  <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;" data-translations>
+    <div style="margin:0;display:flex;flex-direction:column;gap:16px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+        <div style="min-width:0;flex:1 1 420px;">
+          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">${v.t('tr.title')}</h2>
+          <p style="margin:0;font-size:12.5px;color:#8A847C;max-width:840px;line-height:1.5;">${v.t('tr.subtitle')}</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#8A847C;">${v.t('tr.lang')}
+            <select value=${v.trLang} onChange=${v.onTrLang} style="padding:8px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;">
+              ${v.trLangs.map((l) => html`<option value=${l.id}>${l.label}</option>`)}
+            </select>
+          </label>
+          <button onClick=${v.proposeTr} disabled=${!v.trConfigured || v.trRunning || v.trBusy || !v.trMissing} data-tr-propose style="padding:9px 15px;font-size:12.5px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;cursor:${!v.trConfigured || v.trRunning || v.trBusy || !v.trMissing ? 'not-allowed' : 'pointer'};opacity:${!v.trConfigured || !v.trMissing ? 0.55 : 1};">${v.trRunning ? v.trProgress : v.t('tr.propose', { n: v.trMissing })}</button>
+          <button onClick=${v.validateAllTr} disabled=${!v.trProposed || v.trBusy} data-tr-validate-all style="padding:9px 18px;font-size:13px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.trProposed && !v.trBusy ? 'pointer' : 'not-allowed'};background:${v.trProposed ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.trProposed ? '#fff' : '#8A847C'};">${v.t('tr.validateAll', { n: v.trProposed })}</button>
+        </div>
+      </div>
+
+      <div style="padding:10px 13px;border-radius:12px;font-size:12px;line-height:1.6;background:${v.trConfigured ? 'rgba(46,110,78,0.08)' : 'rgba(201,123,74,0.12)'};color:${v.trConfigured ? '#2E6E4E' : '#8A5A2B'};" data-tr-status=${v.trConfigured ? 'ok' : 'off'}>
+        <div>${v.trConfigured ? v.t('tr.claudeReady', { model: v.trModel }) : v.t('tr.claudeOff')}</div>
+        ${v.trRunning && html`<div>⏳ ${v.trProgress}</div>`}
+        ${v.trJobText && html`<div style="color:#4A4640;">${v.trJobText}</div>`}
+        ${v.trJobErrors && html`<div style="color:#8D1D2C;">⚠ ${v.trJobErrors}</div>`}
+        <div style="color:${v.trHasStores ? '#4A4640' : '#8A5A2B'};">🏬 ${v.trStoresText}</div>
+      </div>
+
+      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 20px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          ${v.trFilters.map((f) => html`<button onClick=${f.pick} data-tr-filter=${f.id} style="padding:6px 13px;font-size:12px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${f.active ? '#232220' : 'rgba(35,34,32,0.12)'};background:${f.active ? '#232220' : '#fff'};color:${f.active ? '#fff' : '#4A4640'};">${f.label}</button>`)}
+          <input value=${v.trSearch} onInput=${v.onTrSearch} placeholder=${v.t('tr.search')} style="margin-left:auto;flex:0 1 260px;min-width:160px;padding:8px 11px;font-size:12.5px;border:1px solid rgba(35,34,32,0.12);border-radius:999px;background:#FBF8F2;" />
+        </div>
+        ${!v.trLoaded && html`<p style="margin:0;font-size:12.5px;color:#8A847C;">${v.t('app.loading')}</p>`}
+        ${v.trLoaded && !v.trGroups.length && html`<p style="margin:0;padding:10px 0;font-size:12.5px;color:#8A847C;">${v.trEmpty}</p>`}
+        ${v.trGroups.map((g) => html`
+          <div style="margin-top:6px;" data-tr-group=${g.kind}>
+            <h3 style="margin:10px 0 8px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${g.label} · ${g.n}</h3>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              ${g.rows.map((r) => html`
+                <div data-tr-row=${r.key} data-tr-state=${r.state} style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) auto;gap:10px;align-items:center;padding:8px 10px;border-radius:10px;border:1px solid ${r.state === 'proposed' ? 'rgba(141,29,44,0.22)' : 'rgba(35,34,32,0.08)'};background:${r.state === 'proposed' ? 'rgba(141,29,44,0.03)' : (r.state === 'validated' || r.state === 'erp' ? '#fff' : '#FBF8F2')};">
+                  <div style="min-width:0;">
+                    <div style="font-size:13px;color:#232220;font-weight:600;overflow-wrap:anywhere;">${r.source}</div>
+                    <div style="font-size:11px;color:#8A847C;overflow-wrap:anywhere;">${r.label}${r.where ? ` · ${r.where}` : ''}</div>
+                    ${r.before && html`<div style="font-size:11px;color:#8A5A2B;margin-top:2px;overflow-wrap:anywhere;">↺ ${r.before}</div>`}
+                  </div>
+                  <div style="min-width:0;">
+                    <input value=${r.value} onInput=${r.onInput} onChange=${r.onChange} disabled=${r.state === 'erp'} placeholder=${v.trPlaceholder} style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:13px;border:1px solid ${r.edited ? '#C97B4A' : 'rgba(35,34,32,0.14)'};border-radius:8px;background:${r.state === 'erp' ? 'rgba(35,34,32,0.04)' : '#fff'};color:#232220;" />
+                    <div style="font-size:10.5px;margin-top:3px;color:${r.state === 'validated' || r.state === 'erp' ? '#2E6E4E' : (r.state === 'proposed' ? '#8D1D2C' : '#8A5A2B')};">${r.state === 'validated' || r.state === 'erp' ? '✓ ' : ''}${r.badge}</div>
+                  </div>
+                  <div style="display:flex;gap:6px;justify-content:flex-end;min-width:64px;">
+                    ${r.state === 'proposed' && html`
+                      <button onClick=${r.validate} title=${v.t('tr.validate')} data-tr-validate style="width:30px;height:30px;border-radius:8px;border:1px solid rgba(46,110,78,0.35);background:rgba(46,110,78,0.10);color:#2E6E4E;cursor:pointer;font-size:13px;">✓</button>
+                      <button onClick=${r.reject} title=${v.t('tr.reject')} style="width:30px;height:30px;border-radius:8px;border:1px solid rgba(35,34,32,0.12);background:#fff;color:#8D1D2C;cursor:pointer;font-size:13px;">✕</button>`}
+                  </div>
+                </div>
+              `)}
+            </div>
+          </div>
+        `)}
+        <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;line-height:1.5;">${v.t('tr.footer')}</p>
       </div>
     </div>
   </div>
