@@ -159,8 +159,31 @@ reverse proxy expose l'application.
 
 ## Fonctionnement
 
+### Habillage du module Marketing (« Marketing en magasin »)
+La régie est le **Marketing en magasin** du module Marketing (`/marketing`, menu Campagnes) :
+elle en reprend les jetons de couleur, la coquille et le système de boutons
+(`public/css/regie.css`, source : dépôt `marketing`, `src/styles/global.css`).
+
+- **Seule** (`/signage/`, ouverte depuis le rail du cockpit) : barre latérale de 246 px — logo,
+  « Marketing en magasin », retour au module (`../marketing/`), bouton **Diffuser** (assistant),
+  puis les groupes *Diffusion* (Accueil, Compositeur, Planning, Réseau & supervision),
+  *Contenus* (Produits, Périodes, Traductions), *Campagnes* (Promotions, Campagnes) et
+  *Réglages* (Paramètres, Mise en route, Rapport de diffusion).
+- **Dans le cadre du module** (`/marketing` → Marketing en magasin) : le menu du module est
+  déjà à gauche, la régie n'en ajoute pas ; ses écrans passent en **onglets soulignés** sous
+  sa barre supérieure. Détecté tout seul (page dans un cadre) ou forcé par `?embed=1`, comme
+  les écrans du module Social. L'espace magasin fait de même dans la version franchisé.
+- **Barre supérieure** : surtitre, titre de l'écran, fil (film › élément au compositeur, état
+  de l'écran ailleurs) ; annuler / rétablir, enregistrement, prix, mode urgence, *Voir le
+  film*, **Publier** (l'action principale) et la langue de l'interface.
+- Cartes blanches à filet, rayon 12 px ; boutons à 8 px (bordeaux plein réservé à l'action
+  principale, blanc à filet sinon) ; titres de section en capitales grises ; graisses 400/500 ;
+  pas d'ombre sur les surfaces. L'aperçu du compositeur prend la largeur de sa colonne.
+- Les **écrans des magasins** (`player`, `film`, `renderer.js`) gardent leur charte : cet
+  habillage ne concerne que les pages de travail (régie, espace magasin, agence, rapport).
+
 ### Langue de l'interface (FR / NL / EN / IT)
-Un **sélecteur de langue** en en-tête (et sur l'écran de connexion) bascule toute la régie
+Un **sélecteur de langue** dans la barre supérieure (et sur l'écran de connexion) bascule toute la régie
 entre **français, néerlandais, anglais et italien**. Le choix est **mémorisé par navigateur**
 (`localStorage: sig_ui_lang`) — c'est une préférence d'affichage de l'outil, indépendante des
 données. Les libellés vivent dans `public/js/i18n.js` (dictionnaire `{ clé: { fr, nl, en, it } }`,

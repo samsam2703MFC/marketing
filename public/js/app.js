@@ -21,6 +21,65 @@ const readUiLang = () => {
   try { const v = localStorage.getItem('sig_ui_lang'); if (v && UI_LANG_IDS.includes(v)) return v; } catch { /* pas de localStorage */ }
   return 'fr';
 };
+// Coquille du module Marketing : la régie y est le « Marketing en magasin ».
+// Affichée dans le cadre du module (/marketing → Marketing en magasin), elle
+// n'a pas de menu latéral à elle — celui du module est déjà à gauche — et ses
+// écrans passent en onglets sous la barre supérieure. `?embed=1` force ce
+// mode, comme pour les écrans du module Social.
+const EMBEDDED = (() => {
+  try { return new URLSearchParams(location.search).get('embed') === '1' || window.self !== window.top; } catch { return true; }
+})();
+// Icônes linéaires 24 px, même famille que le menu du module Marketing.
+const ICON = {
+  back: 'M19 12H5M12 19l-7-7 7-7',
+  play: 'M6 4l14 8-14 8z',
+  home: 'M3 10.5L12 3l9 7.5V21h-6v-6H9v6H3z',
+  composer: 'M4 3h16v18H4zM8 3v18M16 3v18M4 8h4M4 13h4M4 18h4M16 8h4M16 13h4M16 18h4',
+  calendar: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
+  screens: 'M3 4h18v12H3zM8 20h8M12 16v4',
+  products: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8zM7.5 7.5h.01',
+  seasons: 'M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10z',
+  translations: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c2.5 2.5 3.5 5.5 3.5 9s-1 6.5-3.5 9M12 3C9.5 5.5 8.5 8.5 8.5 12s1 6.5 3.5 9',
+  promotions: 'M19 5L5 19M7 7a1.5 1.5 0 1 0 .01 0M17 17a1.5 1.5 0 1 0 .01 0',
+  campaigns: 'M3 11l14-7v16L3 13zM7 14v5',
+  settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
+  onboarding: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM10 8.5v7l5.5-3.5z',
+  report: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h5',
+  undo: 'M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-1',
+  redo: 'M15 14l5-5-5-5M20 9H9a5 5 0 0 0 0 10h1',
+  check: 'M20 6L9 17l-5-5',
+  euro: 'M17 6.5A7 7 0 1 0 17 17.5M4 10h10M4 14h10',
+  bolt: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
+  send: 'M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z',
+  external: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3',
+};
+const icon = (d, size = 16) => html`<svg width=${size} height=${size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d=${d} /></svg>`;
+// Écrans de la régie, regroupés comme le menu du module Marketing.
+// `view` : un écran ; `act` : une action (mise en route, rapport).
+const SHELL_GROUPS = [
+  { label: 'shell.grpBroadcast', items: [
+    { view: 'home', label: 'nav.home', icon: ICON.home },
+    { view: 'composer', label: 'nav.composer', icon: ICON.composer },
+    { view: 'planning', label: 'nav.planning', icon: ICON.calendar },
+    { view: 'fleet', label: 'nav.fleet', icon: ICON.screens },
+  ] },
+  { label: 'shell.grpContent', items: [
+    { view: 'products', label: 'nav.products', icon: ICON.products },
+    { view: 'seasons', label: 'nav.seasons', icon: ICON.seasons },
+    { view: 'translations', label: 'nav.translations', icon: ICON.translations },
+  ] },
+  { label: 'shell.grpCampaigns', items: [
+    { view: 'promotions', label: 'nav.promotions', icon: ICON.promotions },
+    { view: 'campaigns', label: 'nav.campaigns', icon: ICON.campaigns },
+  ] },
+  { label: 'shell.grpSettings', items: [
+    { view: 'settings', label: 'settings.title', icon: ICON.settings },
+    { act: 'onboarding', label: 'shell.onboarding', icon: ICON.onboarding },
+    { act: 'report', label: 'shell.report', icon: ICON.report },
+  ] },
+];
+const SHELL_VIEWS = SHELL_GROUPS.flatMap((g) => g.items.filter((it) => it.view));
+
 // Une valeur d'illustration est affichable telle quelle si c'est une URL, une
 // donnée inline, un chemin absolu, ou un fichier à extension image. Sinon (id
 // numérique, nom brut…), on n'affiche pas la balise <img> (on montre la valeur).
@@ -32,6 +91,9 @@ const imgRenderable = (v) => {
 
 const PREVIEW_W = 560;
 const SCALE = PREVIEW_W / W;
+// Colonnes du compositeur (bibliothèque · éditeur · aperçu), à côté du menu
+// latéral du module : l'aperçu y prend la largeur de sa colonne, 560 px au plus.
+const COMPOSER_COLS = { lib: 280, editorMin: 320, previewMin: 420, previewFr: 1.1 };
 const DAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 const SLOTS = [
   { label: 'Matin', from: '06:00', to: '11:00' },
@@ -67,10 +129,10 @@ const PHOTO_TIP = 'Qualité top : photo carrée d’au moins 2000 × 2000 px, id
 const MOMENT_TAG_TIP = 'Périodes de la journée où cette fiche peut passer sur les écrans. Clique pour cycler : visible → exclue → vide. Aucune case = elle passe à tous les moments. Enregistré tout de suite.';
 const momentTagCells = (cells) => html`
   <span style="display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap;">
-    <span style="font-size:10.5px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#8A847C;">Périodes</span>
+    <span style="font-size:10.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Périodes</span>
     ${infoTip(MOMENT_TAG_TIP)}
     ${cells.map((c) => html`
-      <button key=${c.moment} onClick=${c.toggle} title=${c.state === 'incl' ? 'Visible à ce moment' : (c.state === 'excl' ? 'Exclue à ce moment' : 'Aucune règle')} style="padding:4px 10px;font-size:11.5px;font-weight:600;border-radius:999px;cursor:pointer;${c.state === 'incl' ? 'border:1px solid #2E6E4E;background:rgba(46,110,78,0.12);color:#2E6E4E;' : (c.state === 'excl' ? 'border:1px solid #8D1D2C;background:rgba(141,29,44,0.10);color:#8D1D2C;text-decoration:line-through;' : 'border:1px solid rgba(35,34,32,0.16);background:#fff;color:#8A847C;')}">${c.label}</button>
+      <button key=${c.moment} onClick=${c.toggle} title=${c.state === 'incl' ? 'Visible à ce moment' : (c.state === 'excl' ? 'Exclue à ce moment' : 'Aucune règle')} style="padding:4px 10px;font-size:11.5px;font-weight:500;border-radius:8px;cursor:pointer;${c.state === 'incl' ? 'border:1px solid var(--green);background:rgba(63,122,82,0.12);color:var(--green);' : (c.state === 'excl' ? 'border:1px solid var(--accent);background:rgba(141,29,44,0.10);color:var(--accent);text-decoration:line-through;' : 'border:1px solid var(--line);background:#fff;color:var(--muted);')}">${c.label}</button>
     `)}
   </span>`;
 
@@ -167,6 +229,7 @@ class App extends Component {
 
   // ---------------------------------------------------------------- lifecycle
   async componentDidMount() {
+    window.addEventListener('resize', this._onResize);
     this._last = performance.now();
     this._raf = requestAnimationFrame(this.tick);
     this._hb = setInterval(() => {
@@ -212,6 +275,7 @@ class App extends Component {
   }
 
   componentWillUnmount() {
+    window.removeEventListener('resize', this._onResize);
     cancelAnimationFrame(this._raf);
     clearInterval(this._hb);
     clearInterval(this._poll);
@@ -358,6 +422,23 @@ class App extends Component {
     this.setState({ authRequired: true, loginPass: '' });
   };
 
+  // L'aperçu suit la largeur de sa colonne : on re-rend au redimensionnement.
+  _onResize = () => {
+    if (this._resizeRaf) return;
+    this._resizeRaf = requestAnimationFrame(() => { this._resizeRaf = 0; this.forceUpdate(); });
+  };
+
+  // Largeur de l'aperçu : 560 px dans l'onglet Playlist (pleine largeur) ;
+  // dans l'onglet Bibliothèque, celle de la troisième colonne, moins ses
+  // marges (section 2 × 26 px, cadre sombre 2 × 20 px).
+  previewWidth() {
+    if (this.state.composerTab !== 'lib') return PREVIEW_W;
+    const content = window.innerWidth - (EMBEDDED ? 0 : 246);
+    const free = content - COMPOSER_COLS.lib;
+    const col = Math.max(COMPOSER_COLS.previewMin, free * COMPOSER_COLS.previewFr / (1 + COMPOSER_COLS.previewFr));
+    return Math.max(300, Math.min(PREVIEW_W, Math.floor(col - 92)));
+  }
+
   // ------------------------------------------------------------ drag position
   startDrag(kind, e) {
     e.preventDefault(); e.stopPropagation();
@@ -368,7 +449,8 @@ class App extends Component {
   }
   _onDragMove = (e) => {
     const d = this._drag2; if (!d) return;
-    const dx = (e.clientX - d.x) / SCALE, dy = (e.clientY - d.y) / SCALE;
+    const sc = this._scale || SCALE;
+    const dx = (e.clientX - d.x) / sc, dy = (e.clientY - d.y) / sc;
     const obj = d.kind === 'illo'
       ? { illoX: Math.round(d.pos.illoX + dx), illoY: Math.round(d.pos.illoY + dy) }
       : { listX: Math.round(d.pos.listX + dx), listY: Math.round(d.pos.listY + dy) };
@@ -2309,6 +2391,16 @@ class App extends Component {
   };
 
   setView(v) { this.setState({ view: v }); if (v === 'fleet') this.refreshFleet(); }
+  // Ouvre un écran du menu avec son chargement (produits, périodes, campagnes…).
+  goView(v) {
+    if (v === 'home') this.openHome();
+    else if (v === 'products') this.openProducts();
+    else if (v === 'promotions') this.openPromotions();
+    else if (v === 'campaigns') this.openCampaigns();
+    else if (v === 'seasons') this.openSeasons();
+    else if (v === 'translations') this.openTranslations();
+    else this.setView(v);
+  }
   // Traduction d'une clé pour la langue d'interface courante (+ interpolation).
   t(key, vars) { return tr(this.state.uiLang, key, vars); }
   // Change la langue de l'interface et la mémorise pour ce navigateur.
@@ -2743,8 +2835,11 @@ class App extends Component {
     const inner = m
       ? renderModule(h, this.resolveMod(m), lt, opts)
       : h('div', { style: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FUI, fontSize: 120, color: '#B8B2A8' } }, 'Playlist vide');
-    const stage = h('div', { style: { position: 'absolute', left: 0, top: 0, width: W, height: H, background: '#F5EFE4', transform: `scale(${SCALE})`, transformOrigin: 'top left' } }, inner);
-    return h('div', { style: { position: 'relative', width: PREVIEW_W, height: Math.round(H * SCALE), margin: '0 auto' } }, stage);
+    const pw = this.previewWidth();
+    const scale = pw / W;
+    this._scale = scale;
+    const stage = h('div', { style: { position: 'absolute', left: 0, top: 0, width: W, height: H, background: '#F5EFE4', transform: `scale(${scale})`, transformOrigin: 'top left' } }, inner);
+    return h('div', { style: { position: 'relative', width: pw, height: Math.round(H * scale), margin: '0 auto' } }, stage);
   }
 
   // -------------------------------------------------------------------- vals
@@ -2761,8 +2856,8 @@ class App extends Component {
     const selType = this.elementTypeOf(m);
     const total = this.total();
     const { m: playM, lt } = this.activeInScope();
-    const iconBtn = 'display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:7px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.14);cursor:pointer;font-size:14px;color:#232220;';
-    const miniBtn = 'display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.10);cursor:pointer;font-size:12px;color:#232220;';
+    const iconBtn = 'display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:var(--paper);border:1px solid var(--line);cursor:pointer;font-size:14px;color:var(--ink);';
+    const miniBtn = 'display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;background:rgba(255,255,255,0.7);border:1px solid var(--line);cursor:pointer;font-size:12px;color:var(--ink);';
     const tagChipOf = (mm) => (mm.tag && mm.tag.enabled
       ? h('span', { style: { flex: '0 0 auto', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#fff', background: RUBY, borderRadius: 999, padding: '2px 7px' } }, 'Promo')
       : null);
@@ -2779,9 +2874,9 @@ class App extends Component {
       return {
         id, name: mm.name, order: i + 1, tagChip: tagChipOf(mm),
         meta: `${isLi ? 'Liaison' : this.activeItems(mm).length + ' produits'} · ${this.schedSummary(mm.schedule)}`,
-        cardStyle: `display:flex;align-items:center;gap:9px;padding:10px 10px;border-radius:11px;cursor:pointer;background:${selc ? '#fff' : 'rgba(255,255,255,0.55)'};border:1px solid ${selc ? '#8D1D2C' : 'rgba(35,34,32,0.08)'};`,
-        badgeStyle: `display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:7px;flex:0 0 auto;font-size:12px;font-weight:600;${isLi ? 'background:rgba(35,34,32,0.10);color:#8A847C;' : 'background:rgba(141,29,44,0.12);color:#8D1D2C;'}`,
-        miniBtnDel: miniBtn + 'color:#8D1D2C;',
+        cardStyle: `display:flex;align-items:flex-start;gap:9px;padding:10px 10px;border-radius:10px;cursor:pointer;background:#fff;border:1px solid ${selc ? 'var(--accent)' : 'var(--line)'};${selc ? 'box-shadow:inset 0 0 0 1px var(--accent);' : ''}`,
+        badgeStyle: `display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:8px;flex:0 0 auto;font-size:12px;font-weight:500;${isLi ? 'background:rgba(35,34,32,0.10);color:var(--muted);' : 'background:rgba(141,29,44,0.12);color:var(--accent);'}`,
+        miniBtnDel: miniBtn + 'color:var(--accent);',
         select: () => this.selectMod(id),
         remove: (e) => { e.stopPropagation(); this.removeFromPlaylist(i); },
         onDragStart: (e) => { this._dragIdx = i; e.dataTransfer.effectAllowed = 'move'; e.currentTarget.classList.add('dragging'); },
@@ -2801,10 +2896,10 @@ class App extends Component {
         name: mm.name, tagChip: tagChipOf(mm), catChip: catChipOf(mm),
         typeIcon: (this.elementTypeOf(mm) || {}).icon || (isLi ? '⧉' : '▤'),
         libMeta: `${this.modMeta(mm)}${cnt ? ' · dans playlist ×' + cnt : ' · ⚠ hors playlist (＋ pour diffuser)'}`,
-        cardStyle: `display:flex;align-items:center;gap:9px;padding:10px 10px;border-radius:11px;cursor:pointer;background:${selc ? '#fff' : 'rgba(255,255,255,0.4)'};border:1px solid ${selc ? '#8D1D2C' : 'rgba(35,34,32,0.08)'};`,
-        badgeStyle: `display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:7px;flex:0 0 auto;font-size:12px;${isLi ? 'background:rgba(35,34,32,0.10);color:#8A847C;' : 'background:rgba(141,29,44,0.12);color:#8D1D2C;'}`,
-        addBtn: miniBtn + 'background:#8D1D2C;color:#fff;border:none;font-weight:700;',
-        miniBtn, miniBtnDel: miniBtn + 'color:#8D1D2C;',
+        cardStyle: `display:flex;align-items:flex-start;gap:9px;padding:10px 10px;border-radius:10px;cursor:pointer;background:#fff;border:1px solid ${selc ? 'var(--accent)' : 'var(--line)'};${selc ? 'box-shadow:inset 0 0 0 1px var(--accent);' : ''}`,
+        badgeStyle: `display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:8px;flex:0 0 auto;font-size:12px;${isLi ? 'background:rgba(35,34,32,0.10);color:var(--muted);' : 'background:rgba(141,29,44,0.12);color:var(--accent);'}`,
+        addBtn: miniBtn + 'background:var(--accent);color:#fff;border:none;font-weight:500;',
+        miniBtn, miniBtnDel: miniBtn + 'color:var(--accent);',
         select: () => this.selectMod(mm.id),
         addToPlaylist: (e) => { e.stopPropagation(); this.addToPlaylist(mm.id); },
         copy: (e) => { e.stopPropagation(); this.copyMod(mm.id); },
@@ -2818,7 +2913,7 @@ class App extends Component {
     const layoutOptions = layoutList.map((o) => ({
       icon: o.icon, label: o.label,
       pick: () => this.setSelField('layout', o.id),
-      style: `text-align:left;padding:13px 13px;border-radius:12px;cursor:pointer;background:${m.layout === o.id ? 'rgba(141,29,44,0.08)' : '#FBF8F2'};border:1px solid ${m.layout === o.id ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};color:#232220;`,
+      style: `text-align:left;padding:13px 13px;border-radius:12px;cursor:pointer;background:${m.layout === o.id ? 'rgba(141,29,44,0.08)' : '#FBF8F2'};border:1px solid ${m.layout === o.id ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};color:var(--ink);`,
     }));
     const MSHORT = { m1: 'Doux', m2: 'Ample', m3: 'Pulsé', none: 'Aucun' };
     const mGroups = [
@@ -2833,7 +2928,7 @@ class App extends Component {
         options: MOTIONS.map((o) => ({
           label: MSHORT[o.id],
           pick: () => this.setSelField(g.key, o.id),
-          style: `text-align:center;padding:9px 6px;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;background:${isCat && cur === o.id ? 'rgba(141,29,44,0.08)' : '#FBF8F2'};border:1px solid ${isCat && cur === o.id ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};color:#232220;`,
+          style: `text-align:center;padding:9px 6px;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;background:${isCat && cur === o.id ? 'rgba(141,29,44,0.08)' : '#FBF8F2'};border:1px solid ${isCat && cur === o.id ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};color:var(--ink);`,
         })),
       };
     });
@@ -2842,14 +2937,14 @@ class App extends Component {
       name: t.name, price: t.price, img: t.img, active: t.active,
       isIllus: t.src !== 'photo', isPhoto: t.src === 'photo',
       photoLabel: t.src === 'photo' ? 'Photo importée · changer' : 'Importer une photo',
-      thumb: h('img', { src: t.img, alt: '', style: { width: 46, height: 46, objectFit: 'contain', flex: '0 0 auto', background: '#FBF8F2', borderRadius: 8, padding: 3, boxSizing: 'border-box', border: t.src === 'photo' ? '1px solid rgba(35,34,32,0.14)' : 'none' } }),
-      wrapStyle: `display:flex;flex-direction:column;gap:9px;padding:11px 12px;border-radius:12px;border:1px solid rgba(35,34,32,0.08);background:${t.active ? '#FBF8F2' : 'rgba(35,34,32,0.035)'};opacity:${t.active ? 1 : 0.6};`,
+      thumb: h('img', { src: t.img, alt: '', style: { width: 46, height: 46, objectFit: 'contain', flex: '0 0 auto', background: '#FBF8F2', borderRadius: 8, padding: 3, boxSizing: 'border-box', border: t.src === 'photo' ? '1px solid var(--line)' : 'none' } }),
+      wrapStyle: `display:flex;flex-direction:column;gap:9px;padding:11px 12px;border-radius:12px;border:1px solid var(--line);background:${t.active ? '#FBF8F2' : 'rgba(35,34,32,0.035)'};opacity:${t.active ? 1 : 0.6};`,
       iconBtn,
-      delBtn: iconBtn + 'color:#8D1D2C;',
-      eyeStyle: iconBtn + (t.active ? '' : 'background:rgba(141,29,44,0.10);color:#8D1D2C;'),
+      delBtn: iconBtn + 'color:var(--accent);',
+      eyeStyle: iconBtn + (t.active ? '' : 'background:rgba(141,29,44,0.10);color:var(--accent);'),
       eyeIcon: t.active ? '👁' : '⃠',
-      illusTabStyle: `padding:6px 11px;font-size:12px;font-weight:500;border:none;border-radius:6px;cursor:pointer;${t.src !== 'photo' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'}`,
-      photoTabStyle: `padding:6px 11px;font-size:12px;font-weight:500;border:none;border-radius:6px;cursor:pointer;${t.src === 'photo' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'}`,
+      illusTabStyle: `padding:6px 11px;font-size:12px;font-weight:500;border:none;border-radius:6px;cursor:pointer;${t.src !== 'photo' ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'}`,
+      photoTabStyle: `padding:6px 11px;font-size:12px;font-weight:500;border:none;border-radius:6px;cursor:pointer;${t.src === 'photo' ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'}`,
       onName: (e) => this.updItem(i, 'name', e.target.value),
       onPrice: (e) => this.updItem(i, 'price', e.target.value),
       onImg: (e) => this.updItem(i, 'img', e.target.value),
@@ -2877,13 +2972,13 @@ class App extends Component {
       return {
         label: s.label,
         pick: () => this.setSchedBoth(s.from, s.to),
-        style: `padding:9px 14px;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;${on ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#8A847C;border:1px solid rgba(35,34,32,0.14);'}`,
+        style: `padding:9px 14px;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;${on ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:var(--paper);color:var(--muted);border:1px solid var(--line);'}`,
       };
     });
     const days = DAYS.map((lab, d) => ({
       label: lab,
       toggle: () => this.toggleDay(d),
-      style: `width:52px;padding:9px 0;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;${m.schedule.days[d] ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#8A847C;border:1px solid rgba(35,34,32,0.14);'}`,
+      style: `width:52px;padding:9px 0;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;${m.schedule.days[d] ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:var(--paper);color:var(--muted);border:1px solid var(--line);'}`,
     }));
 
     // ---- ligne du temps (onglet Playlist) ----
@@ -2902,7 +2997,7 @@ class App extends Component {
         durLabel: skip ? '⚠ vide — sauté' : `${(Math.round(dur * 10) / 10).toString().replace('.', ',')} s`,
         typeIcon: (this.elementTypeOf(mm) || {}).icon || (isLi ? '⧉' : '▤'),
         width: skip ? 104 : Math.max(104, Math.round(dur * 14)),
-        blockStyle: `flex:0 0 auto;display:flex;flex-direction:column;justify-content:space-between;gap:4px;padding:9px 11px;border-radius:10px;cursor:grab;opacity:${skip ? 0.55 : 1};background:${playingHere ? '#8D1D2C' : '#fff'};color:${playingHere ? '#fff' : '#232220'};border:1px ${skip ? 'dashed rgba(141,29,44,0.5)' : `solid ${playingHere ? '#8D1D2C' : 'rgba(35,34,32,0.12)'}`};box-shadow:0 2px 6px rgba(0,0,0,0.05);`,
+        blockStyle: `flex:0 0 auto;display:flex;flex-direction:column;justify-content:space-between;gap:4px;padding:9px 11px;border-radius:10px;cursor:grab;opacity:${skip ? 0.55 : 1};background:${playingHere ? '#8D1D2C' : '#fff'};color:${playingHere ? '#fff' : '#232220'};border:1px ${skip ? 'dashed rgba(141,29,44,0.5)' : `solid ${playingHere ? '#8D1D2C' : 'rgba(35,34,32,0.12)'}`};`,
         jump: () => this.setState({ scope: 'playlist', t: startT, playing: true }),
         remove: (e) => { e.stopPropagation(); this.removeFromPlaylist(i); },
         onDragStart: (e) => { e.dataTransfer.setData('text/plain', 'idx:' + i); e.dataTransfer.effectAllowed = 'move'; e.currentTarget.classList.add('dragging'); },
@@ -2949,7 +3044,7 @@ class App extends Component {
       })),
     ].map((c) => ({
       ...c,
-      style: `display:inline-flex;align-items:center;gap:7px;padding:8px 14px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;transition:all 0.15s;${c.active ? `background:${c.color};color:#fff;border:1px solid ${c.color};` : `background:#fff;color:${c.color};border:1px solid ${c.color}55;`}`,
+      style: `display:inline-flex;align-items:center;gap:7px;padding:8px 14px;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;transition:all 0.15s;${c.active ? `background:${c.color};color:#fff;border:1px solid ${c.color};` : `background:#fff;color:${c.color};border:1px solid ${c.color}55;`}`,
       dotStyle: `width:8px;height:8px;border-radius:50%;background:${c.active ? '#fff' : c.color};`,
     }));
     // Filtre de format : ne proposer au montage que les items compatibles avec
@@ -2963,7 +3058,7 @@ class App extends Component {
       count: st.library.filter((mm) => this.fitsOrient(mm, o.id)).length,
       active: st.libOrient === o.id,
       pick: () => this.setState({ libOrient: o.id }),
-      style: `display:inline-flex;align-items:center;gap:6px;padding:7px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;${st.libOrient === o.id ? 'background:#232220;color:#fff;border:1px solid #232220;' : 'background:#fff;color:#5B564E;border:1px solid rgba(35,34,32,0.18);'}`,
+      style: `display:inline-flex;align-items:center;gap:6px;padding:7px 13px;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;${st.libOrient === o.id ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:#fff;color:var(--muted-2);border:1px solid var(--line);'}`,
     }));
     const libCards = st.library.filter((mm) => (st.libFilter === 'all' || this.libCatOf(mm).id === st.libFilter) && this.fitsOrient(mm, st.libOrient)).map((mm) => ({
       name: mm.name,
@@ -2982,13 +3077,13 @@ class App extends Component {
     const pubDaysVals = DAYS.map((lab, d) => ({
       label: lab,
       toggle: () => this.togglePubDay(d),
-      style: `width:52px;padding:9px 0;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;${st.pubDays[d] ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#8A847C;border:1px solid rgba(35,34,32,0.14);'}`,
+      style: `width:52px;padding:9px 0;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;${st.pubDays[d] ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:var(--paper);color:var(--muted);border:1px solid var(--line);'}`,
     }));
 
     // ---- programmation & magasins du film (onglet Playlist) ----
     const filmActive = this.activeFilm();
-    const chipDay = (on) => `width:48px;padding:8px 0;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;${on ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#8A847C;border:1px solid rgba(35,34,32,0.14);'}`;
-    const chipWide = (on) => `padding:8px 13px;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;${on ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#8A847C;border:1px solid rgba(35,34,32,0.14);'}`;
+    const chipDay = (on) => `width:48px;padding:8px 0;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;${on ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:var(--paper);color:var(--muted);border:1px solid var(--line);'}`;
+    const chipWide = (on) => `padding:8px 13px;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;${on ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:var(--paper);color:var(--muted);border:1px solid var(--line);'}`;
     const filmDaysVals = DAYS.map((lab, d) => ({
       label: lab,
       toggle: () => this.toggleFilmDay(d),
@@ -3017,7 +3112,7 @@ class App extends Component {
       return {
         label: c.label,
         pick: () => this.setFilmCat(c.id),
-        style: `display:inline-flex;align-items:center;gap:7px;padding:7px 13px;font-size:12px;font-weight:600;border-radius:999px;cursor:pointer;${on ? `background:${c.color};color:#fff;border:1px solid ${c.color};` : `background:#fff;color:${c.color};border:1px solid ${c.color}55;`}`,
+        style: `display:inline-flex;align-items:center;gap:7px;padding:7px 13px;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;${on ? `background:${c.color};color:#fff;border:1px solid ${c.color};` : `background:#fff;color:${c.color};border:1px solid ${c.color}55;`}`,
         dotStyle: `width:7px;height:7px;border-radius:50%;background:${on ? '#fff' : c.color};`,
       };
     });
@@ -3037,7 +3132,7 @@ class App extends Component {
     }
 
     // ---- vue réseau ----
-    const stTab = 'padding:8px 16px;font-size:13px;font-weight:500;border:none;border-radius:999px;cursor:pointer;';
+    const stTab = 'padding:8px 16px;font-size:13px;font-weight:500;border:none;border-radius:8px;cursor:pointer;';
     const fmtAgo = (s) => (s >= 999999 ? 'jamais vu' : s < 60 ? `il y a ${s}s` : s < 3600 ? `il y a ${Math.floor(s / 60)} min` : `il y a ${Math.floor(s / 3600)} h`);
     const STCOL = { playing: '#2E7D32', syncing: '#B8860B', error: '#8D1D2C', offline: '#8A847C', idle: '#8A847C' };
     const STLAB = { playing: 'En lecture', syncing: 'Sync…', error: 'Erreur', offline: 'Hors ligne', idle: 'En pause' };
@@ -3117,15 +3212,15 @@ class App extends Component {
           name: p.name, hw: p.hw, orient: p.orient,
           playerUrl: `player.html?id=${encodeURIComponent(p.id)}&token=${encodeURIComponent(p.token)}`,
           kioskLabel: p.kiosk ? 'KIOSK' : '⚠ non verrouillé',
-          kioskStyle: `flex:0 0 auto;font-size:9px;font-weight:700;letter-spacing:0.06em;border-radius:999px;padding:2px 7px;${p.kiosk ? 'background:rgba(46,125,50,0.14);color:#2E7D32;' : 'background:rgba(141,29,44,0.12);color:#8D1D2C;'}`,
+          kioskStyle: `flex:0 0 auto;font-size:9px;font-weight:500;letter-spacing:0.06em;border-radius:999px;padding:2px 7px;${p.kiosk ? 'background:rgba(63,122,82,0.14);color:var(--green);' : 'background:rgba(141,29,44,0.12);color:var(--accent);'}`,
           statusDotStyle: `width:12px;height:12px;border-radius:50%;flex:0 0 auto;background:${ov ? '#8D1D2C' : STCOL[p.state]};box-shadow:0 0 0 4px ${ov ? '#8D1D2C' : STCOL[p.state]}22;`,
-          statusPillStyle: `display:inline-flex;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:600;color:${ov ? '#fff' : STCOL[p.state]};background:${ov ? '#8D1D2C' : STCOL[p.state] + '18'};`,
+          statusPillStyle: `display:inline-flex;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:500;color:${ov ? '#fff' : STCOL[p.state]};background:${ov ? '#8D1D2C' : STCOL[p.state] + '18'};`,
           statusLabel: ov ? '⚡ Override' : STLAB[p.state],
           playedVer: p.playedVer,
-          verStyle: `font-weight:600;color:${late ? '#B8860B' : '#232220'};`,
+          verStyle: `font-weight:500;color:${late ? '#B8860B' : '#232220'};`,
           verNote: late ? `assignée v${p.assignedVer} · en retard` : 'à jour',
           dataVer: p.dataVer,
-          dataStyle: `font-weight:600;color:${dstale ? '#8D1D2C' : '#232220'};`,
+          dataStyle: `font-weight:500;color:${dstale ? '#8D1D2C' : '#232220'};`,
           dataAge: p.state === 'offline' ? `${ageShort(p.dataAge)} (cache)` : `il y a ${ageShort(p.dataAge)}`,
           dataAgeColor: dstale ? '#8D1D2C' : '#8A847C',
           cachePct: `${p.cache}%`,
@@ -3171,7 +3266,7 @@ class App extends Component {
       return {
         id: l.id, label: l.label, nStores, on,
         pick: () => this.setState({ catLang: l.id }),
-        style: `display:inline-flex;align-items:center;gap:7px;padding:7px 14px;font-size:12px;font-weight:700;text-transform:uppercase;border-radius:999px;cursor:pointer;${on ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#fff;color:#8D1D2C;border:1px solid rgba(141,29,44,0.3);'}`,
+        style: `display:inline-flex;align-items:center;gap:7px;padding:7px 14px;font-size:12px;font-weight:500;text-transform:uppercase;border-radius:8px;cursor:pointer;${on ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:#fff;color:var(--accent);border:1px solid rgba(141,29,44,0.3);'}`,
       };
     });
     // On ne liste que les catégories AVEC au moins un produit actif — plus la
@@ -3185,7 +3280,7 @@ class App extends Component {
         id: c.id, count, usedBy, active: c.active !== false, on,
         name: isBaseLang ? c.name : ((c.aliases || {})[editLang] || ''),
         namePlaceholder: isBaseLang ? 'Nom de la catégorie' : `${c.name} (${editLang})`,
-        cardStyle: `display:flex;align-items:center;gap:9px;padding:11px 12px;border-radius:11px;cursor:pointer;background:${on ? '#fff' : 'rgba(255,255,255,0.5)'};border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.08)'};opacity:${c.active !== false ? 1 : 0.55};`,
+        cardStyle: `display:flex;align-items:center;gap:9px;padding:11px 12px;border-radius:10px;cursor:pointer;background:${on ? '#fff' : 'rgba(255,255,255,0.5)'};border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.08)'};opacity:${c.active !== false ? 1 : 0.55};`,
         pick: () => this.setState({ catSel: c.id }),
         onName: (e) => this.setCat((d) => {
           const x = d.categories.find((y) => y.id === c.id);
@@ -3328,7 +3423,7 @@ class App extends Component {
         label: s.store, sub: `${s.group} · ${s.players.length} écran(s)`,
         toggle: () => this.toggleTarget(s.id),
         style: `display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-radius:12px;cursor:pointer;text-align:left;background:${on ? 'rgba(141,29,44,0.06)' : '#FBF8F2'};border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};`,
-        checkStyle: `display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:7px;flex:0 0 auto;font-size:13px;${on ? 'background:#8D1D2C;color:#fff;' : 'background:#fff;border:1px solid rgba(35,34,32,0.20);color:transparent;'}`,
+        checkStyle: `display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:8px;flex:0 0 auto;font-size:13px;${on ? 'background:var(--accent);color:#fff;' : 'background:#fff;border:1px solid rgba(35,34,32,0.20);color:transparent;'}`,
         check: on ? '✓' : '',
       };
     });
@@ -3336,7 +3431,7 @@ class App extends Component {
     const pubSlots = PSLOTS.map((l) => ({
       label: l,
       pick: () => this.setState({ pubSlot: l }),
-      style: `padding:9px 14px;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;${st.pubSlot === l ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#8A847C;border:1px solid rgba(35,34,32,0.14);'}`,
+      style: `padding:9px 14px;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;${st.pubSlot === l ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:var(--paper);color:var(--muted);border:1px solid var(--line);'}`,
     }));
     const pubF = st.playlists.find((p) => p.id === (st.pubFilm || st.activePl)) || this.activeFilm();
     const tgtCount = st.pubMode === 'data'
@@ -3353,13 +3448,15 @@ class App extends Component {
     const crumbs = (() => {
       const arr = [];
       const crumb = (label, go, cur) => ({
-        label,
+        label, cur: !!cur, link: !!go,
         go: go || (() => {}),
-        sepStyle: `font-size:13px;color:#C9C3B8;margin:0 4px;${arr.length === 0 ? 'display:none;' : ''}`,
-        style: `background:none;border:none;padding:2px 4px;font-size:12.5px;cursor:${go ? 'pointer' : 'default'};${cur ? 'color:#232220;font-weight:600;' : 'color:#8A847C;'}`,
+        sepStyle: `font-size:13px;color:var(--faint);margin:0 4px;${arr.length === 0 ? 'display:none;' : ''}`,
+        style: `background:none;border:none;padding:2px 4px;font-size:12.5px;cursor:${go ? 'pointer' : 'default'};${cur ? 'color:var(--ink);font-weight:500;' : 'color:var(--muted);'}`,
       });
       const T = (k, vars) => this.t(k, vars);
       const unsaved = (dirty) => (dirty ? ' · ' + T('common.unsaved') : '');
+      // L'accueil n'a pas de fil : le titre suffit.
+      if (st.view === 'home') return arr;
       if (st.view === 'fleet') {
         arr.push(crumb(T('nav.composer'), () => this.setView('composer'), false));
         arr.push(crumb(T('nav.fleet'), () => this.setView('fleet'), false));
@@ -3475,7 +3572,7 @@ class App extends Component {
       })),
     };
 
-    const subTab = 'padding:8px 18px;font-size:13px;font-weight:600;border:none;border-radius:999px;cursor:pointer;';
+    const subTab = 'padding:8px 18px;font-size:13px;font-weight:500;border:none;border-radius:8px;cursor:pointer;';
     const hdrRound = 'width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;cursor:pointer;flex:0 0 auto;';
     return {
       // Traduction de l'interface + sélecteur de langue (FR / EN / IT).
@@ -3729,10 +3826,27 @@ class App extends Component {
       isTimelineTab: st.composerTab === 'timeline',
       setTabLib: () => this.setComposerTab('lib'),
       setTabTimeline: () => this.setComposerTab('timeline'),
-      tabLibStyle: subTab + (st.composerTab !== 'timeline' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
-      tabTimelineStyle: subTab + (st.composerTab === 'timeline' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
+      tabLibStyle: subTab + (st.composerTab !== 'timeline' ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'),
+      tabTimelineStyle: subTab + (st.composerTab === 'timeline' ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'),
       resetPos: () => this.resetPos(),
       undo: () => this.undo(), redo: () => this.redo(),
+      canUndo: st.past.length > 0, canRedo: st.future.length > 0,
+      dirty: !!st.dirty, override: !!st.override,
+      // Coquille : menu latéral (hors cadre), onglets (dans le cadre du module
+      // Marketing), titre de la barre supérieure.
+      shellGroups: SHELL_GROUPS.map((g) => ({
+        label: this.t(g.label),
+        items: g.items.map((it) => ({
+          key: it.view || it.act, view: it.view, icon: it.icon, label: this.t(it.label),
+          active: !!it.view && st.view === it.view,
+          go: it.view ? () => this.goView(it.view) : (it.act === 'onboarding' ? () => this.openOnboarding() : () => this.openReport()),
+        })),
+      })),
+      shellTabs: SHELL_VIEWS.map((it) => ({ key: it.view, view: it.view, label: this.t(it.label), active: st.view === it.view, go: () => this.goView(it.view) })),
+      shellTitle: this.t((SHELL_VIEWS.find((it) => it.view === st.view) || { label: 'nav.composer' }).label),
+      // Fil sous le titre, sans le répéter : compositeur → film › élément ;
+      // ailleurs → l'état de l'écran (compte, « non enregistré »).
+      trail: st.view === 'composer' ? crumbs.slice(1) : crumbs.slice(-1).filter((c) => crumbs.length > 1),
       undoStyle: `display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;font-size:15px;background:transparent;border:1px solid ${st.past.length ? 'rgba(35,34,32,0.16)' : 'rgba(35,34,32,0.06)'};color:${st.past.length ? '#5B564E' : '#C9C3B8'};cursor:${st.past.length ? 'pointer' : 'not-allowed'};`,
       redoStyle: `display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;font-size:15px;background:transparent;border:1px solid ${st.future.length ? 'rgba(35,34,32,0.16)' : 'rgba(35,34,32,0.06)'};color:${st.future.length ? '#5B564E' : '#C9C3B8'};cursor:${st.future.length ? 'pointer' : 'not-allowed'};`,
       isComposerView: st.view === 'composer', isFleetView: st.view === 'fleet', isSettingsView: st.view === 'settings',
@@ -3740,33 +3854,33 @@ class App extends Component {
       isSeasonsView: st.view === 'seasons', isHomeView: st.view === 'home',
       isPromotionsView: st.view === 'promotions',
       setViewPromotions: () => this.openPromotions(),
-      tabPromotionsStyle: stTab + (st.view === 'promotions' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
+      tabPromotionsStyle: stTab + (st.view === 'promotions' ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'),
       isCampaignsView: st.view === 'campaigns',
       setViewCampaigns: () => this.openCampaigns(),
       isTranslationsView: st.view === 'translations',
       setViewTranslations: () => this.openTranslations(),
-      tabTranslationsStyle: stTab + (st.view === 'translations' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
+      tabTranslationsStyle: stTab + (st.view === 'translations' ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'),
       ...(st.view === 'translations' ? this.trVals() : {}),
-      tabCampaignsStyle: stTab + (st.view === 'campaigns' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
+      tabCampaignsStyle: stTab + (st.view === 'campaigns' ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'),
       setViewHome: () => this.openHome(),
-      tabHomeStyle: stTab + (st.view === 'home' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
+      tabHomeStyle: stTab + (st.view === 'home' ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'),
       setViewComposer: () => this.setView('composer'),
       setViewFleet: () => this.setView('fleet'),
       setViewSettings: () => this.setView('settings'),
       setViewProducts: () => this.openProducts(),
       setViewPlanning: () => this.setView('planning'),
       setViewSeasons: () => this.openSeasons(),
-      tabProductsStyle: stTab + (st.view === 'products' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
-      tabPlanningStyle: stTab + (st.view === 'planning' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
-      tabSeasonsStyle: stTab + (st.view === 'seasons' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
-      tabComposerStyle: stTab + (st.view === 'composer' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
-      tabFleetStyle: stTab + (st.view === 'fleet' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'),
-      settingsIconStyle: `display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:50%;font-size:17px;cursor:pointer;flex:0 0 auto;${st.view === 'settings' ? 'background:#8D1D2C;color:#fff;border:none;' : 'background:#EFE9E0;color:#232220;border:1px solid rgba(35,34,32,0.10);'}`,
+      tabProductsStyle: stTab + (st.view === 'products' ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'),
+      tabPlanningStyle: stTab + (st.view === 'planning' ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'),
+      tabSeasonsStyle: stTab + (st.view === 'seasons' ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'),
+      tabComposerStyle: stTab + (st.view === 'composer' ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'),
+      tabFleetStyle: stTab + (st.view === 'fleet' ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'),
+      settingsIconStyle: `display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:50%;font-size:17px;cursor:pointer;flex:0 0 auto;${st.view === 'settings' ? 'background:var(--accent);color:#fff;border:none;' : 'background:var(--chip);color:var(--ink);border:1px solid var(--line);'}`,
       playlistVersion: st.version,
       pushPrices: this.pushPrices,
       toggleOverride: this.toggleOverride,
       overrideLabel: st.override ? this.t('override.resume') : this.t('override.flash'),
-      overrideStyle: `padding:9px 18px;font-size:13px;font-weight:600;letter-spacing:0.01em;border-radius:999px;cursor:pointer;${st.override ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;box-shadow:0 2px 8px rgba(141,29,44,0.3);' : 'background:transparent;color:#5B564E;border:1px solid rgba(35,34,32,0.18);'}`,
+      overrideStyle: `padding:9px 18px;font-size:13px;font-weight:500;letter-spacing:0.01em;border-radius:8px;cursor:pointer;${st.override ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:transparent;color:var(--muted-2);border:1px solid var(--line);'}`,
       kpis, fleet,
       hasAlerts: offline > 0 || errors > 0 || stale > 0 || st.override,
       alertText: `${st.override ? '⚡ Diffusion flash active — playlists normales suspendues. ' : ''}${offline > 0 ? offline + ' écran(s) hors ligne — lecture + prix poursuivis depuis le cache local. ' : ''}${stale > 0 ? stale + ' snapshot(s) prix périmé(s) (>1 h) à resynchroniser. ' : ''}${errors > 0 ? errors + ' écran(s) en erreur (stockage/temp) à intervenir.' : ''}`,
@@ -3782,8 +3896,8 @@ class App extends Component {
       whenScheduled: st.pubWhen === 'scheduled',
       setWhenNow: () => this.setState({ pubWhen: 'now' }),
       setWhenScheduled: () => this.setState({ pubWhen: 'scheduled' }),
-      whenNowStyle: `padding:7px 15px;font-size:12.5px;font-weight:500;border:none;border-radius:6px;cursor:pointer;${st.pubWhen === 'now' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'}`,
-      whenSchedStyle: `padding:7px 15px;font-size:12.5px;font-weight:500;border:none;border-radius:6px;cursor:pointer;${st.pubWhen === 'scheduled' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'}`,
+      whenNowStyle: `padding:7px 15px;font-size:12.5px;font-weight:500;border:none;border-radius:6px;cursor:pointer;${st.pubWhen === 'now' ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'}`,
+      whenSchedStyle: `padding:7px 15px;font-size:12.5px;font-weight:500;border:none;border-radius:6px;cursor:pointer;${st.pubWhen === 'scheduled' ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'}`,
       activateAt: st.activateAt,
       onActivateAt: (e) => this.setState({ activateAt: e.target.value }),
       publishSummary: st.pubMode === 'data'
@@ -3791,7 +3905,7 @@ class App extends Component {
         : `Film « ${pubF.name} » v${nextV} → ${pubStoresLabel} (${tgtCount} écran(s)) · diffusion ${this.schedSummary(pubF.schedule)} · activation ${whenLabel}. La programmation et les magasins se règlent sur le film (onglet 2 · Playlist). Bascule atomique + tests live au déploiement.`,
       deploy: this.deploy,
       deployLabel: st.deploying ? 'Déploiement + tests live…' : (tgtCount ? (st.pubMode === 'data' ? `Pousser les prix sur ${tgtCount} écran(s)` : `Déployer sur ${tgtCount} écran(s)`) : 'Choisir une cible'),
-      deployStyle: `padding:11px 22px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:${tgtCount && !st.deploying ? 'pointer' : 'not-allowed'};${tgtCount ? 'background:#8D1D2C;color:#fff;' : 'background:rgba(35,34,32,0.10);color:#8A847C;'}opacity:${st.deploying ? 0.7 : 1};`,
+      deployStyle: `padding:9px 18px;font-size:13px;font-weight:500;border-radius:8px;border:none;cursor:${tgtCount && !st.deploying ? 'pointer' : 'not-allowed'};${tgtCount ? 'background:var(--accent);color:#fff;' : 'background:rgba(35,34,32,0.10);color:var(--muted);'}opacity:${st.deploying ? 0.7 : 1};`,
       hasToast: !!st.toast, toast: st.toast,
       playlistEmpty: st.playlist.length === 0,
       isCategory: isCat, isLiaison: isLia, isProduit, isFilmEl, isAnim, isMedia, isPromo, isCampaign, isBundle, isHtml,
@@ -3916,7 +4030,7 @@ class App extends Component {
       hasDur: isProduit || isFilmEl || isAnim || isMedia || isPromo || isCampaign || isHtml,
       selName: m.name,
       selTypeLabel: selType ? selType.label : (isLia ? 'Liaison' : 'Catégorie'),
-      selTypeBadge: `display:inline-flex;align-items:center;padding:4px 11px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;${isLia ? 'background:rgba(35,34,32,0.10);color:#8A847C;' : 'background:rgba(141,29,44,0.12);color:#8D1D2C;'}`,
+      selTypeBadge: `display:inline-flex;align-items:center;padding:4px 11px;border-radius:999px;font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;${isLia ? 'background:rgba(35,34,32,0.10);color:var(--muted);' : 'background:rgba(141,29,44,0.12);color:var(--accent);'}`,
       liaisonSub: m.sub || '',
       onSelName: (e) => this.setSelField('name', e.target.value),
       onLiaisonSub: (e) => this.setSelField('sub', e.target.value),
@@ -4026,14 +4140,14 @@ class App extends Component {
       motionSimple: MOTIONS.map((o) => ({
         label: o.label,
         pick: () => this.setSelField('motion', o.id),
-        style: `text-align:left;padding:10px 13px;font-size:12.5px;font-weight:500;border-radius:9px;cursor:pointer;background:${(m.motion || 'm1') === o.id ? 'rgba(141,29,44,0.08)' : '#FBF8F2'};border:1px solid ${(m.motion || 'm1') === o.id ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};color:#232220;`,
+        style: `text-align:left;padding:10px 13px;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;background:${(m.motion || 'm1') === o.id ? 'rgba(141,29,44,0.08)' : '#FBF8F2'};border:1px solid ${(m.motion || 'm1') === o.id ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};color:var(--ink);`,
       })),
       libTagPicker: this.libCatList().filter((t) => t.active !== false || this.libCatOf(m).id === t.id).map((t) => {
         const on = this.libCatOf(m).id === t.id;
         return {
           label: t.name,
           pick: () => this.setSelField('libTag', t.id),
-          style: `display:inline-flex;align-items:center;gap:7px;padding:7px 13px;font-size:12px;font-weight:600;border-radius:999px;cursor:pointer;${on ? `background:${t.color};color:#fff;border:1px solid ${t.color};` : `background:#fff;color:${t.color};border:1px solid ${t.color}55;`}`,
+          style: `display:inline-flex;align-items:center;gap:7px;padding:7px 13px;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;${on ? `background:${t.color};color:#fff;border:1px solid ${t.color};` : `background:#fff;color:${t.color};border:1px solid ${t.color}55;`}`,
           dotStyle: `width:7px;height:7px;border-radius:50%;background:${on ? '#fff' : t.color};`,
         };
       }),
@@ -4046,14 +4160,14 @@ class App extends Component {
       })),
       addItem: () => this.addItem(),
       paste: () => this.paste(),
-      pasteStyle: `flex:1 1 auto;padding:10px;font-size:12.5px;font-weight:500;border-radius:10px;cursor:${st.clipboard ? 'pointer' : 'not-allowed'};${st.clipboard ? 'color:#232220;background:#EFE9E0;border:1px solid rgba(35,34,32,0.14);' : 'color:#B8B2A8;background:rgba(35,34,32,0.04);border:1px solid rgba(35,34,32,0.08);'}`,
+      pasteStyle: `flex:1 1 auto;padding:10px;font-size:12.5px;font-weight:500;border-radius:10px;cursor:${st.clipboard ? 'pointer' : 'not-allowed'};${st.clipboard ? 'color:var(--ink);background:var(--chip);border:1px solid var(--line);' : 'color:var(--faint);background:rgba(35,34,32,0.04);border:1px solid var(--line);'}`,
       tagEnabled: !!(m.tag && m.tag.enabled),
       tagLabel: m.tag ? m.tag.label : '',
       tagImg: m.tag ? m.tag.img : '',
       toggleTag: () => this.setTag('enabled', !(m.tag && m.tag.enabled)),
       onTagLabel: (e) => this.setTag('label', e.target.value),
       onTagImg: (e) => this.setTag('img', e.target.value),
-      tagTrackStyle: `position:relative;width:50px;height:28px;border-radius:999px;border:none;cursor:pointer;flex:0 0 auto;background:${m.tag && m.tag.enabled ? '#8D1D2C' : 'rgba(35,34,32,0.18)'};`,
+      tagTrackStyle: `position:relative;width:50px;height:28px;border-radius:8px;border:none;cursor:pointer;flex:0 0 auto;background:${m.tag && m.tag.enabled ? '#8D1D2C' : 'rgba(35,34,32,0.18)'};`,
       tagKnobStyle: `position:absolute;top:3px;left:${m.tag && m.tag.enabled ? '25px' : '3px'};width:22px;height:22px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 3px rgba(0,0,0,0.25);`,
       scheduleSummary: this.schedSummary(m.schedule),
       fromTime: m.schedule.from, toTime: m.schedule.to,
@@ -4072,13 +4186,13 @@ class App extends Component {
       timeLabel: `${fmtTime(st.t)} / ${fmtTime(total)}`,
       setScopeModule: () => this.setState({ scope: 'module', t: 0 }),
       setScopePlaylist: () => this.setState({ scope: 'playlist', t: 0 }),
-      scopeModuleStyle: `padding:6px 14px;font-size:12px;font-weight:500;border:none;border-radius:999px;cursor:pointer;${st.scope === 'module' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'}`,
-      scopePlaylistStyle: `padding:6px 14px;font-size:12px;font-weight:500;border:none;border-radius:999px;cursor:pointer;${st.scope === 'playlist' ? 'background:#fff;color:#232220;box-shadow:0 1px 2px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'}`,
+      scopeModuleStyle: `padding:6px 14px;font-size:12px;font-weight:500;border:none;border-radius:8px;cursor:pointer;${st.scope === 'module' ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'}`,
+      scopePlaylistStyle: `padding:6px 14px;font-size:12px;font-weight:500;border:none;border-radius:8px;cursor:pointer;${st.scope === 'playlist' ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'}`,
       secPerLine: st.secPerLine,
       secLabel: `${st.secPerLine.toFixed(st.secPerLine % 1 ? 1 : 0)} s`,
       onSec: (e) => this.dirty({ secPerLine: parseFloat(e.target.value) }),
       toggleLoop: () => this.dirty({ loop: !st.loop }),
-      loopTrackStyle: `position:relative;width:50px;height:28px;border-radius:999px;border:none;cursor:pointer;flex:0 0 auto;background:${st.loop ? '#8D1D2C' : 'rgba(35,34,32,0.18)'};`,
+      loopTrackStyle: `position:relative;width:50px;height:28px;border-radius:8px;border:none;cursor:pointer;flex:0 0 auto;background:${st.loop ? '#8D1D2C' : 'rgba(35,34,32,0.18)'};`,
       loopKnobStyle: `position:absolute;top:3px;left:${st.loop ? '25px' : '3px'};width:22px;height:22px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 3px rgba(0,0,0,0.25);`,
       moduleCount: st.playlist.length,
       playlistTotal: fmtTime(this.playlistMods().reduce((s, mm) => s + this.moduleDur(mm), 0)),
@@ -4093,10 +4207,10 @@ class App extends Component {
       onSrvIp: (e) => { this.setState({ srvIp: e.target.value, test: { state: 'idle', rows: [] } }); this.saveSrv(); },
       onSrvToken: (e) => { this.setState({ srvToken: e.target.value, test: { state: 'idle', rows: [] } }); this.saveSrv(); },
       srvPing: st.test.state === 'ok' ? '● Connecté' : st.test.state === 'fail' ? '● Échec' : st.test.state === 'testing' ? '○ Test…' : '○ Non testé',
-      srvPingStyle: `font-size:12px;font-weight:600;color:${st.test.state === 'ok' ? '#2E7D32' : st.test.state === 'fail' ? '#8D1D2C' : '#8A847C'};`,
+      srvPingStyle: `font-size:12px;font-weight:500;color:${st.test.state === 'ok' ? '#2E7D32' : st.test.state === 'fail' ? '#8D1D2C' : '#8A847C'};`,
       testConn: this.testConn,
       testBtnLabel: st.test.state === 'testing' ? 'Test en cours…' : 'Tester la connexion (live)',
-      testBtnStyle: `width:100%;padding:11px;font-size:13.5px;font-weight:600;border-radius:10px;cursor:${st.test.state === 'testing' ? 'progress' : 'pointer'};border:none;background:#232220;color:#fff;opacity:${st.test.state === 'testing' ? 0.7 : 1};`,
+      testBtnStyle: `width:100%;padding:11px;font-size:13.5px;font-weight:500;border-radius:10px;cursor:${st.test.state === 'testing' ? 'progress' : 'pointer'};border:none;background:var(--accent);color:#fff;opacity:${st.test.state === 'testing' ? 0.7 : 1};`,
       hasTestRows: st.test.rows.length > 0,
       testRows: st.test.rows.map((r) => ({
         label: r.label,
@@ -4108,16 +4222,16 @@ class App extends Component {
       // Bouton d'état (modale de publication) : cuivre quand modifs en attente.
       saved: st.saved, dirty: st.dirty,
       saveLabel: st.dirty ? 'Enregistrer' : 'Enregistré',
-      saveStyle: `padding:9px 20px;font-size:13px;font-weight:600;letter-spacing:0.01em;border-radius:999px;cursor:${st.dirty ? 'pointer' : 'default'};${st.dirty ? 'background:#6E4A2B;color:#fff;border:1px solid #6E4A2B;box-shadow:0 2px 8px rgba(110,74,43,0.25);' : 'background:transparent;color:#8A847C;border:1px solid rgba(35,34,32,0.14);'}`,
+      saveStyle: `padding:9px 20px;font-size:13px;font-weight:500;letter-spacing:0.01em;border-radius:8px;cursor:${st.dirty ? 'pointer' : 'default'};${st.dirty ? 'background:var(--muted-2);color:#fff;border:1px solid var(--muted-2);' : 'background:transparent;color:var(--muted);border:1px solid var(--line);'}`,
       // Bandeau : icônes rondes + vignettes, palette gris/rubis/abricot/cuivre.
-      saveIconStyle: `${hdrRound}${st.dirty ? 'background:#6E4A2B;color:#fff;border:1px solid #6E4A2B;box-shadow:0 2px 10px rgba(110,74,43,0.35);' : 'background:transparent;color:#2E7D32;border:1px solid rgba(46,125,50,0.35);'}`,
+      saveIconStyle: `${hdrRound}${st.dirty ? 'background:var(--muted-2);color:#fff;border:1px solid var(--muted-2);' : 'background:transparent;color:var(--green);border:1px solid rgba(63,122,82,0.35);'}`,
       saveTip: st.dirty ? 'Enregistrement automatique en cours… (clique pour forcer)' : 'Tout est enregistré automatiquement',
-      pricesIconStyle: `${hdrRound}background:rgba(201,123,74,0.14);color:#A25C2E;border:1px solid rgba(201,123,74,0.5);`,
-      overrideIconStyle: `${hdrRound}${st.override ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;box-shadow:0 2px 10px rgba(141,29,44,0.35);' : 'background:transparent;color:#5B564E;border:1px solid rgba(35,34,32,0.18);'}`,
+      pricesIconStyle: `${hdrRound}background:rgba(201,123,74,0.14);color:var(--warn);border:1px solid rgba(201,123,74,0.5);`,
+      overrideIconStyle: `${hdrRound}${st.override ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:transparent;color:var(--muted-2);border:1px solid var(--line);'}`,
       overrideTip: st.override ? this.t('override.tipOn') : this.t('override.tipOff'),
-      publishIconStyle: `width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;cursor:pointer;flex:0 0 auto;background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;box-shadow:0 3px 12px rgba(141,29,44,0.4);`,
-      onbIconStyle: `${hdrRound}background:rgba(46,110,78,0.12);color:#2E6E4E;border:1px solid rgba(46,110,78,0.4);`,
-      reportIconStyle: `${hdrRound}background:rgba(110,74,43,0.12);color:#6E4A2B;border:1px solid rgba(110,74,43,0.4);`,
+      publishIconStyle: `width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;cursor:pointer;flex:0 0 auto;background:var(--accent);color:#fff;border:1px solid var(--accent);`,
+      onbIconStyle: `${hdrRound}background:rgba(63,122,82,0.12);color:var(--green);border:1px solid rgba(63,122,82,0.4);`,
+      reportIconStyle: `${hdrRound}background:var(--chip);color:var(--muted-2);border:1px solid var(--line);`,
       openReport: () => this.openReport(),
       // ---- guide de mise en route ----
       openOnboarding: () => this.openOnboarding(),
@@ -4160,31 +4274,33 @@ class App extends Component {
   render() {
     const st = this.state;
     if (st.loading) {
-      return html`<div style="height:100vh;display:flex;align-items:center;justify-content:center;color:#8A847C;font-size:15px;">${this.t('app.loading')}</div>`;
+      return html`<div style="height:100vh;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:15px;">${this.t('app.loading')}</div>`;
     }
     if (st.authRequired) {
-      return html`<div style="height:100vh;display:flex;align-items:center;justify-content:center;background:#E7E1D8;padding:24px;">
-        <form onSubmit=${this.doLogin} style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:20px;padding:36px 38px;width:360px;max-width:100%;box-shadow:0 30px 80px rgba(0,0,0,0.10);display:flex;flex-direction:column;gap:13px;">
+      return html`<div style="height:100vh;display:flex;align-items:center;justify-content:center;background:var(--paper);padding:24px;">
+        <form onSubmit=${this.doLogin} style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:36px 38px;width:360px;max-width:100%;display:flex;flex-direction:column;gap:13px;">
           <img src="assets/logo.png" alt="L'Atelier By" style="height:44px;width:auto;align-self:center;margin-bottom:4px;" />
-          <div style="text-align:center;font-weight:600;font-size:16px;">${this.t('login.title')}</div>
-          <div style="text-align:center;font-size:12px;color:#8A847C;margin-bottom:6px;">${this.t('login.subtitle')}</div>
-          <div style="display:flex;justify-content:center;gap:5px;margin-bottom:4px;">
-            ${UI_LANGS.map((l) => html`<button type="button" title=${l.label} onClick=${() => this.setUiLang(l.id)} style="padding:4px 11px;font-size:11px;font-weight:700;border:none;border-radius:999px;cursor:pointer;${l.id === st.uiLang ? 'background:#8D1D2C;color:#fff;' : 'background:#EFE9E0;color:#8A847C;'}">${l.short}</button>`)}
+          <div style="text-align:center;font-weight:500;font-size:16px;">${this.t('login.title')}</div>
+          <div style="text-align:center;font-size:12px;color:var(--muted);margin-bottom:6px;">${this.t('login.subtitle')}</div>
+          <div style="display:flex;justify-content:center;margin-bottom:4px;">
+            <div class="role-switch">
+              ${UI_LANGS.map((l) => html`<button type="button" title=${l.label} onClick=${() => this.setUiLang(l.id)} class=${l.id === st.uiLang ? 'is-on' : ''}>${l.short}</button>`)}
+            </div>
           </div>
-          <label style="font-size:12.5px;font-weight:500;color:#8A847C;">${this.t('login.user')}</label>
-          <input value=${st.loginUser} onInput=${(e) => this.setState({ loginUser: e.target.value })} autocomplete="username" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:14px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;" />
-          <label style="font-size:12.5px;font-weight:500;color:#8A847C;">${this.t('login.password')}</label>
-          <input type="password" value=${st.loginPass} onInput=${(e) => this.setState({ loginPass: e.target.value })} autocomplete="current-password" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:14px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;" />
-          ${st.loginError && html`<div style="font-size:12.5px;color:#8D1D2C;">${st.loginError}</div>`}
-          <button type="submit" style="margin-top:6px;padding:12px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:pointer;background:#232220;color:#fff;opacity:${st.loggingIn ? 0.7 : 1};">${st.loggingIn ? this.t('login.signingIn') : this.t('login.signIn')}</button>
-          <a href="film" target="_blank" style="margin-top:10px;text-align:center;font-size:13px;font-weight:500;color:#8D1D2C;padding:10px;border:1px solid rgba(141,29,44,0.25);border-radius:999px;background:rgba(141,29,44,0.06);">${this.t('login.viewFilm')}</a>
+          <label style="font-size:12.5px;font-weight:500;color:var(--muted);">${this.t('login.user')}</label>
+          <input value=${st.loginUser} onInput=${(e) => this.setState({ loginUser: e.target.value })} autocomplete="username" spellcheck="false" style="width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
+          <label style="font-size:12.5px;font-weight:500;color:var(--muted);">${this.t('login.password')}</label>
+          <input type="password" value=${st.loginPass} onInput=${(e) => this.setState({ loginPass: e.target.value })} autocomplete="current-password" style="width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
+          ${st.loginError && html`<div style="font-size:12.5px;color:var(--accent);">${st.loginError}</div>`}
+          <button type="submit" style="margin-top:6px;padding:12px;font-size:14px;font-weight:500;border-radius:8px;border:none;cursor:pointer;background:var(--accent);color:#fff;opacity:${st.loggingIn ? 0.7 : 1};">${st.loggingIn ? this.t('login.signingIn') : this.t('login.signIn')}</button>
+          <a class="btn" href="film" target="_blank" style="margin-top:10px;">${this.t('login.viewFilm')}</a>
         </form>
       </div>`;
     }
     if (st.loadError) {
-      return html`<div style="height:100vh;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;color:#8D1D2C;font-size:15px;">
+      return html`<div style="height:100vh;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;color:var(--accent);font-size:15px;">
         <div>${this.t('app.cmsUnreachable', { err: st.loadError })}</div>
-        <button onClick=${() => { this.setState({ loading: true, loadError: '' }); this.loadState(); }} style="padding:10px 22px;border-radius:999px;border:none;background:#232220;color:#fff;cursor:pointer;">${this.t('app.retry')}</button>
+        <button onClick=${() => { this.setState({ loading: true, loadError: '' }); this.loadState(); }} style="padding:10px 22px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;">${this.t('app.retry')}</button>
       </div>`;
     }
     const v = this.vals();
@@ -4192,47 +4308,47 @@ class App extends Component {
     // Volets repliables de l'éditeur : en-tête cliquable, résumé quand fermé,
     // un seul volet ouvert à la fois, centré à l'écran à l'ouverture.
     const secOpen = (id) => (Array.isArray(st.openSec) ? st.openSec.includes(id) : st.openSec === id);
-    const secCard = 'background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;overflow:hidden;';
+    const secCard = 'background:#FFFFFF;border:1px solid var(--line);border-radius:12px;overflow:hidden;';
     const secBody = 'padding:2px 24px 22px;';
     const secHead = (id, title, summary) => html`
       <button onClick=${(e) => this.toggleSec(id, e.currentTarget.parentElement)} style="width:100%;box-sizing:border-box;display:flex;align-items:center;gap:11px;padding:17px 24px;background:transparent;border:none;cursor:pointer;text-align:left;">
-        <span style="flex:0 0 auto;display:inline-block;font-size:10px;color:#8D1D2C;transform:rotate(${secOpen(id) ? '90deg' : '0deg'});transition:transform .15s;">▶</span>
-        <span style="flex:0 0 auto;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">${title}</span>
-        ${!secOpen(id) && summary ? html`<span style="flex:1 1 auto;min-width:0;text-align:right;font-size:12px;color:#8A847C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${summary}</span>` : null}
+        <span style="flex:0 0 auto;display:inline-block;font-size:9px;color:var(--muted);transform:rotate(${secOpen(id) ? '90deg' : '0deg'});transition:transform .15s;">▶</span>
+        <span style="flex:0 1 auto;min-width:0;font-size:13px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${title}</span>
+        ${!secOpen(id) && summary ? html`<span style="flex:1 1 auto;min-width:0;text-align:right;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${summary}</span>` : null}
       </button>`;
 
     // Aperçu + transport — l'onglet 1 montre l'élément en construction,
     // l'onglet 2 montre le film complet.
     const previewBlock = html`
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:12px;flex-wrap:wrap;">
-        <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8A847C;">${v.isTimelineTab ? `Aperçu du film « ${this.activeFilm().name} » · 6480 × 3840` : `Aperçu de l'élément · 6480 × 3840`}</h2>
+        <h2 style="margin:0;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${v.isTimelineTab ? `Aperçu du film « ${this.activeFilm().name} » · 6480 × 3840` : `Aperçu de l'élément · 6480 × 3840`}</h2>
         ${v.isTimelineTab && this.activeFilm().mode === 'continu' ? html`
           <span style="display:inline-flex;align-items:center;gap:8px;">
-            <span style="font-size:11px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border-radius:999px;padding:3px 10px;">🔄 boucle générée${v.contPreviewMeta ? ` · ${v.contPreviewMeta.slots} slot(s)` : ''}</span>
+            <span style="font-size:11px;font-weight:500;color:var(--muted-2);background:var(--chip);border-radius:999px;padding:3px 10px;">🔄 boucle générée${v.contPreviewMeta ? ` · ${v.contPreviewMeta.slots} slot(s)` : ''}</span>
             ${infoTip('Aperçu FIDÈLE : c’est la boucle réellement composée par le serveur (produits de saison, moment, ratios…), telle qu’elle passera à l’écran. Elle reflète les réglages ENREGISTRÉS — après une modif, elle se rafraîchit à l’enregistrement (auto ~1 s) ou via ⟳.')}
-            <button onClick=${() => this.loadContPreview()} disabled=${v.contPreviewBusy} title="Recomposer l’aperçu maintenant" style="padding:5px 11px;font-size:11.5px;font-weight:600;color:#6E4A2B;background:#fff;border:1px solid rgba(110,74,43,0.35);border-radius:999px;cursor:${v.contPreviewBusy ? 'wait' : 'pointer'};">⟳ Actualiser</button>
+            <button onClick=${() => this.loadContPreview()} disabled=${v.contPreviewBusy} title="Recomposer l’aperçu maintenant" style="padding:5px 11px;font-size:11.5px;font-weight:500;color:var(--muted-2);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:${v.contPreviewBusy ? 'wait' : 'pointer'};">⟳ Actualiser</button>
           </span>
         ` : ''}
       </div>
       ${v.isTimelineTab && this.activeFilm().mode === 'continu' && v.contPreviewMeta && v.contPreviewMeta.products === 0 ? html`
-        <div style="margin:-4px 0 12px;padding:11px 14px;border-radius:10px;background:rgba(201,123,74,0.1);border:1px solid rgba(201,123,74,0.35);font-size:12.5px;color:#8A5A2B;line-height:1.5;">
+        <div style="margin:-4px 0 12px;padding:11px 14px;border-radius:10px;background:rgba(201,123,74,0.1);border:1px solid rgba(201,123,74,0.35);font-size:12.5px;color:var(--warn);line-height:1.5;">
           ⚠ <strong>Aucun produit éligible</strong> au moment courant${v.contPreviewMeta.moment ? ` (${{ matin: 'matin', midi: 'midi', aprem: 'après-midi' }[v.contPreviewMeta.moment] || v.contPreviewMeta.moment})` : ''} — la boucle serait quasi vide à l'écran. Vérifie la <strong>source</strong> et les <strong>périodes de vente / saisons</strong> (onglet Périodes), ou mets « Si rien en saison » sur <strong>Tout le catalogue</strong>.
         </div>
       ` : ''}
       ${v.dragHint && html`
-        <p style="margin:-4px 0 12px;font-size:11.5px;color:#8A847C;">✥ Glisse l'illustration ou le bandeau sur l'aperçu pour les positionner.</p>
+        <p style="margin:-4px 0 12px;font-size:11.5px;color:var(--muted);">✥ Glisse l'illustration ou le bandeau sur l'aperçu pour les positionner.</p>
       `}
-      <div style="background:#232220;border-radius:16px;padding:20px;box-shadow:0 24px 60px rgba(0,0,0,0.16);">
+      <div style="background:var(--ink);border-radius:12px;padding:20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
           <span style="font-size:12px;color:rgba(255,255,255,0.55);letter-spacing:0.06em;">${v.nowPlaying}</span>
           <span style="font-size:12px;color:rgba(255,255,255,0.55);">Ligne <strong style="color:#fff;">${v.liveLine}</strong></span>
         </div>
         <div style="background:#0a0a0a;border-radius:10px;overflow:hidden;">${v.preview}</div>
         <div style="display:flex;align-items:center;gap:14px;margin-top:18px;">
-          <button onClick=${v.togglePlay} style="display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;background:#8D1D2C;color:#fff;border:none;cursor:pointer;font-size:16px;flex:0 0 auto;">${v.playIcon}</button>
+          <button onClick=${v.togglePlay} style="display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:16px;flex:0 0 auto;">${v.playIcon}</button>
           <button onClick=${v.restart} title="Recommencer" style="display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,0.10);color:#fff;border:none;cursor:pointer;font-size:14px;flex:0 0 auto;">↺</button>
           <div onClick=${v.scrub} ref=${v.trackRef} style="flex:1 1 auto;height:8px;border-radius:4px;background:rgba(255,255,255,0.14);position:relative;cursor:pointer;">
-            <div style="position:absolute;left:0;top:0;height:100%;border-radius:4px;background:#8D1D2C;width:${v.progressPct};"></div>
+            <div style="position:absolute;left:0;top:0;height:100%;border-radius:4px;background:var(--accent);width:${v.progressPct};"></div>
             <div style="position:absolute;top:50%;transform:translate(-50%,-50%);left:${v.progressPct};width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.4);"></div>
           </div>
           <span style="font-variant-numeric:tabular-nums;font-size:12.5px;color:rgba(255,255,255,0.7);flex:0 0 auto;min-width:84px;text-align:right;">${v.timeLabel}</span>
@@ -4241,21 +4357,21 @@ class App extends Component {
 
     // Réglages de diffusion du film — uniquement dans l'onglet Playlist.
     const diffusionBlock = html`
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:20px 22px;">
-        <h2 style="margin:0 0 16px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Diffusion</h2>
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:20px 22px;">
+        <h2 style="margin:0 0 16px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">Diffusion</h2>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-          <label style="font-size:13px;font-weight:500;color:#8A847C;">Durée par ligne</label>
-          <span style="font-size:14px;font-weight:600;">${v.secLabel}</span>
+          <label style="font-size:13px;font-weight:500;color:var(--muted);">Durée par ligne</label>
+          <span style="font-size:14px;font-weight:500;">${v.secLabel}</span>
         </div>
-        <input type="range" min="1" max="8" step="0.5" value=${v.secPerLine} onInput=${v.onSec} style="width:100%;accent-color:#8D1D2C;margin-bottom:18px;" />
+        <input type="range" min="1" max="8" step="0.5" value=${v.secPerLine} onInput=${v.onSec} style="width:100%;accent-color:var(--accent);margin-bottom:18px;" />
         <div style="display:flex;align-items:center;justify-content:space-between;">
           <span style="font-size:14px;font-weight:500;">Boucle continue</span>
           <button onClick=${v.toggleLoop} style=${v.loopTrackStyle}><span style=${v.loopKnobStyle}></span></button>
         </div>
-        <div style="display:flex;gap:14px;margin-top:16px;padding-top:14px;border-top:1px solid rgba(35,34,32,0.08);font-size:12.5px;color:#8A847C;">
-          <span>Film <strong style="color:#232220;">${v.moduleCount} modules</strong></span>
+        <div style="display:flex;gap:14px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);">
+          <span>Film <strong style="color:var(--ink);">${v.moduleCount} modules</strong></span>
           <span style="color:rgba(35,34,32,0.18);">·</span>
-          <span>Durée totale <strong style="color:#232220;">${v.playlistTotal}</strong></span>
+          <span>Durée totale <strong style="color:var(--ink);">${v.playlistTotal}</strong></span>
         </div>
       </div>`;
 
@@ -4265,22 +4381,22 @@ class App extends Component {
       const tags = (p.tags || []).slice(0, 3);
       return html`
         <button onClick=${pick} title=${`${p.name} · ${c.label} · ${p.items.length} module(s)${(p.tags || []).length ? ' · #' + p.tags.join(' #') : ''}`}
-          style="display:inline-flex;align-items:center;gap:7px;padding:7px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;white-space:nowrap;${active ? `background:${c.color};color:#fff;border:1px solid ${c.color};box-shadow:0 2px 8px ${c.color}44;` : `background:#fff;color:#232220;border:1px solid ${c.color}55;border-left:4px solid ${c.color};`}">
+          style="display:inline-flex;align-items:center;gap:7px;padding:7px 13px;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;white-space:nowrap;${active ? `background:${c.color};color:#fff;border:1px solid ${c.color};box-shadow:0 2px 8px ${c.color}44;` : `background:#fff;color:var(--ink);border:1px solid ${c.color}55;border-left:4px solid ${c.color};`}">
           <span>${p.name}</span>
           <span style="opacity:0.7;font-weight:500;">${p.items.length}</span>
-          ${tags.map((t) => html`<span style="font-size:9.5px;font-weight:600;padding:1px 6px;border-radius:999px;background:${active ? 'rgba(255,255,255,0.22)' : c.color + '18'};color:${active ? '#fff' : c.color};">#${t}</span>`)}
+          ${tags.map((t) => html`<span style="font-size:9.5px;font-weight:500;padding:1px 6px;border-radius:999px;background:${active ? 'rgba(255,255,255,0.22)' : c.color + '18'};color:${active ? '#fff' : c.color};">#${t}</span>`)}
         </button>`;
     };
     const filmCounts = {};
     st.playlists.forEach((p) => { const c = filmCatOf(p).id; filmCounts[c] = (filmCounts[c] || 0) + 1; });
     const filmCatChips = [
-      { id: 'all', label: 'Tous', color: '#232220', count: st.playlists.length },
+      { id: 'all', label: 'Tous', color: '#8D1D2C', count: st.playlists.length },
       ...FILM_CATS.filter((c) => filmCounts[c.id]).map((c) => ({ ...c, count: filmCounts[c.id] })),
     ].map((c) => {
       const on = st.filmFilter === c.id;
       return html`
         <button onClick=${() => this.setState({ filmFilter: c.id })}
-          style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:11.5px;font-weight:700;border-radius:999px;cursor:pointer;${on ? `background:${c.color};color:#fff;border:1px solid ${c.color};` : `background:#fff;color:${c.color};border:1px solid ${c.color}55;`}">
+          style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:11.5px;font-weight:500;border-radius:8px;cursor:pointer;${on ? `background:${c.color};color:#fff;border:1px solid ${c.color};` : `background:#fff;color:${c.color};border:1px solid ${c.color}55;`}">
           <span style="width:7px;height:7px;border-radius:50%;background:${on ? '#fff' : c.color};"></span>${c.label}<span style="font-weight:400;opacity:0.75;">${c.count}</span>
         </button>`;
     });
@@ -4288,7 +4404,7 @@ class App extends Component {
     const filmSelector = html`
       <div style="display:flex;flex-direction:column;gap:9px;width:100%;">
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-          <span style="font-size:10px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;margin-right:2px;">Catégories</span>
+          <span style="font-size:10px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-right:2px;">Catégories</span>
           ${filmCatChips}
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
@@ -4298,14 +4414,14 @@ class App extends Component {
                 onInput=${(e) => this.setState({ editFilmName: e.target.value })}
                 onKeyDown=${(e) => { if (e.key === 'Enter') this.renameFilm(st.editFilmName); if (e.key === 'Escape') this.setState({ editingFilm: false }); }}
                 onBlur=${() => this.renameFilm(st.editFilmName)}
-                style="flex:0 1 auto;min-width:180px;padding:7px 9px;font-size:13px;font-weight:600;border:1px solid #8D1D2C;border-radius:8px;background:#fff;" />`
+                style="flex:0 1 auto;min-width:180px;padding:7px 9px;font-size:13px;font-weight:500;border:1px solid var(--accent);border-radius:8px;background:#fff;" />`
             : shownFilms.map((p) => filmBadge(p, p.id === st.activePl, () => this.selectFilm(p.id)))}
-          ${!st.editingFilm && !shownFilms.length ? html`<span style="font-size:12px;color:#8A847C;">Aucun film dans cette catégorie.</span>` : ''}
-          <button onClick=${() => this.setState({ editingFilm: true, editFilmName: this.activeFilm().name })} title="Renommer le film" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;flex:0 0 auto;">✎</button>
-          <button onClick=${() => this.newFilm()} title="Nouveau film (vide)" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:#8D1D2C;color:#fff;border:none;cursor:pointer;font-size:14px;font-weight:700;flex:0 0 auto;">＋</button>
-          <button onClick=${() => this.newExampleFilm()} title="Créer un film d'exemple : une boucle continue préréglée, à dupliquer et adapter" style="display:flex;align-items:center;gap:5px;padding:0 11px;height:26px;border-radius:7px;background:rgba(110,74,43,0.1);color:#6E4A2B;border:1px solid rgba(110,74,43,0.3);cursor:pointer;font-size:12px;font-weight:600;flex:0 0 auto;">✨ Exemple continu</button>
-          <button onClick=${() => this.dupFilm()} title="Dupliquer le film" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;flex:0 0 auto;">⎘</button>
-          <button onClick=${() => this.delFilm()} title="Supprimer le film (les modules restent en bibliothèque)" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.7);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:12px;color:#8D1D2C;flex:0 0 auto;">🗑</button>
+          ${!st.editingFilm && !shownFilms.length ? html`<span style="font-size:12px;color:var(--muted);">Aucun film dans cette catégorie.</span>` : ''}
+          <button onClick=${() => this.setState({ editingFilm: true, editFilmName: this.activeFilm().name })} title="Renommer le film" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,0.7);border:1px solid var(--line);cursor:pointer;font-size:12px;flex:0 0 auto;">✎</button>
+          <button onClick=${() => this.newFilm()} title="Nouveau film (vide)" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:14px;font-weight:500;flex:0 0 auto;">＋</button>
+          <button onClick=${() => this.newExampleFilm()} title="Créer un film d'exemple : une boucle continue préréglée, à dupliquer et adapter" style="display:flex;align-items:center;gap:5px;padding:0 11px;height:26px;border-radius:8px;background:var(--chip);color:var(--muted-2);border:1px solid var(--line);cursor:pointer;font-size:12px;font-weight:500;flex:0 0 auto;">✨ Exemple continu</button>
+          <button onClick=${() => this.dupFilm()} title="Dupliquer le film" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,0.7);border:1px solid var(--line);cursor:pointer;font-size:12px;flex:0 0 auto;">⎘</button>
+          <button onClick=${() => this.delFilm()} title="Supprimer le film (les modules restent en bibliothèque)" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,0.7);border:1px solid var(--line);cursor:pointer;font-size:12px;color:var(--accent);flex:0 0 auto;">🗑</button>
         </div>
       </div>`;
 
@@ -4315,50 +4431,50 @@ class App extends Component {
     // Le film est toujours en mode continu : on ne monte plus de séquence à la
     // main, on pose des règles et la boucle se compose en direct.
     const filmModeToggle = html`
-      <div style="margin-top:14px;padding-top:14px;border-top:1px dashed rgba(35,34,32,0.12);">
+      <div style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);">
         <div style="display:flex;align-items:center;gap:6px;">
           ${infoTip('Le film ne monte rien à la main : tu poses des règles (sources, moments, formats, ratios…) et la boucle se compose toute seule, en s’adaptant au fil de la journée, sans republier.')}
-          <span style="font-size:12px;font-weight:600;color:#6E4A2B;">🔄 Boucle continue</span>
-          <span style="font-size:11.5px;color:#8A847C;">composée en direct · saisons · moments · formats</span>
+          <span style="font-size:12px;font-weight:500;color:var(--muted-2);">🔄 Boucle continue</span>
+          <span style="font-size:11.5px;color:var(--muted);">composée en direct · saisons · moments · formats</span>
         </div>
       </div>`;
     // Panneau de réglages du mode continu.
-    const cField = (label, node, tip) => html`<label style="display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;"><span style="display:inline-flex;align-items:center;gap:5px;">${label}${tip ? infoTip(tip) : ''}</span>${node}</label>`;
-    const cNum = (key, val, min, max) => html`<input type="number" min=${min} max=${max} value=${val} onInput=${(e) => this.updateContinuous({ [key]: e.target.value })} style="width:92px;padding:8px 10px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;" />`;
-    const cChoice = (key, opts) => html`<div style="display:flex;gap:6px;flex-wrap:wrap;">${opts.map(([id, lab]) => html`<button onClick=${() => this.updateContinuous({ [key]: id })} style="padding:7px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${cont[key] === id ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${cont[key] === id ? '#8D1D2C' : '#fff'};color:${cont[key] === id ? '#fff' : '#232220'};">${lab}</button>`)}</div>`;
+    const cField = (label, node, tip) => html`<label style="display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);"><span style="display:inline-flex;align-items:center;gap:5px;">${label}${tip ? infoTip(tip) : ''}</span>${node}</label>`;
+    const cNum = (key, val, min, max) => html`<input type="number" min=${min} max=${max} value=${val} onInput=${(e) => this.updateContinuous({ [key]: e.target.value })} style="width:92px;padding:8px 10px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;" />`;
+    const cChoice = (key, opts) => html`<div style="display:flex;gap:6px;flex-wrap:wrap;">${opts.map(([id, lab]) => html`<button onClick=${() => this.updateContinuous({ [key]: id })} style="padding:7px 13px;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid ${cont[key] === id ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${cont[key] === id ? '#8D1D2C' : '#fff'};color:${cont[key] === id ? '#fff' : '#232220'};">${lab}</button>`)}</div>`;
     // Source oui/non : quand elle est active, son ratio « 1 : N » s'affiche.
     const cUse = (key, label, help, ratioKey) => {
       const on = !!(cont.use || {})[key];
       return html`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <button onClick=${() => this.updateContinuous({ use: { ...(cont.use || {}), [key]: !on } })} title=${help} style="min-width:150px;text-align:left;padding:7px 12px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${on ? '#8D1D2C' : '#fff'};color:${on ? '#fff' : '#232220'};">${on ? '✓ ' : ''}${label}</button>
-        ${on && ratioKey ? html`<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#8A847C;">1 :
-          <input type="number" min="0" max="99" value=${(cont.ratios || {})[ratioKey] || 0} onInput=${(e) => this.updateContinuous({ ratios: { ...(cont.ratios || {}), [ratioKey]: e.target.value } })} style="width:64px;padding:6px 8px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;text-align:right;" />
+        <button onClick=${() => this.updateContinuous({ use: { ...(cont.use || {}), [key]: !on } })} title=${help} style="min-width:150px;text-align:left;padding:7px 12px;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${on ? '#8D1D2C' : '#fff'};color:${on ? '#fff' : '#232220'};">${on ? '✓ ' : ''}${label}</button>
+        ${on && ratioKey ? html`<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);">1 :
+          <input type="number" min="0" max="99" value=${(cont.ratios || {})[ratioKey] || 0} onInput=${(e) => this.updateContinuous({ ratios: { ...(cont.ratios || {}), [ratioKey]: e.target.value } })} style="width:64px;padding:6px 8px;font-size:12.5px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;text-align:right;" />
         </span>` : ''}
       </div>`;
     };
-    const cToggle = (key, yes, no) => html`<div style="display:flex;gap:6px;">${[[true, yes], [false, no]].map(([b, lab]) => html`<button onClick=${() => this.updateContinuous({ [key]: b })} style="padding:7px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${!!cont[key] === b ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${!!cont[key] === b ? '#8D1D2C' : '#fff'};color:${!!cont[key] === b ? '#fff' : '#232220'};">${lab}</button>`)}</div>`;
-    const cRatio = (key, label) => html`<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;"><span style="width:150px;color:#232220;font-weight:600;">${label}</span><span style="color:#8A847C;">1 :</span><input type="number" min="0" max="99" value=${cont.ratios[key]} onInput=${(e) => this.updateContRatio(key, e.target.value)} style="width:66px;padding:7px 9px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;" /></label>`;
+    const cToggle = (key, yes, no) => html`<div style="display:flex;gap:6px;">${[[true, yes], [false, no]].map(([b, lab]) => html`<button onClick=${() => this.updateContinuous({ [key]: b })} style="padding:7px 13px;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid ${!!cont[key] === b ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${!!cont[key] === b ? '#8D1D2C' : '#fff'};color:${!!cont[key] === b ? '#fff' : '#232220'};">${lab}</button>`)}</div>`;
+    const cRatio = (key, label) => html`<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;"><span style="width:150px;color:var(--ink);font-weight:500;">${label}</span><span style="color:var(--muted);">1 :</span><input type="number" min="0" max="99" value=${cont.ratios[key]} onInput=${(e) => this.updateContRatio(key, e.target.value)} style="width:66px;padding:7px 9px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;" /></label>`;
     const catChips = (st.catalog.categories || []).map((c) => {
       const on = cont.categories.includes(c.id);
-      return html`<button onClick=${() => { const set = new Set(cont.categories); on ? set.delete(c.id) : set.add(c.id); this.updateContinuous({ categories: [...set] }); }} style="padding:6px 12px;font-size:12px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${on ? '#8D1D2C' : '#fff'};color:${on ? '#fff' : '#232220'};">${c.name}</button>`;
+      return html`<button onClick=${() => { const set = new Set(cont.categories); on ? set.delete(c.id) : set.add(c.id); this.updateContinuous({ categories: [...set] }); }} style="padding:6px 12px;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${on ? '#8D1D2C' : '#fff'};color:${on ? '#fff' : '#232220'};">${c.name}</button>`;
     });
     // Playlists d'exception : tags multi-sélection (films « playlist » uniquement).
     const excFilms = st.playlists.filter((p) => p.mode !== 'continu' && p.id !== this.activeFilm().id);
     const excChips = excFilms.map((p) => {
       const on = cont.exceptionFilms.includes(p.id);
-      return html`<button onClick=${() => { const set = new Set(cont.exceptionFilms); on ? set.delete(p.id) : set.add(p.id); this.updateContinuous({ exceptionFilms: [...set] }); }} style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:12px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${on ? '#8D1D2C' : '#fff'};color:${on ? '#fff' : '#232220'};">${on ? '✓ ' : '+ '}${p.name}</button>`;
+      return html`<button onClick=${() => { const set = new Set(cont.exceptionFilms); on ? set.delete(p.id) : set.add(p.id); this.updateContinuous({ exceptionFilms: [...set] }); }} style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${on ? '#8D1D2C' : '#fff'};color:${on ? '#fff' : '#232220'};">${on ? '✓ ' : '+ '}${p.name}</button>`;
     });
     const contPanel = html`
-      <div style="background:#FFFFFF;border:1px solid rgba(141,29,44,0.22);border-radius:16px;padding:18px 20px;">
+      <div style="background:#FFFFFF;border:1px solid rgba(141,29,44,0.22);border-radius:12px;padding:18px 20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
-          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">🔄 Boucle continue — la régie compose « ${this.activeFilm().name} » en direct</h3>
-          <a href=${new URL('film?film=' + this.activeFilm().id, location.href).toString()} target="_blank" style="font-size:12.5px;font-weight:600;color:#6E4A2B;">▶ Aperçu en direct ↗</a>
+          <h3 style="margin:0;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">🔄 Boucle continue — la régie compose « ${this.activeFilm().name} » en direct</h3>
+          <a href=${new URL('film?film=' + this.activeFilm().id, location.href).toString()} target="_blank" style="font-size:12.5px;font-weight:500;color:var(--muted-2);">▶ Aperçu en direct ↗</a>
         </div>
         <div style="display:flex;flex-direction:column;gap:18px;">
           <div style="display:flex;gap:26px;flex-wrap:wrap;">
             ${cField('Orientation de l\'écran', html`<div style="display:flex;gap:7px;">
               ${[['paysage', '▭ 16:9 paysage'], ['portrait', '▯ 9:16 portrait']].map(([id, lab]) => html`
-                <button onClick=${() => { this.updateContinuous({ orient: id }); this.setState({ libOrient: id }); }} style="padding:7px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${cont.orient === id ? '#232220' : 'rgba(35,34,32,0.16)'};background:${cont.orient === id ? '#232220' : '#fff'};color:${cont.orient === id ? '#fff' : '#232220'};">${lab}</button>
+                <button onClick=${() => { this.updateContinuous({ orient: id }); this.setState({ libOrient: id }); }} style="padding:7px 13px;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid ${cont.orient === id ? 'var(--accent)' : 'var(--line)'};background:${cont.orient === id ? 'var(--accent)' : '#fff'};color:${cont.orient === id ? '#fff' : 'var(--ink)'};">${lab}</button>
               `)}
             </div>`, 'Format des écrans visés par cette boucle. C’est le PREMIER filtre : seuls les éléments de bibliothèque à ce format sont proposés (items précis, promotions, campagnes) et diffusés.')}
             ${cField('Sources — oui / non', html`<div style="display:flex;flex-direction:column;gap:7px;">
@@ -4369,19 +4485,19 @@ class App extends Component {
             ${cField('Adapter au moment', cToggle('perMoment', 'Oui (matin/midi/aprem)', 'Non'), 'Si activé, la boucle ne montre que les produits vendus au moment courant (table « Périodes de vente » dans l’onglet Périodes) : viennoiseries le matin, sandwichs le midi, etc.')}
             ${cField('Ordre', cChoice('order', [['catalogue', 'Catalogue'], ['aleatoire', 'Aléatoire']]), 'Ordre de passage. « Catalogue » = l’ordre du catalogue. « Aléatoire » = mélangé (stable pendant une fenêtre, re-mélangé au changement de moment/saison).')}
           </div>
-          ${cont.source === 'categories' ? html`<div><div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:8px;">Catégories exclues (exceptions) — tout le reste passe</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${catChips}</div></div>` : ''}
+          ${cont.source === 'categories' ? html`<div><div style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Catégories exclues (exceptions) — tout le reste passe</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${catChips}</div></div>` : ''}
 
           <!-- Suites : mini éditeur de montage (intro · outro · gamme…) -->
-          <div style="border-top:1px dashed rgba(35,34,32,0.14);padding-top:16px;">
+          <div style="border-top:1px dashed var(--line);padding-top:16px;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
               <div style="display:flex;align-items:center;gap:7px;">
-                <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Suites — montage à la main</span>
+                <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Suites — montage à la main</span>
                 ${infoTip('Une suite est une petite séquence que tu montes toi-même : intro, outro, présentation d’une gamme… Tu choisis son ordre, sa place dans la boucle (ouverture, clôture, ou toutes les N positions) et son format d’écran. Le reste du film continue à se composer tout seul autour.')}
               </div>
               <div style="display:flex;align-items:center;gap:8px;">
-                ${v.seqDirty ? html`<span style="font-size:11.5px;font-weight:600;color:#B8860B;">non enregistré</span>` : ''}
-                <button onClick=${v.addSequence} style="padding:6px 13px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">+ Suite</button>
-                <button onClick=${v.saveSequences} disabled=${v.seqBusy || !v.seqDirty} style="padding:6px 14px;font-size:12px;font-weight:600;color:#fff;background:${v.seqDirty ? '#8D1D2C' : 'rgba(141,29,44,0.35)'};border:none;border-radius:999px;cursor:${v.seqBusy ? 'wait' : (v.seqDirty ? 'pointer' : 'default')};">${v.seqBusy ? 'Enregistrement…' : 'Enregistrer'}</button>
+                ${v.seqDirty ? html`<span style="font-size:11.5px;font-weight:500;color:var(--warn);">non enregistré</span>` : ''}
+                <button onClick=${v.addSequence} style="padding:6px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">+ Suite</button>
+                <button onClick=${v.saveSequences} disabled=${v.seqBusy || !v.seqDirty} style="padding:6px 14px;font-size:12px;font-weight:500;color:#fff;background:${v.seqDirty ? '#8D1D2C' : 'rgba(141,29,44,0.35)'};border:none;border-radius:8px;cursor:${v.seqBusy ? 'wait' : (v.seqDirty ? 'pointer' : 'default')};">${v.seqBusy ? 'Enregistrement…' : 'Enregistrer'}</button>
               </div>
             </div>
             ${v.seqRows.length ? html`
@@ -4391,58 +4507,58 @@ class App extends Component {
                   ${v.seqRows.map((s) => html`
                     <div key=${s.id} style="display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:10px;cursor:pointer;border:1px solid ${s.selected ? 'rgba(141,29,44,0.45)' : 'rgba(35,34,32,0.10)'};background:${s.selected ? 'rgba(141,29,44,0.06)' : '#FBF8F2'};" onClick=${s.pick}>
                       <button onClick=${(e) => { e.stopPropagation(); s.toggleInFilm(); }} title=${s.inFilm ? 'Utilisée dans ce film — cliquer pour retirer' : 'Non utilisée dans ce film'} style="flex:0 0 auto;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;line-height:1;border-radius:5px;cursor:pointer;border:1px solid ${s.inFilm ? '#8D1D2C' : 'rgba(35,34,32,0.28)'};background:${s.inFilm ? '#8D1D2C' : '#fff'};color:#fff;">${s.inFilm ? '✓' : ''}</button>
-                      <span style="flex:1 1 auto;min-width:0;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${s.active ? '#232220' : '#8A847C'};">${s.name}</span>
-                      <span style="flex:0 0 auto;font-size:10.5px;color:#8A847C;">${({ debut: '⤒ début', fin: '⤓ fin', boucle: '↻ 1:' + s.ratio })[s.placement]} · ${s.count}</span>
+                      <span style="flex:1 1 auto;min-width:0;font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${s.active ? '#232220' : '#8A847C'};">${s.name}</span>
+                      <span style="flex:0 0 auto;font-size:10.5px;color:var(--muted);">${({ debut: '⤒ début', fin: '⤓ fin', boucle: '↻ 1:' + s.ratio })[s.placement]} · ${s.count}</span>
                     </div>
                   `)}
                 </div>
                 <!-- colonne droite : la suite sélectionnée -->
                 ${v.seqCur && html`
-                  <div style="flex:1 1 380px;min-width:0;background:#FBF8F2;border:1px solid rgba(35,34,32,0.10);border-radius:12px;padding:12px 14px;">
+                  <div style="flex:1 1 380px;min-width:0;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px 14px;">
                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-                      <input key=${'sqn-' + v.seqCur.id} defaultValue=${v.seqCur.name} onChange=${v.seqCur.onName} placeholder="Nom de la suite (ex. Intro)" style="flex:1 1 160px;min-width:0;padding:7px 10px;font-size:13px;font-weight:600;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
-                      <span style="display:inline-flex;background:#EFE9E0;border-radius:8px;padding:2px;">
+                      <input key=${'sqn-' + v.seqCur.id} defaultValue=${v.seqCur.name} onChange=${v.seqCur.onName} placeholder="Nom de la suite (ex. Intro)" style="flex:1 1 160px;min-width:0;padding:7px 10px;font-size:13px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;" />
+                      <span style="display:inline-flex;background:var(--chip);border-radius:8px;padding:2px;">
                         ${[['paysage', '▭ 16:9'], ['portrait', '▯ 9:16']].map(([id, lab]) => html`
-                          <button onClick=${() => v.seqCur.setOrient(id)} style="padding:5px 10px;font-size:11.5px;font-weight:600;border:none;border-radius:6px;cursor:pointer;${v.seqCur.orient === id ? 'background:#fff;color:#232220;box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'}">${lab}</button>
+                          <button onClick=${() => v.seqCur.setOrient(id)} style="padding:5px 10px;font-size:11.5px;font-weight:500;border:none;border-radius:6px;cursor:pointer;${v.seqCur.orient === id ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'}">${lab}</button>
                         `)}
                       </span>
-                      <button onClick=${v.seqCur.toggleActive} title=${v.seqCur.active ? 'Active' : 'Inactive'} style="padding:5px 11px;font-size:11.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${v.seqCur.active ? '#2E6E4E' : 'rgba(35,34,32,0.18)'};background:${v.seqCur.active ? 'rgba(46,110,78,0.10)' : '#fff'};color:${v.seqCur.active ? '#2E6E4E' : '#8A847C'};">${v.seqCur.active ? '✓ Active' : 'Inactive'}</button>
-                      <button onClick=${v.seqCur.del} title="Supprimer la suite" style="width:28px;height:28px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;color:#8D1D2C;cursor:pointer;">✕</button>
+                      <button onClick=${v.seqCur.toggleActive} title=${v.seqCur.active ? 'Active' : 'Inactive'} style="padding:5px 11px;font-size:11.5px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid ${v.seqCur.active ? '#2E6E4E' : 'rgba(35,34,32,0.18)'};background:${v.seqCur.active ? 'rgba(63,122,82,0.10)' : '#fff'};color:${v.seqCur.active ? '#2E6E4E' : '#8A847C'};">${v.seqCur.active ? '✓ Active' : 'Inactive'}</button>
+                      <button onClick=${v.seqCur.del} title="Supprimer la suite" style="width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--accent);cursor:pointer;">✕</button>
                     </div>
                     <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:12px;">
-                      <span style="font-size:10.5px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#8A847C;">Place dans la boucle</span>
+                      <span style="font-size:10.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Place dans la boucle</span>
                       ${[['debut', '⤒ Ouverture'], ['fin', '⤓ Clôture'], ['boucle', '↻ Toutes les N']].map(([id, lab]) => html`
-                        <button onClick=${() => v.seqCur.setPlacement(id)} style="padding:5px 11px;font-size:11.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${v.seqCur.placement === id ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${v.seqCur.placement === id ? '#8D1D2C' : '#fff'};color:${v.seqCur.placement === id ? '#fff' : '#232220'};">${lab}</button>
+                        <button onClick=${() => v.seqCur.setPlacement(id)} style="padding:5px 11px;font-size:11.5px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid ${v.seqCur.placement === id ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${v.seqCur.placement === id ? '#8D1D2C' : '#fff'};color:${v.seqCur.placement === id ? '#fff' : '#232220'};">${lab}</button>
                       `)}
-                      ${v.seqCur.placement === 'boucle' ? html`<span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:#8A847C;">1 :
-                        <input type="number" min="1" max="99" value=${v.seqCur.ratio} onInput=${v.seqCur.onRatio} style="width:60px;padding:5px 8px;font-size:12px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;text-align:right;" />
+                      ${v.seqCur.placement === 'boucle' ? html`<span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);">1 :
+                        <input type="number" min="1" max="99" value=${v.seqCur.ratio} onInput=${v.seqCur.onRatio} style="width:60px;padding:5px 8px;font-size:12px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;text-align:right;" />
                       </span>` : ''}
                     </div>
                     <div style="display:flex;flex-direction:column;gap:4px;max-height:240px;overflow:auto;padding-right:4px;">
                       ${v.seqCur.items.length ? v.seqCur.items.map((it) => html`
-                        <div key=${it.key} style="display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:9px;background:#fff;border:1px solid ${it.missing || it.wrongOrient ? 'rgba(184,134,11,0.5)' : 'rgba(35,34,32,0.10)'};">
-                          <span style="flex:0 0 auto;width:20px;font-size:11px;font-weight:700;color:#8A847C;text-align:right;">${it.n}</span>
+                        <div key=${it.key} style="display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:8px;background:#fff;border:1px solid ${it.missing || it.wrongOrient ? 'rgba(184,134,11,0.5)' : 'rgba(35,34,32,0.10)'};">
+                          <span style="flex:0 0 auto;width:20px;font-size:11px;font-weight:500;color:var(--muted);text-align:right;">${it.n}</span>
                           <span style="flex:0 0 auto;font-size:13px;">${it.icon}</span>
-                          <span style="flex:1 1 auto;min-width:0;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${it.name}<span style="color:#8A847C;"> · ${it.meta}</span>${it.wrongOrient ? html`<span style="color:#B8860B;"> · autre format, ne passera pas</span>` : ''}</span>
+                          <span style="flex:1 1 auto;min-width:0;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${it.name}<span style="color:var(--muted);"> · ${it.meta}</span>${it.wrongOrient ? html`<span style="color:var(--warn);"> · autre format, ne passera pas</span>` : ''}</span>
                           <span style="flex:0 0 auto;display:inline-flex;gap:3px;">
-                            <button onClick=${it.up} disabled=${it.isFirst} title="Monter" style="width:24px;height:24px;border-radius:6px;border:1px solid rgba(35,34,32,0.12);background:#FBF8F2;cursor:${it.isFirst ? 'default' : 'pointer'};opacity:${it.isFirst ? 0.35 : 1};font-size:11px;">↑</button>
-                            <button onClick=${it.down} disabled=${it.isLast} title="Descendre" style="width:24px;height:24px;border-radius:6px;border:1px solid rgba(35,34,32,0.12);background:#FBF8F2;cursor:${it.isLast ? 'default' : 'pointer'};opacity:${it.isLast ? 0.35 : 1};font-size:11px;">↓</button>
-                            ${it.missing ? '' : html`<button onClick=${it.edit} title="Éditer dans la bibliothèque" style="width:24px;height:24px;border-radius:6px;border:1px solid rgba(35,34,32,0.12);background:#FBF8F2;color:#6E4A2B;cursor:pointer;font-size:11px;">✎</button>`}
-                            <button onClick=${it.del} title="Retirer de la suite" style="width:24px;height:24px;border-radius:6px;border:1px solid rgba(35,34,32,0.12);background:#FBF8F2;color:#8D1D2C;cursor:pointer;font-size:11px;">✕</button>
+                            <button onClick=${it.up} disabled=${it.isFirst} title="Monter" style="width:24px;height:24px;border-radius:6px;border:1px solid var(--line);background:var(--paper);cursor:${it.isFirst ? 'default' : 'pointer'};opacity:${it.isFirst ? 0.35 : 1};font-size:11px;">↑</button>
+                            <button onClick=${it.down} disabled=${it.isLast} title="Descendre" style="width:24px;height:24px;border-radius:6px;border:1px solid var(--line);background:var(--paper);cursor:${it.isLast ? 'default' : 'pointer'};opacity:${it.isLast ? 0.35 : 1};font-size:11px;">↓</button>
+                            ${it.missing ? '' : html`<button onClick=${it.edit} title="Éditer dans la bibliothèque" style="width:24px;height:24px;border-radius:6px;border:1px solid var(--line);background:var(--paper);color:var(--muted-2);cursor:pointer;font-size:11px;">✎</button>`}
+                            <button onClick=${it.del} title="Retirer de la suite" style="width:24px;height:24px;border-radius:6px;border:1px solid var(--line);background:var(--paper);color:var(--accent);cursor:pointer;font-size:11px;">✕</button>
                           </span>
                         </div>
-                      `) : html`<span style="font-size:12px;color:#8A847C;padding:4px 0;">Suite vide — ajoute un élément ci-dessous.</span>`}
+                      `) : html`<span style="font-size:12px;color:var(--muted);padding:4px 0;">Suite vide — ajoute un élément ci-dessous.</span>`}
                     </div>
                     ${v.seqCur.addable.length ? html`
-                      <select onChange=${v.seqCur.onAdd} style="margin-top:10px;width:100%;box-sizing:border-box;padding:8px 10px;font-size:12.5px;border:1px dashed rgba(141,29,44,0.4);border-radius:9px;background:rgba(141,29,44,0.04);color:#8D1D2C;font-weight:600;cursor:pointer;">
+                      <select onChange=${v.seqCur.onAdd} style="margin-top:10px;width:100%;box-sizing:border-box;padding:8px 10px;font-size:12.5px;border:1px dashed rgba(141,29,44,0.4);border-radius:8px;background:rgba(141,29,44,0.04);color:var(--accent);font-weight:500;cursor:pointer;">
                         <option value="">＋ Ajouter un élément à la suite…</option>
                         ${v.seqCur.addable.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
                       </select>
-                    ` : html`<p style="margin:10px 0 0;font-size:12px;color:#B8860B;">Aucun élément de bibliothèque au format ${v.seqCur.orient === 'portrait' ? '9:16' : '16:9'}.</p>`}
+                    ` : html`<p style="margin:10px 0 0;font-size:12px;color:var(--warn);">Aucun élément de bibliothèque au format ${v.seqCur.orient === 'portrait' ? '9:16' : '16:9'}.</p>`}
                   </div>
                 `}
               </div>
-            ` : html`<p style="margin:0;font-size:12.5px;color:#8A847C;">Aucune suite. « + Suite » pour monter une intro, un outro ou une présentation de gamme.</p>`}
+            ` : html`<p style="margin:0;font-size:12.5px;color:var(--muted);">Aucune suite. « + Suite » pour monter une intro, un outro ou une présentation de gamme.</p>`}
           </div>
           <div style="display:flex;gap:20px;flex-wrap:wrap;">
             ${cField('Durée fiche (s)', cNum('prodDur', cont.prodDur, 2, 60), 'Combien de secondes une fiche produit reste à l’écran.')}
@@ -4451,7 +4567,7 @@ class App extends Component {
           </div>
           <div>
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:9px;">
-              <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Ratios par type d'élément · 1 : N (0 = jamais)</span>
+              <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Ratios par type d'élément · 1 : N (0 = jamais)</span>
               ${infoTip('Dose le mélange de la boucle. « 1 : N » = un élément de ce type tous les N slots. Ex. Liaison 1:5 = un logo de transition toutes les 5 fiches ; Produit seul 1:6 = une fiche plein écran toutes les 6. 0 = ce type n’apparaît jamais.')}
             </div>
             <div style="display:flex;flex-direction:column;gap:8px;max-width:360px;">
@@ -4463,25 +4579,25 @@ class App extends Component {
             </div>
             <!-- Parcours de la bibliothèque : actif/inactif + ratio de passage -->
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:16px 0 8px;">
-              <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Parcours de la bibliothèque · ${cont.orient === 'portrait' ? '9:16 portrait' : '16:9 paysage'}</span>
+              <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Parcours de la bibliothèque · ${cont.orient === 'portrait' ? '9:16 portrait' : '16:9 paysage'}</span>
               ${infoTip('Créer une boucle, c’est passer en revue TOUS les éléments de la bibliothèque : coche ceux qui doivent passer et donne à chacun son ratio « 1 : N » (un passage tous les N slots). Seuls les éléments au format d’écran de cette boucle sont listés, et un élément tagué par moment ne passera qu’à ces moments-là. Décocher garde le ratio en mémoire.')}
-              <span style="font-size:11.5px;font-weight:600;color:${v.contLoopOn ? '#6E4A2B' : '#8A847C'};">${v.contLoopOn} / ${v.contItemRatios.length} actif(s)</span>
+              <span style="font-size:11.5px;font-weight:500;color:${v.contLoopOn ? '#6E4A2B' : '#8A847C'};">${v.contLoopOn} / ${v.contItemRatios.length} actif(s)</span>
               ${v.contItemRatios.length ? html`<span style="display:inline-flex;gap:5px;">
-                <button onClick=${v.contLoopAll} style="padding:4px 10px;font-size:11.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid rgba(35,34,32,0.16);background:#fff;color:#232220;">Tout activer</button>
-                <button onClick=${v.contLoopNone} style="padding:4px 10px;font-size:11.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid rgba(35,34,32,0.16);background:#fff;color:#232220;">Tout désactiver</button>
+                <button onClick=${v.contLoopAll} style="padding:4px 10px;font-size:11.5px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);">Tout activer</button>
+                <button onClick=${v.contLoopNone} style="padding:4px 10px;font-size:11.5px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);">Tout désactiver</button>
               </span>` : ''}
             </div>
             <div style="display:flex;flex-direction:column;gap:4px;max-width:470px;max-height:290px;overflow:auto;padding-right:4px;">
               ${v.contItemRatios.length ? v.contItemRatios.map((it) => html`
-                <div key=${it.id} style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:9px;border:1px solid ${it.on ? 'rgba(141,29,44,0.28)' : 'rgba(35,34,32,0.10)'};background:${it.on ? 'rgba(141,29,44,0.05)' : '#FBF8F2'};">
+                <div key=${it.id} style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:8px;border:1px solid ${it.on ? 'rgba(141,29,44,0.28)' : 'rgba(35,34,32,0.10)'};background:${it.on ? 'rgba(141,29,44,0.05)' : '#FBF8F2'};">
                   <button onClick=${it.toggle} title=${it.on ? 'Actif dans la boucle — cliquer pour retirer' : 'Inactif — cliquer pour ajouter à la boucle'} style="flex:0 0 auto;width:19px;height:19px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;line-height:1;border-radius:5px;cursor:pointer;border:1px solid ${it.on ? '#8D1D2C' : 'rgba(35,34,32,0.28)'};background:${it.on ? '#8D1D2C' : '#fff'};color:#fff;">${it.on ? '✓' : ''}</button>
                   <span style="flex:0 0 auto;font-size:13px;">${it.icon}</span>
-                  <span style="flex:1 1 auto;min-width:0;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${it.on ? '#232220' : '#8A847C'};">${it.name}<span style="color:#8A847C;"> · ${it.moments}</span></span>
-                  <span style="flex:0 0 auto;font-size:12px;color:#8A847C;">1 :</span>
-                  <input type="number" min="0" max="99" value=${it.n} onInput=${it.onN} title="Un passage tous les N slots de la boucle" style="width:62px;padding:5px 8px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;text-align:right;" />
-                  <button onClick=${it.edit} title="Éditer cet élément dans la bibliothèque" style="flex:0 0 auto;padding:4px 7px;font-size:12px;border-radius:7px;cursor:pointer;border:1px solid rgba(35,34,32,0.14);background:#fff;color:#6E4A2B;">✎</button>
+                  <span style="flex:1 1 auto;min-width:0;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${it.on ? '#232220' : '#8A847C'};">${it.name}<span style="color:var(--muted);"> · ${it.moments}</span></span>
+                  <span style="flex:0 0 auto;font-size:12px;color:var(--muted);">1 :</span>
+                  <input type="number" min="0" max="99" value=${it.n} onInput=${it.onN} title="Un passage tous les N slots de la boucle" style="width:62px;padding:5px 8px;font-size:12.5px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;text-align:right;" />
+                  <button onClick=${it.edit} title="Éditer cet élément dans la bibliothèque" style="flex:0 0 auto;padding:4px 7px;font-size:12px;border-radius:8px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--muted-2);">✎</button>
                 </div>
-              `) : html`<span style="font-size:12px;color:#8A847C;">Aucun élément de bibliothèque à ce format.</span>`}
+              `) : html`<span style="font-size:12px;color:var(--muted);">Aucun élément de bibliothèque à ce format.</span>`}
             </div>
           </div>
           <div style="display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start;">
@@ -4500,83 +4616,93 @@ class App extends Component {
     const home = this.homeReadiness();
     const MOMENT_FULL = { matin: this.t('moment.matin'), midi: this.t('moment.midi'), aprem: this.t('moment.aprem') };
     return html`
-<div style="height:100vh;background:#E7E1D8;color:#232220;display:flex;flex-direction:column;overflow:hidden;">
+<div class="workspace">
 
-  <header style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px 24px;padding:14px 30px;background:#FFFFFF;border-bottom:1px solid rgba(35,34,32,0.10);z-index:5;">
-    <div style="display:flex;align-items:center;gap:16px;min-width:0;flex:1 1 auto;">
-      <div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0;flex:0 0 auto;">
-        <img src="assets/logo.png" alt="L'Atelier By" style="height:32px;width:auto;" />
-        <span style="font-weight:500;font-size:12.5px;letter-spacing:0.02em;white-space:nowrap;">${v.t('header.console')}</span>
-      </div>
-      <div style="display:inline-flex;background:#EFE9E0;border-radius:999px;padding:3px;flex:0 0 auto;margin-left:10px;">
-        <button onClick=${v.setViewHome} style=${v.tabHomeStyle}>${v.t('nav.home')}</button>
-        <button onClick=${v.setViewComposer} style=${v.tabComposerStyle}>${v.t('nav.composer')}</button>
-        <button onClick=${v.setViewProducts} style=${v.tabProductsStyle}>${v.t('nav.products')}</button>
-        <button onClick=${v.setViewPromotions} style=${v.tabPromotionsStyle}>${v.t('nav.promotions')}</button>
-        <button onClick=${v.setViewCampaigns} style=${v.tabCampaignsStyle}>${v.t('nav.campaigns')}</button>
-        <button onClick=${v.setViewSeasons} style=${v.tabSeasonsStyle}>${v.t('nav.seasons')}</button>
-        <button onClick=${v.setViewPlanning} style=${v.tabPlanningStyle}>${v.t('nav.planning')}</button>
-        <button onClick=${v.setViewTranslations} style=${v.tabTranslationsStyle} data-nav-translations>${v.t('nav.translations')}</button>
-        <button onClick=${v.setViewFleet} style=${v.tabFleetStyle}>${v.t('nav.fleet')}</button>
-      </div>
+  ${!EMBEDDED && html`
+  <nav class="sidebar" aria-label=${v.t('shell.menu')}>
+    <div class="sidebar__head">
+      <img src="assets/logo.png" alt="L'Atelier By" class="sidebar__logo" />
+      <div class="sidebar__kicker">${v.t('shell.kicker')}</div>
     </div>
-    <div style="display:flex;align-items:center;gap:9px;flex:0 0 auto;flex-wrap:wrap;justify-content:flex-end;">
-      <button class="hdr-btn" onClick=${v.undo} style=${v.undoStyle}>↶<span class="hdr-tip">${v.t('hdr.undo')}</span></button>
-      <button class="hdr-btn" onClick=${v.redo} style=${v.redoStyle}>↷<span class="hdr-tip">${v.t('hdr.redo')}</span></button>
-      <span style="width:1px;height:26px;background:rgba(35,34,32,0.10);flex:0 0 auto;margin:0 3px;"></span>
-      <button class="hdr-btn" onClick=${v.save} style=${v.saveIconStyle}>✓<span class="hdr-tip">${v.saveTip}</span></button>
-      <button class="hdr-btn" onClick=${v.pushPrices} style=${v.pricesIconStyle}>€<span class="hdr-tip">${v.t('hdr.pushPrices')}</span></button>
-      <button class="hdr-btn" onClick=${v.toggleOverride} style=${v.overrideIconStyle}>⚡<span class="hdr-tip">${v.overrideTip}</span></button>
-      <button class="hdr-btn" onClick=${v.openPublish} style=${v.publishIconStyle}>↗<span class="hdr-tip hdr-tip-right">${v.t('hdr.publish')}</span></button>
-      <span style="width:1px;height:26px;background:rgba(35,34,32,0.10);flex:0 0 auto;margin:0 3px;"></span>
-      <button class="hdr-btn" onClick=${() => this.openWizard()} style="position:relative;display:flex;align-items:center;gap:5px;height:32px;padding:0 13px;border-radius:9px;background:#8D1D2C;color:#fff;border:none;cursor:pointer;font-size:12.5px;font-weight:700;flex:0 0 auto;">${v.t('hdr.broadcast')}<span class="hdr-tip hdr-tip-right">${v.t('hdr.broadcastTip')}</span></button>
-      <button class="hdr-btn" onClick=${v.openReport} style=${v.reportIconStyle}>📄<span class="hdr-tip hdr-tip-right">${v.t('hdr.report')}</span></button>
-      <button class="hdr-btn" onClick=${v.openOnboarding} style=${v.onbIconStyle}>🎓<span class="hdr-tip hdr-tip-right">${v.t('hdr.onboarding')}</span></button>
-      <button class="hdr-btn" onClick=${v.setViewSettings} style=${v.settingsIconStyle}>⚙<span class="hdr-tip hdr-tip-right">${v.t('hdr.settings')}</span></button>
-      <span style="width:1px;height:26px;background:rgba(35,34,32,0.10);flex:0 0 auto;margin:0 3px;"></span>
-      <div title=${v.t('nav.uiLang')} style="display:inline-flex;background:#EFE9E0;border-radius:999px;padding:3px;flex:0 0 auto;">
-        ${v.uiLangs.map((l) => html`<button onClick=${l.pick} title=${l.label} style="padding:5px 10px;font-size:11.5px;font-weight:700;letter-spacing:0.04em;border:none;border-radius:999px;cursor:pointer;${l.active ? 'background:#8D1D2C;color:#fff;' : 'background:transparent;color:#8A847C;'}">${l.short}</button>`)}
+    <div class="sidebar__back">
+      <a href="../marketing/">${icon(ICON.back)}${v.t('shell.back')}</a>
+    </div>
+    <div class="sidebar__groups">
+      ${v.shellGroups.map((g, gi) => html`
+        <div class="sidebar__group" key=${g.label}>
+          <div class="sidebar__group-label">${g.label}</div>
+          ${gi === 0 && html`<button class="sidebar__action" onClick=${() => this.openWizard()} title=${v.t('hdr.broadcastTip')}>${icon(ICON.play)}${v.t('shell.broadcast')}</button>`}
+          ${g.items.map((it) => html`
+            <button key=${it.key} class=${'sidebar__item' + (it.active ? ' is-active' : '')} aria-current=${it.active ? 'page' : undefined} data-view=${it.view || undefined} data-nav-translations=${it.view === 'translations' ? '' : undefined} onClick=${it.go}>${icon(it.icon)}${it.label}</button>
+          `)}
+        </div>
+      `)}
+    </div>
+  </nav>`}
+
+  <div class="workspace__main">
+  <header class="topbar">
+    <div class="topbar__title">
+      <p class="topbar__kicker">${v.t('shell.kicker')}</p>
+      <h1>${v.shellTitle}</h1>
+      ${v.trail.length > 0 && html`<div class="topbar__trail">
+        ${v.trail.map((c, i) => html`${i > 0 && html`<span class="sep">›</span>`}${c.cur ? html`<span class="is-current">${c.label}</span>` : (c.link ? html`<button onClick=${c.go}>${c.label}</button>` : html`<span>${c.label}</span>`)}`)}
+      </div>`}
+    </div>
+    <div class="topbar__actions">
+      <button class="btn btn--icon hdr-btn" onClick=${v.undo} disabled=${!v.canUndo} aria-label=${v.t('hdr.undo')}>${icon(ICON.undo)}<span class="hdr-tip">${v.t('hdr.undo')}</span></button>
+      <button class="btn btn--icon hdr-btn" onClick=${v.redo} disabled=${!v.canRedo} aria-label=${v.t('hdr.redo')}>${icon(ICON.redo)}<span class="hdr-tip">${v.t('hdr.redo')}</span></button>
+      <span class="topbar__sep"></span>
+      <button class=${'btn btn--icon hdr-btn ' + (v.dirty ? 'is-dirty' : 'is-ok')} onClick=${v.save} aria-label=${v.saveTip}>${icon(ICON.check)}<span class="hdr-tip">${v.saveTip}</span></button>
+      <button class="btn btn--icon hdr-btn" onClick=${v.pushPrices} aria-label=${v.t('hdr.pushPrices')}>${icon(ICON.euro)}<span class="hdr-tip">${v.t('hdr.pushPrices')}</span></button>
+      <button class=${'btn btn--icon hdr-btn' + (v.override ? ' is-on' : '')} onClick=${v.toggleOverride} aria-pressed=${v.override ? 'true' : 'false'} aria-label=${v.overrideTip}>${icon(ICON.bolt)}<span class="hdr-tip">${v.overrideTip}</span></button>
+      ${EMBEDDED && html`
+        <button class="btn btn--icon hdr-btn" onClick=${v.openReport} aria-label=${v.t('hdr.report')}>${icon(ICON.report)}<span class="hdr-tip hdr-tip-right">${v.t('hdr.report')}</span></button>
+        <button class="btn btn--icon hdr-btn" onClick=${v.openOnboarding} aria-label=${v.t('hdr.onboarding')}>${icon(ICON.onboarding)}<span class="hdr-tip hdr-tip-right">${v.t('hdr.onboarding')}</span></button>`}
+      <span class="topbar__sep"></span>
+      <a class="btn" href="film" target="_blank" title="Ouvrir la visionneuse publique du film (dernière playlist publiée)">${v.t('shell.seeFilm')} ${icon(ICON.external, 14)}</a>
+      ${EMBEDDED && html`<button class="btn hdr-btn" onClick=${() => this.openWizard()}>${icon(ICON.play, 14)}${v.t('shell.broadcast')}<span class="hdr-tip hdr-tip-right">${v.t('hdr.broadcastTip')}</span></button>`}
+      <button class="btn btn--primary hdr-btn" onClick=${v.openPublish}>${icon(ICON.send, 14)}${v.t('shell.publish')}<span class="hdr-tip hdr-tip-right">${v.t('hdr.publish')}</span></button>
+      <div class="role-switch" title=${v.t('nav.uiLang')}>
+        ${v.uiLangs.map((l) => html`<button key=${l.id} onClick=${l.pick} title=${l.label} class=${l.active ? 'is-on' : ''}>${l.short}</button>`)}
       </div>
     </div>
   </header>
 
-  <nav style="flex:0 0 auto;display:flex;align-items:center;flex-wrap:wrap;gap:2px;padding:9px 30px;background:#F3EEE6;border-bottom:1px solid rgba(35,34,32,0.08);">
-    ${v.crumbs.map((c) => html`
-      <span style=${c.sepStyle}>›</span>
-      <button onClick=${c.go} style=${c.style}>${c.label}</button>
-    `)}
-    <a href="film" target="_blank" title="Ouvrir la visionneuse publique du film (dernière playlist publiée)" style="margin-left:auto;font-size:12.5px;font-weight:600;color:#8D1D2C;padding:4px 12px;border:1px solid rgba(141,29,44,0.25);border-radius:999px;background:rgba(141,29,44,0.06);">${v.t('nav.seeFilm')}</a>
-  </nav>
+  ${EMBEDDED && html`
+  <nav class="page-tabs page-tabs--bar" aria-label=${v.t('shell.tabs')}>
+    ${v.shellTabs.map((it) => html`<button key=${it.key} class=${'page-tabs__tab' + (it.active ? ' is-on' : '')} data-view=${it.view} data-nav-translations=${it.view === 'translations' ? '' : undefined} onClick=${it.go}>${it.label}</button>`)}
+  </nav>`}
 
   ${v.isSettingsView && html`
-  <div style="flex:1 1 auto;overflow:auto;padding:34px 32px 48px;">
-    <div style="max-width:640px;margin:0 auto;">
-      <h1 style="margin:0 0 6px;font-size:24px;font-weight:600;">${v.t('settings.title')}</h1>
-      <p style="margin:0 0 26px;font-size:13.5px;color:#8A847C;">${v.t('settings.subtitle')}</p>
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;">
+  <div class="app__body">
+    <div style="max-width:640px;">
+      <h1 style="margin:0 0 6px;font-size:24px;font-weight:500;">${v.t('settings.title')}</h1>
+      <p style="margin:0 0 26px;font-size:13.5px;color:var(--muted);">${v.t('settings.subtitle')}</p>
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:26px 28px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
-          <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">${v.t('settings.serverConn')}</h2>
+          <h2 style="margin:0;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${v.t('settings.serverConn')}</h2>
           <span style=${v.srvPingStyle}>${v.srvPing}</span>
         </div>
-        <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:6px;">URL du CMS (API base)</label>
-        <input value=${v.srvUrl} onInput=${v.onSrvUrl} placeholder="https://cms.erp.local/api/v1" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:14px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;margin-bottom:16px;" />
+        <label style="display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:6px;">URL du CMS (API base)</label>
+        <input value=${v.srvUrl} onInput=${v.onSrvUrl} placeholder="https://cms.erp.local/api/v1" spellcheck="false" style="width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;margin-bottom:16px;" />
         <div style="display:flex;gap:12px;margin-bottom:16px;">
           <div style="flex:1 1 auto;min-width:0;">
-            <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:6px;">IP / hôte player</label>
-            <input value=${v.srvIp} onInput=${v.onSrvIp} placeholder="192.168.1.42" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:14px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;" />
+            <label style="display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:6px;">IP / hôte player</label>
+            <input value=${v.srvIp} onInput=${v.onSrvIp} placeholder="192.168.1.42" spellcheck="false" style="width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;" />
           </div>
           <div style="flex:1 1 auto;min-width:0;">
-            <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:6px;">Token player</label>
-            <input value=${v.srvToken} onInput=${v.onSrvToken} placeholder="plyr_…" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:14px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;" />
+            <label style="display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:6px;">Token player</label>
+            <input value=${v.srvToken} onInput=${v.onSrvToken} placeholder="plyr_…" spellcheck="false" style="width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;" />
           </div>
         </div>
         <button onClick=${v.testConn} style=${v.testBtnStyle}>${v.testBtnLabel}</button>
         ${v.hasTestRows && html`
           <div style="margin-top:16px;display:flex;flex-direction:column;gap:8px;">
             ${v.testRows.map((r) => html`
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;border-radius:9px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.08);">
-                <div style="display:flex;align-items:center;gap:10px;min-width:0;"><span style=${r.dotStyle}></span><span style="font-size:13px;font-family:ui-monospace,monospace;color:#232220;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.label}</span></div>
-                <span style="flex:0 0 auto;font-size:13px;font-weight:600;color:${r.color};">${r.result}</span>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;border-radius:8px;background:#fff;border:1px solid var(--line);">
+                <div style="display:flex;align-items:center;gap:10px;min-width:0;"><span style=${r.dotStyle}></span><span style="font-size:13px;font-family:ui-monospace,monospace;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.label}</span></div>
+                <span style="flex:0 0 auto;font-size:13px;font-weight:500;color:${r.color};">${r.result}</span>
               </div>
             `)}
           </div>
@@ -4584,69 +4710,69 @@ class App extends Component {
       </div>
 
       <!-- Stockage / streaming HD -->
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;margin-top:20px;">
-        <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Stockage / streaming HD</h2>
-        <p style="margin:0 0 14px;font-size:12px;color:#8A847C;line-height:1.5;">Adresse et identifiants d'un stockage HD externe (pour héberger les grosses vidéos hors du serveur local). Optionnel : par défaut les vidéos vivent dans le dossier <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">public/media/</code> du serveur.</p>
-        <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:6px;">Adresse du stockage HD</label>
-        <input value=${v.hdUrl} onInput=${v.onHdUrl} placeholder="https://hd-storage.exemple.com/ ou ftp://…" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:14px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;margin-bottom:14px;" />
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:26px 28px;margin-top:20px;">
+        <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">Stockage / streaming HD</h2>
+        <p style="margin:0 0 14px;font-size:12px;color:var(--muted);line-height:1.5;">Adresse et identifiants d'un stockage HD externe (pour héberger les grosses vidéos hors du serveur local). Optionnel : par défaut les vidéos vivent dans le dossier <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">public/media/</code> du serveur.</p>
+        <label style="display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:6px;">Adresse du stockage HD</label>
+        <input value=${v.hdUrl} onInput=${v.onHdUrl} placeholder="https://hd-storage.exemple.com/ ou ftp://…" spellcheck="false" style="width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;margin-bottom:14px;" />
         <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
           <div style="flex:1 1 200px;min-width:0;">
-            <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:6px;">Identifiant</label>
-            <input value=${v.hdUser} onInput=${v.onHdUser} placeholder="utilisateur" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:14px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;" />
+            <label style="display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:6px;">Identifiant</label>
+            <input value=${v.hdUser} onInput=${v.onHdUser} placeholder="utilisateur" spellcheck="false" style="width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
           </div>
           <div style="flex:1 1 200px;min-width:0;">
-            <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:6px;">Mot de passe / clé</label>
-            <input type="password" value=${v.hdPass} onInput=${v.onHdPass} placeholder=${v.hasHdPass ? '•••••••• (enregistré)' : 'mot de passe'} style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:14px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;" />
+            <label style="display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:6px;">Mot de passe / clé</label>
+            <input type="password" value=${v.hdPass} onInput=${v.onHdPass} placeholder=${v.hasHdPass ? '•••••••• (enregistré)' : 'mot de passe'} style="width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
           </div>
         </div>
-        <button onClick=${v.saveHd} disabled=${v.hdSaving} style="padding:11px 22px;font-size:13.5px;font-weight:600;color:#fff;background:#8D1D2C;border:none;border-radius:999px;cursor:${v.hdSaving ? 'wait' : 'pointer'};">${v.hdSaving ? 'Enregistrement…' : 'Enregistrer le stockage HD'}</button>
+        <button onClick=${v.saveHd} disabled=${v.hdSaving} style="padding:11px 22px;font-size:13.5px;font-weight:500;color:#fff;background:var(--accent);border:none;border-radius:8px;cursor:${v.hdSaving ? 'wait' : 'pointer'};">${v.hdSaving ? 'Enregistrement…' : 'Enregistrer le stockage HD'}</button>
       </div>
 
       <!-- Matières premières : ingrédient ↔ animation de la bibliothèque -->
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;margin-top:20px;">
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:26px 28px;margin-top:20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Matières premières — ingrédient ↔ animation</h2>
+          <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">Matières premières — ingrédient ↔ animation</h2>
           <div style="display:flex;align-items:center;gap:8px;">
-            ${v.ingDirty ? html`<span style="font-size:11.5px;font-weight:600;color:#B8860B;">modifications non enregistrées</span>` : ''}
-            <button onClick=${v.addIngredient} style="padding:6px 13px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">+ Ingrédient</button>
+            ${v.ingDirty ? html`<span style="font-size:11.5px;font-weight:500;color:var(--warn);">modifications non enregistrées</span>` : ''}
+            <button onClick=${v.addIngredient} style="padding:6px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">+ Ingrédient</button>
           </div>
         </div>
-        <p style="margin:0 0 14px;font-size:12px;color:#8A847C;line-height:1.5;">Lie une matière première à <strong>une animation</strong> de la bibliothèque : c'est ce lien que le module produit du franchiseur (Produit → Ingrédient) vient lire. Le réglage se fait <strong>ici</strong> — la régie est la seule source. La référence ERP est optionnelle : elle rapproche les deux mondes sans dépendre du nom.</p>
-        ${v.ingAnimOptions.length ? '' : html`<p style="margin:0 0 12px;font-size:12px;color:#B8860B;">Aucune animation dans la bibliothèque — crée un élément « animation » dans le Compositeur pour pouvoir en lier une.</p>`}
+        <p style="margin:0 0 14px;font-size:12px;color:var(--muted);line-height:1.5;">Lie une matière première à <strong>une animation</strong> de la bibliothèque : c'est ce lien que le module produit du franchiseur (Produit → Ingrédient) vient lire. Le réglage se fait <strong>ici</strong> — la régie est la seule source. La référence ERP est optionnelle : elle rapproche les deux mondes sans dépendre du nom.</p>
+        ${v.ingAnimOptions.length ? '' : html`<p style="margin:0 0 12px;font-size:12px;color:var(--warn);">Aucune animation dans la bibliothèque — crée un élément « animation » dans le Compositeur pour pouvoir en lier une.</p>`}
         <div style="display:flex;flex-direction:column;gap:8px;">
           ${v.ingRows.map((x) => html`
             <div key=${x.id} style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:9px 11px;border-radius:10px;border:1px solid ${x.active ? 'rgba(35,34,32,0.10)' : 'rgba(35,34,32,0.06)'};background:${x.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};">
-              <input key=${'ign-' + x.id} defaultValue=${x.name} onChange=${x.onName} placeholder="Nom de l'ingrédient (ex. Beurre AOP)" style="flex:1 1 180px;min-width:0;padding:7px 10px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
-              <input key=${'igr-' + x.id} defaultValue=${x.extRef} onChange=${x.onRef} placeholder="réf. ERP (optionnel)" spellcheck="false" style="flex:0 1 140px;min-width:0;padding:7px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;" />
+              <input key=${'ign-' + x.id} defaultValue=${x.name} onChange=${x.onName} placeholder="Nom de l'ingrédient (ex. Beurre AOP)" style="flex:1 1 180px;min-width:0;padding:7px 10px;font-size:12.5px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;" />
+              <input key=${'igr-' + x.id} defaultValue=${x.extRef} onChange=${x.onRef} placeholder="réf. ERP (optionnel)" spellcheck="false" style="flex:0 1 140px;min-width:0;padding:7px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;" />
               <label style="display:inline-flex;align-items:center;gap:6px;flex:1 1 220px;min-width:0;">
-                <span style="font-size:10.5px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#8A847C;white-space:nowrap;">Animation</span>
+                <span style="font-size:10.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);white-space:nowrap;">Animation</span>
                 <select value=${x.moduleId} onChange=${x.onAnim} style="flex:1 1 auto;min-width:0;padding:6px 8px;font-size:12px;border:1px solid ${x.orphan ? 'rgba(184,134,11,0.6)' : 'rgba(35,34,32,0.16)'};border-radius:8px;background:#fff;cursor:pointer;">
                   <option value="">— aucune —</option>
                   ${v.ingAnimOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
                 </select>
               </label>
-              ${x.orphan ? html`<span style="font-size:11px;color:#B8860B;">animation supprimée</span>` : ''}
-              <button onClick=${x.toggleActive} title=${x.active ? 'Rendre inactif' : 'Réactiver'} style="flex:0 0 auto;padding:5px 11px;font-size:11.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${x.active ? '#2E6E4E' : 'rgba(35,34,32,0.18)'};background:${x.active ? 'rgba(46,110,78,0.10)' : '#fff'};color:${x.active ? '#2E6E4E' : '#8A847C'};">${x.active ? '✓ Actif' : 'Inactif'}</button>
+              ${x.orphan ? html`<span style="font-size:11px;color:var(--warn);">animation supprimée</span>` : ''}
+              <button onClick=${x.toggleActive} title=${x.active ? 'Rendre inactif' : 'Réactiver'} style="flex:0 0 auto;padding:5px 11px;font-size:11.5px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid ${x.active ? '#2E6E4E' : 'rgba(35,34,32,0.18)'};background:${x.active ? 'rgba(63,122,82,0.10)' : '#fff'};color:${x.active ? '#2E6E4E' : '#8A847C'};">${x.active ? '✓ Actif' : 'Inactif'}</button>
               <span style="flex:0 0 auto;display:inline-flex;gap:3px;">
-                <button onClick=${x.up} disabled=${x.isFirst} title="Monter" style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:${x.isFirst ? 'default' : 'pointer'};opacity:${x.isFirst ? 0.35 : 1};">↑</button>
-                <button onClick=${x.down} disabled=${x.isLast} title="Descendre" style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:${x.isLast ? 'default' : 'pointer'};opacity:${x.isLast ? 0.35 : 1};">↓</button>
-                <button onClick=${x.del} title="Supprimer" style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;color:#8D1D2C;cursor:pointer;">✕</button>
+                <button onClick=${x.up} disabled=${x.isFirst} title="Monter" style="width:26px;height:26px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:${x.isFirst ? 'default' : 'pointer'};opacity:${x.isFirst ? 0.35 : 1};">↑</button>
+                <button onClick=${x.down} disabled=${x.isLast} title="Descendre" style="width:26px;height:26px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:${x.isLast ? 'default' : 'pointer'};opacity:${x.isLast ? 0.35 : 1};">↓</button>
+                <button onClick=${x.del} title="Supprimer" style="width:26px;height:26px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--accent);cursor:pointer;">✕</button>
               </span>
             </div>
           `)}
-          ${!v.ingRows.length && html`<p style="margin:0;font-size:12.5px;color:#8A847C;">Aucune matière première. « + Ingrédient » pour en déclarer une.</p>`}
+          ${!v.ingRows.length && html`<p style="margin:0;font-size:12.5px;color:var(--muted);">Aucune matière première. « + Ingrédient » pour en déclarer une.</p>`}
         </div>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px;">
-          <button onClick=${v.saveIngredients} disabled=${v.ingBusy || !v.ingDirty} style="padding:11px 22px;font-size:13.5px;font-weight:600;color:#fff;background:${v.ingDirty ? '#8D1D2C' : 'rgba(141,29,44,0.35)'};border:none;border-radius:999px;cursor:${v.ingBusy ? 'wait' : (v.ingDirty ? 'pointer' : 'default')};">${v.ingBusy ? 'Enregistrement…' : 'Enregistrer les matières premières'}</button>
-          <button onClick=${v.inspectIngredients} title="Cherche la table des ingrédients dans la base de l'ERP (lecture seule, rien n'est importé)" style="padding:9px 16px;font-size:12.5px;font-weight:600;color:#6E4A2B;background:#fff;border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">🔎 Diagnostic ERP</button>
+          <button onClick=${v.saveIngredients} disabled=${v.ingBusy || !v.ingDirty} style="padding:11px 22px;font-size:13.5px;font-weight:500;color:#fff;background:${v.ingDirty ? '#8D1D2C' : 'rgba(141,29,44,0.35)'};border:none;border-radius:8px;cursor:${v.ingBusy ? 'wait' : (v.ingDirty ? 'pointer' : 'default')};">${v.ingBusy ? 'Enregistrement…' : 'Enregistrer les matières premières'}</button>
+          <button onClick=${v.inspectIngredients} title="Cherche la table des ingrédients dans la base de l'ERP (lecture seule, rien n'est importé)" style="padding:9px 16px;font-size:12.5px;font-weight:500;color:var(--muted-2);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">🔎 Diagnostic ERP</button>
         </div>
         ${v.ingDiag && html`
-          <div style="margin-top:12px;padding:11px 13px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.08);font-size:12px;color:#4A4640;">
+          <div style="margin-top:12px;padding:11px 13px;border-radius:10px;background:var(--paper);border:1px solid var(--line);font-size:12px;color:var(--muted-2);">
             ${v.ingDiag.busy ? 'Recherche…'
-              : (v.ingDiag.error ? html`<span style="color:#8D1D2C;">Diagnostic impossible — la base de l'ERP n'est pas joignable : ${v.ingDiag.error}</span>`
+              : (v.ingDiag.error ? html`<span style="color:var(--accent);">Diagnostic impossible — la base de l'ERP n'est pas joignable : ${v.ingDiag.error}</span>`
                 : (v.ingDiag.ok
                   ? html`<div>Base <strong>${v.ingDiag.db}</strong> — table(s) trouvée(s) :
-                      ${v.ingDiag.inspected.map((t) => html`<div style="margin-top:6px;"><strong>${t.table}</strong> <span style="color:#8A847C;font-family:ui-monospace,monospace;">${t.columns.join(', ')}</span></div>`)}
+                      ${v.ingDiag.inspected.map((t) => html`<div style="margin-top:6px;"><strong>${t.table}</strong> <span style="color:var(--muted);font-family:ui-monospace,monospace;">${t.columns.join(', ')}</span></div>`)}
                     </div>`
                   : 'Aucune table d\'ingrédients reconnue dans la base de l\'ERP. Les matières premières se saisissent alors directement ci-dessus.'))}
           </div>
@@ -4654,37 +4780,37 @@ class App extends Component {
       </div>
 
       <!-- Catégories de la bibliothèque : classement des éléments + table liée -->
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;margin-top:20px;">
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:26px 28px;margin-top:20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Catégories de la bibliothèque</h2>
+          <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">Catégories de la bibliothèque</h2>
           <div style="display:flex;align-items:center;gap:8px;">
-            ${v.libCatDirty ? html`<span style="font-size:11.5px;font-weight:600;color:#B8860B;">modifications non enregistrées</span>` : ''}
-            <button onClick=${v.addLibCat} style="padding:6px 13px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">+ Catégorie</button>
+            ${v.libCatDirty ? html`<span style="font-size:11.5px;font-weight:500;color:var(--warn);">modifications non enregistrées</span>` : ''}
+            <button onClick=${v.addLibCat} style="padding:6px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">+ Catégorie</button>
           </div>
         </div>
-        <p style="margin:0 0 14px;font-size:12px;color:#8A847C;line-height:1.5;">Le classement des éléments de la bibliothèque. Chaque catégorie dit à quelle <strong>table de la régie</strong> elle est liée : c'est la donnée qui alimente ses éléments. Une catégorie inactive n'est plus proposée au classement, mais les éléments qui la portent restent visibles.</p>
+        <p style="margin:0 0 14px;font-size:12px;color:var(--muted);line-height:1.5;">Le classement des éléments de la bibliothèque. Chaque catégorie dit à quelle <strong>table de la régie</strong> elle est liée : c'est la donnée qui alimente ses éléments. Une catégorie inactive n'est plus proposée au classement, mais les éléments qui la portent restent visibles.</p>
         <div style="display:flex;flex-direction:column;gap:8px;">
           ${v.libCatRows.map((c) => html`
             <div key=${c.id} style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:9px 11px;border-radius:10px;border:1px solid ${c.active ? 'rgba(35,34,32,0.10)' : 'rgba(35,34,32,0.06)'};background:${c.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};">
-              <input key=${'lcc-' + c.id} type="color" defaultValue=${c.color} onChange=${c.onColor} title="Couleur de la catégorie" style="flex:0 0 auto;width:30px;height:30px;padding:0;border:1px solid rgba(35,34,32,0.14);border-radius:7px;background:#fff;cursor:pointer;" />
-              <input key=${'lcn-' + c.id} defaultValue=${c.name} onChange=${c.onName} placeholder="Nom de la catégorie" style="flex:1 1 150px;min-width:0;padding:7px 10px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
+              <input key=${'lcc-' + c.id} type="color" defaultValue=${c.color} onChange=${c.onColor} title="Couleur de la catégorie" style="flex:0 0 auto;width:30px;height:30px;padding:0;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;" />
+              <input key=${'lcn-' + c.id} defaultValue=${c.name} onChange=${c.onName} placeholder="Nom de la catégorie" style="flex:1 1 150px;min-width:0;padding:7px 10px;font-size:12.5px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;" />
               <label style="display:inline-flex;align-items:center;gap:6px;flex:1 1 210px;min-width:0;">
-                <span style="font-size:10.5px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#8A847C;white-space:nowrap;">Table liée</span>
-                <select value=${c.src} onChange=${c.onSrc} title="Table de la régie qui alimente cette catégorie" style="flex:1 1 auto;min-width:0;padding:6px 8px;font-size:12px;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;cursor:pointer;">
+                <span style="font-size:10.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);white-space:nowrap;">Table liée</span>
+                <select value=${c.src} onChange=${c.onSrc} title="Table de la régie qui alimente cette catégorie" style="flex:1 1 auto;min-width:0;padding:6px 8px;font-size:12px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
                   ${v.libSourceOptions.map((s) => html`<option value=${s.id}>${s.name}</option>`)}
                 </select>
               </label>
-              <span style="flex:0 0 auto;font-size:11.5px;color:#8A847C;">${c.used} élément(s)</span>
-              <button onClick=${c.toggleActive} title=${c.active ? 'Rendre inactive' : 'Réactiver'} style="flex:0 0 auto;padding:5px 11px;font-size:11.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${c.active ? '#2E6E4E' : 'rgba(35,34,32,0.18)'};background:${c.active ? 'rgba(46,110,78,0.10)' : '#fff'};color:${c.active ? '#2E6E4E' : '#8A847C'};">${c.active ? '✓ Active' : 'Inactive'}</button>
+              <span style="flex:0 0 auto;font-size:11.5px;color:var(--muted);">${c.used} élément(s)</span>
+              <button onClick=${c.toggleActive} title=${c.active ? 'Rendre inactive' : 'Réactiver'} style="flex:0 0 auto;padding:5px 11px;font-size:11.5px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid ${c.active ? '#2E6E4E' : 'rgba(35,34,32,0.18)'};background:${c.active ? 'rgba(63,122,82,0.10)' : '#fff'};color:${c.active ? '#2E6E4E' : '#8A847C'};">${c.active ? '✓ Active' : 'Inactive'}</button>
               <span style="flex:0 0 auto;display:inline-flex;gap:3px;">
-                <button onClick=${c.up} disabled=${c.isFirst} title="Monter" style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:${c.isFirst ? 'default' : 'pointer'};opacity:${c.isFirst ? 0.35 : 1};">↑</button>
-                <button onClick=${c.down} disabled=${c.isLast} title="Descendre" style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:${c.isLast ? 'default' : 'pointer'};opacity:${c.isLast ? 0.35 : 1};">↓</button>
-                <button onClick=${c.del} title="Supprimer" style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;color:#8D1D2C;cursor:pointer;">✕</button>
+                <button onClick=${c.up} disabled=${c.isFirst} title="Monter" style="width:26px;height:26px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:${c.isFirst ? 'default' : 'pointer'};opacity:${c.isFirst ? 0.35 : 1};">↑</button>
+                <button onClick=${c.down} disabled=${c.isLast} title="Descendre" style="width:26px;height:26px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:${c.isLast ? 'default' : 'pointer'};opacity:${c.isLast ? 0.35 : 1};">↓</button>
+                <button onClick=${c.del} title="Supprimer" style="width:26px;height:26px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--accent);cursor:pointer;">✕</button>
               </span>
             </div>
           `)}
         </div>
-        <button onClick=${v.saveLibCats} disabled=${v.libCatBusy || !v.libCatDirty} style="margin-top:16px;padding:11px 22px;font-size:13.5px;font-weight:600;color:#fff;background:${v.libCatDirty ? '#8D1D2C' : 'rgba(141,29,44,0.35)'};border:none;border-radius:999px;cursor:${v.libCatBusy ? 'wait' : (v.libCatDirty ? 'pointer' : 'default')};">${v.libCatBusy ? 'Enregistrement…' : 'Enregistrer les catégories'}</button>
+        <button onClick=${v.saveLibCats} disabled=${v.libCatBusy || !v.libCatDirty} style="margin-top:16px;padding:11px 22px;font-size:13.5px;font-weight:500;color:#fff;background:${v.libCatDirty ? '#8D1D2C' : 'rgba(141,29,44,0.35)'};border:none;border-radius:8px;cursor:${v.libCatBusy ? 'wait' : (v.libCatDirty ? 'pointer' : 'default')};">${v.libCatBusy ? 'Enregistrement…' : 'Enregistrer les catégories'}</button>
       </div>
 
       <!-- Connexion sécurisée (https) -->
@@ -4693,44 +4819,44 @@ class App extends Component {
         const onHttp = location.protocol === 'http:';
         const until = hs && hs.validTo ? new Date(hs.validTo).toLocaleString('fr-BE', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '';
         const late = hs && hs.daysLeft != null && hs.daysLeft < 2;
-        return html`<div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;margin-top:20px;">
-          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Connexion sécurisée (https)</h2>
+        return html`<div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:26px 28px;margin-top:20px;">
+          <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">Connexion sécurisée (https)</h2>
           ${hs && hs.ok ? html`
-            <p style="margin:0 0 10px;font-size:12px;color:#2E6E4E;font-weight:600;">● https actif — <a href=${hs.base} style="color:#2E6E4E;">${hs.base}</a></p>
+            <p style="margin:0 0 10px;font-size:12px;color:var(--green);font-weight:500;">● https actif — <a href=${hs.base} style="color:var(--green);">${hs.base}</a></p>
             <p style="margin:0 0 10px;font-size:12px;color:${late ? '#8D1D2C' : '#8A847C'};line-height:1.5;">Certificat ${hs.issuer || 'Let\'s Encrypt'} valable jusqu'au ${until}${late ? ' — renouvellement en retard : à vérifier sur le serveur (la livraison dit, à l\'étape HTTPS, qui le renouvelle et si son défi passe)' : ' · renouvelé automatiquement (certificats de 6 jours)'}.</p>
-            <p style="margin:0 0 ${onHttp ? 12 : 0}px;font-size:12px;color:#8A847C;line-height:1.5;">Un écran ne <strong>redémarre sans réseau</strong> que s'il est ouvert en https : la page et son code restent alors sur l'écran. Ouvre la régie à cette adresse et ses liens (player, magasin, film) seront tous en https.</p>
-            ${onHttp ? html`<a href=${hs.base} style="display:inline-flex;align-items:center;gap:6px;padding:9px 16px;font-size:12.5px;font-weight:600;color:#fff;background:#2E6E4E;border-radius:999px;">🔒 Ouvrir la régie en https ↗</a>` : ''}
-          ` : html`<p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">Pas de https constaté sur ce serveur. La livraison s'appuie sur celui du serveur s'il en a un, et pose sinon un certificat Let's Encrypt pour l'adresse IP (renouvelé automatiquement). En http, les écrans tiennent une coupure réseau page ouverte, mais ne redémarrent pas sans réseau — le navigateur réserve le service worker au https.</p>`}
+            <p style="margin:0 0 ${onHttp ? 12 : 0}px;font-size:12px;color:var(--muted);line-height:1.5;">Un écran ne <strong>redémarre sans réseau</strong> que s'il est ouvert en https : la page et son code restent alors sur l'écran. Ouvre la régie à cette adresse et ses liens (player, magasin, film) seront tous en https.</p>
+            ${onHttp ? html`<a href=${hs.base} style="display:inline-flex;align-items:center;gap:6px;padding:9px 16px;font-size:12.5px;font-weight:500;color:#fff;background:var(--green);border-radius:999px;">🔒 Ouvrir la régie en https ↗</a>` : ''}
+          ` : html`<p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">Pas de https constaté sur ce serveur. La livraison s'appuie sur celui du serveur s'il en a un, et pose sinon un certificat Let's Encrypt pour l'adresse IP (renouvelé automatiquement). En http, les écrans tiennent une coupure réseau page ouverte, mais ne redémarrent pas sans réseau — le navigateur réserve le service worker au https.</p>`}
         </div>`;
       })()}
 
       <!-- Espace Vidéo — Agence -->
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;margin-top:20px;">
-        <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Espace Vidéo — Agence</h2>
-        <p style="margin:0 0 12px;font-size:12px;color:#8A847C;line-height:1.5;">Un accès séparé où les agences uploadent des vidéos/photos taguées (moment · produit · saison) et vérifient leur présence sur le serveur. Elles n'accèdent qu'à cette page, avec l'identifiant <strong>agence</strong> et un mot de passe dédié.</p>
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:26px 28px;margin-top:20px;">
+        <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">Espace Vidéo — Agence</h2>
+        <p style="margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.5;">Un accès séparé où les agences uploadent des vidéos/photos taguées (moment · produit · saison) et vérifient leur présence sur le serveur. Elles n'accèdent qu'à cette page, avec l'identifiant <strong>agence</strong> et un mot de passe dédié.</p>
         ${st.agencyEnabled
-          ? html`<p style="margin:0 0 14px;font-size:12px;color:#2E6E4E;font-weight:600;">● Accès ouvert — partage-leur ce lien :</p>`
-          : html`<p style="margin:0 0 14px;padding:10px 12px;border-radius:9px;background:rgba(184,134,11,0.10);border:1px solid rgba(184,134,11,0.35);font-size:12px;color:#6E4A2B;line-height:1.5;"><strong>Accès fermé.</strong> Aucun mot de passe agence n'est défini sur ce serveur, et le mot de passe par défaut est refusé en production. Pour l'ouvrir : ajouter le secret <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">SIG_AGENCY_PASSWORD</code> au dépôt GitHub (Settings → Secrets and variables → Actions), puis relancer le déploiement.</p>`}
-        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.08);">
-          <input readonly value=${v.agencyUrl} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:8px 10px;font-size:12.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:7px;background:#fff;" />
-          <button onClick=${() => v.copyLink(v.agencyUrl)} style="flex:0 0 auto;padding:8px 14px;font-size:12.5px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Copier</button>
-          <a href=${v.agencyUrl} target="_blank" style="flex:0 0 auto;font-size:12.5px;font-weight:600;color:#8D1D2C;">↗ Ouvrir</a>
+          ? html`<p style="margin:0 0 14px;font-size:12px;color:var(--green);font-weight:500;">● Accès ouvert — partage-leur ce lien :</p>`
+          : html`<p style="margin:0 0 14px;padding:10px 12px;border-radius:8px;background:rgba(184,134,11,0.10);border:1px solid rgba(184,134,11,0.35);font-size:12px;color:var(--muted-2);line-height:1.5;"><strong>Accès fermé.</strong> Aucun mot de passe agence n'est défini sur ce serveur, et le mot de passe par défaut est refusé en production. Pour l'ouvrir : ajouter le secret <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">SIG_AGENCY_PASSWORD</code> au dépôt GitHub (Settings → Secrets and variables → Actions), puis relancer le déploiement.</p>`}
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:var(--paper);border:1px solid var(--line);">
+          <input readonly value=${v.agencyUrl} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:8px 10px;font-size:12.5px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;" />
+          <button onClick=${() => v.copyLink(v.agencyUrl)} style="flex:0 0 auto;padding:8px 14px;font-size:12.5px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;">⎘ Copier</button>
+          <a href=${v.agencyUrl} target="_blank" style="flex:0 0 auto;font-size:12.5px;font-weight:500;color:var(--accent);">↗ Ouvrir</a>
         </div>
       </div>
 
       ${st.pwaForm && html`
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;margin-top:20px;">
-        <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Catalogue PWA — même serveur</h2>
-        <p style="margin:0 0 14px;font-size:12px;color:#8A847C;line-height:1.5;">La régie tourne sur le serveur des bases de données : le bouton détecte tout seul la base qui contient <strong>product_category</strong>, <strong>product</strong> et <strong>shop_product</strong> (connexion locale), lit les colonnes, et rafraîchit la table produits — catégories, produits, prix par boutique mappés sur les magasins dans l'ordre.</p>
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:26px 28px;margin-top:20px;">
+        <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">Catalogue PWA — même serveur</h2>
+        <p style="margin:0 0 14px;font-size:12px;color:var(--muted);line-height:1.5;">La régie tourne sur le serveur des bases de données : le bouton détecte tout seul la base qui contient <strong>product_category</strong>, <strong>product</strong> et <strong>shop_product</strong> (connexion locale), lit les colonnes, et rafraîchit la table produits — catégories, produits, prix par boutique mappés sur les magasins dans l'ordre.</p>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-          <button onClick=${() => this.pwaAction('import')} disabled=${!!st.pwaBusy} style="display:inline-flex;align-items:center;gap:9px;padding:12px 24px;font-size:14px;font-weight:600;border-radius:999px;cursor:${st.pwaBusy ? 'progress' : 'pointer'};background:#6E4A2B;color:#fff;border:1px solid #6E4A2B;box-shadow:0 2px 10px rgba(110,74,43,0.3);">
+          <button onClick=${() => this.pwaAction('import')} disabled=${!!st.pwaBusy} style="display:inline-flex;align-items:center;gap:9px;padding:9px 18px;font-size:13px;font-weight:500;border-radius:8px;cursor:${st.pwaBusy ? 'progress' : 'pointer'};background:var(--muted-2);color:#fff;border:1px solid var(--muted-2);">
             <span style="font-size:16px;display:inline-block;${st.pwaBusy === 'import' ? 'animation:none;' : ''}">⟳</span>
             ${st.pwaBusy === 'import' ? 'Rafraîchissement…' : 'Rafraîchir depuis la base'}
           </button>
-          <button onClick=${() => this.pwaAction('test')} disabled=${!!st.pwaBusy} style="padding:11px 18px;font-size:13px;font-weight:600;border-radius:999px;cursor:${st.pwaBusy ? 'progress' : 'pointer'};background:transparent;color:#5B564E;border:1px solid rgba(35,34,32,0.18);">${st.pwaBusy === 'test' ? 'Détection…' : 'Tester (sans importer)'}</button>
+          <button onClick=${() => this.pwaAction('test')} disabled=${!!st.pwaBusy} style="padding:11px 18px;font-size:13px;font-weight:500;border-radius:8px;cursor:${st.pwaBusy ? 'progress' : 'pointer'};background:transparent;color:var(--muted-2);border:1px solid var(--line);">${st.pwaBusy === 'test' ? 'Détection…' : 'Tester (sans importer)'}</button>
         </div>
         ${st.pwaResult && html`
-          <div style="margin-bottom:12px;font-size:12.5px;font-weight:600;line-height:1.6;color:${st.pwaResult.ok ? '#2E7D32' : '#8D1D2C'};">
+          <div style="margin-bottom:12px;font-size:12.5px;font-weight:500;line-height:1.6;color:${st.pwaResult.ok ? '#2E7D32' : '#8D1D2C'};">
             ${st.pwaResult.ok
               ? (st.pwaResult.counts
                 ? `✓ Base « ${st.pwaResult.db} » détectée — ${Object.entries(st.pwaResult.counts).map(([k, n]) => `${n} ${k}`).join(' · ')}`
@@ -4740,167 +4866,167 @@ class App extends Component {
           </div>
         `}
         <details>
-        <summary style="font-size:12px;font-weight:600;color:#8A847C;cursor:pointer;">Réglages avancés — uniquement si la détection automatique échoue</summary>
+        <summary style="font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;">Réglages avancés — uniquement si la détection automatique échoue</summary>
         <div style="margin:10px 0 0;">
-          <button onClick=${() => this.pwaReset()} style="padding:8px 14px;font-size:12px;font-weight:600;border-radius:999px;cursor:pointer;background:transparent;color:#8D1D2C;border:1px solid rgba(141,29,44,0.3);">Réinitialiser les réglages avancés (retour au tout-automatique)</button>
+          <button onClick=${() => this.pwaReset()} style="padding:8px 14px;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;background:transparent;color:var(--accent);border:1px solid rgba(141,29,44,0.3);">Réinitialiser les réglages avancés (retour au tout-automatique)</button>
         </div>
         <div style="display:grid;grid-template-columns:1.2fr 90px 1fr 1fr 1fr;gap:9px;margin:12px 0 10px;">
-          <input value=${st.pwaForm.host} onInput=${(e) => this.setPwa('host', e.target.value)} placeholder="Hôte (127.0.0.1)" style="padding:10px 12px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;min-width:0;" />
-          <input value=${st.pwaForm.port} onInput=${(e) => this.setPwa('port', e.target.value)} placeholder="3306" inputmode="numeric" style="padding:10px 12px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;min-width:0;" />
-          <input value=${st.pwaForm.db} onInput=${(e) => this.setPwa('db', e.target.value)} placeholder="Base (ex. pwa)" style="padding:10px 12px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;min-width:0;" />
-          <input value=${st.pwaForm.user} onInput=${(e) => this.setPwa('user', e.target.value)} placeholder="Utilisateur" style="padding:10px 12px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;min-width:0;" />
-          <input type="password" value=${st.pwaForm.password} onInput=${(e) => this.setPwa('password', e.target.value)} placeholder=${st.pwaForm.hasPassword ? '••••• (inchangé)' : 'Mot de passe'} style="padding:10px 12px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;min-width:0;" />
+          <input value=${st.pwaForm.host} onInput=${(e) => this.setPwa('host', e.target.value)} placeholder="Hôte (127.0.0.1)" style="padding:10px 12px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;min-width:0;" />
+          <input value=${st.pwaForm.port} onInput=${(e) => this.setPwa('port', e.target.value)} placeholder="3306" inputmode="numeric" style="padding:10px 12px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;min-width:0;" />
+          <input value=${st.pwaForm.db} onInput=${(e) => this.setPwa('db', e.target.value)} placeholder="Base (ex. pwa)" style="padding:10px 12px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;min-width:0;" />
+          <input value=${st.pwaForm.user} onInput=${(e) => this.setPwa('user', e.target.value)} placeholder="Utilisateur" style="padding:10px 12px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;min-width:0;" />
+          <input type="password" value=${st.pwaForm.password} onInput=${(e) => this.setPwa('password', e.target.value)} placeholder=${st.pwaForm.hasPassword ? '••••• (inchangé)' : 'Mot de passe'} style="padding:10px 12px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;min-width:0;" />
         </div>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-          <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">ID boutique PWA par magasin</span>
+          <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">ID boutique PWA par magasin</span>
           ${st.fleet.map((sf) => html`
-            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#5B564E;background:#FBF8F2;border:1px solid rgba(35,34,32,0.12);border-radius:999px;padding:5px 6px 5px 12px;">
+            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted-2);background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:5px 6px 5px 12px;">
               ${sf.store}
-              <input value=${(st.pwaForm.shopMap || {})[sf.id] || ''} onInput=${(e) => this.setPwaShop(sf.id, e.target.value)} placeholder="id" style="width:52px;padding:5px 8px;font-size:12px;border:1px solid rgba(35,34,32,0.16);border-radius:999px;background:#fff;text-align:center;" />
+              <input value=${(st.pwaForm.shopMap || {})[sf.id] || ''} onInput=${(e) => this.setPwaShop(sf.id, e.target.value)} placeholder="id" style="width:52px;padding:5px 8px;font-size:12px;border:1px solid var(--line);border-radius:999px;background:#fff;text-align:center;" />
             </label>
           `)}
         </div>
         <div style="margin-bottom:4px;">
           <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px;">
-            <label style="font-size:11.5px;color:#8A847C;">Catégories → <code>id, nom</code></label>
-            <textarea value=${st.pwaForm.qCategories} onInput=${(e) => this.setPwa('qCategories', e.target.value)} rows="1" style="padding:9px 11px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;resize:vertical;"></textarea>
-            <label style="font-size:11.5px;color:#8A847C;">Produits → <code>id, id_catégorie, nom, prix, actif</code></label>
-            <textarea value=${st.pwaForm.qProducts} onInput=${(e) => this.setPwa('qProducts', e.target.value)} rows="1" style="padding:9px 11px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;resize:vertical;"></textarea>
-            <label style="font-size:11.5px;color:#8A847C;">Prix par boutique (shop_product) → <code>id_produit, id_boutique, prix</code></label>
-            <textarea value=${st.pwaForm.qShopPrices} onInput=${(e) => this.setPwa('qShopPrices', e.target.value)} rows="1" style="padding:9px 11px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;resize:vertical;"></textarea>
-            <label style="font-size:11.5px;color:#8A847C;">Alias / langues (optionnel) → <code>id_produit, langue, nom</code></label>
-            <textarea value=${st.pwaForm.qAliases} onInput=${(e) => this.setPwa('qAliases', e.target.value)} rows="1" placeholder="SELECT product_id, lang, name FROM product_lang" style="padding:9px 11px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;resize:vertical;"></textarea>
+            <label style="font-size:11.5px;color:var(--muted);">Catégories → <code>id, nom</code></label>
+            <textarea value=${st.pwaForm.qCategories} onInput=${(e) => this.setPwa('qCategories', e.target.value)} rows="1" style="padding:9px 11px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;resize:vertical;"></textarea>
+            <label style="font-size:11.5px;color:var(--muted);">Produits → <code>id, id_catégorie, nom, prix, actif</code></label>
+            <textarea value=${st.pwaForm.qProducts} onInput=${(e) => this.setPwa('qProducts', e.target.value)} rows="1" style="padding:9px 11px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;resize:vertical;"></textarea>
+            <label style="font-size:11.5px;color:var(--muted);">Prix par boutique (shop_product) → <code>id_produit, id_boutique, prix</code></label>
+            <textarea value=${st.pwaForm.qShopPrices} onInput=${(e) => this.setPwa('qShopPrices', e.target.value)} rows="1" style="padding:9px 11px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;resize:vertical;"></textarea>
+            <label style="font-size:11.5px;color:var(--muted);">Alias / langues (optionnel) → <code>id_produit, langue, nom</code></label>
+            <textarea value=${st.pwaForm.qAliases} onInput=${(e) => this.setPwa('qAliases', e.target.value)} rows="1" placeholder="SELECT product_id, lang, name FROM product_lang" style="padding:9px 11px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;resize:vertical;"></textarea>
           </div>
         </div>
         </details>
       </div>
       `}
 
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:26px 28px;margin-top:20px;">
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:26px 28px;margin-top:20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-          <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8D1D2C;">Liens de diffusion — film</h2>
-          <a href="film" target="_blank" style="font-size:12.5px;font-weight:600;color:#8D1D2C;">▶ Ouvrir le film</a>
+          <h2 style="margin:0;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">Liens de diffusion — film</h2>
+          <a href="film" target="_blank" style="font-size:12.5px;font-weight:500;color:var(--accent);">▶ Ouvrir le film</a>
         </div>
-        <p style="margin:0 0 16px;font-size:12px;color:#8A847C;line-height:1.5;">Le format d'écran (pixels + ratio) est inscrit dans l'URL : copie le lien du format voulu et pointe la TV / box / navigateur directement dessus. La lecture ne demande aucune connexion.</p>
+        <p style="margin:0 0 16px;font-size:12px;color:var(--muted);line-height:1.5;">Le format d'écran (pixels + ratio) est inscrit dans l'URL : copie le lien du format voulu et pointe la TV / box / navigateur directement dessus. La lecture ne demande aucune connexion.</p>
         <div style="display:flex;flex-direction:column;gap:8px;">
           ${this.filmLinks().map((l) => html`
-            <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.08);">
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--paper);border:1px solid var(--line);">
               <div style="flex:0 0 190px;min-width:0;">
-                <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.label}</div>
-                <div style="font-size:10.5px;color:#8A847C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.sub}</div>
+                <div style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.label}</div>
+                <div style="font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.sub}</div>
               </div>
-              <input readonly value=${l.url} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:8px 10px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:7px;background:#fff;color:#232220;" />
-              <button onClick=${() => this.copyLink(l.url)} title="Copier le lien" style="flex:0 0 auto;padding:8px 13px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">Copier</button>
-              <a href=${l.url} target="_blank" title="Ouvrir dans un onglet" style="flex:0 0 auto;padding:8px 11px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(35,34,32,0.14);background:#fff;color:#232220;">↗</a>
+              <input readonly value=${l.url} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:8px 10px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);" />
+              <button onClick=${() => this.copyLink(l.url)} title="Copier le lien" style="flex:0 0 auto;padding:8px 13px;font-size:12px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;">Copier</button>
+              <a href=${l.url} target="_blank" title="Ouvrir dans un onglet" style="flex:0 0 auto;padding:8px 11px;font-size:12px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);">↗</a>
             </div>
           `)}
         </div>
         ${this.perFilmLinks().length > 0 && html`
-          <h3 style="margin:20px 0 4px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">Par film · dernière publication du film (55″ standard)</h3>
-          <p style="margin:0 0 12px;font-size:11.5px;color:#8A847C;line-height:1.5;">Un lien par film de la régie. Un film jamais publié s'affiche en prévisualisation (badge « brouillon ») — pense à Enregistrer puis Publier.</p>
+          <h3 style="margin:20px 0 4px;font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Par film · dernière publication du film (55″ standard)</h3>
+          <p style="margin:0 0 12px;font-size:11.5px;color:var(--muted);line-height:1.5;">Un lien par film de la régie. Un film jamais publié s'affiche en prévisualisation (badge « brouillon ») — pense à Enregistrer puis Publier.</p>
           <div style="display:flex;flex-direction:column;gap:8px;">
             ${this.perFilmLinks().map((l) => html`
-              <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.08);">
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--paper);border:1px solid var(--line);">
                 <div style="flex:0 0 190px;min-width:0;">
-                  <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.label}</div>
-                  <div style="font-size:10.5px;color:#8A847C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.sub}</div>
+                  <div style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.label}</div>
+                  <div style="font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.sub}</div>
                 </div>
-                <input readonly value=${l.url} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:8px 10px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:7px;background:#fff;color:#232220;" />
-                <button onClick=${() => this.copyLink(l.url)} title="Copier le lien" style="flex:0 0 auto;padding:8px 13px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">Copier</button>
-                <a href=${l.url} target="_blank" title="Ouvrir dans un onglet" style="flex:0 0 auto;padding:8px 11px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(35,34,32,0.14);background:#fff;color:#232220;">↗</a>
+                <input readonly value=${l.url} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:8px 10px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);" />
+                <button onClick=${() => this.copyLink(l.url)} title="Copier le lien" style="flex:0 0 auto;padding:8px 13px;font-size:12px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;">Copier</button>
+                <a href=${l.url} target="_blank" title="Ouvrir dans un onglet" style="flex:0 0 auto;padding:8px 11px;font-size:12px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);">↗</a>
               </div>
             `)}
           </div>
         `}
         ${this.storeFilmLinks().length > 0 && html`
-          <h3 style="margin:20px 0 4px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">Par magasin · version assignée au magasin (55″ standard)</h3>
-          <p style="margin:0 0 12px;font-size:11.5px;color:#8A847C;line-height:1.5;">Chaque lien montre le film que CE magasin doit jouer — pratique à envoyer au responsable du point de vente.</p>
+          <h3 style="margin:20px 0 4px;font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Par magasin · version assignée au magasin (55″ standard)</h3>
+          <p style="margin:0 0 12px;font-size:11.5px;color:var(--muted);line-height:1.5;">Chaque lien montre le film que CE magasin doit jouer — pratique à envoyer au responsable du point de vente.</p>
           <div style="display:flex;flex-direction:column;gap:8px;">
             ${this.storeFilmLinks().map((l) => html`
-              <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.08);">
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--paper);border:1px solid var(--line);">
                 <div style="flex:0 0 190px;min-width:0;">
-                  <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.label}</div>
-                  <div style="font-size:10.5px;color:#8A847C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.sub}</div>
+                  <div style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.label}</div>
+                  <div style="font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.sub}</div>
                 </div>
-                <input readonly value=${l.url} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:8px 10px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:7px;background:#fff;color:#232220;" />
-                <button onClick=${() => this.copyLink(l.url)} title="Copier le lien" style="flex:0 0 auto;padding:8px 13px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">Copier</button>
-                <a href=${l.url} target="_blank" title="Ouvrir dans un onglet" style="flex:0 0 auto;padding:8px 11px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(35,34,32,0.14);background:#fff;color:#232220;">↗</a>
+                <input readonly value=${l.url} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:8px 10px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);" />
+                <button onClick=${() => this.copyLink(l.url)} title="Copier le lien" style="flex:0 0 auto;padding:8px 13px;font-size:12px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;">Copier</button>
+                <a href=${l.url} target="_blank" title="Ouvrir dans un onglet" style="flex:0 0 auto;padding:8px 11px;font-size:12px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);">↗</a>
               </div>
             `)}
           </div>
         `}
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:16px;">
-        <button onClick=${this.logout} style="padding:10px 18px;font-size:13px;font-weight:500;border-radius:999px;border:1px solid rgba(35,34,32,0.16);background:#fff;color:#8A847C;cursor:pointer;">Se déconnecter</button>
+        <button onClick=${this.logout} style="padding:10px 18px;font-size:13px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--muted);cursor:pointer;">Se déconnecter</button>
       </div>
     </div>
   </div>
   `}
 
   ${v.isProductsView && html`
-  <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;">
+  <div class="app__body">
     <div style="margin:0;display:flex;flex-direction:column;gap:16px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
         <div>
-          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">${v.t('products.title')}</h2>
-          <p style="margin:0;font-size:12.5px;color:#8A847C;">${v.t('products.subtitle')}</p>
+          <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${v.t('products.title')}</h2>
+          <p style="margin:0;font-size:12.5px;color:var(--muted);">${v.t('products.subtitle')}</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Langue d'édition</span>
+          <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Langue d'édition</span>
           ${v.langChips.map((l) => html`
             <button onClick=${l.pick} title=${l.label + (l.nStores ? ` · ${l.nStores} magasin(s)` : '')} style=${l.style}>${l.id}${l.nStores ? html`<span style="font-weight:400;opacity:0.75;">${l.nStores}</span>` : ''}</button>
           `)}
         </div>
-        <button onClick=${v.saveCat} disabled=${!v.catDirty || v.catSaving} style="padding:11px 22px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:${v.catDirty && !v.catSaving ? 'pointer' : 'not-allowed'};background:${v.catDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.catDirty ? '#fff' : '#8A847C'};">${v.catSaving ? 'Enregistrement…' : (v.catDirty ? 'Enregistrer la table' : '✓ Enregistrée')}</button>
+        <button onClick=${v.saveCat} disabled=${!v.catDirty || v.catSaving} style="padding:9px 18px;font-size:13px;font-weight:500;border-radius:8px;border:1px solid ${v.catDirty ? 'var(--accent)' : 'var(--line)'};cursor:${v.catDirty && !v.catSaving ? 'pointer' : 'not-allowed'};background:${v.catDirty ? 'var(--accent)' : '#fff'};color:${v.catDirty ? '#fff' : 'var(--muted)'};">${v.catSaving ? 'Enregistrement…' : (v.catDirty ? 'Enregistrer la table' : '✓ Enregistrée')}</button>
       </div>
 
       <div style="display:grid;grid-template-columns:320px 1fr;gap:16px;align-items:start;">
-        <div style="background:#F3EEE6;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:8px;">
+        <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px;">
           <div style="display:flex;align-items:center;justify-content:space-between;padding:0 4px;">
-            <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">Catégories</h3>
-            <button onClick=${v.addProdCat} style="padding:6px 12px;font-size:12px;font-weight:600;color:#fff;background:#8D1D2C;border:none;border-radius:999px;cursor:pointer;">＋</button>
+            <h3 style="margin:0;font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Catégories</h3>
+            <button onClick=${v.addProdCat} style="padding:6px 12px;font-size:12px;font-weight:500;color:#fff;background:var(--accent);border:none;border-radius:8px;cursor:pointer;">＋</button>
           </div>
           ${v.prodCats.map((c) => html`
             <div onClick=${c.pick} style=${c.cardStyle}>
-              <input value=${c.name} onInput=${c.onName} onClick=${(e) => e.stopPropagation()} placeholder=${c.namePlaceholder} style="flex:1 1 auto;min-width:0;padding:7px 9px;font-size:13.5px;font-weight:600;border:1px solid ${c.on ? 'rgba(141,29,44,0.3)' : 'transparent'};border-radius:7px;background:${c.on ? '#FBF8F2' : 'transparent'};${v.isBaseLang ? '' : 'border-color:rgba(184,134,11,0.5);'}" />
-              <span style="flex:0 0 auto;font-size:11px;color:#8A847C;">${c.count}${c.usedBy ? ' · ⛓' + c.usedBy : ''}</span>
-              <button onClick=${c.toggleActive} title="Active / inactive" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;flex:0 0 auto;border:1px solid rgba(35,34,32,0.12);cursor:pointer;background:${c.active ? 'rgba(46,110,78,0.12)' : 'rgba(35,34,32,0.06)'};color:${c.active ? '#2E6E4E' : '#8A847C'};font-size:12px;">${c.active ? '✓' : '⃠'}</button>
-              <button onClick=${c.del} title="Supprimer la catégorie" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;flex:0 0 auto;border:1px solid rgba(35,34,32,0.12);cursor:pointer;background:rgba(255,255,255,0.7);color:#8D1D2C;font-size:12px;">🗑</button>
+              <input value=${c.name} onInput=${c.onName} onClick=${(e) => e.stopPropagation()} placeholder=${c.namePlaceholder} style="flex:1 1 auto;min-width:0;padding:7px 9px;font-size:13.5px;font-weight:500;border:1px solid ${c.on ? 'rgba(141,29,44,0.3)' : 'transparent'};border-radius:8px;background:${c.on ? '#FBF8F2' : 'transparent'};${v.isBaseLang ? '' : 'border-color:rgba(184,134,11,0.5);'}" />
+              <span style="flex:0 0 auto;font-size:11px;color:var(--muted);">${c.count}${c.usedBy ? ' · ⛓' + c.usedBy : ''}</span>
+              <button onClick=${c.toggleActive} title="Active / inactive" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;flex:0 0 auto;border:1px solid var(--line);cursor:pointer;background:${c.active ? 'rgba(63,122,82,0.12)' : 'rgba(35,34,32,0.06)'};color:${c.active ? '#2E6E4E' : '#8A847C'};font-size:12px;">${c.active ? '✓' : '⃠'}</button>
+              <button onClick=${c.del} title="Supprimer la catégorie" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;flex:0 0 auto;border:1px solid var(--line);cursor:pointer;background:rgba(255,255,255,0.7);color:var(--accent);font-size:12px;">🗑</button>
             </div>
             ${c.on && v.isBaseLang && html`
-              <div onClick=${(e) => e.stopPropagation()} style="display:flex;align-items:center;gap:8px;margin:-4px 0 4px;padding:8px 10px;border-radius:9px;background:rgba(255,255,255,0.55);border:1px solid rgba(35,34,32,0.08);">
+              <div onClick=${(e) => e.stopPropagation()} style="display:flex;align-items:center;gap:8px;margin:-4px 0 4px;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.55);border:1px solid var(--line);">
                 ${c.imgOk
-                  ? html`<img src=${c.img} alt="" loading="lazy" style="width:30px;height:30px;border-radius:7px;object-fit:contain;flex:0 0 auto;border:1px solid rgba(35,34,32,0.12);background:#fff;" />`
-                  : html`<span title="Aucune illustration" style="width:30px;height:30px;border-radius:7px;flex:0 0 auto;border:1px dashed rgba(35,34,32,0.22);background:#F5EFE4;display:flex;align-items:center;justify-content:center;font-size:13px;color:#C9C3B8;">🖼</span>`}
+                  ? html`<img src=${c.img} alt="" loading="lazy" style="width:30px;height:30px;border-radius:8px;object-fit:contain;flex:0 0 auto;border:1px solid var(--line);background:#fff;" />`
+                  : html`<span title="Aucune illustration" style="width:30px;height:30px;border-radius:8px;flex:0 0 auto;border:1px dashed rgba(35,34,32,0.22);background:var(--chip);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--faint);">🖼</span>`}
                 <div style="flex:1 1 auto;min-width:0;">
-                  <div style="font-size:10.5px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;margin-bottom:3px;">Illustration de la catégorie</div>
-                  <input value=${c.img} onInput=${c.onImg} placeholder="assets/… ou URL" spellcheck="false" title="Une catégorie porte une illustration ; un produit porte une photo." style="width:100%;box-sizing:border-box;padding:6px 9px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.14);border-radius:7px;background:#fff;" />
+                  <div style="font-size:10.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:3px;">Illustration de la catégorie</div>
+                  <input value=${c.img} onInput=${c.onImg} placeholder="assets/… ou URL" spellcheck="false" title="Une catégorie porte une illustration ; un produit porte une photo." style="width:100%;box-sizing:border-box;padding:6px 9px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;" />
                 </div>
               </div>
             `}
           `)}
-          ${!v.prodCats.length && html`<div style="font-size:12px;color:#8A847C;padding:8px;">Aucune catégorie — clique ＋ pour commencer.</div>`}
+          ${!v.prodCats.length && html`<div style="font-size:12px;color:var(--muted);padding:8px;">Aucune catégorie — clique ＋ pour commencer.</div>`}
         </div>
 
-        <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+        <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;min-width:0;overflow-x:auto;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:10px;flex-wrap:wrap;">
-            <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">${v.prodSelCat ? `Produits · ${v.prodSelCat.name}` : 'Produits'}</h3>
-            <button onClick=${v.addProd} style="padding:8px 14px;font-size:12.5px;font-weight:500;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;cursor:pointer;">+ Ajouter un produit</button>
+            <h3 style="margin:0;font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${v.prodSelCat ? `Produits · ${v.prodSelCat.name}` : 'Produits'}</h3>
+            <button onClick=${v.addProd} style="padding:8px 14px;font-size:12.5px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">+ Ajouter un produit</button>
           </div>
           <div style="overflow-x:auto;">
             <div style="display:grid;grid-template-columns:52px minmax(190px,1.4fr) 150px 110px ${v.storeCols.map(() => '110px').join(' ')} 90px 130px;gap:8px;align-items:center;min-width:${700 + v.storeCols.length * 118}px;">
               <span></span>
-              <span style="font-size:10.5px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">Produit</span>
-              <span style="font-size:10.5px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">Visuel</span>
-              <span style="font-size:10.5px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;text-align:right;">Prix défaut</span>
-              ${v.storeCols.map((sc) => html`<span title=${sc.label} style="font-size:8.5px;font-weight:600;letter-spacing:0.02em;text-transform:uppercase;color:#8A847C;text-align:right;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;">${sc.label}</span>`)}
-              <span style="font-size:10.5px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;text-align:center;" title="✓ Actif = présent au catalogue · ⦸ Rupture = temporairement indisponible, masqué des boucles continues">État</span>
+              <span style="font-size:10.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Produit</span>
+              <span style="font-size:10.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Visuel</span>
+              <span style="font-size:10.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);text-align:right;">Prix défaut</span>
+              ${v.storeCols.map((sc) => html`<span title=${sc.label} style="font-size:8.5px;font-weight:500;letter-spacing:0.02em;text-transform:uppercase;color:var(--muted);text-align:right;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;">${sc.label}</span>`)}
+              <span style="font-size:10.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);text-align:center;" title="✓ Actif = présent au catalogue · ⦸ Rupture = temporairement indisponible, masqué des boucles continues">État</span>
               <span></span>
               ${v.prodRows.map((p) => html`
                 <div style="display:flex;align-items:center;">${p.thumb}</div>
                 <input value=${p.name} onInput=${p.onName} placeholder=${p.namePlaceholder} style="padding:9px 11px;font-size:13.5px;font-weight:500;border:1px solid ${v.isBaseLang ? 'rgba(35,34,32,0.14)' : 'rgba(184,134,11,0.55)'};border-radius:8px;background:${p.active ? '#FBF8F2' : 'rgba(35,34,32,0.04)'};opacity:${p.active ? 1 : 0.6};min-width:0;" />
                 <div style="display:flex;align-items:center;gap:5px;min-width:0;">
-                  <select value=${p.isPhoto ? '' : p.img} onChange=${p.onImg} style="flex:1 1 auto;min-width:0;padding:8px 6px;font-size:11.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;cursor:pointer;">
+                  <select value=${p.isPhoto ? '' : p.img} onChange=${p.onImg} style="flex:1 1 auto;min-width:0;padding:8px 6px;font-size:11.5px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
                     ${p.isPhoto && html`<option value="">📷 photo</option>`}
                     <option value="assets/cookies.png">Cookie</option>
                     <option value="assets/cake-slice.png">Part gâteau</option>
@@ -4911,66 +5037,66 @@ class App extends Component {
                     <option value="assets/sweet-tart-small.png">Tarte S</option>
                     <option value="assets/sweet-tart-big.png">Tarte L</option>
                   </select>
-                  <label title="Importer une photo" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:7px;flex:0 0 auto;border:1px dashed rgba(35,34,32,0.3);background:#FBF8F2;cursor:pointer;font-size:13px;">⬆<input type="file" accept="image/*" onChange=${p.onPhoto} style="display:none;" /></label>
+                  <label title="Importer une photo" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;flex:0 0 auto;border:1px dashed rgba(35,34,32,0.3);background:var(--paper);cursor:pointer;font-size:13px;">⬆<input type="file" accept="image/*" onChange=${p.onPhoto} style="display:none;" /></label>
                 </div>
-                <input value=${p.price} onInput=${p.onPrice} inputmode="decimal" style="padding:9px 10px;font-size:13.5px;font-weight:600;text-align:right;color:#8D1D2C;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;min-width:0;" />
+                <input value=${p.price} onInput=${p.onPrice} inputmode="decimal" style="padding:9px 10px;font-size:13.5px;font-weight:500;text-align:right;color:var(--accent);border:1px solid var(--line);border-radius:8px;background:#fff;min-width:0;" />
                 ${p.storePrices.map((sp) => html`
-                  <input value=${sp.value} onInput=${sp.onInput} placeholder="défaut" inputmode="decimal" style="padding:9px 10px;font-size:13px;text-align:right;color:${sp.value ? '#8D1D2C' : '#B8B2A8'};font-weight:${sp.value ? 600 : 400};border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:${sp.value ? 'rgba(141,29,44,0.05)' : '#FBF8F2'};min-width:0;" />
+                  <input value=${sp.value} onInput=${sp.onInput} placeholder="défaut" inputmode="decimal" style="padding:9px 10px;font-size:13px;text-align:right;color:${sp.value ? '#8D1D2C' : '#B8B2A8'};font-weight:${sp.value ? 600 : 400};border:1px solid var(--line);border-radius:8px;background:${sp.value ? 'rgba(141,29,44,0.05)' : '#FBF8F2'};min-width:0;" />
                 `)}
                 <div style="display:flex;justify-content:center;gap:5px;">
-                  <button onClick=${p.toggleActive} title="Actif / inactif (masqué partout à l'écran)" style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid rgba(35,34,32,0.12);cursor:pointer;background:${p.active ? 'rgba(46,110,78,0.12)' : 'rgba(141,29,44,0.08)'};color:${p.active ? '#2E6E4E' : '#8D1D2C'};font-size:13px;">${p.active ? '✓' : '⃠'}</button>
+                  <button onClick=${p.toggleActive} title="Actif / inactif (masqué partout à l'écran)" style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid var(--line);cursor:pointer;background:${p.active ? 'rgba(63,122,82,0.12)' : 'rgba(141,29,44,0.08)'};color:${p.active ? '#2E6E4E' : '#8D1D2C'};font-size:13px;">${p.active ? '✓' : '⃠'}</button>
                   <button onClick=${p.toggleUnavailable} title="En rupture / indisponible — masqué des boucles continues (mode Continu) et signalé. Réactive quand le produit revient." style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;cursor:pointer;border:1px solid ${p.unavailable ? 'rgba(141,29,44,0.4)' : 'rgba(35,34,32,0.12)'};background:${p.unavailable ? 'rgba(141,29,44,0.14)' : '#FBF8F2'};color:${p.unavailable ? '#8D1D2C' : '#C9C3B8'};font-size:14px;">⦸</button>
                 </div>
                 <div style="display:flex;align-items:center;gap:4px;justify-content:flex-end;">
-                  <button onClick=${p.showAppearance} title="Régie → Apparition… — où et quand ce produit passe à l'écran (c'est ce que lit la fiche produit de l'ERP)" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:7px;cursor:pointer;font-size:12px;border:1px solid ${p.appearanceOpen ? 'rgba(141,29,44,0.4)' : 'rgba(35,34,32,0.12)'};background:${p.appearanceOpen ? 'rgba(141,29,44,0.10)' : '#FBF8F2'};color:${p.appearanceOpen ? '#8D1D2C' : '#6E4A2B'};">👁</button>
-                  <button onClick=${p.up} title="Monter" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#FBF8F2;cursor:pointer;font-size:12px;">↑</button>
-                  <button onClick=${p.down} title="Descendre" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#FBF8F2;cursor:pointer;font-size:12px;">↓</button>
-                  <button onClick=${p.del} title="Supprimer" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#FBF8F2;cursor:pointer;font-size:12px;color:#8D1D2C;">✕</button>
+                  <button onClick=${p.showAppearance} title="Régie → Apparition… — où et quand ce produit passe à l'écran (c'est ce que lit la fiche produit de l'ERP)" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:12px;border:1px solid ${p.appearanceOpen ? 'rgba(141,29,44,0.4)' : 'rgba(35,34,32,0.12)'};background:${p.appearanceOpen ? 'rgba(141,29,44,0.10)' : '#FBF8F2'};color:${p.appearanceOpen ? '#8D1D2C' : '#6E4A2B'};">👁</button>
+                  <button onClick=${p.up} title="Monter" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;font-size:12px;">↑</button>
+                  <button onClick=${p.down} title="Descendre" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;font-size:12px;">↓</button>
+                  <button onClick=${p.del} title="Supprimer" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;font-size:12px;color:var(--accent);">✕</button>
                 </div>
               `)}
             </div>
           </div>
-          ${!v.prodRows.length && html`<div style="font-size:12.5px;color:#8A847C;padding:14px 4px 4px;">Aucun produit dans cette catégorie — « + Ajouter un produit ».</div>`}
+          ${!v.prodRows.length && html`<div style="font-size:12.5px;color:var(--muted);padding:14px 4px 4px;">Aucun produit dans cette catégorie — « + Ajouter un produit ».</div>`}
           <!-- Régie → Apparition… : le résumé lu par la fiche produit de l'ERP -->
           ${v.appearance && html`
-            <div style="margin-top:16px;border:1px solid rgba(141,29,44,0.22);border-radius:14px;padding:16px 18px;background:#FFFFFF;">
+            <div style="margin-top:16px;border:1px solid rgba(141,29,44,0.22);border-radius:12px;padding:16px 18px;background:#FFFFFF;">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
                 <div style="display:flex;align-items:center;gap:7px;">
-                  <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Régie → Apparition… · ${v.appearance.produit.nom}</h3>
+                  <h3 style="margin:0;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Régie → Apparition… · ${v.appearance.produit.nom}</h3>
                   ${infoTip('Tout ce que la régie sait du passage de ce produit à l’écran. Les tags se règlent ICI (Périodes, secteurs, campagnes) ; la fiche produit de l’ERP lit ce même résumé, en lecture seule.')}
                 </div>
-                <span style="font-size:12px;font-weight:600;color:${v.appearance.maintenant.visible ? '#2E6E4E' : '#8D1D2C'};">${v.appearance.maintenant.visible ? '● À l\'écran maintenant' : '○ Pas à l\'écran'} · ${v.appearance.maintenant.label}${v.appearance.maintenant.raison ? ` — ${v.appearance.maintenant.raison}` : ''}</span>
+                <span style="font-size:12px;font-weight:500;color:${v.appearance.maintenant.visible ? '#2E6E4E' : '#8D1D2C'};">${v.appearance.maintenant.visible ? '● À l\'écran maintenant' : '○ Pas à l\'écran'} · ${v.appearance.maintenant.label}${v.appearance.maintenant.raison ? ` — ${v.appearance.maintenant.raison}` : ''}</span>
               </div>
               <div style="display:flex;gap:22px;flex-wrap:wrap;font-size:12.5px;">
                 <div style="flex:1 1 260px;min-width:0;">
-                  <div style="font-size:10.5px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;margin-bottom:6px;">Périodes de la journée</div>
+                  <div style="font-size:10.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Périodes de la journée</div>
                   ${v.appearance.periodes.map((m) => html`
                     <div key=${m.id} style="display:flex;align-items:center;gap:8px;padding:3px 0;">
                       <span style="width:9px;height:9px;border-radius:50%;flex:0 0 auto;background:${m.visible ? '#2E6E4E' : '#8D1D2C'};"></span>
-                      <span style="width:82px;flex:0 0 auto;font-weight:600;">${m.label}</span>
-                      <span style="color:#8A847C;">produit : ${m.produit} · catégorie : ${m.categorie}</span>
+                      <span style="width:82px;flex:0 0 auto;font-weight:500;">${m.label}</span>
+                      <span style="color:var(--muted);">produit : ${m.produit} · catégorie : ${m.categorie}</span>
                     </div>
                   `)}
                 </div>
                 <div style="flex:1 1 240px;min-width:0;">
-                  <div style="font-size:10.5px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;margin-bottom:6px;">Secteurs d'écrans</div>
+                  <div style="font-size:10.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Secteurs d'écrans</div>
                   ${v.appearance.secteurs.length ? v.appearance.secteurs.map((s) => html`
                     <div key=${s.sectorId} style="padding:3px 0;color:${s.montre ? '#232220' : '#8A847C'};">
                       ${s.montre ? '✓' : '○'} ${s.store} · ${s.sector}
-                      <span style="color:#8A847C;">${s.filtrePeriodes ? ' · filtre les périodes' : ''}${s.filtreCategories ? ' · filtre les catégories' : ''}</span>
+                      <span style="color:var(--muted);">${s.filtrePeriodes ? ' · filtre les périodes' : ''}${s.filtreCategories ? ' · filtre les catégories' : ''}</span>
                     </div>
-                  `) : html`<span style="color:#8A847C;">Aucun secteur — les écrans suivent le film du magasin.</span>`}
+                  `) : html`<span style="color:var(--muted);">Aucun secteur — les écrans suivent le film du magasin.</span>`}
                 </div>
                 <div style="flex:1 1 220px;min-width:0;">
-                  <div style="font-size:10.5px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;margin-bottom:6px;">Saisons · campagnes · éléments</div>
-                  <div style="padding:3px 0;">${v.appearance.saisons.length ? v.appearance.saisons.map((s) => s.nom).join(' · ') : html`<span style="color:#8A847C;">aucune période active</span>`}</div>
-                  <div style="padding:3px 0;">${v.appearance.campagnes.length ? v.appearance.campagnes.map((c) => `${c.nom}${c.dansSaPeriode ? '' : ' (hors créneau)'}`).join(' · ') : html`<span style="color:#8A847C;">aucune campagne</span>`}</div>
-                  <div style="padding:3px 0;">${v.appearance.elements.length ? `${v.appearance.elements.length} élément(s) de bibliothèque` : html`<span style="color:#8A847C;">aucun élément ne le montre</span>`}</div>
+                  <div style="font-size:10.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Saisons · campagnes · éléments</div>
+                  <div style="padding:3px 0;">${v.appearance.saisons.length ? v.appearance.saisons.map((s) => s.nom).join(' · ') : html`<span style="color:var(--muted);">aucune période active</span>`}</div>
+                  <div style="padding:3px 0;">${v.appearance.campagnes.length ? v.appearance.campagnes.map((c) => `${c.nom}${c.dansSaPeriode ? '' : ' (hors créneau)'}`).join(' · ') : html`<span style="color:var(--muted);">aucune campagne</span>`}</div>
+                  <div style="padding:3px 0;">${v.appearance.elements.length ? `${v.appearance.elements.length} élément(s) de bibliothèque` : html`<span style="color:var(--muted);">aucun élément ne le montre</span>`}</div>
                 </div>
               </div>
             </div>
           `}
-          <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Prix par magasin : laisse vide pour utiliser le prix par défaut. Langues : FR = noms de base ; dans une autre langue, le champ nom édite la traduction (vide = nom de base). Chaque magasin affiche automatiquement ses prix ET sa langue (réglée dans Réseau). État : ✓ actif · <strong style="color:#8D1D2C;">⦸ rupture</strong> = temporairement indisponible, retiré des boucles en mode Continu (le reste du catalogue continue).</p>
+          <p style="margin:14px 0 0;font-size:11.5px;color:var(--muted);">Prix par magasin : laisse vide pour utiliser le prix par défaut. Langues : FR = noms de base ; dans une autre langue, le champ nom édite la traduction (vide = nom de base). Chaque magasin affiche automatiquement ses prix ET sa langue (réglée dans Réseau). État : ✓ actif · <strong style="color:var(--accent);">⦸ rupture</strong> = temporairement indisponible, retiré des boucles en mode Continu (le reste du catalogue continue).</p>
         </div>
       </div>
     </div>
@@ -4978,89 +5104,89 @@ class App extends Component {
   `}
 
   ${v.isSeasonsView && html`
-  <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;">
+  <div class="app__body">
     <div style="margin:0;display:flex;flex-direction:column;gap:16px;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
         <div>
-          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">${v.t('seasons.title')}</h2>
-          <p style="margin:0;font-size:12.5px;color:#8A847C;max-width:760px;">${v.t('seasons.subtitle')} <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">ws_season</code></p>
+          <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${v.t('seasons.title')}</h2>
+          <p style="margin:0;font-size:12.5px;color:var(--muted);max-width:760px;">${v.t('seasons.subtitle')} <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">ws_season</code></p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <input value=${v.wsTable} onInput=${v.onWsTable} placeholder="table (déf. ws_season)" spellcheck="false" title="Nom de la table MySQL des périodes, si différent de ws_season" style="width:170px;padding:9px 11px;font-size:12.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:999px;background:#FBF8F2;" />
-          <button onClick=${v.diagSeasons} disabled=${v.seasonsBusy} title="Lecture seule : liste les colonnes réelles de ws_season et détecte une éventuelle colonne d'illustration" style="padding:9px 14px;font-size:12.5px;font-weight:600;color:#4A4640;background:#fff;border:1px solid rgba(35,34,32,0.2);border-radius:999px;cursor:${v.seasonsBusy ? 'wait' : 'pointer'};">${v.t('seasons.diagnostic')}</button>
-          <button onClick=${v.importSeasons} disabled=${v.seasonsBusy} style="padding:9px 15px;font-size:12.5px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.35);border-radius:999px;cursor:${v.seasonsBusy ? 'wait' : 'pointer'};">${v.t('seasons.import')}</button>
-          <button onClick=${v.saveSeasons} disabled=${!v.seasonsDirty || v.seasonsBusy} style="padding:9px 18px;font-size:13px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.seasonsDirty && !v.seasonsBusy ? 'pointer' : 'not-allowed'};background:${v.seasonsDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.seasonsDirty ? '#fff' : '#8A847C'};">${v.seasonsBusy ? v.t('common.saving') : (v.seasonsDirty ? v.t('common.save') : v.t('common.saved'))}</button>
+          <input value=${v.wsTable} onInput=${v.onWsTable} placeholder="table (déf. ws_season)" spellcheck="false" title="Nom de la table MySQL des périodes, si différent de ws_season" style="width:170px;padding:9px 11px;font-size:12.5px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:999px;background:#fff;" />
+          <button onClick=${v.diagSeasons} disabled=${v.seasonsBusy} title="Lecture seule : liste les colonnes réelles de ws_season et détecte une éventuelle colonne d'illustration" style="padding:9px 14px;font-size:12.5px;font-weight:500;color:var(--muted-2);background:#fff;border:1px solid rgba(35,34,32,0.2);border-radius:8px;cursor:${v.seasonsBusy ? 'wait' : 'pointer'};">${v.t('seasons.diagnostic')}</button>
+          <button onClick=${v.importSeasons} disabled=${v.seasonsBusy} style="padding:9px 15px;font-size:12.5px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:${v.seasonsBusy ? 'wait' : 'pointer'};">${v.t('seasons.import')}</button>
+          <button onClick=${v.saveSeasons} disabled=${!v.seasonsDirty || v.seasonsBusy} style="padding:9px 18px;font-size:13px;font-weight:500;border-radius:8px;border:1px solid ${v.seasonsDirty ? 'var(--accent)' : 'var(--line)'};cursor:${v.seasonsDirty && !v.seasonsBusy ? 'pointer' : 'not-allowed'};background:${v.seasonsDirty ? 'var(--accent)' : '#fff'};color:${v.seasonsDirty ? '#fff' : 'var(--muted)'};">${v.seasonsBusy ? v.t('common.saving') : (v.seasonsDirty ? v.t('common.save') : v.t('common.saved'))}</button>
         </div>
       </div>
       ${v.wsCandidates.length ? html`
-        <div style="background:rgba(201,123,74,0.08);border:1px solid rgba(201,123,74,0.3);border-radius:12px;padding:12px 16px;font-size:12.5px;color:#6E4A2B;">
+        <div style="background:rgba(201,123,74,0.08);border:1px solid rgba(201,123,74,0.3);border-radius:12px;padding:12px 16px;font-size:12.5px;color:var(--muted-2);">
           Aucune table de périodes exploitée. Tables candidates — clique l'une d'elles (elle remplit le champ) puis « Importer » :
           <span style="display:inline-flex;flex-wrap:wrap;gap:6px;margin-left:6px;">
-            ${v.wsCandidates.map((t) => html`<button onClick=${() => v.useWsCandidate(t)} style="font-family:ui-monospace,monospace;font-size:12px;font-weight:600;color:#6E4A2B;background:#fff;border:1px solid rgba(110,74,43,0.35);border-radius:999px;padding:3px 10px;cursor:pointer;">${t}</button>`)}
+            ${v.wsCandidates.map((t) => html`<button onClick=${() => v.useWsCandidate(t)} style="font-family:ui-monospace,monospace;font-size:12px;font-weight:500;color:var(--muted-2);background:#fff;border:1px solid var(--line);border-radius:8px;padding:3px 10px;cursor:pointer;">${t}</button>`)}
           </span>
         </div>
       ` : ''}
       ${v.wsInspected.length ? html`
-        <div style="background:#FBF8F2;border:1px solid rgba(35,34,32,0.12);border-radius:12px;padding:12px 16px;font-size:12px;color:#4A4640;line-height:1.6;">
+        <div style="background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px 16px;font-size:12px;color:var(--muted-2);line-height:1.6;">
           <strong>Colonnes vues</strong> (il faut 2 colonnes de dates du → au + un nom) :
           ${v.wsInspected.map((ins) => html`
-            <div style="margin-top:6px;"><code style="font-weight:700;color:#6E4A2B;">${ins.table}</code> → <span style="font-family:ui-monospace,monospace;">${(ins.types || ins.columns).join(', ')}</span></div>
-            ${ins.sample && ins.sample.length ? html`<div style="margin-top:2px;color:#8A847C;font-family:ui-monospace,monospace;font-size:11px;">ex. : ${ins.sample.join(' | ')}</div>` : ''}
+            <div style="margin-top:6px;"><code style="font-weight:500;color:var(--muted-2);">${ins.table}</code> → <span style="font-family:ui-monospace,monospace;">${(ins.types || ins.columns).join(', ')}</span></div>
+            ${ins.sample && ins.sample.length ? html`<div style="margin-top:2px;color:var(--muted);font-family:ui-monospace,monospace;font-size:11px;">ex. : ${ins.sample.join(' | ')}</div>` : ''}
           `)}
-          <div style="margin-top:6px;color:#8A847C;">Si les dates sont dans ces colonnes mais non détectées, dis-moi lesquelles (du/au) et je les câble.</div>
+          <div style="margin-top:6px;color:var(--muted);">Si les dates sont dans ces colonnes mais non détectées, dis-moi lesquelles (du/au) et je les câble.</div>
         </div>
       ` : ''}
       ${v.wsDiag ? html`
-        <div style="background:${v.wsDiag.imageFound ? 'rgba(46,110,78,0.06)' : '#FBF8F2'};border:1px solid ${v.wsDiag.imageFound ? 'rgba(46,110,78,0.3)' : 'rgba(35,34,32,0.12)'};border-radius:12px;padding:12px 16px;font-size:12px;color:#4A4640;line-height:1.6;">
-          <div style="font-weight:700;color:${v.wsDiag.imageFound ? '#2E6E4E' : '#8D1D2C'};">
+        <div style="background:${v.wsDiag.imageFound ? 'rgba(63,122,82,0.06)' : '#FBF8F2'};border:1px solid ${v.wsDiag.imageFound ? 'rgba(63,122,82,0.3)' : 'rgba(35,34,32,0.12)'};border-radius:12px;padding:12px 16px;font-size:12px;color:var(--muted-2);line-height:1.6;">
+          <div style="font-weight:500;color:${v.wsDiag.imageFound ? '#2E6E4E' : '#8D1D2C'};">
             ${v.wsDiag.imageFound
-              ? html`🖼 Colonne d'illustration détectée : ${v.wsDiag.imageCols.map((c) => html`<code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">${c.column}</code> dans <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">${c.table}</code>${c.sample ? html` · ex. « ${c.sample} »` : ''} `)}`
+              ? html`🖼 Colonne d'illustration détectée : ${v.wsDiag.imageCols.map((c) => html`<code style="background:var(--chip);padding:1px 5px;border-radius:4px;">${c.column}</code> dans <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">${c.table}</code>${c.sample ? html` · ex. « ${c.sample} »` : ''} `)}`
               : (v.wsDiag.ok ? html`🔍 Aucune colonne d'illustration détectée dans les tables de périodes vues.` : html`⚠ ${v.wsDiag.error || 'Base non lisible'}`)}
           </div>
           ${(v.wsDiag.inspected || []).map((ins) => html`
-            <div style="margin-top:8px;"><code style="font-weight:700;color:#6E4A2B;">${ins.table}</code> → <span style="font-family:ui-monospace,monospace;">${(ins.types || ins.columns).join(', ')}</span></div>
-            ${ins.sample && ins.sample.length ? html`<div style="margin-top:2px;color:#8A847C;font-family:ui-monospace,monospace;font-size:11px;">ex. : ${ins.sample.join(' | ')}</div>` : ''}
+            <div style="margin-top:8px;"><code style="font-weight:500;color:var(--muted-2);">${ins.table}</code> → <span style="font-family:ui-monospace,monospace;">${(ins.types || ins.columns).join(', ')}</span></div>
+            ${ins.sample && ins.sample.length ? html`<div style="margin-top:2px;color:var(--muted);font-family:ui-monospace,monospace;font-size:11px;">ex. : ${ins.sample.join(' | ')}</div>` : ''}
           `)}
-          <div style="margin-top:8px;color:#8A847C;">${v.wsDiag.imageFound ? html`L'import récupère automatiquement cette colonne. Clique « ⟳ Importer » pour (re)charger les périodes avec leur illustration.` : html`Diagnostic lecture seule — rien n'a été modifié. Si une colonne image existe sous un autre nom, dis-le-moi et je l'ajoute au détecteur.`}</div>
+          <div style="margin-top:8px;color:var(--muted);">${v.wsDiag.imageFound ? html`L'import récupère automatiquement cette colonne. Clique « ⟳ Importer » pour (re)charger les périodes avec leur illustration.` : html`Diagnostic lecture seule — rien n'a été modifié. Si une colonne image existe sous un autre nom, dis-le-moi et je l'ajoute au détecteur.`}</div>
         </div>
       ` : ''}
 
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${v.seasonsCount} période(s) · ${v.seasonsCurrentCount} active(s) aujourd'hui</h3>
-          <button onClick=${v.addSeason} style="padding:8px 14px;font-size:12.5px;font-weight:500;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;cursor:pointer;">+ Ajouter une période</button>
+          <h3 style="margin:0;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${v.seasonsCount} période(s) · ${v.seasonsCurrentCount} active(s) aujourd'hui</h3>
+          <button onClick=${v.addSeason} style="padding:8px 14px;font-size:12.5px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">+ Ajouter une période</button>
         </div>
         <div style="display:flex;flex-direction:column;gap:10px;">
           ${v.seasonRows.map((s) => html`
-            <div style="border:1px solid rgba(35,34,32,0.1);border-radius:12px;padding:13px 15px;background:${s.current ? 'rgba(46,110,78,0.05)' : '#FBF8F2'};">
+            <div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:${s.current ? 'rgba(63,122,82,0.05)' : '#FBF8F2'};">
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                 ${s.imageOk
-                  ? html`<img src=${s.image} alt="" loading="lazy" title="Illustration de la période" style="width:28px;height:28px;border-radius:7px;object-fit:cover;flex:0 0 auto;border:1px solid rgba(35,34,32,0.15);background:${s.color};" />`
+                  ? html`<img src=${s.image} alt="" loading="lazy" title="Illustration de la période" style="width:28px;height:28px;border-radius:8px;object-fit:cover;flex:0 0 auto;border:1px solid var(--line);background:${s.color};" />`
                   : html`<span style="width:10px;height:10px;border-radius:50%;background:${s.color};flex:0 0 auto;"></span>`}
-                <input value=${s.name} onInput=${s.onName} placeholder="Nom (ex. Galette des rois)" style="flex:1 1 200px;min-width:0;padding:9px 11px;font-size:14px;font-weight:600;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
+                <input value=${s.name} onInput=${s.onName} placeholder="Nom (ex. Galette des rois)" style="flex:1 1 200px;min-width:0;padding:9px 11px;font-size:14px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;" />
                 <span style="display:flex;align-items:center;gap:5px;">
-                  <input value=${s.from} onInput=${s.onFrom} placeholder="du (JJ/MM)" style="width:110px;padding:9px 10px;font-size:12.5px;text-align:center;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
-                  <span style="color:#8A847C;">→</span>
-                  <input value=${s.to} onInput=${s.onTo} placeholder="au (JJ/MM)" style="width:110px;padding:9px 10px;font-size:12.5px;text-align:center;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
+                  <input value=${s.from} onInput=${s.onFrom} placeholder="du (JJ/MM)" style="width:110px;padding:9px 10px;font-size:12.5px;text-align:center;border:1px solid var(--line);border-radius:8px;background:#fff;" />
+                  <span style="color:var(--muted);">→</span>
+                  <input value=${s.to} onInput=${s.onTo} placeholder="au (JJ/MM)" style="width:110px;padding:9px 10px;font-size:12.5px;text-align:center;border:1px solid var(--line);border-radius:8px;background:#fff;" />
                 </span>
-                ${s.current ? html`<span style="font-size:10.5px;font-weight:700;color:#2E6E4E;background:rgba(46,110,78,0.12);border:1px solid rgba(46,110,78,0.35);border-radius:999px;padding:3px 9px;">● active aujourd'hui</span>` : ''}
-                <button onClick=${s.del} title="Supprimer" style="flex:0 0 auto;width:30px;height:30px;border-radius:8px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:pointer;font-size:13px;color:#8D1D2C;">✕</button>
+                ${s.current ? html`<span style="font-size:10.5px;font-weight:500;color:var(--green);background:rgba(63,122,82,0.12);border:1px solid rgba(63,122,82,0.35);border-radius:999px;padding:3px 9px;">● active aujourd'hui</span>` : ''}
+                <button onClick=${s.del} title="Supprimer" style="flex:0 0 auto;width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:13px;color:var(--accent);">✕</button>
               </div>
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;padding-left:20px;">
                 ${s.imageOk
-                  ? html`<img src=${s.image} alt="Aperçu de l'illustration" loading="lazy" style="width:48px;height:48px;border-radius:9px;object-fit:cover;flex:0 0 auto;border:1px solid rgba(35,34,32,0.15);background:#fff;" />`
-                  : html`<span title=${s.image ? 'Valeur non affichable ici' : 'Aucune illustration'} style="width:48px;height:48px;border-radius:9px;flex:0 0 auto;border:1px dashed rgba(35,34,32,0.22);background:#F5EFE4;display:flex;align-items:center;justify-content:center;font-size:18px;color:#C9C3B8;">🖼</span>`}
+                  ? html`<img src=${s.image} alt="Aperçu de l'illustration" loading="lazy" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex:0 0 auto;border:1px solid var(--line);background:#fff;" />`
+                  : html`<span title=${s.image ? 'Valeur non affichable ici' : 'Aucune illustration'} style="width:48px;height:48px;border-radius:8px;flex:0 0 auto;border:1px dashed rgba(35,34,32,0.22);background:var(--chip);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--faint);">🖼</span>`}
                 <div style="display:flex;flex-direction:column;gap:4px;flex:1 1 240px;min-width:0;">
-                  <span style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;">Illustration</span>
-                  <input value=${s.image} onInput=${s.onImage} placeholder="URL/lien direct de l'image (auto-rempli si la table importée a une colonne image)" spellcheck="false" title="Lien direct de l'illustration de la période. Rempli automatiquement à l'import si la table (ex. product_availability_period) expose une colonne image ; sinon colle une URL ici." style="width:100%;box-sizing:border-box;padding:7px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
+                  <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Illustration</span>
+                  <input value=${s.image} onInput=${s.onImage} placeholder="URL/lien direct de l'image (auto-rempli si la table importée a une colonne image)" spellcheck="false" title="Lien direct de l'illustration de la période. Rempli automatiquement à l'import si la table (ex. product_availability_period) expose une colonne image ; sinon colle une URL ici." style="width:100%;box-sizing:border-box;padding:7px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;" />
                 </div>
-                ${s.image && !s.imageOk ? html`<span title="Valeur non affichable directement (id ou nom de fichier sans chemin) — indique-moi le format et je résous l'URL." style="font-size:11px;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;padding:2px 9px;flex:0 0 auto;">⚠ non affichable</span>` : ''}
+                ${s.image && !s.imageOk ? html`<span title="Valeur non affichable directement (id ou nom de fichier sans chemin) — indique-moi le format et je résous l'URL." style="font-size:11px;color:var(--accent);background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;padding:2px 9px;flex:0 0 auto;">⚠ non affichable</span>` : ''}
               </div>
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding-left:20px;">
-                <span style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;">Produits liés :</span>
-                ${s.products.map((p) => html`<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;padding:3px 5px 3px 10px;">${p.name}<button onClick=${p.remove} style="width:16px;height:16px;border-radius:50%;border:none;background:rgba(141,29,44,0.15);color:#8D1D2C;cursor:pointer;font-size:10px;line-height:1;">✕</button></span>`)}
+                <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Produits liés :</span>
+                ${s.products.map((p) => html`<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;color:var(--accent);background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;padding:3px 5px 3px 10px;">${p.name}<button onClick=${p.remove} style="width:16px;height:16px;border-radius:50%;border:none;background:rgba(141,29,44,0.15);color:var(--accent);cursor:pointer;font-size:10px;line-height:1;">✕</button></span>`)}
                 ${s.addable.length ? html`
-                  <select onChange=${s.onAddProduct} style="padding:6px 9px;font-size:12px;border:1px solid rgba(35,34,32,0.16);border-radius:999px;background:#fff;cursor:pointer;">
+                  <select onChange=${s.onAddProduct} style="padding:6px 9px;font-size:12px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
                     <option value="">+ produit…</option>
                     ${s.addable.map((o) => html`<option value=${o.id}>${o.name}</option>`)}
                   </select>
@@ -5068,395 +5194,395 @@ class App extends Component {
               </div>
             </div>
           `)}
-          ${!v.seasonRows.length && html`<p style="margin:0;font-size:12.5px;color:#8A847C;padding:8px 0;">Aucune période. « + Ajouter une période » ou « ⟳ Importer depuis ws_season ».</p>`}
+          ${!v.seasonRows.length && html`<p style="margin:0;font-size:12.5px;color:var(--muted);padding:8px 0;">Aucune période. « + Ajouter une période » ou « ⟳ Importer depuis ws_season ».</p>`}
         </div>
-        <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Dates : <strong>JJ/MM</strong> (ex. 21/06) ou AAAA-MM-JJ ; l'année est ignorée (la période revient chaque année). Une période à cheval sur le nouvel an (ex. 15/12 → 06/01) est gérée.</p>
+        <p style="margin:14px 0 0;font-size:11.5px;color:var(--muted);">Dates : <strong>JJ/MM</strong> (ex. 21/06) ou AAAA-MM-JJ ; l'année est ignorée (la période revient chaque année). Une période à cheval sur le nouvel an (ex. 15/12 → 06/01) est gérée.</p>
       </div>
 
       <!-- Périodes de vente : produit × moment (matin / midi / après-midi) -->
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
-          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Périodes de vente — produit × moment de la journée</h3>
+          <h3 style="margin:0;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Périodes de vente — produit × moment de la journée</h3>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <button onClick=${v.pmAllCollapsed ? v.expandAllPm : v.collapseAllPm} style="padding:7px 13px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">${v.pmAllCollapsed ? '▷ Tout déplier' : '▽ Tout plier'}</button>
-            <button onClick=${v.saveProdMoments} disabled=${!v.prodMomentsDirty || v.prodMomentsBusy} style="padding:8px 16px;font-size:12.5px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.prodMomentsDirty && !v.prodMomentsBusy ? 'pointer' : 'not-allowed'};background:${v.prodMomentsDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.prodMomentsDirty ? '#fff' : '#8A847C'};">${v.prodMomentsBusy ? 'Enregistrement…' : (v.prodMomentsDirty ? 'Enregistrer' : '✓ Enregistré')}</button>
+            <button onClick=${v.pmAllCollapsed ? v.expandAllPm : v.collapseAllPm} style="padding:7px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.pmAllCollapsed ? '▷ Tout déplier' : '▽ Tout plier'}</button>
+            <button onClick=${v.saveProdMoments} disabled=${!v.prodMomentsDirty || v.prodMomentsBusy} style="padding:8px 16px;font-size:12.5px;font-weight:500;border-radius:8px;border:1px solid ${v.prodMomentsDirty ? 'var(--accent)' : 'var(--line)'};cursor:${v.prodMomentsDirty && !v.prodMomentsBusy ? 'pointer' : 'not-allowed'};background:${v.prodMomentsDirty ? 'var(--accent)' : '#fff'};color:${v.prodMomentsDirty ? '#fff' : 'var(--muted)'};">${v.prodMomentsBusy ? 'Enregistrement…' : (v.prodMomentsDirty ? 'Enregistrer' : '✓ Enregistré')}</button>
           </div>
         </div>
-        <p style="margin:0 0 12px;font-size:12px;color:#8A847C;max-width:820px;">Clique une case pour cycler : <strong style="color:#2E6E4E;">vendu</strong> → <strong style="color:#8D1D2C;">exception (exclu)</strong> → vide. Un produit sans aucune case cochée est vendu à tous les moments. En mode continu, la boucle ne montre que les produits vendus au moment courant${v.prodMomentsCurrent ? html` (actuellement : <strong>${v.prodMomentsCurrent}</strong>)` : ''}. La ligne d'une <strong>catégorie</strong> se tague aussi : hors créneau, elle retire <strong>tous</strong> ses produits, et les tags produits affinent à l'intérieur. Clique une catégorie pour la plier/déplier.</p>
+        <p style="margin:0 0 12px;font-size:12px;color:var(--muted);max-width:820px;">Clique une case pour cycler : <strong style="color:var(--green);">vendu</strong> → <strong style="color:var(--accent);">exception (exclu)</strong> → vide. Un produit sans aucune case cochée est vendu à tous les moments. En mode continu, la boucle ne montre que les produits vendus au moment courant${v.prodMomentsCurrent ? html` (actuellement : <strong>${v.prodMomentsCurrent}</strong>)` : ''}. La ligne d'une <strong>catégorie</strong> se tague aussi : hors créneau, elle retire <strong>tous</strong> ses produits, et les tags produits affinent à l'intérieur. Clique une catégorie pour la plier/déplier.</p>
         <div style="overflow-x:auto;">
           <table style="border-collapse:collapse;width:100%;min-width:420px;font-size:13px;">
             <thead><tr>
-              <th style="text-align:left;padding:8px 10px;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;border-bottom:1px solid rgba(35,34,32,0.12);">Produit</th>
-              ${v.saleMoments.map((mo) => html`<th style="padding:8px 10px;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:${v.prodMomentsCurrent === mo.id ? '#8D1D2C' : '#8A847C'};border-bottom:1px solid rgba(35,34,32,0.12);text-align:center;width:120px;">${mo.label}</th>`)}
+              <th style="text-align:left;padding:8px 10px;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);">Produit</th>
+              ${v.saleMoments.map((mo) => html`<th style="padding:8px 10px;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:${v.prodMomentsCurrent === mo.id ? '#8D1D2C' : '#8A847C'};border-bottom:1px solid var(--line);text-align:center;width:120px;">${mo.label}</th>`)}
             </tr></thead>
             <tbody>
               ${v.prodMomentCats.map((cat) => html`
                 <tr>
                   <td style="padding:0;">
-                    <button onClick=${cat.toggle} style="width:100%;box-sizing:border-box;display:flex;align-items:center;gap:9px;padding:9px 10px;background:#F5EFE4;border:none;border-top:1px solid rgba(35,34,32,0.08);border-bottom:1px solid rgba(35,34,32,0.08);cursor:pointer;text-align:left;">
-                      <span style="flex:0 0 auto;font-size:10px;color:#8D1D2C;display:inline-block;transform:rotate(${cat.collapsed ? '0' : '90'}deg);">▶</span>
-                      <span style="flex:1 1 auto;font-size:12.5px;font-weight:700;color:#6E4A2B;">${cat.name}</span>
-                      <span style="flex:0 0 auto;font-size:11px;color:#8A847C;">${cat.count} produit(s)</span>
+                    <button onClick=${cat.toggle} style="width:100%;box-sizing:border-box;display:flex;align-items:center;gap:9px;padding:9px 10px;background:var(--chip);border:none;border-top:1px solid var(--line);border-bottom:1px solid var(--line);cursor:pointer;text-align:left;">
+                      <span style="flex:0 0 auto;font-size:10px;color:var(--accent);display:inline-block;transform:rotate(${cat.collapsed ? '0' : '90'}deg);">▶</span>
+                      <span style="flex:1 1 auto;font-size:12.5px;font-weight:500;color:var(--muted-2);">${cat.name}</span>
+                      <span style="flex:0 0 auto;font-size:11px;color:var(--muted);">${cat.count} produit(s)</span>
                     </button>
                   </td>
-                  ${cat.cells.map((c) => html`<td style="padding:5px 10px;text-align:center;background:#F5EFE4;border-top:1px solid rgba(35,34,32,0.08);border-bottom:1px solid rgba(35,34,32,0.08);">
-                    ${cat.taggable ? html`<button onClick=${c.toggle} title="Période de vente de la CATÉGORIE — hors créneau, elle retire tous ses produits" style="width:34px;height:26px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;border:1px solid ${c.state === 'incl' ? 'rgba(46,110,78,0.45)' : (c.state === 'excl' ? 'rgba(141,29,44,0.45)' : 'rgba(35,34,32,0.16)')};background:${c.state === 'incl' ? 'rgba(46,110,78,0.18)' : (c.state === 'excl' ? 'rgba(141,29,44,0.16)' : '#fff')};color:${c.state === 'incl' ? '#2E6E4E' : (c.state === 'excl' ? '#8D1D2C' : '#C9C3B8')};">${c.state === 'incl' ? '✓' : (c.state === 'excl' ? '✕' : '·')}</button>` : ''}
+                  ${cat.cells.map((c) => html`<td style="padding:5px 10px;text-align:center;background:var(--chip);border-top:1px solid var(--line);border-bottom:1px solid var(--line);">
+                    ${cat.taggable ? html`<button onClick=${c.toggle} title="Période de vente de la CATÉGORIE — hors créneau, elle retire tous ses produits" style="width:34px;height:26px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;border:1px solid ${c.state === 'incl' ? 'rgba(63,122,82,0.45)' : (c.state === 'excl' ? 'rgba(141,29,44,0.45)' : 'rgba(35,34,32,0.16)')};background:${c.state === 'incl' ? 'rgba(63,122,82,0.18)' : (c.state === 'excl' ? 'rgba(141,29,44,0.16)' : '#fff')};color:${c.state === 'incl' ? '#2E6E4E' : (c.state === 'excl' ? '#8D1D2C' : '#C9C3B8')};">${c.state === 'incl' ? '✓' : (c.state === 'excl' ? '✕' : '·')}</button>` : ''}
                   </td>`)}
                 </tr>
                 ${cat.collapsed ? '' : cat.products.map((p) => html`
                   <tr>
-                    <td style="padding:7px 10px 7px 26px;border-bottom:1px solid rgba(35,34,32,0.06);white-space:nowrap;${p.active ? '' : 'color:#B8B2A8;'}">${p.name}${p.active ? '' : ' · inactif'}</td>
-                    ${p.cells.map((c) => html`<td style="padding:5px 10px;border-bottom:1px solid rgba(35,34,32,0.06);text-align:center;">
-                      <button onClick=${c.toggle} title="Cliquer pour changer" style="width:34px;height:30px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:700;border:1px solid ${c.state === 'incl' ? 'rgba(46,110,78,0.4)' : (c.state === 'excl' ? 'rgba(141,29,44,0.4)' : 'rgba(35,34,32,0.14)')};background:${c.state === 'incl' ? 'rgba(46,110,78,0.14)' : (c.state === 'excl' ? 'rgba(141,29,44,0.12)' : '#FBF8F2')};color:${c.state === 'incl' ? '#2E6E4E' : (c.state === 'excl' ? '#8D1D2C' : '#C9C3B8')};">${c.state === 'incl' ? '✓' : (c.state === 'excl' ? '✕' : '·')}</button>
+                    <td style="padding:7px 10px 7px 26px;border-bottom:1px solid var(--line);white-space:nowrap;${p.active ? '' : 'color:var(--faint);'}">${p.name}${p.active ? '' : ' · inactif'}</td>
+                    ${p.cells.map((c) => html`<td style="padding:5px 10px;border-bottom:1px solid var(--line);text-align:center;">
+                      <button onClick=${c.toggle} title="Cliquer pour changer" style="width:34px;height:30px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:500;border:1px solid ${c.state === 'incl' ? 'rgba(63,122,82,0.4)' : (c.state === 'excl' ? 'rgba(141,29,44,0.4)' : 'rgba(35,34,32,0.14)')};background:${c.state === 'incl' ? 'rgba(63,122,82,0.14)' : (c.state === 'excl' ? 'rgba(141,29,44,0.12)' : '#FBF8F2')};color:${c.state === 'incl' ? '#2E6E4E' : (c.state === 'excl' ? '#8D1D2C' : '#C9C3B8')};">${c.state === 'incl' ? '✓' : (c.state === 'excl' ? '✕' : '·')}</button>
                     </td>`)}
                   </tr>
                 `)}
               `)}
-              ${!v.prodMomentCats.length ? html`<tr><td colspan="4" style="padding:12px 10px;color:#8A847C;font-size:12.5px;">Aucun produit dans le catalogue. Importe le catalogue dans l'onglet Produits.</td></tr>` : ''}
+              ${!v.prodMomentCats.length ? html`<tr><td colspan="4" style="padding:12px 10px;color:var(--muted);font-size:12.5px;">Aucun produit dans le catalogue. Importe le catalogue dans l'onglet Produits.</td></tr>` : ''}
             </tbody>
           </table>
         </div>
       </div>
 
       <!-- Médiathèque agence : vue admin (nombre + tags + présence) -->
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Médiathèque agence — ${v.mediaOverview.total ? `${v.mediaOverview.total} média(s) sur le serveur` : 'vide'}</h3>
+          <h3 style="margin:0;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Médiathèque agence — ${v.mediaOverview.total ? `${v.mediaOverview.total} média(s) sur le serveur` : 'vide'}</h3>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <button onClick=${v.refreshMediaLib} style="padding:7px 13px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">⟳ Rafraîchir</button>
-            ${!st.agencyEnabled && html`<span title="Aucun mot de passe agence sur ce serveur (secret SIG_AGENCY_PASSWORD) : l'espace agence refuse toute connexion. Voir Paramètres." style="padding:6px 11px;font-size:11.5px;font-weight:600;color:#6E4A2B;background:rgba(184,134,11,0.12);border:1px solid rgba(184,134,11,0.35);border-radius:999px;">Accès agence fermé</span>`}
-            <a href=${v.agencyUrl} target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:8px 15px;font-size:12.5px;font-weight:600;color:#fff;background:#6E4A2B;border-radius:999px;">🎬 Ouvrir l'espace Agence ↗</a>
-            <button onClick=${() => v.copyLink(v.agencyUrl)} title="Copier le lien agence" style="padding:8px 13px;font-size:12px;font-weight:600;border-radius:999px;border:1px solid rgba(110,74,43,0.35);background:#fff;color:#6E4A2B;cursor:pointer;">⎘ Lien</button>
+            <button onClick=${v.refreshMediaLib} style="padding:7px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">⟳ Rafraîchir</button>
+            ${!st.agencyEnabled && html`<span title="Aucun mot de passe agence sur ce serveur (secret SIG_AGENCY_PASSWORD) : l'espace agence refuse toute connexion. Voir Paramètres." style="padding:6px 11px;font-size:11.5px;font-weight:500;color:var(--muted-2);background:rgba(184,134,11,0.12);border:1px solid rgba(184,134,11,0.35);border-radius:999px;">Accès agence fermé</span>`}
+            <a href=${v.agencyUrl} target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:8px 15px;font-size:12.5px;font-weight:500;color:#fff;background:var(--muted-2);border-radius:999px;">🎬 Ouvrir l'espace Agence ↗</a>
+            <button onClick=${() => v.copyLink(v.agencyUrl)} title="Copier le lien agence" style="padding:8px 13px;font-size:12px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--muted-2);cursor:pointer;">⎘ Lien</button>
           </div>
         </div>
         ${v.mediaOverview.total ? html`
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-            <span style="font-size:12px;color:#4A4640;background:#F5EFE4;border-radius:999px;padding:4px 12px;">🎬 ${v.mediaOverview.videos} vidéo(s)</span>
-            <span style="font-size:12px;color:#4A4640;background:#F5EFE4;border-radius:999px;padding:4px 12px;">🖼 ${v.mediaOverview.photos} photo(s)</span>
-            <span style="font-size:12px;color:#4A4640;background:#F5EFE4;border-radius:999px;padding:4px 12px;">Matin ${v.mediaOverview.byMoment.matin} · Midi ${v.mediaOverview.byMoment.midi} · Après-midi ${v.mediaOverview.byMoment.aprem} · Journée ${v.mediaOverview.byMoment.all}</span>
-            <span style="font-size:12px;color:${v.mediaOverview.present === v.mediaOverview.total ? '#2E6E4E' : '#8D1D2C'};background:#F5EFE4;border-radius:999px;padding:4px 12px;">${v.mediaOverview.present}/${v.mediaOverview.total} présent(s) sur le disque</span>
+            <span style="font-size:12px;color:var(--muted-2);background:var(--chip);border-radius:999px;padding:4px 12px;">🎬 ${v.mediaOverview.videos} vidéo(s)</span>
+            <span style="font-size:12px;color:var(--muted-2);background:var(--chip);border-radius:999px;padding:4px 12px;">🖼 ${v.mediaOverview.photos} photo(s)</span>
+            <span style="font-size:12px;color:var(--muted-2);background:var(--chip);border-radius:999px;padding:4px 12px;">Matin ${v.mediaOverview.byMoment.matin} · Midi ${v.mediaOverview.byMoment.midi} · Après-midi ${v.mediaOverview.byMoment.aprem} · Journée ${v.mediaOverview.byMoment.all}</span>
+            <span style="font-size:12px;color:${v.mediaOverview.present === v.mediaOverview.total ? '#2E6E4E' : '#8D1D2C'};background:var(--chip);border-radius:999px;padding:4px 12px;">${v.mediaOverview.present}/${v.mediaOverview.total} présent(s) sur le disque</span>
           </div>
           <div style="display:flex;flex-direction:column;gap:6px;">
             ${v.mediaOverview.rows.map((mm) => html`
-              <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:9px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.08);flex-wrap:wrap;">
+              <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;background:#fff;border:1px solid var(--line);flex-wrap:wrap;">
                 <span style="font-size:15px;flex:0 0 auto;">${mm.kind === 'photo' ? '🖼' : '🎬'}</span>
-                <span style="flex:1 1 200px;min-width:0;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${mm.filename}</span>
-                <span style="font-size:10.5px;font-weight:700;color:#6E4A2B;background:rgba(110,74,43,0.1);border-radius:999px;padding:2px 9px;">${mm.moment}</span>
-                ${mm.product ? html`<span style="font-size:11px;color:#4A4640;">🏷 ${mm.product}</span>` : ''}
-                ${mm.season ? html`<span style="font-size:11px;color:#6E4A2B;">📅 ${mm.season}</span>` : ''}
-                <span style="font-size:11px;color:#8A847C;">${Math.round((mm.size || 0) / 1024 / 1024 * 10) / 10} Mo</span>
-                <span style="font-size:11px;font-weight:700;color:${mm.present ? '#2E6E4E' : '#8D1D2C'};">${mm.present ? '✓' : '⚠ absent'}</span>
-                <button onClick=${mm.del} title="Supprimer du serveur" style="flex:0 0 auto;width:24px;height:24px;border-radius:50%;background:rgba(141,29,44,0.1);border:none;cursor:pointer;font-size:11px;color:#8D1D2C;">✕</button>
+                <span style="flex:1 1 200px;min-width:0;font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${mm.filename}</span>
+                <span style="font-size:10.5px;font-weight:500;color:var(--muted-2);background:var(--chip);border-radius:999px;padding:2px 9px;">${mm.moment}</span>
+                ${mm.product ? html`<span style="font-size:11px;color:var(--muted-2);">🏷 ${mm.product}</span>` : ''}
+                ${mm.season ? html`<span style="font-size:11px;color:var(--muted-2);">📅 ${mm.season}</span>` : ''}
+                <span style="font-size:11px;color:var(--muted);">${Math.round((mm.size || 0) / 1024 / 1024 * 10) / 10} Mo</span>
+                <span style="font-size:11px;font-weight:500;color:${mm.present ? '#2E6E4E' : '#8D1D2C'};">${mm.present ? '✓' : '⚠ absent'}</span>
+                <button onClick=${mm.del} title="Supprimer du serveur" style="flex:0 0 auto;width:24px;height:24px;border-radius:50%;background:rgba(141,29,44,0.1);border:none;cursor:pointer;font-size:11px;color:var(--accent);">✕</button>
               </div>
             `)}
           </div>
-        ` : html`<p style="margin:0;font-size:12.5px;color:#8A847C;">Aucun média sur le serveur pour l'instant. Les agences en ajoutent via l'espace Agence (ou dépose-les dans <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">public/media/</code> par SFTP).</p>`}
+        ` : html`<p style="margin:0;font-size:12.5px;color:var(--muted);">Aucun média sur le serveur pour l'instant. Les agences en ajoutent via l'espace Agence (ou dépose-les dans <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">public/media/</code> par SFTP).</p>`}
       </div>
     </div>
   </div>
   `}
 
   ${v.isPromotionsView && html`
-  <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;">
+  <div class="app__body">
     <div style="margin:0;display:flex;flex-direction:column;gap:16px;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
         <div>
-          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">${v.t('promo.title')}</h2>
-          <p style="margin:0;font-size:12.5px;color:#8A847C;max-width:820px;">${v.t('promo.subtitle')}</p>
+          <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${v.t('promo.title')}</h2>
+          <p style="margin:0;font-size:12.5px;color:var(--muted);max-width:820px;">${v.t('promo.subtitle')}</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <button onClick=${v.addPromoType} style="padding:9px 15px;font-size:12.5px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;cursor:pointer;">${v.t('promo.addType')}</button>
-          <button onClick=${v.savePromoTypes} disabled=${!v.promoDirty || v.promoBusy} style="padding:9px 18px;font-size:13px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.promoDirty && !v.promoBusy ? 'pointer' : 'not-allowed'};background:${v.promoDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.promoDirty ? '#fff' : '#8A847C'};">${v.promoBusy ? v.t('common.saving') : (v.promoDirty ? v.t('common.save') : v.t('common.saved'))}</button>
+          <button onClick=${v.addPromoType} style="padding:9px 15px;font-size:12.5px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.t('promo.addType')}</button>
+          <button onClick=${v.savePromoTypes} disabled=${!v.promoDirty || v.promoBusy} style="padding:9px 18px;font-size:13px;font-weight:500;border-radius:8px;border:1px solid ${v.promoDirty ? 'var(--accent)' : 'var(--line)'};cursor:${v.promoDirty && !v.promoBusy ? 'pointer' : 'not-allowed'};background:${v.promoDirty ? 'var(--accent)' : '#fff'};color:${v.promoDirty ? '#fff' : 'var(--muted)'};">${v.promoBusy ? v.t('common.saving') : (v.promoDirty ? v.t('common.save') : v.t('common.saved'))}</button>
         </div>
       </div>
 
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${v.t('promo.count', { n: v.promoCount })}</h3>
+          <h3 style="margin:0;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${v.t('promo.count', { n: v.promoCount })}</h3>
         </div>
         <div style="display:flex;flex-direction:column;gap:10px;">
           ${v.promoRows.map((t) => html`
-            <div style="border:1px solid rgba(35,34,32,0.1);border-radius:12px;padding:13px 15px;background:${t.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};opacity:${t.active ? 1 : 0.72};">
+            <div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:${t.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};opacity:${t.active ? 1 : 0.72};">
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <span style="display:inline-flex;align-items:center;gap:7px;padding:5px 13px 5px 11px;border-radius:999px;font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:#fff;background:${t.color};flex:0 0 auto;"><span style="font-size:15px;line-height:1;">${t.icon}</span>${t.name || 'Sans nom'}</span>
-                <input value=${t.icon} onInput=${t.onIcon} maxlength="4" title="Icône (emoji)" style="width:56px;text-align:center;padding:9px 6px;font-size:16px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
-                <input value=${t.name} onInput=${t.onName} placeholder="Nom (ex. Happy hour)" style="flex:1 1 180px;min-width:0;padding:9px 11px;font-size:14px;font-weight:600;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
-                <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#8A847C;">${v.t('common.color')} <input type="color" value=${t.color} onInput=${t.onColor} title="Couleur du badge" style="width:34px;height:30px;padding:0;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;" /></label>
-                <button onClick=${t.toggleActive} title=${t.active ? 'Actif — proposé dans le Compositeur' : 'Inactif — masqué du choix'} style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid rgba(35,34,32,0.12);cursor:pointer;background:${t.active ? 'rgba(46,110,78,0.12)' : 'rgba(141,29,44,0.08)'};color:${t.active ? '#2E6E4E' : '#8D1D2C'};font-size:13px;">${t.active ? '✓' : '⃠'}</button>
+                <span style="display:inline-flex;align-items:center;gap:7px;padding:5px 13px 5px 11px;border-radius:999px;font-size:12px;font-weight:500;letter-spacing:0.04em;text-transform:uppercase;color:#fff;background:${t.color};flex:0 0 auto;"><span style="font-size:15px;line-height:1;">${t.icon}</span>${t.name || 'Sans nom'}</span>
+                <input value=${t.icon} onInput=${t.onIcon} maxlength="4" title="Icône (emoji)" style="width:56px;text-align:center;padding:9px 6px;font-size:16px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
+                <input value=${t.name} onInput=${t.onName} placeholder="Nom (ex. Happy hour)" style="flex:1 1 180px;min-width:0;padding:9px 11px;font-size:14px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;" />
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);">${v.t('common.color')} <input type="color" value=${t.color} onInput=${t.onColor} title="Couleur du badge" style="width:34px;height:30px;padding:0;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;" /></label>
+                <button onClick=${t.toggleActive} title=${t.active ? 'Actif — proposé dans le Compositeur' : 'Inactif — masqué du choix'} style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid var(--line);cursor:pointer;background:${t.active ? 'rgba(63,122,82,0.12)' : 'rgba(141,29,44,0.08)'};color:${t.active ? '#2E6E4E' : '#8D1D2C'};font-size:13px;">${t.active ? '✓' : '⃠'}</button>
                 <span style="display:flex;align-items:center;gap:4px;flex:0 0 auto;">
-                  <button onClick=${t.up} disabled=${t.isFirst} title="Monter" style="width:30px;height:30px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:${t.isFirst ? 'not-allowed' : 'pointer'};font-size:12px;opacity:${t.isFirst ? 0.4 : 1};">↑</button>
-                  <button onClick=${t.down} disabled=${t.isLast} title="Descendre" style="width:30px;height:30px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:${t.isLast ? 'not-allowed' : 'pointer'};font-size:12px;opacity:${t.isLast ? 0.4 : 1};">↓</button>
-                  <button onClick=${t.del} title="Supprimer ce sous-type" style="width:30px;height:30px;border-radius:8px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:pointer;font-size:13px;color:#8D1D2C;">✕</button>
+                  <button onClick=${t.up} disabled=${t.isFirst} title="Monter" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:${t.isFirst ? 'not-allowed' : 'pointer'};font-size:12px;opacity:${t.isFirst ? 0.4 : 1};">↑</button>
+                  <button onClick=${t.down} disabled=${t.isLast} title="Descendre" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:${t.isLast ? 'not-allowed' : 'pointer'};font-size:12px;opacity:${t.isLast ? 0.4 : 1};">↓</button>
+                  <button onClick=${t.del} title="Supprimer ce sous-type" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:13px;color:var(--accent);">✕</button>
                 </span>
               </div>
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;padding-left:2px;">
-                <input value=${t.descr} onInput=${t.onDescr} placeholder="Description courte (ex. Réduction sur un créneau horaire)" style="flex:1 1 320px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;color:#4A4640;" />
+                <input value=${t.descr} onInput=${t.onDescr} placeholder="Description courte (ex. Réduction sur un créneau horaire)" style="flex:1 1 320px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--muted-2);" />
                 <span style="font-size:11px;color:${t.used ? '#6E4A2B' : '#B8B2A8'};">${t.used ? v.t('common.usedBy', { n: t.used }) : v.t('common.unused')}</span>
               </div>
               <div style="margin-top:9px;padding-left:2px;">${momentTagCells(t.moCells)}</div>
             </div>
           `)}
-          ${!v.promoRows.length && html`<p style="margin:0;font-size:12.5px;color:#8A847C;padding:8px 0;">Aucun sous-type de promotion. « + Ajouter une promotion » pour en créer un.</p>`}
+          ${!v.promoRows.length && html`<p style="margin:0;font-size:12.5px;color:var(--muted);padding:8px 0;">Aucun sous-type de promotion. « + Ajouter une promotion » pour en créer un.</p>`}
         </div>
-        <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Supprimer un sous-type ne casse pas les éléments qui l'utilisaient : ils retombent sur un badge neutre « Offre » jusqu'à ce que tu leur en réassignes un. L'ordre ci-dessus est celui proposé dans le Compositeur.</p>
+        <p style="margin:14px 0 0;font-size:11.5px;color:var(--muted);">Supprimer un sous-type ne casse pas les éléments qui l'utilisaient : ils retombent sur un badge neutre « Offre » jusqu'à ce que tu leur en réassignes un. L'ordre ci-dessus est celui proposé dans le Compositeur.</p>
       </div>
 
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;" data-tfb-pointer>
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;" data-tfb-pointer>
         <div style="min-width:0;flex:1 1 320px;">
-          <h3 style="margin:0 0 4px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${v.t('tfb.pointerTitle', { n: v.tfbTotal })}</h3>
-          <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">${v.t('tfb.pointerText')}</p>
+          <h3 style="margin:0 0 4px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${v.t('tfb.pointerTitle', { n: v.tfbTotal })}</h3>
+          <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">${v.t('tfb.pointerText')}</p>
         </div>
-        <button onClick=${v.goCampaigns} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;background:#8D1D2C;color:#fff;cursor:pointer;">${v.t('tfb.goCampaigns')}</button>
+        <button onClick=${v.goCampaigns} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:500;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;">${v.t('tfb.goCampaigns')}</button>
       </div>
     </div>
   </div>
   `}
 
   ${v.isCampaignsView && html`
-  <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;">
+  <div class="app__body">
     <div style="margin:0;display:flex;flex-direction:column;gap:16px;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
         <div>
-          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">${v.t('campaign.title')}</h2>
-          <p style="margin:0;font-size:12.5px;color:#8A847C;max-width:840px;">${v.t('campaign.subtitle')}</p>
+          <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${v.t('campaign.title')}</h2>
+          <p style="margin:0;font-size:12.5px;color:var(--muted);max-width:840px;">${v.t('campaign.subtitle')}</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <button onClick=${v.addCampaign} style="padding:9px 15px;font-size:12.5px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;cursor:pointer;">${v.t('campaign.add')}</button>
-          <button onClick=${v.saveCampaigns} disabled=${!v.campaignDirty || v.campaignBusy} style="padding:9px 18px;font-size:13px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.campaignDirty && !v.campaignBusy ? 'pointer' : 'not-allowed'};background:${v.campaignDirty ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.campaignDirty ? '#fff' : '#8A847C'};">${v.campaignBusy ? v.t('common.saving') : (v.campaignDirty ? v.t('common.save') : v.t('common.saved'))}</button>
+          <button onClick=${v.addCampaign} style="padding:9px 15px;font-size:12.5px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.t('campaign.add')}</button>
+          <button onClick=${v.saveCampaigns} disabled=${!v.campaignDirty || v.campaignBusy} style="padding:9px 18px;font-size:13px;font-weight:500;border-radius:8px;border:1px solid ${v.campaignDirty ? 'var(--accent)' : 'var(--line)'};cursor:${v.campaignDirty && !v.campaignBusy ? 'pointer' : 'not-allowed'};background:${v.campaignDirty ? 'var(--accent)' : '#fff'};color:${v.campaignDirty ? '#fff' : 'var(--muted)'};">${v.campaignBusy ? v.t('common.saving') : (v.campaignDirty ? v.t('common.save') : v.t('common.saved'))}</button>
         </div>
       </div>
 
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${v.t('campaign.count', { n: v.campaignCount })}</h3>
+          <h3 style="margin:0;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${v.t('campaign.count', { n: v.campaignCount })}</h3>
         </div>
         <div style="display:flex;flex-direction:column;gap:10px;">
           ${v.campaignRows.map((c) => html`
-            <div style="border:1px solid rgba(35,34,32,0.1);border-radius:12px;padding:13px 15px;background:${c.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};opacity:${c.active ? 1 : 0.72};">
+            <div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:${c.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};opacity:${c.active ? 1 : 0.72};">
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                 ${c.imageOk
-                  ? html`<img src=${c.image} alt="" loading="lazy" style="width:34px;height:34px;border-radius:8px;object-fit:cover;flex:0 0 auto;border:1px solid rgba(35,34,32,0.15);" />`
+                  ? html`<img src=${c.image} alt="" loading="lazy" style="width:34px;height:34px;border-radius:8px;object-fit:cover;flex:0 0 auto;border:1px solid var(--line);" />`
                   : html`<span style="width:34px;height:34px;border-radius:8px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:17px;color:#fff;background:${c.color};">${c.isGamme ? '🗂' : '📣'}</span>`}
-                <input value=${c.name} onInput=${c.onName} placeholder="Nom de la campagne (ex. Rentrée gourmande)" style="flex:1 1 220px;min-width:0;padding:9px 11px;font-size:14px;font-weight:600;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
-                <select value=${c.scope} onChange=${c.onScope} title="Portée de la campagne" style="flex:0 0 auto;padding:9px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;">
+                <input value=${c.name} onInput=${c.onName} placeholder="Nom de la campagne (ex. Rentrée gourmande)" style="flex:1 1 220px;min-width:0;padding:9px 11px;font-size:14px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;" />
+                <select value=${c.scope} onChange=${c.onScope} title="Portée de la campagne" style="flex:0 0 auto;padding:9px 10px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
                   <option value="produit">📣 Produit</option>
                   <option value="gamme">🗂 Gamme thématique</option>
                 </select>
-                <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#8A847C;">${v.t('common.color')} <input type="color" value=${c.color} onInput=${c.onColor} title="Couleur d'accent" style="width:34px;height:30px;padding:0;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;" /></label>
-                <button onClick=${c.toggleActive} title=${c.active ? 'Active — proposée dans le Compositeur' : 'Inactive — masquée du choix'} style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid rgba(35,34,32,0.12);cursor:pointer;background:${c.active ? 'rgba(46,110,78,0.12)' : 'rgba(141,29,44,0.08)'};color:${c.active ? '#2E6E4E' : '#8D1D2C'};font-size:13px;">${c.active ? '✓' : '⃠'}</button>
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);">${v.t('common.color')} <input type="color" value=${c.color} onInput=${c.onColor} title="Couleur d'accent" style="width:34px;height:30px;padding:0;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;" /></label>
+                <button onClick=${c.toggleActive} title=${c.active ? 'Active — proposée dans le Compositeur' : 'Inactive — masquée du choix'} style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid var(--line);cursor:pointer;background:${c.active ? 'rgba(63,122,82,0.12)' : 'rgba(141,29,44,0.08)'};color:${c.active ? '#2E6E4E' : '#8D1D2C'};font-size:13px;">${c.active ? '✓' : '⃠'}</button>
                 <span style="display:flex;align-items:center;gap:4px;flex:0 0 auto;">
-                  <button onClick=${c.up} disabled=${c.isFirst} title="Monter" style="width:30px;height:30px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:${c.isFirst ? 'not-allowed' : 'pointer'};font-size:12px;opacity:${c.isFirst ? 0.4 : 1};">↑</button>
-                  <button onClick=${c.down} disabled=${c.isLast} title="Descendre" style="width:30px;height:30px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:${c.isLast ? 'not-allowed' : 'pointer'};font-size:12px;opacity:${c.isLast ? 0.4 : 1};">↓</button>
-                  <button onClick=${c.del} title="Supprimer cette campagne" style="width:30px;height:30px;border-radius:8px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:pointer;font-size:13px;color:#8D1D2C;">✕</button>
+                  <button onClick=${c.up} disabled=${c.isFirst} title="Monter" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:${c.isFirst ? 'not-allowed' : 'pointer'};font-size:12px;opacity:${c.isFirst ? 0.4 : 1};">↑</button>
+                  <button onClick=${c.down} disabled=${c.isLast} title="Descendre" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:${c.isLast ? 'not-allowed' : 'pointer'};font-size:12px;opacity:${c.isLast ? 0.4 : 1};">↓</button>
+                  <button onClick=${c.del} title="Supprimer cette campagne" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:13px;color:var(--accent);">✕</button>
                 </span>
               </div>
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;">
                 ${c.isGamme
-                  ? html`<input value=${c.theme} onInput=${c.onTheme} placeholder="Thème / gamme (ex. Viennoiseries)" style="flex:1 1 180px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;" />`
-                  : html`<select value=${c.productRef} onChange=${c.onProductRef} style="flex:1 1 180px;min-width:0;padding:8px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;cursor:pointer;">
+                  ? html`<input value=${c.theme} onInput=${c.onTheme} placeholder="Thème / gamme (ex. Viennoiseries)" style="flex:1 1 180px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;" />`
+                  : html`<select value=${c.productRef} onChange=${c.onProductRef} style="flex:1 1 180px;min-width:0;padding:8px 10px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
                       <option value="">— Produit lié (photo/prix) —</option>
                       ${v.campaignProductOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
                     </select>`}
-                <input value=${c.message} onInput=${c.onMessage} placeholder="Accroche (ex. La rentrée en douceur)" style="flex:1 1 200px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;" />
+                <input value=${c.message} onInput=${c.onMessage} placeholder="Accroche (ex. La rentrée en douceur)" style="flex:1 1 200px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
                 <span style="display:flex;align-items:center;gap:4px;flex:0 0 auto;">
-                  <input value=${c.dateFrom} onInput=${c.onFrom} placeholder="du (JJ/MM)" style="width:96px;padding:8px 9px;font-size:12px;text-align:center;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;" />
-                  <span style="color:#8A847C;">→</span>
-                  <input value=${c.dateTo} onInput=${c.onTo} placeholder="au (JJ/MM)" style="width:96px;padding:8px 9px;font-size:12px;text-align:center;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;" />
+                  <input value=${c.dateFrom} onInput=${c.onFrom} placeholder="du (JJ/MM)" style="width:96px;padding:8px 9px;font-size:12px;text-align:center;border:1px solid var(--line);border-radius:8px;background:#fff;" />
+                  <span style="color:var(--muted);">→</span>
+                  <input value=${c.dateTo} onInput=${c.onTo} placeholder="au (JJ/MM)" style="width:96px;padding:8px 9px;font-size:12px;text-align:center;border:1px solid var(--line);border-radius:8px;background:#fff;" />
                 </span>
               </div>
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;">
-                <input value=${c.image} onInput=${c.onImage} placeholder="URL du visuel (optionnel — sinon la photo du produit lié est utilisée)" spellcheck="false" style="flex:1 1 320px;min-width:0;padding:7px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;" />
+                <input value=${c.image} onInput=${c.onImage} placeholder="URL du visuel (optionnel — sinon la photo du produit lié est utilisée)" spellcheck="false" style="flex:1 1 320px;min-width:0;padding:7px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;" />
                 <span style="font-size:11px;color:${c.used ? '#6E4A2B' : '#B8B2A8'};">${c.used ? v.t('common.usedBy', { n: c.used }) : v.t('common.unused')}</span>
               </div>
               <div style="margin-top:9px;">${momentTagCells(c.moCells)}</div>
             </div>
           `)}
-          ${!v.campaignRows.length && html`<p style="margin:0;font-size:12.5px;color:#8A847C;padding:8px 0;">Aucune campagne. « + Ajouter une campagne » pour en créer une (ou importe-les depuis l'ERP plus tard).</p>`}
+          ${!v.campaignRows.length && html`<p style="margin:0;font-size:12.5px;color:var(--muted);padding:8px 0;">Aucune campagne. « + Ajouter une campagne » pour en créer une (ou importe-les depuis l'ERP plus tard).</p>`}
         </div>
-        <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;">Portée <strong>produit</strong> = la campagne affiche la photo et le prix du produit lié. Portée <strong>gamme thématique</strong> = un thème libre (ex. « Viennoiseries »). Supprimer une campagne ne casse pas les éléments qui la diffusaient : ils affichent un repère neutre jusqu'à réassignation.</p>
+        <p style="margin:14px 0 0;font-size:11.5px;color:var(--muted);">Portée <strong>produit</strong> = la campagne affiche la photo et le prix du produit lié. Portée <strong>gamme thématique</strong> = un thème libre (ex. « Viennoiseries »). Supprimer une campagne ne casse pas les éléments qui la diffusaient : ils affichent un repère neutre jusqu'à réassignation.</p>
       </div>
 
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;" data-bundles data-tfb>
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;" data-bundles data-tfb>
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
           <div style="min-width:0;flex:1 1 320px;">
-            <h3 style="margin:0 0 4px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${v.t('tfb.title', { n: v.tfbTotal })}</h3>
-            <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;max-width:760px;">${v.t('tfb.subtitle')}</p>
+            <h3 style="margin:0 0 4px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${v.t('tfb.title', { n: v.tfbTotal })}</h3>
+            <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;max-width:760px;">${v.t('tfb.subtitle')}</p>
           </div>
-          <button onClick=${v.syncBundles} disabled=${v.bundleBusy || v.bundleState === 'off'} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.bundleBusy || v.bundleState === 'off' ? 'not-allowed' : 'pointer'};background:${v.bundleState === 'off' ? 'rgba(35,34,32,0.08)' : '#8D1D2C'};color:${v.bundleState === 'off' ? '#8A847C' : '#fff'};">${v.bundleBusy ? v.t('bundles.syncing') : v.t('bundles.sync')}</button>
+          <button onClick=${v.syncBundles} disabled=${v.bundleBusy || v.bundleState === 'off'} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:500;border-radius:8px;border:1px solid var(--accent);cursor:${v.bundleBusy || v.bundleState === 'off' ? 'not-allowed' : 'pointer'};background:${v.bundleState === 'off' ? 'rgba(35,34,32,0.08)' : '#8D1D2C'};color:${v.bundleState === 'off' ? '#8A847C' : '#fff'};">${v.bundleBusy ? v.t('bundles.syncing') : v.t('bundles.sync')}</button>
         </div>
-        <div style="padding:9px 12px;border-radius:10px;font-size:12px;line-height:1.5;margin-bottom:12px;background:${v.bundleState === 'ok' ? 'rgba(46,110,78,0.08)' : (v.bundleState === 'error' ? 'rgba(141,29,44,0.07)' : 'rgba(35,34,32,0.05)')};color:${v.bundleState === 'ok' ? '#2E6E4E' : (v.bundleState === 'error' ? '#8D1D2C' : '#6E675E')};" data-bundle-status=${v.bundleState}>
+        <div style="padding:9px 12px;border-radius:10px;font-size:12px;line-height:1.5;margin-bottom:12px;background:${v.bundleState === 'ok' ? 'rgba(63,122,82,0.08)' : (v.bundleState === 'error' ? 'rgba(141,29,44,0.07)' : 'rgba(35,34,32,0.05)')};color:${v.bundleState === 'ok' ? '#2E6E4E' : (v.bundleState === 'error' ? '#8D1D2C' : '#6E675E')};" data-bundle-status=${v.bundleState}>
           ${v.bundleState === 'ok' ? '● ' : (v.bundleState === 'error' ? '⚠ ' : '○ ')}${v.bundleStatusText}
-          ${v.bundleWarnings.map((w) => html`<div style="color:#6E4A2B;margin-top:3px;">⚠ ${w}</div>`)}
+          ${v.bundleWarnings.map((w) => html`<div style="color:var(--muted-2);margin-top:3px;">⚠ ${w}</div>`)}
           ${v.tfbKindLines.map((l) => html`<div style="margin-top:3px;color:${l.ok ? '#4A4640' : '#8D1D2C'};">${l.ok ? '' : '⚠ '}${l.text}</div>`)}
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-          ${v.tfbFilters.map((f) => html`<button onClick=${f.pick} data-tfb-filter=${f.id} style="padding:6px 13px;font-size:12px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${f.active ? '#232220' : 'rgba(35,34,32,0.12)'};background:${f.active ? '#232220' : '#fff'};color:${f.active ? '#fff' : '#4A4640'};">${f.label}</button>`)}
+          ${v.tfbFilters.map((f) => html`<button onClick=${f.pick} data-tfb-filter=${f.id} style="padding:6px 13px;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid ${f.active ? 'var(--accent)' : 'var(--line)'};background:${f.active ? 'var(--accent)' : '#fff'};color:${f.active ? '#fff' : 'var(--muted-2)'};">${f.label}</button>`)}
         </div>
         <div style="display:flex;flex-direction:column;gap:10px;">
           ${v.tfbShowBundles && v.bundleRows.map((b) => html`
-            <div style="border:1px solid rgba(35,34,32,0.1);border-radius:12px;padding:13px 15px;background:${b.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};opacity:${b.active ? 1 : 0.75};" data-bundle=${b.id}>
+            <div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:${b.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};opacity:${b.active ? 1 : 0.75};" data-bundle=${b.id}>
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                 <span style="font-size:18px;">🎁</span>
-                <strong style="font-size:14px;color:#232220;flex:1 1 200px;min-width:0;overflow-wrap:anywhere;">${b.name}</strong>
-                <span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:0.06em;color:#fff;background:${b.active ? '#2E6E4E' : (b.status === 'DRAFT' ? '#B8860B' : '#8A847C')};">${b.status}</span>
-                ${b.voucher && html`<span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:600;color:#6E4A2B;background:rgba(201,123,74,0.15);">${v.t('bundles.voucher')}</span>`}
-                <span style="font-size:16px;font-weight:700;color:#8D1D2C;white-space:nowrap;">${b.price}</span>
-                ${b.worth && html`<span style="font-size:12px;color:#8A847C;text-decoration:line-through;white-space:nowrap;">${b.worth}</span>`}
+                <strong style="font-size:14px;color:var(--ink);flex:1 1 200px;min-width:0;overflow-wrap:anywhere;">${b.name}</strong>
+                <span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:500;letter-spacing:0.06em;color:#fff;background:${b.active ? '#2E6E4E' : (b.status === 'DRAFT' ? '#B8860B' : '#8A847C')};">${b.status}</span>
+                ${b.voucher && html`<span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:500;color:var(--muted-2);background:rgba(201,123,74,0.15);">${v.t('bundles.voucher')}</span>`}
+                <span style="font-size:16px;font-weight:500;color:var(--accent);white-space:nowrap;">${b.price}</span>
+                ${b.worth && html`<span style="font-size:12px;color:var(--muted);text-decoration:line-through;white-space:nowrap;">${b.worth}</span>`}
               </div>
-              ${b.descr && html`<div style="margin-top:4px;font-size:12px;color:#6E675E;">${b.descr}</div>`}
+              ${b.descr && html`<div style="margin-top:4px;font-size:12px;color:var(--muted-2);">${b.descr}</div>`}
               <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;">
                 ${b.comp.map((c) => html`<span title=${c.missing ? v.t('bundles.missingProduct') : ''} style="padding:4px 10px;border-radius:999px;font-size:12px;background:${c.missing ? 'rgba(141,29,44,0.07)' : '#fff'};border:1px solid ${c.missing ? 'rgba(141,29,44,0.3)' : 'rgba(35,34,32,0.12)'};color:${c.missing ? '#8D1D2C' : '#232220'};">${c.label}${c.missing ? ' ?' : ''}</span>`)}
               </div>
-              <div style="margin-top:8px;font-size:12px;color:#4A4640;line-height:1.6;">
+              <div style="margin-top:8px;font-size:12px;color:var(--muted-2);line-height:1.6;">
                 <div>🕒 ${b.when}${b.dates ? ` · 📅 ${b.dates}` : ''}</div>
                 <div>🏬 ${b.shops}</div>
               </div>
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;">
-                <input value=${b.img} onChange=${b.onImg} placeholder=${v.t('bundles.imgPlaceholder')} style="flex:1 1 260px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;color:#4A4640;" />
+                <input value=${b.img} onChange=${b.onImg} placeholder=${v.t('bundles.imgPlaceholder')} style="flex:1 1 260px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--muted-2);" />
                 <span style="font-size:11px;color:${b.used ? '#6E4A2B' : '#B8B2A8'};">${b.used ? v.t('common.usedBy', { n: b.used }) : v.t('common.unused')}</span>
-                <button onClick=${b.create} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.25);border-radius:999px;cursor:pointer;">${v.t('bundles.create')}</button>
+                <button onClick=${b.create} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.t('bundles.create')}</button>
               </div>
             </div>
           `)}
           ${v.tfbPromoRows.map((p) => html`
-            <div style="border:1px solid rgba(35,34,32,0.1);border-radius:12px;padding:13px 15px;background:${p.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};opacity:${p.active ? 1 : 0.75};" data-tfb-promo=${p.id}>
+            <div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:${p.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};opacity:${p.active ? 1 : 0.75};" data-tfb-promo=${p.id}>
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                 <span style="font-size:18px;">${p.icon}</span>
-                <strong style="font-size:14px;color:#232220;flex:1 1 200px;min-width:0;overflow-wrap:anywhere;">${p.name}</strong>
-                <span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:600;color:#4A4640;background:rgba(35,34,32,0.07);">${p.kindLabel}</span>
-                <span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:0.06em;color:#fff;background:${p.active ? '#2E6E4E' : (p.status === 'DRAFT' ? '#B8860B' : '#8A847C')};">${p.status}</span>
-                ${p.voucherOnly && html`<span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:600;color:#6E4A2B;background:rgba(201,123,74,0.15);">${v.t('bundles.voucher')}</span>`}
-                <span style="font-size:15px;font-weight:700;color:#8D1D2C;white-space:nowrap;" data-tfb-label>${p.label}</span>
+                <strong style="font-size:14px;color:var(--ink);flex:1 1 200px;min-width:0;overflow-wrap:anywhere;">${p.name}</strong>
+                <span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:500;color:var(--muted-2);background:rgba(35,34,32,0.07);">${p.kindLabel}</span>
+                <span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:500;letter-spacing:0.06em;color:#fff;background:${p.active ? '#2E6E4E' : (p.status === 'DRAFT' ? '#B8860B' : '#8A847C')};">${p.status}</span>
+                ${p.voucherOnly && html`<span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:500;color:var(--muted-2);background:rgba(201,123,74,0.15);">${v.t('bundles.voucher')}</span>`}
+                <span style="font-size:15px;font-weight:500;color:var(--accent);white-space:nowrap;" data-tfb-label>${p.label}</span>
               </div>
-              ${p.descr && html`<div style="margin-top:4px;font-size:12px;color:#6E675E;">${p.descr}</div>`}
+              ${p.descr && html`<div style="margin-top:4px;font-size:12px;color:var(--muted-2);">${p.descr}</div>`}
               ${p.targets.length > 0 && html`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;">
                 ${p.targets.map((c) => html`<span title=${c.missing ? v.t('bundles.missingProduct') : ''} style="padding:4px 10px;border-radius:999px;font-size:12px;background:${c.missing ? 'rgba(141,29,44,0.07)' : '#fff'};border:1px solid ${c.missing ? 'rgba(141,29,44,0.3)' : 'rgba(35,34,32,0.12)'};color:${c.missing ? '#8D1D2C' : '#232220'};">${c.label}${c.missing ? ' ?' : ''}</span>`)}
               </div>`}
-              <div style="margin-top:8px;font-size:12px;color:#4A4640;line-height:1.6;">
+              <div style="margin-top:8px;font-size:12px;color:var(--muted-2);line-height:1.6;">
                 ${p.kind !== 'voucher' && html`<div>🕒 ${p.when}${p.dates ? ` · 📅 ${p.dates}` : ''}</div>`}
                 ${p.kind === 'voucher' && html`<div>🎟️ ${p.voucher}${p.dates ? ` · 📅 ${p.dates}` : ''}</div>`}
                 ${p.kind !== 'voucher' && html`<div>🏬 ${p.shops}</div>`}
               </div>
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;">
-                <input value=${p.img} onChange=${p.onImg} placeholder=${v.t('bundles.imgPlaceholder')} style="flex:1 1 260px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;color:#4A4640;" />
+                <input value=${p.img} onChange=${p.onImg} placeholder=${v.t('bundles.imgPlaceholder')} style="flex:1 1 260px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--muted-2);" />
                 <span style="font-size:11px;color:${p.used ? '#6E4A2B' : '#B8B2A8'};">${p.used ? v.t('common.usedBy', { n: p.used }) : v.t('common.unused')}</span>
-                <button onClick=${p.create} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.25);border-radius:999px;cursor:pointer;">${v.t('bundles.create')}</button>
+                <button onClick=${p.create} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.t('bundles.create')}</button>
               </div>
             </div>
           `)}
-          ${!v.tfbTotal && html`<p style="margin:0;font-size:12.5px;color:#8A847C;padding:6px 0;">${v.bundleState === 'off' ? v.t('bundles.emptyOff') : v.t('tfb.empty')}</p>`}
+          ${!v.tfbTotal && html`<p style="margin:0;font-size:12.5px;color:var(--muted);padding:6px 0;">${v.bundleState === 'off' ? v.t('bundles.emptyOff') : v.t('tfb.empty')}</p>`}
         </div>
-        <p style="margin:12px 0 0;font-size:11.5px;color:#8A847C;line-height:1.5;">${v.t('tfb.footer')}</p>
+        <p style="margin:12px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5;">${v.t('tfb.footer')}</p>
       </div>
     </div>
   </div>
   `}
 
   ${v.isTranslationsView && html`
-  <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;" data-translations>
+  <div class="app__body" data-translations>
     <div style="margin:0;display:flex;flex-direction:column;gap:16px;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
         <div style="min-width:0;flex:1 1 420px;">
-          <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">${v.t('tr.title')}</h2>
-          <p style="margin:0;font-size:12.5px;color:#8A847C;max-width:840px;line-height:1.5;">${v.t('tr.subtitle')}</p>
+          <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${v.t('tr.title')}</h2>
+          <p style="margin:0;font-size:12.5px;color:var(--muted);max-width:840px;line-height:1.5;">${v.t('tr.subtitle')}</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#8A847C;">${v.t('tr.lang')}
-            <select value=${v.trLang} onChange=${v.onTrLang} style="padding:8px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;">
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);">${v.t('tr.lang')}
+            <select value=${v.trLang} onChange=${v.onTrLang} style="padding:8px 10px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
               ${v.trLangs.map((l) => html`<option value=${l.id}>${l.label}</option>`)}
             </select>
           </label>
-          <button onClick=${v.proposeTr} disabled=${!v.trConfigured || v.trRunning || v.trBusy || !v.trMissing} data-tr-propose style="padding:9px 15px;font-size:12.5px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;cursor:${!v.trConfigured || v.trRunning || v.trBusy || !v.trMissing ? 'not-allowed' : 'pointer'};opacity:${!v.trConfigured || !v.trMissing ? 0.55 : 1};">${v.trRunning ? v.trProgress : v.t('tr.propose', { n: v.trMissing })}</button>
-          <button onClick=${v.validateAllTr} disabled=${!v.trProposed || v.trBusy} data-tr-validate-all style="padding:9px 18px;font-size:13px;font-weight:600;border-radius:999px;border:1px solid #8D1D2C;cursor:${v.trProposed && !v.trBusy ? 'pointer' : 'not-allowed'};background:${v.trProposed ? '#8D1D2C' : 'rgba(35,34,32,0.10)'};color:${v.trProposed ? '#fff' : '#8A847C'};">${v.t('tr.validateAll', { n: v.trProposed })}</button>
+          <button onClick=${v.proposeTr} disabled=${!v.trConfigured || v.trRunning || v.trBusy || !v.trMissing} data-tr-propose style="padding:9px 15px;font-size:12.5px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:${!v.trConfigured || v.trRunning || v.trBusy || !v.trMissing ? 'not-allowed' : 'pointer'};opacity:${!v.trConfigured || !v.trMissing ? 0.55 : 1};">${v.trRunning ? v.trProgress : v.t('tr.propose', { n: v.trMissing })}</button>
+          <button onClick=${v.validateAllTr} disabled=${!v.trProposed || v.trBusy} data-tr-validate-all style="padding:9px 18px;font-size:13px;font-weight:500;border-radius:8px;border:1px solid ${v.trProposed ? 'var(--accent)' : 'var(--line)'};cursor:${v.trProposed && !v.trBusy ? 'pointer' : 'not-allowed'};background:${v.trProposed ? 'var(--accent)' : '#fff'};color:${v.trProposed ? '#fff' : 'var(--muted)'};">${v.t('tr.validateAll', { n: v.trProposed })}</button>
         </div>
       </div>
 
-      <div style="padding:10px 13px;border-radius:12px;font-size:12px;line-height:1.6;background:${v.trConfigured ? 'rgba(46,110,78,0.08)' : 'rgba(201,123,74,0.12)'};color:${v.trConfigured ? '#2E6E4E' : '#8A5A2B'};" data-tr-status=${v.trConfigured ? 'ok' : 'off'}>
+      <div style="padding:10px 13px;border-radius:12px;font-size:12px;line-height:1.6;background:${v.trConfigured ? 'rgba(63,122,82,0.08)' : 'rgba(201,123,74,0.12)'};color:${v.trConfigured ? '#2E6E4E' : '#8A5A2B'};" data-tr-status=${v.trConfigured ? 'ok' : 'off'}>
         <div>${v.trConfigured ? v.t('tr.claudeReady', { model: v.trModel }) : v.t('tr.claudeOff')}</div>
         ${v.trRunning && html`<div>⏳ ${v.trProgress}</div>`}
-        ${v.trJobText && html`<div style="color:#4A4640;">${v.trJobText}</div>`}
-        ${v.trJobErrors && html`<div style="color:#8D1D2C;">⚠ ${v.trJobErrors}</div>`}
+        ${v.trJobText && html`<div style="color:var(--muted-2);">${v.trJobText}</div>`}
+        ${v.trJobErrors && html`<div style="color:var(--accent);">⚠ ${v.trJobErrors}</div>`}
         <div style="color:${v.trHasStores ? '#4A4640' : '#8A5A2B'};">🏬 ${v.trStoresText}</div>
       </div>
 
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 20px 18px;">
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:16px 20px 18px;">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-          ${v.trFilters.map((f) => html`<button onClick=${f.pick} data-tr-filter=${f.id} style="padding:6px 13px;font-size:12px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${f.active ? '#232220' : 'rgba(35,34,32,0.12)'};background:${f.active ? '#232220' : '#fff'};color:${f.active ? '#fff' : '#4A4640'};">${f.label}</button>`)}
-          <input value=${v.trSearch} onInput=${v.onTrSearch} placeholder=${v.t('tr.search')} style="margin-left:auto;flex:0 1 260px;min-width:160px;padding:8px 11px;font-size:12.5px;border:1px solid rgba(35,34,32,0.12);border-radius:999px;background:#FBF8F2;" />
+          ${v.trFilters.map((f) => html`<button onClick=${f.pick} data-tr-filter=${f.id} style="padding:6px 13px;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid ${f.active ? 'var(--accent)' : 'var(--line)'};background:${f.active ? 'var(--accent)' : '#fff'};color:${f.active ? '#fff' : 'var(--muted-2)'};">${f.label}</button>`)}
+          <input value=${v.trSearch} onInput=${v.onTrSearch} placeholder=${v.t('tr.search')} style="margin-left:auto;flex:0 1 260px;min-width:160px;padding:8px 11px;font-size:12.5px;border:1px solid var(--line);border-radius:999px;background:#fff;" />
         </div>
-        ${!v.trLoaded && html`<p style="margin:0;font-size:12.5px;color:#8A847C;">${v.t('app.loading')}</p>`}
-        ${v.trLoaded && !v.trGroups.length && html`<p style="margin:0;padding:10px 0;font-size:12.5px;color:#8A847C;">${v.trEmpty}</p>`}
+        ${!v.trLoaded && html`<p style="margin:0;font-size:12.5px;color:var(--muted);">${v.t('app.loading')}</p>`}
+        ${v.trLoaded && !v.trGroups.length && html`<p style="margin:0;padding:10px 0;font-size:12.5px;color:var(--muted);">${v.trEmpty}</p>`}
         ${v.trGroups.map((g) => html`
           <div style="margin-top:6px;" data-tr-group=${g.kind}>
-            <h3 style="margin:10px 0 8px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${g.label} · ${g.n}</h3>
+            <h3 style="margin:10px 0 8px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${g.label} · ${g.n}</h3>
             <div style="display:flex;flex-direction:column;gap:6px;">
               ${g.rows.map((r) => html`
                 <div data-tr-row=${r.key} data-tr-state=${r.state} style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) auto;gap:10px;align-items:center;padding:8px 10px;border-radius:10px;border:1px solid ${r.state === 'proposed' ? 'rgba(141,29,44,0.22)' : 'rgba(35,34,32,0.08)'};background:${r.state === 'proposed' ? 'rgba(141,29,44,0.03)' : (r.state === 'validated' || r.state === 'erp' ? '#fff' : '#FBF8F2')};">
                   <div style="min-width:0;">
-                    <div style="font-size:13px;color:#232220;font-weight:600;overflow-wrap:anywhere;">${r.source}</div>
-                    <div style="font-size:11px;color:#8A847C;overflow-wrap:anywhere;">${r.label}${r.where ? ` · ${r.where}` : ''}</div>
-                    ${r.before && html`<div style="font-size:11px;color:#8A5A2B;margin-top:2px;overflow-wrap:anywhere;">↺ ${r.before}</div>`}
+                    <div style="font-size:13px;color:var(--ink);font-weight:500;overflow-wrap:anywhere;">${r.source}</div>
+                    <div style="font-size:11px;color:var(--muted);overflow-wrap:anywhere;">${r.label}${r.where ? ` · ${r.where}` : ''}</div>
+                    ${r.before && html`<div style="font-size:11px;color:var(--warn);margin-top:2px;overflow-wrap:anywhere;">↺ ${r.before}</div>`}
                   </div>
                   <div style="min-width:0;">
-                    <input value=${r.value} onInput=${r.onInput} onChange=${r.onChange} disabled=${r.state === 'erp'} placeholder=${v.trPlaceholder} style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:13px;border:1px solid ${r.edited ? '#C97B4A' : 'rgba(35,34,32,0.14)'};border-radius:8px;background:${r.state === 'erp' ? 'rgba(35,34,32,0.04)' : '#fff'};color:#232220;" />
+                    <input value=${r.value} onInput=${r.onInput} onChange=${r.onChange} disabled=${r.state === 'erp'} placeholder=${v.trPlaceholder} style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:13px;border:1px solid ${r.edited ? '#C97B4A' : 'rgba(35,34,32,0.14)'};border-radius:8px;background:${r.state === 'erp' ? 'rgba(35,34,32,0.04)' : '#fff'};color:var(--ink);" />
                     <div style="font-size:10.5px;margin-top:3px;color:${r.state === 'validated' || r.state === 'erp' ? '#2E6E4E' : (r.state === 'proposed' ? '#8D1D2C' : '#8A5A2B')};">${r.state === 'validated' || r.state === 'erp' ? '✓ ' : ''}${r.badge}</div>
                   </div>
                   <div style="display:flex;gap:6px;justify-content:flex-end;min-width:64px;">
                     ${r.state === 'proposed' && html`
-                      <button onClick=${r.validate} title=${v.t('tr.validate')} data-tr-validate style="width:30px;height:30px;border-radius:8px;border:1px solid rgba(46,110,78,0.35);background:rgba(46,110,78,0.10);color:#2E6E4E;cursor:pointer;font-size:13px;">✓</button>
-                      <button onClick=${r.reject} title=${v.t('tr.reject')} style="width:30px;height:30px;border-radius:8px;border:1px solid rgba(35,34,32,0.12);background:#fff;color:#8D1D2C;cursor:pointer;font-size:13px;">✕</button>`}
+                      <button onClick=${r.validate} title=${v.t('tr.validate')} data-tr-validate style="width:30px;height:30px;border-radius:8px;border:1px solid rgba(63,122,82,0.35);background:rgba(63,122,82,0.10);color:var(--green);cursor:pointer;font-size:13px;">✓</button>
+                      <button onClick=${r.reject} title=${v.t('tr.reject')} style="width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--accent);cursor:pointer;font-size:13px;">✕</button>`}
                   </div>
                 </div>
               `)}
             </div>
           </div>
         `)}
-        <p style="margin:14px 0 0;font-size:11.5px;color:#8A847C;line-height:1.5;">${v.t('tr.footer')}</p>
+        <p style="margin:14px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5;">${v.t('tr.footer')}</p>
       </div>
     </div>
   </div>
   `}
 
   ${v.isPlanningView && html`
-  <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;">
-    <div style="max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
+  <div class="app__body">
+    <div style="display:flex;flex-direction:column;gap:16px;">
       <div>
-        <h2 style="margin:0 0 4px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">${v.t('planning.title')}</h2>
-        <p style="margin:0;font-size:12.5px;color:#8A847C;">${v.t('planning.subtitle')}</p>
+        <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${v.t('planning.title')}</h2>
+        <p style="margin:0;font-size:12.5px;color:var(--muted);">${v.t('planning.subtitle')}</p>
       </div>
 
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
-        <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">1 · Magasins</h3>
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;">
+        <h3 style="margin:0 0 12px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">1 · Magasins</h3>
         ${v.planStoreChips.length ? html`
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;">
             ${v.planStoreChips.map((s) => html`
               <button onClick=${s.toggle} style=${s.style}>
-                <span style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;">${s.badge ? html`<span style="color:#8D1D2C;">✓</span>` : ''}${s.label}</span>
-                <span style="font-size:11px;color:#8A847C;">${s.sub}</span>
+                <span style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:500;">${s.badge ? html`<span style="color:var(--accent);">✓</span>` : ''}${s.label}</span>
+                <span style="font-size:11px;color:var(--muted);">${s.sub}</span>
               </button>
             `)}
           </div>
-        ` : html`<p style="margin:0;font-size:12.5px;color:#8A847C;">Aucun magasin — importe ton catalogue (⚙ Paramètres → Rafraîchir) ou branche un écran.</p>`}
+        ` : html`<p style="margin:0;font-size:12.5px;color:var(--muted);">Aucun magasin — importe ton catalogue (⚙ Paramètres → Rafraîchir) ou branche un écran.</p>`}
       </div>
 
       <!-- 2 · Semaine (modèle A–E) + activation + duplication -->
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">2 · Semaine (modèle)</h3>
-          <span style="font-size:12px;color:#8A847C;">Diffusée actuellement : <strong style="color:#2E6E4E;">Semaine ${v.planActiveWeek}</strong></span>
+          <h3 style="margin:0;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">2 · Semaine (modèle)</h3>
+          <span style="font-size:12px;color:var(--muted);">Diffusée actuellement : <strong style="color:var(--green);">Semaine ${v.planActiveWeek}</strong></span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
           ${v.planWeekTabs.map((t) => html`
-            <button onClick=${t.pick} title=${t.playing ? 'Semaine actuellement diffusée' : ''} style="display:flex;align-items:center;gap:6px;padding:9px 18px;font-size:14px;font-weight:700;border-radius:10px;cursor:pointer;${t.active ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.14);'}">
+            <button onClick=${t.pick} title=${t.playing ? 'Semaine actuellement diffusée' : ''} style="display:flex;align-items:center;gap:6px;padding:9px 18px;font-size:14px;font-weight:500;border-radius:10px;cursor:pointer;${t.active ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:var(--paper);color:var(--ink);border:1px solid var(--line);'}">
               Sem. ${t.label}${t.playing ? html`<span style="width:7px;height:7px;border-radius:50%;background:${t.active ? '#fff' : '#2E6E4E'};"></span>` : ''}
             </button>
           `)}
         </div>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-          <button onClick=${v.activatePlanWeek} disabled=${v.planWeekActive} style="padding:9px 18px;font-size:13px;font-weight:600;border-radius:999px;cursor:${v.planWeekActive ? 'default' : 'pointer'};${v.planWeekActive ? 'background:rgba(46,110,78,0.12);color:#2E6E4E;border:1px solid rgba(46,110,78,0.4);' : 'background:#2E6E4E;color:#fff;border:1px solid #2E6E4E;'}">${v.planWeekActive ? `✓ Semaine ${v.planWeek} diffusée` : `▶ Diffuser la semaine ${v.planWeek}`}</button>
-          <span style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:#8A847C;">
+          <button onClick=${v.activatePlanWeek} disabled=${v.planWeekActive} style="padding:9px 18px;font-size:13px;font-weight:500;border-radius:8px;cursor:${v.planWeekActive ? 'default' : 'pointer'};${v.planWeekActive ? 'background:rgba(63,122,82,0.12);color:var(--green);border:1px solid rgba(63,122,82,0.4);' : 'background:var(--green);color:#fff;border:1px solid var(--green);'}">${v.planWeekActive ? `✓ Semaine ${v.planWeek} diffusée` : `▶ Diffuser la semaine ${v.planWeek}`}</button>
+          <span style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted);">
             Dupliquer la semaine ${v.planWeek} vers
-            <select onChange=${(e) => { const t = e.target.value; e.target.value = ''; if (t) v.duplicatePlanWeek(t); }} style="padding:8px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;cursor:pointer;">
+            <select onChange=${(e) => { const t = e.target.value; e.target.value = ''; if (t) v.duplicatePlanWeek(t); }} style="padding:8px 10px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
               <option value="">semaine…</option>
               ${v.planDupTargets.map((w) => html`<option value=${w}>Semaine ${w}</option>`)}
             </select>
@@ -5465,44 +5591,44 @@ class App extends Component {
       </div>
 
       ${!v.planHasStores ? html`
-        <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 20px;text-align:center;">
-          <p style="margin:0;font-size:13px;color:#8A847C;">Sélectionne au moins un magasin ci-dessus pour remplir son planning de la semaine ${v.planWeek}.</p>
+        <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:22px 20px;text-align:center;">
+          <p style="margin:0;font-size:13px;color:var(--muted);">Sélectionne au moins un magasin ci-dessus pour remplir son planning de la semaine ${v.planWeek}.</p>
         </div>
       ` : html`
 
       <!-- 3 · Jour de la semaine -->
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
-        <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">3 · Jour de la semaine</h3>
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;">
+        <h3 style="margin:0 0 12px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">3 · Jour de la semaine</h3>
         <div style="display:flex;gap:7px;flex-wrap:wrap;">
           ${v.planDayTabs.map((d) => html`
-            <button onClick=${d.pick} style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 16px;border-radius:10px;cursor:pointer;min-width:64px;${d.active ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.14);'}">
-              <span style="font-size:13px;font-weight:700;">${d.label}</span>
-              <span style="font-size:10px;${d.active ? 'color:rgba(255,255,255,0.85);' : 'color:#8A847C;'}">${d.count ? `${d.count} film(s)` : '—'}</span>
+            <button onClick=${d.pick} style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 16px;border-radius:10px;cursor:pointer;min-width:64px;${d.active ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:var(--paper);color:var(--ink);border:1px solid var(--line);'}">
+              <span style="font-size:13px;font-weight:500;">${d.label}</span>
+              <span style="font-size:10px;${d.active ? 'color:rgba(255,255,255,0.85);' : 'color:var(--muted);'}">${d.count ? `${d.count} film(s)` : '—'}</span>
             </button>
           `)}
         </div>
       </div>
 
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
-        <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Films — ${v.planDayName} (glisse-les sur un moment)</h3>
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;">
+        <h3 style="margin:0 0 12px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Films — ${v.planDayName} (glisse-les sur un moment)</h3>
         ${v.planFilmCards.length ? html`
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             ${v.planFilmCards.map((f) => html`
-              <div draggable="true" onDragStart=${f.onDragStart} onDragEnd=${f.onDragEnd} style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:#FBF8F2;border:1px solid ${f.color}55;border-left:4px solid ${f.color};cursor:grab;">
-                <span style="font-size:13px;font-weight:600;">${f.name}</span>
-                <span style="font-size:10px;font-weight:600;color:${f.color};">${f.catLabel}</span>
-                ${f.dayBadge ? html`<span title="Jours de planning de ce film" style="font-size:9px;font-weight:700;color:#6E4A2B;background:rgba(110,74,43,0.1);border-radius:999px;padding:1px 6px;">${f.dayBadge}</span>` : ''}
-                <span style="font-size:10px;color:#8A847C;">${f.count} mod.</span>
-                ${f.tags.map((t) => html`<span style="font-size:9px;font-weight:600;color:${f.color};">#${t}</span>`)}
+              <div draggable="true" onDragStart=${f.onDragStart} onDragEnd=${f.onDragEnd} style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:var(--paper);border:1px solid ${f.color}55;border-left:4px solid ${f.color};cursor:grab;">
+                <span style="font-size:13px;font-weight:500;">${f.name}</span>
+                <span style="font-size:10px;font-weight:500;color:${f.color};">${f.catLabel}</span>
+                ${f.dayBadge ? html`<span title="Jours de planning de ce film" style="font-size:9px;font-weight:500;color:var(--muted-2);background:var(--chip);border-radius:999px;padding:1px 6px;">${f.dayBadge}</span>` : ''}
+                <span style="font-size:10px;color:var(--muted);">${f.count} mod.</span>
+                ${f.tags.map((t) => html`<span style="font-size:9px;font-weight:500;color:${f.color};">#${t}</span>`)}
               </div>
             `)}
           </div>
-        ` : html`<p style="margin:0;font-size:12.5px;color:#8A847C;">Aucun film disponible pour ${v.planDayName}. Un film n'apparaît que si son « jour de planning » inclut ce jour (réglable dans les propriétés du film, onglet Playlist).</p>`}
+        ` : html`<p style="margin:0;font-size:12.5px;color:var(--muted);">Aucun film disponible pour ${v.planDayName}. Un film n'apparaît que si son « jour de planning » inclut ce jour (réglable dans les propriétés du film, onglet Playlist).</p>`}
       </div>
 
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;">
-          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Semaine ${v.planWeek} · ${v.planDayName} — moments</h3>
+          <h3 style="margin:0;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Semaine ${v.planWeek} · ${v.planDayName} — moments</h3>
           <span style="font-size:11.5px;color:${v.planSaving ? '#8A847C' : '#2E6E4E'};">${v.planSaving ? 'Enregistrement…' : '✓ Enregistré automatiquement'}</span>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
@@ -5510,35 +5636,35 @@ class App extends Component {
             <div style="display:flex;flex-direction:column;gap:10px;">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
                 <span style="display:flex;align-items:center;gap:7px;">
-                  <span style="font-size:13px;font-weight:700;color:#232220;">${col.label}</span>
-                  <span title="Films dans ce moment (5 max)" style="font-size:10.5px;font-weight:700;color:${col.full ? '#8D1D2C' : '#8A847C'};background:${col.full ? 'rgba(141,29,44,0.1)' : 'rgba(35,34,32,0.06)'};border-radius:999px;padding:2px 8px;">${col.count}/${col.max}</span>
+                  <span style="font-size:13px;font-weight:500;color:var(--ink);">${col.label}</span>
+                  <span title="Films dans ce moment (5 max)" style="font-size:10.5px;font-weight:500;color:${col.full ? '#8D1D2C' : '#8A847C'};background:${col.full ? 'rgba(141,29,44,0.1)' : 'rgba(35,34,32,0.06)'};border-radius:999px;padding:2px 8px;">${col.count}/${col.max}</span>
                 </span>
                 <span style="display:flex;align-items:center;gap:4px;">
-                  <input value=${col.from} onInput=${col.onFrom} style="width:62px;padding:5px 7px;font-size:12px;text-align:center;border:1px solid rgba(35,34,32,0.16);border-radius:7px;background:#FBF8F2;" />
-                  <span style="color:#8A847C;font-size:12px;">→</span>
-                  <input value=${col.to} onInput=${col.onTo} style="width:62px;padding:5px 7px;font-size:12px;text-align:center;border:1px solid rgba(35,34,32,0.16);border-radius:7px;background:#FBF8F2;" />
+                  <input value=${col.from} onInput=${col.onFrom} style="width:62px;padding:5px 7px;font-size:12px;text-align:center;border:1px solid var(--line);border-radius:8px;background:#fff;" />
+                  <span style="color:var(--muted);font-size:12px;">→</span>
+                  <input value=${col.to} onInput=${col.onTo} style="width:62px;padding:5px 7px;font-size:12px;text-align:center;border:1px solid var(--line);border-radius:8px;background:#fff;" />
                 </span>
               </div>
               <div class="pl-item" onDragOver=${col.onDragOver} onDragLeave=${col.onDragLeave} onDrop=${col.onDrop}
                 style="min-height:96px;border-radius:12px;border:2px dashed ${col.films.length ? 'rgba(35,34,32,0.14)' : 'rgba(35,34,32,0.2)'};background:${col.films.length ? '#fff' : '#FBF8F2'};display:flex;flex-direction:column;gap:7px;padding:12px;">
                 ${col.films.map((f) => html`
-                  <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:9px;background:${f.color}10;border-left:4px solid ${f.color};">
-                    <span style="font-size:10px;font-weight:700;color:${f.color};opacity:0.75;">${f.order}</span>
+                  <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;background:${f.color}10;border-left:4px solid ${f.color};">
+                    <span style="font-size:10px;font-weight:500;color:${f.color};opacity:0.75;">${f.order}</span>
                     <div style="flex:1 1 auto;min-width:0;">
-                      <div style="font-size:13px;font-weight:600;color:${f.color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${f.name}</div>
-                      <div style="font-size:10px;color:#8A847C;">${f.count} module(s)</div>
+                      <div style="font-size:13px;font-weight:500;color:${f.color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${f.name}</div>
+                      <div style="font-size:10px;color:var(--muted);">${f.count} module(s)</div>
                     </div>
-                    <button onClick=${f.remove} title="Retirer" style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:rgba(141,29,44,0.1);border:none;cursor:pointer;font-size:11px;color:#8D1D2C;">✕</button>
+                    <button onClick=${f.remove} title="Retirer" style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:rgba(141,29,44,0.1);border:none;cursor:pointer;font-size:11px;color:var(--accent);">✕</button>
                   </div>
                 `)}
                 ${col.films.length
                   ? (col.full
-                    ? html`<div style="font-size:10.5px;color:#8D1D2C;text-align:center;padding:3px;">${col.max} films max atteint — retires-en un pour changer</div>`
-                    : html`<div style="font-size:10.5px;color:#B8B2A8;text-align:center;padding:3px;">＋ glisse un autre film (joué à la suite)</div>`)
-                  : html`<div style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;font-size:12px;color:#B8B2A8;">Glisse un film ici — ou utilise « ＋ ajouter » ci-dessous (5 max)</div>`}
+                    ? html`<div style="font-size:10.5px;color:var(--accent);text-align:center;padding:3px;">${col.max} films max atteint — retires-en un pour changer</div>`
+                    : html`<div style="font-size:10.5px;color:var(--faint);text-align:center;padding:3px;">＋ glisse un autre film (joué à la suite)</div>`)
+                  : html`<div style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--faint);">Glisse un film ici — ou utilise « ＋ ajouter » ci-dessous (5 max)</div>`}
               </div>
               ${!col.full && col.addFilms.length ? html`
-                <select onChange=${col.onAdd} title="Ajouter un film sans glisser" style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:12.5px;border:1px solid rgba(141,29,44,0.25);border-radius:9px;background:#FBF8F2;color:#8D1D2C;cursor:pointer;">
+                <select onChange=${col.onAdd} title="Ajouter un film sans glisser" style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:12.5px;border:1px solid rgba(141,29,44,0.25);border-radius:8px;background:#fff;color:var(--accent);cursor:pointer;">
                   <option value="">＋ ajouter un film…</option>
                   ${col.addFilms.map((o) => html`<option value=${o.id}>${o.name}</option>`)}
                 </select>
@@ -5546,20 +5672,20 @@ class App extends Component {
             </div>
           `)}
         </div>
-        <p style="margin:12px 0 0;font-size:11.5px;color:#8A847C;">Glisse les films sur un moment, ou ajoute-les avec le menu « ＋ ajouter » (jusqu'à 5 par moment, enchaînés en boucle). Les fenêtres horaires sont communes à tous les magasins et à toutes les semaines.</p>
+        <p style="margin:12px 0 0;font-size:11.5px;color:var(--muted);">Glisse les films sur un moment, ou ajoute-les avec le menu « ＋ ajouter » (jusqu'à 5 par moment, enchaînés en boucle). Les fenêtres horaires sont communes à tous les magasins et à toutes les semaines.</p>
       </div>
 
       <!-- Liens des écrans (semaine active diffusée en direct) -->
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
-        <h3 style="margin:0 0 4px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Liens des écrans</h3>
-        <p style="margin:0 0 12px;font-size:11.5px;color:#8A847C;">Un lien par magasin, à mettre sur l'écran. Il diffuse en direct la <strong>semaine active (${v.planActiveWeek})</strong>, le bon film selon le jour et l'heure.</p>
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;">
+        <h3 style="margin:0 0 4px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Liens des écrans</h3>
+        <p style="margin:0 0 12px;font-size:11.5px;color:var(--muted);">Un lien par magasin, à mettre sur l'écran. Il diffuse en direct la <strong>semaine active (${v.planActiveWeek})</strong>, le bon film selon le jour et l'heure.</p>
         <div style="display:flex;flex-direction:column;gap:8px;">
           ${v.planStoreLinks.map((l) => html`
-            <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.08);">
-              <span style="flex:0 0 150px;font-size:13px;font-weight:600;">${l.store}</span>
-              <input readonly value=${l.url} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:7px 10px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:7px;background:#fff;" />
-              <button onClick=${() => v.copyLink(l.url)} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Copier</button>
-              <a href=${l.url} target="_blank" style="flex:0 0 auto;font-size:12px;font-weight:600;color:#8D1D2C;">↗</a>
+            <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:var(--paper);border:1px solid var(--line);">
+              <span style="flex:0 0 150px;font-size:13px;font-weight:500;">${l.store}</span>
+              <input readonly value=${l.url} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:7px 10px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;" />
+              <button onClick=${() => v.copyLink(l.url)} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;">⎘ Copier</button>
+              <a href=${l.url} target="_blank" style="flex:0 0 auto;font-size:12px;font-weight:500;color:var(--accent);">↗</a>
             </div>
           `)}
         </div>
@@ -5567,24 +5693,24 @@ class App extends Component {
       `}
 
       <!-- Jours de planning des films (déplacé depuis le formulaire du film) · toujours visible -->
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;">
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;">
         <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;">
-          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Jours de planning des films</h3>
+          <h3 style="margin:0;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Jours de planning des films</h3>
           ${infoTip('Quels films sont PROPOSÉS quel jour quand tu remplis le planning ci-dessus (ex. « Crêpes » = mercredi). Purement un filtre d’organisation : ça ne change pas quand un film est diffusé (ça, c’est « Jours de diffusion », réglé sur le film). Un film coché sur tous les jours est proposé tous les jours.')}
         </div>
-        <p style="margin:0 0 12px;font-size:12px;color:#8A847C;">Coche les jours où chaque film doit apparaître dans le sélecteur du planning. Décoche pour le masquer ce jour-là.</p>
+        <p style="margin:0 0 12px;font-size:12px;color:var(--muted);">Coche les jours où chaque film doit apparaître dans le sélecteur du planning. Décoche pour le masquer ce jour-là.</p>
         <div style="overflow-x:auto;">
           <table style="border-collapse:collapse;width:100%;min-width:460px;font-size:13px;">
             <thead><tr>
-              <th style="text-align:left;padding:7px 10px;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;border-bottom:1px solid rgba(35,34,32,0.12);">Film</th>
-              ${v.planDayTabs.map((d) => html`<th style="padding:7px 8px;font-size:11px;text-transform:uppercase;color:#8A847C;border-bottom:1px solid rgba(35,34,32,0.12);text-align:center;width:52px;">${d.label}</th>`)}
+              <th style="text-align:left;padding:7px 10px;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);">Film</th>
+              ${v.planDayTabs.map((d) => html`<th style="padding:7px 8px;font-size:11px;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);text-align:center;width:52px;">${d.label}</th>`)}
             </tr></thead>
             <tbody>
               ${v.planDayMatrix.map((p) => html`
                 <tr>
-                  <td style="padding:6px 10px;border-bottom:1px solid rgba(35,34,32,0.06);white-space:nowrap;">${p.name}${p.mode === 'continu' ? html` <span style="font-size:9.5px;font-weight:700;color:#6E4A2B;background:rgba(110,74,43,0.1);border-radius:999px;padding:1px 6px;">🔄 continu</span>` : ''}</td>
-                  ${p.days.map((d) => html`<td style="padding:4px 8px;border-bottom:1px solid rgba(35,34,32,0.06);text-align:center;">
-                    <button onClick=${d.toggle} title=${d.on ? 'Proposé ce jour — cliquer pour masquer' : 'Masqué ce jour — cliquer pour proposer'} style="width:30px;height:28px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;border:1px solid ${d.on ? 'rgba(46,110,78,0.4)' : 'rgba(35,34,32,0.14)'};background:${d.on ? 'rgba(46,110,78,0.14)' : '#FBF8F2'};color:${d.on ? '#2E6E4E' : '#C9C3B8'};">${d.on ? '✓' : '·'}</button>
+                  <td style="padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap;">${p.name}${p.mode === 'continu' ? html` <span style="font-size:9.5px;font-weight:500;color:var(--muted-2);background:var(--chip);border-radius:999px;padding:1px 6px;">🔄 continu</span>` : ''}</td>
+                  ${p.days.map((d) => html`<td style="padding:4px 8px;border-bottom:1px solid var(--line);text-align:center;">
+                    <button onClick=${d.toggle} title=${d.on ? 'Proposé ce jour — cliquer pour masquer' : 'Masqué ce jour — cliquer pour proposer'} style="width:30px;height:28px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;border:1px solid ${d.on ? 'rgba(63,122,82,0.4)' : 'rgba(35,34,32,0.14)'};background:${d.on ? 'rgba(63,122,82,0.14)' : '#FBF8F2'};color:${d.on ? '#2E6E4E' : '#C9C3B8'};">${d.on ? '✓' : '·'}</button>
                   </td>`)}
                 </tr>
               `)}
@@ -5597,132 +5723,132 @@ class App extends Component {
   `}
 
   ${v.isFleetView && html`
-  <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;">
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;max-width:1400px;margin:0 auto 22px;">
+  <div class="app__body">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:0 0 22px;">
       ${v.kpis.map((k) => html`
-        <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:14px;padding:20px 22px;">
-          <div style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:8px;">${k.label}</div>
-          <div style="display:flex;align-items:baseline;gap:10px;"><span style="font-size:40px;font-weight:600;color:${k.color};line-height:1;">${k.value}</span><span style="font-size:13px;color:#8A847C;">${k.sub}</span></div>
+        <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:20px 22px;">
+          <div style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">${k.label}</div>
+          <div style="display:flex;align-items:baseline;gap:10px;"><span style="font-size:40px;font-weight:500;color:${k.color};line-height:1;">${k.value}</span><span style="font-size:13px;color:var(--muted);">${k.sub}</span></div>
         </div>
       `)}
     </div>
 
     ${v.hasAlerts && html`
-      <div style="max-width:1400px;margin:0 auto 22px;display:flex;align-items:center;gap:12px;padding:14px 20px;border-radius:12px;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);">
+      <div style="margin:0 0 22px;display:flex;align-items:center;gap:12px;padding:14px 20px;border-radius:12px;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);">
         <span style="font-size:18px;">⚠</span>
-        <span style="font-size:14px;color:#8D1D2C;font-weight:500;">${v.alertText}</span>
+        <span style="font-size:14px;color:var(--accent);font-weight:500;">${v.alertText}</span>
       </div>
     `}
 
-    <div style="max-width:1400px;margin:0 auto;display:flex;flex-direction:column;gap:18px;">
+    <div style="margin:0;display:flex;flex-direction:column;gap:18px;">
       ${v.fleet.map((s) => html`
-        <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;overflow:hidden;">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:16px 22px;border-bottom:1px solid rgba(35,34,32,0.08);background:#FBF8F2;">
+        <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;overflow:hidden;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:16px 22px;border-bottom:1px solid var(--line);background:var(--paper);">
             <div style="display:flex;align-items:center;gap:12px;min-width:0;">
               ${s.renaming ? html`
                 <input value=${this.state.editStoreName} onInput=${s.onRenameInput} onKeyDown=${s.onRenameKey}
                   ref=${(el) => { if (el && document.activeElement !== el && !el._focused) { el._focused = true; el.focus(); el.select(); } }}
-                  style="padding:7px 11px;font-size:15px;font-weight:600;border:1px solid #8D1D2C;border-radius:8px;background:#fff;min-width:260px;" />
-                <button onClick=${s.commitRename} style="padding:7px 13px;font-size:12px;font-weight:600;border-radius:8px;border:none;background:#8D1D2C;color:#fff;cursor:pointer;">OK</button>
+                  style="padding:7px 11px;font-size:15px;font-weight:500;border:1px solid var(--accent);border-radius:8px;background:#fff;min-width:260px;" />
+                <button onClick=${s.commitRename} style="padding:7px 13px;font-size:12px;font-weight:500;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;">OK</button>
               ` : html`
-                <span style="font-size:16px;font-weight:600;">${s.store}</span>
-                <button onClick=${s.startRename} title="Renommer le magasin / l'écran" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.8);border:1px solid rgba(35,34,32,0.14);cursor:pointer;font-size:12px;color:#8A847C;">✎</button>
+                <span style="font-size:16px;font-weight:500;">${s.store}</span>
+                <button onClick=${s.startRename} title="Renommer le magasin / l'écran" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,0.8);border:1px solid var(--line);cursor:pointer;font-size:12px;color:var(--muted);">✎</button>
               `}
-              <span style="font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;background:rgba(35,34,32,0.07);border-radius:999px;padding:3px 10px;">${s.group}</span>
-              <button onClick=${s.copyFilm} title="Copier le lien direct du film de ce magasin (à la taille de son combo d'écrans)" style="padding:5px 11px;font-size:11.5px;font-weight:600;border-radius:999px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Lien film</button>
-              <a href=${s.filmUrl} target="_blank" title="Ouvrir le film de ce magasin" style="font-size:11.5px;font-weight:600;color:#8D1D2C;">↗</a>
+              <span style="font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);background:rgba(35,34,32,0.07);border-radius:999px;padding:3px 10px;">${s.group}</span>
+              <button onClick=${s.copyFilm} title="Copier le lien direct du film de ce magasin (à la taille de son combo d'écrans)" style="padding:5px 11px;font-size:11.5px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;">⎘ Lien film</button>
+              <a href=${s.filmUrl} target="_blank" title="Ouvrir le film de ce magasin" style="font-size:11.5px;font-weight:500;color:var(--accent);">↗</a>
             </div>
             <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;">
-              <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Combo écrans</span>
-              <select value=${s.fmt.screens} onChange=${s.setScreens} title="Nombre d'écrans côte à côte" style="padding:7px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;cursor:pointer;">
+              <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Combo écrans</span>
+              <select value=${s.fmt.screens} onChange=${s.setScreens} title="Nombre d'écrans côte à côte" style="padding:7px 9px;font-size:12.5px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
                 ${[1, 2, 3, 4, 5, 6].map((n) => html`<option value=${n}>${n}</option>`)}
               </select>
-              <span style="font-size:12px;color:#8A847C;">×</span>
-              <select value=${s.fmt.size} onChange=${s.setSize} title="Diagonale d'une dalle" style="padding:7px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;cursor:pointer;">
+              <span style="font-size:12px;color:var(--muted);">×</span>
+              <select value=${s.fmt.size} onChange=${s.setSize} title="Diagonale d'une dalle" style="padding:7px 9px;font-size:12.5px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
                 ${[32, 43, 49, 55, 65, 75, 85].map((n) => html`<option value=${n}>${n}″</option>`)}
               </select>
-              <select value=${s.fmt.orient} onChange=${s.setOrient} title="Orientation des dalles" style="padding:7px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;cursor:pointer;">
+              <select value=${s.fmt.orient} onChange=${s.setOrient} title="Orientation des dalles" style="padding:7px 9px;font-size:12.5px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
                 <option value="paysage">paysage</option>
                 <option value="portrait">portrait</option>
               </select>
-              <select value=${s.lang} onChange=${s.setLang} title="Langue d'affichage du magasin (noms de produits via la table produits)" style="padding:7px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;cursor:pointer;text-transform:uppercase;">
+              <select value=${s.lang} onChange=${s.setLang} title="Langue d'affichage du magasin (noms de produits via la table produits)" style="padding:7px 9px;font-size:12.5px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;text-transform:uppercase;">
                 ${s.langOptions.map((l) => html`<option value=${l.id}>${l.id}</option>`)}
               </select>
-              <span style="font-size:12.5px;font-weight:700;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.2);border-radius:999px;padding:5px 12px;">= ${s.fmt.px}</span>
+              <span style="font-size:12.5px;font-weight:500;color:var(--accent);background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.2);border-radius:999px;padding:5px 12px;">= ${s.fmt.px}</span>
               <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:${s.connColor};"><span style="width:8px;height:8px;border-radius:50%;background:${s.connColor};"></span>${s.connLabel}</div>
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 22px;border-bottom:1px solid rgba(35,34,32,0.06);background:#fff;">
-            <span style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">Coordonnées</span>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 22px;border-bottom:1px solid var(--line);background:#fff;">
+            <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Coordonnées</span>
             ${infoTip('Alimentent les champs dynamiques des gabarits, résolus PAR MAGASIN à la diffusion : {{adresse}}, {{horaires}}, {{tel}} et {{magasin}} (le nom). Un seul gabarit affiche ainsi les bonnes infos selon le point de vente. Enregistré en quittant le champ.')}
-            <input key=${'ad-' + s.id} defaultValue=${s.address} onChange=${s.setAddress} placeholder="Adresse — {{adresse}}" title="Adresse du magasin — jeton {{adresse}}" style="flex:2 1 220px;min-width:0;padding:7px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
-            <input key=${'hr-' + s.id} defaultValue=${s.hours} onChange=${s.setHours} placeholder="Horaires — {{horaires}}" title="Horaires d'ouverture — jeton {{horaires}}" style="flex:1 1 160px;min-width:0;padding:7px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
-            <input key=${'ph-' + s.id} defaultValue=${s.phone} onChange=${s.setPhone} placeholder="Téléphone — {{tel}}" title="Téléphone — jeton {{tel}}" style="flex:1 1 140px;min-width:0;padding:7px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
+            <input key=${'ad-' + s.id} defaultValue=${s.address} onChange=${s.setAddress} placeholder="Adresse — {{adresse}}" title="Adresse du magasin — jeton {{adresse}}" style="flex:2 1 220px;min-width:0;padding:7px 10px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
+            <input key=${'hr-' + s.id} defaultValue=${s.hours} onChange=${s.setHours} placeholder="Horaires — {{horaires}}" title="Horaires d'ouverture — jeton {{horaires}}" style="flex:1 1 160px;min-width:0;padding:7px 10px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
+            <input key=${'ph-' + s.id} defaultValue=${s.phone} onChange=${s.setPhone} placeholder="Téléphone — {{tel}}" title="Téléphone — jeton {{tel}}" style="flex:1 1 140px;min-width:0;padding:7px 10px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
           </div>
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 22px;border-bottom:1px solid rgba(35,34,32,0.06);background:#fff;">
-            <span style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">Compte magasin</span>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 22px;border-bottom:1px solid var(--line);background:#fff;">
+            <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Compte magasin</span>
             ${infoTip('Un accès propre au magasin, en français ou en néerlandais (…/magasin) : il y voit SES écrans (état, cache réel), le lien d\'écran du magasin, et y déclare ses ruptures du jour — le produit quitte SES écrans seulement. La portée est décidée par le serveur : le compte ne peut ni lire ni modifier un autre magasin.')}
             ${s.account ? html`
-              <span style="font-size:12.5px;color:#4A4640;">identifiant <strong style="font-family:ui-monospace,monospace;">${s.account}</strong></span>
-              <button onClick=${s.resetAccount} style="padding:6px 12px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">Nouveau mot de passe</button>
-              <button onClick=${s.deleteAccount} style="padding:6px 12px;font-size:12px;font-weight:600;color:#8D1D2C;background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:999px;cursor:pointer;">Supprimer</button>
-            ` : html`<button onClick=${s.createAccount} style="padding:6px 12px;font-size:12px;font-weight:600;color:#fff;background:#8D1D2C;border:none;border-radius:999px;cursor:pointer;">Créer le compte magasin</button>`}
-            ${s.unavailableNames.length ? html`<span title="Déclarés épuisés par le magasin : retirés de SES écrans jusqu'à ce soir (ou jusqu'à remise en vente)." style="font-size:12px;color:#8D1D2C;">Épuisés aujourd'hui : <strong>${s.unavailableNames.join(', ')}</strong></span>` : ''}
+              <span style="font-size:12.5px;color:var(--muted-2);">identifiant <strong style="font-family:ui-monospace,monospace;">${s.account}</strong></span>
+              <button onClick=${s.resetAccount} style="padding:6px 12px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">Nouveau mot de passe</button>
+              <button onClick=${s.deleteAccount} style="padding:6px 12px;font-size:12px;font-weight:500;color:var(--accent);background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:8px;cursor:pointer;">Supprimer</button>
+            ` : html`<button onClick=${s.createAccount} style="padding:6px 12px;font-size:12px;font-weight:500;color:#fff;background:var(--accent);border:none;border-radius:8px;cursor:pointer;">Créer le compte magasin</button>`}
+            ${s.unavailableNames.length ? html`<span title="Déclarés épuisés par le magasin : retirés de SES écrans jusqu'à ce soir (ou jusqu'à remise en vente)." style="font-size:12px;color:var(--accent);">Épuisés aujourd'hui : <strong>${s.unavailableNames.join(', ')}</strong></span>` : ''}
           </div>
           ${s.cred ? html`
-            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 22px;border-bottom:1px solid rgba(35,34,32,0.06);background:rgba(46,125,50,0.07);">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 22px;border-bottom:1px solid var(--line);background:rgba(63,122,82,0.07);">
               <span style="font-size:12.5px;color:#1F5B2A;line-height:1.6;flex:1 1 320px;">À transmettre au magasin — <strong>le mot de passe ne sera plus affiché</strong> : lien <strong>${s.cred.url}</strong> · identifiant <strong style="font-family:ui-monospace,monospace;">${s.cred.username}</strong> · mot de passe <strong style="font-family:ui-monospace,monospace;">${s.cred.password}</strong></span>
-              <button onClick=${() => this.copyLink(`${s.cred.url}\nIdentifiant / Gebruikersnaam : ${s.cred.username}\nMot de passe / Wachtwoord : ${s.cred.password}`)} style="padding:7px 13px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(46,125,50,0.35);background:#fff;color:#1F5B2A;cursor:pointer;">Copier</button>
-              <button onClick=${() => this.setState({ storeCred: null })} style="padding:7px 11px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(35,34,32,0.14);background:#fff;color:#4A4640;cursor:pointer;">Masquer</button>
+              <button onClick=${() => this.copyLink(`${s.cred.url}\nIdentifiant / Gebruikersnaam : ${s.cred.username}\nMot de passe / Wachtwoord : ${s.cred.password}`)} style="padding:7px 13px;font-size:12px;font-weight:500;border-radius:8px;border:1px solid rgba(63,122,82,0.35);background:#fff;color:#1F5B2A;cursor:pointer;">Copier</button>
+              <button onClick=${() => this.setState({ storeCred: null })} style="padding:7px 11px;font-size:12px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--muted-2);cursor:pointer;">Masquer</button>
             </div>
           ` : ''}
-          <div style="padding:12px 22px;border-bottom:1px solid rgba(35,34,32,0.06);background:#FBF8F2;">
+          <div style="padding:12px 22px;border-bottom:1px solid var(--line);background:var(--paper);">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;${s.groups.length ? 'margin-bottom:10px;' : ''}">
               <div style="display:flex;align-items:center;gap:7px;">
-                <span style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">${v.t('sector.plural')}</span>
+                <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${v.t('sector.plural')}</span>
                 ${infoTip(v.t('sector.help'))}
               </div>
-              <button onClick=${s.addGroup} style="padding:6px 12px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">${v.t('sector.add')}</button>
+              <button onClick=${s.addGroup} style="padding:6px 12px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.t('sector.add')}</button>
             </div>
             <div style="display:flex;flex-direction:column;gap:8px;">
               ${s.groups.map((g) => html`
-                <div key=${g.id} class="sig-sector-row" style="display:flex;flex-direction:column;gap:9px;background:#fff;border:1px solid rgba(35,34,32,0.1);border-radius:10px;padding:10px 12px;">
+                <div key=${g.id} class="sig-sector-row" style="display:flex;flex-direction:column;gap:9px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;">
                   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                    <input key=${'gn-' + g.id} defaultValue=${g.name} onChange=${g.onName} placeholder=${v.t('sector.namePlaceholder')} style="flex:1 1 160px;min-width:0;padding:6px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.14);border-radius:7px;background:#FBF8F2;" />
+                    <input key=${'gn-' + g.id} defaultValue=${g.name} onChange=${g.onName} placeholder=${v.t('sector.namePlaceholder')} style="flex:1 1 160px;min-width:0;padding:6px 9px;font-size:12.5px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;" />
                     <!-- Config d'écrans PROPRE au secteur : nombre · taille · position -->
-                    <span style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;background:#FBF8F2;border:1px solid rgba(35,34,32,0.10);border-radius:9px;padding:5px 9px;">
-                      <span style="font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#8A847C;">${v.t('sector.screens')}</span>
-                      <select value=${g.fmt.screens} onChange=${g.onScreens} title=${v.t('sector.screenCount')} style="padding:5px 7px;font-size:12px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:7px;background:#fff;cursor:pointer;">${[1, 2, 3, 4, 5, 6].map((n) => html`<option value=${n}>${n}</option>`)}</select>
-                      <span style="font-size:11px;color:#8A847C;">×</span>
-                      <select value=${g.fmt.size} onChange=${g.onSize} title=${v.t('sector.screenSize')} style="padding:5px 7px;font-size:12px;border:1px solid rgba(35,34,32,0.16);border-radius:7px;background:#fff;cursor:pointer;">${[32, 43, 49, 55, 65, 75, 85].map((n) => html`<option value=${n}>${n}″</option>`)}</select>
+                    <span style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:5px 9px;">
+                      <span style="font-size:10.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${v.t('sector.screens')}</span>
+                      <select value=${g.fmt.screens} onChange=${g.onScreens} title=${v.t('sector.screenCount')} style="padding:5px 7px;font-size:12px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">${[1, 2, 3, 4, 5, 6].map((n) => html`<option value=${n}>${n}</option>`)}</select>
+                      <span style="font-size:11px;color:var(--muted);">×</span>
+                      <select value=${g.fmt.size} onChange=${g.onSize} title=${v.t('sector.screenSize')} style="padding:5px 7px;font-size:12px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">${[32, 43, 49, 55, 65, 75, 85].map((n) => html`<option value=${n}>${n}″</option>`)}</select>
                       <!-- Position : portrait / paysage, choix explicite en 2 boutons -->
-                      <span title=${v.t('sector.orient')} style="display:inline-flex;background:#EFE9E0;border-radius:7px;padding:2px;">
+                      <span title=${v.t('sector.orient')} style="display:inline-flex;background:var(--chip);border-radius:8px;padding:2px;">
                         ${[['portrait', v.t('sector.portrait'), 8, 13], ['paysage', v.t('sector.landscape'), 15, 9]].map(([id, label, iw, ih]) => html`
-                          <button onClick=${() => g.setOrient(id)} title=${label} style="display:flex;align-items:center;gap:5px;padding:4px 9px;font-size:11.5px;font-weight:600;border:none;border-radius:6px;cursor:pointer;${g.fmt.orient === id ? 'background:#8D1D2C;color:#fff;' : 'background:transparent;color:#8A847C;'}"><span style="display:inline-block;width:${iw}px;height:${ih}px;border-radius:2px;border:1.5px solid currentColor;"></span>${label}</button>`)}
+                          <button onClick=${() => g.setOrient(id)} title=${label} style="display:flex;align-items:center;gap:5px;padding:4px 9px;font-size:11.5px;font-weight:500;border:none;border-radius:6px;cursor:pointer;${g.fmt.orient === id ? 'background:var(--accent);color:#fff;' : 'background:transparent;color:var(--muted);'}"><span style="display:inline-block;width:${iw}px;height:${ih}px;border-radius:2px;border:1.5px solid currentColor;"></span>${label}</button>`)}
                       </span>
                       <!-- Aperçu visuel de l'agencement (n dalles à l'échelle) -->
                       <span title=${g.fmt.label} style="display:inline-flex;align-items:flex-end;gap:2px;height:26px;">
                         ${Array.from({ length: g.fmt.screens }, (_, i) => html`<span key=${i} style="display:inline-block;width:${g.fmt.orient === 'portrait' ? 13 : 24}px;height:${g.fmt.orient === 'portrait' ? 24 : 13}px;border-radius:2px;background:rgba(141,29,44,0.16);border:1px solid rgba(141,29,44,0.45);"></span>`)}
                       </span>
-                      <span class="sig-sector-px" style="font-size:11px;font-weight:700;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.2);border-radius:999px;padding:3px 8px;">${g.fmt.px}</span>
+                      <span class="sig-sector-px" style="font-size:11px;font-weight:500;color:var(--accent);background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.2);border-radius:999px;padding:3px 8px;">${g.fmt.px}</span>
                     </span>
-                    <a href=${g.previewUrl} target="_blank" title="Aperçu du secteur (boucle catégories)" style="font-size:11.5px;font-weight:600;color:#8D1D2C;flex:0 0 auto;">${v.t('sector.preview')}</a>
-                    <button onClick=${g.del} title=${v.t('sector.delete')} style="flex:0 0 auto;width:28px;height:28px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:pointer;font-size:12px;color:#8D1D2C;">✕</button>
+                    <a href=${g.previewUrl} target="_blank" title="Aperçu du secteur (boucle catégories)" style="font-size:11.5px;font-weight:500;color:var(--accent);flex:0 0 auto;">${v.t('sector.preview')}</a>
+                    <button onClick=${g.del} title=${v.t('sector.delete')} style="flex:0 0 auto;width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:12px;color:var(--accent);">✕</button>
                   </div>
                   <!-- Ce que le secteur filtre : périodes et/ou catégories -->
                   <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
-                    <span style="font-size:10.5px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#8A847C;">${v.t('sector.filters')}</span>
+                    <span style="font-size:10.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${v.t('sector.filters')}</span>
                     ${[[g.filterMoments, g.toggleMoments, v.t('sector.filterMoments'), v.t('sector.filterMomentsHelp')],
                        [g.filterCats, g.toggleCats, v.t('sector.filterCats'), v.t('sector.filterCatsHelp')]].map(([on, toggle, label, help]) => html`
-                      <button onClick=${toggle} title=${help} style="display:inline-flex;align-items:center;gap:5px;padding:4px 11px;font-size:11.5px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${on ? '#8D1D2C' : '#fff'};color:${on ? '#fff' : '#8A847C'};">${on ? '✓' : '○'} ${label}</button>
+                      <button onClick=${toggle} title=${help} style="display:inline-flex;align-items:center;gap:5px;padding:4px 11px;font-size:11.5px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${on ? '#8D1D2C' : '#fff'};color:${on ? '#fff' : '#8A847C'};">${on ? '✓' : '○'} ${label}</button>
                     `)}
-                    ${g.noFilter ? html`<span style="font-size:11px;color:#B8860B;">${v.t('sector.noFilter')}</span>` : ''}
+                    ${g.noFilter ? html`<span style="font-size:11px;color:var(--warn);">${v.t('sector.noFilter')}</span>` : ''}
                   </div>
                   ${g.filterCats ? html`<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
-                    <span style="font-size:10.5px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:#8A847C;">${v.t('sector.categories')}</span>
-                    ${g.catChips.map((c) => html`<span style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.28);border-radius:999px;padding:2px 5px 2px 9px;">${c.name}<button onClick=${c.remove} style="width:15px;height:15px;border-radius:50%;border:none;background:rgba(110,74,43,0.18);color:#6E4A2B;cursor:pointer;font-size:9px;line-height:1;">✕</button></span>`)}
-                    ${g.catChips.length ? '' : html`<span style="font-size:11px;color:#B8860B;">${v.t('sector.noCatFollows')}</span>`}
-                    ${g.addableCats.length ? html`<select onChange=${g.onAddCat} style="padding:4px 7px;font-size:11.5px;border:1px solid rgba(35,34,32,0.16);border-radius:999px;background:#fff;cursor:pointer;"><option value="">${v.t('sector.addCat')}</option>${g.addableCats.map((c) => html`<option value=${c.id}>${c.name}</option>`)}</select>` : ''}
+                    <span style="font-size:10.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${v.t('sector.categories')}</span>
+                    ${g.catChips.map((c) => html`<span style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:999px;padding:2px 5px 2px 9px;">${c.name}<button onClick=${c.remove} style="width:15px;height:15px;border-radius:50%;border:none;background:rgba(92,88,82,0.18);color:var(--muted-2);cursor:pointer;font-size:9px;line-height:1;">✕</button></span>`)}
+                    ${g.catChips.length ? '' : html`<span style="font-size:11px;color:var(--warn);">${v.t('sector.noCatFollows')}</span>`}
+                    ${g.addableCats.length ? html`<select onChange=${g.onAddCat} style="padding:4px 7px;font-size:11.5px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;"><option value="">${v.t('sector.addCat')}</option>${g.addableCats.map((c) => html`<option value=${c.id}>${c.name}</option>`)}</select>` : ''}
                   </div>` : ''}
                 </div>
               `)}
@@ -5734,17 +5860,17 @@ class App extends Component {
                 <div style="display:flex;align-items:center;gap:12px;min-width:0;">
                   <span style=${p.statusDotStyle}></span>
                   <div style="min-width:0;">
-                    <div style="display:flex;align-items:center;gap:7px;"><a href=${p.playerUrl} target="_blank" title="Ouvrir ce player dans un onglet (test live)" style="font-size:14px;font-weight:600;color:#232220;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name} <span style="color:#B8B2A8;font-weight:400;">↗</span></a><span style=${p.kioskStyle}>${p.kioskLabel}</span></div>
-                    <div style="font-size:11.5px;color:#8A847C;">${p.hw} · ${p.orient}</div>
-                    ${p.groupOptions.length ? html`<select value=${p.groupId} onChange=${p.setGroup} title=${v.t('sector.playerPick')} style="margin-top:5px;max-width:190px;padding:4px 7px;font-size:11px;font-weight:600;border:1px solid ${p.groupId ? 'rgba(110,74,43,0.4)' : 'rgba(35,34,32,0.16)'};border-radius:7px;background:${p.groupId ? 'rgba(110,74,43,0.08)' : '#FBF8F2'};color:${p.groupId ? '#6E4A2B' : '#4A4640'};cursor:pointer;">
+                    <div style="display:flex;align-items:center;gap:7px;"><a href=${p.playerUrl} target="_blank" title="Ouvrir ce player dans un onglet (test live)" style="font-size:14px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name} <span style="color:var(--faint);font-weight:400;">↗</span></a><span style=${p.kioskStyle}>${p.kioskLabel}</span></div>
+                    <div style="font-size:11.5px;color:var(--muted);">${p.hw} · ${p.orient}</div>
+                    ${p.groupOptions.length ? html`<select value=${p.groupId} onChange=${p.setGroup} title=${v.t('sector.playerPick')} style="margin-top:5px;max-width:190px;padding:4px 7px;font-size:11px;font-weight:500;border:1px solid ${p.groupId ? 'rgba(92,88,82,0.4)' : 'rgba(35,34,32,0.16)'};border-radius:8px;background:${p.groupId ? 'rgba(92,88,82,0.08)' : '#FBF8F2'};color:${p.groupId ? '#6E4A2B' : '#4A4640'};cursor:pointer;">
                       <option value="">${v.t('sector.storeFilm')}</option>
                       ${p.groupOptions.map((g) => html`<option value=${g.id}>▦ ${g.name}</option>`)}
                     </select>` : ''}
                   </div>
                 </div>
                 <div><span style=${p.statusPillStyle}>${p.statusLabel}</span></div>
-                <div style="font-size:12.5px;"><span style="color:#8A847C;">Playlist </span><span style=${p.verStyle}>v${p.playedVer}</span><div style="font-size:11px;color:#8A847C;">${p.verNote}</div><div style="font-size:11px;margin-top:2px;"><span style="color:#8A847C;">Prix </span><span style=${p.dataStyle}>d${p.dataVer}</span><span style="color:${p.dataAgeColor};"> · ${p.dataAge}</span></div></div>
-                <div style="font-size:12px;color:#8A847C;min-width:0;">
+                <div style="font-size:12.5px;"><span style="color:var(--muted);">Playlist </span><span style=${p.verStyle}>v${p.playedVer}</span><div style="font-size:11px;color:var(--muted);">${p.verNote}</div><div style="font-size:11px;margin-top:2px;"><span style="color:var(--muted);">Prix </span><span style=${p.dataStyle}>d${p.dataVer}</span><span style="color:${p.dataAgeColor};"> · ${p.dataAge}</span></div></div>
+                <div style="font-size:12px;color:var(--muted);min-width:0;">
                   <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;">
                     <div style="flex:1 1 auto;height:6px;border-radius:3px;background:rgba(35,34,32,0.10);overflow:hidden;"><div style="height:100%;border-radius:3px;background:${p.cacheColor};width:${p.cachePct};"></div></div>
                     <span style="flex:0 0 auto;font-variant-numeric:tabular-nums;">${p.cachePct}</span>
@@ -5752,7 +5878,7 @@ class App extends Component {
                   <div title=${p.cacheNote} style="font-size:11px;color:${p.cacheNoteColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px;">${p.cacheNote}</div>
                   <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">▶ ${p.media}</div>
                 </div>
-                <div style="font-size:12px;color:#8A847C;text-align:right;"><div style="font-weight:500;color:#232220;">${p.sync}</div><div>${p.health}</div></div>
+                <div style="font-size:12px;color:var(--muted);text-align:right;"><div style="font-weight:500;color:var(--ink);">${p.sync}</div><div>${p.health}</div></div>
               </div>
             `)}
           </div>
@@ -5763,48 +5889,48 @@ class App extends Component {
   `}
 
   ${v.isHomeView && html`
-  <div style="flex:1 1 auto;overflow:auto;padding:26px 32px 48px;">
-    <div style="max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:18px;">
+  <div class="app__body">
+    <div style="display:flex;flex-direction:column;gap:18px;">
       <div>
-        <h1 style="margin:0 0 4px;font-size:22px;font-weight:600;color:#232220;">${v.t('home.welcome')}</h1>
-        <p style="margin:0;font-size:13.5px;color:#8A847C;">${v.t('home.intro')} ${home.count === home.total ? v.t('home.allReady') : v.t('home.stepsReady', { n: home.count, total: home.total })}</p>
+        <h1 style="margin:0 0 4px;font-size:21px;font-weight:400;color:var(--ink);">${v.t('home.welcome')}</h1>
+        <p style="margin:0;font-size:13.5px;color:var(--muted);">${v.t('home.intro')} ${home.count === home.total ? v.t('home.allReady') : v.t('home.stepsReady', { n: home.count, total: home.total })}</p>
       </div>
 
       <!-- Ce qui passe maintenant -->
-      <div style="background:linear-gradient(135deg,#2A2622,#3A332C);border-radius:18px;padding:20px 24px;color:#fff;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px 22px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
         <div>
-          <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin-bottom:6px;">${v.t('home.nowPlaying')}</div>
-          <div style="font-size:18px;font-weight:600;">${home.film ? home.film.name : v.t('home.noFilm')} ${home.film && home.film.mode === 'continu' ? html`<span style="font-size:11px;font-weight:600;color:#F0D9B5;background:rgba(240,217,181,0.15);border-radius:999px;padding:2px 9px;margin-left:4px;">🔄 continu</span>` : ''}</div>
-          <div style="font-size:12.5px;color:rgba(255,255,255,0.6);margin-top:4px;">${v.t('home.moment')} : <strong style="color:#fff;">${MOMENT_FULL[home.moment] || '—'}</strong> · ${v.t('home.activeWeek')} : <strong style="color:#fff;">${home.week}</strong> · ${v.t('home.screens')} : <strong style="color:#fff;">${home.online}/${home.screens}</strong> ${v.t('home.online')}</div>
+          <div style="font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">${v.t('home.nowPlaying')}</div>
+          <div style="font-size:21px;font-weight:400;color:var(--ink);">${home.film ? home.film.name : v.t('home.noFilm')} ${home.film && home.film.mode === 'continu' ? html`<span style="font-size:11.5px;font-weight:400;color:var(--ink);background:var(--chip);border-radius:999px;padding:4px 10px;margin-left:6px;vertical-align:3px;">🔄 continu</span>` : ''}</div>
+          <div style="font-size:12.5px;color:var(--muted);margin-top:6px;">${v.t('home.moment')} : <strong style="color:var(--ink);font-weight:500;">${MOMENT_FULL[home.moment] || '—'}</strong> · ${v.t('home.activeWeek')} : <strong style="color:var(--ink);font-weight:500;">${home.week}</strong> · ${v.t('home.screens')} : <strong style="color:var(--ink);font-weight:500;">${home.online}/${home.screens}</strong> ${v.t('home.online')}</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <a href=${new URL('film', location.href).toString()} target="_blank" style="padding:10px 16px;font-size:13px;font-weight:600;color:#232220;background:#fff;border-radius:999px;">▶ Voir la diffusion ↗</a>
+          <a class="btn" href=${new URL('film', location.href).toString()} target="_blank">Voir la diffusion ${icon(ICON.external, 14)}</a>
         </div>
       </div>
 
       <!-- Prêt à diffuser ? -->
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:20px 22px;">
-        <h3 style="margin:0 0 14px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${v.t('home.readyChecklist')}</h3>
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:20px 22px;">
+        <h3 style="margin:0 0 14px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${v.t('home.readyChecklist')}</h3>
         <div style="display:flex;flex-direction:column;gap:10px;">
           ${home.steps.map((s) => html`
-            <div style="display:flex;align-items:center;gap:14px;padding:13px 15px;border-radius:12px;background:${s.ok ? 'rgba(46,110,78,0.06)' : (s.soft ? '#FBF8F2' : 'rgba(201,123,74,0.07)')};border:1px solid ${s.ok ? 'rgba(46,110,78,0.25)' : (s.soft ? 'rgba(35,34,32,0.1)' : 'rgba(201,123,74,0.3)')};">
-              <span style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;font-size:15px;font-weight:700;background:${s.ok ? 'rgba(46,110,78,0.15)' : 'rgba(35,34,32,0.06)'};color:${s.ok ? '#2E6E4E' : '#B8B2A8'};">${s.ok ? '✓' : (s.soft ? '○' : '!')}</span>
+            <div style="display:flex;align-items:center;gap:14px;padding:13px 15px;border-radius:12px;background:${s.ok ? 'rgba(63,122,82,0.06)' : (s.soft ? '#FBF8F2' : 'rgba(201,123,74,0.07)')};border:1px solid ${s.ok ? 'rgba(63,122,82,0.25)' : (s.soft ? 'rgba(35,34,32,0.1)' : 'rgba(201,123,74,0.3)')};">
+              <span style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;font-size:15px;font-weight:500;background:${s.ok ? 'rgba(63,122,82,0.15)' : 'rgba(35,34,32,0.06)'};color:${s.ok ? '#2E6E4E' : '#B8B2A8'};">${s.ok ? '✓' : (s.soft ? '○' : '!')}</span>
               <div style="flex:1 1 auto;min-width:0;">
-                <div style="font-size:14px;font-weight:600;color:#232220;">${s.label}${s.soft && !s.ok ? html` <span style="font-size:11px;font-weight:500;color:#8A847C;">· optionnel</span>` : ''}</div>
-                <div style="font-size:12px;color:#8A847C;">${s.hint}</div>
+                <div style="font-size:14px;font-weight:500;color:var(--ink);">${s.label}${s.soft && !s.ok ? html` <span style="font-size:11px;font-weight:500;color:var(--muted);">· optionnel</span>` : ''}</div>
+                <div style="font-size:12px;color:var(--muted);">${s.hint}</div>
               </div>
-              ${!s.ok && s.cta ? html`<button onClick=${s.cta.go} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:600;color:#fff;background:#8D1D2C;border:none;border-radius:999px;cursor:pointer;">${s.cta.label}</button>`
-                : (s.cta ? html`<button onClick=${s.cta.go} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.08);border:1px solid rgba(110,74,43,0.25);border-radius:999px;cursor:pointer;">${s.cta.label}</button>` : '')}
+              ${!s.ok && s.cta ? html`<button onClick=${s.cta.go} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:500;color:#fff;background:var(--accent);border:none;border-radius:8px;cursor:pointer;">${s.cta.label}</button>`
+                : (s.cta ? html`<button onClick=${s.cta.go} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${s.cta.label}</button>` : '')}
             </div>
           `)}
         </div>
       </div>
 
       <!-- Assistant de diffusion : le parcours guidé de bout en bout -->
-      <button onClick=${() => this.openWizard()} style="width:100%;box-sizing:border-box;text-align:left;display:flex;align-items:center;gap:16px;padding:20px 24px;border-radius:18px;background:linear-gradient(135deg,#8D1D2C,#6E4A2B);border:none;cursor:pointer;box-shadow:0 12px 30px rgba(141,29,44,0.22);">
-        <div style="font-size:32px;flex:0 0 auto;">🎬</div>
+      <button onClick=${() => this.openWizard()} style="width:100%;box-sizing:border-box;text-align:left;display:flex;align-items:center;gap:16px;padding:18px 22px;border-radius:12px;background:var(--accent);border:none;cursor:pointer;">
+        <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:10px;background:rgba(255,255,255,0.14);color:#fff;">${icon(ICON.play, 20)}</div>
         <div style="flex:1 1 auto;min-width:0;">
-          <div style="font-size:16px;font-weight:700;color:#fff;">Assistant de diffusion</div>
+          <div style="font-size:16px;font-weight:500;color:#fff;">Assistant de diffusion</div>
           <div style="font-size:12.5px;color:rgba(255,255,255,0.82);margin-top:3px;line-height:1.45;">Créer un film (continu ou playlist) → contenu → écrans → aperçu → diffuser, avec le rapport. De bout en bout, guidé.</div>
         </div>
         <div style="font-size:22px;color:rgba(255,255,255,0.85);flex:0 0 auto;">→</div>
@@ -5812,20 +5938,20 @@ class App extends Component {
 
       <!-- Actions rapides -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;">
-        <button onClick=${() => this.startFirstFilm()} style="text-align:left;padding:18px 20px;border-radius:16px;background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);cursor:pointer;">
-          <div style="font-size:22px;margin-bottom:6px;">✨</div>
-          <div style="font-size:14px;font-weight:700;color:#232220;">Créer un film continu</div>
-          <div style="font-size:12px;color:#8A847C;margin-top:3px;">Une boucle prête, à adapter en quelques clics.</div>
+        <button onClick=${() => this.startFirstFilm()} style="text-align:left;padding:18px 20px;border-radius:12px;background:#FFFFFF;border:1px solid var(--line);cursor:pointer;">
+          <div style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;background:var(--accent-soft);color:var(--accent);margin-bottom:10px;">${icon(ICON.composer, 18)}</div>
+          <div style="font-size:14px;font-weight:500;color:var(--ink);">Créer un film continu</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px;">Une boucle prête, à adapter en quelques clics.</div>
         </button>
-        <button onClick=${() => this.openOnboarding()} style="text-align:left;padding:18px 20px;border-radius:16px;background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);cursor:pointer;">
-          <div style="font-size:22px;margin-bottom:6px;">📺</div>
-          <div style="font-size:14px;font-weight:700;color:#232220;">Brancher un écran</div>
-          <div style="font-size:12px;color:#8A847C;margin-top:3px;">Configure et connecte tes magasins pas à pas.</div>
+        <button onClick=${() => this.openOnboarding()} style="text-align:left;padding:18px 20px;border-radius:12px;background:#FFFFFF;border:1px solid var(--line);cursor:pointer;">
+          <div style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;background:var(--accent-soft);color:var(--accent);margin-bottom:10px;">${icon(ICON.screens, 18)}</div>
+          <div style="font-size:14px;font-weight:500;color:var(--ink);">Brancher un écran</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px;">Configure et connecte tes magasins pas à pas.</div>
         </button>
-        <button onClick=${() => this.openSeasons()} style="text-align:left;padding:18px 20px;border-radius:16px;background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);cursor:pointer;">
-          <div style="font-size:22px;margin-bottom:6px;">🗓️</div>
-          <div style="font-size:14px;font-weight:700;color:#232220;">Périodes & données</div>
-          <div style="font-size:12px;color:#8A847C;margin-top:3px;">Saisons, produit × moment, médias agence.</div>
+        <button onClick=${() => this.openSeasons()} style="text-align:left;padding:18px 20px;border-radius:12px;background:#FFFFFF;border:1px solid var(--line);cursor:pointer;">
+          <div style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;background:var(--accent-soft);color:var(--accent);margin-bottom:10px;">${icon(ICON.seasons, 18)}</div>
+          <div style="font-size:14px;font-weight:500;color:var(--ink);">Périodes & données</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px;">Saisons, produit × moment, médias agence.</div>
         </button>
       </div>
     </div>
@@ -5833,22 +5959,22 @@ class App extends Component {
   `}
 
   ${v.isComposerView && html`
-  <div style="flex:0 0 auto;display:flex;align-items:center;gap:16px;padding:10px 30px;background:#EDE7DE;border-bottom:1px solid rgba(35,34,32,0.08);flex-wrap:wrap;">
-    <div style="display:inline-flex;background:#E0D9CE;border-radius:999px;padding:3px;">
-      <button onClick=${v.setTabLib} style=${v.tabLibStyle}>1 · Bibliothèque — construire</button>
-      <button onClick=${v.setTabTimeline} style=${v.tabTimelineStyle}>2 · Playlist — ligne du temps</button>
-    </div>
-    <span style="font-size:12px;color:#8A847C;">${v.isTimelineTab ? 'Glisse les éléments de la bibliothèque sur la ligne du temps, puis Enregistrer et Publier sur le réseau.' : 'Construis ici les éléments (catégories, liaisons) qui composeront tes films.'}</span>
+  <div style="flex:0 0 auto;display:flex;align-items:flex-end;gap:16px;padding:6px 24px 0;background:#fff;border-bottom:1px solid var(--line);flex-wrap:wrap;">
+    <nav class="page-tabs" style="margin:0;border-bottom:none;">
+      <button onClick=${v.setTabLib} class=${'page-tabs__tab' + (v.isTimelineTab ? '' : ' is-on')}>1 · Bibliothèque — construire</button>
+      <button onClick=${v.setTabTimeline} class=${'page-tabs__tab' + (v.isTimelineTab ? ' is-on' : '')}>2 · Playlist — ligne du temps</button>
+    </nav>
+    <span style="font-size:12px;color:var(--muted);padding-bottom:10px;">${v.isTimelineTab ? 'Glisse les éléments de la bibliothèque sur la ligne du temps, puis Enregistrer et Publier sur le réseau.' : 'Construis ici les éléments (catégories, liaisons) qui composeront tes films.'}</span>
   </div>
   `}
 
   ${v.isComposerView && v.isLibTab && html`
-  <div style="flex:1 1 auto;display:grid;grid-template-columns:300px minmax(440px,1fr) minmax(560px,0.95fr);min-height:0;">
+  <div style="flex:1 1 auto;display:grid;grid-template-columns:${COMPOSER_COLS.lib}px minmax(${COMPOSER_COLS.editorMin}px,1fr) minmax(${COMPOSER_COLS.previewMin}px,${COMPOSER_COLS.previewFr}fr);min-height:0;">
 
-    <aside style="background:#F3EEE6;border-right:1px solid rgba(35,34,32,0.10);display:flex;flex-direction:column;min-height:0;overflow:auto;">
+    <aside style="background:#fff;border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;overflow:auto;">
       <div style="flex:0 0 auto;padding:18px 18px 10px;">
-        <h2 style="margin:0 0 3px;font-size:12px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#8D1D2C;">${v.t('composer.library')}</h2>
-        <p style="margin:0 0 9px;font-size:11.5px;color:#8A847C;line-height:1.4;">Tous les éléments · clique pour éditer · ＋ ajoute au film affiché dans l'onglet Playlist</p>
+        <h2 style="margin:0 0 3px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${v.t('composer.library')}</h2>
+        <p style="margin:0 0 9px;font-size:11.5px;color:var(--muted);line-height:1.4;">Tous les éléments · clique pour éditer · ＋ ajoute au film affiché dans l'onglet Playlist</p>
         <!-- Filtre de format : 16:9 paysage / 9:16 portrait -->
         <div style="display:flex;gap:5px;flex-wrap:wrap;">
           ${v.libOrientChips.map((o) => html`
@@ -5861,45 +5987,45 @@ class App extends Component {
           <div onClick=${ml.select} style=${ml.cardStyle}>
             <span style=${ml.badgeStyle}>${ml.typeIcon}</span>
             <div style="flex:1 1 auto;min-width:0;">
-              <div style="display:flex;align-items:center;gap:6px;">
-                <span style="font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${ml.name}</span>
+              <div style="font-size:13.5px;font-weight:500;line-height:1.3;overflow-wrap:anywhere;">${ml.name}</div>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px;">
                 ${ml.catChip}
                 ${ml.tagChip}
+                <span style="font-size:11px;color:var(--muted);">${ml.libMeta}</span>
               </div>
-              <div style="font-size:11px;color:#8A847C;">${ml.libMeta}</div>
-            </div>
-            <div style="display:flex;align-items:center;gap:3px;flex:0 0 auto;">
-              <button onClick=${ml.addToPlaylist} title="Ajouter à la playlist" style=${ml.addBtn}>＋</button>
-              <button onClick=${ml.copy} title="Copier" style=${ml.miniBtn}>⧉</button>
-              <button onClick=${ml.dup} title="Dupliquer" style=${ml.miniBtn}>⎘</button>
-              <button onClick=${ml.del} title="Supprimer de la bibliothèque" style=${ml.miniBtnDel}>🗑</button>
+              <div style="display:flex;align-items:center;gap:3px;margin-top:8px;">
+                <button onClick=${ml.addToPlaylist} title="Ajouter à la playlist" style=${ml.addBtn}>＋</button>
+                <button onClick=${ml.copy} title="Copier" style=${ml.miniBtn}>⧉</button>
+                <button onClick=${ml.dup} title="Dupliquer" style=${ml.miniBtn}>⎘</button>
+                <button onClick=${ml.del} title="Supprimer de la bibliothèque" style=${ml.miniBtnDel}>🗑</button>
+              </div>
             </div>
           </div>
         `)}
       </div>
-      <div style="flex:0 0 auto;padding:12px;border-top:1px solid rgba(35,34,32,0.10);display:flex;gap:8px;">
-        <button onClick=${v.openAddPicker} style="flex:1 1 auto;padding:11px;font-size:13.5px;font-weight:600;color:#fff;background:#8D1D2C;border:none;border-radius:10px;cursor:pointer;">${v.t('composer.addElement')}</button>
+      <div style="flex:0 0 auto;padding:12px;border-top:1px solid var(--line);display:flex;gap:8px;">
+        <button onClick=${v.openAddPicker} style="flex:1 1 auto;padding:11px;font-size:13.5px;font-weight:500;color:#fff;background:var(--accent);border:none;border-radius:10px;cursor:pointer;">${v.t('composer.addElement')}</button>
         <button onClick=${v.paste} style=${v.pasteStyle}>${v.t('composer.paste')}</button>
       </div>
     </aside>
 
-    <section style="overflow:auto;padding:24px 26px 40px;border-right:1px solid rgba(35,34,32,0.10);">
+    <section style="overflow:auto;padding:24px 26px 40px;border-right:1px solid var(--line);">
       <div style="display:flex;flex-direction:column;gap:20px;max-width:600px;">
 
-        <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:22px 24px;">
+        <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:22px 24px;">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
             <span style=${v.selTypeBadge}>${v.selTypeLabel}</span>
-            <h2 style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8A847C;">${v.t('composer.selectedModule')}</h2>
+            <h2 style="margin:0;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${v.t('composer.selectedModule')}</h2>
           </div>
-          <input value=${v.selName} onInput=${v.onSelName} placeholder="Nom du module" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:19px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#FBF8F2;" />
-          <div style="margin-top:8px;display:flex;align-items:center;gap:7px;font-size:11.5px;color:#8A847C;flex-wrap:wrap;">
+          <input value=${v.selName} onInput=${v.onSelName} placeholder="Nom du module" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:19px;font-weight:500;border:1px solid var(--line);border-radius:10px;background:#fff;" />
+          <div style="margin-top:8px;display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted);flex-wrap:wrap;">
             ${infoTip('Champs dynamiques : dans le titre ou le sous-titre, écris un jeton entre doubles accolades — il est remplacé PAR MAGASIN à la diffusion (un seul gabarit, les bonnes valeurs partout). Jetons : {{magasin}} (nom), {{adresse}}, {{horaires}}, {{tel}} (coordonnées saisies dans l’onglet Réseau) · {{date}} (date du jour) · {{saison}} (période active) · {{moment}} (matin/midi/après-midi). Ex. « Bienvenue à {{magasin}} ». Dans l’aperçu générique le jeton reste visible ; via le lien d’un magasin il est résolu.')}
             <span>Jetons dynamiques :</span>
-            ${['{{magasin}}', '{{adresse}}', '{{date}}', '{{saison}}'].map((t) => html`<code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">${t}</code>`)}
+            ${['{{magasin}}', '{{adresse}}', '{{date}}', '{{saison}}'].map((t) => html`<code style="background:var(--chip);padding:1px 5px;border-radius:4px;">${t}</code>`)}
             <span>…</span>
           </div>
           <div style="margin-top:14px;">
-            <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:7px;">Catégorie de bibliothèque</label>
+            <label style="display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:7px;">Catégorie de bibliothèque</label>
             <div style="display:flex;flex-wrap:wrap;gap:7px;">
               ${v.libTagPicker.map((t) => html`
                 <button onClick=${t.pick} style=${t.style}><span style=${t.dotStyle}></span>${t.label}</button>
@@ -5907,38 +6033,38 @@ class App extends Component {
             </div>
           </div>
           <div style="margin-top:14px;">
-            <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:7px;">
+            <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:7px;">
               ${infoTip('Format de l’élément : un écran est soit paysage (16:9), soit portrait (9:16). Ce choix sert de FILTRE au montage — un élément 16:9 n’est proposé que quand tu montes pour des écrans paysage, un 9:16 que pour du portrait.')}
               <span>Format de diffusion</span>
             </label>
             <div style="display:flex;flex-wrap:wrap;gap:7px;">
               ${v.orientOpts.map((o) => html`
-                <button onClick=${o.pick} title=${o.hint} style="padding:8px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;${o.active ? 'background:#232220;color:#fff;border:1px solid #232220;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.16);'}">${o.label}</button>
+                <button onClick=${o.pick} title=${o.hint} style="padding:8px 13px;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;${o.active ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:var(--paper);color:var(--ink);border:1px solid var(--line);'}">${o.label}</button>
               `)}
             </div>
           </div>
           <div style="margin-top:14px;">
-            <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:7px;">
+            <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:7px;">
               ${infoTip('Périodes de la journée où cet élément peut passer. Aucune cochée = il passe à tous les moments. Sert au filtrage de la boucle continue et à l’aperçu « Contenu par moment ».')}
               <span>Moments de diffusion <span style="font-weight:400;">— ${v.momentSummary}</span></span>
             </label>
             <div style="display:flex;flex-wrap:wrap;gap:7px;">
               ${v.momentOpts.map((o) => html`
-                <button onClick=${o.toggle} style="padding:8px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;${o.active ? 'background:#6E4A2B;color:#fff;border:1px solid #6E4A2B;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.16);'}">${o.active ? '✓ ' : ''}${o.label}</button>
+                <button onClick=${o.toggle} style="padding:8px 13px;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;${o.active ? 'background:var(--muted-2);color:#fff;border:1px solid var(--muted-2);' : 'background:var(--paper);color:var(--ink);border:1px solid var(--line);'}">${o.active ? '✓ ' : ''}${o.label}</button>
               `)}
             </div>
           </div>
           ${v.hasSub && html`
             <div style="margin-top:14px;">
-              <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:7px;">Sous-titre (accroche)</label>
-              <input value=${v.liaisonSub} onInput=${v.onLiaisonSub} placeholder="ex. faites maison chaque matin" style="width:100%;box-sizing:border-box;padding:11px 13px;font-size:15px;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#FBF8F2;" />
+              <label style="display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:7px;">Sous-titre (accroche)</label>
+              <input value=${v.liaisonSub} onInput=${v.onLiaisonSub} placeholder="ex. faites maison chaque matin" style="width:100%;box-sizing:border-box;padding:11px 13px;font-size:15px;border:1px solid var(--line);border-radius:10px;background:#fff;" />
             </div>
           `}
           ${v.hasDur && html`
             <div style="margin-top:14px;display:flex;align-items:center;gap:10px;">
-              <label style="font-size:12.5px;font-weight:500;color:#8A847C;">Durée à l'écran</label>
-              <input type="number" min="2" max="120" step="1" value=${v.durVal} onInput=${v.onDur} style="width:90px;padding:9px 11px;font-size:14px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;text-align:right;" />
-              <span style="font-size:12.5px;color:#8A847C;">secondes</span>
+              <label style="font-size:12.5px;font-weight:500;color:var(--muted);">Durée à l'écran</label>
+              <input type="number" min="2" max="120" step="1" value=${v.durVal} onInput=${v.onDur} style="width:90px;padding:9px 11px;font-size:14px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;text-align:right;" />
+              <span style="font-size:12.5px;color:var(--muted);">secondes</span>
             </div>
           `}
         </div>
@@ -5947,12 +6073,12 @@ class App extends Component {
           ${secHead('tag', 'Tag campagne', v.tagSummary)}
           ${secOpen('tag') && html`<div style=${secBody}>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-            <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">Affiche un macaron (illustration + texte) sur l'écran, pour une campagne commerciale.</p>
+            <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">Affiche un macaron (illustration + texte) sur l'écran, pour une campagne commerciale.</p>
             <button onClick=${v.toggleTag} style=${v.tagTrackStyle}><span style=${v.tagKnobStyle}></span></button>
           </div>
           ${v.tagEnabled && html`
             <div style="display:flex;gap:10px;align-items:center;">
-              <select value=${v.tagImg} onChange=${v.onTagImg} style="flex:0 0 150px;padding:10px;font-size:13px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;cursor:pointer;">
+              <select value=${v.tagImg} onChange=${v.onTagImg} style="flex:0 0 150px;padding:10px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
                 <option value="">Aucune icône</option>
                 <option value="assets/cherry.png">Cerise</option>
                 <option value="assets/apple.png">Pomme</option>
@@ -5960,7 +6086,7 @@ class App extends Component {
                 <option value="assets/cake-slice.png">Part de gâteau</option>
                 <option value="assets/cookies.png">Cookie</option>
               </select>
-              <input value=${v.tagLabel} onInput=${v.onTagLabel} placeholder="ex. Nouveauté · -20%" style="flex:1 1 auto;min-width:0;padding:10px 12px;font-size:15px;font-weight:600;color:#8D1D2C;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
+              <input value=${v.tagLabel} onInput=${v.onTagLabel} placeholder="ex. Nouveauté · -20%" style="flex:1 1 auto;min-width:0;padding:10px 12px;font-size:15px;font-weight:500;color:var(--accent);border:1px solid var(--line);border-radius:8px;background:#fff;" />
             </div>
           `}
           </div>`}
@@ -5970,10 +6096,10 @@ class App extends Component {
           <div style=${secCard}>
             ${secHead('watermark', 'Filigrane / filtre photo', v.watermarkSummary)}
             ${secOpen('watermark') && html`<div style=${secBody}>
-            <p style="margin:0 0 12px;font-size:12px;color:#8A847C;line-height:1.5;">Superpose un filigrane à l'élément — surtout utile sur les photos : logo en filigrane, logo dans un coin, ou ruban « Nouveau ».</p>
+            <p style="margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.5;">Superpose un filigrane à l'élément — surtout utile sur les photos : logo en filigrane, logo dans un coin, ou ruban « Nouveau ».</p>
             <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
               ${v.watermarkOpts.map((o) => html`
-                <button onClick=${o.pick} style="padding:11px 12px;font-size:13px;font-weight:600;border-radius:9px;cursor:pointer;${o.active ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.14);'}">${o.label}</button>
+                <button onClick=${o.pick} style="padding:11px 12px;font-size:13px;font-weight:500;border-radius:8px;cursor:pointer;${o.active ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:var(--paper);color:var(--ink);border:1px solid var(--line);'}">${o.label}</button>
               `)}
             </div>
             </div>`}
@@ -6001,10 +6127,10 @@ class App extends Component {
             ${secHead('produit', 'Produit à la une', v.produitSummary)}
             ${secOpen('produit') && html`<div style=${secBody}>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
-              <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">Le produit vient de la table produits — nom et prix (par magasin) suivent automatiquement.</p>
-              <button onClick=${v.goProducts} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.25);border-radius:999px;cursor:pointer;">▦ Ouvrir la table produits</button>
+              <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">Le produit vient de la table produits — nom et prix (par magasin) suivent automatiquement.</p>
+              <button onClick=${v.goProducts} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">▦ Ouvrir la table produits</button>
             </div>
-            <select value=${v.curProductRef} onChange=${v.onProductRef} style="width:100%;box-sizing:border-box;padding:11px 12px;font-size:14px;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#FBF8F2;cursor:pointer;">
+            <select value=${v.curProductRef} onChange=${v.onProductRef} style="width:100%;box-sizing:border-box;padding:11px 12px;font-size:14px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer;">
               <option value="">— Choisir un produit —</option>
               ${v.productOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
             </select>
@@ -6017,10 +6143,10 @@ class App extends Component {
             ${secHead('media', 'Média ciblé — agence', 'moment + saison')}
             ${secOpen('media') && html`<div style=${secBody}>
             <div style="display:flex;flex-direction:column;gap:12px;align-items:center;text-align:center;padding:6px 4px;">
-              <div style="width:64px;height:64px;border-radius:16px;background:#1B1B1B;color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;">🎯</div>
-              <p style="margin:0;font-size:13px;line-height:1.6;color:#4A4640;max-width:420px;">Cet élément diffuse <strong>automatiquement</strong> une vidéo ou photo de la <strong>médiathèque agence</strong>, <strong>tirée au sort</strong> parmi celles taguées pour le <strong>moment courant</strong> (matin/midi/soir, selon les fenêtres du planning) et une <strong>saison active</strong>. La pioche change à chaque diffusion — parfait pour surprendre le client tout en restant de saison.</p>
-              <a href=${v.mediaAgencyUrl} target="_blank" style="font-size:13px;font-weight:600;color:#8D1D2C;">↗ Ouvrir l'espace Vidéo — Agence (upload et tags)</a>
-              <p style="margin:0;font-size:11.5px;color:#8A847C;">Règle la <strong>durée</strong> à l'écran ci-dessus, et la <strong>mise en page</strong> (plein écran ou adapté). S'il n'y a aucun média éligible à l'instant, un écran repère « Média ciblé » s'affiche.</p>
+              <div style="width:64px;height:64px;border-radius:12px;background:#1B1B1B;color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;">🎯</div>
+              <p style="margin:0;font-size:13px;line-height:1.6;color:var(--muted-2);max-width:420px;">Cet élément diffuse <strong>automatiquement</strong> une vidéo ou photo de la <strong>médiathèque agence</strong>, <strong>tirée au sort</strong> parmi celles taguées pour le <strong>moment courant</strong> (matin/midi/soir, selon les fenêtres du planning) et une <strong>saison active</strong>. La pioche change à chaque diffusion — parfait pour surprendre le client tout en restant de saison.</p>
+              <a href=${v.mediaAgencyUrl} target="_blank" style="font-size:13px;font-weight:500;color:var(--accent);">↗ Ouvrir l'espace Vidéo — Agence (upload et tags)</a>
+              <p style="margin:0;font-size:11.5px;color:var(--muted);">Règle la <strong>durée</strong> à l'écran ci-dessus, et la <strong>mise en page</strong> (plein écran ou adapté). S'il n'y a aucun média éligible à l'instant, un écran repère « Média ciblé » s'affiche.</p>
             </div>
             </div>`}
           </div>
@@ -6030,47 +6156,47 @@ class App extends Component {
           <div style=${secCard}>
             ${secHead('promo', 'Type de promotion', v.promoSummary)}
             ${secOpen('promo') && html`<div style=${secBody}>
-            <div style="margin-bottom:14px;padding:11px 13px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.10);" data-tfb-link>
-              <label style="display:block;font-size:12.5px;font-weight:600;color:#232220;margin-bottom:6px;">${v.t('tfb.editorTitle')}</label>
+            <div style="margin-bottom:14px;padding:11px 13px;border-radius:10px;background:var(--paper);border:1px solid var(--line);" data-tfb-link>
+              <label style="display:block;font-size:12.5px;font-weight:500;color:var(--ink);margin-bottom:6px;">${v.t('tfb.editorTitle')}</label>
               ${v.hasTfbPromos ? html`
-                <select value=${v.curTfbRef} onChange=${v.onTfbRef} style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:13.5px;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#fff;cursor:pointer;">
+                <select value=${v.curTfbRef} onChange=${v.onTfbRef} style="width:100%;box-sizing:border-box;padding:10px 12px;font-size:13.5px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer;">
                   <option value="">${v.t('tfb.pickNone')}</option>
                   ${v.tfbOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
                 </select>
                 ${v.tfbPicked && html`
-                  <div style="margin-top:9px;font-size:12px;color:#4A4640;line-height:1.6;">
-                    <div style="font-size:13.5px;font-weight:700;color:#232220;">${v.tfbPicked.icon} ${v.tfbPicked.name} · <span style="color:#8D1D2C;">${v.tfbPicked.label}</span></div>
+                  <div style="margin-top:9px;font-size:12px;color:var(--muted-2);line-height:1.6;">
+                    <div style="font-size:13.5px;font-weight:500;color:var(--ink);">${v.tfbPicked.icon} ${v.tfbPicked.name} · <span style="color:var(--accent);">${v.tfbPicked.label}</span></div>
                     ${v.tfbPicked.targets.length ? html`<div>${v.tfbPicked.targets.map((c) => c.label).join(' · ')}</div>` : ''}
                     <div>🕒 ${v.tfbPicked.when}${v.tfbPicked.dates ? ` · 📅 ${v.tfbPicked.dates}` : ''}</div>
                     <div>🏬 ${v.tfbPicked.shops}</div>
                     ${v.tfbPicked.voucher && html`<div>🎟️ ${v.tfbPicked.voucher}</div>`}
-                    ${!v.tfbPicked.active && html`<div style="margin-top:4px;color:#8D1D2C;font-weight:600;">${v.t('tfb.inactiveNote')}</div>`}
+                    ${!v.tfbPicked.active && html`<div style="margin-top:4px;color:var(--accent);font-weight:500;">${v.t('tfb.inactiveNote')}</div>`}
                   </div>
                 `}
-                <p style="margin:8px 0 0;font-size:11.5px;color:#8A847C;line-height:1.5;">${v.t('tfb.editorHelp')}</p>
-              ` : html`<p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">${v.t('tfb.editorNone')} <button onClick=${v.goCampaigns} style="background:none;border:none;padding:0;color:#8D1D2C;font-weight:700;text-decoration:underline;cursor:pointer;font-size:12px;">${v.t('tfb.goCampaigns')}</button></p>`}
+                <p style="margin:8px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5;">${v.t('tfb.editorHelp')}</p>
+              ` : html`<p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">${v.t('tfb.editorNone')} <button onClick=${v.goCampaigns} style="background:none;border:none;padding:0;color:var(--accent);font-weight:500;text-decoration:underline;cursor:pointer;font-size:12px;">${v.t('tfb.goCampaigns')}</button></p>`}
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
-              <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">Le sous-type vient de la base (happy hour, vente flash, bundle…) — modifiable dans <strong>Promotions</strong>. Renseigne l'accroche dans « Nom du module » et le détail dans « Sous-titre ».</p>
-              <button onClick=${v.goPromoTypes} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.25);border-radius:999px;cursor:pointer;">🏷️ Gérer les promotions</button>
+              <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">Le sous-type vient de la base (happy hour, vente flash, bundle…) — modifiable dans <strong>Promotions</strong>. Renseigne l'accroche dans « Nom du module » et le détail dans « Sous-titre ».</p>
+              <button onClick=${v.goPromoTypes} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">🏷️ Gérer les promotions</button>
             </div>
             ${v.hasPromoTypes ? html`
               <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
                 ${v.promoTypeOptions.map((o) => html`
-                  <button onClick=${o.pick} style="text-align:left;padding:11px 12px;font-size:13px;font-weight:600;border-radius:9px;cursor:pointer;${o.active ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.14);'}">${o.label}</button>
+                  <button onClick=${o.pick} style="text-align:left;padding:11px 12px;font-size:13px;font-weight:500;border-radius:8px;cursor:pointer;${o.active ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:var(--paper);color:var(--ink);border:1px solid var(--line);'}">${o.label}</button>
                 `)}
               </div>
-              <div style="margin-top:12px;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.10);">
-                <span style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#fff;background:${v.promoColor};"><span style="font-size:15px;">${v.promoIcon}</span>${v.promoName}</span>
-                <span style="font-size:11.5px;color:#8A847C;">badge affiché à l'écran</span>
+              <div style="margin-top:12px;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--paper);border:1px solid var(--line);">
+                <span style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;font-size:12px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#fff;background:${v.promoColor};"><span style="font-size:15px;">${v.promoIcon}</span>${v.promoName}</span>
+                <span style="font-size:11.5px;color:var(--muted);">badge affiché à l'écran</span>
               </div>
             ` : html`
-              <div style="padding:12px 14px;border-radius:10px;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.2);font-size:12.5px;color:#8D1D2C;line-height:1.5;">Aucun sous-type de promotion actif. <button onClick=${v.goPromoTypes} style="background:none;border:none;padding:0;color:#8D1D2C;font-weight:700;text-decoration:underline;cursor:pointer;font-size:12.5px;">Créer un type de promotion →</button></div>
+              <div style="padding:12px 14px;border-radius:10px;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.2);font-size:12.5px;color:var(--accent);line-height:1.5;">Aucun sous-type de promotion actif. <button onClick=${v.goPromoTypes} style="background:none;border:none;padding:0;color:var(--accent);font-weight:500;text-decoration:underline;cursor:pointer;font-size:12.5px;">Créer un type de promotion →</button></div>
             `}
             ${v.promoUsesProduct && html`
               <div style="margin-top:14px;">
-                <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:7px;">Produit mis en avant (photo + prix)</label>
-                <select value=${v.curProductRef} onChange=${v.onProductRef} style="width:100%;box-sizing:border-box;padding:11px 12px;font-size:14px;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#FBF8F2;cursor:pointer;">
+                <label style="display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:7px;">Produit mis en avant (photo + prix)</label>
+                <select value=${v.curProductRef} onChange=${v.onProductRef} style="width:100%;box-sizing:border-box;padding:11px 12px;font-size:14px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer;">
                   <option value="">— Aucun produit —</option>
                   ${v.productOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
                 </select>
@@ -6096,25 +6222,25 @@ class App extends Component {
             ${secHead('bundle', v.t('bundles.editorTitle'), v.bundleSummary)}
             ${secOpen('bundle') && html`<div style=${secBody}>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
-              <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">${v.t('bundles.editorHelp')}</p>
-              <button onClick=${v.goBundles} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.25);border-radius:999px;cursor:pointer;">${v.t('bundles.manage')}</button>
+              <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">${v.t('bundles.editorHelp')}</p>
+              <button onClick=${v.goBundles} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.t('bundles.manage')}</button>
             </div>
             ${v.hasBundles ? html`
-              <select value=${v.curBundleRef} onChange=${v.onBundleRef} style="width:100%;box-sizing:border-box;padding:11px 12px;font-size:14px;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#FBF8F2;cursor:pointer;">
+              <select value=${v.curBundleRef} onChange=${v.onBundleRef} style="width:100%;box-sizing:border-box;padding:11px 12px;font-size:14px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer;">
                 <option value="">${v.t('bundles.pick')}</option>
                 ${v.bundleOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
               </select>
               ${v.bundlePicked && html`
-                <div style="margin-top:12px;padding:11px 13px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.10);font-size:12px;color:#4A4640;line-height:1.6;">
-                  <div style="font-size:14px;font-weight:700;color:#232220;">${v.bundlePicked.name} · ${v.bundlePicked.price}${v.bundlePicked.worth ? html` <span style="color:#8A847C;font-weight:400;text-decoration:line-through;">${v.bundlePicked.worth}</span>` : ''}</div>
+                <div style="margin-top:12px;padding:11px 13px;border-radius:10px;background:var(--paper);border:1px solid var(--line);font-size:12px;color:var(--muted-2);line-height:1.6;">
+                  <div style="font-size:14px;font-weight:500;color:var(--ink);">${v.bundlePicked.name} · ${v.bundlePicked.price}${v.bundlePicked.worth ? html` <span style="color:var(--muted);font-weight:400;text-decoration:line-through;">${v.bundlePicked.worth}</span>` : ''}</div>
                   <div>${v.bundlePicked.comp.map((c) => c.label).join(' + ')}</div>
                   <div>🕒 ${v.bundlePicked.when}</div>
                   <div>🏬 ${v.bundlePicked.shops}</div>
-                  ${!v.bundlePicked.active && html`<div style="margin-top:4px;color:#8D1D2C;font-weight:600;">${v.t('bundles.inactiveNote')}</div>`}
+                  ${!v.bundlePicked.active && html`<div style="margin-top:4px;color:var(--accent);font-weight:500;">${v.t('bundles.inactiveNote')}</div>`}
                 </div>
               `}
             ` : html`
-              <div style="padding:12px 14px;border-radius:10px;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.2);font-size:12.5px;color:#8D1D2C;line-height:1.5;">${v.t('bundles.noneYet')} <button onClick=${v.goBundles} style="background:none;border:none;padding:0;color:#8D1D2C;font-weight:700;text-decoration:underline;cursor:pointer;font-size:12.5px;">${v.t('bundles.goSync')}</button></div>
+              <div style="padding:12px 14px;border-radius:10px;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.2);font-size:12.5px;color:var(--accent);line-height:1.5;">${v.t('bundles.noneYet')} <button onClick=${v.goBundles} style="background:none;border:none;padding:0;color:var(--accent);font-weight:500;text-decoration:underline;cursor:pointer;font-size:12.5px;">${v.t('bundles.goSync')}</button></div>
             `}
             </div>`}
           </div>
@@ -6125,27 +6251,27 @@ class App extends Component {
             ${secHead('campaign', 'Campagne à diffuser', v.campaignSummary)}
             ${secOpen('campaign') && html`<div style=${secBody}>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
-              <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">Choisis une <strong>campagne</strong> dans la liste — son nom, son visuel, son produit lié et sa période s'affichent automatiquement. La liste se gère (ou s'importe) dans <strong>Campagnes</strong>.</p>
-              <button onClick=${v.goCampaigns} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:600;color:#8D1D2C;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.25);border-radius:999px;cursor:pointer;">📣 Gérer les campagnes</button>
+              <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">Choisis une <strong>campagne</strong> dans la liste — son nom, son visuel, son produit lié et sa période s'affichent automatiquement. La liste se gère (ou s'importe) dans <strong>Campagnes</strong>.</p>
+              <button onClick=${v.goCampaigns} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">📣 Gérer les campagnes</button>
             </div>
             ${v.hasCampaigns ? html`
-              <select value=${v.curCampaignRef} onChange=${(e) => this.setSelField('campaignRef', e.target.value)} style="width:100%;box-sizing:border-box;padding:11px 12px;font-size:14px;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#FBF8F2;cursor:pointer;">
+              <select value=${v.curCampaignRef} onChange=${(e) => this.setSelField('campaignRef', e.target.value)} style="width:100%;box-sizing:border-box;padding:11px 12px;font-size:14px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer;">
                 <option value="">— Choisir une campagne —</option>
                 ${v.campaignOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
               </select>
               ${v.campaignInfo && v.curCampaignRef && html`
-                <div style="margin-top:12px;display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.10);">
+                <div style="margin-top:12px;display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:10px;background:var(--paper);border:1px solid var(--line);">
                   ${v.campaignInfo.image
-                    ? html`<img src=${v.campaignInfo.image} alt="" loading="lazy" style="width:52px;height:52px;border-radius:9px;object-fit:cover;flex:0 0 auto;border:1px solid rgba(35,34,32,0.15);" />`
-                    : html`<span style="width:52px;height:52px;border-radius:9px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;background:${v.campaignInfo.color || '#8D1D2C'};">${v.campaignInfo.scope === 'gamme' ? '🗂' : '📣'}</span>`}
+                    ? html`<img src=${v.campaignInfo.image} alt="" loading="lazy" style="width:52px;height:52px;border-radius:8px;object-fit:cover;flex:0 0 auto;border:1px solid var(--line);" />`
+                    : html`<span style="width:52px;height:52px;border-radius:8px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;background:${v.campaignInfo.color || '#8D1D2C'};">${v.campaignInfo.scope === 'gamme' ? '🗂' : '📣'}</span>`}
                   <div style="flex:1 1 auto;min-width:0;">
-                    <div style="font-size:14px;font-weight:700;color:#232220;">${v.campaignInfo.name}</div>
-                    <div style="font-size:11.5px;color:#8A847C;">${v.campaignInfo.scope === 'gamme' ? `Gamme · ${v.campaignInfo.theme || '—'}` : 'Produit'}${v.campaignInfo.message ? ` · ${v.campaignInfo.message}` : ''}${v.campaignInfo.dateFrom ? ` · du ${v.campaignInfo.dateFrom}${v.campaignInfo.dateTo ? ` au ${v.campaignInfo.dateTo}` : ''}` : ''}</div>
+                    <div style="font-size:14px;font-weight:500;color:var(--ink);">${v.campaignInfo.name}</div>
+                    <div style="font-size:11.5px;color:var(--muted);">${v.campaignInfo.scope === 'gamme' ? `Gamme · ${v.campaignInfo.theme || '—'}` : 'Produit'}${v.campaignInfo.message ? ` · ${v.campaignInfo.message}` : ''}${v.campaignInfo.dateFrom ? ` · du ${v.campaignInfo.dateFrom}${v.campaignInfo.dateTo ? ` au ${v.campaignInfo.dateTo}` : ''}` : ''}</div>
                   </div>
                 </div>
               `}
             ` : html`
-              <div style="padding:12px 14px;border-radius:10px;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.2);font-size:12.5px;color:#8D1D2C;line-height:1.5;">Aucune campagne dans la liste. <button onClick=${v.goCampaigns} style="background:none;border:none;padding:0;color:#8D1D2C;font-weight:700;text-decoration:underline;cursor:pointer;font-size:12.5px;">Créer une campagne →</button></div>
+              <div style="padding:12px 14px;border-radius:10px;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.2);font-size:12.5px;color:var(--accent);line-height:1.5;">Aucune campagne dans la liste. <button onClick=${v.goCampaigns} style="background:none;border:none;padding:0;color:var(--accent);font-weight:500;text-decoration:underline;cursor:pointer;font-size:12.5px;">Créer une campagne →</button></div>
             `}
             </div>`}
           </div>
@@ -6167,84 +6293,84 @@ class App extends Component {
             ${secHead('htmlcode', 'Code HTML', v.htmlSummary)}
             ${secOpen('htmlcode') && html`<div style=${secBody}>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
-              <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;max-width:420px;">Colle ici ton <strong>code HTML</strong> (document complet ou fragment) : il est mis à l'échelle de l'écran. Les <strong>variables</strong> ci-dessous sont remplacées <strong>par magasin</strong> à la diffusion.</p>
+              <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;max-width:420px;">Colle ici ton <strong>code HTML</strong> (document complet ou fragment) : il est mis à l'échelle de l'écran. Les <strong>variables</strong> ci-dessous sont remplacées <strong>par magasin</strong> à la diffusion.</p>
             </div>
 
             <!-- Format source de la maquette : ratio + dimensions -->
-            <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:7px;">Format de la maquette collée <span style="font-weight:400;">— ratio ${v.htmlRatio}</span></label>
+            <label style="display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:7px;">Format de la maquette collée <span style="font-weight:400;">— ratio ${v.htmlRatio}</span></label>
             <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px;">
               ${v.htmlPresets.map((p) => html`
-                <button onClick=${p.pick} title=${`${p.w} × ${p.h} px`} style="padding:8px 13px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;${p.active ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.14);'}">${p.label}</button>
+                <button onClick=${p.pick} title=${`${p.w} × ${p.h} px`} style="padding:8px 13px;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;${p.active ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:var(--paper);color:var(--ink);border:1px solid var(--line);'}">${p.label}</button>
               `)}
             </div>
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
-              <input type="number" min="64" max="20000" value=${v.htmlW} onInput=${v.onHtmlW} title="Largeur de la maquette (px)" style="width:104px;padding:9px 11px;font-size:13.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;text-align:right;" />
-              <span style="color:#8A847C;font-size:13px;">×</span>
-              <input type="number" min="64" max="20000" value=${v.htmlH} onInput=${v.onHtmlH} title="Hauteur de la maquette (px)" style="width:104px;padding:9px 11px;font-size:13.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;text-align:right;" />
-              <span style="font-size:12px;color:#8A847C;">px · la mise en page (Adapter / Remplir / Étirer) décide du cadrage</span>
+              <input type="number" min="64" max="20000" value=${v.htmlW} onInput=${v.onHtmlW} title="Largeur de la maquette (px)" style="width:104px;padding:9px 11px;font-size:13.5px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;text-align:right;" />
+              <span style="color:var(--muted);font-size:13px;">×</span>
+              <input type="number" min="64" max="20000" value=${v.htmlH} onInput=${v.onHtmlH} title="Hauteur de la maquette (px)" style="width:104px;padding:9px 11px;font-size:13.5px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;text-align:right;" />
+              <span style="font-size:12px;color:var(--muted);">px · la mise en page (Adapter / Remplir / Étirer) décide du cadrage</span>
             </div>
 
             <!-- Variables insérables au curseur -->
-            <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:7px;">Variables — clique pour insérer dans le code</label>
+            <label style="display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:7px;">Variables — clique pour insérer dans le code</label>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
               ${v.htmlTokens.map((t) => html`
-                <button onClick=${t.insert} title=${t.label} style="padding:5px 11px;font-size:12px;font-weight:600;font-family:ui-monospace,monospace;color:#8D1D2C;background:rgba(141,29,44,0.07);border:1px solid rgba(141,29,44,0.22);border-radius:7px;cursor:pointer;">${t.token}</button>
+                <button onClick=${t.insert} title=${t.label} style="padding:5px 11px;font-size:12px;font-weight:500;font-family:ui-monospace,monospace;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${t.token}</button>
               `)}
             </div>
 
             <!-- Variables détectées dans le code, à lier aux données -->
             ${v.htmlVarRows.length ? html`
-              <div style="margin-bottom:14px;padding:12px 13px;border-radius:10px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.12);">
+              <div style="margin-bottom:14px;padding:12px 13px;border-radius:10px;background:var(--paper);border:1px solid var(--line);">
                 <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px;">
                   ${infoTip('Chaque {{ variable }} trouvée dans ton code est listée ici. Lie-la à une donnée (produit, promotion, campagne, magasin) ou à une valeur libre : elle sera remplacée à la diffusion, magasin par magasin. Une variable laissée « non liée » retombe sur les jetons standards ({{magasin}}, {{date}}…) ou reste visible telle quelle. Les constantes de marque comme {{ logo }} sont résolues d’office — rien à lier.')}
-                  <span style="font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#8D1D2C;">Variables détectées — ${v.htmlVarsSummary}</span>
+                  <span style="font-size:12px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--accent);">Variables détectées — ${v.htmlVarsSummary}</span>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:7px;">
                   ${v.htmlVarRows.map((r) => html`
                     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                      <button onClick=${r.select} title="Cliquer pour placer cette variable à l'écran" style="flex:0 0 auto;min-width:120px;text-align:left;font-family:ui-monospace,monospace;font-size:12px;font-weight:700;cursor:pointer;color:${(r.bound || r.isBrandAuto) ? '#2E6E4E' : '#8D1D2C'};background:${(r.bound || r.isBrandAuto) ? 'rgba(46,110,78,0.10)' : 'rgba(141,29,44,0.07)'};border:1px solid ${r.selected ? '#232220' : 'transparent'};border-radius:6px;padding:5px 9px;">${'{{ ' + r.name + ' }}'}${r.moved ? html`<span style="font-weight:400;opacity:0.7;"> ⤧</span>` : ''}</button>
-                      <select value=${r.src} onChange=${r.onSrc} style="flex:0 0 auto;padding:7px 9px;font-size:12px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;">
+                      <button onClick=${r.select} title="Cliquer pour placer cette variable à l'écran" style="flex:0 0 auto;min-width:120px;text-align:left;font-family:ui-monospace,monospace;font-size:12px;font-weight:500;cursor:pointer;color:${(r.bound || r.isBrandAuto) ? '#2E6E4E' : '#8D1D2C'};background:${(r.bound || r.isBrandAuto) ? 'rgba(63,122,82,0.10)' : 'rgba(141,29,44,0.07)'};border:1px solid ${r.selected ? '#232220' : 'transparent'};border-radius:6px;padding:5px 9px;">${'{{ ' + r.name + ' }}'}${r.moved ? html`<span style="font-weight:400;opacity:0.7;"> ⤧</span>` : ''}</button>
+                      <select value=${r.src} onChange=${r.onSrc} style="flex:0 0 auto;padding:7px 9px;font-size:12px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
                         <option value="">${r.isBrandAuto ? '✓ auto — identité de marque' : '— non liée —'}</option>
                         ${r.sources.map((s) => html`<option value=${s.id}>${s.label}</option>`)}
                       </select>
                       ${r.isBrandAuto && html`<img src=${r.brand} alt="" style="flex:0 0 auto;height:22px;width:auto;max-width:80px;object-fit:contain;" />`}
                       ${r.needsPick && html`
-                        <select value=${r.value} onChange=${r.onValue} style="flex:1 1 130px;min-width:0;padding:7px 9px;font-size:12px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;">
+                        <select value=${r.value} onChange=${r.onValue} style="flex:1 1 130px;min-width:0;padding:7px 9px;font-size:12px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
                           <option value="">— choisir —</option>
                           ${r.pickOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
                         </select>
                       `}
                       ${r.fields.length ? html`
-                        <select value=${r.field} onChange=${r.onField} style="flex:0 0 auto;padding:7px 9px;font-size:12px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;cursor:pointer;">
+                        <select value=${r.field} onChange=${r.onField} style="flex:0 0 auto;padding:7px 9px;font-size:12px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
                           ${r.fields.map((f) => html`<option value=${f.id}>${f.label}</option>`)}
                         </select>
                       ` : ''}
                       ${r.isLiteral && html`
-                        <input value=${r.value} onInput=${r.onValue} placeholder="valeur affichée" style="flex:1 1 150px;min-width:0;padding:7px 10px;font-size:12px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#fff;" />
+                        <input value=${r.value} onInput=${r.onValue} placeholder="valeur affichée" style="flex:1 1 150px;min-width:0;padding:7px 10px;font-size:12px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
                       `}
-                      ${r.bound && html`<button onClick=${r.clear} title="Délier" style="flex:0 0 auto;width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.12);background:#fff;cursor:pointer;font-size:11px;color:#8D1D2C;">✕</button>`}
+                      ${r.bound && html`<button onClick=${r.clear} title="Délier" style="flex:0 0 auto;width:26px;height:26px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:11px;color:var(--accent);">✕</button>`}
                     </div>
                     ${r.selected && html`
-                      <div style="margin:2px 0 6px 8px;padding:10px 12px;border-radius:9px;background:#fff;border:1px solid rgba(35,34,32,0.14);display:flex;flex-direction:column;gap:8px;">
+                      <div style="margin:2px 0 6px 8px;padding:10px 12px;border-radius:8px;background:#fff;border:1px solid var(--line);display:flex;flex-direction:column;gap:8px;">
                         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-                          <span style="font-size:11.5px;color:#8A847C;">Place à l'écran — décalage en px de la maquette</span>
+                          <span style="font-size:11.5px;color:var(--muted);">Place à l'écran — décalage en px de la maquette</span>
                           <span style="display:flex;align-items:center;gap:4px;">
-                            <button onClick=${() => r.nudge(0, -10)} title="Monter" style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;">↑</button>
-                            <button onClick=${() => r.nudge(0, 10)} title="Descendre" style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;">↓</button>
-                            <button onClick=${() => r.nudge(-10, 0)} title="Gauche" style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;">←</button>
-                            <button onClick=${() => r.nudge(10, 0)} title="Droite" style="width:26px;height:26px;border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;">→</button>
-                            <button onClick=${r.resetPos} title="Remettre à zéro" style="padding:4px 10px;font-size:11.5px;font-weight:600;border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;color:#8A847C;">Recentrer</button>
+                            <button onClick=${() => r.nudge(0, -10)} title="Monter" style="width:26px;height:26px;border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;">↑</button>
+                            <button onClick=${() => r.nudge(0, 10)} title="Descendre" style="width:26px;height:26px;border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;">↓</button>
+                            <button onClick=${() => r.nudge(-10, 0)} title="Gauche" style="width:26px;height:26px;border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;">←</button>
+                            <button onClick=${() => r.nudge(10, 0)} title="Droite" style="width:26px;height:26px;border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;">→</button>
+                            <button onClick=${r.resetPos} title="Remettre à zéro" style="padding:4px 10px;font-size:11.5px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;color:var(--muted);">Recentrer</button>
                           </span>
                         </div>
                         <div style="display:flex;align-items:center;gap:8px;">
-                          <span style="font-size:11.5px;color:#8A847C;width:14px;">X</span>
-                          <input type="range" min="-800" max="800" step="5" value=${r.x} onInput=${r.onX} style="flex:1 1 auto;accent-color:#8D1D2C;" />
-                          <span style="font-size:11.5px;font-weight:600;width:52px;text-align:right;font-variant-numeric:tabular-nums;">${r.x} px</span>
+                          <span style="font-size:11.5px;color:var(--muted);width:14px;">X</span>
+                          <input type="range" min="-800" max="800" step="5" value=${r.x} onInput=${r.onX} style="flex:1 1 auto;accent-color:var(--accent);" />
+                          <span style="font-size:11.5px;font-weight:500;width:52px;text-align:right;font-variant-numeric:tabular-nums;">${r.x} px</span>
                         </div>
                         <div style="display:flex;align-items:center;gap:8px;">
-                          <span style="font-size:11.5px;color:#8A847C;width:14px;">Y</span>
-                          <input type="range" min="-800" max="800" step="5" value=${r.y} onInput=${r.onY} style="flex:1 1 auto;accent-color:#8D1D2C;" />
-                          <span style="font-size:11.5px;font-weight:600;width:52px;text-align:right;font-variant-numeric:tabular-nums;">${r.y} px</span>
+                          <span style="font-size:11.5px;color:var(--muted);width:14px;">Y</span>
+                          <input type="range" min="-800" max="800" step="5" value=${r.y} onInput=${r.onY} style="flex:1 1 auto;accent-color:var(--accent);" />
+                          <span style="font-size:11.5px;font-weight:500;width:52px;text-align:right;font-variant-numeric:tabular-nums;">${r.y} px</span>
                         </div>
                       </div>
                     `}
@@ -6254,8 +6380,8 @@ class App extends Component {
             ` : ''}
 
             <!-- Éditeur de code (non contrôlé : la saisie résiste aux re-rendus) -->
-            <textarea id="sig-html-editor" key=${'html-' + v.selId} defaultValue=${v.htmlCode} onInput=${v.onHtmlCode} spellcheck="false" placeholder="Colle ton HTML ici — ex. une affiche générée, un gabarit…" style="width:100%;box-sizing:border-box;min-height:280px;padding:12px 13px;font-size:12px;line-height:1.5;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#FBF8F2;resize:vertical;"></textarea>
-            <p style="margin:9px 0 0;font-size:11.5px;color:#8A847C;line-height:1.5;">Les polices <strong>Gotham</strong> et <strong>Vank</strong> et les images de <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">assets/</code> sont déjà disponibles — pas besoin de redéclarer <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">@font-face</code>. Les <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">&lt;script&gt;</code> et gestionnaires d'événements sont retirés à l'affichage (sécurité) ; les <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">&lt;style&gt;</code> sont conservés.</p>
+            <textarea id="sig-html-editor" key=${'html-' + v.selId} defaultValue=${v.htmlCode} onInput=${v.onHtmlCode} spellcheck="false" placeholder="Colle ton HTML ici — ex. une affiche générée, un gabarit…" style="width:100%;box-sizing:border-box;min-height:280px;padding:12px 13px;font-size:12px;line-height:1.5;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;border:1px solid var(--line);border-radius:10px;background:#fff;resize:vertical;"></textarea>
+            <p style="margin:9px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5;">Les polices <strong>Gotham</strong> et <strong>Vank</strong> et les images de <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">assets/</code> sont déjà disponibles — pas besoin de redéclarer <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">@font-face</code>. Les <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">&lt;script&gt;</code> et gestionnaires d'événements sont retirés à l'affichage (sécurité) ; les <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">&lt;style&gt;</code> sont conservés.</p>
             </div>`}
           </div>
         `}
@@ -6265,73 +6391,73 @@ class App extends Component {
             ${secHead('video', 'Vidéo', v.videoSummary)}
             ${secOpen('video') && html`<div style=${secBody}>
             <!-- bascule : vidéo unique / vidéo surprise (dossier serveur) -->
-            <div style="display:inline-flex;background:#EFE9E0;border-radius:9px;padding:3px;margin-bottom:14px;">
-              <button onClick=${() => { if (v.isSurprise) v.toggleSurprise(); }} style="padding:7px 14px;font-size:12.5px;font-weight:600;border:none;border-radius:7px;cursor:pointer;${!v.isSurprise ? 'background:#fff;color:#232220;box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'}">Vidéo unique</button>
-              <button onClick=${() => { if (!v.isSurprise) v.toggleSurprise(); }} style="padding:7px 14px;font-size:12.5px;font-weight:600;border:none;border-radius:7px;cursor:pointer;${v.isSurprise ? 'background:#fff;color:#6E4A2B;box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'}">🎲 Vidéo surprise</button>
+            <div style="display:inline-flex;background:var(--chip);border-radius:8px;padding:3px;margin-bottom:14px;">
+              <button onClick=${() => { if (v.isSurprise) v.toggleSurprise(); }} style="padding:7px 14px;font-size:12.5px;font-weight:500;border:none;border-radius:8px;cursor:pointer;${!v.isSurprise ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'}">Vidéo unique</button>
+              <button onClick=${() => { if (!v.isSurprise) v.toggleSurprise(); }} style="padding:7px 14px;font-size:12.5px;font-weight:500;border:none;border-radius:8px;cursor:pointer;${v.isSurprise ? 'background:#fff;color:var(--muted-2);' : 'background:transparent;color:var(--muted);'}">🎲 Vidéo surprise</button>
             </div>
 
             ${!v.isSurprise && html`
-              <p style="margin:0 0 12px;font-size:12px;color:#8A847C;line-height:1.5;">mp4 ou webm, <strong>8 Mo max</strong> (compresse en 1080p/H.264). Lue en boucle, sans le son, pendant la durée choisie.</p>
+              <p style="margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.5;">mp4 ou webm, <strong>8 Mo max</strong> (compresse en 1080p/H.264). Lue en boucle, sans le son, pendant la durée choisie.</p>
               ${v.hasVideo && html`
                 <!-- La vignette montre le MÊME cadrage que l'écran, sinon elle ment. -->
                 <video src=${v.videoPreview} muted autoplay loop playsinline style="width:100%;aspect-ratio:${W} / ${H};object-fit:${v.vidFit};border-radius:12px;background:${v.bgSwatch};margin-bottom:10px;"></video>
               `}
               <div style="display:flex;gap:10px;">
-                <label style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 12px;font-size:13px;font-weight:600;color:#8D1D2C;border:1px dashed rgba(141,29,44,0.4);border-radius:10px;background:rgba(141,29,44,0.04);cursor:pointer;">
+                <label style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 12px;font-size:13px;font-weight:500;color:var(--accent);border:1px dashed rgba(141,29,44,0.4);border-radius:10px;background:rgba(141,29,44,0.04);cursor:pointer;">
                   <span style="font-size:16px;">⬆</span><span>${v.hasVideo ? 'Remplacer la vidéo' : 'Importer une vidéo'}</span>
                   <input type="file" accept="video/mp4,video/webm,video/*" onChange=${v.onVideoFile} style="display:none;" />
                 </label>
-                ${v.hasVideo && html`<button onClick=${v.clearVideo} style="padding:11px 16px;font-size:13px;font-weight:600;color:#8D1D2C;background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:10px;cursor:pointer;">Retirer</button>`}
+                ${v.hasVideo && html`<button onClick=${v.clearVideo} style="padding:11px 16px;font-size:13px;font-weight:500;color:var(--accent);background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:10px;cursor:pointer;">Retirer</button>`}
               </div>
 
               <!-- Cadrage : remplir/adapter, puis déplacer et zoomer -->
               ${v.hasVideo && html`
-                <div style="margin-top:14px;padding-top:13px;border-top:1px dashed rgba(35,34,32,0.14);">
+                <div style="margin-top:14px;padding-top:13px;border-top:1px dashed var(--line);">
                   <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px;">
-                    <span style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">Cadrage à l'écran</span>
+                    <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Cadrage à l'écran</span>
                     ${infoTip('« Adapter » montre TOUTE la vidéo, avec des bandes noires si son format diffère de l’écran. « Remplir » couvre l’écran et recadre les bords — les flèches choisissent alors la partie visible, et le zoom règle la taille.')}
                   </div>
                   <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-                    <span style="display:inline-flex;background:#EFE9E0;border-radius:9px;padding:3px;height:fit-content;">
+                    <span style="display:inline-flex;background:var(--chip);border-radius:8px;padding:3px;height:fit-content;">
                       ${[['contain', '▭ Adapter (tout voir)'], ['cover', '◼ Remplir (recadrer)']].map(([id, lab]) => html`
-                        <button onClick=${() => v.setVidFit(id)} style="padding:7px 13px;font-size:12.5px;font-weight:600;border:none;border-radius:7px;cursor:pointer;${v.vidFit === id ? 'background:#fff;color:#232220;box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'}">${lab}</button>
+                        <button onClick=${() => v.setVidFit(id)} style="padding:7px 13px;font-size:12.5px;font-weight:500;border:none;border-radius:8px;cursor:pointer;${v.vidFit === id ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'}">${lab}</button>
                       `)}
                     </span>
                     <!-- pavé de flèches -->
                     <div style="display:grid;grid-template-columns:repeat(3,30px);grid-template-rows:repeat(3,30px);gap:3px;">
                       <span></span>
-                      <button onClick=${() => v.nudgeVid(0, -1)} title="Monter la vidéo" style="border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;font-size:12px;">↑</button>
+                      <button onClick=${() => v.nudgeVid(0, -1)} title="Monter la vidéo" style="border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;font-size:12px;">↑</button>
                       <span></span>
-                      <button onClick=${() => v.nudgeVid(-1, 0)} title="Décaler à gauche" style="border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;font-size:12px;">←</button>
-                      <button onClick=${v.resetVid} title="Recentrer et remettre le zoom à 1×" style="border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:${v.vidMoved ? 'rgba(141,29,44,0.10)' : '#FBF8F2'};color:${v.vidMoved ? '#8D1D2C' : '#8A847C'};cursor:pointer;font-size:11px;">⌖</button>
-                      <button onClick=${() => v.nudgeVid(1, 0)} title="Décaler à droite" style="border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;font-size:12px;">→</button>
+                      <button onClick=${() => v.nudgeVid(-1, 0)} title="Décaler à gauche" style="border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;font-size:12px;">←</button>
+                      <button onClick=${v.resetVid} title="Recentrer et remettre le zoom à 1×" style="border-radius:8px;border:1px solid var(--line);background:${v.vidMoved ? 'rgba(141,29,44,0.10)' : '#FBF8F2'};color:${v.vidMoved ? '#8D1D2C' : '#8A847C'};cursor:pointer;font-size:11px;">⌖</button>
+                      <button onClick=${() => v.nudgeVid(1, 0)} title="Décaler à droite" style="border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;font-size:12px;">→</button>
                       <span></span>
-                      <button onClick=${() => v.nudgeVid(0, 1)} title="Descendre la vidéo" style="border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;font-size:12px;">↓</button>
+                      <button onClick=${() => v.nudgeVid(0, 1)} title="Descendre la vidéo" style="border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;font-size:12px;">↓</button>
                       <span></span>
                     </div>
-                    <label style="display:flex;flex-direction:column;gap:6px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">
+                    <label style="display:flex;flex-direction:column;gap:6px;font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">
                       <span>Zoom · ${v.vidZoom.toFixed(2)}×</span>
                       <span style="display:inline-flex;align-items:center;gap:7px;">
-                        <button onClick=${() => v.zoomVid(-1)} title="Réduire" style="width:28px;height:28px;border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;font-size:13px;">−</button>
+                        <button onClick=${() => v.zoomVid(-1)} title="Réduire" style="width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;font-size:13px;">−</button>
                         <input type="range" min="0.5" max="4" step="0.05" value=${v.vidZoom} onInput=${v.onVidZoom} style="width:150px;" />
-                        <button onClick=${() => v.zoomVid(1)} title="Agrandir" style="width:28px;height:28px;border-radius:7px;border:1px solid rgba(35,34,32,0.14);background:#FBF8F2;cursor:pointer;font-size:13px;">+</button>
+                        <button onClick=${() => v.zoomVid(1)} title="Agrandir" style="width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;font-size:13px;">+</button>
                       </span>
                     </label>
                   </div>
-                  ${v.vidMoved ? html`<p style="margin:9px 0 0;font-size:11.5px;color:#8A847C;">Décalage ${v.vidX > 0 ? '+' : ''}${v.vidX} px · ${v.vidY > 0 ? '+' : ''}${v.vidY} px — ⌖ pour recentrer.</p>` : ''}
+                  ${v.vidMoved ? html`<p style="margin:9px 0 0;font-size:11.5px;color:var(--muted);">Décalage ${v.vidX > 0 ? '+' : ''}${v.vidX} px · ${v.vidY > 0 ? '+' : ''}${v.vidY} px — ⌖ pour recentrer.</p>` : ''}
 
                   <!-- Couleur de fond : palette de la marque + teinte libre -->
                   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:13px;">
-                    <span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">
+                    <span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">
                       Couleur de fond${infoTip('Ce qu’on voit AUTOUR de la vidéo quand elle ne remplit pas l’écran (mode « adapter », ou zoom réduit). La liste reprend la palette de la marque ; « teinte libre » ouvre le nuancier pour un cas particulier.')}
                     </span>
-                    <span title=${v.bgName} style="width:26px;height:26px;flex:0 0 auto;border-radius:7px;border:1px solid rgba(35,34,32,0.22);background:${v.bgSwatch};"></span>
-                    <select value=${v.bgColor} onChange=${v.onBgPick} style="flex:1 1 190px;min-width:0;padding:8px 10px;font-size:12.5px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;cursor:pointer;">
+                    <span title=${v.bgName} style="width:26px;height:26px;flex:0 0 auto;border-radius:8px;border:1px solid rgba(35,34,32,0.22);background:${v.bgSwatch};"></span>
+                    <select value=${v.bgColor} onChange=${v.onBgPick} style="flex:1 1 190px;min-width:0;padding:8px 10px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
                       ${v.bgOptions.map((c) => html`<option value=${c.id ? c.hex : ''}>${c.name}</option>`)}
                       ${v.bgIsCustom ? html`<option value=${v.bgColor}>Teinte libre (${v.bgColor})</option>` : ''}
                     </select>
-                    <label title="Teinte libre" style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#8A847C;cursor:pointer;">
-                      <input type="color" value=${v.bgSwatch} onChange=${v.onBgCustom} style="width:32px;height:28px;padding:0;border:1px solid rgba(35,34,32,0.16);border-radius:7px;background:#fff;cursor:pointer;" />
+                    <label title="Teinte libre" style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);cursor:pointer;">
+                      <input type="color" value=${v.bgSwatch} onChange=${v.onBgCustom} style="width:32px;height:28px;padding:0;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;" />
                       libre
                     </label>
                   </div>
@@ -6340,25 +6466,25 @@ class App extends Component {
             `}
 
             ${v.isSurprise && html`
-              <p style="margin:0 0 12px;font-size:12px;color:#8A847C;line-height:1.5;">Le player pioche <strong>une vidéo au hasard</strong> dans le dossier serveur <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">public/surprise/</code> à chaque diffusion — pour surprendre le client. Ajoute des vidéos ici (≤ 18 Mo) ou dépose-les directement dans le dossier par SFTP (gros fichiers).</p>
+              <p style="margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.5;">Le player pioche <strong>une vidéo au hasard</strong> dans le dossier serveur <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">public/surprise/</code> à chaque diffusion — pour surprendre le client. Ajoute des vidéos ici (≤ 18 Mo) ou dépose-les directement dans le dossier par SFTP (gros fichiers).</p>
               <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">
-                <span style="font-size:12.5px;font-weight:600;color:#6E4A2B;">🎲 ${v.surpriseList.length} vidéo(s) dans le dossier</span>
-                <button onClick=${v.refreshSurprise} style="padding:6px 12px;font-size:12px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">⟳ Rafraîchir</button>
+                <span style="font-size:12.5px;font-weight:500;color:var(--muted-2);">🎲 ${v.surpriseList.length} vidéo(s) dans le dossier</span>
+                <button onClick=${v.refreshSurprise} style="padding:6px 12px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">⟳ Rafraîchir</button>
               </div>
               ${v.surpriseList.length ? html`
                 <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;">
                   ${v.surpriseList.map((vid) => html`
-                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 11px;border-radius:9px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.1);">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 11px;border-radius:8px;background:#fff;border:1px solid var(--line);">
                       <span style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🎬 ${vid.name}</span>
                       <span style="display:flex;align-items:center;gap:9px;flex:0 0 auto;">
-                        <span style="font-size:11px;color:#8A847C;">${Math.round((vid.size || 0) / 1024 / 1024 * 10) / 10} Mo</span>
-                        <button onClick=${() => v.delSurprise(vid.name)} title="Supprimer du dossier" style="width:22px;height:22px;border-radius:50%;background:rgba(141,29,44,0.1);border:none;cursor:pointer;font-size:11px;color:#8D1D2C;">✕</button>
+                        <span style="font-size:11px;color:var(--muted);">${Math.round((vid.size || 0) / 1024 / 1024 * 10) / 10} Mo</span>
+                        <button onClick=${() => v.delSurprise(vid.name)} title="Supprimer du dossier" style="width:22px;height:22px;border-radius:50%;background:rgba(141,29,44,0.1);border:none;cursor:pointer;font-size:11px;color:var(--accent);">✕</button>
                       </span>
                     </div>
                   `)}
                 </div>
-              ` : html`<p style="margin:0 0 12px;font-size:12px;color:#B8B2A8;">Dossier vide — ajoute au moins une vidéo.</p>`}
-              <label style="display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 12px;font-size:13px;font-weight:600;color:#6E4A2B;border:1px dashed rgba(110,74,43,0.45);border-radius:10px;background:rgba(110,74,43,0.05);cursor:${v.surpriseBusy ? 'wait' : 'pointer'};">
+              ` : html`<p style="margin:0 0 12px;font-size:12px;color:var(--faint);">Dossier vide — ajoute au moins une vidéo.</p>`}
+              <label style="display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 12px;font-size:13px;font-weight:500;color:var(--muted-2);border:1px dashed rgba(92,88,82,0.45);border-radius:10px;background:rgba(92,88,82,0.05);cursor:${v.surpriseBusy ? 'wait' : 'pointer'};">
                 <span style="font-size:16px;">⬆</span><span>${v.surpriseBusy ? 'Envoi…' : 'Ajouter des vidéos au dossier'}</span>
                 <input type="file" accept="video/mp4,video/webm,video/*" multiple onChange=${v.onSurpriseFiles} style="display:none;" />
               </label>
@@ -6371,15 +6497,15 @@ class App extends Component {
           <div style=${secCard}>
             ${secHead('anim', 'Visuel', v.animSummary)}
             ${secOpen('anim') && html`<div style=${secBody}>
-            <div style="display:inline-flex;background:#EFE9E0;border-radius:9px;padding:3px;margin-bottom:14px;">
+            <div style="display:inline-flex;background:var(--chip);border-radius:8px;padding:3px;margin-bottom:14px;">
               ${[['texte', '✦ Texte animé'], ['fichier', '🎞 Fichier d\'animation']].map(([id, lab]) => html`
-                <button onClick=${() => v.setAnimMode(id)} style="padding:7px 14px;font-size:12.5px;font-weight:600;border:none;border-radius:7px;cursor:pointer;${v.animMode === id ? 'background:#fff;color:#232220;box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'}">${lab}</button>
+                <button onClick=${() => v.setAnimMode(id)} style="padding:7px 14px;font-size:12.5px;font-weight:500;border:none;border-radius:8px;cursor:pointer;${v.animMode === id ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'}">${lab}</button>
               `)}
             </div>
-            <p style="margin:0 0 12px;font-size:12px;color:#8A847C;line-height:1.5;">
+            <p style="margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.5;">
               ${v.animMode === 'fichier'
                 ? html`Le fichier importé <strong>remplace</strong> le rendu généré : l'élément devient un conteneur. Formats acceptés : <strong>GIF</strong>, PNG, WebP, <strong>SVG animé</strong>, <strong>MP4 / WebM</strong> et <strong>Lottie (.json)</strong> — 18 Mo max.`
-                : html`Le titre et l'accroche restent générés (jetons <code style="background:#EFE9E0;padding:1px 5px;border-radius:4px;">{{magasin}}</code> compris). Tu peux poser un <strong>visuel de fond</strong> derrière — image ou vidéo — avec un voile qui garde le texte lisible.`}
+                : html`Le titre et l'accroche restent générés (jetons <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">{{magasin}}</code> compris). Tu peux poser un <strong>visuel de fond</strong> derrière — image ou vidéo — avec un voile qui garde le texte lisible.`}
             </p>
             ${(() => {
               const isFile = v.animMode === 'fichier';
@@ -6390,36 +6516,36 @@ class App extends Component {
               const clear = isFile ? v.clearAnimFile : v.clearAnimBg;
               const label = isFile ? 'fichier d\'animation' : 'visuel de fond';
               return html`
-                ${url && html`<div style="margin-bottom:10px;border-radius:12px;overflow:hidden;background:#EFE9E0;border:1px solid rgba(35,34,32,0.1);">
+                ${url && html`<div style="margin-bottom:10px;border-radius:12px;overflow:hidden;background:var(--chip);border:1px solid var(--line);">
                   ${kind === 'video'
                     ? html`<video src=${url} muted autoplay loop playsinline style="width:100%;display:block;max-height:200px;object-fit:contain;background:#000;"></video>`
                     : (kind === 'lottie'
-                      ? html`<div style="padding:16px 14px;font-size:12.5px;color:#6E4A2B;">🅛 Animation Lottie — aperçu dans l'écran ci-dessus (le lecteur se charge à la demande).</div>`
+                      ? html`<div style="padding:16px 14px;font-size:12.5px;color:var(--muted-2);">🅛 Animation Lottie — aperçu dans l'écran ci-dessus (le lecteur se charge à la demande).</div>`
                       : html`<img src=${url} alt="" style="width:100%;display:block;max-height:200px;object-fit:contain;" />`)}
                 </div>`}
                 <div style="display:flex;gap:10px;margin-bottom:10px;">
-                  <label style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 12px;font-size:13px;font-weight:600;color:#8D1D2C;border:1px dashed rgba(141,29,44,0.4);border-radius:10px;background:rgba(141,29,44,0.04);cursor:${v.animBusy ? 'wait' : 'pointer'};">
+                  <label style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 12px;font-size:13px;font-weight:500;color:var(--accent);border:1px dashed rgba(141,29,44,0.4);border-radius:10px;background:rgba(141,29,44,0.04);cursor:${v.animBusy ? 'wait' : 'pointer'};">
                     <span style="font-size:16px;">⬆</span><span>${v.animBusy ? 'Envoi…' : (url ? `Remplacer le ${label}` : `Importer un ${label}`)}</span>
                     <input type="file" accept=".gif,.png,.webp,.svg,.jpg,.jpeg,.avif,.mp4,.webm,.mov,.m4v,.json,image/*,video/*,application/json" onChange=${onPick} style="display:none;" />
                   </label>
-                  ${url && html`<button onClick=${clear} style="padding:11px 16px;font-size:13px;font-weight:600;color:#8D1D2C;background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:10px;cursor:pointer;">Retirer</button>`}
+                  ${url && html`<button onClick=${clear} style="padding:11px 16px;font-size:13px;font-weight:500;color:var(--accent);background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:10px;cursor:pointer;">Retirer</button>`}
                 </div>
-                <label style="display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;margin-bottom:12px;">
+                <label style="display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:12px;">
                   <span>…ou une adresse (fichier déjà sur le serveur)</span>
-                  <input key=${'au-' + (isFile ? 'f' : 'b') + v.selId} defaultValue=${url} onChange=${onUrl} placeholder="anim/mon-animation.gif · media/clip.mp4 · https://…" spellcheck="false" style="padding:9px 11px;font-size:12.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.14);border-radius:9px;background:#FBF8F2;" />
+                  <input key=${'au-' + (isFile ? 'f' : 'b') + v.selId} defaultValue=${url} onChange=${onUrl} placeholder="anim/mon-animation.gif · media/clip.mp4 · https://…" spellcheck="false" style="padding:9px 11px;font-size:12.5px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;" />
                 </label>`;
             })()}
             <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;">
-              <label style="display:flex;flex-direction:column;gap:6px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">
+              <label style="display:flex;flex-direction:column;gap:6px;font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">
                 <span style="display:inline-flex;align-items:center;gap:5px;">Cadrage${infoTip('« Remplir » couvre tout l’écran, quitte à rogner les bords. « Adapter » montre le fichier en entier, avec des bandes si le format diffère.')}</span>
-                <span style="display:inline-flex;background:#EFE9E0;border-radius:8px;padding:3px;">
+                <span style="display:inline-flex;background:var(--chip);border-radius:8px;padding:3px;">
                   ${[['cover', 'Remplir'], ['contain', 'Adapter']].map(([id, lab]) => html`
-                    <button onClick=${() => v.setAnimFit(id)} style="padding:6px 12px;font-size:12px;font-weight:600;border:none;border-radius:6px;cursor:pointer;${v.animFit === id ? 'background:#fff;color:#232220;box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent;color:#8A847C;'}">${lab}</button>
+                    <button onClick=${() => v.setAnimFit(id)} style="padding:6px 12px;font-size:12px;font-weight:500;border:none;border-radius:6px;cursor:pointer;${v.animFit === id ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'}">${lab}</button>
                   `)}
                 </span>
               </label>
               ${v.animMode !== 'fichier' && v.animBg && html`
-                <label style="display:flex;flex-direction:column;gap:6px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">
+                <label style="display:flex;flex-direction:column;gap:6px;font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">
                   <span style="display:inline-flex;align-items:center;gap:5px;">Voile sur le fond · ${v.animDim} %${infoTip('Assombrit le visuel de fond pour que le titre reste lisible. 0 % = fond brut.')}</span>
                   <input type="range" min="0" max="90" value=${v.animDim} onInput=${v.onAnimDim} style="width:200px;" />
                 </label>
@@ -6444,11 +6570,11 @@ class App extends Component {
           <div style=${secCard}>
             ${secHead('motion', 'Mouvement dynamique', v.motionSummary)}
             ${secOpen('motion') && html`<div style=${secBody}>
-            <p style="margin:0 0 16px;font-size:12px;color:#8A847C;line-height:1.5;">Réglable indépendamment par élément.</p>
+            <p style="margin:0 0 16px;font-size:12px;color:var(--muted);line-height:1.5;">Réglable indépendamment par élément.</p>
             <div style="display:flex;flex-direction:column;gap:14px;">
               ${v.motionGroups.map((g) => html`
                 <div>
-                  <label style="display:block;font-size:12.5px;font-weight:500;color:#8A847C;margin-bottom:6px;">${g.label}</label>
+                  <label style="display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:6px;">${g.label}</label>
                   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px;">
                     ${g.options.map((o) => html`<button onClick=${o.pick} style=${o.style}>${o.label}</button>`)}
                   </div>
@@ -6464,17 +6590,17 @@ class App extends Component {
             ${secHead('pos', 'Positions (avancé)', v.posSummary)}
             ${secOpen('pos') && html`<div style=${secBody}>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-              <p style="margin:0;font-size:12px;color:#8A847C;line-height:1.5;">Ajuste finement titre, liste et illustration par-dessus la mise en page.</p>
-              <button onClick=${v.resetPos} style="flex:0 0 auto;padding:7px 12px;font-size:12px;font-weight:500;color:#8A847C;background:#FBF8F2;border:1px solid rgba(35,34,32,0.14);border-radius:8px;cursor:pointer;">Réinitialiser</button>
+              <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">Ajuste finement titre, liste et illustration par-dessus la mise en page.</p>
+              <button onClick=${v.resetPos} style="flex:0 0 auto;padding:7px 12px;font-size:12px;font-weight:500;color:var(--muted);background:var(--paper);border:1px solid var(--line);border-radius:8px;cursor:pointer;">Réinitialiser</button>
             </div>
             <div style="display:flex;flex-direction:column;gap:12px;">
               ${v.posFields.map((pf) => html`
                 <div>
                   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-                    <label style="font-size:12.5px;font-weight:500;color:#8A847C;">${pf.label}</label>
-                    <span style="font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;">${pf.display}</span>
+                    <label style="font-size:12.5px;font-weight:500;color:var(--muted);">${pf.label}</label>
+                    <span style="font-size:12.5px;font-weight:500;font-variant-numeric:tabular-nums;">${pf.display}</span>
                   </div>
-                  <input type="range" min=${pf.min} max=${pf.max} step=${pf.step} value=${pf.value} onInput=${pf.onInput} style="width:100%;accent-color:#8D1D2C;" />
+                  <input type="range" min=${pf.min} max=${pf.max} step=${pf.step} value=${pf.value} onInput=${pf.onInput} style="width:100%;accent-color:var(--accent);" />
                 </div>
               `)}
             </div>
@@ -6487,23 +6613,23 @@ class App extends Component {
             ${secHead('items', 'Liste de prix — table produits', v.itemsSummary)}
             ${secOpen('items') && html`<div style=${secBody}>
             <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
-              <span style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#2E6E4E;background:rgba(46,110,78,0.1);border:1px solid rgba(46,110,78,0.35);border-radius:999px;padding:3px 10px;">⛓ ${v.linkedCatName}</span>
+              <span style="font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--green);background:rgba(63,122,82,0.1);border:1px solid rgba(63,122,82,0.35);border-radius:999px;padding:3px 10px;">⛓ ${v.linkedCatName}</span>
             </div>
-            <p style="margin:0 0 12px;font-size:12px;color:#8A847C;line-height:1.5;">Les lignes viennent de la table produits : noms, prix (et prix par magasin), actifs/inactifs suivent automatiquement. Modifie-les dans la table.</p>
+            <p style="margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.5;">Les lignes viennent de la table produits : noms, prix (et prix par magasin), actifs/inactifs suivent automatiquement. Modifie-les dans la table.</p>
             <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;">
               ${v.linkedRows.map((r) => html`
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:9px;background:${r.active ? '#FBF8F2' : 'rgba(35,34,32,0.04)'};opacity:${r.active ? 1 : 0.55};">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:8px;background:${r.active ? '#FBF8F2' : 'rgba(35,34,32,0.04)'};opacity:${r.active ? 1 : 0.55};">
                   <span style="font-size:13.5px;font-weight:500;">${r.name}${r.active ? '' : ' · masqué'}</span>
-                  <span style="font-size:13.5px;font-weight:600;color:#8D1D2C;">${r.price} €</span>
+                  <span style="font-size:13.5px;font-weight:500;color:var(--accent);">${r.price} €</span>
                 </div>
               `)}
             </div>
             <div style="display:flex;gap:10px;flex-wrap:wrap;">
-              <button onClick=${v.goProducts} style="flex:1 1 auto;padding:11px 14px;font-size:13px;font-weight:600;color:#fff;background:#8D1D2C;border:none;border-radius:10px;cursor:pointer;">▦ Ouvrir la table produits</button>
-              <select value=${v.curCatRef} onChange=${v.onLinkCat} style="flex:1 1 auto;padding:10px 12px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#FBF8F2;cursor:pointer;">
+              <button onClick=${v.goProducts} style="flex:1 1 auto;padding:11px 14px;font-size:13px;font-weight:500;color:#fff;background:var(--accent);border:none;border-radius:10px;cursor:pointer;">▦ Ouvrir la table produits</button>
+              <select value=${v.curCatRef} onChange=${v.onLinkCat} style="flex:1 1 auto;padding:10px 12px;font-size:13px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer;">
                 ${v.catOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
               </select>
-              <button onClick=${v.doUnlinkCat} title="Copier les lignes dans l'élément et reprendre la main" style="padding:11px 14px;font-size:13px;font-weight:600;color:#8D1D2C;background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:10px;cursor:pointer;">Délier</button>
+              <button onClick=${v.doUnlinkCat} title="Copier les lignes dans l'élément et reprendre la main" style="padding:11px 14px;font-size:13px;font-weight:500;color:var(--accent);background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:10px;cursor:pointer;">Délier</button>
             </div>
             </div>`}
           </div>
@@ -6515,11 +6641,11 @@ class App extends Component {
             ${secOpen('items') && html`<div style=${secBody}>
             <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
               <div style="display:flex;align-items:center;gap:8px;">
-                <select value="" onChange=${v.onLinkCat} title="Les lignes viendront de la table produits" style="padding:8px 10px;font-size:12px;border:1px solid rgba(35,34,32,0.16);border-radius:999px;background:#FBF8F2;cursor:pointer;max-width:230px;">
+                <select value="" onChange=${v.onLinkCat} title="Les lignes viendront de la table produits" style="padding:8px 10px;font-size:12px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;max-width:230px;">
                   <option value="">⛓ Lier à la table produits…</option>
                   ${v.catOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
                 </select>
-                <button onClick=${v.addItem} style="padding:8px 14px;font-size:12.5px;font-weight:500;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;cursor:pointer;">+ Ajouter</button>
+                <button onClick=${v.addItem} style="padding:8px 14px;font-size:12.5px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">+ Ajouter</button>
               </div>
             </div>
             <div style="display:flex;flex-direction:column;gap:12px;">
@@ -6527,10 +6653,10 @@ class App extends Component {
                 <div style=${it.wrapStyle}>
                   <div style="display:flex;align-items:center;gap:11px;">
                     ${it.thumb}
-                    <input value=${it.name} onInput=${it.onName} placeholder="Nom du produit" style="flex:1 1 auto;min-width:0;padding:10px 12px;font-size:15px;font-weight:500;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
+                    <input value=${it.name} onInput=${it.onName} placeholder="Nom du produit" style="flex:1 1 auto;min-width:0;padding:10px 12px;font-size:15px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;" />
                     <div style="position:relative;flex:0 0 104px;">
-                      <input value=${it.price} onInput=${it.onPrice} placeholder="0,00" inputmode="decimal" style="width:100%;box-sizing:border-box;padding:10px 24px 10px 12px;font-size:15px;font-weight:600;text-align:right;color:#8D1D2C;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
-                      <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:13px;color:#8A847C;pointer-events:none;">€</span>
+                      <input value=${it.price} onInput=${it.onPrice} placeholder="0,00" inputmode="decimal" style="width:100%;box-sizing:border-box;padding:10px 24px 10px 12px;font-size:15px;font-weight:500;text-align:right;color:var(--accent);border:1px solid var(--line);border-radius:8px;background:#fff;" />
+                      <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--muted);pointer-events:none;">€</span>
                     </div>
                     <div style="display:flex;align-items:center;gap:4px;flex:0 0 auto;">
                       <button onClick=${it.moveUp} title="Monter" style=${it.iconBtn}>↑</button>
@@ -6541,13 +6667,13 @@ class App extends Component {
                     </div>
                   </div>
                   <div style="display:flex;align-items:center;gap:8px;padding-left:57px;">
-                    <div style="display:inline-flex;background:#EFE9E0;border-radius:8px;padding:3px;">
+                    <div style="display:inline-flex;background:var(--chip);border-radius:8px;padding:3px;">
                       <button onClick=${it.setIllus} style=${it.illusTabStyle}>Illustration</button>
                       <button onClick=${it.setPhoto} style=${it.photoTabStyle}>Photo</button>
                     </div>
                     ${infoTip(PHOTO_TIP)}
                     ${it.isIllus && html`
-                      <select value=${it.img} onChange=${it.onImg} style="flex:1 1 auto;padding:9px 10px;font-size:13px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;cursor:pointer;">
+                      <select value=${it.img} onChange=${it.onImg} style="flex:1 1 auto;padding:9px 10px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
                         <option value="assets/cookies.png">Brookie / cookie</option>
                         <option value="assets/cake-slice.png">Part de gâteau</option>
                         <option value="assets/cake.png">Gâteau</option>
@@ -6559,7 +6685,7 @@ class App extends Component {
                       </select>
                     `}
                     ${it.isPhoto && html`
-                      <label style="flex:1 1 auto;display:flex;align-items:center;gap:8px;padding:9px 12px;font-size:12.5px;color:#8A847C;border:1px dashed rgba(35,34,32,0.28);border-radius:8px;background:#FBF8F2;cursor:pointer;">
+                      <label style="flex:1 1 auto;display:flex;align-items:center;gap:8px;padding:9px 12px;font-size:12.5px;color:var(--muted);border:1px dashed rgba(35,34,32,0.28);border-radius:8px;background:var(--paper);cursor:pointer;">
                         <span style="font-size:15px;">⬆</span><span>${it.photoLabel}</span>
                         <input type="file" accept="image/*" onChange=${it.onPhoto} style="display:none;" />
                       </label>
@@ -6575,7 +6701,7 @@ class App extends Component {
       </div>
     </section>
 
-    <section style="overflow:auto;padding:24px 26px 40px;background:#EDE7DE;">
+    <section style="overflow:auto;padding:24px 26px 40px;background:var(--paper);">
       ${previewBlock}
     </section>
 
@@ -6583,109 +6709,109 @@ class App extends Component {
   `}
 
   ${v.isComposerView && v.isTimelineTab && html`
-  <div style="flex:1 1 auto;overflow:auto;padding:20px 30px 44px;background:#EDE7DE;">
-    <div style="max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
+  <div class="app__body app__body--wide">
+    <div style="display:flex;flex-direction:column;gap:16px;">
 
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 18px;">
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:16px 18px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Bibliothèque de films — choisis une catégorie, puis un film à éditer</h3>
-          <span style="font-size:12px;color:#8A847C;">film courant : <strong style="color:#232220;">${this.activeFilm().name}</strong> · ${v.timelineTotal} · ${v.moduleCount} module(s)</span>
+          <h3 style="margin:0;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Bibliothèque de films — choisis une catégorie, puis un film à éditer</h3>
+          <span style="font-size:12px;color:var(--muted);">film courant : <strong style="color:var(--ink);">${this.activeFilm().name}</strong> · ${v.timelineTotal} · ${v.moduleCount} module(s)</span>
         </div>
         ${filmSelector}
         ${filmModeToggle}
       </div>
 
       ${filmMode === 'continu' ? contPanel : html`
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 18px;">
-        <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">Bibliothèque — choisis d'abord l'orientation de l'écran, puis une catégorie, et glisse un élément sur la ligne du temps (ou clique ＋)</h3>
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:16px 18px;">
+        <h3 style="margin:0 0 12px;font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Bibliothèque — choisis d'abord l'orientation de l'écran, puis une catégorie, et glisse un élément sur la ligne du temps (ou clique ＋)</h3>
         <!-- 1 · Orientation de l'écran : filtre principal du montage -->
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid rgba(35,34,32,0.08);">
-          <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8D1D2C;">1 · Orientation de l'écran</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line);">
+          <span style="font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">1 · Orientation de l'écran</span>
           ${v.libOrientChips.map((o) => html`
             <button onClick=${o.pick} style=${o.style}><span>${o.icon}</span>${o.label}<span style="font-weight:400;opacity:0.75;">${o.count}</span></button>
           `)}
         </div>
         <!-- 2 · Catégorie de bibliothèque -->
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
-          <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">2 · Catégorie</span>
+          <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">2 · Catégorie</span>
           ${v.libTagChips.map((t) => html`
             <button onClick=${t.pick} style=${t.style}><span style=${t.dotStyle}></span>${t.label}<span style="font-weight:400;opacity:0.75;">${t.count}</span></button>
           `)}
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           ${v.libCards.map((c) => html`
-            <div draggable="true" onDragStart=${c.onDragStart} style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:#FBF8F2;border:1px solid ${c.tagColor}44;border-left:4px solid ${c.tagColor};cursor:grab;">
+            <div draggable="true" onDragStart=${c.onDragStart} style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:var(--paper);border:1px solid ${c.tagColor}44;border-left:4px solid ${c.tagColor};cursor:grab;">
               <span style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;flex:0 0 auto;font-size:11px;background:${c.tagColor}1F;color:${c.tagColor};">${c.typeIcon}</span>
               <div style="min-width:0;">
                 <div style="display:flex;align-items:center;gap:6px;">
-                  <span style="font-size:12.5px;font-weight:600;white-space:nowrap;">${c.name}</span>
-                  <span style="font-size:9px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:${c.tagColor};">${c.tagLabel}</span>
+                  <span style="font-size:12.5px;font-weight:500;white-space:nowrap;">${c.name}</span>
+                  <span style="font-size:9px;font-weight:500;letter-spacing:0.05em;text-transform:uppercase;color:${c.tagColor};">${c.tagLabel}</span>
                 </div>
-                <div style="font-size:10px;color:#8A847C;">${c.meta}${c.inFilm ? '' : ' · hors film'}</div>
+                <div style="font-size:10px;color:var(--muted);">${c.meta}${c.inFilm ? '' : ' · hors film'}</div>
               </div>
-              <button onClick=${c.add} title="Ajouter à la fin du film" style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:#8D1D2C;color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:700;flex:0 0 auto;">＋</button>
-              <button onClick=${c.edit} title="Éditer dans la bibliothèque" style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:rgba(255,255,255,0.8);border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:11px;flex:0 0 auto;">✎</button>
+              <button onClick=${c.add} title="Ajouter à la fin du film" style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:500;flex:0 0 auto;">＋</button>
+              <button onClick=${c.edit} title="Éditer dans la bibliothèque" style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:rgba(255,255,255,0.8);border:1px solid var(--line);cursor:pointer;font-size:11px;flex:0 0 auto;">✎</button>
             </div>
           `)}
-          ${v.libEmptyMsg && html`<div style="font-size:12px;color:#8A847C;padding:8px 4px;">${v.libEmptyMsg}</div>`}
+          ${v.libEmptyMsg && html`<div style="font-size:12px;color:var(--muted);padding:8px 4px;">${v.libEmptyMsg}</div>`}
         </div>
       </div>
 
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 18px;">
-        <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8A847C;">Ligne du temps · « ${this.activeFilm().name} »</h3>
-        <div onDragOver=${v.timelineEndDrop.onDragOver} onDrop=${v.timelineEndDrop.onDrop} style="display:flex;align-items:stretch;gap:7px;overflow-x:auto;padding:12px;background:#EFE9E0;border-radius:12px;min-height:96px;">
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:16px 18px;">
+        <h3 style="margin:0 0 12px;font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Ligne du temps · « ${this.activeFilm().name} »</h3>
+        <div onDragOver=${v.timelineEndDrop.onDragOver} onDrop=${v.timelineEndDrop.onDrop} style="display:flex;align-items:stretch;gap:7px;overflow-x:auto;padding:12px;background:var(--chip);border-radius:12px;min-height:96px;">
           ${v.timelineBlocks.map((b) => html`
             <div class="tl-block pl-item" draggable="true" onClick=${b.jump} onDragStart=${b.onDragStart} onDragOver=${b.onDragOver} onDragLeave=${b.onDragLeave} onDrop=${b.onDrop} onDragEnd=${b.onDragEnd} style="${b.blockStyle}width:${b.width}px;" title="Clique pour caler l'aperçu sur ce bloc">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
-                <span style="font-size:10px;font-weight:700;opacity:0.7;">${b.order}</span>
+                <span style="font-size:10px;font-weight:500;opacity:0.7;">${b.order}</span>
                 <button onClick=${b.remove} title="Retirer du film (reste en bibliothèque)" style="display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:5px;background:rgba(0,0,0,0.08);border:none;cursor:pointer;font-size:10px;color:inherit;">✕</button>
               </div>
-              <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${b.typeIcon} ${b.name}</div>
+              <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${b.typeIcon} ${b.name}</div>
               <div style="font-size:10px;opacity:0.7;font-variant-numeric:tabular-nums;">${b.durLabel}</div>
             </div>
           `)}
           ${v.playlistEmpty && html`
-            <div style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:#B8B2A8;border:1px dashed rgba(35,34,32,0.2);border-radius:10px;padding:18px;">Glisse ici les éléments de la bibliothèque pour composer le film</div>
+            <div style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:var(--faint);border:1px dashed rgba(35,34,32,0.2);border-radius:10px;padding:18px;">Glisse ici les éléments de la bibliothèque pour composer le film</div>
           `}
-          <div style="flex:1 1 64px;min-width:64px;border:1px dashed rgba(35,34,32,0.18);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#B8B2A8;font-size:18px;" title="Dépose ici pour ajouter à la fin">＋</div>
+          <div style="flex:1 1 64px;min-width:64px;border:1px dashed var(--line);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:18px;" title="Dépose ici pour ajouter à la fin">＋</div>
         </div>
-        <p style="margin:10px 0 0;font-size:11.5px;color:#8A847C;">Clique un bloc pour caler l'aperçu dessus · glisse pour réordonner · ✕ retire (l'élément reste en bibliothèque) · la largeur d'un bloc reflète sa durée.</p>
+        <p style="margin:10px 0 0;font-size:11.5px;color:var(--muted);">Clique un bloc pour caler l'aperçu dessus · glisse pour réordonner · ✕ retire (l'élément reste en bibliothèque) · la largeur d'un bloc reflète sa durée.</p>
       </div>`}
 
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 18px;">
-        <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Rangement du film — catégorie & tags</h3>
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:16px 18px;">
+        <h3 style="margin:0 0 12px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Rangement du film — catégorie & tags</h3>
         <div style="display:flex;gap:28px;flex-wrap:wrap;">
           <div>
-            <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:7px;">Catégorie</div>
+            <div style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;">Catégorie</div>
             <div style="display:flex;flex-wrap:wrap;gap:6px;">
               ${v.filmCatVals.map((c) => html`<button onClick=${c.pick} style=${c.style}><span style=${c.dotStyle}></span>${c.label}</button>`)}
             </div>
           </div>
           <div style="flex:1 1 260px;min-width:240px;">
-            <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:7px;">Tags</div>
+            <div style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;">Tags</div>
             <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
               ${v.filmTagVals.map((t) => html`
-                <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 6px 5px 11px;font-size:12px;font-weight:600;border-radius:999px;background:#EFE9E0;border:1px solid rgba(35,34,32,0.12);">#${t.label}
-                  <button onClick=${t.remove} title="Retirer le tag" style="display:flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;background:rgba(141,29,44,0.1);border:none;cursor:pointer;font-size:10px;color:#8D1D2C;">✕</button>
+                <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 6px 5px 11px;font-size:12px;font-weight:500;border-radius:999px;background:var(--chip);border:1px solid var(--line);">#${t.label}
+                  <button onClick=${t.remove} title="Retirer le tag" style="display:flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;background:rgba(141,29,44,0.1);border:none;cursor:pointer;font-size:10px;color:var(--accent);">✕</button>
                 </span>`)}
-              <input value=${v.filmTagInput} onInput=${v.onFilmTagInput} onKeyDown=${v.onFilmTagKey} placeholder="+ tag (Entrée)" style="flex:0 1 140px;min-width:110px;padding:6px 10px;font-size:12px;border:1px solid rgba(35,34,32,0.16);border-radius:999px;background:#FBF8F2;" />
+              <input value=${v.filmTagInput} onInput=${v.onFilmTagInput} onKeyDown=${v.onFilmTagKey} placeholder="+ tag (Entrée)" style="flex:0 1 140px;min-width:110px;padding:6px 10px;font-size:12px;border:1px solid var(--line);border-radius:999px;background:#fff;" />
             </div>
           </div>
         </div>
       </div>
 
-      <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:16px 18px;">
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:16px 18px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:12px;flex-wrap:wrap;">
           <span style="display:inline-flex;align-items:center;gap:6px;">
-            <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Programmation & magasins du film</h3>
+            <h3 style="margin:0;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Programmation & magasins du film</h3>
             ${infoTip('Priorité : si un magasin a un PLANNING (onglet Planning) qui couvre l’heure courante, c’est le planning qui décide quel film passe sur cet écran. Sinon, ces réglages-ci s’appliquent (jours + fenêtre horaire + magasins ciblés à la publication). En clair : le planning gagne quand il existe, le film sert de réglage par défaut.')}
           </span>
-          <span style="font-size:12px;color:#8A847C;">${v.filmSchedSummary}</span>
+          <span style="font-size:12px;color:var(--muted);">${v.filmSchedSummary}</span>
         </div>
         <div style="display:flex;gap:28px;flex-wrap:wrap;">
           <div>
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;">
-              <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;">Jours de diffusion</span>
+              <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Jours de diffusion</span>
               ${infoTip('Quand le film PASSE réellement à l’écran. Hors de ces jours, l’écran affiche l’attente. À ne pas confondre avec les « Jours de planning » (dans l’onglet Planning), qui ne servent qu’à filtrer les films proposés lors du remplissage du planning hebdo.')}
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:6px;">
@@ -6693,28 +6819,28 @@ class App extends Component {
             </div>
           </div>
           <div>
-            <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:7px;">Fenêtre horaire</div>
+            <div style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;">Fenêtre horaire</div>
             <div style="display:flex;flex-wrap:wrap;gap:6px;">
               ${v.filmSlotVals.map((s) => html`<button onClick=${s.pick} style=${s.style}>${s.label}</button>`)}
             </div>
           </div>
           <div>
-            <div style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8A847C;margin-bottom:7px;">Magasins</div>
+            <div style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;">Magasins</div>
             <div style="display:flex;flex-wrap:wrap;gap:6px;">
               <button onClick=${v.filmAllStores.pick} style=${v.filmAllStores.style}>Tous</button>
               ${v.filmStoreVals.map((s) => html`<button onClick=${s.toggle} style=${s.style}>${s.label}</button>`)}
             </div>
           </div>
         </div>
-        <p style="margin:12px 0 0;font-size:11.5px;color:#8A847C;">Hors créneau, les écrans affichent l'attente (le lien de partage montre toujours le film). « Tous » = le film part sur tout le réseau à la publication.</p>
+        <p style="margin:12px 0 0;font-size:11.5px;color:var(--muted);">Hors créneau, les écrans affichent l'attente (le lien de partage montre toujours le film). « Tous » = le film part sur tout le réseau à la publication.</p>
 
         <!-- Contenu du film filtré par moment de vente (matin / midi / après-midi) -->
-        <div style="margin-top:14px;padding-top:13px;border-top:1px solid rgba(35,34,32,0.10);">
+        <div style="margin-top:14px;padding-top:13px;border-top:1px solid var(--line);">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
             ${infoTip('Aperçu du contenu réellement diffusé à chaque moment de la journée. Un produit n’est retenu que s’il est vendu à ce créneau (table « Périodes de vente », onglet Périodes) ; sans aucune règle il passe à tous les moments. Un élément dont tous les produits sont hors créneau est signalé — il serait sauté à l’écran.')}
-            <span style="font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#8D1D2C;">Contenu par moment · ${v.libOrient === 'portrait' ? '9:16 portrait' : '16:9 paysage'}</span>
+            <span style="font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Contenu par moment · ${v.libOrient === 'portrait' ? '9:16 portrait' : '16:9 paysage'}</span>
             ${v.filmMomentTabs.map((mo) => html`
-              <button onClick=${mo.pick} style="padding:6px 13px;font-size:12px;font-weight:600;border-radius:999px;cursor:pointer;${mo.active ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.14);'}">${mo.label}${mo.isNow ? ' ●' : ''}</button>
+              <button onClick=${mo.pick} style="padding:6px 13px;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;${mo.active ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:var(--paper);color:var(--ink);border:1px solid var(--line);'}">${mo.label}${mo.isNow ? ' ●' : ''}</button>
             `)}
           </div>
           ${v.filmMomentRows.length ? html`
@@ -6722,13 +6848,13 @@ class App extends Component {
               ${v.filmMomentRows.map((r) => html`
                 <div style="display:flex;align-items:center;gap:9px;padding:7px 11px;border-radius:8px;background:${r.empty ? 'rgba(141,29,44,0.06)' : '#FBF8F2'};border:1px solid ${r.empty ? 'rgba(141,29,44,0.25)' : 'rgba(35,34,32,0.08)'};">
                   <span style="flex:0 0 auto;font-size:13px;">${r.icon}</span>
-                  <span style="flex:0 0 auto;font-size:12.5px;font-weight:600;min-width:120px;">${r.name}</span>
+                  <span style="flex:0 0 auto;font-size:12.5px;font-weight:500;min-width:120px;">${r.name}</span>
                   <span style="flex:0 0 auto;font-size:11.5px;color:${r.empty ? '#8D1D2C' : '#8A847C'};">${r.empty ? '⚠ rien à ce moment — élément sauté' : r.detail}</span>
-                  ${r.names && html`<span style="flex:1 1 auto;min-width:0;font-size:11px;color:#8A847C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.names}</span>`}
+                  ${r.names && html`<span style="flex:1 1 auto;min-width:0;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.names}</span>`}
                 </div>
               `)}
             </div>
-          ` : html`<p style="margin:0;font-size:12px;color:#8A847C;">Ce film n'a pas encore de contenu.</p>`}
+          ` : html`<p style="margin:0;font-size:12px;color:var(--muted);">Ce film n'a pas encore de contenu.</p>`}
         </div>
       </div>
 
@@ -6736,17 +6862,17 @@ class App extends Component {
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;align-items:start;">
         ${diffusionBlock}
-        <div style="background:#FFFFFF;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:20px 22px;">
-          <h3 style="margin:0 0 12px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">3 · Diffuser</h3>
-          <p style="margin:0 0 14px;font-size:12px;color:#8A847C;line-height:1.55;">Un seul geste : <strong>Diffuser</strong>. La <strong>programmation</strong> et les <strong>magasins</strong> se règlent ci-dessus, sur le film ; le lien de visionnage s'affiche juste après.</p>
-          <button onClick=${v.openPublish} style="width:100%;box-sizing:border-box;padding:14px 18px;font-size:15px;font-weight:700;border-radius:999px;border:none;cursor:pointer;background:#8D1D2C;color:#fff;">🚀 Diffuser sur le réseau ↗</button>
-          <div style="margin-top:9px;display:flex;align-items:center;gap:8px;font-size:11.5px;color:#8A847C;">
+        <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:20px 22px;">
+          <h3 style="margin:0 0 12px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">3 · Diffuser</h3>
+          <p style="margin:0 0 14px;font-size:12px;color:var(--muted);line-height:1.55;">Un seul geste : <strong>Diffuser</strong>. La <strong>programmation</strong> et les <strong>magasins</strong> se règlent ci-dessus, sur le film ; le lien de visionnage s'affiche juste après.</p>
+          <button onClick=${v.openPublish} style="width:100%;box-sizing:border-box;padding:14px 18px;font-size:15px;font-weight:500;border-radius:8px;border:none;cursor:pointer;background:var(--accent);color:#fff;">🚀 Diffuser sur le réseau ↗</button>
+          <div style="margin-top:9px;display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--muted);">
             <span>${v.saved ? '✓ Enregistré automatiquement' : (v.dirty ? '✎ Modifications en cours…' : 'Enregistré automatiquement')}</span>
-            <button onClick=${v.save} style="padding:4px 10px;font-size:11px;font-weight:600;border-radius:999px;border:1px solid rgba(35,34,32,0.16);background:#fff;color:#5B564E;cursor:pointer;">Enregistrer maintenant</button>
+            <button onClick=${v.save} style="padding:4px 10px;font-size:11px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--muted-2);cursor:pointer;">Enregistrer maintenant</button>
           </div>
-          <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(35,34,32,0.08);font-size:11.5px;color:#8A847C;line-height:1.5;">Lien direct de ce film (55″) :
-            <button onClick=${() => this.copyLink(this.filmUrl({ film: st.activePl, w: 3840, h: 2160 }))} style="margin-left:6px;padding:8px 13px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Copier le lien</button>
-            <a href=${this.filmUrl({ film: st.activePl, w: 3840, h: 2160 })} target="_blank" style="margin-left:6px;font-size:12px;font-weight:600;">↗ Ouvrir</a>
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);line-height:1.5;">Lien direct de ce film (55″) :
+            <button onClick=${() => this.copyLink(this.filmUrl({ film: st.activePl, w: 3840, h: 2160 }))} style="margin-left:6px;padding:8px 13px;font-size:12px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;">⎘ Copier le lien</button>
+            <a href=${this.filmUrl({ film: st.activePl, w: 3840, h: 2160 })} target="_blank" style="margin-left:6px;font-size:12px;font-weight:500;">↗ Ouvrir</a>
           </div>
         </div>
       </div>
@@ -6757,18 +6883,18 @@ class App extends Component {
 
   ${v.onbOpen && html`
     <div onClick=${v.closeOnb} style="position:fixed;inset:0;background:rgba(20,15,12,0.5);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:50;">
-      <div onClick=${(e) => e.stopPropagation()} style="width:900px;max-width:95vw;max-height:90vh;overflow:auto;background:#FBF8F2;border-radius:20px;padding:24px 26px;box-shadow:0 30px 80px rgba(0,0,0,0.35);">
+      <div onClick=${(e) => e.stopPropagation()} style="width:900px;max-width:95vw;max-height:90vh;overflow:auto;background:var(--paper);border-radius:12px;padding:24px 26px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-          <h2 style="margin:0;font-size:19px;font-weight:600;">🎓 Mise en route</h2>
-          <button onClick=${v.closeOnb} style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:9px;background:#EFE9E0;border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:14px;">✕</button>
+          <h2 style="margin:0;font-size:19px;font-weight:500;">🎓 Mise en route</h2>
+          <button onClick=${v.closeOnb} style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:var(--chip);border:1px solid var(--line);cursor:pointer;font-size:14px;">✕</button>
         </div>
-        <p style="margin:0 0 16px;font-size:12.5px;color:#8A847C;">Configure chaque magasin pas à pas : écran, langue, test, lien. ${v.onbDoneCount}/${v.onbCount} magasin(s) prêt(s).</p>
+        <p style="margin:0 0 16px;font-size:12.5px;color:var(--muted);">Configure chaque magasin pas à pas : écran, langue, test, lien. ${v.onbDoneCount}/${v.onbCount} magasin(s) prêt(s).</p>
         ${v.onbStores.length ? html`
         <div style="display:grid;grid-template-columns:220px 1fr;gap:18px;align-items:start;">
           <div style="display:flex;flex-direction:column;gap:7px;">
             ${v.onbStores.map((s) => html`
-              <button onClick=${s.pick} style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 13px;border-radius:11px;cursor:pointer;text-align:left;background:${s.on ? '#fff' : 'rgba(255,255,255,0.5)'};border:1px solid ${s.on ? '#8D1D2C' : 'rgba(35,34,32,0.1)'};">
-                <span style="font-size:13.5px;font-weight:600;">${s.name}</span>
+              <button onClick=${s.pick} style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 13px;border-radius:10px;cursor:pointer;text-align:left;background:${s.on ? '#fff' : 'rgba(255,255,255,0.5)'};border:1px solid ${s.on ? '#8D1D2C' : 'rgba(35,34,32,0.1)'};">
+                <span style="font-size:13.5px;font-weight:500;">${s.name}</span>
                 <span style="font-size:14px;color:${s.done ? '#2E7D32' : '#C9C3B8'};">${s.done ? '✓' : '○'}</span>
               </button>
             `)}
@@ -6776,92 +6902,92 @@ class App extends Component {
           ${v.onbSel && html`
           <div style="display:flex;flex-direction:column;gap:14px;">
 
-            <div style="background:#fff;border:1px solid rgba(35,34,32,0.08);border-radius:14px;padding:16px 18px;">
-              <h3 style="margin:0 0 10px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">1 · Écran — ${v.onbSel.name}</h3>
+            <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;">
+              <h3 style="margin:0 0 10px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">1 · Écran — ${v.onbSel.name}</h3>
               <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;">
-                <span style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8A847C;">Combo</span>
-                <select value=${v.onbSel.fmt.screens} onChange=${v.onbSel.setScreens} style="padding:7px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;cursor:pointer;">
+                <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Combo</span>
+                <select value=${v.onbSel.fmt.screens} onChange=${v.onbSel.setScreens} style="padding:7px 9px;font-size:12.5px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
                   ${[1, 2, 3, 4, 5, 6].map((n) => html`<option value=${n}>${n}</option>`)}
                 </select>
-                <span style="font-size:12px;color:#8A847C;">×</span>
-                <select value=${v.onbSel.fmt.size} onChange=${v.onbSel.setSize} style="padding:7px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;cursor:pointer;">
+                <span style="font-size:12px;color:var(--muted);">×</span>
+                <select value=${v.onbSel.fmt.size} onChange=${v.onbSel.setSize} style="padding:7px 9px;font-size:12.5px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
                   ${[32, 43, 49, 55, 65, 75, 85].map((n) => html`<option value=${n}>${n}″</option>`)}
                 </select>
-                <select value=${v.onbSel.fmt.orient} onChange=${v.onbSel.setOrient} style="padding:7px 9px;font-size:12.5px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#FBF8F2;cursor:pointer;">
+                <select value=${v.onbSel.fmt.orient} onChange=${v.onbSel.setOrient} style="padding:7px 9px;font-size:12.5px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
                   <option value="paysage">paysage</option>
                   <option value="portrait">portrait</option>
                 </select>
-                <span style="font-size:12.5px;font-weight:700;color:#8D1D2C;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.2);border-radius:999px;padding:5px 12px;">= ${v.onbSel.fmt.px}</span>
+                <span style="font-size:12.5px;font-weight:500;color:var(--accent);background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.2);border-radius:999px;padding:5px 12px;">= ${v.onbSel.fmt.px}</span>
               </div>
-              <div style="margin-top:11px;padding:11px 13px;border-radius:10px;background:${v.onbSel.is4k ? 'rgba(184,134,11,0.08)' : 'rgba(46,110,78,0.07)'};border:1px solid ${v.onbSel.is4k ? 'rgba(184,134,11,0.3)' : 'rgba(46,110,78,0.25)'};">
-                <div style="font-size:12px;font-weight:600;color:${v.onbSel.is4k ? '#8a6508' : '#2E6E4E'};margin-bottom:4px;">📶 Débit conseillé — ${v.onbSel.bwReco}</div>
-                <div style="font-size:11.5px;color:#8A847C;line-height:1.5;">Repère : 4K H.264 ≈ 25–50 Mbps · 4K H.265/HEVC ≈ 15–25 Mbps · 1080p ≈ 5–10 Mbps. Ça compte surtout pour les <strong>films avec vidéo</strong> (élément Film) en lecture continue ; les menus (images) sont mis en cache sur l'écran et ne consomment qu'au premier chargement.</div>
+              <div style="margin-top:11px;padding:11px 13px;border-radius:10px;background:${v.onbSel.is4k ? 'rgba(184,134,11,0.08)' : 'rgba(63,122,82,0.07)'};border:1px solid ${v.onbSel.is4k ? 'rgba(184,134,11,0.3)' : 'rgba(63,122,82,0.25)'};">
+                <div style="font-size:12px;font-weight:500;color:${v.onbSel.is4k ? '#8a6508' : '#2E6E4E'};margin-bottom:4px;">📶 Débit conseillé — ${v.onbSel.bwReco}</div>
+                <div style="font-size:11.5px;color:var(--muted);line-height:1.5;">Repère : 4K H.264 ≈ 25–50 Mbps · 4K H.265/HEVC ≈ 15–25 Mbps · 1080p ≈ 5–10 Mbps. Ça compte surtout pour les <strong>films avec vidéo</strong> (élément Film) en lecture continue ; les menus (images) sont mis en cache sur l'écran et ne consomment qu'au premier chargement.</div>
               </div>
             </div>
 
-            <div style="background:#fff;border:1px solid rgba(35,34,32,0.08);border-radius:14px;padding:16px 18px;">
-              <h3 style="margin:0 0 10px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">2 · Langue d'affichage</h3>
-              <select value=${v.onbSel.lang} onChange=${v.onbSel.setLang} style="padding:8px 12px;font-size:13px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;cursor:pointer;text-transform:uppercase;">
+            <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;">
+              <h3 style="margin:0 0 10px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">2 · Langue d'affichage</h3>
+              <select value=${v.onbSel.lang} onChange=${v.onbSel.setLang} style="padding:8px 12px;font-size:13px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;text-transform:uppercase;">
                 ${v.onbSel.langOptions.map((l) => html`<option value=${l.id}>${l.id} — ${l.label}</option>`)}
               </select>
-              <span style="font-size:11.5px;color:#8A847C;margin-left:10px;">Les noms de produits s'affichent dans cette langue (alias de la table produits).</span>
+              <span style="font-size:11.5px;color:var(--muted);margin-left:10px;">Les noms de produits s'affichent dans cette langue (alias de la table produits).</span>
             </div>
 
-            <div style="background:#fff;border:1px solid rgba(35,34,32,0.08);border-radius:14px;padding:16px 18px;">
+            <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
-                <h3 style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">3 · Test de l'écran</h3>
-                <button onClick=${v.onbSel.runTest} style="padding:8px 15px;font-size:12.5px;font-weight:600;border-radius:999px;border:1px solid #2E6E4E;background:rgba(46,110,78,0.08);color:#2E6E4E;cursor:pointer;">${v.onbSel.test && v.onbSel.test.state === 'testing' ? 'Test…' : '▶ Tester'}</button>
+                <h3 style="margin:0;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">3 · Test de l'écran</h3>
+                <button onClick=${v.onbSel.runTest} style="padding:8px 15px;font-size:12.5px;font-weight:500;border-radius:8px;border:1px solid var(--green);background:rgba(63,122,82,0.08);color:var(--green);cursor:pointer;">${v.onbSel.test && v.onbSel.test.state === 'testing' ? 'Test…' : '▶ Tester'}</button>
               </div>
               ${v.onbSel.test && v.onbSel.test.state === 'ok' && html`
-                <div style="font-size:12.5px;color:#2E7D32;line-height:1.6;">✓ Lien OK — sert « <strong>${v.onbSel.test.name}</strong> »${v.onbSel.test.plan ? ` (planning : ${v.onbSel.test.plan})` : ''} · ${v.onbSel.test.modules} élément(s) · rendu ${v.onbSel.test.px}${v.onbSel.test.draft ? ' · brouillon (pas encore publié)' : ''}</div>
+                <div style="font-size:12.5px;color:var(--green);line-height:1.6;">✓ Lien OK — sert « <strong>${v.onbSel.test.name}</strong> »${v.onbSel.test.plan ? ` (planning : ${v.onbSel.test.plan})` : ''} · ${v.onbSel.test.modules} élément(s) · rendu ${v.onbSel.test.px}${v.onbSel.test.draft ? ' · brouillon (pas encore publié)' : ''}</div>
               `}
-              ${v.onbSel.test && v.onbSel.test.state === 'err' && html`<div style="font-size:12.5px;color:#8D1D2C;">✗ ${v.onbSel.test.error}</div>`}
-              ${!v.onbSel.test && html`<div style="font-size:12px;color:#8A847C;">Clique « Tester » pour vérifier que le lien du magasin répond et voir ce qu'il diffuse.</div>`}
+              ${v.onbSel.test && v.onbSel.test.state === 'err' && html`<div style="font-size:12.5px;color:var(--accent);">✗ ${v.onbSel.test.error}</div>`}
+              ${!v.onbSel.test && html`<div style="font-size:12px;color:var(--muted);">Clique « Tester » pour vérifier que le lien du magasin répond et voir ce qu'il diffuse.</div>`}
             </div>
 
-            <div style="background:#fff;border:1px solid rgba(35,34,32,0.08);border-radius:14px;padding:16px 18px;">
-              <h3 style="margin:0 0 10px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">4 · Lien à mettre sur l'écran</h3>
+            <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;">
+              <h3 style="margin:0 0 10px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">4 · Lien à mettre sur l'écran</h3>
               <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
                 <div style="flex:0 0 auto;text-align:center;">
-                  <img src=${qrDataUri(v.onbSel.link)} alt="QR du lien écran" style="width:140px;height:140px;display:block;border:1px solid rgba(35,34,32,0.1);border-radius:10px;background:#fff;" />
-                  <div style="font-size:10.5px;color:#8A847C;margin-top:5px;">📱 Scanne pour ouvrir sur l'écran</div>
+                  <img src=${qrDataUri(v.onbSel.link)} alt="QR du lien écran" style="width:140px;height:140px;display:block;border:1px solid var(--line);border-radius:10px;background:#fff;" />
+                  <div style="font-size:10.5px;color:var(--muted);margin-top:5px;">📱 Scanne pour ouvrir sur l'écran</div>
                 </div>
                 <div style="flex:1 1 260px;min-width:220px;">
                   <div style="display:flex;align-items:center;gap:8px;">
-                    <input readonly value=${v.onbSel.link} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:8px 11px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#FBF8F2;" />
-                    <button onClick=${v.onbSel.copyLink} style="flex:0 0 auto;padding:8px 14px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">⎘ Copier</button>
-                    <a href=${v.onbSel.link} target="_blank" style="flex:0 0 auto;font-size:12px;font-weight:600;color:#8D1D2C;">↗</a>
+                    <input readonly value=${v.onbSel.link} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:8px 11px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;" />
+                    <button onClick=${v.onbSel.copyLink} style="flex:0 0 auto;padding:8px 14px;font-size:12px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;">⎘ Copier</button>
+                    <a href=${v.onbSel.link} target="_blank" style="flex:0 0 auto;font-size:12px;font-weight:500;color:var(--accent);">↗</a>
                   </div>
-                  <p style="margin:8px 0 0;font-size:11.5px;color:#8A847C;">Ouvre ce lien en plein écran sur l'écran du magasin (mode kiosque), ou scanne le QR depuis la box/TV. Il bascule tout seul selon l'heure si tu as fait un Planning.</p>
+                  <p style="margin:8px 0 0;font-size:11.5px;color:var(--muted);">Ouvre ce lien en plein écran sur l'écran du magasin (mode kiosque), ou scanne le QR depuis la box/TV. Il bascule tout seul selon l'heure si tu as fait un Planning.</p>
                 </div>
               </div>
             </div>
 
-            <button onClick=${v.onbSel.toggleDone} style="align-self:flex-start;padding:10px 20px;font-size:13px;font-weight:600;border-radius:999px;cursor:pointer;${v.onbSel.done ? 'background:rgba(46,125,50,0.12);color:#2E7D32;border:1px solid rgba(46,125,50,0.4);' : 'background:#232220;color:#fff;border:none;'}">${v.onbSel.done ? '✓ Magasin configuré — annuler' : 'Marquer ce magasin comme configuré'}</button>
+            <button onClick=${v.onbSel.toggleDone} style="align-self:flex-start;padding:10px 20px;font-size:13px;font-weight:500;border-radius:8px;cursor:pointer;${v.onbSel.done ? 'background:rgba(63,122,82,0.12);color:var(--green);border:1px solid rgba(63,122,82,0.4);' : 'background:var(--accent);color:#fff;border:none;'}">${v.onbSel.done ? '✓ Magasin configuré — annuler' : 'Marquer ce magasin comme configuré'}</button>
 
           </div>
           `}
         </div>
-        ` : html`<p style="margin:0;font-size:13px;color:#8A847C;">Aucun magasin actif. Fais ⚙ Paramètres → ⟳ Rafraîchir pour importer tes magasins, ou branche un écran.</p>`}
+        ` : html`<p style="margin:0;font-size:13px;color:var(--muted);">Aucun magasin actif. Fais ⚙ Paramètres → ⟳ Rafraîchir pour importer tes magasins, ou branche un écran.</p>`}
       </div>
     </div>
   `}
 
   ${v.addPickerOpen && html`
     <div onClick=${v.closeAddPicker} style="position:fixed;inset:0;background:rgba(20,15,12,0.5);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:50;">
-      <div onClick=${(e) => e.stopPropagation()} style="width:620px;max-width:94vw;max-height:88vh;overflow:auto;background:#FBF8F2;border-radius:20px;padding:26px 28px;box-shadow:0 30px 80px rgba(0,0,0,0.35);">
+      <div onClick=${(e) => e.stopPropagation()} style="width:620px;max-width:94vw;max-height:88vh;overflow:auto;background:var(--paper);border-radius:12px;padding:26px 28px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-          <h2 style="margin:0;font-size:19px;font-weight:600;">Nouvel élément</h2>
-          <button onClick=${v.closeAddPicker} style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:9px;background:#EFE9E0;border:1px solid rgba(35,34,32,0.12);cursor:pointer;font-size:14px;">✕</button>
+          <h2 style="margin:0;font-size:19px;font-weight:500;">Nouvel élément</h2>
+          <button onClick=${v.closeAddPicker} style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:var(--chip);border:1px solid var(--line);cursor:pointer;font-size:14px;">✕</button>
         </div>
-        <p style="margin:0 0 16px;font-size:12.5px;color:#8A847C;">Choisis le type — chaque type a ses propres mises en page.</p>
+        <p style="margin:0 0 16px;font-size:12.5px;color:var(--muted);">Choisis le type — chaque type a ses propres mises en page.</p>
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
           ${v.typeCards.map((t) => html`
-            <button onClick=${t.pick} style="text-align:left;display:flex;gap:13px;align-items:flex-start;padding:15px 16px;border-radius:13px;cursor:pointer;background:#fff;border:1px solid rgba(35,34,32,0.12);">
-              <span style="display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;flex:0 0 auto;font-size:18px;background:rgba(141,29,44,0.1);color:#8D1D2C;">${t.icon}</span>
+            <button onClick=${t.pick} style="text-align:left;display:flex;gap:13px;align-items:flex-start;padding:15px 16px;border-radius:12px;cursor:pointer;background:#fff;border:1px solid var(--line);">
+              <span style="display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;flex:0 0 auto;font-size:18px;background:rgba(141,29,44,0.1);color:var(--accent);">${t.icon}</span>
               <span style="min-width:0;">
-                <span style="display:block;font-size:14px;font-weight:600;margin-bottom:3px;">${t.label}</span>
-                <span style="display:block;font-size:11.5px;color:#8A847C;line-height:1.45;">${t.descr}</span>
+                <span style="display:block;font-size:14px;font-weight:500;margin-bottom:3px;">${t.label}</span>
+                <span style="display:block;font-size:11.5px;color:var(--muted);line-height:1.45;">${t.descr}</span>
               </span>
             </button>
           `)}
@@ -6893,10 +7019,10 @@ class App extends Component {
     const done = st.wizDone;
     const purl = this.filmUrl({ film: wf.id });
     const previewSrc = purl + (purl.includes('?') ? '&' : '?') + '_=' + st.wizNonce;
-    const h2 = 'margin:0 0 6px;font-size:20px;font-weight:700;color:#232220;';
-    const sub = 'margin:0 0 20px;font-size:13.5px;color:#8A847C;';
-    const card = (on) => `flex:1 1 240px;text-align:left;padding:18px 20px;border-radius:14px;cursor:pointer;background:${on ? 'rgba(141,29,44,0.06)' : '#fff'};border:1.5px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};`;
-    const pill = (on) => `padding:9px 15px;font-size:13px;font-weight:600;border-radius:999px;cursor:pointer;border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${on ? '#8D1D2C' : '#fff'};color:${on ? '#fff' : '#232220'};`;
+    const h2 = 'margin:0 0 6px;font-size:20px;font-weight:500;color:var(--ink);';
+    const sub = 'margin:0 0 20px;font-size:13.5px;color:var(--muted);';
+    const card = (on) => `flex:1 1 240px;text-align:left;padding:18px 20px;border-radius:12px;cursor:pointer;background:${on ? 'rgba(141,29,44,0.06)' : '#fff'};border:1.5px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};`;
+    const pill = (on) => `padding:9px 15px;font-size:13px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${on ? '#8D1D2C' : '#fff'};color:${on ? '#fff' : '#232220'};`;
     let body;
     if (st.wizStep === 0) {
       body = html`
@@ -6904,44 +7030,44 @@ class App extends Component {
         <p style=${sub}>Le <strong>Continu</strong> se compose et se met à jour tout seul — recommandé. La <strong>Playlist</strong> est une séquence figée d'éléments que tu choisis.</p>
         <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:24px;">
           <button onClick=${() => this.setFilmMode('continu')} style=${card(wf.mode === 'continu')}>
-            <div style="font-size:16px;font-weight:700;color:#232220;">🔄 Continu ${wf.mode === 'continu' ? html`<span style="color:#2E6E4E;">✓</span>` : ''}</div>
-            <div style="margin-top:5px;font-size:12.5px;color:#8A847C;line-height:1.5;">Boucle générée automatiquement depuis le catalogue, les saisons et les moments. S'adapte seule.</div>
+            <div style="font-size:16px;font-weight:500;color:var(--ink);">🔄 Continu ${wf.mode === 'continu' ? html`<span style="color:var(--green);">✓</span>` : ''}</div>
+            <div style="margin-top:5px;font-size:12.5px;color:var(--muted);line-height:1.5;">Boucle générée automatiquement depuis le catalogue, les saisons et les moments. S'adapte seule.</div>
           </button>
           <button onClick=${() => this.setFilmMode('playlist')} style=${card(wf.mode === 'playlist')}>
-            <div style="font-size:16px;font-weight:700;color:#232220;">▤ Playlist ${wf.mode === 'playlist' ? html`<span style="color:#2E6E4E;">✓</span>` : ''}</div>
-            <div style="margin-top:5px;font-size:12.5px;color:#8A847C;line-height:1.5;">Séquence figée : tu choisis les éléments et leur ordre.</div>
+            <div style="font-size:16px;font-weight:500;color:var(--ink);">▤ Playlist ${wf.mode === 'playlist' ? html`<span style="color:var(--green);">✓</span>` : ''}</div>
+            <div style="margin-top:5px;font-size:12.5px;color:var(--muted);line-height:1.5;">Séquence figée : tu choisis les éléments et leur ordre.</div>
           </button>
         </div>
-        <label style="display:block;font-size:12.5px;font-weight:600;color:#8A847C;margin-bottom:6px;">Nom du film</label>
-        <input key=${'wn-' + wf.id} defaultValue=${wf.name} onChange=${(e) => this.wizName(e.target.value)} placeholder="ex. Boucle boutique" style="width:100%;max-width:420px;box-sizing:border-box;padding:11px 13px;font-size:15px;font-weight:600;border:1px solid rgba(35,34,32,0.16);border-radius:10px;background:#fff;" />`;
+        <label style="display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:6px;">Nom du film</label>
+        <input key=${'wn-' + wf.id} defaultValue=${wf.name} onChange=${(e) => this.wizName(e.target.value)} placeholder="ex. Boucle boutique" style="width:100%;max-width:420px;box-sizing:border-box;padding:11px 13px;font-size:15px;font-weight:500;border:1px solid var(--line);border-radius:10px;background:#fff;" />`;
     } else if (st.wizStep === 1 && wf.mode === 'continu') {
       body = html`
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
           <h2 style=${h2}>Contenu de la boucle</h2>
-          <button onClick=${() => this.wizExample()} style="padding:8px 14px;font-size:12.5px;font-weight:600;color:#6E4A2B;background:rgba(110,74,43,0.1);border:1px solid rgba(110,74,43,0.3);border-radius:999px;cursor:pointer;">✨ Réglages d'exemple</button>
+          <button onClick=${() => this.wizExample()} style="padding:8px 14px;font-size:12.5px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">✨ Réglages d'exemple</button>
         </div>
         <p style=${sub}>Les essentiels ci-dessous suffisent. Réglages fins (ratios, exceptions, durées) dans le Compositeur.</p>
         <div style="display:flex;flex-direction:column;gap:18px;max-width:640px;">
           <div>
-            <div style="font-size:12.5px;font-weight:600;color:#8A847C;margin-bottom:7px;">D'où viennent les fiches</div>
+            <div style="font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:7px;">D'où viennent les fiches</div>
             <div style="display:flex;gap:7px;flex-wrap:wrap;">
               ${[['saison', 'Produits de saison'], ['tout', 'Tout le catalogue'], ['categories', 'Tout sauf catégories']].map(([id, lab]) => html`<button onClick=${() => this.updateContinuous({ source: id })} style=${pill(wc.source === id)}>${lab}</button>`)}
             </div>
           </div>
           <div>
-            <div style="font-size:12.5px;font-weight:600;color:#8A847C;margin-bottom:7px;">Adapter au moment de la journée</div>
+            <div style="font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:7px;">Adapter au moment de la journée</div>
             <div style="display:flex;gap:7px;">
               <button onClick=${() => this.updateContinuous({ perMoment: true })} style=${pill(wc.perMoment !== false)}>Oui (matin/midi/aprem)</button>
               <button onClick=${() => this.updateContinuous({ perMoment: false })} style=${pill(wc.perMoment === false)}>Non</button>
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:10px;">
-            <div style="font-size:12.5px;font-weight:600;color:#8A847C;">Nombre max de fiches</div>
-            <input type="number" min="4" max="40" defaultValue=${wc.maxItems || 12} key=${'wm-' + wf.id} onChange=${(e) => this.updateContinuous({ maxItems: parseInt(e.target.value, 10) || 12 })} style="width:80px;padding:8px 10px;font-size:14px;font-weight:600;text-align:right;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#fff;" />
+            <div style="font-size:12.5px;font-weight:500;color:var(--muted);">Nombre max de fiches</div>
+            <input type="number" min="4" max="40" defaultValue=${wc.maxItems || 12} key=${'wm-' + wf.id} onChange=${(e) => this.updateContinuous({ maxItems: parseInt(e.target.value, 10) || 12 })} style="width:80px;padding:8px 10px;font-size:14px;font-weight:500;text-align:right;border:1px solid var(--line);border-radius:8px;background:#fff;" />
           </div>
           <div>
             <div style="display:flex;align-items:center;gap:7px;margin-bottom:7px;">
-              <span style="font-size:12.5px;font-weight:600;color:#8A847C;">Vitesse d'affichage</span>
+              <span style="font-size:12.5px;font-weight:500;color:var(--muted);">Vitesse d'affichage</span>
               ${infoTip('Durée d’affichage de chaque fiche produit (et, proportionnellement, des vidéos). Choix rapide : Lent laisse le temps de lire, Rapide enchaîne. Réglable finement dans le Compositeur.')}
             </div>
             <div style="display:flex;gap:7px;flex-wrap:wrap;">
@@ -6950,24 +7076,24 @@ class App extends Component {
           </div>
           <div>
             <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px;">
-              <span style="font-size:12.5px;font-weight:600;color:#8A847C;">Ratios par type d'élément · 1 : N (0 = jamais)</span>
+              <span style="font-size:12.5px;font-weight:500;color:var(--muted);">Ratios par type d'élément · 1 : N (0 = jamais)</span>
               ${infoTip('Dose le mélange de la boucle. « 1 : N » = un élément de ce type tous les N slots. Ex. Liaison 1:5 = un logo de transition toutes les 5 fiches ; Produit seul 1:6 = une fiche plein écran toutes les 6. 0 = ce type n’apparaît jamais. Le nombre d’éléments DISPONIBLES est indiqué à droite : un type sans élément (0) n’aura aucun effet même avec un ratio.')}
             </div>
             <div style="display:flex;flex-direction:column;gap:8px;">
               ${ratioRows.map((r) => html`
                 <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;flex-wrap:wrap;">
-                  <span style="width:170px;color:#232220;font-weight:600;">${r.label}</span>
-                  <span style="color:#8A847C;">1 :</span>
-                  <input type="number" min="0" max="99" value=${(wc.ratios || {})[r.key] != null ? wc.ratios[r.key] : 0} onInput=${(e) => this.updateContRatio(r.key, e.target.value)} style="width:66px;padding:7px 9px;font-size:13px;border:1px solid rgba(35,34,32,0.16);border-radius:8px;background:#fff;" />
+                  <span style="width:170px;color:var(--ink);font-weight:500;">${r.label}</span>
+                  <span style="color:var(--muted);">1 :</span>
+                  <input type="number" min="0" max="99" value=${(wc.ratios || {})[r.key] != null ? wc.ratios[r.key] : 0} onInput=${(e) => this.updateContRatio(r.key, e.target.value)} style="width:66px;padding:7px 9px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
                   ${r.gen
-                    ? html`<span style="font-size:11.5px;color:#8A847C;">généré · toujours dispo</span>`
+                    ? html`<span style="font-size:11.5px;color:var(--muted);">généré · toujours dispo</span>`
                     : (r.avail > 0
-                      ? html`<span style="font-size:11.5px;font-weight:600;color:#2E6E4E;">${r.avail} ${r.unit} dispo</span>`
-                      : html`<span style="font-size:11.5px;font-weight:600;color:#B8860B;">aucun ${r.unit} — sans effet</span>`)}
+                      ? html`<span style="font-size:11.5px;font-weight:500;color:var(--green);">${r.avail} ${r.unit} dispo</span>`
+                      : html`<span style="font-size:11.5px;font-weight:500;color:var(--warn);">aucun ${r.unit} — sans effet</span>`)}
                 </label>`)}
             </div>
           </div>
-          <button onClick=${() => { this.setState({ wizard: false }); this.setView('composer'); }} style="align-self:flex-start;padding:8px 14px;font-size:12.5px;font-weight:600;color:#8D1D2C;background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:999px;cursor:pointer;">⚙ Réglages avancés dans le Compositeur ↗</button>
+          <button onClick=${() => { this.setState({ wizard: false }); this.setView('composer'); }} style="align-self:flex-start;padding:8px 14px;font-size:12.5px;font-weight:500;color:var(--accent);background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:8px;cursor:pointer;">⚙ Réglages avancés dans le Compositeur ↗</button>
         </div>`;
     } else if (st.wizStep === 1) {
       body = html`
@@ -6976,13 +7102,13 @@ class App extends Component {
         ${(st.library || []).length ? html`
           <div style="display:flex;flex-direction:column;gap:8px;max-width:640px;">
             ${(st.library || []).map((mm) => { const on = (wf.items || []).includes(mm.id); return html`
-              <button onClick=${() => this.wizToggleItem(mm.id)} style="display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:11px;text-align:left;cursor:pointer;background:${on ? 'rgba(46,110,78,0.06)' : '#fff'};border:1px solid ${on ? 'rgba(46,110,78,0.4)' : 'rgba(35,34,32,0.12)'};">
+              <button onClick=${() => this.wizToggleItem(mm.id)} style="display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:10px;text-align:left;cursor:pointer;background:${on ? 'rgba(63,122,82,0.06)' : '#fff'};border:1px solid ${on ? 'rgba(63,122,82,0.4)' : 'rgba(35,34,32,0.12)'};">
                 <span style="width:22px;height:22px;flex:0 0 auto;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;background:${on ? '#2E6E4E' : 'rgba(35,34,32,0.08)'};color:${on ? '#fff' : '#8A847C'};">${on ? '✓' : ''}</span>
-                <span style="font-size:14px;font-weight:600;color:#232220;">${mm.name || 'Élément'}</span>
-                <span style="font-size:11.5px;color:#8A847C;">${mm.type || ''}</span>
+                <span style="font-size:14px;font-weight:500;color:var(--ink);">${mm.name || 'Élément'}</span>
+                <span style="font-size:11.5px;color:var(--muted);">${mm.type || ''}</span>
               </button>`; })}
           </div>
-        ` : html`<div style="padding:16px;border-radius:12px;background:rgba(201,123,74,0.1);border:1px solid rgba(201,123,74,0.35);font-size:13px;color:#8A5A2B;">Aucun élément dans la bibliothèque. Crée-en dans le <button onClick=${() => { this.setState({ wizard: false }); this.setView('composer'); }} style="border:none;background:none;color:#8D1D2C;font-weight:700;cursor:pointer;text-decoration:underline;padding:0;">Compositeur</button>, puis reviens.</div>`}`;
+        ` : html`<div style="padding:16px;border-radius:12px;background:rgba(201,123,74,0.1);border:1px solid rgba(201,123,74,0.35);font-size:13px;color:var(--warn);">Aucun élément dans la bibliothèque. Crée-en dans le <button onClick=${() => { this.setState({ wizard: false }); this.setView('composer'); }} style="border:none;background:none;color:var(--accent);font-weight:500;cursor:pointer;text-decoration:underline;padding:0;">Compositeur</button>, puis reviens.</div>`}`;
     } else if (st.wizStep === 2) {
       body = html`
         <h2 style=${h2}>Sur quels écrans ?</h2>
@@ -6990,131 +7116,131 @@ class App extends Component {
         <div style="display:flex;flex-direction:column;gap:8px;max-width:660px;">
           ${stores.map((s) => { const on = targeted.includes(s.id); return html`
             <div>
-              <button onClick=${() => this.toggleFilmStore(s.id)} style="width:100%;box-sizing:border-box;display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:11px;text-align:left;cursor:pointer;background:${on ? 'rgba(141,29,44,0.06)' : '#fff'};border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};">
+              <button onClick=${() => this.toggleFilmStore(s.id)} style="width:100%;box-sizing:border-box;display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:10px;text-align:left;cursor:pointer;background:${on ? 'rgba(141,29,44,0.06)' : '#fff'};border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};">
                 <span style="width:22px;height:22px;flex:0 0 auto;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;background:${on ? '#8D1D2C' : 'rgba(35,34,32,0.08)'};color:${on ? '#fff' : '#8A847C'};">${on ? '✓' : ''}</span>
-                <span style="flex:1 1 auto;font-size:14px;font-weight:600;color:#232220;">${s.store}</span>
-                <span style="font-size:11.5px;color:#8A847C;">${(s.players || []).length} écran(s)${s.format ? ` · ${s.format.label}` : ''}</span>
+                <span style="flex:1 1 auto;font-size:14px;font-weight:500;color:var(--ink);">${s.store}</span>
+                <span style="font-size:11.5px;color:var(--muted);">${(s.players || []).length} écran(s)${s.format ? ` · ${s.format.label}` : ''}</span>
               </button>
               ${(s.groups || []).length ? html`
                 <div style="padding:5px 0 2px 34px;display:flex;flex-direction:column;gap:2px;">
-                  ${s.groups.map((g) => { const filt = (g.cats || []).length; return html`<div style="font-size:11.5px;color:#8A847C;">▦ <strong style="color:#6E4A2B;">${g.name}</strong> · ${filt ? html`<span style="color:#6E4A2B;">${filt} catégorie(s) — garde son contenu</span>` : 'suit ce film'}${g.format ? ` · ${g.format.label}` : ''}</div>`; })}
+                  ${s.groups.map((g) => { const filt = (g.cats || []).length; return html`<div style="font-size:11.5px;color:var(--muted);">▦ <strong style="color:var(--muted-2);">${g.name}</strong> · ${filt ? html`<span style="color:var(--muted-2);">${filt} catégorie(s) — garde son contenu</span>` : 'suit ce film'}${g.format ? ` · ${g.format.label}` : ''}</div>`; })}
                 </div>
               ` : ''}
             </div>`; })}
-          ${!stores.length ? html`<div style="font-size:13px;color:#8A847C;">Aucun magasin. Branche un écran d'abord.</div>` : ''}
+          ${!stores.length ? html`<div style="font-size:13px;color:var(--muted);">Aucun magasin. Branche un écran d'abord.</div>` : ''}
         </div>
-        <div style="margin-top:14px;font-size:13px;font-weight:600;color:#8D1D2C;">${targeted.length ? `${targeted.length} magasin(s)` : 'Tous les magasins'} · ${nScreens} écran(s) ciblé(s)</div>`;
+        <div style="margin-top:14px;font-size:13px;font-weight:500;color:var(--accent);">${targeted.length ? `${targeted.length} magasin(s)` : 'Tous les magasins'} · ${nScreens} écran(s) ciblé(s)</div>`;
     } else if (st.wizStep === 3) {
       body = html`
         <h2 style=${h2}>Aperçu du film</h2>
         <p style=${sub}>Aperçu réel de « ${wf.name} » tel qu'il passera à l'écran (boucle générée par le serveur). Enregistré automatiquement en arrivant ici.</p>
-        <div style="border-radius:14px;overflow:hidden;border:1px solid rgba(35,34,32,0.12);background:#232220;box-shadow:0 20px 50px rgba(0,0,0,0.14);">
-          <iframe key=${'wprev-' + st.wizNonce} src=${previewSrc} title="Aperçu du film" style="display:block;width:100%;height:58vh;border:none;background:#232220;"></iframe>
+        <div style="border-radius:12px;overflow:hidden;border:1px solid var(--line);background:var(--ink);">
+          <iframe key=${'wprev-' + st.wizNonce} src=${previewSrc} title="Aperçu du film" style="display:block;width:100%;height:58vh;border:none;background:var(--ink);"></iframe>
         </div>
         <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
-          <a href=${previewSrc} target="_blank" style="font-size:12.5px;font-weight:600;color:#8D1D2C;">↗ Ouvrir en plein écran</a>
-          <button onClick=${() => this.wizGo(3)} style="padding:4px 11px;font-size:12px;font-weight:600;color:#6E4A2B;background:#fff;border:1px solid rgba(110,74,43,0.35);border-radius:999px;cursor:pointer;">⟳ Rafraîchir</button>
+          <a href=${previewSrc} target="_blank" style="font-size:12.5px;font-weight:500;color:var(--accent);">↗ Ouvrir en plein écran</a>
+          <button onClick=${() => this.wizGo(3)} style="padding:4px 11px;font-size:12px;font-weight:500;color:var(--muted-2);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">⟳ Rafraîchir</button>
         </div>`;
     } else {
       body = done ? html`
         <div style="text-align:center;max-width:560px;margin:10px auto;">
           <div style="font-size:44px;">🎉</div>
-          <h2 style="margin:8px 0 6px;font-size:22px;font-weight:700;color:#2E6E4E;">Film diffusé sur le réseau</h2>
+          <h2 style="margin:8px 0 6px;font-size:22px;font-weight:500;color:var(--green);">Film diffusé sur le réseau</h2>
           <p style=${sub}>« ${done.name} » · version v${done.version} · <strong>${done.playerCount} écran(s)</strong> · tests live <strong>${done.testsOk}/${done.testsTotal}</strong> OK.</p>
           <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:8px;">
-            <button onClick=${() => this.openReport()} style="padding:12px 20px;font-size:14px;font-weight:700;color:#fff;background:#8D1D2C;border:none;border-radius:12px;cursor:pointer;">📊 Ouvrir le rapport de diffusion</button>
-            <a href=${done.url} target="_blank" style="display:inline-flex;align-items:center;padding:12px 18px;font-size:13.5px;font-weight:600;color:#8D1D2C;background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:12px;">▶ Voir le film</a>
-            <button onClick=${() => this.closeWizard()} style="padding:12px 18px;font-size:13.5px;font-weight:600;color:#4A4640;background:#fff;border:1px solid rgba(35,34,32,0.16);border-radius:12px;cursor:pointer;">Terminer</button>
+            <button onClick=${() => this.openReport()} style="padding:12px 20px;font-size:14px;font-weight:500;color:#fff;background:var(--accent);border:none;border-radius:12px;cursor:pointer;">📊 Ouvrir le rapport de diffusion</button>
+            <a href=${done.url} target="_blank" style="display:inline-flex;align-items:center;padding:12px 18px;font-size:13.5px;font-weight:500;color:var(--accent);background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:12px;">▶ Voir le film</a>
+            <button onClick=${() => this.closeWizard()} style="padding:12px 18px;font-size:13.5px;font-weight:500;color:var(--muted-2);background:#fff;border:1px solid var(--line);border-radius:12px;cursor:pointer;">Terminer</button>
           </div>
         </div>`
         : html`
         <h2 style=${h2}>Prêt à diffuser</h2>
         <p style=${sub}>Vérifie le récapitulatif, puis lance la diffusion réelle sur les écrans ciblés.</p>
         <div style="max-width:560px;display:flex;flex-direction:column;gap:10px;">
-          <div style="display:flex;justify-content:space-between;padding:12px 15px;border-radius:11px;background:#fff;border:1px solid rgba(35,34,32,0.1);"><span style="color:#8A847C;">Film</span><strong>${wf.name} · ${wf.mode === 'continu' ? '🔄 Continu' : '▤ Playlist'}</strong></div>
-          <div style="display:flex;justify-content:space-between;padding:12px 15px;border-radius:11px;background:#fff;border:1px solid rgba(35,34,32,0.1);"><span style="color:#8A847C;">Écrans</span><strong>${targeted.length ? `${targeted.length} magasin(s)` : 'Tous les magasins'} · ${nScreens} écran(s)</strong></div>
-          <button onClick=${() => this.wizPublish()} disabled=${st.wizPublishing} style="margin-top:6px;padding:15px 22px;font-size:16px;font-weight:700;color:#fff;background:${st.wizPublishing ? '#B8B2A8' : '#8D1D2C'};border:none;border-radius:13px;cursor:${st.wizPublishing ? 'wait' : 'pointer'};">${st.wizPublishing ? 'Diffusion + tests live…' : '🚀 Diffuser sur le réseau'}</button>
-          <p style="margin:2px 0 0;font-size:11.5px;color:#8A847C;">La publication est versionnée et testée automatiquement ; le rapport s'ouvre juste après.</p>
+          <div style="display:flex;justify-content:space-between;padding:12px 15px;border-radius:10px;background:#fff;border:1px solid var(--line);"><span style="color:var(--muted);">Film</span><strong>${wf.name} · ${wf.mode === 'continu' ? '🔄 Continu' : '▤ Playlist'}</strong></div>
+          <div style="display:flex;justify-content:space-between;padding:12px 15px;border-radius:10px;background:#fff;border:1px solid var(--line);"><span style="color:var(--muted);">Écrans</span><strong>${targeted.length ? `${targeted.length} magasin(s)` : 'Tous les magasins'} · ${nScreens} écran(s)</strong></div>
+          <button onClick=${() => this.wizPublish()} disabled=${st.wizPublishing} style="margin-top:6px;padding:15px 22px;font-size:16px;font-weight:500;color:#fff;background:${st.wizPublishing ? '#B8B2A8' : '#8D1D2C'};border:none;border-radius:12px;cursor:${st.wizPublishing ? 'wait' : 'pointer'};">${st.wizPublishing ? 'Diffusion + tests live…' : '🚀 Diffuser sur le réseau'}</button>
+          <p style="margin:2px 0 0;font-size:11.5px;color:var(--muted);">La publication est versionnée et testée automatiquement ; le rapport s'ouvre juste après.</p>
         </div>`;
     }
     return html`
-      <div style="position:fixed;inset:0;background:#F2ECE2;z-index:40;display:flex;flex-direction:column;">
-        <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:15px 26px;background:#fff;border-bottom:1px solid rgba(35,34,32,0.1);">
-          <div style="font-size:15px;font-weight:700;color:#232220;">${v.t('wiz.title')}</div>
+      <div style="position:fixed;inset:0;background:var(--paper);z-index:40;display:flex;flex-direction:column;">
+        <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:15px 26px;background:#fff;border-bottom:1px solid var(--line);">
+          <div style="font-size:15px;font-weight:500;color:var(--ink);">${v.t('wiz.title')}</div>
           <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
             ${WIZ_STEP_KEYS.map((key, i) => html`
-              ${i ? html`<span style="color:#C9C3B8;">→</span>` : ''}
-              <button onClick=${() => (i < st.wizStep || done ? this.wizGo(i) : null)} style="display:flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;border:1px solid ${i === st.wizStep ? '#8D1D2C' : 'rgba(35,34,32,0.14)'};background:${i === st.wizStep ? '#8D1D2C' : (i < st.wizStep ? 'rgba(46,110,78,0.1)' : '#fff')};color:${i === st.wizStep ? '#fff' : (i < st.wizStep ? '#2E6E4E' : '#8A847C')};cursor:${i < st.wizStep ? 'pointer' : 'default'};font-size:12px;font-weight:600;">
+              ${i ? html`<span style="color:var(--faint);">→</span>` : ''}
+              <button onClick=${() => (i < st.wizStep || done ? this.wizGo(i) : null)} style="display:flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;border:1px solid ${i === st.wizStep ? '#8D1D2C' : 'rgba(35,34,32,0.14)'};background:${i === st.wizStep ? '#8D1D2C' : (i < st.wizStep ? 'rgba(63,122,82,0.1)' : '#fff')};color:${i === st.wizStep ? '#fff' : (i < st.wizStep ? '#2E6E4E' : '#8A847C')};cursor:${i < st.wizStep ? 'pointer' : 'default'};font-size:12px;font-weight:500;">
                 <span>${i < st.wizStep ? '✓' : (i + 1)}</span>${v.t(key)}
               </button>`)}
           </div>
-          <button onClick=${() => this.closeWizard()} style="padding:7px 13px;font-size:12.5px;font-weight:600;color:#8A847C;background:#fff;border:1px solid rgba(35,34,32,0.16);border-radius:999px;cursor:pointer;">${v.t('wiz.close')}</button>
+          <button onClick=${() => this.closeWizard()} style="padding:7px 13px;font-size:12.5px;font-weight:500;color:var(--muted);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.t('wiz.close')}</button>
         </div>
         <div style="flex:1 1 auto;overflow:auto;padding:28px 26px;">
           <div style="max-width:940px;margin:0 auto;">${body}</div>
         </div>
-        <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 26px;background:#fff;border-top:1px solid rgba(35,34,32,0.1);">
-          <button onClick=${() => this.wizGo(st.wizStep - 1)} disabled=${st.wizStep === 0 || !!done} style="padding:11px 18px;font-size:13.5px;font-weight:600;border-radius:10px;cursor:${st.wizStep === 0 || done ? 'not-allowed' : 'pointer'};border:1px solid rgba(35,34,32,0.16);background:#fff;color:${st.wizStep === 0 || done ? '#C9C3B8' : '#4A4640'};">← Retour</button>
-          ${st.wizStep < 4 ? html`<button onClick=${() => this.wizGo(st.wizStep + 1)} style="padding:11px 22px;font-size:13.5px;font-weight:700;border-radius:10px;cursor:pointer;border:none;background:#8D1D2C;color:#fff;">${st.wizStep === 3 ? 'Diffusion →' : 'Suivant →'}</button>` : html`<span></span>`}
+        <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 26px;background:#fff;border-top:1px solid var(--line);">
+          <button onClick=${() => this.wizGo(st.wizStep - 1)} disabled=${st.wizStep === 0 || !!done} style="padding:11px 18px;font-size:13.5px;font-weight:500;border-radius:10px;cursor:${st.wizStep === 0 || done ? 'not-allowed' : 'pointer'};border:1px solid var(--line);background:#fff;color:${st.wizStep === 0 || done ? '#C9C3B8' : '#4A4640'};">← Retour</button>
+          ${st.wizStep < 4 ? html`<button onClick=${() => this.wizGo(st.wizStep + 1)} style="padding:11px 22px;font-size:13.5px;font-weight:500;border-radius:10px;cursor:pointer;border:none;background:var(--accent);color:#fff;">${st.wizStep === 3 ? 'Diffusion →' : 'Suivant →'}</button>` : html`<span></span>`}
         </div>
       </div>`;
   })()}
 
   ${v.publishing && html`
     <div onClick=${v.closePublish} style="position:fixed;inset:0;background:rgba(35,34,32,0.55);z-index:20;display:flex;align-items:center;justify-content:center;padding:30px;">
-      <div onClick=${v.stop} style="background:#F5EFE4;border-radius:20px;width:640px;max-width:100%;max-height:90vh;overflow:auto;box-shadow:0 40px 100px rgba(0,0,0,0.35);">
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:22px 26px;border-bottom:1px solid rgba(35,34,32,0.10);">
+      <div onClick=${v.stop} style="background:var(--chip);border-radius:12px;width:640px;max-width:100%;max-height:90vh;overflow:auto;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:22px 26px;border-bottom:1px solid var(--line);">
           <div>
-            <h2 style="margin:0;font-size:19px;font-weight:600;">Publier sur le réseau</h2>
-            <p style="margin:4px 0 0;font-size:12.5px;color:#8A847C;">Déploiement atomique · le player bascule quand tous les médias sont en cache</p>
+            <h2 style="margin:0;font-size:19px;font-weight:500;">Publier sur le réseau</h2>
+            <p style="margin:4px 0 0;font-size:12.5px;color:var(--muted);">Déploiement atomique · le player bascule quand tous les médias sont en cache</p>
           </div>
           <button onClick=${v.closePublish} style="width:34px;height:34px;border-radius:50%;border:none;background:rgba(35,34,32,0.08);cursor:pointer;font-size:15px;">✕</button>
         </div>
         ${st.pubDone && html`
         <div style="padding:26px;display:flex;flex-direction:column;gap:16px;">
           <div style="display:flex;align-items:center;gap:14px;">
-            <span style="display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;background:rgba(46,125,50,0.14);color:#2E7D32;font-size:22px;flex:0 0 auto;">✓</span>
+            <span style="display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;background:rgba(63,122,82,0.14);color:var(--green);font-size:22px;flex:0 0 auto;">✓</span>
             <div>
-              <div style="font-size:16px;font-weight:600;">Film « ${st.pubDone.name} » ${st.pubDone.scheduled ? 'planifié' : 'déployé'} · v${st.pubDone.version}</div>
-              <div style="font-size:12.5px;color:#8A847C;">${st.pubDone.playerCount} écran(s) ciblés · tests live ${st.pubDone.testsOk}/${st.pubDone.testsTotal} OK</div>
+              <div style="font-size:16px;font-weight:500;">Film « ${st.pubDone.name} » ${st.pubDone.scheduled ? 'planifié' : 'déployé'} · v${st.pubDone.version}</div>
+              <div style="font-size:12.5px;color:var(--muted);">${st.pubDone.playerCount} écran(s) ciblés · tests live ${st.pubDone.testsOk}/${st.pubDone.testsTotal} OK</div>
             </div>
           </div>
-          <div style="background:#FBF8F2;border:1px solid rgba(35,34,32,0.10);border-radius:12px;padding:14px 16px;">
-            <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#8A847C;margin-bottom:8px;">Ton lien pour voir le film (public · 55″)</div>
+          <div style="background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px 16px;">
+            <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Ton lien pour voir le film (public · 55″)</div>
             <div style="display:flex;gap:8px;align-items:center;">
-              <input readonly value=${st.pubDone.url} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:9px 11px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#fff;" />
-              <button onClick=${() => this.copyLink(st.pubDone.url)} style="flex:0 0 auto;padding:9px 14px;font-size:12.5px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:#8D1D2C;cursor:pointer;">Copier</button>
-              <a href=${st.pubDone.url} target="_blank" style="flex:0 0 auto;padding:9px 12px;font-size:12.5px;font-weight:600;border-radius:8px;border:1px solid rgba(35,34,32,0.14);background:#fff;color:#232220;">↗ Ouvrir</a>
+              <input readonly value=${st.pubDone.url} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:9px 11px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;" />
+              <button onClick=${() => this.copyLink(st.pubDone.url)} style="flex:0 0 auto;padding:9px 14px;font-size:12.5px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;">Copier</button>
+              <a href=${st.pubDone.url} target="_blank" style="flex:0 0 auto;padding:9px 12px;font-size:12.5px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);">↗ Ouvrir</a>
             </div>
-            <p style="margin:10px 0 0;font-size:11.5px;color:#8A847C;line-height:1.5;">Les liens par magasin sont dans ⚙ Paramètres → Liens de diffusion. Les écrans basculent automatiquement dès leur cache prêt.</p>
+            <p style="margin:10px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5;">Les liens par magasin sont dans ⚙ Paramètres → Liens de diffusion. Les écrans basculent automatiquement dès leur cache prêt.</p>
           </div>
           <div style="display:flex;justify-content:flex-end;">
-            <button onClick=${v.closePublish} style="padding:11px 22px;font-size:14px;font-weight:600;border-radius:999px;border:none;cursor:pointer;background:#232220;color:#fff;">Voir le réseau →</button>
+            <button onClick=${v.closePublish} style="padding:9px 18px;font-size:13px;font-weight:500;border-radius:8px;border:none;cursor:pointer;background:var(--accent);color:#fff;">Voir le réseau →</button>
           </div>
         </div>
         `}
         ${!st.pubDone && html`
         <div style="padding:24px 26px;display:flex;flex-direction:column;gap:22px;">
           <div>
-            <h3 style="margin:0 0 10px;font-size:12px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Type de synchronisation</h3>
+            <h3 style="margin:0 0 10px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">Type de synchronisation</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
               <button onClick=${v.setModeFull} style=${v.modeFullStyle}>
-                <span style="display:block;font-size:14px;font-weight:600;margin-bottom:3px;">Playlist complète</span>
-                <span style="font-size:11.5px;color:#8A847C;line-height:1.35;">Médias + templates + snapshots · bascule atomique</span>
+                <span style="display:block;font-size:14px;font-weight:500;margin-bottom:3px;">Playlist complète</span>
+                <span style="font-size:11.5px;color:var(--muted);line-height:1.35;">Médias + templates + snapshots · bascule atomique</span>
               </button>
               <button onClick=${v.setModeData} style=${v.modeDataStyle}>
-                <span style="display:block;font-size:14px;font-weight:600;margin-bottom:3px;">Données prix seules</span>
-                <span style="font-size:11.5px;color:#8A847C;line-height:1.35;">Sync incrémentale légère · aucune vidéo re-téléchargée</span>
+                <span style="display:block;font-size:14px;font-weight:500;margin-bottom:3px;">Données prix seules</span>
+                <span style="font-size:11.5px;color:var(--muted);line-height:1.35;">Sync incrémentale légère · aucune vidéo re-téléchargée</span>
               </button>
             </div>
           </div>
           ${st.pubMode !== 'data' && html`
           <div>
-            <h3 style="margin:0 0 10px;font-size:12px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Film à publier</h3>
+            <h3 style="margin:0 0 10px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">Film à publier</h3>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
               ${st.playlists.map((p) => html`
                 <button onClick=${() => this.setState({ pubFilm: p.id })} title=${`${p.name} · ${p.items.length} module(s)`}
-                  style="padding:8px 15px;font-size:12.5px;font-weight:600;border-radius:999px;cursor:pointer;white-space:nowrap;${p.id === (st.pubFilm || st.activePl) ? 'background:#8D1D2C;color:#fff;border:1px solid #8D1D2C;' : 'background:#FBF8F2;color:#232220;border:1px solid rgba(35,34,32,0.16);'}">
+                  style="padding:8px 15px;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;white-space:nowrap;${p.id === (st.pubFilm || st.activePl) ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:var(--paper);color:var(--ink);border:1px solid var(--line);'}">
                   ${p.name} <span style="opacity:0.65;font-weight:500;">(${p.items.length})</span>
                 </button>
               `)}
@@ -7122,24 +7248,24 @@ class App extends Component {
           </div>
           `}
           <div>
-            <h3 style="margin:0 0 10px;font-size:12px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">Activation</h3>
-            <div style="display:inline-flex;background:#EFE9E0;border-radius:8px;padding:3px;margin-bottom:12px;">
+            <h3 style="margin:0 0 10px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">Activation</h3>
+            <div style="display:inline-flex;background:var(--chip);border-radius:8px;padding:3px;margin-bottom:12px;">
               <button onClick=${v.setWhenNow} style=${v.whenNowStyle}>Maintenant</button>
               <button onClick=${v.setWhenScheduled} style=${v.whenSchedStyle}>Planifiée</button>
             </div>
             ${v.whenScheduled && html`
               <div style="display:flex;align-items:center;gap:10px;">
-                <span style="font-size:13px;color:#8A847C;">activate_at</span>
-                <input type="datetime-local" value=${v.activateAt} onInput=${v.onActivateAt} style="padding:9px 11px;font-size:14px;border:1px solid rgba(35,34,32,0.14);border-radius:8px;background:#FBF8F2;" />
+                <span style="font-size:13px;color:var(--muted);">activate_at</span>
+                <input type="datetime-local" value=${v.activateAt} onInput=${v.onActivateAt} style="padding:9px 11px;font-size:14px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
               </div>
             `}
           </div>
-          <div style="background:#FBF8F2;border:1px solid rgba(35,34,32,0.10);border-radius:12px;padding:16px 18px;font-size:13px;color:#232220;line-height:1.6;">
+          <div style="background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:16px 18px;font-size:13px;color:var(--ink);line-height:1.6;">
             ${v.publishSummary}
           </div>
         </div>
-        <div style="display:flex;justify-content:flex-end;gap:12px;padding:18px 26px;border-top:1px solid rgba(35,34,32,0.10);">
-          <button onClick=${v.closePublish} style="padding:11px 20px;font-size:14px;font-weight:500;border-radius:999px;border:1px solid rgba(35,34,32,0.16);background:#fff;cursor:pointer;">Annuler</button>
+        <div style="display:flex;justify-content:flex-end;gap:12px;padding:18px 26px;border-top:1px solid var(--line);">
+          <button onClick=${v.closePublish} style="padding:11px 20px;font-size:14px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;">Annuler</button>
           <button onClick=${v.deploy} style=${v.deployStyle}>${v.deployLabel}</button>
         </div>
         `}
@@ -7148,10 +7274,11 @@ class App extends Component {
   `}
 
   ${v.hasToast && html`
-    <div style="position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:30;display:flex;align-items:center;gap:12px;padding:14px 24px;border-radius:999px;background:#232220;color:#fff;box-shadow:0 16px 40px rgba(0,0,0,0.3);font-size:14px;font-weight:500;max-width:calc(100vw - 60px);">
+    <div style="position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:30;display:flex;align-items:center;gap:12px;padding:14px 24px;border-radius:999px;background:var(--ink);color:#fff;font-size:14px;font-weight:500;max-width:calc(100vw - 60px);">
       <span style="width:9px;height:9px;border-radius:50%;background:#5BBE7A;flex:0 0 auto;"></span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${v.toast}</span>
     </div>
   `}
+  </div>
 </div>`;
   }
 }

@@ -1,0 +1,167 @@
+/* Régie d'affichage — habillage du module Marketing (/marketing).
+   La régie est le « Marketing en magasin » du module : elle en reprend les
+   jetons, la coquille (barre latérale 246 px, barre supérieure, onglets
+   soulignés) et le système de boutons, pour s'y lire comme un de ses écrans.
+   Source : dépôt marketing, src/styles/global.css. Pas d'ombre sur les
+   surfaces : la hiérarchie repose sur les bordures et les fonds.
+   Seule la page de la régie charge cette feuille : les écrans des magasins
+   (player, film) gardent leur charte. */
+:root {
+  --ink: #1c1a17;
+  --muted: #7a736a;
+  --muted-2: #5c5852;
+  --faint: #B8B2A8;
+  --line: #e6e0d8;
+  --paper: #faf7f2;
+  --accent: #8D1D2C;
+  --accent-dark: #6f1622;
+  --accent-soft: rgba(141, 29, 44, 0.08);
+  --danger: #b3261e;
+  --chip: #EDE7DE;
+  --table-head: #FBF9F5;
+  --row-line: rgba(34, 34, 34, 0.06);
+  --green: #3f7a52;
+  --green-soft: rgba(63, 122, 82, 0.12);
+  --warn: #8a6d0f;
+  --warn-soft: rgba(216, 170, 30, 0.14);
+}
+
+html, body { background: var(--paper); color: var(--ink); }
+* { box-sizing: border-box; }
+a { color: var(--accent); }
+a:hover { color: var(--accent-dark); }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* --- Coquille ------------------------------------------------------------ */
+.workspace { display: flex; height: 100vh; overflow: hidden; background: var(--paper); color: var(--ink); }
+.workspace__main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+.sidebar {
+  flex: 0 0 246px; display: flex; flex-direction: column;
+  background: #fff; border-right: 1px solid var(--line);
+  overflow-y: auto; padding-bottom: 24px;
+}
+.sidebar__head { padding: 20px 16px 8px; }
+.sidebar__logo { height: 26px; display: block; }
+.sidebar__kicker {
+  font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--accent); font-weight: 600; margin-top: 9px;
+}
+.sidebar__back { padding: 6px 12px 4px; }
+.sidebar__back a {
+  display: flex; align-items: center; gap: 9px;
+  background: var(--paper); border-radius: 10px; padding: 11px 13px;
+  font-size: 13px; color: var(--muted-2); text-decoration: none;
+}
+.sidebar__back a:hover { color: var(--ink); }
+.sidebar__groups { padding: 2px 12px 0; }
+.sidebar__group { margin-top: 18px; }
+.sidebar__group-label {
+  font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--faint); font-weight: 500; padding: 0 10px 8px;
+}
+.sidebar__action {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: calc(100% - 24px); margin: 2px 12px 8px; padding: 9px 12px;
+  border: none; border-radius: 8px; background: var(--accent); color: #fff;
+  font: 500 13px/1.2 'Gotham', system-ui, sans-serif; cursor: pointer;
+}
+.sidebar__action:hover, .sidebar__action.is-active { background: var(--accent-dark); color: #fff; }
+.sidebar__item {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 9px 10px; border: none; border-radius: 9px; background: transparent;
+  font: 400 13px/1.2 'Gotham', system-ui, sans-serif; color: var(--muted-2);
+  text-align: left; text-decoration: none; cursor: pointer; transition: all 0.15s;
+}
+.sidebar__item:hover { background: var(--paper); color: var(--muted-2); }
+.sidebar__item.is-active { background: var(--accent-soft); color: var(--accent); }
+.sidebar__item svg, .sidebar__action svg, .sidebar__back svg { flex: 0 0 auto; }
+.sidebar__item-count {
+  margin-left: auto; padding: 1px 7px; border-radius: 999px;
+  background: var(--chip); color: var(--muted-2); font-size: 11px;
+}
+.sidebar__foot { margin-top: auto; padding: 18px 22px 0; }
+.sidebar__foot-label {
+  font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--faint); font-weight: 500; margin-bottom: 8px;
+}
+
+.topbar {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px 1rem; padding: 18px 24px;
+  border-bottom: 1px solid var(--line); background: #fff;
+}
+.topbar__title { min-width: 0; }
+.topbar__kicker {
+  font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 4px;
+}
+.topbar h1 { font-size: 26px; font-weight: 400; letter-spacing: -0.01em; margin: 0; color: var(--ink); }
+.topbar__trail {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 2px;
+  margin: 6px 0 0; font-size: 12.5px; color: var(--muted);
+}
+.topbar__trail button {
+  margin: 0; padding: 0 2px; border: none; background: none;
+  font: inherit; color: var(--muted); cursor: pointer;
+}
+.topbar__trail button:hover { color: var(--ink); text-decoration: underline; }
+.topbar__trail .is-current { color: var(--muted-2); }
+.topbar__trail .sep { color: var(--faint); margin: 0 4px; }
+.topbar__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.topbar__sep { width: 1px; height: 24px; background: var(--line); margin: 0 2px; flex: 0 0 auto; }
+
+/* Zone de contenu : elle défile sur toute la largeur, ses enfants sont bornés. */
+.app__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 22px 24px 40px; }
+.app__body > * { max-width: 1180px; }
+.app__body--wide > * { max-width: none; }
+
+/* Onglets soulignés (écrans d'un même menu, ou navigation de la régie quand
+   elle est affichée dans le cadre du module Marketing). */
+.page-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 16px; border-bottom: 1px solid var(--line); }
+.page-tabs--bar { flex: 0 0 auto; margin: 0; padding: 6px 24px 0; background: #fff; }
+.page-tabs__tab {
+  margin: 0 0 -1px; padding: 8px 12px; border: none; border-bottom: 2px solid transparent; border-radius: 0;
+  background: none; color: var(--muted-2); font: 500 13px/1.2 'Gotham', system-ui, sans-serif; cursor: pointer;
+}
+.page-tabs__tab:hover { color: var(--ink); }
+.page-tabs__tab.is-on { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* --- Boutons -------------------------------------------------------------
+   Un bouton FAIT quelque chose ; une pastille (.filter) CHOISIT. Le bordeaux
+   plein est réservé à l'action principale de l'écran. */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 36px; margin: 0; padding: 7px 16px;
+  border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink);
+  font: 500 13px/1.2 'Gotham', system-ui, sans-serif; text-decoration: none; white-space: nowrap;
+  cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.btn:hover:not(:disabled) { border-color: var(--muted-2); color: var(--ink); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn--primary:hover:not(:disabled) { background: var(--accent-dark); border-color: var(--accent-dark); color: #fff; }
+.btn--ghost { background: transparent; border-color: transparent; color: var(--muted-2); }
+.btn--ghost:hover:not(:disabled) { border-color: transparent; color: var(--ink); text-decoration: underline; }
+.btn--sm { min-height: 30px; padding: 5px 11px; font-size: 12px; }
+.btn--icon { flex: none; width: 36px; padding: 0; }
+.btn--icon.is-on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn--icon.is-dirty { border-color: var(--accent); color: var(--accent); }
+.btn--icon.is-ok { color: var(--green); }
+
+/* Sélecteur de langue de l'interface (gabarit du sélecteur de rôle). */
+.role-switch { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; flex: 0 0 auto; }
+.role-switch button {
+  margin: 0; border: none; border-radius: 0; background: #fff; color: var(--muted-2);
+  padding: 7px 12px; font: 500 12px/1.2 'Gotham', system-ui, sans-serif; letter-spacing: 0.04em; cursor: pointer;
+}
+.role-switch button.is-on { background: var(--accent); color: #fff; }
+
+/* Bulles des boutons de la barre : encre du module. */
+.hdr-btn .hdr-tip { background: var(--ink); color: #fff; font-weight: 400; box-shadow: none; }
+.hdr-btn .hdr-tip::after { border-bottom-color: var(--ink); }
+.sig-info .sig-tip { background: var(--ink); box-shadow: none; }
+.sig-info .sig-tip::after { border-top-color: var(--ink); }
+.sig-info > button { border-color: var(--line); color: var(--muted); }
+.sig-info > button:hover { border-color: var(--accent); color: var(--accent); }

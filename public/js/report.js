@@ -60,12 +60,12 @@ function thumb(m, secPerLine, wPx = 248) {
     },
   }, renderModule(h, m, lt, { secPerLine }));
   return h('div', {
-    style: { position: 'relative', width: wPx + 'px', height: hPx + 'px', borderRadius: '8px', overflow: 'hidden', flex: '0 0 auto', border: '1px solid rgba(35,34,32,0.10)' },
+    style: { position: 'relative', width: wPx + 'px', height: hPx + 'px', borderRadius: '8px', overflow: 'hidden', flex: '0 0 auto', border: '1px solid var(--line)' },
   }, stage);
 }
 
-const card = (kids, extra = '') => html`<div style="background:#fff;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:20px 22px;${extra}">${kids}</div>`;
-const h3 = (t) => html`<h3 style="margin:0 0 4px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#8D1D2C;">${t}</h3>`;
+const card = (kids, extra = '') => html`<div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px 22px;${extra}">${kids}</div>`;
+const h3 = (t) => html`<h3 style="margin:0 0 4px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${t}</h3>`;
 
 class Report extends Component {
   state = { data: null, error: '' };
@@ -87,8 +87,8 @@ class Report extends Component {
   }
 
   render(_, st) {
-    if (st.error) return html`<div style="max-width:720px;margin:80px auto;padding:24px;text-align:center;color:#8D1D2C;font-family:${FUI};">Rapport indisponible — ${st.error}</div>`;
-    if (!st.data) return html`<div style="max-width:720px;margin:120px auto;text-align:center;color:#8A847C;font-family:${FUI};">Chargement du rapport…</div>`;
+    if (st.error) return html`<div style="max-width:720px;margin:80px auto;padding:24px;text-align:center;color:var(--accent);font-family:${FUI};">Rapport indisponible — ${st.error}</div>`;
+    if (!st.data) return html`<div style="max-width:720px;margin:120px auto;text-align:center;color:var(--muted);font-family:${FUI};">Chargement du rapport…</div>`;
 
     const d = st.data;
     const spl = d.secPerLine || 4;
@@ -114,7 +114,7 @@ class Report extends Component {
       return [...set];
     };
 
-    const chip = (txt, color) => html`<span style="font-size:11px;font-weight:700;letter-spacing:0.04em;color:${color};background:${color}18;border:1px solid ${color}55;border-radius:999px;padding:2px 10px;">${txt}</span>`;
+    const chip = (txt, color) => html`<span style="font-size:11px;font-weight:500;letter-spacing:0.04em;color:${color};background:${color}18;border:1px solid ${color}55;border-radius:999px;padding:2px 10px;">${txt}</span>`;
 
     const films = d.playlists || [];
 
@@ -126,20 +126,20 @@ class Report extends Component {
           <div style="display:flex;align-items:center;gap:16px;">
             <img src="assets/logo.png" alt="" style="height:52px;width:auto;" />
             <div>
-              <div style="font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8A847C;">${d.meta.brand} — Régie d'affichage</div>
-              <div style="font-size:26px;font-weight:700;letter-spacing:-0.01em;">Rapport de diffusion</div>
-              <div style="font-size:12px;color:#8A847C;margin-top:2px;">Généré le ${fmtDate(d.meta.generatedAt)} · version v${d.meta.version} · prix d${d.meta.dataVer}</div>
+              <div style="font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${d.meta.brand} — Régie d'affichage</div>
+              <div style="font-size:26px;font-weight:500;letter-spacing:-0.01em;">Rapport de diffusion</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Généré le ${fmtDate(d.meta.generatedAt)} · version v${d.meta.version} · prix d${d.meta.dataVer}</div>
             </div>
           </div>
           <div class="no-print" style="display:flex;gap:8px;">
-            <button onClick=${() => window.print()} style="padding:10px 16px;border-radius:999px;border:1px solid rgba(35,34,32,0.18);background:#fff;color:${INK};font-size:13px;font-weight:600;cursor:pointer;">🖨 Imprimer / PDF</button>
+            <button onClick=${() => window.print()} style="padding:10px 16px;border-radius:8px;border:1px solid var(--line);background:#fff;color:${INK};font-size:13px;font-weight:500;cursor:pointer;">🖨 Imprimer / PDF</button>
           </div>
         </div>
 
         <!-- Intro / explication -->
         ${card(html`
           ${h3('À propos de ce rapport')}
-          <p style="margin:6px 0 0;font-size:13.5px;line-height:1.6;color:#4A4640;">
+          <p style="margin:6px 0 0;font-size:13.5px;line-height:1.6;color:var(--muted-2);">
             Ce document récapitule <strong>tout ce qui est prêt à être diffusé</strong> sur les écrans de ${d.meta.brand} :
             la <strong>bibliothèque de films</strong> (chaque film est une suite d'éléments : catégories de produits avec prix,
             liaisons, animations, vidéos), le <strong>planning</strong> qui décide quel film passe à quel moment de la journée,
@@ -150,8 +150,8 @@ class Report extends Component {
 
         <!-- Bibliothèque de films -->
         <div style="display:flex;align-items:center;gap:10px;margin:0 2px 12px;">
-          <span style="font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:${INK};">1 · Bibliothèque de films</span>
-          <span style="font-size:12px;color:#8A847C;">${films.length} film(s)</span>
+          <span style="font-size:13px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:${INK};">1 · Bibliothèque de films</span>
+          <span style="font-size:12px;color:var(--muted);">${films.length} film(s)</span>
         </div>
 
         ${films.length ? films.map((f) => {
@@ -164,12 +164,12 @@ class Report extends Component {
             <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px;">
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                 <span style="width:10px;height:10px;border-radius:50%;background:${cat.color};"></span>
-                <span style="font-size:18px;font-weight:700;">${f.name}</span>
+                <span style="font-size:18px;font-weight:500;">${f.name}</span>
                 ${chip(cat.label, cat.color)}
-                ${(f.tags || []).map((t) => html`<span style="font-size:11px;font-weight:600;color:${cat.color};">#${t}</span>`)}
+                ${(f.tags || []).map((t) => html`<span style="font-size:11px;font-weight:500;color:${cat.color};">#${t}</span>`)}
                 ${f.id === d.activePlaylistId ? chip('▶ Actif', '#2E6E4E') : ''}
               </div>
-              <div style="font-size:12.5px;color:#8A847C;text-align:right;">
+              <div style="font-size:12.5px;color:var(--muted);text-align:right;">
                 ${mods.length} élément(s) · durée ${fmtDur(filmDur(f))}
               </div>
             </div>
@@ -178,47 +178,47 @@ class Report extends Component {
                 <div style="flex:0 0 auto;display:flex;flex-direction:column;gap:5px;width:248px;">
                   ${thumb(m, spl)}
                   <div style="display:flex;align-items:baseline;justify-content:space-between;gap:6px;">
-                    <span style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m.name || m.type}</span>
-                    <span style="font-size:10.5px;color:#8A847C;flex:0 0 auto;">${fmtDur(moduleDur(m, spl))}</span>
+                    <span style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m.name || m.type}</span>
+                    <span style="font-size:10.5px;color:var(--muted);flex:0 0 auto;">${fmtDur(moduleDur(m, spl))}</span>
                   </div>
-                  ${m.type === 'category' && m.items ? html`<span style="font-size:10.5px;color:#8A847C;">${activeItems(m).length} produit(s)</span>` : ''}
+                  ${m.type === 'category' && m.items ? html`<span style="font-size:10.5px;color:var(--muted);">${activeItems(m).length} produit(s)</span>` : ''}
                 </div>
-              `) : html`<span style="font-size:12.5px;color:#8A847C;padding:14px 0;">Film vide (aucun élément).</span>`}
+              `) : html`<span style="font-size:12.5px;color:var(--muted);padding:14px 0;">Film vide (aucun élément).</span>`}
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;padding-top:12px;border-top:1px solid rgba(35,34,32,0.07);font-size:12px;color:#6A655E;">
               <span><strong>Jours :</strong> ${everyDay ? 'tous les jours' : DAYS.filter((_, i) => days[i]).join(' · ') || '—'}</span>
               <span><strong>Diffusion :</strong> ${usage.length ? usage.join(' · ') : 'via l\'assignation par défaut de l\'écran'}</span>
             </div>
           `, 'margin-bottom:14px;');
-        }) : card(html`<p style="margin:0;font-size:13px;color:#8A847C;">Aucun film pour l'instant.</p>`, 'margin-bottom:14px;')}
+        }) : card(html`<p style="margin:0;font-size:13px;color:var(--muted);">Aucun film pour l'instant.</p>`, 'margin-bottom:14px;')}
 
         <!-- Planning -->
         <div style="display:flex;align-items:center;gap:10px;margin:26px 2px 12px;">
-          <span style="font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:${INK};">2 · Planning — moments de la journée</span>
+          <span style="font-size:13px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:${INK};">2 · Planning — moments de la journée</span>
         </div>
         ${this.renderPlanning(d, byId)}
 
         <!-- Écrans -->
         <div style="display:flex;align-items:center;gap:10px;margin:26px 2px 12px;">
-          <span style="font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:${INK};">3 · Écrans</span>
-          <span style="font-size:12px;color:#8A847C;">${d.stores.length} magasin(s)</span>
+          <span style="font-size:13px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:${INK};">3 · Écrans</span>
+          <span style="font-size:12px;color:var(--muted);">${d.stores.length} magasin(s)</span>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;">
           ${d.stores.map((s) => html`
-            <div style="background:#fff;border:1px solid rgba(35,34,32,0.08);border-radius:14px;padding:15px 17px;opacity:${s.active ? 1 : 0.55};">
+            <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:15px 17px;opacity:${s.active ? 1 : 0.55};">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-                <span style="font-size:15px;font-weight:700;">${s.name}</span>
-                ${s.active ? '' : html`<span style="font-size:10.5px;color:#8A847C;">inactif</span>`}
+                <span style="font-size:15px;font-weight:500;">${s.name}</span>
+                ${s.active ? '' : html`<span style="font-size:10.5px;color:var(--muted);">inactif</span>`}
               </div>
-              <div style="font-size:12px;color:#8A847C;margin:3px 0 8px;">${s.group || ''}</div>
-              <div style="font-size:12.5px;color:#4A4640;">📐 ${s.format.label} — <strong>${s.format.px}</strong></div>
-              <div style="font-size:12.5px;color:#4A4640;margin-top:2px;">🗣 Langue : ${(s.lang || 'fr').toUpperCase()}</div>
-              <a class="no-print" href=${`film?store=${encodeURIComponent(s.id)}`} target="_blank" style="display:inline-block;margin-top:9px;font-size:12.5px;font-weight:600;color:#8D1D2C;">↗ Voir l'écran en direct</a>
+              <div style="font-size:12px;color:var(--muted);margin:3px 0 8px;">${s.group || ''}</div>
+              <div style="font-size:12.5px;color:var(--muted-2);">📐 ${s.format.label} — <strong>${s.format.px}</strong></div>
+              <div style="font-size:12.5px;color:var(--muted-2);margin-top:2px;">🗣 Langue : ${(s.lang || 'fr').toUpperCase()}</div>
+              <a class="no-print" href=${`film?store=${encodeURIComponent(s.id)}`} target="_blank" style="display:inline-block;margin-top:9px;font-size:12.5px;font-weight:500;color:var(--accent);">↗ Voir l'écran en direct</a>
             </div>
           `)}
         </div>
 
-        <div style="margin-top:34px;text-align:center;font-size:11.5px;color:#B8B2A8;">
+        <div style="margin-top:34px;text-align:center;font-size:11.5px;color:var(--faint);">
           ${d.meta.brand} · Régie d'affichage — rapport généré automatiquement.
         </div>
       </div>
@@ -236,8 +236,8 @@ class Report extends Component {
 
     const windowsRow = html`
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
-        <span style="font-size:12px;font-weight:700;color:#2E6E4E;background:rgba(46,110,78,0.1);border:1px solid rgba(46,110,78,0.35);border-radius:999px;padding:4px 12px;">Semaine diffusée : ${activeWeek}</span>
-        ${windows.map((w) => html`<span style="font-size:12px;color:#4A4640;background:#F5EFE4;border-radius:999px;padding:4px 12px;"><strong>${w.label}</strong> ${w.from} → ${w.to}</span>`)}
+        <span style="font-size:12px;font-weight:500;color:var(--green);background:rgba(63,122,82,0.1);border:1px solid rgba(63,122,82,0.35);border-radius:999px;padding:4px 12px;">Semaine diffusée : ${activeWeek}</span>
+        ${windows.map((w) => html`<span style="font-size:12px;color:var(--muted-2);background:var(--chip);border-radius:999px;padding:4px 12px;"><strong>${w.label}</strong> ${w.from} → ${w.to}</span>`)}
       </div>`;
 
     // Seuls les magasins qui ont du contenu dans la semaine active, par jour.
@@ -250,7 +250,7 @@ class Report extends Component {
     if (!planned.length) {
       return card(html`
         ${windowsRow}
-        <p style="margin:6px 0 0;font-size:13px;color:#8A847C;line-height:1.6;">
+        <p style="margin:6px 0 0;font-size:13px;color:var(--muted);line-height:1.6;">
           Aucun créneau programmé dans la semaine active (${activeWeek}). Hors planning, chaque écran diffuse le film qui lui est assigné par défaut.
           Les fenêtres horaires ci-dessus sont communes à tous les magasins.
         </p>
@@ -259,28 +259,28 @@ class Report extends Component {
 
     return card(html`
       ${windowsRow}
-      <p style="margin:0 0 14px;font-size:12.5px;color:#8A847C;line-height:1.55;">
+      <p style="margin:0 0 14px;font-size:12.5px;color:var(--muted);line-height:1.55;">
         Planning de la semaine active (${activeWeek}) : pour chaque magasin et chaque jour, le(s) film(s) joué(s) à chaque moment
         (plusieurs films s'enchaînent en boucle). Hors créneau, l'écran reprend son film habituel.
       </p>
       <div style="display:flex;flex-direction:column;gap:16px;">
         ${planned.map(({ store, week, days }) => html`
           <div>
-            <div style="font-size:14px;font-weight:700;margin-bottom:8px;">${store.name}</div>
+            <div style="font-size:14px;font-weight:500;margin-bottom:8px;">${store.name}</div>
             <div style="display:flex;flex-direction:column;gap:8px;">
               ${days.map((day) => html`
                 <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;">
-                  <span style="flex:0 0 92px;font-size:12.5px;font-weight:700;color:#6E4A2B;padding-top:3px;">${DAY_LONG[day]}</span>
+                  <span style="flex:0 0 92px;font-size:12.5px;font-weight:500;color:var(--muted-2);padding-top:3px;">${DAY_LONG[day]}</span>
                   <div style="display:flex;gap:8px;flex-wrap:wrap;flex:1 1 auto;">
                     ${windows.map((w) => {
                       const fids = (week[day] && week[day][w.id]) || [];
                       if (!fids.length) return '';
                       return html`
-                        <div style="border:1px solid rgba(35,34,32,0.1);border-radius:10px;padding:8px 11px;background:#FBF8F2;min-width:150px;">
-                          <div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#8A847C;">${w.label}</div>
+                        <div style="border:1px solid var(--line);border-radius:10px;padding:8px 11px;background:var(--paper);min-width:150px;">
+                          <div style="font-size:10px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${w.label}</div>
                           ${fids.map((fid, i) => html`<div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
-                            <span style="font-size:9px;font-weight:700;color:${filmCat(fid).color};opacity:0.7;">${i + 1}</span>
-                            <span style="font-size:12.5px;font-weight:600;color:${filmCat(fid).color};">${filmName(fid)}</span>
+                            <span style="font-size:9px;font-weight:500;color:${filmCat(fid).color};opacity:0.7;">${i + 1}</span>
+                            <span style="font-size:12.5px;font-weight:500;color:${filmCat(fid).color};">${filmName(fid)}</span>
                           </div>`)}
                         </div>`;
                     })}

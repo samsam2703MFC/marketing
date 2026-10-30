@@ -17,6 +17,11 @@ async function api(method, path, body) {
   return j;
 }
 const RUBY = '#8D1D2C';
+// Affiché dans le cadre du module Marketing (version franchisé) : pas de logo,
+// le menu du module est déjà à gauche.
+const EMBEDDED = (() => {
+  try { return new URLSearchParams(location.search).get('embed') === '1' || window.self !== window.top; } catch { return true; }
+})();
 const REFRESH_MS = 15000;
 
 // ---- FR / NL ---------------------------------------------------------------
@@ -168,32 +173,31 @@ class Magasin extends Component {
   }
 
   langSwitch() {
-    const b = (id) => `padding:6px 11px;font-size:12px;font-weight:700;border:none;border-radius:7px;cursor:pointer;${this.state.lang === id ? 'background:#fff;color:#232220;box-shadow:0 1px 3px rgba(0,0,0,0.1);' : 'background:transparent;color:#8A847C;'}`;
-    return html`<div style="display:inline-flex;background:#EFE9E0;border-radius:9px;padding:3px;">
-      <button onClick=${() => this.setLang('fr')} style=${b('fr')}>FR</button>
-      <button onClick=${() => this.setLang('nl')} style=${b('nl')}>NL</button>
+    return html`<div class="role-switch">
+      <button onClick=${() => this.setLang('fr')} class=${this.state.lang === 'fr' ? 'is-on' : ''}>FR</button>
+      <button onClick=${() => this.setLang('nl')} class=${this.state.lang === 'nl' ? 'is-on' : ''}>NL</button>
     </div>`;
   }
 
   render(_, st) {
     const t = this.t;
-    if (!st.ready) return html`<div style="max-width:640px;margin:120px auto;text-align:center;color:#8A847C;font-family:'Gotham';">${t('loading')}</div>`;
-    const card = 'background:#fff;border:1px solid rgba(35,34,32,0.08);border-radius:16px;padding:18px 20px;margin-bottom:16px;';
-    const h3 = `margin:0 0 10px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${RUBY};`;
-    const input = 'width:100%;box-sizing:border-box;padding:12px 14px;font-size:14px;border:1px solid rgba(35,34,32,0.18);border-radius:10px;background:#FBF8F2;';
+    if (!st.ready) return html`<div style="max-width:640px;margin:120px auto;text-align:center;color:var(--muted);font-family:'Gotham';">${t('loading')}</div>`;
+    const card = 'background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px;';
+    const h3 = 'margin:0 0 10px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);';
+    const input = 'width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;border:1px solid var(--line);border-radius:10px;background:var(--paper);';
 
     if (st.authRequired) {
       return html`
         <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;font-family:'Gotham';">
-          <form onSubmit=${this.login} style="width:100%;max-width:380px;background:#fff;border:1px solid rgba(35,34,32,0.08);border-radius:18px;padding:30px 28px;box-shadow:0 20px 60px rgba(35,34,32,0.12);display:flex;flex-direction:column;gap:12px;">
+          <form onSubmit=${this.login} style="width:100%;max-width:380px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:30px 28px;box-shadow:0 20px 60px rgba(35,34,32,0.12);display:flex;flex-direction:column;gap:12px;">
             <div style="display:flex;align-items:center;justify-content:space-between;"><img src="assets/logo.png" alt="" style="height:46px;" />${this.langSwitch()}</div>
-            <h1 style="margin:4px 0 0;font-size:20px;font-weight:700;">${t('title')}</h1>
-            <p style="margin:0 0 6px;font-size:12.5px;color:#8A847C;">${t('loginSub')}</p>
+            <h1 style="margin:4px 0 0;font-size:20px;font-weight:500;">${t('title')}</h1>
+            <p style="margin:0 0 6px;font-size:12.5px;color:var(--muted);">${t('loginSub')}</p>
             <input value=${st.loginUser} onInput=${(e) => this.setState({ loginUser: e.target.value })} placeholder=${t('user')} autocomplete="username" autocapitalize="off" style=${input} />
             <input type="password" value=${st.loginPass} onInput=${(e) => this.setState({ loginPass: e.target.value })} placeholder=${t('password')} autocomplete="current-password" style=${input} />
             ${st.loginError ? html`<div style="font-size:12.5px;color:${RUBY};">${st.loginError}</div>` : ''}
-            ${st.wrongRole ? html`<a href="./" style="font-size:12.5px;color:${RUBY};font-weight:600;">${t('toConsole')} →</a>` : ''}
-            <button type="submit" disabled=${st.loggingIn} style="width:100%;padding:12px;font-size:14px;font-weight:600;color:#fff;background:${RUBY};border:none;border-radius:10px;cursor:pointer;">${st.loggingIn ? t('signingIn') : t('signIn')}</button>
+            ${st.wrongRole ? html`<a href="./" style="font-size:12.5px;color:${RUBY};font-weight:500;">${t('toConsole')} →</a>` : ''}
+            <button type="submit" disabled=${st.loggingIn} style="width:100%;padding:12px;font-size:14px;font-weight:500;color:#fff;background:${RUBY};border:none;border-radius:10px;cursor:pointer;">${st.loggingIn ? t('signingIn') : t('signIn')}</button>
           </form>
         </div>`;
     }
@@ -214,25 +218,26 @@ class Magasin extends Component {
     const stCol = { playing: '#2E7D32', syncing: '#B8860B', offline: RUBY, error: RUBY, idle: '#8A847C' };
 
     return html`
-      <div style="max-width:1000px;margin:0 auto;padding:24px 20px 70px;font-family:'Gotham';color:#232220;">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px;">
-          <div style="display:flex;align-items:center;gap:14px;">
-            <img src="assets/logo.png" alt="" style="height:46px;" />
-            <div>
-              <div style="font-size:11px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8A847C;">${t('title')}</div>
-              <div style="font-size:22px;font-weight:700;">${d.store.name}</div>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;">
-            ${this.langSwitch()}
-            <button onClick=${this.logout} style="padding:9px 15px;font-size:12.5px;font-weight:600;color:${RUBY};background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:999px;cursor:pointer;">${t('logout')}</button>
+      <div style="font-family:'Gotham';color:var(--ink);">
+      <header class="topbar">
+        <div style="display:flex;align-items:center;gap:16px;min-width:0;">
+          ${EMBEDDED ? '' : html`<img src="assets/logo.png" alt="L'Atelier By" style="height:26px;" />`}
+          <div class="topbar__title">
+            <p class="topbar__kicker">${t('title')}</p>
+            <h1>${d.store.name}</h1>
           </div>
         </div>
+        <div class="topbar__actions">
+          ${this.langSwitch()}
+          <button class="btn" onClick=${this.logout}>${t('logout')}</button>
+        </div>
+      </header>
+      <div style="max-width:1000px;padding:22px 24px 70px;">
 
         ${location.protocol === 'http:' && d.https && d.https.ok ? html`
-          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:rgba(46,110,78,0.08);border:1px solid rgba(46,110,78,0.3);border-radius:14px;padding:12px 16px;margin-bottom:16px;">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:rgba(63,122,82,0.08);border:1px solid rgba(63,122,82,0.3);border-radius:12px;padding:12px 16px;margin-bottom:16px;">
             <span style="flex:1 1 300px;font-size:12.5px;color:#1F5B2A;line-height:1.5;">🔒 ${t('httpsBanner')}</span>
-            <a href=${new URL('magasin', d.https.base).toString()} style="font-size:12.5px;font-weight:700;color:#1F5B2A;">${t('httpsOpen')}</a>
+            <a href=${new URL('magasin', d.https.base).toString()} style="font-size:12.5px;font-weight:500;color:#1F5B2A;">${t('httpsOpen')}</a>
           </div>` : ''}
 
         <!-- Écrans -->
@@ -248,63 +253,64 @@ class Magasin extends Component {
               if (s.detail) notes.push(s.detail.sw ? t('bootOk') : t('bootNo'));
               notes.push(t('seen', { x: this.ago(s.syncAgo) }));
               const link = new URL(s.link, linkBase).toString();
-              return html`<div style="display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:12px;background:#FBF8F2;border:1px solid rgba(35,34,32,0.08);flex-wrap:wrap;">
+              return html`<div style="display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:12px;background:var(--paper);border:1px solid var(--line);flex-wrap:wrap;">
                 <span style="width:10px;height:10px;border-radius:50%;flex:0 0 auto;background:${stCol[s.state] || '#8A847C'};"></span>
                 <div style="flex:1 1 260px;min-width:0;">
-                  <div style="font-size:14px;font-weight:700;">${s.name} <span style="font-size:11.5px;font-weight:600;color:${stCol[s.state] || '#8A847C'};margin-left:6px;">${t('st_' + s.state) || s.state}</span></div>
+                  <div style="font-size:14px;font-weight:500;">${s.name} <span style="font-size:11.5px;font-weight:500;color:${stCol[s.state] || '#8A847C'};margin-left:6px;">${t('st_' + s.state) || s.state}</span></div>
                   <div style="font-size:12px;color:${(a && a.missing) || late ? RUBY : '#6E675E'};margin-top:3px;line-height:1.5;">${notes.join(' · ')}</div>
                 </div>
-                <a href=${link} target="_blank" style="font-size:12.5px;font-weight:600;color:${RUBY};">${t('open')} ↗</a>
-                <button onClick=${() => this.copy(link)} style="padding:7px 12px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:${RUBY};cursor:pointer;">${t('copy')}</button>
+                <a href=${link} target="_blank" style="font-size:12.5px;font-weight:500;color:${RUBY};">${t('open')} ↗</a>
+                <button onClick=${() => this.copy(link)} style="padding:7px 12px;font-size:12px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;">${t('copy')}</button>
               </div>`;
             })}
-          </div>` : html`<p style="margin:0;font-size:13px;color:#6E675E;line-height:1.6;">${t('noScreens')}</p>`}
+          </div>` : html`<p style="margin:0;font-size:13px;color:var(--muted-2);line-height:1.6;">${t('noScreens')}</p>`}
         </div>
 
         <!-- Lien d'écran du magasin -->
         <div style=${card}>
           <h3 style=${h3}>${t('storeLink')}</h3>
-          <p style="margin:0 0 10px;font-size:12.5px;color:#6E675E;line-height:1.6;">${t('storeLinkHelp')}</p>
+          <p style="margin:0 0 10px;font-size:12.5px;color:var(--muted-2);line-height:1.6;">${t('storeLinkHelp')}</p>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-            <input readonly value=${filmUrl} onClick=${(e) => e.target.select()} style="flex:1 1 280px;min-width:0;padding:9px 11px;font-size:12.5px;font-family:ui-monospace,monospace;border:1px solid rgba(35,34,32,0.12);border-radius:8px;background:#FBF8F2;" />
-            <button onClick=${() => this.copy(filmUrl)} style="padding:9px 14px;font-size:12.5px;font-weight:600;border-radius:8px;border:1px solid rgba(141,29,44,0.25);background:rgba(141,29,44,0.06);color:${RUBY};cursor:pointer;">${t('copy')}</button>
-            <a href=${filmUrl} target="_blank" style="font-size:12.5px;font-weight:600;color:${RUBY};">${t('watch')}</a>
+            <input readonly value=${filmUrl} onClick=${(e) => e.target.select()} style="flex:1 1 280px;min-width:0;padding:9px 11px;font-size:12.5px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:var(--paper);" />
+            <button onClick=${() => this.copy(filmUrl)} style="padding:9px 14px;font-size:12.5px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;">${t('copy')}</button>
+            <a href=${filmUrl} target="_blank" style="font-size:12.5px;font-weight:500;color:${RUBY};">${t('watch')}</a>
           </div>
         </div>
 
         <!-- Ruptures -->
         <div style=${card}>
           <h3 style=${h3}>${t('ruptures')}</h3>
-          <p style="margin:0 0 12px;font-size:12.5px;color:#6E675E;line-height:1.6;">${t('rupturesHelp')}</p>
-          <div style="font-size:12px;font-weight:600;color:#4A4640;margin-bottom:8px;">${t('nowOut', { n: out.length })}</div>
+          <p style="margin:0 0 12px;font-size:12.5px;color:var(--muted-2);line-height:1.6;">${t('rupturesHelp')}</p>
+          <div style="font-size:12px;font-weight:500;color:var(--muted-2);margin-bottom:8px;">${t('nowOut', { n: out.length })}</div>
           ${out.length ? html`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
             ${out.map((p) => html`<div style="display:inline-flex;align-items:center;gap:8px;padding:7px 8px 7px 12px;border-radius:999px;background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.25);">
-              <span style="font-size:12.5px;font-weight:700;color:${RUBY};">${p.name}</span>
-              <span style="font-size:11px;color:#8A847C;">${p.until ? t('tonight') : t('manual')}</span>
-              <button disabled=${st.busyId === p.id} onClick=${() => this.setOut(p, false)} style="padding:5px 10px;font-size:11.5px;font-weight:700;border:none;border-radius:999px;background:#2E7D32;color:#fff;cursor:pointer;">${t('backOn')}</button>
+              <span style="font-size:12.5px;font-weight:500;color:${RUBY};">${p.name}</span>
+              <span style="font-size:11px;color:var(--muted);">${p.until ? t('tonight') : t('manual')}</span>
+              <button disabled=${st.busyId === p.id} onClick=${() => this.setOut(p, false)} style="padding:5px 10px;font-size:11.5px;font-weight:500;border:none;border-radius:8px;background:var(--green);color:#fff;cursor:pointer;">${t('backOn')}</button>
             </div>`)}
-          </div>` : html`<p style="margin:0 0 14px;font-size:12.5px;color:#8A847C;">${t('noneOut')}</p>`}
+          </div>` : html`<p style="margin:0 0 14px;font-size:12.5px;color:var(--muted);">${t('noneOut')}</p>`}
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
-            <input value=${st.q} onInput=${(e) => this.setState({ q: e.target.value })} placeholder=${t('search')} style="flex:1 1 240px;min-width:0;padding:10px 12px;font-size:13.5px;border:1px solid rgba(35,34,32,0.16);border-radius:9px;background:#FBF8F2;" />
-            <label style="display:inline-flex;align-items:center;gap:7px;font-size:12px;color:#4A4640;cursor:pointer;">
+            <input value=${st.q} onInput=${(e) => this.setState({ q: e.target.value })} placeholder=${t('search')} style="flex:1 1 240px;min-width:0;padding:10px 12px;font-size:13.5px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
+            <label style="display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted-2);cursor:pointer;">
               <input type="checkbox" checked=${st.keep} onChange=${(e) => this.setState({ keep: e.target.checked })} />${t('keep')}
             </label>
           </div>
           ${groups.length ? groups.map((g) => html`
             <div style="margin-top:10px;">
-              <div style="font-size:10.5px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8A847C;margin-bottom:6px;">${g.name}</div>
+              <div style="font-size:10.5px;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">${g.name}</div>
               <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:6px;">
                 ${g.items.map((p) => html`<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;border:1px solid ${p.unavailable ? 'rgba(141,29,44,0.3)' : 'rgba(35,34,32,0.08)'};background:${p.unavailable ? 'rgba(141,29,44,0.05)' : '#FBF8F2'};">
-                  <span style="flex:1 1 auto;min-width:0;font-size:13px;font-weight:600;line-height:1.3;overflow-wrap:anywhere;${p.unavailable ? `color:${RUBY};text-decoration:line-through;` : ''}">${p.name}</span>
-                  <span style="flex:0 0 auto;font-size:11.5px;color:#8A847C;white-space:nowrap;">${p.price ? `${p.price} €` : ''}</span>
+                  <span style="flex:1 1 auto;min-width:0;font-size:13px;font-weight:500;line-height:1.3;overflow-wrap:anywhere;${p.unavailable ? `color:${RUBY};text-decoration:line-through;` : ''}">${p.name}</span>
+                  <span style="flex:0 0 auto;font-size:11.5px;color:var(--muted);white-space:nowrap;">${p.price ? `${p.price} €` : ''}</span>
                   <button disabled=${st.busyId === p.id} onClick=${() => this.setOut(p, !p.unavailable)}
-                    style="flex:0 0 auto;padding:6px 10px;font-size:11.5px;font-weight:700;border-radius:8px;cursor:pointer;${p.unavailable ? 'border:none;background:#2E7D32;color:#fff;' : `border:1px solid rgba(141,29,44,0.35);background:#fff;color:${RUBY};`}">${p.unavailable ? t('backOn') : t('markOut')}</button>
+                    style="flex:0 0 auto;padding:6px 10px;font-size:11.5px;font-weight:500;border-radius:8px;cursor:pointer;${p.unavailable ? 'border:none;background:var(--green);color:#fff;' : `border:1px solid rgba(141,29,44,0.35);background:#fff;color:${RUBY};`}">${p.unavailable ? t('backOn') : t('markOut')}</button>
                 </div>`)}
               </div>
-            </div>`) : html`<p style="margin:8px 0 0;font-size:12.5px;color:#8A847C;">${t('noProduct')}</p>`}
+            </div>`) : html`<p style="margin:8px 0 0;font-size:12.5px;color:var(--muted);">${t('noProduct')}</p>`}
         </div>
 
-        ${st.toast ? html`<div style="position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#232220;color:#fff;font-size:13px;padding:11px 18px;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,0.25);z-index:50;">${st.toast}</div>` : ''}
+        ${st.toast ? html`<div style="position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--ink);color:#fff;font-size:13px;padding:11px 18px;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,0.25);z-index:50;">${st.toast}</div>` : ''}
+      </div>
       </div>`;
   }
 }

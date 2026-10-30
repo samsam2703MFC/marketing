@@ -41,6 +41,20 @@ export const I18N = {
   'nav.fleet': { fr: 'Réseau & supervision', nl: 'Netwerk & toezicht', en: 'Network & monitoring', it: 'Rete e supervisione' },
   'nav.seeFilm': { fr: '▶ Voir le film', nl: '▶ Film bekijken', en: '▶ View film', it: '▶ Vedi film' },
   'nav.uiLang': { fr: 'Langue de l\'interface', nl: 'Taal van de interface', en: 'Interface language', it: 'Lingua dell\'interfaccia' },
+  // -- coquille du module Marketing (barre latérale, barre supérieure) --
+  'shell.kicker': { fr: 'Marketing en magasin', nl: 'Marketing in de winkel', en: 'In-store marketing', it: 'Marketing in negozio' },
+  'shell.back': { fr: 'Retour au Marketing', nl: 'Terug naar Marketing', en: 'Back to Marketing', it: 'Torna al Marketing' },
+  'shell.menu': { fr: 'Navigation de la régie', nl: 'Navigatie van het schermbeheer', en: 'Console navigation', it: 'Navigazione della console' },
+  'shell.grpBroadcast': { fr: 'Diffusion', nl: 'Uitzending', en: 'Broadcast', it: 'Trasmissione' },
+  'shell.grpContent': { fr: 'Contenus', nl: 'Inhoud', en: 'Content', it: 'Contenuti' },
+  'shell.grpCampaigns': { fr: 'Campagnes', nl: 'Campagnes', en: 'Campaigns', it: 'Campagne' },
+  'shell.grpSettings': { fr: 'Réglages', nl: 'Instellingen', en: 'Settings', it: 'Impostazioni' },
+  'shell.broadcast': { fr: 'Diffuser', nl: 'Uitzenden', en: 'Broadcast', it: 'Trasmetti' },
+  'shell.publish': { fr: 'Publier', nl: 'Publiceren', en: 'Publish', it: 'Pubblica' },
+  'shell.seeFilm': { fr: 'Voir le film', nl: 'Film bekijken', en: 'View film', it: 'Vedi film' },
+  'shell.onboarding': { fr: 'Mise en route', nl: 'Opstarten', en: 'Getting started', it: 'Avvio' },
+  'shell.report': { fr: 'Rapport de diffusion', nl: 'Uitzendrapport', en: 'Broadcast report', it: 'Report di trasmissione' },
+  'shell.tabs': { fr: 'Écrans de la régie', nl: 'Schermen van het schermbeheer', en: 'Console screens', it: 'Schermate della console' },
 
   // -- boutons d'en-tête (info-bulles) --
   'hdr.undo': { fr: 'Annuler (⌘Z)', nl: 'Ongedaan maken (⌘Z)', en: 'Undo (⌘Z)', it: 'Annulla (⌘Z)' },
