@@ -202,18 +202,17 @@ entière, pour attraper une colonne ajoutée plus tard.
   secret de session présents) — des états, aucune valeur ; champs ajoutés,
   rien de retiré ni renommé.
 
-**Connexion** (`POST …/session`, octobre 2026). Le module ne garde aucun mot de
-passe : il présente téléphone et mot de passe à l'ERP (`MAR_ERP_AUTH_BASE`).
-Réalm `admin` accepté → `BRAND_ADMIN`. Refusé faute d'appartenance admin (403,
-ou 409) → réalm `owner` ; accepté, les boutiques du compte sont lues dans l'ERP
-avec son propre jeton (`GET /api/v1/owner/shops`) et rapprochées de `mar_shop`
-(`erp_shop_id`, ou code `erp-N`) → `FRANCHISEE` limité à celles-là. Mot de passe
-faux : 401, sans essayer l'autre réalm. Compte sans boutique connue : 403
-nommant les identifiants de l'ERP. Le cookie `mar_session` (`HttpOnly`,
-`SameSite=Lax`, `Secure` en HTTPS) porte rôle et boutiques, signé par
-`MAR_SESSION_SECRET` : réécrit, il ne vaut rien. Le jeton de l'ERP n'est pas
-gardé. Écarts au §5 : pas de JWT RS256 propre ni de refresh à rotation — une
-session de 12 heures, puis une nouvelle connexion.
+**Connexion** (`POST …/session`, octobre 2026). Le module sert au pilotage de
+la marque : il s'ouvre avec un **compte réseau** de l'ERP, et avec lui
+seulement. Il ne garde aucun mot de passe : il présente téléphone et mot de
+passe au réalm `admin` de l'ERP (`MAR_ERP_AUTH_BASE`). Accepté → `BRAND_ADMIN`.
+Refusé faute d'appartenance réseau (403, ou 409) → 403 : un compte de boutique
+n'a pas accès au module, le réalm `owner` n'est pas essayé. Mot de passe faux :
+401. Le cookie `mar_session` (`HttpOnly`, `SameSite=Lax`, `Secure` en HTTPS)
+porte l'identité, signé par `MAR_SESSION_SECRET` : réécrit, il ne vaut rien, et
+un cookie qui ne serait pas réseau n'ouvre rien, même signé. Le jeton de l'ERP
+n'est pas gardé. Écarts au §5 : pas de JWT RS256 propre ni de refresh à
+rotation — une session de 12 heures, puis une nouvelle connexion.
 
 **Accès de service.** Le module Social et le cockpit appellent cette API de
 serveur à serveur. Ils présentent `X-Marketing-Service`, comparé en temps

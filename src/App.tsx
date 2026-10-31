@@ -56,13 +56,11 @@ export default function App() {
     )
   }
 
-  const space = ROLE === 'FRANCHISEE' ? 'franchise' : 'reseau'
   const current = session.data
 
   if (!current?.authenticated || loginOpen) {
     return (
       <LoginView
-        space={space}
         onDone={() => {
           setLoginOpen(false)
           reload()
@@ -78,30 +76,6 @@ export default function App() {
     } finally {
       reload()
     }
-  }
-
-  // La version réseau est celle du réseau : un compte de boutique y est renvoyé vers son espace.
-  if (ROLE === 'BRAND_ADMIN' && current.role !== 'BRAND_ADMIN') {
-    const franchise = import.meta.env.VITE_FRANCHISE_BASE
-    return (
-      <div className="auth">
-        <section className="auth__card login">
-          <img src={`${import.meta.env.BASE_URL}img/logo.png`} alt="L'Atelier By" className="login__logo" />
-          <h1 className="login__title">Compte de boutique</h1>
-          <p className="muted login__sub">
-            {current.label ? `${current.label} — ` : ''}ce compte ouvre l’espace de ses boutiques, pas la version réseau.
-          </p>
-          {franchise ? (
-            <a className="btn btn--primary" href={franchise}>
-              Ouvrir l’espace boutique
-            </a>
-          ) : null}
-          <button type="button" className="ghost login__cancel" onClick={logout}>
-            Se déconnecter
-          </button>
-        </section>
-      </div>
-    )
   }
 
   return <Workspace account={{ via: current.via ?? null, label: current.label ?? null }} onLogin={() => setLoginOpen(true)} onLogout={logout} />

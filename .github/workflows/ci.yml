@@ -574,7 +574,7 @@ jobs:
       # La connexion au module, indépendante des secrets de base : le .env du
       # serveur peut être tenu à la main, et l'étape précédente est alors sautée.
       # Ce qui manque est ajouté, rien n'est réécrit :
-      #   MAR_ERP_AUTH_BASE  l'ERP où se vérifient les identifiants (réalms admin, owner) ;
+      #   MAR_ERP_AUTH_BASE  l'ERP où se vérifient les identifiants (comptes réseau, réalm admin) ;
       #   MAR_SESSION_SECRET signe les cookies de session ;
       #   MAR_SERVICE_TOKEN  présenté par le module Social et le cockpit, qui appellent
       #                      cette API de serveur à serveur — recopié dans service-token.
