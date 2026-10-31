@@ -18,6 +18,7 @@ import CrmView from './views/CrmView'
 import CampaignTypesView from './views/CampaignTypesView'
 import AddressesView from './views/AddressesView'
 import CampaignFixView from './views/CampaignFixView'
+import BrochureView from './views/brochure/BrochureView'
 import CampaignBuilder from './views/builder/CampaignBuilder'
 import SocialView from './views/SocialView'
 import InStoreView from './views/InStoreView'
@@ -317,7 +318,7 @@ function Workspace() {
         )}
 
         <main
-          className={`app__body${route === 'builder' ? ' app__body--wide' : ''}${framed ? ' app__body--frame' : ''}`}
+          className={`app__body${route === 'builder' || route === 'brochures' ? ' app__body--wide' : ''}${framed ? ' app__body--frame' : ''}`}
         >
           {/* Une entrée à onglets : les écrans qui montraient la même donnée sous plusieurs entrées du menu. */}
           {tabs ? (
@@ -372,6 +373,7 @@ function Workspace() {
           {route === 'crm' ? <CrmView /> : null}
           {route === 'campaign-types' ? <CampaignTypesView /> : null}
           {route === 'addresses' ? <AddressesView /> : null}
+          {route === 'brochures' && role === 'BRAND_ADMIN' ? <BrochureView campaignId={campaignId} onOpenCampaign={openCampaign} /> : null}
 
           {route === 'campaign-fix' ? (
             <CampaignFixView
@@ -412,6 +414,7 @@ function Workspace() {
               onPlanPosts={role === 'BRAND_ADMIN' ? () => planPosts(campaignId) : undefined}
               onOpenAssistant={() => setRoute('builder')}
               onComplete={() => completeCampaigns(campaignId)}
+              onBrochures={role === 'BRAND_ADMIN' ? () => setRoute('brochures') : undefined}
               brandAdmin={role === 'BRAND_ADMIN'}
             />
           ) : null}

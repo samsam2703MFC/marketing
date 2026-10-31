@@ -14,6 +14,7 @@ declare(strict_types=1);
  * l'application ; seuls les contrôleurs sont à reprendre.
  */
 
+use Marketing\Controller\BrochureController;
 use Marketing\Controller\CampaignController;
 use Marketing\Controller\CampaignVoucherController;
 use Marketing\Controller\CatalogController;
@@ -41,6 +42,7 @@ return static function (Router $router): void {
     $uploads    = new UploadController();
     $public     = new PublicController();
     $campaignVouchers = new CampaignVoucherController();
+    $brochures  = new BrochureController();
 
     // Session — publique : elle ne dit que si l'appelant est authentifié.
     // Le front s'en sert pour savoir s'il est embarqué dans l'ERP, auquel cas
@@ -81,6 +83,9 @@ return static function (Router $router): void {
     $router->patch('/api/v1/marketing/campaigns/{id}',          [$campaigns, 'update']);
     $router->put('/api/v1/marketing/campaigns/{id}/lever-targets', [$campaigns, 'leverTargets']);
     $router->post('/api/v1/marketing/campaigns/{id}/offer-items', [$campaigns, 'addOfferItems']);
+    // Brochures (leaflet A5, dépliant A4) : les réglages du générateur ; le contenu vient de …/print.
+    $router->get('/api/v1/marketing/campaigns/{id}/brochures',          [$brochures, 'index']);
+    $router->put('/api/v1/marketing/campaigns/{id}/brochures/{format}', [$brochures, 'save']);
     $router->delete('/api/v1/marketing/campaigns/{id}',         [$campaigns, 'destroy']);
 
     // Ventes réelles — l'historique qui éclaire l'étape « Objectifs »

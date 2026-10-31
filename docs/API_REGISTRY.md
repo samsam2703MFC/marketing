@@ -83,6 +83,8 @@ entière, pour attraper une colonne ajoutée plus tard.
 | POST | `…/campaigns/{id}/offer-items` | tenant (même règle d'écriture) | `{status, message}` — produits du catalogue ajoutés à l'offre, tout statut ; ajout seul, idempotent |
 | GET | `…/campaigns/{id}/monitor` | tenant | objet |
 | GET | `…/campaigns/{id}/print` | tenant | objet (dossier d'impression) |
+| GET | `…/campaigns/{id}/brochures` | tenant | tableau `[{format, settings, updated_at}]` — réglages du générateur de brochures, un par format |
+| PUT | `…/campaigns/{id}/brochures/{format}` | tenant (écriture : marque, ou boutique sur sa campagne locale) | `{status, message}` — `format` ∈ `leaflet-a5`, `depliant-a4` ; remplace les réglages du format, idempotent |
 | GET | `…/campaigns/{id}/roi-costs` | marque | tableau |
 | GET | `…/campaigns/{id}/vouchers` | tenant (résultats limités aux boutiques de l'appelant) | objet `{configured, message, can_edit, vouchers, totals, campaign_promotions}` |
 | POST | `…/campaigns/{id}/vouchers` | tenant (écriture : marque, ou boutique sur sa campagne locale) | `{status, message, inserted_id}` — `inserted_id` = le code |
@@ -326,6 +328,34 @@ produit et ses bundles. Un produit déjà présent n'est pas rajouté ; une
 campagne sans offre en reçoit une, à son nom. Produit inconnu ou liste vide :
 422, rien d'écrit. Écart résiduel des deux routes, comme le reste du module :
 pas d'enveloppe `{success, data, meta}`, `snake_case`.
+
+**Brochures d'une campagne** (`GET …/brochures`, `PUT …/brochures/{format}`, octobre 2026).
+Le générateur de brochures (Campagnes › Brochures & leaflets) compose un leaflet
+A5 recto-verso ou un dépliant A4 trois volets à partir du dossier d'impression
+(`GET …/print`) : offre, produits, prix, conditions et palette ne sont pas
+recopiés. Ces deux routes ne portent que ce qui appartient à la brochure : le
+modèle, les textes en français et en néerlandais, le choix et l'ordre des
+produits, un prix saisi quand le catalogue n'en a pas de fiable, la destination
+du QR code et les boutiques écartées. Corps du `PUT` :
+`{ "settings": { template, texts: {fr, nl}, products: [{key, on, price}], qr: {mode, category, group}, excludedShops: [n], cropMarks } }`.
+Validation stricte : clé inconnue, modèle hors liste, texte de plus de 240
+caractères, prix négatif ou QR « catégorie » sans catégorie refusent l'envoi
+entier (422, rien d'écrit). Table `mar_campaign_brochure` (migration 038), une
+ligne par campagne et par format. Écart résiduel, comme le reste du module :
+pas d'enveloppe `{success, data, meta}`, erreurs sans code machine ; les clés
+des réglages sont en `camelCase` parce que le document est rendu tel quel au
+front.
+
+Le générateur lit aussi, sans rien y écrire :
+
+| Route | Ce que le générateur en tire |
+|---|---|
+| `GET {VITE_SOCIAL_BASE}api/v1/social/state` | les boutiques (adresse, horaires, téléphone, langues) et l'adresse du webshop |
+| `GET {VITE_SOCIAL_BASE}api/v1/social/catalogue/nav?shop=N` | les catégories du webshop de la boutique, pour diriger le QR code |
+
+Le QR code de chaque version mène au webshop **de la boutique** :
+`{webshopUrl}?shop=N`, suivi de la catégorie choisie le cas échéant — le même
+lien que les posts du module Social.
 
 **Routes lues par le Tableau de bord, bloc « Trafic clients et panier moyen »**
 (vue Réseau seule, lecture seule) :

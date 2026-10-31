@@ -1996,6 +1996,25 @@ export interface SocialAdItem {
 export interface SocialState {
   posts: SocialPost[]
   ads: SocialAdItem[]
+  /** Les boutiques telles que le module Social les tient (adresse, horaires, langues) : le générateur de brochures s'en sert. */
+  shops?: SocialShop[]
+  /** Le webshop du réseau ; une boutique s'y ouvre par `?shop={n° de caisse}`. */
+  webshopUrl?: string
+  brand?: { name?: string; langs?: string[] }
+}
+
+/** Une boutique du module Social : `id` est son numéro de caisse, le `N` du code `erp-N` de ce module. */
+export interface SocialShop {
+  id: string
+  name: string
+  address?: string
+  hours?: string
+  hoursNl?: string
+  phone?: string
+  /** Les langues de la boutique : une brochure en est tirée dans chacune. */
+  langs?: string[]
+  /** Magasin test : pas de webshop. */
+  test?: boolean
 }
 
 /** L'état du module Social : ses posts et les publicités Meta qu'il suit. */
@@ -2100,4 +2119,107 @@ export interface StoreMonth {
  */
 export function getStoreMonths(years: number[]): Promise<StoreMonth[]> {
   return request(`${COCKPIT}/stores/perf`, { query: { annees: years.join(',') } })
+}
+
+
+// ---------------------------------------------------------------------------
+// Brochures : dossier d'impression, réglages du générateur, catégories du webshop
+// ---------------------------------------------------------------------------
+
+/** Une mécanique de prix appliquée à un produit de l'offre (voir `OfferPricing` côté API). */
+export interface PrintMechanic {
+  type: string
+  value: number | null
+  buy: number | null
+  get: number | null
+  /** Le texte de la mécanique, en français (« −20 % », « 2 + 1 offert »). */
+  text: string | null
+}
+
+export interface PrintProduct {
+  label: string
+  name: string | null
+  family: string | null
+  sku_ref: string | null
+  image_url: string | null
+  price_before: number | null
+  price_after: number | null
+  mechanic: PrintMechanic | null
+  options: { show_photo: boolean; show_price_before: boolean; show_price_after: boolean; show_mechanic: boolean }
+}
+
+/** Le dossier d'impression général d'une campagne : ce qu'un client lit. */
+export interface PrintFile {
+  campaign: {
+    id: number
+    name: string
+    starts_on: string | null
+    ends_on: string | null
+    type_label: string | null
+    lever_label: string | null
+    tone: string | null
+    scope: 'RESEAU' | 'LOCALE'
+    colors: { primary: string; secondary: string; accent: string; ink: string }
+  }
+  brand: { name: string | null; logo_url: string | null }
+  visual: { file_url: string; fit: string | null; focal_point_y: number | null } | null
+  offer: {
+    title: string | null
+    mechanic_text: string | null
+    starts_on: string | null
+    ends_on: string | null
+    hour_from: string | null
+    hour_to: string | null
+    weekdays_mask: number | null
+    scope_label: string | null
+    max_qty_per_ticket: number | null
+    is_cumulative: boolean
+  } | null
+  products: PrintProduct[]
+  legal: { period_text: string | null; conditions_text: string | null }
+  /** `boutiques` : prix relus dans les boutiques ; `catalogue` : prix du catalogue de l'ERP. */
+  price_source: 'boutiques' | 'catalogue'
+}
+
+export function getPrintFile(campaignId: number): Promise<PrintFile> {
+  return request<PrintFile>(`${BASE}/campaigns/${campaignId}/print`)
+}
+
+export type BrochureFormat = 'leaflet-a5' | 'depliant-a4'
+
+/** Les réglages d'une brochure, tels que l'API les valide (liste blanche des clés). */
+export interface BrochureSettings {
+  template: string
+  texts: Partial<Record<'fr' | 'nl', Partial<Record<string, string>>>>
+  /** L'ordre et le choix des produits ; `price` : un prix saisi, quand le catalogue n'en a pas de fiable. */
+  products: Array<{ key: string; on: boolean; price: number | null }>
+  /** `webshop` : le webshop de la boutique ; `category` : une catégorie de ce webshop. */
+  qr: { mode: 'webshop' | 'category'; category: number | null; group: number | null }
+  /** Les boutiques écartées (identifiants de ce module). */
+  excludedShops: number[]
+  cropMarks: boolean
+}
+
+export interface SavedBrochure {
+  format: BrochureFormat
+  settings: Partial<BrochureSettings>
+  updated_at: string
+}
+
+export function listBrochures(campaignId: number): Promise<SavedBrochure[]> {
+  return request<SavedBrochure[]>(`${BASE}/campaigns/${campaignId}/brochures`)
+}
+
+export function saveBrochure(campaignId: number, format: BrochureFormat, settings: BrochureSettings): Promise<{ message: string }> {
+  return request(`${BASE}/campaigns/${campaignId}/brochures/${format}`, { method: 'PUT', body: { settings } })
+}
+
+/** Les rayons du webshop d'une boutique, lus par le module Social. */
+export interface WebshopNav {
+  groupes: Array<{ id: number; name: string; cats: number[]; n: number }>
+  categories: Array<{ id: number; name: string; groupe: number; n: number }>
+}
+
+export function getWebshopNav(shop: number): Promise<WebshopNav> {
+  return request<WebshopNav>(`${SOCIAL_ROOT}/api/v1/social/catalogue/nav`, { query: { shop } })
 }
