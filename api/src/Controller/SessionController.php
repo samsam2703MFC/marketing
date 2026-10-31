@@ -94,6 +94,7 @@ final class SessionController
                 // l'aveugle. Aucune valeur n'est divulguée, seulement des états.
                 'config_found'  => \Marketing\Support\Env::source() !== null,
                 'dev_auth'      => \Marketing\Support\Env::get('MAR_DEV_AUTH') === '1',
+                'login_ready'   => self::loginReady(),
             ]);
         }
 
@@ -111,6 +112,13 @@ final class SessionController
             // `service` : un autre module du serveur.
             'via'           => Identity::source(),
             'label'         => Identity::label($_COOKIE),
+            'login_ready'   => self::loginReady(),
         ]);
+    }
+
+    /** La connexion par l'ERP peut-elle s'ouvrir : adresse de l'ERP et secret de session présents. Un état, aucune valeur. */
+    private static function loginReady(): bool
+    {
+        return \Marketing\Support\ErpClient::authBase() !== '' && Session::secret() !== null;
     }
 }

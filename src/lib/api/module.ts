@@ -89,6 +89,8 @@ export interface Session {
   via?: 'erp' | 'dev' | 'service' | null
   /** La personne connectée par l'ERP, téléphone masqué (« ••• 3456 · réseau »). */
   label?: string | null
+  /** La connexion par l'ERP peut s'ouvrir sur ce serveur (adresse de l'ERP et secret de session présents). */
+  login_ready?: boolean
 }
 
 export function getSession(): Promise<Session> {
