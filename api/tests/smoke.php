@@ -381,6 +381,7 @@ AuthContext::set(1, 'BRAND_ADMIN', 1);
 
 $response = call($router, 'GET', '/api/v1/marketing/session');
 check('la session dit d\'où vient l\'identité', is_bool($response['body']['dev_auth'] ?? null), var_export($response['body']['dev_auth'] ?? null, true));
+check('la session dit si la connexion par l\'ERP est prête (un état, aucune valeur)', is_bool($response['body']['login_ready'] ?? null));
 
 $channelId = (int) $pdo->query("SELECT id FROM mar_channel WHERE code = 'plv'")->fetchColumn();
 

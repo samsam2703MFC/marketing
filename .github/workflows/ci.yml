@@ -509,10 +509,6 @@ jobs:
           # variable (le webshop vit sur ce même serveur) ; le jeton, un secret :
           # c'est l'admin_token de la config.php du webshop.
           MAR_WEBSHOP_API_BASE: ${{ vars.MAR_WEBSHOP_API_BASE || 'http://185.180.206.46/webshop/api' }}
-          # L'ERP (TFBuddy) où se vérifient les identifiants de chacun à la connexion
-          # (réalms admin et owner). Distincte de MAR_ERP_API_BASE (lectures de
-          # tarifs et de promotions), qui demande en plus un compte de service.
-          MAR_ERP_AUTH_BASE: ${{ vars.MAR_ERP_AUTH_BASE || 'https://atelierby.tfbuddy.com' }}
           MAR_WEBSHOP_API_TOKEN: ${{ secrets.MAR_WEBSHOP_API_TOKEN }}
         run: |
           umask 077
@@ -532,8 +528,7 @@ jobs:
             # repartirait en silence sur la table par défaut.
             for cle in MAR_ERP_SHOPS_TABLE MAR_ERP_ROYALTY_INVOICE_TABLE \
                        MAR_ERP_ROYALTY_LINE_TABLE MAR_ERP_PRODUCTS_TABLE \
-                       MAR_ERP_CUSTOMERS_TABLE MAR_WEBSHOP_API_BASE MAR_WEBSHOP_API_TOKEN \
-                       MAR_ERP_AUTH_BASE; do
+                       MAR_ERP_CUSTOMERS_TABLE MAR_WEBSHOP_API_BASE MAR_WEBSHOP_API_TOKEN; do
               valeur="${!cle:-}"
               # Un `if`, pas un `&&` : le pas de la boucle sort en échec quand la
               # dernière variable est vide, et l'étape entière tomberait avec lui.
@@ -569,22 +564,48 @@ jobs:
             cat .env.db >> .env.merged
             mv .env.merged .env
             rm -f .env.db
-            # Secrets propres au serveur, tirés au premier passage puis jamais réécrits
-            # (ils ne transitent ni par GitHub ni par les journaux) :
-            # MAR_SESSION_SECRET signe les cookies de session de la connexion par l'ERP ;
-            # MAR_SERVICE_TOKEN est présenté par le module Social et le cockpit, qui
-            # appellent cette API de serveur à serveur — ils le lisent dans service-token.
-            grep -q '^MAR_SESSION_SECRET=' .env || echo \"MAR_SESSION_SECRET=\$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')\" >> .env
-            grep -q '^MAR_SERVICE_TOKEN=' .env || echo \"MAR_SERVICE_TOKEN=\$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')\" >> .env
-            grep '^MAR_SERVICE_TOKEN=' .env | tail -n 1 | cut -d= -f2- | tr -d '\"' > service-token
-            chgrp www-data service-token 2>/dev/null || true
-            chmod 640 service-token
             chgrp www-data .env 2>/dev/null || true
             chmod 640 .env
             chmod 750 '$CONFIG_DIR'
             chgrp www-data '$CONFIG_DIR' 2>/dev/null || true
           "
           rm -f .env.deploy
+
+      # La connexion au module, indépendante des secrets de base : le .env du
+      # serveur peut être tenu à la main, et l'étape précédente est alors sautée.
+      # Ce qui manque est ajouté, rien n'est réécrit :
+      #   MAR_ERP_AUTH_BASE  l'ERP où se vérifient les identifiants (réalms admin, owner) ;
+      #   MAR_SESSION_SECRET signe les cookies de session ;
+      #   MAR_SERVICE_TOKEN  présenté par le module Social et le cockpit, qui appellent
+      #                      cette API de serveur à serveur — recopié dans service-token.
+      # Les deux secrets sont tirés sur le serveur : ils ne passent ni par GitHub ni
+      # par les journaux (l'étape n'affiche que des états).
+      - name: Connexion et accès de service
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
+          MAR_ERP_AUTH_BASE: ${{ vars.MAR_ERP_AUTH_BASE || 'https://atelierby.tfbuddy.com' }}
+        run: |
+          set +e
+          out=$($SSH_CMD $SSH_OPTS -o BatchMode=yes "$SSH_USER@$SSH_HOST" "
+            cd '$CONFIG_DIR' 2>/dev/null || { echo 'CD_FAIL'; exit 90; }
+            touch .env 2>/dev/null && [ -w .env ] || { echo 'ENV_RO'; exit 91; }
+            grep -q '^MAR_ERP_AUTH_BASE=' .env || echo 'MAR_ERP_AUTH_BASE=\"$MAR_ERP_AUTH_BASE\"' >> .env
+            grep -q '^MAR_SESSION_SECRET=' .env || echo \"MAR_SESSION_SECRET=\$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')\" >> .env
+            grep -q '^MAR_SERVICE_TOKEN=' .env || echo \"MAR_SERVICE_TOKEN=\$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')\" >> .env
+            grep '^MAR_SERVICE_TOKEN=' .env | tail -n 1 | cut -d= -f2- | tr -d '\"' > service-token || { echo 'TOKEN_FAIL'; exit 92; }
+            chgrp www-data service-token 2>/dev/null
+            chmod 640 service-token
+            [ -s service-token ] || { echo 'TOKEN_EMPTY'; exit 93; }
+            echo OK
+          " 2>&1)
+          rc=$?
+          set -e
+          case "$out" in
+            *OK*) echo "Connexion : MAR_ERP_AUTH_BASE, MAR_SESSION_SECRET et MAR_SERVICE_TOKEN présents ; service-token à jour." ;;
+            *ENV_RO*) echo "::warning title=Connexion non configurée::$CONFIG_DIR/.env n'est pas modifiable par le compte de déploiement : ajoutez MAR_ERP_AUTH_BASE, MAR_SESSION_SECRET et MAR_SERVICE_TOKEN à la main (voir docs/DEPLOIEMENT-SERVEUR.md)." ;;
+            *) echo "::warning title=Connexion non configurée::étape interrompue (code $rc) : $(printf '%s' "$out" | grep -v '^MAR_' | tail -n 3 | tr '\n' ' ')" ;;
+          esac
 
       - name: Appliquer les migrations
         if: steps.check.outputs.configured == 'true'

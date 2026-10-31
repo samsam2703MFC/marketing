@@ -133,6 +133,12 @@ export default function AddressesView() {
                 'Aucune identité'
               )}
             </p>
+            {s.login_ready === false ? (
+              <p>
+                <span className="tag-stop">Connexion non prête</span> Il manque <code>MAR_ERP_AUTH_BASE</code> ou{' '}
+                <code>MAR_SESSION_SECRET</code> dans la configuration du serveur : la connexion par l’ERP ne peut pas s’ouvrir.
+              </p>
+            ) : null}
             {s.via === 'erp' ? (
               <p>
                 <span className="badge badge--mesure">ERP</span> Connecté par les identifiants de l’ERP{s.label ? ` (${s.label})` : ''}.

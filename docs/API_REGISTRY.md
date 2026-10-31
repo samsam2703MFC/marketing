@@ -198,7 +198,8 @@ entière, pour attraper une colonne ajoutée plus tard.
   c'est explicite dans la déclaration (dernier argument `true`). Aucune ne rend
   de donnée métier. `GET` dit si l'appelant est authentifié, sous quel rôle, et
   par quelle voie : `via` = `erp` (connexion), `service` (autre module) ou `dev`
-  (`MAR_DEV_AUTH`), plus `dev_auth` — des états, aucune valeur ; champs ajoutés,
+  (`MAR_DEV_AUTH`), plus `dev_auth` et `login_ready` (adresse de l'ERP et
+  secret de session présents) — des états, aucune valeur ; champs ajoutés,
   rien de retiré ni renommé.
 
 **Connexion** (`POST …/session`, octobre 2026). Le module ne garde aucun mot de

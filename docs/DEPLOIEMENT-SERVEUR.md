@@ -101,13 +101,26 @@ Les guillemets ne sont pas décoratifs : un mot de passe contenant des espaces e
 
 Chacun se connecte avec ses identifiants de l'ERP (téléphone + mot de passe) : le module les présente à l'ERP (`MAR_ERP_AUTH_BASE`, écrit par le déploiement) et ne les garde pas. Un compte du réseau ouvre la version réseau ; un compte de boutique, ses boutiques seules.
 
-Le déploiement complète le `.env` sans jamais réécrire ce qui y est :
+À chaque déploiement, l'étape « Connexion et accès de service » complète le `.env` — qu'il soit écrit par le déploiement ou tenu à la main — sans jamais réécrire ce qui y est :
 
 | Clé | Rôle | Origine |
 |---|---|---|
 | `MAR_ERP_AUTH_BASE` | ERP où se vérifient les identifiants | variable GitHub, par défaut `https://atelierby.tfbuddy.com` |
 | `MAR_SESSION_SECRET` | signe les cookies de session | tiré sur le serveur au premier passage |
 | `MAR_SERVICE_TOKEN` | présenté par Social et le cockpit (`X-Marketing-Service`) | tiré au premier passage, recopié dans `service-token` (640, `www-data`) |
+
+Si le compte de déploiement ne peut pas modifier le `.env`, l'étape le signale (avertissement « Connexion non configurée ») ; à faire alors une fois, à la main :
+
+```bash
+cd /var/www/private/marketing
+grep -q '^MAR_ERP_AUTH_BASE=' .env  || echo 'MAR_ERP_AUTH_BASE="https://atelierby.tfbuddy.com"' | sudo tee -a .env > /dev/null
+grep -q '^MAR_SESSION_SECRET=' .env || echo "MAR_SESSION_SECRET=$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')" | sudo tee -a .env > /dev/null
+grep -q '^MAR_SERVICE_TOKEN=' .env  || echo "MAR_SERVICE_TOKEN=$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')" | sudo tee -a .env > /dev/null
+grep '^MAR_SERVICE_TOKEN=' .env | tail -n 1 | cut -d= -f2- | tr -d '"' | sudo tee service-token > /dev/null
+sudo chown root:www-data service-token && sudo chmod 640 service-token
+```
+
+Contrôle : `GET /marketing/api/v1/marketing/session` rend `"login_ready": true`.
 
 `MAR_DEV_AUTH=1` ouvre le module à tout visiteur en `BRAND_ADMIN`. Il ne doit pas rester en production une fois la connexion vérifiée.
 
