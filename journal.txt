@@ -1,17 +1,6 @@
 accueil : HTTP 200 · Module Marketing — L'Atelier By
   → 00-accueil.png
-  → 01-campagnes.png
-  → 02-assistant.png
-  « Type & cadrage » introuvable — capture prise en l'état
-  → 03-objectifs.png
-  → 03b-magasins.png
-  → 03c-detail-objectifs.png
-  → 04-prix.png
-  → 04b-compensation.png
-  réseau encore occupé après 30 s : /consulant_bo/api/cockpit/stores/perf?annees=2025%2C2026 (29 s)
-  → 05-fonds.png
-  → 05b-mouvement.png
-  réseau encore occupé après 30 s : /consulant_bo/api/cockpit/stores/perf?annees=2025%2C2026 (30 s)
-  → 06-repost.png
-  repost : Page « L'Atelier By » relue le 31/10 15:05 · 2 publications depuis l’activation (29/10 11:01) · relue toutes les 5 minutes.
-  repost : À VENIR · POSTS PROGRAMMÉS SUR LA PAGE DE LA MARQUE
+  « Campagnes » introuvable — capture prise en l'état
+  « Reprendre » introuvable — capture prise en l'état
+  « Fonds marketing » introuvable — capture prise en l'état
+  « Repost automatique » introuvable — capture prise en l'état
