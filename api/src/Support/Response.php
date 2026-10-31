@@ -71,6 +71,11 @@ final class Response
     {
         http_response_code($response['status']);
 
+        // En-têtes posés par un contrôleur (le cookie de session, à la connexion).
+        foreach ($response['headers'] ?? [] as $header) {
+            header($header, false);
+        }
+
         if ($response['body'] === null) {
             return;
         }

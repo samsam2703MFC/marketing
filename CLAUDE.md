@@ -56,7 +56,9 @@ droit de faire aujourd'hui :
 
 - Les règles de **sécurité** du standard sont tenues (fermeture par défaut,
   périmètre lu côté serveur et appliqué dans les dépôts, isolation testée) — par
-  un mécanisme différent du JWT : l'identité vient du middleware de l'ERP hôte.
+  un mécanisme différent du JWT : l'identité vient d'une connexion par les
+  identifiants de l'ERP (cookie de session signé), ou d'un jeton de service pour
+  les autres modules du serveur.
 - Les écarts restants sont de **forme** : préfixe sans segment `{app}`, absence
   d'enveloppe `{success, data, meta}`, erreurs sans code machine, `snake_case`,
   collections non paginées.

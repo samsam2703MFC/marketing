@@ -7,6 +7,10 @@ interface SidebarProps {
   /** Enseigne du périmètre, lue dans l'adresse. Affichée, jamais choisie ici. */
   brandName: string | null
   onNavigate: (route: Route) => void
+  /** D'où vient l'identité, et qui est connecté. */
+  account?: { via: 'erp' | 'dev' | 'service' | null; label: string | null }
+  onLogin?: () => void
+  onLogout?: () => void
 }
 
 /** Icône linéaire 16 px, même famille visuelle que le prototype. */
@@ -28,7 +32,7 @@ function Icon({ path }: { path: string }) {
   )
 }
 
-export default function Sidebar({ role, route, brandName, onNavigate }: SidebarProps) {
+export default function Sidebar({ role, route, brandName, onNavigate, account, onLogin, onLogout }: SidebarProps) {
   // Un onglet allume l'entrée qui le porte (« Par trimestre » → « Performance »).
   const current = menuRoute(role, route)
 
@@ -96,6 +100,31 @@ export default function Sidebar({ role, route, brandName, onNavigate }: SidebarP
           </div>
         ))}
       </div>
+
+      {/* Qui est connecté, et comment. L'identité de développement se voit : elle ouvre le module à tout visiteur. */}
+      {account ? (
+        <div className={`sidebar__account${account.via === 'dev' ? ' is-dev' : ''}`}>
+          {account.via === 'erp' ? (
+            <>
+              <span className="sidebar__account-who">{account.label ?? 'Connecté par l’ERP'}</span>
+              {onLogout ? (
+                <button type="button" className="linklike" onClick={onLogout}>
+                  Se déconnecter
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <span className="sidebar__account-who">{account.via === 'dev' ? 'Identité de développement' : 'Accès sans connexion'}</span>
+              {onLogin ? (
+                <button type="button" className="linklike" onClick={onLogin}>
+                  Se connecter avec l’ERP
+                </button>
+              ) : null}
+            </>
+          )}
+        </div>
+      ) : null}
     </nav>
   )
 }

@@ -48,6 +48,9 @@ return static function (Router $router): void {
     // Le front s'en sert pour savoir s'il est embarqué dans l'ERP, auquel cas
     // l'identité est déjà posée et son écran de connexion n'a pas lieu d'être.
     $router->get('/api/v1/marketing/session', [$session, 'show'], true);
+    // Connexion par les identifiants de l'ERP, et sa fermeture : publiques, puisqu'on n'a pas encore d'identité.
+    $router->post('/api/v1/marketing/session', [$session, 'open'], true);
+    $router->delete('/api/v1/marketing/session', [$session, 'close'], true);
 
     // ── Vitrine ────────────────────────────────────────────────────────────
     // La seule route publique du module, et la seule écrite au format du

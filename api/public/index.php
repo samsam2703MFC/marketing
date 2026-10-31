@@ -3,15 +3,14 @@
 declare(strict_types=1);
 
 /**
- * Contrôleur frontal autonome.
+ * Contrôleur frontal du module.
  *
- * Sert aux tests et au développement local. Dans l'ERP, c'est le contrôleur
- * frontal existant qui prend le relais : il valide le JWT, renseigne
- * `AuthContext`, puis appelle les contrôleurs du module. Ce fichier n'est alors
- * pas déployé.
+ * C'est lui qui sert l'API en production (/marketing/api, /marketingc/api) : le
+ * raccord prévu au contrôleur frontal de l'ERP n'existe pas. L'identité se
+ * résout donc ici, par `Identity`.
  */
 
-use Marketing\Support\AuthContext;
+use Marketing\Support\Identity;
 use Marketing\Support\Request;
 use Marketing\Support\Response;
 use Marketing\Support\Router;
@@ -22,29 +21,10 @@ $router = new Router();
 (require __DIR__ . '/../routes.php')($router);
 
 /**
- * Résolution de l'identité.
- *
- * Ce module ne vérifie aucune signature — l'ERP le fait déjà. En autonome, on
- * accepte une identité passée par en-tête, mais **uniquement** si MAR_DEV_AUTH
- * est explicitement activé. Sans ce garde-fou, un déploiement accidentel de ce
- * fichier laisserait n'importe qui se déclarer BRAND_ADMIN.
+ * Résolution de l'identité : jeton de service (un autre module du serveur), puis
+ * session ouverte par les identifiants de l'ERP, puis — si et seulement si
+ * MAR_DEV_AUTH=1 — identité de développement. Voir `Identity`.
  */
-// Lu via Env::get et non getenv : `putenv()` est neutralisé sur beaucoup de
-// configurations durcies, et son échec est silencieux — la configuration
-// paraîtrait absente alors que le fichier a bien été lu.
-use Marketing\Support\Env;
-
-if (Env::get('MAR_DEV_AUTH') === '1') {
-    // Les en-têtes priment, ce qui permet de simuler plusieurs rôles depuis
-    // curl ; à défaut, MAR_DEV_USER_ID sert d'identité par défaut pour ouvrir
-    // l'interface dans un navigateur sans monter tout le flux d'authentification.
-    $userId = (int) ($_SERVER['HTTP_X_DEV_USER_ID'] ?? Env::get('MAR_DEV_USER_ID', '0'));
-    $role   = (string) ($_SERVER['HTTP_X_DEV_ROLE'] ?? Env::get('MAR_DEV_ROLE', 'BRAND_ADMIN'));
-    $shops  = array_filter(explode(',', (string) ($_SERVER['HTTP_X_DEV_SHOPS'] ?? Env::get('MAR_DEV_SHOPS', ''))));
-
-    if ($userId > 0) {
-        AuthContext::set($userId, $role, null, array_map('intval', $shops));
-    }
-}
+Identity::resolve($_SERVER, $_COOKIE);
 
 Response::emit($router->dispatch(Request::fromGlobals()));
