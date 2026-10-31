@@ -3991,9 +3991,10 @@ try {
 check('connexion ERP : un compte refusé dit quoi vérifier', str_contains($message, 'MAR_ERP_API_PHONE'), $message);
 
 // --- Connexion au module par les identifiants de l'ERP ----------------------
-// Les réponses de connexion suivent le schéma documenté (AuthUserLoginSuccess) ;
-// la liste des boutiques d'un compte, l'enveloppe `items` + `pagination` des
-// listes de l'ERP. Le module ne garde ni mot de passe ni jeton de l'ERP.
+// Le module sert au pilotage de la marque : il s'ouvre avec un compte réseau
+// de l'ERP (réalm admin), et avec lui seulement. La réponse de connexion suit le
+// schéma documenté (AuthUserLoginSuccess). Le module ne garde ni mot de passe ni
+// jeton de l'ERP.
 echo "\nConnexion par l'ERP\n";
 $envAvant = [];
 foreach (['MAR_SESSION_SECRET', 'MAR_SERVICE_TOKEN', 'MAR_ERP_AUTH_BASE', 'MAR_DEV_AUTH', 'MAR_DEV_USER_ID'] as $cle) {
@@ -4003,7 +4004,6 @@ foreach (['MAR_SESSION_SECRET', 'MAR_SERVICE_TOKEN', 'MAR_ERP_AUTH_BASE', 'MAR_D
 \Marketing\Support\Env::set('MAR_SESSION_SECRET', str_repeat('s', 40));
 \Marketing\Support\Env::set('MAR_ERP_AUTH_BASE', 'https://erp.test/');
 \Marketing\Support\Env::set('MAR_DEV_AUTH', null);
-$pdo->exec('UPDATE mar_shop SET erp_shop_id = 4 WHERE id = 1');
 
 $jwt = 'en-tete.' . rtrim(strtr(base64_encode('{"sub":"321"}'), '+/', '-_'), '=') . '.signature';
 $accepte = static fn (string $jeton): array => [200, (string) json_encode(['access_token' => $jeton, 'refresh_token' => 'r', 'token_type' => 'Bearer', 'session_id' => 1, 'expires_in' => 1800])];
@@ -4012,8 +4012,7 @@ $appelsErp = [];
 $seConnecter = static function (callable $repondre, array $corps = ['phone' => '+32 470 12 34 56', 'password' => 'mot-de-passe']) use (&$appelsErp): array {
     $appelsErp = [];
     $transport = static function (string $url, array $entetes, int $delai, string $methode = 'GET', ?string $corps = null) use (&$appelsErp, $repondre): array {
-        $auth = array_values(array_filter($entetes, static fn ($e) => str_starts_with($e, 'Authorization: ')))[0] ?? '';
-        $appelsErp[] = $methode . ' ' . parse_url($url, PHP_URL_PATH) . ($auth !== '' ? ' ' . $auth : '');
+        $appelsErp[] = $methode . ' ' . parse_url($url, PHP_URL_PATH);
         return $repondre($methode . ' ' . parse_url($url, PHP_URL_PATH));
     };
     $controleur = new \Marketing\Controller\SessionController(new \Marketing\Service\LoginService(new \Marketing\Support\ErpClient($transport)));
@@ -4029,43 +4028,26 @@ $cookieDe = static function (array $reponse): ?string {
 };
 
 $reseau = $seConnecter(static fn (string $appel): array => $appel === 'POST /api/v1/admin/auth/login' ? $accepte($jwt) : [500, '']);
-$cookieReseau = $cookieDe($reseau);
-$ouvert = $cookieReseau === null ? null : \Marketing\Support\Session::open($cookieReseau);
-check('connexion : un compte admin de l\'ERP ouvre le réseau, cookie HttpOnly signé',
-    $reseau['status'] === 200 && ($reseau['body']['role'] ?? '') === 'BRAND_ADMIN' && $cookieReseau !== null
+$cookieReseau = (string) $cookieDe($reseau);
+$ouvert = \Marketing\Support\Session::open($cookieReseau);
+check('connexion : un compte réseau de l\'ERP ouvre le module, cookie HttpOnly signé',
+    $reseau['status'] === 200 && ($reseau['body']['role'] ?? '') === 'BRAND_ADMIN' && $cookieReseau !== ''
         && str_contains(implode('|', $reseau['headers'] ?? []), 'HttpOnly') && ($ouvert['role'] ?? '') === 'BRAND_ADMIN' && ($ouvert['user_id'] ?? 0) === 321
         && $appelsErp === ['POST /api/v1/admin/auth/login'],
     json_encode([$reseau['status'], $reseau['body'], $appelsErp]));
 check('connexion : le libellé masque le téléphone', ($reseau['body']['label'] ?? '') === '••• 3456 · réseau', (string) ($reseau['body']['label'] ?? ''));
 
 $faux = $seConnecter(static fn (string $appel): array => $refuse(401));
-check('connexion : mot de passe faux → 401, sans essayer l\'autre réalm ni poser de cookie',
+check('connexion : mot de passe faux → 401, sans cookie',
     $faux['status'] === 401 && $cookieDe($faux) === null && $appelsErp === ['POST /api/v1/admin/auth/login'], json_encode([$faux['status'], $appelsErp]));
 
-$boutique = $seConnecter(static fn (string $appel): array => match ($appel) {
-    'POST /api/v1/admin/auth/login' => $refuse(403),
-    'POST /api/v1/owner/auth/login' => $accepte('jeton-boutique'),
-    'GET /api/v1/owner/shops'       => [200, '{"items":[{"id":4,"name":"Namur"}],"pagination":{"page":1,"limit":100,"total":1,"pages":1}}'],
-    default                         => [500, ''],
-});
-$ouvertBoutique = \Marketing\Support\Session::open((string) $cookieDe($boutique));
-check('connexion : un compte de boutique ouvre ses boutiques seules, lues avec son propre jeton',
-    $boutique['status'] === 200 && ($boutique['body']['role'] ?? '') === 'FRANCHISEE' && ($boutique['body']['shop_ids'] ?? null) === [1]
-        && ($ouvertBoutique['shop_ids'] ?? null) === [1]
-        && $appelsErp === ['POST /api/v1/admin/auth/login', 'POST /api/v1/owner/auth/login', 'GET /api/v1/owner/shops Authorization: Bearer jeton-boutique'],
-    json_encode([$boutique['status'], $boutique['body'], $appelsErp]));
-
-$inconnue = $seConnecter(static fn (string $appel): array => match ($appel) {
-    'POST /api/v1/admin/auth/login' => $refuse(403),
-    'POST /api/v1/owner/auth/login' => $accepte('jeton-boutique'),
-    default                         => [200, '{"items":[{"id":99}],"pagination":{"page":1,"limit":100,"total":1,"pages":1}}'],
-});
-check('connexion : une boutique de l\'ERP inconnue du module → 403 nommé, pas de cookie',
-    $inconnue['status'] === 403 && str_contains((string) ($inconnue['body']['description'] ?? ''), '99') && $cookieDe($inconnue) === null,
-    json_encode($inconnue['body']));
-
-$sansAcces = $seConnecter(static fn (string $appel): array => $refuse(403));
-check('connexion : ni admin ni boutique → 403', $sansAcces['status'] === 403 && $cookieDe($sansAcces) === null, (string) $sansAcces['status']);
+foreach ([403 => 'sans appartenance réseau', 409 => 'appartenances ambiguës'] as $code => $cas) {
+    $boutique = $seConnecter(static fn (string $appel): array => $refuse($code));
+    check('connexion : un compte qui n\'est pas réseau (' . $cas . ') → 403, sans essayer le réalm des boutiques ni poser de cookie',
+        $boutique['status'] === 403 && $cookieDe($boutique) === null && $appelsErp === ['POST /api/v1/admin/auth/login']
+            && str_contains((string) ($boutique['body']['description'] ?? ''), 'pilotage de la marque'),
+        json_encode([$boutique['status'], $boutique['body'], $appelsErp]));
+}
 
 $vide = $seConnecter(static fn (string $appel): array => $accepte($jwt), ['phone' => '+32470', 'password' => '']);
 check('connexion : mot de passe vide → 422 sans appeler l\'ERP', $vide['status'] === 422 && $appelsErp === [], json_encode([$vide['status'], $appelsErp]));
@@ -4076,15 +4058,19 @@ check('connexion : sans MAR_SESSION_SECRET → 503, l\'ERP n\'est pas appelé', 
 \Marketing\Support\Env::set('MAR_SESSION_SECRET', str_repeat('s', 40));
 
 // L'identité de chaque requête : jeton de service, puis cookie, puis identité de développement.
-$cookieBoutique = (string) $cookieDe($boutique);
-$source = \Marketing\Support\Identity::resolve([], ['mar_session' => $cookieBoutique]);
-check('identité : le cookie d\'une boutique donne FRANCHISEE sur ses boutiques',
-    $source === 'erp' && AuthContext::current()?->role === 'FRANCHISEE' && AuthContext::current()?->shopIds === [1], (string) $source);
-[$charge, $signature] = explode('.', (string) $cookieBoutique);
-$falsifie = rtrim(strtr(base64_encode((string) json_encode(['u' => 1, 'r' => 'BRAND_ADMIN', 's' => [], 'l' => 'x', 'e' => time() + 3600])), '+/', '-_'), '=') . '.' . $signature;
-check('identité : un cookie réécrit (rôle changé) ne vaut rien',
+$source = \Marketing\Support\Identity::resolve([], ['mar_session' => $cookieReseau]);
+check('identité : le cookie d\'un compte réseau donne le réseau',
+    $source === 'erp' && AuthContext::current()?->isBrandAdmin() === true && AuthContext::current()?->userId === 321, (string) $source);
+[, $signature] = explode('.', $cookieReseau);
+$signer = static fn (array $contenu): string => rtrim(strtr(base64_encode((string) json_encode($contenu)), '+/', '-_'), '=');
+$falsifie = $signer(['u' => 1, 'r' => 'BRAND_ADMIN', 's' => [], 'l' => 'autre', 'e' => time() + 3600]) . '.' . $signature;
+check('identité : un cookie réécrit ne vaut rien',
     \Marketing\Support\Identity::resolve([], ['mar_session' => $falsifie]) === null && AuthContext::current() === null);
-check('identité : un cookie échu ne vaut rien', \Marketing\Support\Session::open((string) $cookieBoutique, time() + \Marketing\Support\Session::TTL + 5) === null);
+$boutiqueSignee = $signer(['u' => 9, 'r' => 'FRANCHISEE', 's' => [1], 'l' => 'x', 'e' => time() + 3600]);
+$boutiqueSignee .= '.' . rtrim(strtr(base64_encode(hash_hmac('sha256', $boutiqueSignee, str_repeat('s', 40), true)), '+/', '-_'), '=');
+check('identité : même signé, un cookie de boutique n\'ouvre rien (le module est réservé au réseau)',
+    \Marketing\Support\Identity::resolve([], ['mar_session' => $boutiqueSignee]) === null && AuthContext::current() === null);
+check('identité : un cookie échu ne vaut rien', \Marketing\Support\Session::open($cookieReseau, time() + \Marketing\Support\Session::TTL + 5) === null);
 
 \Marketing\Support\Env::set('MAR_SERVICE_TOKEN', str_repeat('t', 48));
 check('identité : le jeton de service d\'un autre module donne le réseau',
@@ -4092,9 +4078,9 @@ check('identité : le jeton de service d\'un autre module donne le réseau',
 \Marketing\Support\Env::set('MAR_DEV_AUTH', '1');
 \Marketing\Support\Env::set('MAR_DEV_USER_ID', '5');
 check('identité : un jeton de service faux ne retombe sur rien, même en développement',
-    \Marketing\Support\Identity::resolve(['HTTP_X_MARKETING_SERVICE' => 'faux'], ['mar_session' => (string) $cookieBoutique]) === null && AuthContext::current() === null);
+    \Marketing\Support\Identity::resolve(['HTTP_X_MARKETING_SERVICE' => 'faux'], ['mar_session' => $cookieReseau]) === null && AuthContext::current() === null);
 check('identité : en développement, une session ERP prime sur l\'identité de développement',
-    \Marketing\Support\Identity::resolve([], ['mar_session' => (string) $cookieBoutique]) === 'erp' && AuthContext::current()?->role === 'FRANCHISEE');
+    \Marketing\Support\Identity::resolve([], ['mar_session' => $cookieReseau]) === 'erp' && AuthContext::current()?->userId === 321);
 check('identité : sans cookie, l\'identité de développement ne vaut que si MAR_DEV_AUTH=1',
     \Marketing\Support\Identity::resolve([], []) === 'dev' && AuthContext::current()?->userId === 5);
 \Marketing\Support\Env::set('MAR_DEV_AUTH', null);
@@ -4113,7 +4099,6 @@ check('session : sans identité, les autres routes restent fermées', call($rout
 foreach ($envAvant as $cle => $valeur) {
     \Marketing\Support\Env::set($cle, $valeur);
 }
-$pdo->exec('UPDATE mar_shop SET erp_shop_id = NULL WHERE id = 1');
 AuthContext::set(1, 'BRAND_ADMIN', 1);
 
 // --- Résultat -------------------------------------------------------------

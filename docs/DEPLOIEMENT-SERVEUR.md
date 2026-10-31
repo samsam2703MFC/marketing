@@ -99,7 +99,7 @@ Les guillemets ne sont pas décoratifs : un mot de passe contenant des espaces e
 
 ### Connexion au module
 
-Chacun se connecte avec ses identifiants de l'ERP (téléphone + mot de passe) : le module les présente à l'ERP (`MAR_ERP_AUTH_BASE`, écrit par le déploiement) et ne les garde pas. Un compte du réseau ouvre la version réseau ; un compte de boutique, ses boutiques seules.
+Le module sert au pilotage de la marque : on s'y connecte avec un compte réseau de l'ERP (téléphone + mot de passe, réalm admin). Le module présente les identifiants à l'ERP (`MAR_ERP_AUTH_BASE`, écrit par le déploiement) et ne les garde pas. Un compte de boutique est refusé.
 
 À chaque déploiement, l'étape « Connexion et accès de service » complète le `.env` — qu'il soit écrit par le déploiement ou tenu à la main — sans jamais réécrire ce qui y est :
 

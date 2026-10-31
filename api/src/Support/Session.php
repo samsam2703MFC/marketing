@@ -8,7 +8,7 @@ namespace Marketing\Support;
  * La session d'une personne connectée par ses identifiants de l'ERP.
  *
  * Un cookie `HttpOnly` signé (HMAC-SHA256, secret `MAR_SESSION_SECRET`) porte
- * l'identité résolue à la connexion : rôle, boutiques, libellé. Le serveur ne
+ * l'identité résolue à la connexion : un compte réseau, et son libellé. Le serveur ne
  * garde rien ; il vérifie la signature et l'échéance à chaque requête. Le
  * périmètre vient donc toujours du serveur — un client qui réécrit le cookie
  * casse la signature, et la requête repart sans identité (fermeture par défaut).
@@ -77,21 +77,15 @@ final class Session
             return null;
         }
 
-        $role = $data['r'] ?? null;
-        if (!in_array($role, ['BRAND_ADMIN', 'FRANCHISEE'], true)) {
-            return null;
-        }
-
-        $shops = array_values(array_filter(array_map('intval', is_array($data['s'] ?? null) ? $data['s'] : []), static fn (int $id): bool => $id > 0));
-        // Un franchisé sans boutique ne voit rien : on ne lui ouvre pas de session.
-        if ($role === 'FRANCHISEE' && $shops === []) {
+        // Le module sert au pilotage de la marque : seule une session réseau s'ouvre.
+        if (($data['r'] ?? null) !== 'BRAND_ADMIN') {
             return null;
         }
 
         return [
             'user_id'  => (int) ($data['u'] ?? 0),
-            'role'     => $role,
-            'shop_ids' => $shops,
+            'role'     => 'BRAND_ADMIN',
+            'shop_ids' => [],
             'label'    => (string) ($data['l'] ?? ''),
             'expires'  => $data['e'],
         ];

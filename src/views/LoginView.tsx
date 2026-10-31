@@ -5,18 +5,17 @@ import * as api from '../lib/api/module'
 /**
  * Connexion au module par les identifiants de l'ERP TFBuddy.
  *
- * Le module ne garde aucun mot de passe : il les présente à l'ERP, qui tranche.
- * Un compte du réseau ouvre la version réseau ; un compte de boutique, ses
- * boutiques seules. Le périmètre vient de l'ERP, jamais de cet écran.
+ * Le module sert au pilotage de la marque : il s'ouvre avec un compte réseau de
+ * l'ERP, et avec lui seulement — un compte de boutique est refusé par l'API. Le
+ * module ne garde aucun mot de passe : il les présente à l'ERP, qui tranche.
  */
 interface Props {
-  space: 'reseau' | 'franchise'
   onDone: () => void
   /** Présent quand une identité existe déjà (identité de développement) : on peut revenir sans se connecter. */
   onCancel?: () => void
 }
 
-export default function LoginView({ space, onDone, onCancel }: Props) {
+export default function LoginView({ onDone, onCancel }: Props) {
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [pending, setPending] = useState(false)
@@ -43,7 +42,7 @@ export default function LoginView({ space, onDone, onCancel }: Props) {
         <img src={`${import.meta.env.BASE_URL}img/logo.png`} alt="L'Atelier By" className="login__logo" />
         <h1 className="login__title">Module Marketing</h1>
         <p className="muted login__sub">
-          {space === 'reseau' ? 'Espace réseau' : 'Espace boutique'} · connectez-vous avec vos identifiants de l’ERP TFBuddy.
+          Pilotage de la marque · connectez-vous avec votre compte réseau de l’ERP TFBuddy.
         </p>
 
         <label htmlFor="login-phone">Téléphone</label>

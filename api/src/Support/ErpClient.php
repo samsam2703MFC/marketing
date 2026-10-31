@@ -172,23 +172,17 @@ final class ErpClient
     }
 
     /**
-     * Connexion d'une personne à l'ERP, pour ouvrir sa session dans ce module.
-     *
-     * `realm` : `admin` (le réseau) ou `owner` (une boutique). Le jeton rendu
-     * n'est pas gardé : il sert à lire, dans la foulée, les boutiques du compte.
-     * Le statut est rendu tel quel — c'est l'appelant qui sait ce qu'un 403 veut
-     * dire pour lui (« pas ce réalm-là, essayer l'autre »).
+     * Connexion d'une personne à l'ERP, pour ouvrir sa session dans ce module :
+     * le réalm `admin`, celui des comptes du réseau. Le jeton rendu n'est pas
+     * gardé. Le statut est rendu tel quel — c'est l'appelant qui sait ce qu'un
+     * 403 veut dire pour lui.
      *
      * @return array{status:int, token:?string, body:array<mixed>}
      */
-    public function authenticate(string $realm, string $phone, string $password): array
+    public function authenticate(string $phone, string $password): array
     {
-        if (!in_array($realm, ['admin', 'owner'], true)) {
-            throw new RuntimeException('Réalm de connexion inconnu : ' . $realm . '.');
-        }
-
         [$status, $body] = $this->transmit(
-            self::authBase() . '/api/v1/' . $realm . '/auth/login',
+            self::authBase() . '/api/v1/admin/auth/login',
             ['Accept: application/json', 'Content-Type: application/json', 'X-Request-Id: ' . self::requestId()],
             'POST',
             (string) json_encode(['phone' => $phone, 'password' => $password])
@@ -206,27 +200,6 @@ final class ErpClient
         }
 
         return ['status' => $status, 'token' => $status === 200 ? $token : null, 'body' => $decoded];
-    }
-
-    /**
-     * Un GET JSON avec le jeton d'une personne, et non celui du module.
-     *
-     * @return array<mixed>
-     */
-    public function getAs(string $token, string $path): array
-    {
-        [$status, $body] = $this->transmit(self::authBase() . '/' . ltrim($path, '/'), [
-            'Accept: application/json',
-            'X-Request-Id: ' . self::requestId(),
-            'Authorization: Bearer ' . $token,
-        ]);
-
-        $decoded = json_decode($body, true);
-        if ($status >= 400 || !is_array($decoded)) {
-            throw new RuntimeException(sprintf('L\'ERP a répondu %d sur %s.', $status, $path));
-        }
-
-        return $decoded;
     }
 
     /**
