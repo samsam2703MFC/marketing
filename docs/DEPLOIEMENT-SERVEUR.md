@@ -122,7 +122,9 @@ sudo chown root:www-data service-token && sudo chmod 640 service-token
 
 Contrôle : `GET /marketing/api/v1/marketing/session` rend `"login_ready": true`.
 
-`MAR_DEV_AUTH=1` ouvre le module à tout visiteur en `BRAND_ADMIN`. Il ne doit pas rester en production une fois la connexion vérifiée.
+`MAR_DEV_AUTH=1` ouvre le module à tout visiteur en `BRAND_ADMIN`. La même étape retire du `.env` les lignes `MAR_DEV_*` à chaque déploiement. Recours, si personne ne peut plus se connecter : la variable GitHub `MAR_DEV_AUTH=1`, puis relancer le déploiement — l'étape remet `MAR_DEV_AUTH=1` et `MAR_DEV_USER_ID=1`, et le signale par un avertissement. À retirer dès que possible.
+
+Attention : l'API lit d'abord l'environnement du processus PHP. Une valeur posée dans le vhost (`SetEnv MAR_DEV_AUTH 1`) ou dans le pool PHP-FPM l'emporte sur le `.env` et n'est pas touchée par le déploiement. Contrôle : `GET /marketing/api/v1/marketing/session` sans cookie doit répondre `"authenticated": false`.
 
 ---
 

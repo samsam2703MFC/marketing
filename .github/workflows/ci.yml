@@ -585,11 +585,26 @@ jobs:
         env:
           SSHPASS: ${{ secrets.SSH_PASSWORD }}
           MAR_ERP_AUTH_BASE: ${{ vars.MAR_ERP_AUTH_BASE || 'https://atelierby.tfbuddy.com' }}
+          # L'identité de développement fait entrer tout visiteur en BRAND_ADMIN : elle
+          # est retirée du .env à chaque déploiement. Recours en cas de besoin : la
+          # variable GitHub MAR_DEV_AUTH=1, puis relancer le déploiement.
+          DEV_AUTH: ${{ vars.MAR_DEV_AUTH == '1' && '1' || '0' }}
         run: |
           set +e
           out=$($SSH_CMD $SSH_OPTS -o BatchMode=yes "$SSH_USER@$SSH_HOST" "
             cd '$CONFIG_DIR' 2>/dev/null || { echo 'CD_FAIL'; exit 90; }
             touch .env 2>/dev/null && [ -w .env ] || { echo 'ENV_RO'; exit 91; }
+            if [ '$DEV_AUTH' = '1' ]; then
+              grep -q '^MAR_DEV_AUTH=1' .env || echo 'MAR_DEV_AUTH=1' >> .env
+              grep -q '^MAR_DEV_USER_ID=' .env || echo 'MAR_DEV_USER_ID=1' >> .env
+              echo DEV_ON
+            else
+              # Réécrit sur place (pas de fichier temporaire) : propriétaire et droits restent ceux du .env.
+              reste=\$(grep -v '^MAR_DEV_' .env)
+              printf '%s\n' \"\$reste\" > .env
+              grep -q '^MAR_DEV_AUTH=' .env && { echo 'DEV_STILL'; exit 94; }
+              echo DEV_OFF
+            fi
             grep -q '^MAR_ERP_AUTH_BASE=' .env || echo 'MAR_ERP_AUTH_BASE=\"$MAR_ERP_AUTH_BASE\"' >> .env
             grep -q '^MAR_SESSION_SECRET=' .env || echo \"MAR_SESSION_SECRET=\$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')\" >> .env
             grep -q '^MAR_SERVICE_TOKEN=' .env || echo \"MAR_SERVICE_TOKEN=\$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')\" >> .env
@@ -601,6 +616,10 @@ jobs:
           " 2>&1)
           rc=$?
           set -e
+          case "$out" in
+            *DEV_ON*) echo "::warning title=Identité de développement maintenue::vars.MAR_DEV_AUTH=1 — tout visiteur entre en BRAND_ADMIN." ;;
+            *DEV_OFF*) echo "Identité de développement : retirée du .env." ;;
+          esac
           case "$out" in
             *OK*) echo "Connexion : MAR_ERP_AUTH_BASE, MAR_SESSION_SECRET et MAR_SERVICE_TOKEN présents ; service-token à jour." ;;
             *ENV_RO*) echo "::warning title=Connexion non configurée::$CONFIG_DIR/.env n'est pas modifiable par le compte de déploiement : ajoutez MAR_ERP_AUTH_BASE, MAR_SESSION_SECRET et MAR_SERVICE_TOKEN à la main (voir docs/DEPLOIEMENT-SERVEUR.md)." ;;
