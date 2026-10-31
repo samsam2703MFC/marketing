@@ -235,10 +235,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: dist
-          # À la racine : l'artefact contient le dossier `dist-reseau` et conserve
-          # son nom. Le déposer dans `dist/` l'imbriquerait en `dist/dist-reseau`,
-          # où rien ne va le chercher.
-          path: .
+          # Un seul dossier archivé : l'artefact en garde le CONTENU, à plat, sans
+          # le dossier lui-même (avec deux dossiers, il gardait leurs noms). On le
+          # redépose donc explicitement dans `dist-reseau`, où les étapes suivantes
+          # le cherchent.
+          path: dist-reseau
 
       - name: Vérifier les builds récupérés
         run: |
