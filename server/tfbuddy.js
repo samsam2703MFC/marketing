@@ -104,8 +104,9 @@ async function login(force = false) {
   throw new TfbError(`connexion TFBuddy refusée (${refused.join(', ')}) — numéro ou mot de passe à vérifier`, 401);
 }
 
-// GET authentifié ; un 401 (jeton expiré) relance UNE connexion.
-export async function tfbGet(path) {
+// GET authentifié ; un 401 (jeton expiré) relance UNE connexion. `need` :
+// le droit à nommer si TFBuddy refuse (403) — celui des promotions par défaut.
+export async function tfbGet(path, need = 'MENU.BUNDLE.MANAGE') {
   const c = tfbConfig();
   let s = await login();
   let r = await http('GET', c.base + path, { token: s.token });
@@ -114,7 +115,7 @@ export async function tfbGet(path) {
     r = await http('GET', c.base + path, { token: s.token });
   }
   if (r.status === 403) {
-    throw new TfbError(`TFBuddy refuse ${path.split('?')[0]} au compte « ${s.role} » (403) — il lui faut le droit MENU.BUNDLE.MANAGE`, 403);
+    throw new TfbError(`TFBuddy refuse ${path.split('?')[0]} au compte « ${s.role} » (403)${need ? ` — il lui faut le droit ${need}` : ''}`, 403);
   }
   if (r.status < 200 || r.status >= 300) {
     const why = r.json && (r.json.description || r.json.message || r.json.error);
@@ -374,6 +375,125 @@ export async function fetchShops() {
     name: str(s.name || s.shop_name || s.title || s.label),
     slug: str(s.slug || s.code || s.alias),
   })).filter((s) => s.id);
+}
+
+// ---- Catalogue : catégories, produits, prix pratiqués par magasin -----------
+// Le contrat OpenAPI de TFBuddy ne décrit pas les réponses de ces routes : on
+// lit celles que le cockpit consultant lit en production, avec les champs
+// qu'il y trouve (consultant_bo, src/endpoints.php → panelCatalogue et
+// panelCatalogueComplet ; src/panel_api.php → liste, productCategories,
+// produitsDisponibles, categoryProducts) :
+//   GET /product/categories (sinon /product-categories)
+//       → id, base_name | name, is_active
+//   GET /shops/{id}/products/available — ce que le magasin vend : id,
+//       base_name | name, id_category | category {id, base_name}, prix
+//       pratiqué TTC portion_price_gross | portion_price, is_active
+//   GET /product-categories/{id}/products (sinon /product-category/{id}/…)
+//       → toutes les références de la catégorie, vendues ou non aujourd'hui
+
+// Une liste, quelle que soit l'enveloppe — la même règle que le cockpit
+// (PanelApi::liste) : liste nue, ou première sous-liste non vide.
+export function deepList(j) {
+  if (Array.isArray(j)) return j.filter((x) => x && typeof x === 'object' && !Array.isArray(x));
+  if (!j || typeof j !== 'object') return [];
+  for (const k of ['data', 'items', 'tasks', 'results', 'rows', 'content', 'products', 'grouped_products']) {
+    if (j[k] && typeof j[k] === 'object') {
+      const sub = deepList(j[k]);
+      if (sub.length) return sub;
+    }
+  }
+  return [];
+}
+const firstStr = (o, keys) => {
+  for (const k of keys) { const v = o && o[k]; if (typeof v === 'string' && v.trim()) return v.trim(); }
+  return '';
+};
+const firstId = (o, keys) => {
+  for (const k of keys) {
+    const v = o && o[k];
+    if (v != null && v !== '' && Number.isFinite(Number(v)) && Math.trunc(Number(v)) > 0) return String(Math.trunc(Number(v)));
+  }
+  return '';
+};
+const isActive = (o) => !(o && Object.prototype.hasOwnProperty.call(o, 'is_active') && (o.is_active === 0 || o.is_active === '0' || o.is_active === false));
+// Quatre requêtes à la fois, comme les détails des promotions.
+async function pool(items, n, fn) {
+  let next = 0;
+  const worker = async () => { while (next < items.length) { const i = next++; await fn(items[i], i); } };
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
+}
+// Une erreur qui arrête tout : identifiants refusés, ou TFBuddy injoignable.
+const fatal = (e) => e && (e.status === 401 || !e.status);
+
+// Le catalogue complet, normalisé ; `warnings` dit ce qui n'a pas pu être lu
+// (un magasin, une catégorie) sans arrêter le reste.
+export async function fetchCatalog() {
+  const warnings = [];
+  const cats = new Map();      // extId → { extId, name, active }
+  const prods = new Map();     // extId → { extId, name, catExtId, active, sold }
+  const prices = [];           // { extProductId, extShopId, price }
+  // 1. Catégories : la première route qui rend une liste.
+  let catErr = null;
+  for (const path of ['/product/categories', '/product-categories']) {
+    try {
+      const rows = deepList(await tfbGet(path, ''));
+      for (const r of rows) {
+        const id = firstId(r, ['id', 'id_category', 'category_id']);
+        const name = firstStr(r, ['base_name', 'name', 'category_name', 'label']);
+        if (id && name && !cats.has(id)) cats.set(id, { extId: id, name, active: isActive(r) });
+      }
+      if (rows.length) { catErr = null; break; }
+    } catch (e) {
+      if (fatal(e)) throw e;
+      catErr = catErr || e;
+    }
+  }
+  if (catErr) warnings.push(`catégories : ${catErr.message}`);
+  // 2. Ce que chaque magasin vend, à son prix.
+  const shops = await fetchShops();
+  await pool(shops, 4, async (sh) => {
+    let rows;
+    try { rows = deepList(await tfbGet(`/shops/${encodeURIComponent(sh.id)}/products/available`, '')); }
+    catch (e) { if (fatal(e)) throw e; warnings.push(`magasin ${sh.name || sh.id} : ${e.message}`); return; }
+    for (const l of rows) {
+      const id = firstId(l, ['id', 'product_id', 'id_product']);
+      if (!id) continue;
+      const co = l.category && typeof l.category === 'object' && !Array.isArray(l.category) ? l.category : null;
+      const cid = firstId(l, ['id_category', 'category_id']) || (co ? firstId(co, ['id']) : '');
+      const cname = firstStr(l, ['base_category_name', 'category_name']) || (co ? firstStr(co, ['base_name', 'name']) : '');
+      if (cid && cname && !cats.has(cid)) cats.set(cid, { extId: cid, name: cname, active: co ? isActive(co) : true });
+      let price = null;
+      for (const k of ['portion_price_gross', 'portion_price']) {
+        const n = Number(l[k]);
+        if (l[k] != null && l[k] !== '' && Number.isFinite(n) && n > 0) { price = Math.round(n * 100) / 100; break; }
+      }
+      if (price != null) prices.push({ extProductId: id, extShopId: sh.id, price });
+      const name = firstStr(l, ['base_name', 'name', 'product_name']);
+      const cur = prods.get(id);
+      if (!cur) prods.set(id, { extId: id, name, catExtId: cid, active: isActive(l), sold: true });
+      else { cur.sold = true; if (!cur.name && name) cur.name = name; if (!cur.catExtId && cid) cur.catExtId = cid; }
+    }
+  });
+  // 3. Les références de chaque catégorie, vendues ou non aujourd'hui.
+  await pool([...cats.keys()], 4, async (cid) => {
+    let rows = null;
+    let err = null;
+    // Le cockpit lit /product-categories/{id}/products ; le contrat liste aussi
+    // /product-category/{id}/products : la première qui rend des produits.
+    const c = encodeURIComponent(cid);
+    for (const path of [`/product-categories/${c}/products`, `/product-category/${c}/products`, `/product/categories/${c}/products`]) {
+      try { rows = deepList(await tfbGet(path, '')); if (rows.length) break; }
+      catch (e) { if (fatal(e)) throw e; err = err || e; }
+    }
+    if (!rows && err) { warnings.push(`catégorie ${cats.get(cid).name} : ${err.message}`); return; }
+    for (const l of rows || []) {
+      const id = firstId(l, ['id', 'id_product', 'product_id']);
+      const name = firstStr(l, ['base_name', 'name', 'product_name', 'label']);
+      if (!id || !name || prods.has(id)) continue;
+      prods.set(id, { extId: id, name, catExtId: cid, active: isActive(l), sold: false });
+    }
+  });
+  return { categories: [...cats.values()], products: [...prods.values()], prices, shops, warnings };
 }
 
 // La synchro automatique ne réessaie pas des identifiants refusés avant 6 h

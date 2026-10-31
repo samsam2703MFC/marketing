@@ -217,6 +217,8 @@ class App extends Component {
     promoTypes: [], promoDraft: null, promoDirty: false, promoBusy: false, promoSavedAt: 0,
     // Style des badges : famille TFBuddy → sous-type qui l'habille ('' = maison).
     tfbBadges: {}, badgeBusy: false,
+    // Source du catalogue : dernier import (API TFBuddy, ou base PWA en secours).
+    catImport: null, catImportBusy: false,
     // Catégories de la bibliothèque : éditables dans les Paramètres (nom,
     // couleur, table de la régie qui les alimente).
     libCats: [], libSources: [], libCatDraft: null, libCatDirty: false, libCatBusy: false,
@@ -326,6 +328,7 @@ class App extends Component {
       const sq = await api('GET', '/sequences').catch(() => ({ sequences: [] }));
       const pwa = await api('GET', '/pwa-config').catch(() => null);
       const plan = await api('GET', '/plan').catch(() => ({ windows: [], byStore: {} }));
+      const cim = await api('GET', '/catalog-import').catch(() => null);
       const playlists = ((Array.isArray(st.playlists) && st.playlists.length)
         ? st.playlists
         : [{ id: 'pl1', name: 'Film principal', items: st.playlist || [] }]).map((p) => this.normFilm(p));
@@ -343,6 +346,7 @@ class App extends Component {
         campaigns: cmp.campaigns || [],
         bundles: bdl.bundles || [], bundleSync: bdl.sync || {}, tfbuddy: bdl.tfbuddy || {}, bundleStores: bdl.stores || [],
         tfbPromos: bdl.promos || [], tfbBadges: bdl.badges || {},
+        catImport: cim,
         libCats: lc.libCategories || [], libSources: lc.libSources || [],
         ingredients: ing.ingredients || [],
         sequences: sq.sequences || [],
@@ -2206,6 +2210,24 @@ class App extends Component {
       this.showToast(e.status === 401 ? 'Session expirée — recharge la page (F5)' : `Erreur : ${e.message}`);
     }
   }
+  // Catalogue depuis l'API TFBuddy (la base PWA prend le relais si elle ne
+  // répond pas) : visuels, ruptures et noms traduits de la régie sont gardés.
+  async importCatalogNow() {
+    if (this.state.catImportBusy) return;
+    if (this.state.catDirty) { this.showToast(this.t('catimp.saveFirst')); return; }
+    if (!window.confirm(this.t('catimp.confirm'))) return;
+    this.setState({ catImportBusy: true });
+    try {
+      const r = await api('POST', '/catalog-import', { source: 'auto' });
+      const st = await api('GET', '/catalog-import').catch(() => null);
+      this.setState({ catImportBusy: false, catImport: st || this.state.catImport });
+      if (!r.ok) { this.showToast(this.t('catimp.failToast', { err: r.error || '?' })); return; }
+      const cat = await api('GET', '/catalog');
+      this.setState({ catalog: { categories: cat.categories, products: cat.products }, catDraft: null, catDirty: false });
+      await this.reloadLinkedModules();
+      this.showToast(r.source === 'tfbuddy' ? this.t('catimp.doneApi', { p: r.products }) : this.t('catimp.donePwa'));
+    } catch (e) { this.setState({ catImportBusy: false }); this.showToast(`Erreur : ${e.message}`); }
+  }
   async reloadLinkedModules() {
     // Après une modification du catalogue, les éléments liés (catRef/productRef)
     // sont resservis par le serveur avec leurs lignes à jour.
@@ -3746,6 +3768,42 @@ class App extends Component {
         : 'tous les moments',
       orientEffective: this.orientOf(m),
       prodCats, prodRows, storeCols, prodSelCat, langChips, isBaseLang,
+      catImp: (() => {
+        const ci = st.catImport || {};
+        const s0 = ci.status || {};
+        const configured = !!(ci.tfbuddy && ci.tfbuddy.configured);
+        const ago = (at) => {
+          const m = at ? Math.max(0, Math.round((Date.now() - Date.parse(at)) / 60000)) : null;
+          return m == null ? '' : m < 1 ? this.t('bundles.justNow') : m < 120 ? this.t('bundles.minAgo', { n: m }) : this.t('bundles.hAgo', { n: Math.round(m / 60) });
+        };
+        const src = (x) => (x === 'pwa' ? this.t('catimp.pwa') : this.t('catimp.api'));
+        let tone = 'off';
+        let head = '';
+        let text = '';
+        const notes = [];
+        if (s0.at && s0.ok) {
+          tone = s0.source === 'tfbuddy' ? 'ok' : 'warn';
+          head = src(s0.source);
+          text = s0.source === 'tfbuddy'
+            ? this.t('catimp.okApi', { ago: ago(s0.at), p: s0.products || 0, s: s0.sold || 0, n: s0.storePrices || 0, m: s0.stores || 0 })
+            : this.t('catimp.okPwa', { ago: ago(s0.at), p: s0.products || 0, n: s0.storePrices || 0 });
+          if (s0.apiError) notes.push(this.t('catimp.apiFallback', { err: s0.apiError }));
+        } else if (s0.at) {
+          tone = 'bad';
+          head = src(s0.source);
+          text = this.t('catimp.failed', { err: s0.error || '?' });
+          if (s0.apiError && s0.source === 'pwa') notes.push(this.t('catimp.apiFallback', { err: s0.apiError }));
+          if (s0.lastOk) notes.push(this.t('catimp.lastOk', { ago: ago(s0.lastOk), src: src(s0.lastOkSource) }));
+        } else {
+          head = configured ? this.t('catimp.api') : this.t('catimp.pwa');
+          text = configured ? this.t('catimp.never') : this.t('catimp.off');
+        }
+        if ((s0.unmappedShops || []).length) notes.push(this.t('catimp.unmapped', { ids: s0.unmappedShops.join(', ') }));
+        if (s0.noPrice) notes.push(this.t('catimp.noPrice', { n: s0.noPrice }));
+        if (s0.retired) notes.push(this.t('catimp.retired', { n: s0.retired }));
+        if ((s0.warnings || []).length) notes.push(this.t('catimp.warnings', { list: s0.warnings.slice(0, 4).join(' · ') }));
+        return { tone, head, text, notes, configured, busy: !!st.catImportBusy, run: () => this.importCatalogNow() };
+      })(),
       appearance: st.appearance, appearanceBusy: st.appearanceBusy,
       seasonRows, seasonsDirty: st.seasonsDirty, seasonsBusy: st.seasonsBusy, seasonsCount: (st.seasons || []).length,
       seasonsCurrentCount: (st.seasonsCurrent || []).length,
@@ -5022,7 +5080,8 @@ class App extends Component {
 
       ${st.pwaForm && html`
       <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:26px 28px;margin-top:20px;">
-        <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">Catalogue PWA — même serveur</h2>
+        <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">Catalogue PWA — en secours</h2>
+        <p style="margin:0 0 8px;font-size:12px;color:var(--muted-2);line-height:1.5;">La source principale du catalogue est l'<strong>API TFBuddy</strong> (Produits → « Importer depuis TFBuddy », et chaque jour). Cette base prend le relais quand l'API ne répond pas, ou à la demande ci-dessous.</p>
         <p style="margin:0 0 14px;font-size:12px;color:var(--muted);line-height:1.5;">La régie tourne sur le serveur des bases de données : le bouton détecte tout seul la base qui contient <strong>product_category</strong>, <strong>product</strong> et <strong>shop_product</strong> (connexion locale), lit les colonnes, et rafraîchit la table produits — catégories, produits, prix par boutique mappés sur les magasins dans l'ordre.</p>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
           <button onClick=${() => this.pwaAction('import')} disabled=${!!st.pwaBusy} style="display:inline-flex;align-items:center;gap:9px;padding:9px 18px;font-size:13px;font-weight:500;border-radius:8px;cursor:${st.pwaBusy ? 'progress' : 'pointer'};background:var(--muted-2);color:#fff;border:1px solid var(--muted-2);">
@@ -5153,6 +5212,16 @@ class App extends Component {
           `)}
         </div>
         <button onClick=${v.saveCat} disabled=${!v.catDirty || v.catSaving} style="padding:9px 18px;font-size:13px;font-weight:500;border-radius:8px;border:1px solid ${v.catDirty ? 'var(--accent)' : 'var(--line)'};cursor:${v.catDirty && !v.catSaving ? 'pointer' : 'not-allowed'};background:${v.catDirty ? 'var(--accent)' : '#fff'};color:${v.catDirty ? '#fff' : 'var(--muted)'};">${v.catSaving ? 'Enregistrement…' : (v.catDirty ? 'Enregistrer la table' : '✓ Enregistrée')}</button>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:11px 14px;border-radius:12px;background:#fff;border:1px solid var(--line);" data-catalog-source=${v.catImp.tone}>
+        <span style="width:8px;height:8px;border-radius:999px;flex:0 0 auto;background:${v.catImp.tone === 'ok' ? 'var(--green)' : v.catImp.tone === 'bad' ? 'var(--accent)' : v.catImp.tone === 'warn' ? 'var(--warn)' : 'var(--faint)'};"></span>
+        <div style="flex:1 1 360px;min-width:0;font-size:12.5px;line-height:1.5;color:var(--muted-2);">
+          <strong style="font-weight:500;color:var(--ink);">${v.t('catimp.title')} · ${v.catImp.head}</strong> — ${v.catImp.text}
+          ${v.catImp.notes.map((n) => html`<div style="font-size:11.5px;color:var(--muted);">${n}</div>`)}
+          <div style="font-size:11.5px;color:var(--muted);">${v.t('catimp.auto')}</div>
+        </div>
+        <button onClick=${v.catImp.run} disabled=${v.catImp.busy || !v.catImp.configured} title=${v.catImp.configured ? '' : v.t('catimp.off')} style="flex:0 0 auto;padding:8px 14px;font-size:12.5px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:${v.catImp.configured ? 'var(--ink)' : 'var(--faint)'};cursor:${v.catImp.busy ? 'progress' : (v.catImp.configured ? 'pointer' : 'not-allowed')};" data-catalog-import>${v.catImp.busy ? v.t('catimp.running') : v.t('catimp.run')}</button>
       </div>
 
       <div style="display:grid;grid-template-columns:320px 1fr;gap:16px;align-items:start;">

@@ -31,8 +31,9 @@ import { httpsStatus } from './https-status.js';
 import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
 // Liste des fichiers d'un snapshot — la même que celle du cache des écrans.
 import { snapshotAssets } from '../public/js/assets.js';
-import { publicPwaConfig, savePwaConfig, resetPwaConfig, testPwa, importPwa, pwaBaseName, importSeasons, inspectSeasons, inspectIngredients, pwaConfig, matchStore } from './pwadb.js';
+import { publicPwaConfig, savePwaConfig, resetPwaConfig, testPwa, importSeasons, inspectSeasons, inspectIngredients, pwaConfig, matchStore } from './pwadb.js';
 import { scheduleMirror, syncMirror, mirrorStatus } from './mirror.js';
+import { importCatalog, catalogImportStatus, startCatalogSync } from './tfbcatalog.js';
 import { runConnectionTest, runDeployTests, tcpPing } from './livetest.js';
 
 function sessionToken(req) {
@@ -384,6 +385,8 @@ export function syncBundles({ manual = false } = {}) {
   return bundleSyncRun;
 }
 export function startBundleSync() {
+  // Catalogue (produits, catégories, prix par magasin) : une fois par jour depuis l'API.
+  startCatalogSync(() => scheduleMirror());
   if (!tfbConfigured()) return;
   setTimeout(() => { syncBundles().catch(() => {}); }, 15000);
   setInterval(() => { syncBundles().catch(() => {}); }, 30 * 60000);
@@ -1507,6 +1510,18 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       return send(200, { ok: true, ...loadCatalog(), savedAt: nowIso() });
     }
 
+    // ---- catalogue : l'API TFBuddy d'abord, la base PWA en secours ----------
+    if (req.method === 'GET' && path === '/catalog-import') {
+      return send(200, { status: catalogImportStatus(), tfbuddy: tfbPublicConfig(), auto: process.env.SIG_CATALOG_AUTO !== '0' });
+    }
+    if (req.method === 'POST' && path === '/catalog-import') {
+      const body = await readBody();
+      const source = ['auto', 'tfbuddy', 'pwa'].includes(body.source) ? body.source : 'auto';
+      const out = await importCatalog({ source });
+      if (out.ok) scheduleMirror();
+      return send(200, out);
+    }
+
     // ---- connexion directe à la base PWA (product / shop_product / …) ------
     if (req.method === 'GET' && path === '/pwa-config') return send(200, publicPwaConfig());
     if (req.method === 'POST' && path === '/pwa-config') {
@@ -1519,13 +1534,11 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       catch (e) { return send(200, { ok: false, error: String(e.message || e) }); }
     }
     if (req.method === 'POST' && path === '/pwa-import') {
-      try {
-        // La base MySQL détectée à l'import devient la cible du miroir.
-        if (getDb() && !getSetting('mirror_db', '')) { const b = await pwaBaseName(); if (b) setSetting('mirror_db', b); }
-        const out = await importPwa();
-        scheduleMirror();
-        return send(200, out);
-      } catch (e) { return send(200, { ok: false, error: String(e.message || e) }); }
+      // Même chemin que l'import du catalogue (statut gardé, cible du miroir
+      // posée), source forcée : la base PWA.
+      const out = await importCatalog({ source: 'pwa' });
+      if (out.ok) scheduleMirror();
+      return send(200, out);
     }
 
     if (req.method === 'PUT' && path === '/draft') {

@@ -7,6 +7,11 @@
 //   GET  /api/v1/admin/promotions/{buy-x-get-y | quantity | scheduled-product-discount}[/{id}]
 //   GET  /api/v1/admin/voucher-campaigns            → campagnes de bons (liste complète)
 //   GET  /api/v1/shops                              → les magasins
+// Catalogue — routes que le contrat ne décrit pas : la forme est celle que le
+// cockpit consultant lit en production (consultant_bo, panelCatalogue) :
+//   GET  /api/v1/product/categories                 → {data: [{id, base_name, is_active}]}
+//   GET  /api/v1/shops/{id}/products/available      → {data: [{id, base_name, id_category | category{…}, portion_price_gross | portion_price, is_active}]}
+//   GET  /api/v1/product-categories/{id}/products   → {data: [{id, base_name, is_active}]}
 // Comptes : admin (0470000001 / admin-pass) a le droit ; consultant
 // (0470000002 / consult-pass) se connecte mais reçoit 403 sur les bundles.
 import http from 'node:http';
@@ -77,10 +82,30 @@ const DETAIL_ONLY = ['trigger', 'reward', 'quantity_promotion', 'eligible_produc
 
 export const MOCK_SHOPS = [{ id: 4, name: 'Magasin Gare', slug: '' }, { id: 77, name: 'Boutique inconnue', slug: 'inconnue' }];
 
+// Catalogue : la Gare (4) vend croissant et café ; la boutique 77 (non reliée)
+// vend le croissant moins cher et un pain au chocolat (catégorie portée par la
+// ligne) ; un chausson que personne ne vend, un thé glacé désactivé.
+export const MOCK_CATEGORIES = [{ id: 5, base_name: 'Viennoiseries', is_active: 1 }, { id: 6, base_name: 'Boissons', is_active: 1 }];
+export const MOCK_AVAILABLE = {
+  4: [
+    { id: 901, base_name: 'Croissant', id_category: 5, portion_price_gross: '1.50', is_active: 1 },
+    { id: 902, base_name: 'Café', id_category: 6, portion_price_gross: 2.6, is_active: 1 },
+  ],
+  77: [
+    { id: 901, base_name: 'Croissant', id_category: 5, portion_price_gross: '1.40', is_active: 1 },
+    { id: 904, base_name: 'Pain au chocolat', category: { id: 5, base_name: 'Viennoiseries' }, portion_price: '1.60' },
+  ],
+};
+export const MOCK_CATEGORY_PRODUCTS = {
+  5: [{ id: 901, base_name: 'Croissant' }, { id: 904, base_name: 'Pain au chocolat' }, { id: 905, base_name: 'Chausson aux pommes', is_active: 1 }],
+  6: [{ id: 902, base_name: 'Café' }, { id: 906, base_name: 'Thé glacé', is_active: 0 }],
+};
+
 export function startTfbMock() {
   const calls = [];
   const tokens = new Map();   // jeton → rôle
   let revoked = false;        // revoke() : le compte admin perd MENU.BUNDLE.MANAGE
+  let catalogDown = false;    // catalogDown() : les routes du catalogue répondent 500
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
     calls.push(`${req.method} ${url.pathname}${url.search}`);
@@ -100,6 +125,15 @@ export function startTfbMock() {
       const role = tokens.get(String(req.headers.authorization || '').replace(/^Bearer /, ''));
       if (!role) return send(401, { status: 'error', description: 'Missing or invalid Bearer token' });
       if (url.pathname === '/api/v1/shops') return send(200, { data: MOCK_SHOPS });
+      // Catalogue : lisible par tout compte connecté (le cockpit le lit en consultant).
+      const avail = /^\/api\/v1\/shops\/(\d+)\/products\/available$/.exec(url.pathname);
+      const catProds = /^\/api\/v1\/product-categories\/(\d+)\/products$/.exec(url.pathname);
+      if (url.pathname === '/api/v1/product/categories' || avail || catProds) {
+        if (catalogDown) return send(500, { status: 'error', description: 'INTERNAL_ERROR' });
+        if (avail) return send(200, { status: 'success', data: MOCK_AVAILABLE[avail[1]] || [] });
+        if (catProds) return send(200, { status: 'success', data: MOCK_CATEGORY_PRODUCTS[catProds[1]] || [] });
+        return send(200, { status: 'success', data: MOCK_CATEGORIES });
+      }
       // Autres familles de promotions, et campagnes de bons : même droit que les bundles.
       const fam = /^\/api\/v1\/admin\/promotions\/(buy-x-get-y|quantity|scheduled-product-discount)(?:\/(\d+))?$/.exec(url.pathname);
       const vouchers = url.pathname === '/api/v1/admin/voucher-campaigns';
@@ -137,6 +171,7 @@ export function startTfbMock() {
     resolve({
       url: `http://127.0.0.1:${server.address().port}/api/v1`, calls,
       revoke: (on = true) => { revoked = on; },
+      catalogDown: (on = true) => { catalogDown = on; },
       close: () => server.close(),
     });
   }));

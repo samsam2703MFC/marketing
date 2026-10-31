@@ -93,7 +93,9 @@ async function main() {
         // API Claude simulée : les traductions sont proposées comme en production.
         ANTHROPIC_API_KEY: MOCK_KEY, ANTHROPIC_BASE_URL: aiMock.url, ANTHROPIC_AUTH_TOKEN: '', SIG_TRANSLATE_MODEL: '',
         // Module Marketing simulé : la régie ouverte dans son cadre reprend sa session.
-        SIG_MARKETING_SSO_URL: mkMock.url, SIG_MARKETING_SSO: '' },
+        SIG_MARKETING_SSO_URL: mkMock.url, SIG_MARKETING_SSO: '',
+        // Catalogue : pas d'import automatique au milieu des tests (le test le lance).
+        SIG_CATALOG_AUTO: '0' },
       stdio: 'ignore',
     });
     console.log(`▶ Serveur jetable : ${BASE} (BDD ${join(dir, 'test.db')})`);
@@ -1646,6 +1648,53 @@ async function main() {
       } finally {
         await put(want);
         await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      }
+    });
+    await step('Catalogue TFBuddy — produits, catégories, prix par magasin ; la régie garde les siens', async () => {
+      const before = await call('GET', '/api/v1/catalog');
+      const cat = JSON.parse(JSON.stringify(before));
+      // Ce qui appartient à la régie : visuel et nom traduit du croissant, un
+      // produit saisi à la main, une référence que TFBuddy ne liste plus.
+      const cr = cat.products.find((p) => p.id === 'pwp901');
+      if (!cr) throw new Error('pwp901 absent (posé par le test des bundles)');
+      Object.assign(cr, { img: 'assets/cookies.png', src: 'photo', aliases: { nl: 'Croissant NL' } });
+      cat.products.push({ id: 'pwp999', categoryId: cat.categories[0].id, name: 'Retiré LT', price: '3,00', img: 'assets/cake.png', src: 'illus', active: true, prices: {}, aliases: {} });
+      await call('PUT', '/api/v1/catalog', cat);
+      const local = cat.products.filter((p) => !/^pwp?\d+$/.test(p.id)).map((p) => p.id).sort().join();
+      try {
+        const r = await call('POST', '/api/v1/catalog-import', { source: 'tfbuddy' });
+        if (!r.ok || r.source !== 'tfbuddy') throw new Error(`import en échec : ${r.error}`);
+        if (r.categories !== 2 || r.products !== 5 || r.sold !== 3) throw new Error(`comptes : ${JSON.stringify(r)}`);
+        if (JSON.stringify(r.unmappedShops) !== '["77"]' || r.storePrices !== 2 || r.retired !== 1 || r.noPrice !== 2) throw new Error(`signalements : ${JSON.stringify(r)}`);
+        for (const path of ['/product/categories', '/shops/4/products/available', '/shops/77/products/available', '/product-categories/5/products']) {
+          if (!tfbMock.calls.some((c) => c.startsWith(`GET /api/v1${path}`))) throw new Error(`${path} non lu`);
+        }
+        const c = await call('GET', '/api/v1/catalog');
+        const by = new Map(c.products.map((p) => [p.id, p]));
+        const p901 = by.get('pwp901');
+        if (p901.name !== 'Croissant' || p901.categoryId !== 'pw5') throw new Error(`croissant : ${JSON.stringify(p901)}`);
+        if (p901.price !== '1,40' || JSON.stringify(p901.prices) !== '{"st2":"1,50"}') throw new Error(`prix du croissant : base ${p901.price} (le plus bas des plus pratiqués), magasins ${JSON.stringify(p901.prices)}`);
+        if (p901.img !== 'assets/cookies.png' || p901.src !== 'photo' || p901.aliases.nl !== 'Croissant NL') throw new Error('visuel ou nom traduit de la régie perdu');
+        const p904 = by.get('pwp904');
+        if (!p904 || p904.categoryId !== 'pw5' || p904.price !== '1,60' || !p904.active || Object.keys(p904.prices).length) throw new Error(`pain au chocolat (catégorie portée par la ligne, magasin non relié) : ${JSON.stringify(p904)}`);
+        if (!by.get('pwp905') || by.get('pwp905').active) throw new Error('référence sans prix connu : doit rester inactive (jamais 0,00 € à l’écran)');
+        if (!by.get('pwp906') || by.get('pwp906').active) throw new Error('référence désactivée dans TFBuddy restée active');
+        if (!by.get('pwp999') || by.get('pwp999').active) throw new Error('référence que TFBuddy ne liste plus : gardée mais inactive attendue');
+        if (c.products.filter((p) => !/^pwp?\d+$/.test(p.id)).map((p) => p.id).sort().join() !== local) throw new Error('produits saisis en régie touchés');
+        if (!c.categories.some((x) => x.id === 'pw6' && x.name === 'Boissons')) throw new Error('catégorie Boissons absente');
+        // API muette : la base PWA est essayée en secours ; si elle échoue aussi, rien ne bouge.
+        tfbMock.catalogDown(true);
+        const f = await call('POST', '/api/v1/catalog-import', { source: 'auto' });
+        if (f.source !== 'pwa' || !/HTTP 500/.test(f.apiError || '')) throw new Error(`secours PWA non tenté : ${JSON.stringify(f)}`);
+        const st = (await call('GET', '/api/v1/catalog-import')).status;
+        if (!f.ok) {
+          if (JSON.stringify(await call('GET', '/api/v1/catalog')) !== JSON.stringify(c)) throw new Error('catalogue modifié alors que les deux sources ont échoué');
+          if (st.lastOkSource !== 'tfbuddy' || !st.lastOk || !st.apiError) throw new Error(`statut : ${JSON.stringify(st)}`);
+        }
+        return `2 catégories · 5 produits (3 vendus) · prix Gare + base la plus pratiquée · visuel et alias gardés · retirée → inactive · magasin 77 signalé · API muette → PWA ${f.ok ? 'utilisée' : `essayée (${String(f.error).slice(0, 40)}…), catalogue intact`}`;
+      } finally {
+        tfbMock.catalogDown(false);
+        await call('PUT', '/api/v1/catalog', before);
       }
     });
     await step('Bundles TFBuddy — compte sans MENU.BUNDLE.MANAGE : erreur dite, bundles gardés', async () => {

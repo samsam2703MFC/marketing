@@ -32,8 +32,10 @@ Variables : `PORT` (défaut 8080), `HOST`, `SIG_DB` (chemin SQLite, défaut `dat
 `SIG_ADMIN_PASSWORD` (mot de passe du compte `admin`, appliqué à chaque démarrage),
 `SIG_AGENCY_PASSWORD` (mot de passe du compte `agence` ; absent = compte fermé),
 `BASE_PATH` (chemin public si l'app est montée sous un sous-chemin, ex. `/signage`),
-`SIG_DEMO=1` (démo / tests uniquement).
-Au premier démarrage la base est créée vide et se remplit par l'import PWA. Avec
+`SIG_DEMO=1` (démo / tests uniquement), `SIG_CATALOG_AUTO=0` (coupe l'import quotidien du
+catalogue depuis l'API TFBuddy).
+Au premier démarrage la base est créée vide et se remplit par l'import du catalogue (API
+TFBuddy, ou base PWA en secours). Avec
 `SIG_DEMO=1`, elle est **seedée** avec le contenu de la maquette (catégorie *Tartes*
 8 produits, liaison *Fait maison*, 3 magasins / 5 écrans de démo — dont le player
 d'exemple ci-dessus) et le compte `agence` garde son mot de passe de démo `agence`.
@@ -540,6 +542,43 @@ contenu vient d'une **liste d'entités** — on n'a qu'à en **déposer une comm
   gauche/droite + texte). Supprimer une campagne ne casse pas les éléments qui la diffusaient.
   API : `GET /campaigns`, `PUT /campaigns`.
 
+### Catalogue depuis l'API TFBuddy (la base PWA en secours)
+Catégories, produits et **prix pratiqués par magasin** sont lus sur l'**API TFBuddy**, avec le
+compte des bundles (`TFBUDDY_PHONE` / `TFBUDDY_PASSWORD`). Le contrat OpenAPI de TFBuddy ne décrit
+pas les réponses de ces routes : la régie lit celles que le **cockpit consultant lit en
+production**, avec les champs qu'il y trouve (`consultant_bo`, `src/endpoints.php` →
+`panelCatalogue` / `panelCatalogueComplet`) :
+
+- `GET /product/categories` (sinon `/product-categories`) → `id`, `base_name` | `name`, `is_active` ;
+- `GET /shops/{id}/products/available` pour chaque magasin (`GET /shops`) → ce qu'il vend, à son
+  prix TTC (`portion_price_gross` | `portion_price`), avec sa catégorie (`id_category` ou l'objet
+  `category`) ;
+- `GET /product-categories/{id}/products` (sinon `/product-category/{id}/products`) → les
+  références de chaque catégorie, vendues ou non aujourd'hui.
+
+Écriture (`server/tfbcatalog.js`) : **mêmes identifiants que l'import PWA** (`pw{id}`,
+`pwp{id}`), donc bundles, promotions, éléments liés et périodes restent reliés. Chaque magasin
+relié (correspondance manuelle de l'import PWA, puis slug / nom — jamais créé) garde **son**
+prix ; le prix de base est celui que pratiquent le plus de magasins (à égalité, le plus bas).
+Ce qui appartient à la régie survit : visuel et rupture d'un produit, illustration d'une
+catégorie, noms traduits, ordre des listes. **Rien n'est effacé** : une référence que TFBuddy ne
+liste plus reste, inactive ; un produit saisi à la main en régie (id hors `pw…`) reste tel quel ;
+une référence dont aucun prix n'est connu reste inactive (jamais 0,00 € à l'écran). Les magasins
+TFBuddy non reliés et ce qui n'a pas pu être lu sont signalés.
+
+- **Régie → Produits** : la source du catalogue, le dernier import (ou son erreur, et d'où vient
+  le catalogue actuel), et **Importer depuis TFBuddy**. Si l'API n'est pas configurée ou ne
+  répond pas, la **base PWA** prend le relais (Paramètres → Catalogue PWA — en secours, qui
+  garde aussi son bouton direct).
+- **Chaque jour**, l'import repasse depuis l'API (si le compte est configuré ; `SIG_CATALOG_AUTO=0`
+  le coupe), sans repli automatique sur la PWA : en cas d'échec, le catalogue reste tel quel et
+  l'erreur est dite ; nouvel essai six heures plus tard. Comme après l'import PWA, les nouveaux
+  prix arrivent aux écrans à la prochaine publication des prix.
+- Photos : non lues sur l'API pour l'instant (le cockpit les trouve via la recette du produit,
+  `GET /recipes/{id}`) ; les visuels restent ceux choisis en régie.
+- API : `GET /catalog-import` (dernier import, compte TFBuddy) ·
+  `POST /catalog-import { source: auto | tfbuddy | pwa }` · `POST /pwa-import` (= source `pwa`).
+
 ### Bundles TFBuddy (lus sur l'API)
 Les bundles se gèrent dans **TFBuddy** (le panel, `https://atelierby.tfbuddy.com`) ; la régie
 les **lit sur son API**, comme le cockpit consultant (`consultant_bo`, `src/panel_api.php`) :
@@ -682,6 +721,7 @@ session admin  : POST /api/v1/login · /logout · GET /me
                  POST /stores/{id}/groups · POST/DELETE /groups/{id}
                  POST /players/{id}/group (rattacher un écran à une zone)
                  GET /catalog · PUT /catalog (produits · prix · rupture)
+                 GET /catalog-import · POST /catalog-import (catalogue : API TFBuddy, PWA en secours)
                  GET /promo-types · PUT /promo-types (sous-types de promotion)
                  GET /campaigns · PUT /campaigns (campagnes marketing)
                  GET /bundles · POST /bundles/sync · PATCH /bundles/{id} (bundles TFBuddy)
