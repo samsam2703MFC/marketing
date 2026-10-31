@@ -1,4 +1,3 @@
-  réseau encore occupé après 30 s : /consulant_bo/api/cockpit/stores/perf?annees=2025%2C2026 (29 s)
 accueil : HTTP 200 · Module Marketing — L'Atelier By
   → 00-accueil.png
   → 01-campagnes.png
@@ -12,5 +11,5 @@ accueil : HTTP 200 · Module Marketing — L'Atelier By
   → 05-fonds.png
   → 05b-mouvement.png
   → 06-repost.png
-  repost : Page « L'Atelier By » relue le 30/10 22:00 · 1 publication depuis l’activation (29/10 11:01) · relue toutes les 5 minutes.
+  repost : Page « L'Atelier By » relue le 31/10 13:55 · 1 publication depuis l’activation (29/10 11:01) · relue toutes les 5 minutes.
   repost : À VENIR · POSTS PROGRAMMÉS SUR LA PAGE DE LA MARQUE
