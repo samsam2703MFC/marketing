@@ -5219,7 +5219,7 @@ class App extends Component {
         <div style="flex:1 1 360px;min-width:0;font-size:12.5px;line-height:1.5;color:var(--muted-2);">
           <strong style="font-weight:500;color:var(--ink);">${v.t('catimp.title')} · ${v.catImp.head}</strong> — ${v.catImp.text}
           ${v.catImp.notes.map((n) => html`<div style="font-size:11.5px;color:var(--muted);">${n}</div>`)}
-          <div style="font-size:11.5px;color:var(--muted);">${v.t('catimp.auto')}</div>
+          ${v.catImp.configured && html`<div style="font-size:11.5px;color:var(--muted);">${v.t('catimp.auto')}</div>`}
         </div>
         <button onClick=${v.catImp.run} disabled=${v.catImp.busy || !v.catImp.configured} title=${v.catImp.configured ? '' : v.t('catimp.off')} style="flex:0 0 auto;padding:8px 14px;font-size:12.5px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:${v.catImp.configured ? 'var(--ink)' : 'var(--faint)'};cursor:${v.catImp.busy ? 'progress' : (v.catImp.configured ? 'pointer' : 'not-allowed')};" data-catalog-import>${v.catImp.busy ? v.t('catimp.running') : v.t('catimp.run')}</button>
       </div>
