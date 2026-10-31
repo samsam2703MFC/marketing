@@ -21,12 +21,14 @@ interface MonitorProps {
   onOpenAssistant?: () => void
   /** Ouvre « Compléter les campagnes » sur celle-ci. */
   onComplete?: () => void
+  /** Ouvre le générateur de brochures (leaflet, dépliant) sur cette campagne — réseau seul. */
+  onBrochures?: () => void
 }
 
 /**
  * Suivi en direct d'une campagne : KPI, classement des boutiques, base CRM.
  */
-export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, onCreatePost, onPlanPosts, brandAdmin = false, onOpenAssistant, onComplete }: MonitorProps) {
+export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, onCreatePost, onPlanPosts, brandAdmin = false, onOpenAssistant, onComplete, onBrochures }: MonitorProps) {
   // Relue après un changement du suivi : la carte montre ce que la base a gardé, pas ce qu'on a tapé.
   const [reloadCampaign, setReloadCampaign] = useState(0)
   const campaign = useAsync(() => api.getCampaign(campaignId), [campaignId, reloadCampaign])
@@ -85,6 +87,11 @@ export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, 
         {onPlanPosts ? (
           <button type="button" className="filter is-on back" onClick={onPlanPosts}>
             Planifier les posts de la campagne →
+          </button>
+        ) : null}
+        {onBrochures ? (
+          <button type="button" className="filter is-on back" onClick={onBrochures}>
+            Brochures &amp; leaflets →
           </button>
         ) : null}
       </div>

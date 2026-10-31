@@ -157,6 +157,11 @@ cela n'est repris de l'ERP aujourd'hui. La reprise sait déjà lire
 `franchisee_shop` : ajouter ces colonnes à la découverte est un travail court,
 à condition de savoir comment elles s'appellent chez vous.
 
+**En attendant**, le générateur de brochures (section 11) lit ces coordonnées
+dans le module Social (`GET …/social/state`, `shops[]` : `address`, `hours`,
+`hoursNl`, `phone`, `langs`), qui les tient déjà pour ses posts. Le rapprochement
+se fait par le numéro de caisse : code `erp-N` ici, `id` N là-bas.
+
 ---
 
 ## 7. Les couleurs — *partiel*
@@ -369,10 +374,54 @@ produit, adresse, téléphone, horaires.
 | ~~Palette de campagne (4 couleurs)~~ | **fait** | — |
 | Photos produits — source ERP | court si la colonne existe | l'ERP |
 | Photos produits — options par support | moyen | vous, sur la liste ci-dessus |
-| Adresse, téléphone, horaires des boutiques | court | l'ERP, sur les noms de colonnes |
+| Adresse, téléphone, horaires des boutiques | court | l'ERP, sur les noms de colonnes (lus dans le module Social en attendant) |
+| Noms des produits en néerlandais | à construire | le catalogue de l'ERP |
 | Formats imprimés dans `mar_format` | une ligne par format | vous, sur les formats voulus |
 | ~~Route `/print`, générale et par boutique~~ | **fait** | — |
 
 Rien de tout cela n'est bloquant pour dessiner le gabarit : les manques sont
 identifiés, et un gabarit qui les prévoit n'aura pas à être redessiné quand ils
 arriveront.
+
+---
+
+## 11. Le générateur de brochures — *en base*
+
+Campagnes › **Brochures & leaflets** (vue Réseau ; aussi depuis le suivi d'une
+campagne). Deux supports :
+
+| Support | Format fini | Faces |
+|---|---|---|
+| Leaflet A5 | 148 × 210 mm | recto (couverture), verso (produits, conditions, boutique) |
+| Dépliant A4 3 volets roulés | 297 × 210 mm | extérieur : rabat 97 mm, dos 100, couverture 100 ; intérieur : 100, 100, 97 |
+
+Sept modèles (Fêtes, Épuré, Ruby, Abricot, Noir, Duo, Carte), tous à la palette
+de la campagne. Le contenu vient du dossier d'impression (`GET …/print`) ;
+les choix propres à la brochure s'enregistrent par `PUT …/brochures/{format}`
+(table `mar_campaign_brochure`, voir `docs/API_REGISTRY.md`).
+
+**Versions.** Une générale par langue de la marque, puis une par boutique et
+par langue de la boutique (`langs` du module Social) : une boutique bilingue en
+reçoit deux. Chacune porte l'adresse, les horaires (`hoursNl` en néerlandais) et
+le téléphone de sa boutique, et un **QR code vers le webshop de la boutique**
+(`{webshopUrl}?shop=N`, plus `&category=group:G&sub=category:C` si une catégorie
+est choisie — le lien des posts du module Social). Version générale ou magasin
+test : le webshop sans boutique.
+
+**Néerlandais.** Les textes génériques (appel à l'action, rabat, titre des
+produits), la période et les conditions se composent en néerlandais à partir de
+l'offre. Le surtitre, le titre, l'accroche et le sous-titre des produits sont
+propres à la campagne : ils s'écrivent, et une version NL ne part pas à
+l'imprimeur tant qu'ils manquent.
+
+**Contrôle avant impression**, bloquant pour le PDF imprimeur : aucun produit
+ou trop de produits (6 sur le leaflet, 9 sur le dépliant), prix à confirmer
+(absent, ou 1,00 € — le prix par défaut de l'ERP — et non saisi), textes NL
+manquants, boutique sans adresse. Signalés sans bloquer : produits sans photo,
+horaires ou téléphone absents, texte coupé dans un bloc plein, offre terminée.
+
+**Sortie** par le navigateur (« Enregistrer au format PDF ») : épreuve au
+format fini, filigranée tant qu'un point bloque ; PDF imprimeur avec 3 mm de
+fond perdu et, au choix, traits de coupe et repères de pli (7 mm de marge).
+Les illustrations de gamme sont imprimées en 560 px (`public/img/print/`).
+

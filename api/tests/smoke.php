@@ -1191,6 +1191,53 @@ AuthContext::set(1, 'BRAND_ADMIN', 1);
 check('l\'offre d\'une campagne réseau ne se complète ni par un franchisé, ni sans identité',
     in_array($franchise['status'], [403, 404, 422], true) && $anonyme['status'] === 401 && count($lignesOffre()) === 2,
     json_encode([$franchise['status'], $anonyme['status']]));
+// Brochures (leaflet A5, dépliant A4) : les réglages du générateur, un par format. Rejouer le même
+// envoi ne crée rien de plus ; un envoi fautif n'écrit rien ; le périmètre est celui de la campagne.
+$brochures = sprintf('/api/v1/marketing/campaigns/%d/brochures', $idSuivi);
+$reglages  = [
+    'template' => 'ruby',
+    'texts'    => ['fr' => ['title' => 'Les bûches de fêtes', 'cta' => 'Réservez la vôtre'], 'nl' => ['title' => 'Onze kerststammen']],
+    'products' => [['key' => 'erp-9901', 'on' => true, 'price' => 14.9]],
+    'qr'       => ['mode' => 'category', 'category' => 41000, 'group' => 34],
+    'excludedShops' => [2],
+    'cropMarks' => true,
+];
+$vide   = call($router, 'GET', $brochures);
+$pose   = call($router, 'PUT', $brochures . '/leaflet-a5', [], ['settings' => $reglages]);
+$encore = call($router, 'PUT', $brochures . '/leaflet-a5', [], ['settings' => $reglages]);
+$lues   = call($router, 'GET', $brochures);
+$a5     = $lues['body'][0] ?? [];
+check('brochure : vide au départ, enregistrée, rejouée sans doublon, relue telle quelle',
+    $vide['status'] === 200 && $vide['body'] === [] && $pose['status'] === 200 && $encore['status'] === 200
+        && count($lues['body']) === 1 && ($a5['format'] ?? '') === 'leaflet-a5' && ($a5['settings']['template'] ?? '') === 'ruby'
+        && ($a5['settings']['texts']['nl']['title'] ?? '') === 'Onze kerststammen' && ($a5['settings']['products'][0]['price'] ?? null) === 14.9
+        && ($a5['settings']['qr']['category'] ?? null) === 41000 && ($a5['settings']['excludedShops'] ?? null) === [2],
+    json_encode([$vide['status'], $pose['status'], $encore['status'], $lues['body']], JSON_UNESCAPED_UNICODE));
+foreach ([
+    'format inconnu'   => ['/flyer-dl', $reglages],
+    'modèle inconnu'   => ['/leaflet-a5', ['template' => 'fluo'] + $reglages],
+    'clé inconnue'     => ['/leaflet-a5', $reglages + ['police' => 'Comic']],
+    'texte trop long'  => ['/leaflet-a5', ['texts' => ['fr' => ['title' => str_repeat('a', 241)]]] + $reglages],
+    'langue inconnue'  => ['/leaflet-a5', ['texts' => ['de' => ['title' => 'Baumkuchen']]] + $reglages],
+    'prix négatif'     => ['/leaflet-a5', ['products' => [['key' => 'erp-9901', 'on' => true, 'price' => -1]]] + $reglages],
+    'QR sans catégorie'=> ['/leaflet-a5', ['qr' => ['mode' => 'category']] + $reglages],
+] as $cas => [$suffixe, $corps]) {
+    $refus = call($router, 'PUT', $brochures . $suffixe, [], ['settings' => $corps]);
+    $apres = call($router, 'GET', $brochures)['body'];
+    check('brochure refusée (' . $cas . ') : 422, rien d\'écrit', $refus['status'] === 422 && count($apres) === 1
+        && ($apres[0]['settings']['template'] ?? '') === 'ruby', 'statut ' . $refus['status']);
+}
+check('brochures d\'une campagne inconnue : 404 en lecture comme en écriture',
+    call($router, 'GET', '/api/v1/marketing/campaigns/999999/brochures')['status'] === 404
+        && call($router, 'PUT', '/api/v1/marketing/campaigns/999999/brochures/leaflet-a5', [], ['settings' => $reglages])['status'] === 404);
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+$franchise = call($router, 'PUT', $brochures . '/depliant-a4', [], ['settings' => $reglages]);
+AuthContext::clear();
+$anonyme = call($router, 'GET', $brochures);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+check('la brochure d\'une campagne réseau ne se règle ni par un franchisé, ni sans identité',
+    in_array($franchise['status'], [403, 404, 422], true) && $anonyme['status'] === 401 && count(call($router, 'GET', $brochures)['body']) === 1,
+    json_encode([$franchise['status'], $anonyme['status']]));
 call($router, 'DELETE', sprintf('/api/v1/marketing/campaigns/%d', $idSuivi));
 
 // Réécriture en bloc : les rattachements sont remplacés, pas empilés. Les

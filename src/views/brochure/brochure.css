@@ -1,0 +1,221 @@
+/*
+ * Pages de brochure. Toutes les dimensions sont en millimètres : la même
+ * feuille sert l'aperçu (mise à l'échelle par `zoom`) et l'impression.
+ * `--u` met à l'échelle un panneau : 1 pour une page A5, la largeur du volet
+ * rapportée à 148 mm pour la couverture d'un dépliant.
+ * Palette de la campagne : --p (principale), --s (secondaire), --a (accent), --i (encre).
+ */
+
+.bro-page { position: relative; overflow: hidden; background: #fff; flex: 0 0 auto; }
+.bro-page__face { position: absolute; }
+.bro-page__trim { position: absolute; outline: 0.3mm dashed rgba(141, 29, 44, 0.6); pointer-events: none; z-index: 3; }
+.bro-page__fold { position: absolute; top: 0; bottom: 0; border-left: 0.3mm dashed rgba(36, 28, 26, 0.35); }
+.bro-marks { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 4; }
+.bro-page__watermark {
+  position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; pointer-events: none;
+  font: 500 24mm 'Gotham', system-ui, sans-serif; letter-spacing: 0.12em; color: rgba(141, 29, 44, 0.14);
+  transform: rotate(-32deg);
+}
+
+.bro-face {
+  position: relative; overflow: hidden; text-align: left;
+  font-family: 'Gotham', system-ui, sans-serif; font-weight: 400; line-height: 1.3; color: var(--i);
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.bro-face *, .bro-face *::before, .bro-face *::after { box-sizing: border-box; }
+.bro-face img { display: block; }
+.bro-face p { margin: 0; }
+.bro-trim { position: absolute; inset: var(--b); }
+.bro-panel { position: absolute; top: 0; bottom: 0; }
+.bro-panel__bg {
+  position: absolute; top: calc(-1 * var(--b)); bottom: calc(-1 * var(--b));
+  left: calc(-1 * var(--bl)); right: calc(-1 * var(--br)); background: #F5EFE4;
+}
+.bro-panel__in { position: absolute; inset: 0; }
+
+/* ---------- couverture ---------- */
+.bro-cover {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding: calc(var(--u) * 13mm) calc(var(--u) * 11mm) 0;
+}
+.bro-logo { flex: 0 0 auto; height: calc(var(--u) * 9mm); width: auto; max-width: 80%; object-fit: contain; }
+.bro-eyebrow {
+  display: flex; align-items: center; gap: calc(var(--u) * 3mm); margin-top: calc(var(--u) * 7mm);
+  font-weight: 500; font-size: calc(var(--u) * 3.3mm); letter-spacing: 0.3em; text-transform: uppercase;
+  color: var(--p); white-space: nowrap; flex: 0 0 auto;
+}
+.bro-eyebrow::before, .bro-eyebrow::after { content: ''; flex: 0 0 auto; width: calc(var(--u) * 9mm); height: 0.3mm; background: currentColor; }
+.bro-titlebox { flex: 0 0 auto; max-width: 100%; max-height: calc(var(--u) * 60mm); margin-top: calc(var(--u) * 5mm); overflow: hidden; }
+.bro-title {
+  font-family: 'Vank', 'Gotham', serif; font-weight: 400; font-size: calc(var(--u) * 18mm); line-height: 0.95;
+  letter-spacing: 0.01em; text-transform: uppercase; color: var(--p); white-space: pre-line; overflow-wrap: anywhere;
+}
+.bro-phrase {
+  flex: 0 0 auto; margin-top: calc(var(--u) * 3mm); font-family: 'Playwrite', cursive; font-size: calc(var(--u) * 5mm);
+  line-height: 1.5; color: var(--a); white-space: pre-line;
+}
+.bro-illus { flex: 1 1 0; min-height: 0; width: 100%; object-fit: contain; margin: calc(var(--u) * 4mm) 0 calc(var(--u) * 34mm); }
+.bro-illus--small { flex: 0 1 calc(var(--u) * 30mm); margin-bottom: calc(var(--u) * 32mm); }
+.bro-illus--left { width: 70%; object-position: left center; }
+.bro-illus--white { filter: brightness(0) invert(1); opacity: 0.92; margin-bottom: calc(var(--u) * 30mm); }
+.bro-grow { flex: 1 1 0; }
+.bro-band {
+  position: absolute; left: calc(-1 * var(--bl)); right: calc(-1 * var(--br)); bottom: calc(-1 * var(--b));
+  height: calc(var(--u) * 28mm + var(--b)); overflow: hidden;
+  padding: 0 calc(var(--u) * 11mm + var(--br)) var(--b) calc(var(--u) * 11mm + var(--bl));
+  display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;
+  background: var(--p); color: #F5EFE4;
+}
+.bro-cta { font-weight: 500; font-size: calc(var(--u) * 3.8mm); letter-spacing: 0.18em; text-transform: uppercase; white-space: pre-line; }
+.bro-ctasub { margin-top: calc(var(--u) * 1.6mm); font-size: calc(var(--u) * 3.3mm); letter-spacing: 0.04em; opacity: 0.85; white-space: pre-line; }
+.bro-foot {
+  position: absolute; left: calc(var(--u) * 11mm); right: calc(var(--u) * 11mm); bottom: calc(var(--u) * 11mm);
+  text-align: center; font-weight: 500; font-size: calc(var(--u) * 3.2mm); letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--p); white-space: pre-line;
+}
+.bro-foot--script { font-family: 'Playwrite', cursive; font-weight: 400; font-size: calc(var(--u) * 5.2mm); letter-spacing: 0; text-transform: none; color: var(--a); }
+
+.bro-hero {
+  position: relative; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; background: #fff;
+  width: calc(var(--u) * 62mm); height: calc(var(--u) * 62mm); margin-top: calc(var(--u) * 9mm);
+}
+.bro-hero > img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.bro-hero > img.bro-hero__drawing { width: 72%; height: 72%; border-radius: 0; object-fit: contain; }
+.bro-badge {
+  position: absolute; right: calc(var(--u) * -8mm); bottom: calc(var(--u) * 1mm);
+  width: calc(var(--u) * 27mm); height: calc(var(--u) * 27mm); padding: calc(var(--u) * 2.5mm); border-radius: 50%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; line-height: 1.1;
+  background: var(--a); color: #fff;
+}
+.bro-badge b { font-weight: 500; font-size: calc(var(--u) * 5.2mm); white-space: nowrap; }
+.bro-badge small {
+  margin-top: calc(var(--u) * 1mm); font-weight: 300; font-size: calc(var(--u) * 2.3mm); overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+
+.bro-dots { display: flex; gap: calc(var(--u) * 4mm); margin-top: calc(var(--u) * 9mm); }
+.bro-dots .bro-dot { width: calc(var(--u) * 27mm); height: calc(var(--u) * 27mm); }
+
+/* ---------- produits ---------- */
+.bro-dot { flex: 0 0 auto; display: grid; place-items: center; overflow: hidden; border-radius: 50%; background: #fff; width: calc(var(--u) * 20mm); height: calc(var(--u) * 20mm); }
+.bro-dot img { width: 100%; height: 100%; object-fit: cover; }
+.bro-dot--drawing img { width: 72%; height: 72%; object-fit: contain; }
+.bro-name { font-weight: 500; font-size: calc(var(--u) * 3.9mm); line-height: 1.25; letter-spacing: 0.04em; text-transform: uppercase; }
+.bro-price { display: inline-flex; align-items: baseline; gap: calc(var(--u) * 1.6mm); white-space: nowrap; color: var(--p); }
+.bro-price b { font-weight: 500; font-size: calc(var(--u) * 6mm); }
+.bro-price s { font-size: calc(var(--u) * 3.4mm); color: var(--i); opacity: 0.6; }
+.bro-q {
+  color: #8A4B00 !important; padding: 0 1mm; border-radius: 0.5mm;
+  background: repeating-linear-gradient(-45deg, rgba(176, 130, 26, 0.24) 0 1.4mm, transparent 1.4mm 2.8mm);
+  outline: 0.4mm dashed #B0821A; outline-offset: 0.6mm;
+}
+.bro-mech {
+  display: inline-block; margin-top: calc(var(--u) * 1.4mm); padding: calc(var(--u) * 0.6mm) calc(var(--u) * 2.2mm);
+  border-radius: 99mm; background: var(--a); color: #fff; font-weight: 500; font-size: calc(var(--u) * 2.8mm); letter-spacing: 0.04em;
+}
+.bro-items { display: grid; gap: calc(var(--u) * 4.5mm); }
+.bro-items--dense { gap: calc(var(--u) * 2.6mm); }
+.bro-item { display: grid; grid-template-columns: auto 1fr auto; gap: calc(var(--u) * 4mm); align-items: center; }
+.bro-item--noimg { grid-template-columns: 1fr auto; }
+.bro-item .bro-dot { width: calc(var(--u) * 21mm); height: calc(var(--u) * 21mm); }
+.bro-items--dense .bro-item .bro-dot { width: calc(var(--u) * 15mm); height: calc(var(--u) * 15mm); }
+.bro-items--dense .bro-name { font-size: calc(var(--u) * 3.4mm); }
+.bro-items--dense .bro-price b { font-size: calc(var(--u) * 5mm); }
+.bro-item__text small, .bro-solo small { display: block; margin-top: calc(var(--u) * 0.8mm); font-weight: 300; font-size: calc(var(--u) * 3.3mm); opacity: 0.75; }
+
+.bro-menu { flex: 0 1 auto; width: 100%; display: grid; gap: calc(var(--u) * 3.4mm); margin-top: calc(var(--u) * 7mm); overflow: hidden; text-align: left; }
+.bro-menu--list { margin-top: 0; gap: calc(var(--u) * 4.2mm); }
+.bro-menu__row { display: grid; grid-template-columns: auto 1fr auto; gap: calc(var(--u) * 2mm); align-items: end; }
+.bro-menu__row .bro-name { font-size: calc(var(--u) * 3.4mm); max-width: calc(var(--u) * 82mm); }
+.bro-menu__row .bro-name small { font-weight: 300; text-transform: none; letter-spacing: 0; }
+.bro-menu__row i { border-bottom: 0.3mm dotted currentColor; opacity: 0.45; margin-bottom: calc(var(--u) * 1.2mm); }
+.bro-menu__row .bro-price b { font-size: calc(var(--u) * 4.4mm); }
+
+/* ---------- verso du leaflet ---------- */
+.bro-back { position: absolute; inset: 0; display: flex; flex-direction: column; padding: calc(var(--u) * 12mm) calc(var(--u) * 11mm) 0; }
+.bro-h { font-family: 'Vank', 'Gotham', serif; font-weight: 400; font-size: calc(var(--u) * 9.5mm); line-height: 1; letter-spacing: 0.02em; text-transform: uppercase; color: var(--p); white-space: pre-line; }
+.bro-h--small { font-size: calc(var(--u) * 8mm); }
+.bro-sub { margin-top: calc(var(--u) * 1.5mm); font-family: 'Playwrite', cursive; font-size: calc(var(--u) * 4.2mm); color: var(--a); white-space: pre-line; }
+.bro-back__products { flex: 1 1 0; min-height: 0; overflow: hidden; margin: calc(var(--u) * 6mm) 0 calc(var(--u) * 74mm); }
+.bro-legalbox { position: absolute; left: calc(var(--u) * 11mm); right: calc(var(--u) * 11mm); bottom: calc(var(--u) * 58mm); max-height: calc(var(--u) * 13mm); overflow: hidden; }
+.bro-legal { font-size: calc(var(--u) * 2.9mm); line-height: 1.4; opacity: 0.8; white-space: pre-line; }
+.bro-shop {
+  position: absolute; left: calc(-1 * var(--bl)); right: calc(-1 * var(--br)); bottom: calc(-1 * var(--b));
+  height: calc(var(--u) * 54mm + var(--b)); overflow: hidden;
+  padding: calc(var(--u) * 7mm) calc(var(--u) * 11mm + var(--br)) calc(var(--u) * 6mm + var(--b)) calc(var(--u) * 11mm + var(--bl));
+  display: grid; grid-template-columns: 1fr auto; gap: calc(var(--u) * 5mm); align-items: center;
+  background: var(--p); color: #F5EFE4;
+}
+.bro-who { font-family: 'Vank', 'Gotham', serif; font-size: calc(var(--u) * 7.2mm); line-height: 1.05; letter-spacing: 0.03em; text-transform: uppercase; }
+.bro-shop p, .bro-spine p { margin-top: calc(var(--u) * 2mm); font-size: calc(var(--u) * 3.6mm); line-height: 1.55; }
+.bro-qrbox { display: flex; flex-direction: column; align-items: center; padding: 1.5mm; border-radius: 1.2mm; background: #fff; color: #241C1A; text-align: center; }
+.bro-qrbox span { display: block; max-width: 30mm; margin-top: 0.8mm; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 2.2mm; letter-spacing: 0.03em; }
+.bro-qr { display: block; }
+
+/* ---------- dépliant ---------- */
+.bro-flap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 14mm 9mm 10mm; overflow: hidden; }
+.bro-flap__img { width: 40mm; height: 40mm; object-fit: contain; margin-bottom: 5mm; }
+.bro-flap__text { margin: 3mm 0 7mm; font-size: 3.5mm; line-height: 1.5; white-space: pre-line; }
+.bro-spine { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 14mm 9mm 12mm; color: #F5EFE4; }
+.bro-spine .bro-logo { align-self: flex-start; height: 7mm; max-width: 100%; }
+.bro-spine__foot { margin-top: auto; overflow: hidden; }
+.bro-spine .bro-who { font-size: 6.4mm; }
+.bro-spine .bro-legal { margin-top: 5mm; font-size: 2.7mm; }
+.bro-inside { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 12mm 9mm 10mm; overflow: hidden; }
+.bro-inside__head { position: absolute; top: 12mm; left: 9mm; right: 9mm; max-height: 24mm; overflow: hidden; }
+.bro-inside__body { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; justify-content: center; margin: 26mm 0 16mm; overflow: hidden; }
+.bro-inside__cta { position: absolute; left: 9mm; right: 9mm; bottom: 10mm; max-height: 14mm; overflow: hidden; text-align: center; font-family: 'Playwrite', cursive; font-size: 4.4mm; color: var(--a); white-space: pre-line; }
+.bro-solo { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.bro-solo .bro-dot--big { width: 46mm; height: 46mm; margin-bottom: 5mm; }
+.bro-solo__price { margin-top: 3mm; }
+.bro-solo__price b { font-size: 7.5mm; }
+
+/* ---------- modèles ---------- */
+.bro-p-spine .bro-panel__bg { background: var(--p); }
+
+/* Ruby : couverture en plein, couleur principale. */
+.bro-t-ruby .bro-p-cover .bro-panel__bg { background: var(--p); }
+.bro-t-ruby .bro-p-cover .bro-eyebrow, .bro-t-ruby .bro-p-cover .bro-phrase { color: var(--s); }
+.bro-t-ruby .bro-p-cover .bro-title, .bro-t-ruby .bro-p-cover .bro-foot { color: #F5EFE4; }
+
+/* Noir : tout en encre, texte clair. */
+.bro-t-noir .bro-panel__bg { background: var(--i); }
+.bro-t-noir .bro-p-spine .bro-panel__bg { background: var(--p); }
+.bro-t-noir .bro-panel__in { color: #F5EFE4; }
+.bro-t-noir .bro-eyebrow, .bro-t-noir .bro-price { color: var(--a); }
+.bro-t-noir .bro-title, .bro-t-noir .bro-h, .bro-t-noir .bro-price s { color: #F5EFE4; }
+.bro-t-noir .bro-hero { background: #F5EFE4; }
+.bro-t-noir .bro-title, .bro-t-epure .bro-title { font-size: calc(var(--u) * 15mm); }
+
+/* Abricot : titre fort à gauche, trois produits. */
+.bro-t-abricot .bro-p-cover .bro-panel__bg { background: #F2C9A1; }
+.bro-t-abricot .bro-p-cover .bro-cover { align-items: flex-start; text-align: left; padding-top: calc(var(--u) * 14mm); }
+.bro-t-abricot .bro-p-cover .bro-eyebrow::before { display: none; }
+.bro-t-abricot .bro-p-cover .bro-title { font-size: calc(var(--u) * 22mm); line-height: 0.9; }
+.bro-t-abricot .bro-p-cover .bro-titlebox { max-height: calc(var(--u) * 82mm); }
+.bro-t-abricot .bro-p-cover .bro-phrase { color: var(--p); }
+.bro-t-abricot .bro-band, .bro-t-abricot .bro-shop, .bro-t-abricot .bro-p-spine .bro-panel__bg { background: var(--i); }
+
+/* Duo : le titre sur la couleur, les produits sur le papier. */
+.bro-t-duo .bro-p-cover .bro-cover { flex-direction: row; align-items: stretch; padding: 0; text-align: left; }
+.bro-duo__left {
+  position: relative; width: 46%; display: flex; flex-direction: column; align-items: flex-start;
+  padding: calc(var(--u) * 13mm) calc(var(--u) * 6mm) calc(var(--u) * 10mm) calc(var(--u) * 9mm); color: #F5EFE4;
+}
+.bro-duo__left > * { position: relative; }
+.bro-duo__left > .bro-duo__bg { position: absolute; top: calc(-1 * var(--b)); bottom: calc(-1 * var(--b)); left: calc(-1 * var(--bl)); right: 0; background: var(--p); }
+.bro-t-duo .bro-duo__left .bro-logo { width: 100%; height: auto; max-width: 100%; }
+.bro-t-duo .bro-duo__left .bro-eyebrow { color: var(--s); letter-spacing: 0.2em; white-space: normal; }
+.bro-t-duo .bro-duo__left .bro-eyebrow::before, .bro-t-duo .bro-duo__left .bro-eyebrow::after { display: none; }
+.bro-t-duo .bro-duo__left .bro-title { color: #F5EFE4; font-size: calc(var(--u) * 13mm); }
+.bro-t-duo .bro-duo__left .bro-titlebox { max-height: calc(var(--u) * 120mm); }
+.bro-t-duo .bro-duo__left .bro-phrase { color: var(--s); font-size: calc(var(--u) * 4.2mm); }
+.bro-duo__right { position: relative; width: 54%; display: flex; flex-direction: column; gap: calc(var(--u) * 7mm); overflow: hidden; padding: calc(var(--u) * 16mm) calc(var(--u) * 8mm) calc(var(--u) * 20mm) calc(var(--u) * 7mm); }
+.bro-duo__item { display: grid; grid-template-columns: auto 1fr; gap: calc(var(--u) * 4mm); align-items: center; }
+.bro-duo__item .bro-dot { width: calc(var(--u) * 18mm); height: calc(var(--u) * 18mm); }
+.bro-duo__item .bro-name { font-size: calc(var(--u) * 3.3mm); }
+.bro-duo__item .bro-price b { font-size: calc(var(--u) * 5mm); }
+.bro-duo__host { position: absolute; left: calc(var(--u) * 7mm); right: calc(var(--u) * 8mm); bottom: calc(var(--u) * 10mm); font-weight: 500; font-size: calc(var(--u) * 2.9mm); letter-spacing: 0.14em; text-transform: uppercase; color: var(--p); }
+
+/* Carte : façon menu. */
+.bro-t-carte .bro-p-cover .bro-title { font-size: calc(var(--u) * 13mm); }
