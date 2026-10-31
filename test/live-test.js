@@ -362,6 +362,25 @@ async function main() {
     if (!Array.isArray(r.media)) throw new Error('liste média absente');
     return `${r.media.length} média(s) · dossier ${r.dir}`;
   });
+  if (LOCAL) {
+    // Médiathèque (écran du menu) : un média déposé, ses tags retouchés, puis retiré.
+    await step('Médiathèque — tags retouchés (moment, produit, période), média inconnu 404', async () => {
+      const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      const prod = (state && state.catalog && state.catalog.products && state.catalog.products[0]) || null;
+      const up = await call('POST', '/api/v1/media', { name: 'test-tags.png', kind: 'photo', moment: 'matin', dataUrl: png });
+      const mine = up.media.find((x) => x.filename === '1_test-tags.png');
+      if (!mine) throw new Error('média déposé introuvable');
+      const r = await call('PATCH', `/api/v1/media/${encodeURIComponent(mine.id)}`, { moment: 'aprem', productId: prod ? prod.id : '', seasonId: '' });
+      const after = r.media.find((x) => x.id === mine.id);
+      if (!after || after.moment !== 'aprem') throw new Error(`moment non retouché (${after && after.moment})`);
+      if (prod && after.productId !== prod.id) throw new Error('produit non retouché');
+      if (after.filename !== mine.filename) throw new Error('le fichier a été renommé');
+      const unknown = await fetch(BASE + '/api/v1/media/inconnu', { method: 'PATCH', headers: { 'content-type': 'application/json', ...(authToken ? { authorization: `Bearer ${authToken}` } : {}) }, body: '{}' });
+      if (unknown.status !== 404) throw new Error(`média inconnu : HTTP ${unknown.status}`);
+      await call('DELETE', `/api/v1/media/${encodeURIComponent(mine.id)}`);
+      return `matin → après-midi${prod ? ` · produit « ${prod.name} »` : ''} · fichier inchangé · inconnu 404`;
+    });
+  }
   await step('GET /api/v1/product-moments — périodes de vente (lecture)', async () => {
     const r = await call('GET', '/api/v1/product-moments');
     if (!Array.isArray(r.moments) || !Array.isArray(r.rows)) throw new Error('structure périodes de vente');

@@ -10,7 +10,7 @@ import {
   loadLibCategories, saveLibCategories, LIB_SOURCES, loadIngredients, saveIngredients,
   loadSequences, saveSequences, SEQ_PLACEMENTS,
   loadSeasons, saveSeasons, currentSeasons, currentMoment,
-  loadMedia, addMediaRow, getMediaRow, delMediaRow,
+  loadMedia, addMediaRow, getMediaRow, delMediaRow, updateMediaTags,
   loadProductMoments, saveProductMoments, SALE_MOMENTS, currentSaleMoment, momentTagFilters,
   buildContinuous, continuousRevision, normContinuous,
   loadScreenGroups, screenGroupById, saveScreenGroup, deleteScreenGroup, setPlayerGroup,
@@ -1153,6 +1153,12 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       const media = addMediaRow({ id: 'md' + Date.now().toString(36), filename, kind, moment, productId: body.productId, seasonId: body.seasonId, size: buf.length });
       scheduleMirror();
       return send(200, { ok: true, media: media.map((x) => ({ ...x, url: 'media/' + encodeURIComponent(x.filename), present: existsSync(join(MEDIA_DIR, x.filename)) })) });
+    }
+    if (req.method === 'PATCH' && (mm = m(/^\/media\/(.+)$/))) {
+      const body = await readBody();
+      if (!updateMediaTags(decodeURIComponent(mm[1]), body)) return send(404, { error: 'média inconnu' });
+      scheduleMirror();
+      return send(200, { ok: true, media: mediaList() });
     }
     if (req.method === 'DELETE' && (mm = m(/^\/media\/(.+)$/))) {
       const row = getMediaRow(decodeURIComponent(mm[1]));

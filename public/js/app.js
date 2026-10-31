@@ -75,6 +75,7 @@ const SHELL_GROUPS = [
     { view: 'products', label: 'nav.products', icon: ICON.products },
     { view: 'seasons', label: 'nav.seasons', icon: ICON.seasons },
     { view: 'translations', label: 'nav.translations', icon: ICON.translations },
+    { view: 'media', label: 'nav.media', icon: ICON.image },
   ] },
   { label: 'shell.grpCampaigns', items: [
     { view: 'promotions', label: 'nav.promotions', icon: ICON.promotions },
@@ -228,6 +229,8 @@ class App extends Component {
     surpriseVideos: [], surpriseBusy: false,
     seasons: [], seasonsCurrent: [], seasonsDirty: false, seasonsBusy: false,
     wsTable: '', wsCandidates: [], wsInspected: [], wsDiag: null, mediaLib: [],
+    mediaFilter: { kind: 'all', moment: 'all', product: '', season: '', q: '' }, mediaEdit: null,
+    mediaUp: { open: false, moment: 'all', productId: '', seasonId: '', busy: false },
     prodMoments: [], prodMomentsCurrent: '', prodMomentsDirty: false, prodMomentsBusy: false,
     pmCollapsed: {},
     contPreview: null, contPreviewBusy: false,
@@ -1098,7 +1101,7 @@ class App extends Component {
   tick = (now) => {
     const dt = Math.min(0.05, (now - this._last) / 1000);
     this._last = now;
-    if (this.state.playing && !this.state.loading && !this._dnd && !this.state.wizard) {
+    if (this.state.playing && this.state.view === 'composer' && !this.state.loading && !this._dnd && !this.state.wizard) {
       const total = this.total();
       let t = this.state.t + dt;
       if (t >= total) {
@@ -2022,6 +2025,35 @@ class App extends Component {
     catch (e) { this.showToast(`Erreur : ${e.message}`); }
   }
 
+  async patchMedia(id, patch) {
+    try { const r = await api('PATCH', '/media/' + encodeURIComponent(id), patch); this.setState({ mediaLib: r.media || [] }); }
+    catch (e) { this.showToast(`Erreur : ${e.message}`); }
+  }
+  setMediaFilter(patch) { this.setState({ mediaFilter: { ...this.state.mediaFilter, ...patch } }); }
+  setMediaUp(patch) { this.setState({ mediaUp: { ...this.state.mediaUp, ...patch } }); }
+  // Dépôt depuis la Médiathèque : même route que l'espace agence (18 Mo au plus).
+  async uploadMedia(file) {
+    if (!file) return;
+    if (file.size > 18 * 1024 * 1024) { this.showToast(this.t('media.tooBig')); return; }
+    const kind = (file.type || '').startsWith('image/') ? 'photo' : 'film';
+    const up = this.state.mediaUp;
+    this.setMediaUp({ busy: true });
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(fr.result);
+        fr.onerror = () => reject(new Error('lecture du fichier impossible'));
+        fr.readAsDataURL(file);
+      });
+      const r = await api('POST', '/media', { name: file.name, kind, moment: up.moment, productId: up.productId, seasonId: up.seasonId, dataUrl });
+      this.setState({ mediaLib: r.media || [], mediaUp: { ...this.state.mediaUp, busy: false, open: false } });
+      this.showToast(`« ${file.name} » ajouté ✓`);
+    } catch (e) {
+      this.setMediaUp({ busy: false });
+      this.showToast(`Erreur : ${e.message}`);
+    }
+  }
+
   // ---- stockage / streaming HD (réglages) ---------------------------------
   async loadHdStorage() {
     try { const r = await api('GET', '/hd-storage'); this.setState({ hdUrl: r.hdUrl || '', hdUser: r.hdUser || '', hasHdPass: !!r.hasHdPass }); }
@@ -2415,6 +2447,7 @@ class App extends Component {
     else if (v === 'campaigns') this.openCampaigns();
     else if (v === 'seasons') this.openSeasons();
     else if (v === 'translations') this.openTranslations();
+    else if (v === 'media') { this.setView('media'); this.loadMediaLib(); if (!this.state.seasons.length) this.loadSeasons(); }
     else this.setView(v);
   }
   // Traduction d'une clé pour la langue d'interface courante (+ interpolation).
@@ -3473,6 +3506,11 @@ class App extends Component {
       const unsaved = (dirty) => (dirty ? ' · ' + T('common.unsaved') : '');
       // L'accueil n'a pas de fil : le titre suffit.
       if (st.view === 'home') return arr;
+      if (st.view === 'media') {
+        arr.push(crumb(T('nav.media'), null, false));
+        arr.push(crumb(T('media.count', { n: (st.mediaLib || []).length }), null, true));
+        return arr;
+      }
       if (st.view === 'fleet') {
         arr.push(crumb(T('nav.composer'), () => this.setView('composer'), false));
         arr.push(crumb(T('nav.fleet'), () => this.setView('fleet'), false));
@@ -3586,6 +3624,50 @@ class App extends Component {
         season: ((st.seasons || []).find((s) => s.id === mm.seasonId) || {}).name || '',
         del: () => this.delMediaLib(mm.id, mm.filename),
       })),
+    };
+
+    // ---- médiathèque (écran du menu) ----
+    const mf = st.mediaFilter;
+    const mQ = (mf.q || '').trim().toLowerCase();
+    const MOMENT_TAG = { matin: this.t('moment.matin'), midi: this.t('moment.midi'), aprem: this.t('moment.aprem'), all: this.t('media.allDay') };
+    const mediaView = {
+      total: (st.mediaLib || []).length,
+      filter: mf,
+      kinds: [['all', this.t('media.all')], ['film', this.t('media.videos')], ['photo', this.t('media.photos')]]
+        .map(([id, label]) => ({ id, label, on: mf.kind === id, pick: () => this.setMediaFilter({ kind: id }) })),
+      moments: [['all', this.t('media.anyMoment')], ['matin', MOMENT_TAG.matin], ['midi', MOMENT_TAG.midi], ['aprem', MOMENT_TAG.aprem]]
+        .map(([id, label]) => ({ id, label, on: mf.moment === id, pick: () => this.setMediaFilter({ moment: id }) })),
+      momentOpts: ['all', 'matin', 'midi', 'aprem'].map((id) => ({ id, label: MOMENT_TAG[id] })),
+      products: seasonProdOpts,
+      seasons: (st.seasons || []).map((x) => ({ id: x.id, name: x.name })),
+      onProduct: (e) => this.setMediaFilter({ product: e.target.value }),
+      onSeason: (e) => this.setMediaFilter({ season: e.target.value }),
+      onSearch: (e) => this.setMediaFilter({ q: e.target.value }),
+      up: st.mediaUp,
+      toggleUp: () => this.setMediaUp({ open: !st.mediaUp.open }),
+      upMoment: (e) => this.setMediaUp({ moment: e.target.value }),
+      upProduct: (e) => this.setMediaUp({ productId: e.target.value }),
+      upSeason: (e) => this.setMediaUp({ seasonId: e.target.value }),
+      upFile: (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; this.uploadMedia(f); },
+      refresh: () => this.loadMediaLib(),
+      cards: (st.mediaLib || []).filter((mm) => (mf.kind === 'all' || mm.kind === mf.kind)
+        && (mf.moment === 'all' || mm.moment === mf.moment)
+        && (!mf.product || mm.productId === mf.product)
+        && (!mf.season || mm.seasonId === mf.season)
+        && (!mQ || String(mm.filename).toLowerCase().includes(mQ)))
+        .map((mm) => ({
+          id: mm.id, filename: mm.filename, kind: mm.kind, url: mm.url, present: mm.present,
+          meta: `${Math.round((mm.size || 0) / 1024 / 1024 * 10) / 10} Mo${mm.createdAt ? ' · ' + String(mm.createdAt).slice(0, 10).split('-').reverse().join('/') : ''}`,
+          moment: mm.moment, momentLabel: MOMENT_TAG[mm.moment] || mm.moment,
+          productId: mm.productId, productName: (seasonProdOpts.find((x) => x.id === mm.productId) || {}).name || '',
+          seasonId: mm.seasonId, seasonName: ((st.seasons || []).find((x) => x.id === mm.seasonId) || {}).name || '',
+          editing: st.mediaEdit === mm.id,
+          toggleEdit: () => this.setState({ mediaEdit: st.mediaEdit === mm.id ? null : mm.id }),
+          setMoment: (e) => this.patchMedia(mm.id, { moment: e.target.value }),
+          setProduct: (e) => this.patchMedia(mm.id, { productId: e.target.value }),
+          setSeason: (e) => this.patchMedia(mm.id, { seasonId: e.target.value }),
+          del: () => this.delMediaLib(mm.id, mm.filename),
+        })),
     };
 
     const subTab = 'padding:8px 18px;font-size:13px;font-weight:500;border:none;border-radius:8px;cursor:pointer;';
@@ -3781,6 +3863,7 @@ class App extends Component {
       saveProdMoments: () => this.saveProdMoments(),
       pmAllCollapsed, collapseAllPm: () => this.setAllPmCollapsed(true), expandAllPm: () => this.setAllPmCollapsed(false),
       mediaOverview, refreshMediaLib: () => this.loadMediaLib(),
+      isMediaView: st.view === 'media', mediaView, openMediaView: () => this.goView('media'),
       contPreviewBusy: st.contPreviewBusy,
       contPreviewMeta: (st.contPreview && st.contPreview.filmId === st.activePl) ? st.contPreview.meta : null,
       agencyUrl: new URL('agence', location.href).toString(),
@@ -5258,40 +5341,115 @@ class App extends Component {
         </div>
       </div>
 
-      <!-- Médiathèque agence : vue admin (nombre + tags + présence) -->
-      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-          <h3 style="margin:0;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Médiathèque agence — ${v.mediaOverview.total ? `${v.mediaOverview.total} média(s) sur le serveur` : 'vide'}</h3>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <button onClick=${v.refreshMediaLib} style="padding:7px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">⟳ Rafraîchir</button>
-            ${!st.agencyEnabled && html`<span title="Aucun mot de passe agence sur ce serveur (secret SIG_AGENCY_PASSWORD) : l'espace agence refuse toute connexion. Voir Paramètres." style="padding:6px 11px;font-size:11.5px;font-weight:500;color:var(--muted-2);background:rgba(184,134,11,0.12);border:1px solid rgba(184,134,11,0.35);border-radius:999px;">Accès agence fermé</span>`}
-            <a href=${v.agencyUrl} target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:8px 15px;font-size:12.5px;font-weight:500;color:#fff;background:var(--muted-2);border-radius:999px;">Ouvrir l'espace Agence ↗</a>
-            <button onClick=${() => v.copyLink(v.agencyUrl)} title="Copier le lien agence" style="padding:8px 13px;font-size:12px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--muted-2);cursor:pointer;">⎘ Lien</button>
-          </div>
-        </div>
-        ${v.mediaOverview.total ? html`
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-            <span style="font-size:12px;color:var(--muted-2);background:var(--chip);border-radius:999px;padding:4px 12px;">🎬 ${v.mediaOverview.videos} vidéo(s)</span>
-            <span style="font-size:12px;color:var(--muted-2);background:var(--chip);border-radius:999px;padding:4px 12px;">🖼 ${v.mediaOverview.photos} photo(s)</span>
-            <span style="font-size:12px;color:var(--muted-2);background:var(--chip);border-radius:999px;padding:4px 12px;">Matin ${v.mediaOverview.byMoment.matin} · Midi ${v.mediaOverview.byMoment.midi} · Après-midi ${v.mediaOverview.byMoment.aprem} · Journée ${v.mediaOverview.byMoment.all}</span>
-            <span style="font-size:12px;color:${v.mediaOverview.present === v.mediaOverview.total ? '#2E6E4E' : '#8D1D2C'};background:var(--chip);border-radius:999px;padding:4px 12px;">${v.mediaOverview.present}/${v.mediaOverview.total} présent(s) sur le disque</span>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:6px;">
-            ${v.mediaOverview.rows.map((mm) => html`
-              <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;background:#fff;border:1px solid var(--line);flex-wrap:wrap;">
-                <span style="font-size:15px;flex:0 0 auto;">${mm.kind === 'photo' ? '🖼' : '🎬'}</span>
-                <span style="flex:1 1 200px;min-width:0;font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${mm.filename}</span>
-                <span style="font-size:10.5px;font-weight:500;color:var(--muted-2);background:var(--chip);border-radius:999px;padding:2px 9px;">${mm.moment}</span>
-                ${mm.product ? html`<span style="font-size:11px;color:var(--muted-2);">🏷 ${mm.product}</span>` : ''}
-                ${mm.season ? html`<span style="font-size:11px;color:var(--muted-2);">📅 ${mm.season}</span>` : ''}
-                <span style="font-size:11px;color:var(--muted);">${Math.round((mm.size || 0) / 1024 / 1024 * 10) / 10} Mo</span>
-                <span style="font-size:11px;font-weight:500;color:${mm.present ? '#2E6E4E' : '#8D1D2C'};">${mm.present ? '✓' : '⚠ absent'}</span>
-                <button onClick=${mm.del} title="Supprimer du serveur" style="flex:0 0 auto;width:24px;height:24px;border-radius:50%;background:rgba(141,29,44,0.1);border:none;cursor:pointer;font-size:11px;color:var(--accent);">✕</button>
-              </div>
-            `)}
-          </div>
-        ` : html`<p style="margin:0;font-size:12.5px;color:var(--muted);">Aucun média sur le serveur pour l'instant. Les agences en ajoutent via l'espace Agence (ou dépose-les dans <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">public/media/</code> par SFTP).</p>`}
+      <!-- Médiathèque : elle a son écran dans le menu (Contenus) -->
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div style="font-size:13px;color:var(--muted-2);line-height:1.5;">${v.t('media.pointer')} <span style="color:var(--muted);">${v.t('media.count', { n: v.mediaOverview.total })} · ${v.mediaOverview.videos} ${v.t('media.videos').toLowerCase()} · ${v.mediaOverview.photos} ${v.t('media.photos').toLowerCase()}</span></div>
+        <button class="btn btn--sm" onClick=${v.openMediaView}>${v.t('media.open')}</button>
       </div>
+    </div>
+  </div>
+  `}
+
+  ${v.isMediaView && html`
+  <div class="app__body app__body--wide">
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+        <p style="margin:0;font-size:13px;color:var(--muted-2);line-height:1.5;max-width:820px;">${v.t('media.intro')}</p>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <button class="btn" onClick=${v.mediaView.refresh}>${v.t('media.refresh')}</button>
+          <a class="btn" href=${v.agencyUrl} target="_blank">${v.t('media.agency')} ${icon(ICON.external, 14)}</a>
+          <button class="btn btn--primary" onClick=${v.mediaView.toggleUp}>${icon(ICON.upload, 15)}${v.t('media.upload')}</button>
+        </div>
+      </div>
+
+      ${v.mediaView.up.open && html`
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;">
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted);">${v.t('media.moment')}
+          <select value=${v.mediaView.up.moment} onChange=${v.mediaView.upMoment} style="padding:8px 10px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;min-width:150px;">
+            ${v.mediaView.momentOpts.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
+          </select>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted);">${v.t('media.product')}
+          <select value=${v.mediaView.up.productId} onChange=${v.mediaView.upProduct} style="padding:8px 10px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;min-width:200px;max-width:280px;">
+            <option value="">${v.t('media.noProduct')}</option>
+            ${v.mediaView.products.map((o) => html`<option value=${o.id}>${o.name}</option>`)}
+          </select>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted);">${v.t('media.season')}
+          <select value=${v.mediaView.up.seasonId} onChange=${v.mediaView.upSeason} style="padding:8px 10px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;min-width:180px;">
+            <option value="">${v.t('media.noSeason')}</option>
+            ${v.mediaView.seasons.map((o) => html`<option value=${o.id}>${o.name}</option>`)}
+          </select>
+        </label>
+        <label class=${'btn btn--primary' + (v.mediaView.up.busy ? ' is-busy' : '')} style="cursor:pointer;">
+          ${icon(ICON.upload, 15)}${v.mediaView.up.busy ? v.t('media.sending') : v.t('media.file')}
+          <input type="file" accept="video/mp4,video/webm,video/quicktime,image/*" onChange=${v.mediaView.upFile} disabled=${v.mediaView.up.busy} style="display:none;" />
+        </label>
+        <p style="margin:0;flex:1 1 100%;font-size:12px;color:var(--muted);">${v.t('media.tooBig')}</p>
+      </div>`}
+
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        ${v.mediaView.kinds.map((k) => html`<button key=${k.id} onClick=${k.pick} style=${`padding:6px 13px;font-size:12.5px;border-radius:8px;cursor:pointer;${k.on ? 'background:var(--accent);border:1px solid var(--accent);color:#fff;' : 'background:#fff;border:1px solid var(--line);color:var(--muted-2);'}`}>${k.label}</button>`)}
+        <span class="topbar__sep"></span>
+        ${v.mediaView.moments.map((k) => html`<button key=${k.id} onClick=${k.pick} style=${`padding:6px 13px;font-size:12.5px;border-radius:8px;cursor:pointer;${k.on ? 'background:var(--accent);border:1px solid var(--accent);color:#fff;' : 'background:#fff;border:1px solid var(--line);color:var(--muted-2);'}`}>${k.label}</button>`)}
+        <span class="topbar__sep"></span>
+        <select value=${v.mediaView.filter.product} onChange=${v.mediaView.onProduct} style="padding:6px 9px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;max-width:220px;">
+          <option value="">${v.t('media.anyProduct')}</option>
+          ${v.mediaView.products.map((o) => html`<option value=${o.id}>${o.name}</option>`)}
+        </select>
+        <select value=${v.mediaView.filter.season} onChange=${v.mediaView.onSeason} style="padding:6px 9px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;max-width:200px;">
+          <option value="">${v.t('media.anySeason')}</option>
+          ${v.mediaView.seasons.map((o) => html`<option value=${o.id}>${o.name}</option>`)}
+        </select>
+        <input value=${v.mediaView.filter.q} onInput=${v.mediaView.onSearch} placeholder=${v.t('media.search')} style="flex:1 1 180px;min-width:150px;padding:7px 11px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
+        <span style="font-size:12px;color:var(--muted);">${v.t('media.count', { n: v.mediaView.cards.length })}${v.mediaView.cards.length !== v.mediaView.total ? ` / ${v.mediaView.total}` : ''}</span>
+      </div>
+
+      ${v.mediaView.cards.length ? html`
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;">
+        ${v.mediaView.cards.map((c) => html`
+          <div key=${c.id} data-media-card style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;">
+            <div style="position:relative;aspect-ratio:16/9;background:var(--chip);display:flex;align-items:center;justify-content:center;overflow:hidden;">
+              ${!c.present ? html`<span style="font-size:12px;color:var(--accent);">${v.t('media.missing')}</span>`
+                : (c.kind === 'photo' ? html`<img src=${c.url} alt="" loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block;" />`
+                  : html`<video src=${c.url} muted playsinline preload="metadata" controls style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;background:#000;"></video>`)}
+            </div>
+            <div style="padding:12px 14px 14px;display:flex;flex-direction:column;gap:8px;flex:1 1 auto;">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+                <div style="min-width:0;">
+                  <div title=${c.filename} style="font-size:13px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.filename}</div>
+                  <div style="font-size:11.5px;color:var(--muted);margin-top:2px;">${c.kind === 'photo' ? v.t('media.photos') : v.t('media.videos')} · ${c.meta}</div>
+                </div>
+                <button class="btn btn--icon btn--sm" onClick=${c.del} title="Supprimer du serveur" aria-label="Supprimer du serveur" style="width:30px;color:var(--muted-2);">${icon(ICON.trash, 14)}</button>
+              </div>
+              ${c.editing ? html`
+                <div style="display:flex;flex-direction:column;gap:7px;">
+                  <select value=${c.moment} onChange=${c.setMoment} style="padding:6px 9px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;">
+                    ${v.mediaView.momentOpts.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
+                  </select>
+                  <select value=${c.productId} onChange=${c.setProduct} style="padding:6px 9px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;">
+                    <option value="">${v.t('media.noProduct')}</option>
+                    ${v.mediaView.products.map((o) => html`<option value=${o.id}>${o.name}</option>`)}
+                  </select>
+                  <select value=${c.seasonId} onChange=${c.setSeason} style="padding:6px 9px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;">
+                    <option value="">${v.t('media.noSeason')}</option>
+                    ${v.mediaView.seasons.map((o) => html`<option value=${o.id}>${o.name}</option>`)}
+                  </select>
+                  <button class="btn btn--sm" onClick=${c.toggleEdit} style="align-self:flex-start;">${v.t('media.done')}</button>
+                </div>` : html`
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                  <span style="font-size:11.5px;color:var(--muted-2);background:var(--chip);border-radius:999px;padding:3px 10px;">${metaIcon(ICON.clock)}${c.momentLabel}</span>
+                  ${c.productName && html`<span style="font-size:11.5px;color:var(--muted-2);background:var(--chip);border-radius:999px;padding:3px 10px;">${metaIcon(ICON.products)}${c.productName}</span>`}
+                  ${c.seasonName && html`<span style="font-size:11.5px;color:var(--muted-2);background:var(--chip);border-radius:999px;padding:3px 10px;">${metaIcon(ICON.calendar)}${c.seasonName}</span>`}
+                  <button class="btn btn--ghost btn--sm" onClick=${c.toggleEdit} style="margin-left:auto;">${v.t('media.editTags')}</button>
+                </div>`}
+            </div>
+          </div>
+        `)}
+      </div>` : html`
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:28px 22px;text-align:center;font-size:13px;color:var(--muted);">
+        ${v.mediaView.total ? v.t('media.noMatch') : v.t('media.empty')}
+      </div>`}
     </div>
   </div>
   `}

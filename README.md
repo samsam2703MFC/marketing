@@ -201,6 +201,14 @@ repli sur le français) ; `App.t('clé')` les résout à la volée selon la lang
 L'**espace magasin** est entièrement en français et en néerlandais (langue du magasin par
 défaut). À l'écran, l'attente sans programme ne montre que le logo — aucun texte à traduire.
 
+### Médiathèque (menu Contenus)
+Les vidéos et photos des agences ont leur écran dans le menu de la régie : grille filtrable par
+type, moment de la journée, produit et période, recherche par nom, dépôt d'un fichier avec ses
+tags (18 Mo au plus ; au-delà, `public/media/` par SFTP puis « Actualiser »), retouche des tags
+sur chaque carte (`PATCH /api/v1/media/:id` — le fichier garde son nom, le préfixe `1_`/`2_`/`3_`
+n'étant qu'une convention de dépôt) et suppression. Le mode continu lit ces tags à la prochaine
+composition de la boucle. L'espace agence (`/agence`) reste la porte d'entrée des agences.
+
 ### Espace magasin (`/magasin`)
 Un compte par magasin (voir « Comptes & sécurité »), utilisable sur tablette ou téléphone :
 

@@ -1520,6 +1520,17 @@ export function getMediaRow(id) {
   return r ? { id: r.id, filename: r.filename, kind: r.kind } : null;
 }
 export function delMediaRow(id) { getDb().prepare('DELETE FROM sig_media WHERE id = ?').run(String(id)); }
+// Retouche des tags d'un média (moment, produit, période). Le fichier garde son
+// nom : le préfixe 1_/2_/3_ n'est qu'une convention de dépôt des agences.
+export function updateMediaTags(id, tags) {
+  const r = getDb().prepare('SELECT * FROM sig_media WHERE id = ?').get(String(id));
+  if (!r) return false;
+  const moment = tags.moment === undefined ? r.moment : (['matin', 'midi', 'aprem'].includes(tags.moment) ? tags.moment : 'all');
+  const productId = tags.productId === undefined ? r.product_id : String(tags.productId || '');
+  const seasonId = tags.seasonId === undefined ? r.season_id : String(tags.seasonId || '');
+  getDb().prepare('UPDATE sig_media SET moment = ?, product_id = ?, season_id = ? WHERE id = ?').run(moment, productId, seasonId, String(id));
+  return true;
+}
 
 // Prix par magasin : remplace le prix par défaut des items liés au catalogue.
 export function applyStorePrices(modules, storeId) {
