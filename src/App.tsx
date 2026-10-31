@@ -18,6 +18,7 @@ import CrmView from './views/CrmView'
 import CampaignTypesView from './views/CampaignTypesView'
 import AddressesView from './views/AddressesView'
 import CampaignFixView from './views/CampaignFixView'
+import LoginView from './views/LoginView'
 import BrochureView from './views/brochure/BrochureView'
 import CampaignBuilder from './views/builder/CampaignBuilder'
 import SocialView from './views/SocialView'
@@ -25,11 +26,14 @@ import InStoreView from './views/InStoreView'
 import { ReferencesProvider } from './state/references'
 
 export default function App() {
-  // Le module n'a pas d'écran de connexion : embarqué dans l'ERP, l'identité
-  // vient de son middleware. On lui demande simplement si elle est établie.
-  const session = useAsync(() => api.getSession(), [])
+  // L'identité vient du serveur : une session ouverte par les identifiants de
+  // l'ERP, ou — en développement seulement — l'identité de développement.
+  const [sessionKey, setSessionKey] = useState(0)
+  const [loginOpen, setLoginOpen] = useState(false)
+  const session = useAsync(() => api.getSession(), [sessionKey])
+  const reload = () => setSessionKey((key) => key + 1)
 
-  if (session.loading) {
+  if (session.loading && !session.data) {
     return (
       <div className="app">
         <main className="app__body">
@@ -52,27 +56,55 @@ export default function App() {
     )
   }
 
-  // Pas de formulaire de connexion ici : ce serait un second chemin
-  // d'authentification à maintenir, et il ne saurait pas parler à l'ERP. On dit
-  // ce qui manque, plutôt que de proposer une porte qui n'ouvre sur rien.
-  if (!session.data?.authenticated) {
+  const space = ROLE === 'FRANCHISEE' ? 'franchise' : 'reseau'
+  const current = session.data
+
+  if (!current?.authenticated || loginOpen) {
     return (
-      <div className="app">
-        <main className="app__body">
-          <section className="card pending">
-            <h2>Session non établie</h2>
-            <p className="muted">
-              Ce module lit l’identité de l’ERP. Ouvrez-le depuis l’ERP, ou définissez
-              <code> MAR_DEV_AUTH=1</code> et <code>MAR_DEV_USER_ID</code> dans le fichier
-              de configuration du serveur pour y accéder directement.
-            </p>
-          </section>
-        </main>
+      <LoginView
+        space={space}
+        onDone={() => {
+          setLoginOpen(false)
+          reload()
+        }}
+        onCancel={current?.authenticated ? () => setLoginOpen(false) : undefined}
+      />
+    )
+  }
+
+  async function logout() {
+    try {
+      await api.closeSession()
+    } finally {
+      reload()
+    }
+  }
+
+  // La version réseau est celle du réseau : un compte de boutique y est renvoyé vers son espace.
+  if (ROLE === 'BRAND_ADMIN' && current.role !== 'BRAND_ADMIN') {
+    const franchise = import.meta.env.VITE_FRANCHISE_BASE
+    return (
+      <div className="auth">
+        <section className="auth__card login">
+          <img src={`${import.meta.env.BASE_URL}img/logo.png`} alt="L'Atelier By" className="login__logo" />
+          <h1 className="login__title">Compte de boutique</h1>
+          <p className="muted login__sub">
+            {current.label ? `${current.label} — ` : ''}ce compte ouvre l’espace de ses boutiques, pas la version réseau.
+          </p>
+          {franchise ? (
+            <a className="btn btn--primary" href={franchise}>
+              Ouvrir l’espace boutique
+            </a>
+          ) : null}
+          <button type="button" className="ghost login__cancel" onClick={logout}>
+            Se déconnecter
+          </button>
+        </section>
       </div>
     )
   }
 
-  return <Workspace />
+  return <Workspace account={{ via: current.via ?? null, label: current.label ?? null }} onLogin={() => setLoginOpen(true)} onLogout={logout} />
 }
 
 /**
@@ -156,7 +188,12 @@ function resolveBrand(brands: api.Brand[], requested: number): api.Brand | undef
     : brands.find((brand) => brand.id === requested)
 }
 
-function Workspace() {
+interface Account {
+  via: 'erp' | 'dev' | 'service' | null
+  label: string | null
+}
+
+function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: () => void; onLogout: () => void }) {
   const role = ROLE
   const [route, setRoute] = useState<Route>(() => campaignFromUrl()?.route ?? 'dashboard')
   const [campaignId, setCampaignId] = useState<number | null>(() => campaignFromUrl()?.campaignId ?? null)
@@ -302,7 +339,15 @@ function Workspace() {
   return (
     <ReferencesProvider value={refs}>
     <div className="workspace">
-      <Sidebar role={role} route={route} brandName={scope?.name ?? null} onNavigate={navigate} />
+      <Sidebar
+        role={role}
+        route={route}
+        brandName={scope?.name ?? null}
+        onNavigate={navigate}
+        account={account}
+        onLogin={onLogin}
+        onLogout={onLogout}
+      />
 
       <div className="workspace__main">
         {/* Un écran du module Social ou la régie portent leur propre titre : rien au-dessus du cadre. */}

@@ -97,6 +97,20 @@ Contrôle utile : `sudo -u www-data test -r /var/www/private/marketing/.env && e
 
 Les guillemets ne sont pas décoratifs : un mot de passe contenant des espaces en bordure ou lui-même entouré de guillemets serait tronqué sans eux, et l'authentification MySQL échouerait sans message exploitable.
 
+### Connexion au module
+
+Chacun se connecte avec ses identifiants de l'ERP (téléphone + mot de passe) : le module les présente à l'ERP (`MAR_ERP_AUTH_BASE`, écrit par le déploiement) et ne les garde pas. Un compte du réseau ouvre la version réseau ; un compte de boutique, ses boutiques seules.
+
+Le déploiement complète le `.env` sans jamais réécrire ce qui y est :
+
+| Clé | Rôle | Origine |
+|---|---|---|
+| `MAR_ERP_AUTH_BASE` | ERP où se vérifient les identifiants | variable GitHub, par défaut `https://atelierby.tfbuddy.com` |
+| `MAR_SESSION_SECRET` | signe les cookies de session | tiré sur le serveur au premier passage |
+| `MAR_SERVICE_TOKEN` | présenté par Social et le cockpit (`X-Marketing-Service`) | tiré au premier passage, recopié dans `service-token` (640, `www-data`) |
+
+`MAR_DEV_AUTH=1` ouvre le module à tout visiteur en `BRAND_ADMIN`. Il ne doit pas rester en production une fois la connexion vérifiée.
+
 ---
 
 ## 4. Apache

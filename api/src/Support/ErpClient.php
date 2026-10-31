@@ -87,6 +87,19 @@ final class ErpClient
     }
 
     /**
+     * L'adresse où se vérifient les identifiants des personnes : `MAR_ERP_AUTH_BASE`,
+     * sinon celle des lectures. Séparée parce que la connexion n'a besoin d'aucun
+     * compte de service, alors que les lectures (tarifs, promotions) en demandent un :
+     * renseigner l'une ne doit pas lancer les autres sans leurs identifiants.
+     */
+    public static function authBase(): string
+    {
+        $auth = rtrim(trim((string) Env::get('MAR_ERP_AUTH_BASE', '')), '/');
+
+        return $auth !== '' ? $auth : self::base();
+    }
+
+    /**
      * Ce qu'il faut dire à l'écran quand rien n'est configuré.
      *
      * Un message, pas un silence : « aucune donnée » et « je ne sais pas où
@@ -153,6 +166,64 @@ final class ErpClient
                 $path,
                 $body === '' ? 'un corps vide' : mb_substr(trim(strip_tags($body)), 0, 120)
             ));
+        }
+
+        return $decoded;
+    }
+
+    /**
+     * Connexion d'une personne à l'ERP, pour ouvrir sa session dans ce module.
+     *
+     * `realm` : `admin` (le réseau) ou `owner` (une boutique). Le jeton rendu
+     * n'est pas gardé : il sert à lire, dans la foulée, les boutiques du compte.
+     * Le statut est rendu tel quel — c'est l'appelant qui sait ce qu'un 403 veut
+     * dire pour lui (« pas ce réalm-là, essayer l'autre »).
+     *
+     * @return array{status:int, token:?string, body:array<mixed>}
+     */
+    public function authenticate(string $realm, string $phone, string $password): array
+    {
+        if (!in_array($realm, ['admin', 'owner'], true)) {
+            throw new RuntimeException('Réalm de connexion inconnu : ' . $realm . '.');
+        }
+
+        [$status, $body] = $this->transmit(
+            self::authBase() . '/api/v1/' . $realm . '/auth/login',
+            ['Accept: application/json', 'Content-Type: application/json', 'X-Request-Id: ' . self::requestId()],
+            'POST',
+            (string) json_encode(['phone' => $phone, 'password' => $password])
+        );
+
+        $decoded = json_decode($body, true);
+        $decoded = is_array($decoded) ? $decoded : [];
+        $data    = is_array($decoded['data'] ?? null) ? $decoded['data'] : [];
+        $token   = null;
+        foreach ([$decoded['access_token'] ?? null, $data['access_token'] ?? null, $decoded['token'] ?? null, $data['token'] ?? null] as $candidate) {
+            if (is_string($candidate) && $candidate !== '') {
+                $token = $candidate;
+                break;
+            }
+        }
+
+        return ['status' => $status, 'token' => $status === 200 ? $token : null, 'body' => $decoded];
+    }
+
+    /**
+     * Un GET JSON avec le jeton d'une personne, et non celui du module.
+     *
+     * @return array<mixed>
+     */
+    public function getAs(string $token, string $path): array
+    {
+        [$status, $body] = $this->transmit(self::authBase() . '/' . ltrim($path, '/'), [
+            'Accept: application/json',
+            'X-Request-Id: ' . self::requestId(),
+            'Authorization: Bearer ' . $token,
+        ]);
+
+        $decoded = json_decode($body, true);
+        if ($status >= 400 || !is_array($decoded)) {
+            throw new RuntimeException(sprintf('L\'ERP a répondu %d sur %s.', $status, $path));
         }
 
         return $decoded;

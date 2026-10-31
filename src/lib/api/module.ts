@@ -85,10 +85,26 @@ export interface Session {
   dev_auth?: boolean
   /** Sans identité : le fichier de configuration du serveur a-t-il été trouvé. */
   config_found?: boolean
+  /** D'où vient l'identité : connexion par l'ERP, identité de développement, ou autre module du serveur. */
+  via?: 'erp' | 'dev' | 'service' | null
+  /** La personne connectée par l'ERP, téléphone masqué (« ••• 3456 · réseau »). */
+  label?: string | null
 }
 
 export function getSession(): Promise<Session> {
   return request<Session>(`${BASE}/session`)
+}
+
+/**
+ * Connexion par les identifiants de l'ERP (téléphone + mot de passe). Le module ne
+ * les garde pas : il les présente à l'ERP, puis pose un cookie de session signé.
+ */
+export function openSession(phone: string, password: string): Promise<Session> {
+  return request<Session>(`${BASE}/session`, { method: 'POST', body: { phone, password }, anonymous: true })
+}
+
+export function closeSession(): Promise<{ message: string }> {
+  return request(`${BASE}/session`, { method: 'DELETE', anonymous: true })
 }
 
 // ---------------------------------------------------------------------------

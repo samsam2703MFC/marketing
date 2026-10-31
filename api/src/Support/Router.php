@@ -36,9 +36,9 @@ final class Router
         $this->add('GET', $pattern, $handler, $public);
     }
 
-    public function post(string $pattern, callable $handler): void
+    public function post(string $pattern, callable $handler, bool $public = false): void
     {
-        $this->add('POST', $pattern, $handler);
+        $this->add('POST', $pattern, $handler, $public);
     }
 
     public function patch(string $pattern, callable $handler): void
@@ -52,9 +52,9 @@ final class Router
         $this->add('PUT', $pattern, $handler);
     }
 
-    public function delete(string $pattern, callable $handler): void
+    public function delete(string $pattern, callable $handler, bool $public = false): void
     {
-        $this->add('DELETE', $pattern, $handler);
+        $this->add('DELETE', $pattern, $handler, $public);
     }
 
     public function dispatch(Request $request): array

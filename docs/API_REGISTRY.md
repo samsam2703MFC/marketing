@@ -57,7 +57,9 @@ entière, pour attraper une colonne ajoutée plus tard.
 
 | Méthode | Chemin | Périmètre | Réponse |
 |---|---|---|---|
-| GET | `…/session` **@public** | — | objet — dit seulement si l'appelant est authentifié |
+| GET | `…/session` **@public** | — | objet — dit seulement si l'appelant est authentifié, et par quelle voie (`via`) |
+| POST | `…/session` **@public** | — | `{ phone, password }` → connexion par les identifiants de l'ERP ; pose le cookie de session signé |
+| DELETE | `…/session` **@public** | — | ferme la session (efface le cookie) ; sans session, ne fait rien |
 | GET | `…/references` | — | objet de listes (référentiels du module) |
 | GET | `…/shops` | tenant | tableau |
 | GET | `…/brands` | — | tableau |
@@ -176,7 +178,7 @@ entière, pour attraper une colonne ajoutée plus tard.
 | 3.1 | Identifiants numériques (`id: 42`), pas des chaînes. | toutes |
 | 8.1 | **Aucune collection paginée.** Les listes rendent tout. Les volumes actuels (dizaines de campagnes, quelques centaines de prospects) le supportent, mais la règle est absolue. | ~25 collections |
 | 8.2/8.3 | Pas de `sort` ni de `filter[champ][op]` normalisés ; quelques filtres ad hoc (`?status=`, `?month=`). | ~25 collections |
-| 9 | Pas de JWT propre : l'identité vient du middleware de l'ERP hôte, ou d'en-têtes de développement derrière `MAR_DEV_AUTH`. Pas de `/auth/*`, pas de rotation de refresh, pas de vérification d'`aud`. | module entier |
+| 9 | Pas de JWT propre : l'identité vient d'une connexion par les identifiants de l'ERP (cookie `HttpOnly` signé HMAC, 12 h, sans refresh), d'un jeton de service pour les autres modules du serveur (`X-Marketing-Service`), ou — en développement seulement — d'en-têtes derrière `MAR_DEV_AUTH`. Pas de `/auth/*`, pas de rotation de refresh, pas de vérification d'`aud`. | module entier |
 | 10.1 | Autorisation par **rôle** (`BRAND_ADMIN`, `FRANCHISEE`), pas par scope `{ressource}:{action}`. | module entier |
 | 15 | Pas de couche `services/` : la règle métier vit dans les dépôts, avec le SQL. Les contrôleurs restent minces et sans SQL, mais la séparation métier/persistance n'existe pas. | module entier |
 | 15 | Validation à la main dans les dépôts (exceptions métier), pas par schéma déclaratif strict. Un champ inconnu est ignoré, pas rejeté. | module entier |
@@ -192,11 +194,32 @@ entière, pour attraper une colonne ajoutée plus tard.
   actions non-CRUD au sens du §4.3. `generate` est bien en `POST` avec le verbe
   en dernier segment ; `order` devrait être `POST …/campaign-types/reordonner`
   pour respecter la lettre du §4.3.
-- `GET …/session` est la seule route publique, et elle est explicite dans la
-  déclaration (troisième argument `true`). Elle ne rend aucune donnée métier :
-  seulement si l'appelant est authentifié et sous quel rôle. Authentifié, elle
-  dit aussi `dev_auth` (identité de développement, `MAR_DEV_AUTH`, ou de l'ERP) :
-  un état, aucune valeur — champ ajouté, rien de retiré ni renommé.
+- `GET`, `POST` et `DELETE …/session` sont les seules routes publiques, et
+  c'est explicite dans la déclaration (dernier argument `true`). Aucune ne rend
+  de donnée métier. `GET` dit si l'appelant est authentifié, sous quel rôle, et
+  par quelle voie : `via` = `erp` (connexion), `service` (autre module) ou `dev`
+  (`MAR_DEV_AUTH`), plus `dev_auth` — des états, aucune valeur ; champs ajoutés,
+  rien de retiré ni renommé.
+
+**Connexion** (`POST …/session`, octobre 2026). Le module ne garde aucun mot de
+passe : il présente téléphone et mot de passe à l'ERP (`MAR_ERP_AUTH_BASE`).
+Réalm `admin` accepté → `BRAND_ADMIN`. Refusé faute d'appartenance admin (403,
+ou 409) → réalm `owner` ; accepté, les boutiques du compte sont lues dans l'ERP
+avec son propre jeton (`GET /api/v1/owner/shops`) et rapprochées de `mar_shop`
+(`erp_shop_id`, ou code `erp-N`) → `FRANCHISEE` limité à celles-là. Mot de passe
+faux : 401, sans essayer l'autre réalm. Compte sans boutique connue : 403
+nommant les identifiants de l'ERP. Le cookie `mar_session` (`HttpOnly`,
+`SameSite=Lax`, `Secure` en HTTPS) porte rôle et boutiques, signé par
+`MAR_SESSION_SECRET` : réécrit, il ne vaut rien. Le jeton de l'ERP n'est pas
+gardé. Écarts au §5 : pas de JWT RS256 propre ni de refresh à rotation — une
+session de 12 heures, puis une nouvelle connexion.
+
+**Accès de service.** Le module Social et le cockpit appellent cette API de
+serveur à serveur. Ils présentent `X-Marketing-Service`, comparé en temps
+constant à `MAR_SERVICE_TOKEN` ; ils agissent au niveau du réseau. Un jeton
+faux ne retombe sur aucune autre identité. Le jeton est tiré sur le serveur au
+premier déploiement et posé dans `service-token`, à côté du `.env`, lisible par
+`www-data` ; il ne passe pas par GitHub.
 
 ---
 

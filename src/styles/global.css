@@ -4492,3 +4492,20 @@ table.vouchers--list th:nth-child(7) { width: 9%; }
 .bro-outrow__name { flex: 1; min-width: 0; }
 .bro-outrow__name small { display: block; color: var(--muted); font-size: 10.5px; }
 .bro-outall { display: grid; gap: 6px; margin-top: 10px; }
+
+/* ==========================================================================
+   Connexion par l'ERP, et l'identité en pied de menu
+   ========================================================================== */
+.login { gap: 0.35rem; padding: 28px 28px 22px; background: #fff; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 20px 60px rgba(34, 34, 34, 0.08); }
+.login__logo { width: 168px; align-self: center; margin-bottom: 6px; }
+.login__title { margin: 0; text-align: center; font-size: 1.15rem; }
+.login__sub { margin: 0 0 6px; text-align: center; font-size: 12.5px; line-height: 1.45; }
+.login__error { margin: 10px 0 0; font-size: 12.5px; line-height: 1.45; }
+.login__cancel { margin-top: 8px; }
+.login__note { margin: 12px 0 0; text-align: center; font-size: 11px; }
+.login .btn--primary { margin-top: 1rem; justify-content: center; }
+.sidebar__account { display: grid; gap: 4px; margin: 18px 16px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 12px; }
+.sidebar__account.is-dev { border-color: rgba(141, 29, 44, 0.45); background: rgba(141, 29, 44, 0.04); }
+.sidebar__account-who { color: var(--ink); font-weight: 500; }
+.sidebar__account.is-dev .sidebar__account-who { color: var(--accent); }
+.sidebar__account .linklike { justify-self: start; margin: 0; padding: 0; font-size: 12px; color: var(--accent); }

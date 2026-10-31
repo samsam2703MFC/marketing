@@ -133,15 +133,21 @@ export default function AddressesView() {
                 'Aucune identité'
               )}
             </p>
+            {s.via === 'erp' ? (
+              <p>
+                <span className="badge badge--mesure">ERP</span> Connecté par les identifiants de l’ERP{s.label ? ` (${s.label})` : ''}.
+              </p>
+            ) : null}
             {s.dev_auth ? (
               <p>
                 <span className="tag-stop">Identité de développement</span> Le serveur tourne avec <code>MAR_DEV_AUTH=1</code> : tout
-                visiteur entre sous l’identité réglée sur le serveur, sans passer par l’ERP, et peut en choisir une autre par
-                en-tête. À couper dès que la connexion de l’ERP est branchée.
+                visiteur {s.via === 'erp' ? 'non connecté ' : ''}entre sous l’identité réglée sur le serveur, sans passer par l’ERP, et
+                peut en choisir une autre par en-tête. La connexion par l’ERP est en place (pied du menu) : une fois vérifiée, ce
+                réglage se coupe.
               </p>
-            ) : s.dev_auth === false ? (
+            ) : s.dev_auth === false && s.via !== 'erp' ? (
               <p>
-                <span className="badge badge--mesure">ERP</span> L’identité vient du middleware de l’ERP.
+                <span className="badge badge--mesure">ERP</span> L’identité vient de la connexion par l’ERP.
               </p>
             ) : null}
           </div>
