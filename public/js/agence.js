@@ -4,6 +4,24 @@
 import { html, h, render, Component } from './vendor/preact-htm.js';
 
 const apiUrl = (p) => new URL('api/v1' + p, location.href).toString();
+// Envoi d'un fichier tel quel (sans base64), avec sa progression (0 → 1).
+function uploadFile(path, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open('POST', apiUrl(path));
+    x.withCredentials = true;
+    x.setRequestHeader('content-type', file.type || 'application/octet-stream');
+    x.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total); };
+    x.onload = () => {
+      let j = {};
+      try { j = JSON.parse(x.responseText || '{}'); } catch { /* corps non JSON */ }
+      if (x.status >= 200 && x.status < 300) resolve(j);
+      else { const e = new Error(j.error || `HTTP ${x.status}`); e.status = x.status; reject(e); }
+    };
+    x.onerror = () => reject(new Error('envoi interrompu (réseau)'));
+    x.send(file);
+  });
+}
 async function api(method, path, body) {
   const r = await fetch(apiUrl(path), {
     method, credentials: 'include',
@@ -23,7 +41,7 @@ class Agence extends Component {
   state = {
     ready: false, authRequired: false, loginPass: '', loginError: '', loggingIn: false,
     media: [], products: [], seasons: [], toast: '',
-    form: { kind: 'film', moment: 'matin', productId: '', seasonId: '' }, busy: false,
+    form: { kind: 'film', moment: 'matin', productId: '', seasonId: '' }, busy: false, pct: 0, maxMb: 4096, storage: 'local',
   };
 
   async componentDidMount() {
@@ -39,7 +57,7 @@ class Agence extends Component {
       api('GET', '/catalog').catch(() => ({ products: [] })),
       api('GET', '/seasons').catch(() => ({ seasons: [] })),
     ]);
-    this.setState({ ready: true, authRequired: false, media: media.media || [], products: cat.products || [], seasons: seas.seasons || [] });
+    this.setState({ ready: true, authRequired: false, media: media.media || [], products: cat.products || [], seasons: seas.seasons || [], maxMb: media.maxMb || 4096, storage: media.storage || 'local' });
   }
   toast(t) { clearTimeout(this._t); this.setState({ toast: t }); this._t = setTimeout(() => this.setState({ toast: '' }), 4500); }
   login = async (e) => {
@@ -60,14 +78,15 @@ class Agence extends Component {
     const f = e.target.files && e.target.files[0];
     e.target.value = '';
     if (!f) return;
-    if (f.size > 18 * 1024 * 1024) { this.toast(`${f.name} trop lourd (max 18 Mo par l’upload) — à déposer dans public/media/ par SFTP.`); return; }
-    this.setState({ busy: true });
+    if (f.size > this.state.maxMb * 1048576) { this.toast(`${f.name} trop lourd (max ${this.state.maxMb} Mo).`); return; }
+    this.setState({ busy: true, pct: 0 });
     try {
-      const dataUrl = await new Promise((res, rej) => { const rd = new FileReader(); rd.onload = () => res(rd.result); rd.onerror = rej; rd.readAsDataURL(f); });
-      const out = await api('POST', '/media', { name: f.name, dataUrl, ...this.state.form });
-      this.setState({ media: out.media || [], busy: false });
-      this.toast(`« ${f.name} » ajouté ✓`);
-    } catch (err) { this.setState({ busy: false }); this.toast(`Erreur : ${err.message}`); }
+      const fm = this.state.form;
+      const q = new URLSearchParams({ name: f.name, kind: fm.kind, moment: fm.moment, productId: fm.productId || '', seasonId: fm.seasonId || '' });
+      const out = await uploadFile(`/media/upload?${q}`, f, (p) => this.setState({ pct: Math.round(p * 100) }));
+      this.setState({ media: out.media || [], busy: false, pct: 0 });
+      this.toast(`« ${out.filename || f.name} » ajouté ✓`);
+    } catch (err) { this.setState({ busy: false, pct: 0 }); this.toast(`Erreur : ${err.message}`); }
   };
   del = async (id, name) => {
     if (!window.confirm(`Supprimer « ${name} » du serveur ?`)) return;
@@ -120,7 +139,7 @@ class Agence extends Component {
             <li><strong>Format vidéo :</strong> .mp4 ou .webm, codec H.264 (ou H.265/HEVC), 1080p ou 4K, sans son. <strong>Photo :</strong> .jpg / .png / .webp, idéalement 2000×2000 px.</li>
             <li><strong>Tags :</strong> choisis le <strong>moment</strong> (matin / midi / après-midi), le <strong>produit</strong> et la <strong>saison</strong>. Le système diffusera aléatoirement les médias tagués au bon moment et à la bonne période.</li>
             <li><strong>Nommage :</strong> à l'upload, un préfixe est ajouté automatiquement (<code>1_</code> matin, <code>2_</code> midi, <code>3_</code> après-midi).</li>
-            <li><strong>Gros fichiers (plus de 18 Mo) :</strong> à déposer directement dans le dossier <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">public/media/</code> du serveur par SFTP, puis « Vérifier ».</li>
+            <li><strong>Taille :</strong> jusqu'à ${st.maxMb} Mo par fichier (vidéos 4K comprises), envoyé tel quel ; la progression s'affiche pendant l'envoi.${st.storage === 's3' ? ' Les fichiers sont rangés sur le stockage OVHcloud.' : ''}</li>
           </ul>
         </div>
 
@@ -157,7 +176,7 @@ class Agence extends Component {
             </div>
           </div>
           <label style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:16px;padding:14px;font-size:14px;font-weight:500;color:${RUBY};border:1px dashed rgba(141,29,44,0.4);border-radius:12px;background:rgba(141,29,44,0.04);cursor:${st.busy ? 'wait' : 'pointer'};">
-            <span style="font-size:18px;">⬆</span><span>${st.busy ? 'Envoi en cours…' : `Choisir un fichier ${f.kind === 'photo' ? 'image' : 'vidéo'} à envoyer`}</span>
+            <span style="font-size:18px;">⬆</span><span>${st.busy ? `Envoi en cours… ${st.pct} %` : `Choisir un fichier ${f.kind === 'photo' ? 'image' : 'vidéo'} à envoyer`}</span>
             <input type="file" accept=${f.kind === 'photo' ? 'image/*' : 'video/*'} onChange=${this.onFile} style="display:none;" />
           </label>
         </div>

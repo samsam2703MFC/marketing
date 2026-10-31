@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { getDb, DB_PATH } from './db.js';
 import { handleApi, startBundleSync } from './api.js';
 import { serviceWorkerSource } from './sw.js';
+import { serveStoredMedia } from './media-store.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC_DIR = join(ROOT, 'public');
@@ -65,7 +66,12 @@ function serveStatic(req, res, pathname) {
   if (pathname === '/report') pathname = '/report.html';
   if (pathname === '/agence') pathname = '/agence.html';
   if (pathname === '/magasin') pathname = '/magasin.html';
-  const safe = normalize(pathname).replace(/^(\.\.[/\\])+/, '');
+  // Noms avec espaces ou accents (« 1_Croissant chaud.mp4 ») : l'adresse arrive
+  // encodée (%20…), le fichier sur le disque ne l'est pas.
+  let decoded = pathname;
+  try { decoded = decodeURIComponent(pathname); } catch { /* encodage invalide : tel quel */ }
+  if (decoded.includes('\0')) decoded = pathname;
+  const safe = normalize(decoded).replace(/^(\.\.[/\\])+/, '');
   const file = join(PUBLIC_DIR, safe);
   if (!file.startsWith(PUBLIC_DIR) || !existsSync(file) || !statSync(file).isFile()) {
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
@@ -169,6 +175,8 @@ export function createServer() {
       if (pathname.startsWith('/api/v1/')) {
         await handleApi(req, res, url, readBodyFactory(req), ctx, pathname);
       } else if (req.method === 'GET' || req.method === 'HEAD') {
+        // Média rangé sur OVHcloud : la régie relaie l'objet du bucket.
+        if (pathname.startsWith('/media/') && await serveStoredMedia(req, res, pathname)) return;
         serveStatic(req, res, pathname);
       } else {
         res.writeHead(405, { 'content-type': 'text/plain' });

@@ -31,6 +31,22 @@ function esc(v) {
   return `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n')}'`;
 }
 
+// Réglages sensibles : jamais en clair dans la base PWA. Les mots de passe
+// saisis en régie (base PWA, ancien « stockage HD »), un jeton de serveur…
+// sont masqués dans le miroir ; le SQLite de la régie, lui, ne change pas.
+const SECRET_SETTING = /(pass|password|secret|token|key)$/i;
+export function mirrorRow(table, row) {
+  if (table !== 'sig_settings' || !row || typeof row.key !== 'string') return row;
+  if (SECRET_SETTING.test(row.key) && row.value) return { ...row, value: '(masqué)' };
+  if (row.key === 'pwa_import' && row.value) {
+    try {
+      const j = JSON.parse(row.value);
+      if (j && typeof j === 'object' && j.password) return { ...row, value: JSON.stringify({ ...j, password: '(masqué)' }) };
+    } catch { /* pas du JSON : tel quel */ }
+  }
+  return row;
+}
+
 // Où répliquer : réglage mirror_db (posé à l'import PWA), sinon détection.
 export async function mirrorTargetDb() {
   const saved = getSetting('mirror_db', '');
@@ -91,7 +107,7 @@ export async function syncMirror() {
       if (!cols.length) continue;
       const defs = cols.map((c) => `${qid(c.name)} ${myType(c.type)}`).join(', ');
       script += `DROP TABLE IF EXISTS ${qid(t)};\nCREATE TABLE ${qid(t)} (${defs}) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n`;
-      const rows = db.prepare(`SELECT * FROM ${qid(t)}`).all();
+      const rows = db.prepare(`SELECT * FROM ${qid(t)}`).all().map((r) => mirrorRow(t, r));
       const colList = cols.map((c) => qid(c.name)).join(', ');
       for (let i = 0; i < rows.length; i += 200) {
         const batch = rows.slice(i, i + 200)

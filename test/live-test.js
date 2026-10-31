@@ -15,6 +15,7 @@ import { snapshotAssets } from '../public/js/assets.js';
 import { scheduledNow, tfbPromoLabel, tfbDiscountedPrice } from '../public/js/renderer.js';
 import { startTfbMock, MOCK_ACCOUNTS } from './tfbuddy-mock.js';
 import { startAnthropicMock, MOCK_KEY } from './anthropic-mock.js';
+import { startS3Mock, MOCK_S3 } from './s3-mock.js';
 
 const args = process.argv.slice(2);
 const MUTATE = args.includes('--mutate');
@@ -473,6 +474,163 @@ async function main() {
       }
       await call('DELETE', `/api/v1/media/${encodeURIComponent(item.id)}`);
       return `« 3_lt-clip.mp4 » (après-midi) · ${agencyIsolated}`;
+    });
+    await step('Signature S3 (AWS v4) — les exemples de la documentation AWS', async () => {
+      const { signHeaders, presignUrl } = await import('../server/s3.js');
+      const { createHash } = await import('node:crypto');
+      const c = { endpoint: 'https://s3.amazonaws.com', bucket: 'examplebucket', accessKey: 'AKIAIOSFODNN7EXAMPLE', secretKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY', region: 'us-east-1', prefix: '', pathStyle: false };
+      const now = new Date('2013-05-24T00:00:00Z');
+      const sigOf = (h) => /Signature=([0-9a-f]+)/.exec(h.headers.authorization)[1];
+      const cases = [
+        ['URL présignée', /X-Amz-Signature=([0-9a-f]+)/.exec(presignUrl(c, { key: 'test.txt', expires: 86400, now }))[1], 'aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404'],
+        ['GET + Range', sigOf(signHeaders(c, { method: 'GET', key: 'test.txt', headers: { range: 'bytes=0-9' }, now })), 'f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41'],
+        ['PUT', sigOf(signHeaders(c, { method: 'PUT', key: 'test$file.text', headers: { date: 'Fri, 24 May 2013 00:00:00 GMT', 'x-amz-storage-class': 'REDUCED_REDUNDANCY' }, payloadHash: createHash('sha256').update('Welcome to Amazon S3.').digest('hex'), now })), '98ad721746da40c64f1a55b78f14c238d841ea1380cd77a1b5971af0ece108bd'],
+        ['GET ?lifecycle', sigOf(signHeaders(c, { method: 'GET', key: '', query: { lifecycle: '' }, now })), 'fea454ca298b7da1c68078a5d1bdbfbbe0d65c699e0f91ac7a200a0136783543'],
+        ['liste', sigOf(signHeaders(c, { method: 'GET', key: '', query: { 'max-keys': '2', prefix: 'J' }, now })), '34b48302e7b5fa45bde8084f4b7868a86f0a534bc59db6670ed5711ef69dc6f7'],
+      ];
+      for (const [n, got, want] of cases) if (got !== want) throw new Error(`${n} : signature ${got.slice(0, 12)}… au lieu de ${want.slice(0, 12)}…`);
+      const { s3Config } = await import('../server/s3.js');
+      const ovh = s3Config({ SIG_S3_ENDPOINT: 'https://s3.gra.io.cloud.ovh.net', SIG_S3_BUCKET: 'b' });
+      if (ovh.region !== 'gra' || ovh.prefix !== 'media/') throw new Error(`région ${ovh.region} / préfixe ${ovh.prefix} lus dans l’adresse OVH`);
+      return `${cases.length} exemples AWS identiques (URL présignée, GET + Range, PUT, ?lifecycle, liste) · région « gra » lue dans l’adresse OVH`;
+    });
+    await step('Miroir MySQL — mots de passe et jetons masqués', async () => {
+      const { mirrorRow } = await import('../server/mirror.js');
+      const pw = mirrorRow('sig_settings', { key: 'pwa_import', value: JSON.stringify({ host: 'h', password: 'secret-pwa' }) });
+      if (/secret-pwa/.test(pw.value) || JSON.parse(pw.value).host !== 'h') throw new Error(`mot de passe PWA : ${pw.value}`);
+      for (const k of ['hd_pass', 'srv_token']) if (mirrorRow('sig_settings', { key: k, value: 'x1' }).value !== '(masqué)') throw new Error(`${k} recopié en clair`);
+      if (mirrorRow('sig_settings', { key: 'loop', value: '1' }).value !== '1') throw new Error('réglage ordinaire altéré');
+      if (mirrorRow('sig_media', { key: 'hd_pass', value: 'x' }).value !== 'x') throw new Error('autre table altérée');
+      return 'mot de passe PWA, hd_pass, srv_token → « (masqué) » · réglages ordinaires intacts';
+    });
+    await step('Médiathèque — envoi en flux (19 Mo, sans base64), nom avec espace, lecture par morceaux, ETag', async () => {
+      const { existsSync: exists } = await import('node:fs');
+      const mediaDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'media');
+      const H = { authorization: `Bearer ${authToken}` };
+      const up = (name, body, type = 'video/mp4') => fetch(`${BASE}/api/v1/media/upload?${new URLSearchParams({ name, kind: type.startsWith('image/') ? 'photo' : 'film', moment: 'midi' })}`, { method: 'POST', headers: { ...H, 'content-type': type }, body });
+      const big = Buffer.alloc(19 * 1024 * 1024, 7);
+      big.write('LTFLUX', 0);
+      const ids = [];
+      try {
+        let r = await up('LT flux.mp4', big);
+        let j = await r.json();
+        if (r.status !== 200 || j.filename !== '2_LT flux.mp4' || j.storage !== 'local') throw new Error(`envoi : HTTP ${r.status} ${j.error || j.filename}`);
+        const it = j.media.find((m) => m.filename === j.filename);
+        ids.push(it.id);
+        if (!it.present || it.size !== big.length) throw new Error(`fiche : ${JSON.stringify(it)}`);
+        const url = `${BASE}/${it.url}`;
+        let g = await fetch(url, { headers: { range: 'bytes=0-5' } });
+        if (g.status !== 206 || (await g.text()) !== 'LTFLUX') throw new Error(`lecture par morceaux : HTTP ${g.status}`);
+        g = await fetch(url, { method: 'HEAD' });
+        const etag = g.headers.get('etag');
+        if (Number(g.headers.get('content-length')) !== big.length || g.headers.get('content-type') !== 'video/mp4') throw new Error('taille ou type servis faux (nom avec espace)');
+        if ((await fetch(url, { headers: { 'if-none-match': etag } })).status !== 304) throw new Error('revalidation par ETag : 304 attendu');
+        // Même nom : un second fichier, sans écraser le premier.
+        r = await up('LT flux.mp4', Buffer.from('second'));
+        j = await r.json();
+        if (j.filename !== '2_LT flux-2.mp4') throw new Error(`doublon : ${j.filename}`);
+        ids.push(j.media.find((m) => m.filename === j.filename).id);
+        if ((await up('LT.exe', Buffer.from('x'))).status !== 400) throw new Error('extension non média acceptée');
+        // Taille annoncée au-delà du plafond : refus avant de lire le corps.
+        const http = await import('node:http');
+        const u = new URL(`${BASE}/api/v1/media/upload?name=LT%20gros.mp4&kind=film`);
+        const code = await new Promise((resolve) => {
+          const rq = http.request({ hostname: u.hostname, port: u.port, path: u.pathname + u.search, method: 'POST', headers: { ...H, 'content-type': 'video/mp4', 'content-length': String(5 * 1024 ** 3) } }, (res) => { res.resume(); resolve(res.statusCode); rq.destroy(); });
+          rq.on('error', () => resolve(0));
+          rq.write(Buffer.alloc(1024));
+        });
+        if (code !== 413) throw new Error(`5 Go annoncés : HTTP ${code} au lieu de 413`);
+        for (const id of ids.splice(0)) await call('DELETE', `/api/v1/media/${encodeURIComponent(id)}`);
+        if (exists(join(mediaDir, '2_LT flux.mp4')) || exists(join(mediaDir, '2_LT flux-2.mp4'))) throw new Error('fichiers restés sur le disque après suppression');
+        return `19 Mo envoyés tels quels · « 2_LT flux.mp4 » servi (206, 304) · doublon → « -2 » · .exe 400 · 5 Go annoncés 413 · supprimés du disque`;
+      } finally {
+        for (const id of ids) await call('DELETE', `/api/v1/media/${encodeURIComponent(id)}`).catch(() => {});
+      }
+    });
+    await step('Médiathèque sur OVHcloud (S3 simulé) — envoi, lecture, migration des médias locaux, panne, suppression', async () => {
+      const { mkdtempSync: mkd, existsSync: exists, unlinkSync: unlink } = await import('node:fs');
+      const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+      const mediaDir = join(root, 'public', 'media');
+      const dir = mkd(join(tmpdir(), 'sig-s3-'));
+      const PW = 'admin-s3-test';
+      const s3 = await startS3Mock();
+      let port = 9300 + Math.floor(Math.random() * 400);
+      const start = async (withS3) => {
+        const env = { ...process.env, PORT: String(++port), SIG_DB: join(dir, 's3.db'), SIG_ADMIN_PASSWORD: PW, SIG_CATALOG_AUTO: '0' };
+        for (const k of Object.keys(env)) if (/^SIG_S3_|^TFBUDDY_/.test(k)) delete env[k];
+        delete env.SIG_DEMO;
+        if (withS3) Object.assign(env, { SIG_S3_ENDPOINT: s3.url, SIG_S3_BUCKET: MOCK_S3.bucket, SIG_S3_ACCESS_KEY: MOCK_S3.accessKey, SIG_S3_SECRET_KEY: MOCK_S3.secretKey, SIG_S3_REGION: MOCK_S3.region, SIG_S3_PATH_STYLE: '1' });
+        const proc = spawn(process.execPath, [join(root, 'server', 'index.js')], { env, stdio: 'ignore' });
+        const base = `http://127.0.0.1:${port}`;
+        for (let i = 0; i < 80; i++) {
+          if (await fetch(base + '/api/v1/health').then((r) => r.ok, () => false)) break;
+          await new Promise((r) => setTimeout(r, 150));
+        }
+        const tok = (await (await fetch(base + '/api/v1/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'admin', password: PW }) })).json()).token;
+        const H = { authorization: `Bearer ${tok}` };
+        const j = async (method, path, body) => (await fetch(base + path, { method, headers: { ...H, ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined })).json();
+        const up = (name, body, type) => fetch(`${base}/api/v1/media/upload?${new URLSearchParams({ name, kind: type.startsWith('image/') ? 'photo' : 'film' })}`, { method: 'POST', headers: { ...H, 'content-type': type }, body });
+        return { base, H, j, up, stop: () => new Promise((r) => { proc.once('exit', r); proc.kill(); }) };
+      };
+      const png = Buffer.from('89504e470d0a1a0a0000000d4948445200000001', 'hex');
+      let srv = null;
+      try {
+        // 1. Un média envoyé AVANT le stockage OVH : il reste sur le disque.
+        srv = await start(false);
+        let r = await srv.up('lt-local.png', png, 'image/png');
+        let o = await r.json();
+        if (o.storage !== 'local' || !exists(join(mediaDir, 'lt-local.png'))) throw new Error(`média local : ${JSON.stringify(o).slice(0, 160)}`);
+        await srv.stop();
+        // 2. Même base, stockage OVH configuré.
+        srv = await start(true);
+        let st = await srv.j('GET', '/api/v1/media-storage');
+        if (st.mode !== 's3' || !st.check || !st.check.ok || st.counts.localOnDisk !== 1) throw new Error(`état : ${JSON.stringify(st).slice(0, 220)}`);
+        if (/ovh-test-secret|OVHTESTACCESS/.test(JSON.stringify(st))) throw new Error('l’état expose les clés S3');
+        const vid = Buffer.alloc(2 * 1024 * 1024, 3);
+        vid.write('LTOVH', 0);
+        r = await srv.up('LT ovh.mp4', vid, 'video/mp4');
+        o = await r.json();
+        if (r.status !== 200 || o.storage !== 's3' || o.filename !== 'LT ovh.mp4') throw new Error(`envoi OVH : HTTP ${r.status} ${o.error || JSON.stringify(o).slice(0, 120)}`);
+        const obj = s3.objects.get('media/LT ovh.mp4');
+        if (!obj || obj.body.length !== vid.length || obj.type !== 'video/mp4') throw new Error('objet absent du bucket (ou taille / type faux)');
+        if (exists(join(mediaDir, 'LT ovh.mp4'))) throw new Error('le média OVH a aussi été écrit sur le disque');
+        const url = `${srv.base}/media/${encodeURIComponent('LT ovh.mp4')}`;
+        let g = await fetch(url, { headers: { range: 'bytes=0-4' } });
+        if (g.status !== 206 || (await g.text()) !== 'LTOVH' || g.headers.get('content-range') !== `bytes 0-4/${vid.length}`) throw new Error(`lecture par morceaux depuis OVH : HTTP ${g.status}`);
+        g = await fetch(url);
+        const etag = g.headers.get('etag');
+        if (g.status !== 200 || Buffer.from(await g.arrayBuffer()).length !== vid.length || g.headers.get('content-type') !== 'video/mp4') throw new Error('lecture entière depuis OVH');
+        if ((await fetch(url, { headers: { 'if-none-match': etag } })).status !== 304) throw new Error('revalidation par ETag depuis OVH : 304 attendu');
+        // L'ancien envoi (base64) range lui aussi sur OVH.
+        o = await srv.j('POST', '/api/v1/media', { name: 'lt-b64.png', kind: 'photo', dataUrl: `data:image/png;base64,${png.toString('base64')}` });
+        if (o.storage !== 's3' || !s3.objects.has('media/lt-b64.png')) throw new Error('ancien envoi base64 non rangé sur OVH');
+        // 3. Migration des médias locaux vers OVH (copie vérifiée, copie locale gardée).
+        await srv.j('POST', '/api/v1/media-storage/migrate');
+        for (let i = 0; i < 40 && (st = await srv.j('GET', '/api/v1/media-storage')).job && st.job.running; i++) await new Promise((res) => setTimeout(res, 100));
+        if (!st.job || st.job.moved !== 1 || st.job.errors.length || st.counts.local !== 0) throw new Error(`migration : ${JSON.stringify(st.job)}`);
+        if (!s3.objects.has('media/lt-local.png') || !exists(join(mediaDir, 'lt-local.png'))) throw new Error('migration : objet absent ou copie locale effacée');
+        const before = s3.calls.length;
+        g = await fetch(`${srv.base}/media/lt-local.png`);
+        if (g.status !== 200 || !s3.calls.slice(before).some((c) => c.includes('/media/lt-local.png'))) throw new Error('média migré non servi depuis OVH');
+        // 4. Panne d'OVH : envoi refusé et dit, rien d'enregistré ; lecture 502.
+        const n0 = (await srv.j('GET', '/api/v1/media')).media.length;
+        s3.down(true);
+        r = await srv.up('LT panne.mp4', Buffer.from('x'), 'video/mp4');
+        o = await r.json();
+        const g502 = (await fetch(url)).status;
+        s3.down(false);
+        if (r.status !== 502 || !/503/.test(o.error || '')) throw new Error(`panne : HTTP ${r.status} ${o.error}`);
+        if ((await srv.j('GET', '/api/v1/media')).media.length !== n0) throw new Error('fiche créée malgré l’échec de l’envoi');
+        if (g502 !== 502) throw new Error(`lecture pendant la panne : HTTP ${g502}`);
+        // 5. Suppression : l'objet du bucket, et la copie locale.
+        for (const m of (await srv.j('GET', '/api/v1/media')).media) await srv.j('DELETE', `/api/v1/media/${encodeURIComponent(m.id)}`);
+        if (s3.objects.size || exists(join(mediaDir, 'lt-local.png'))) throw new Error(`après suppression : ${s3.objects.size} objet(s) au bucket`);
+        return 'local avant OVH · 2 Mo en flux → bucket (type vidéo, pas sur le disque) · 206 / 304 servis depuis OVH · base64 → OVH · migration vérifiée (copie locale gardée) · panne : 502 dit, rien d’enregistré · suppression au bucket · clés jamais exposées · signature vérifiée à chaque appel';
+      } finally {
+        if (srv) await srv.stop().catch(() => {});
+        s3.close();
+        for (const f of ['lt-local.png', 'LT ovh.mp4', 'lt-b64.png']) { try { unlink(join(mediaDir, f)); } catch { /* absent */ } }
+      }
     });
     await step('Élément « média ciblé » — pioche selon moment + saison', async () => {
       // moment courant calculé EXACTEMENT comme le serveur (fenêtres par défaut).

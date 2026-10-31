@@ -34,6 +34,8 @@ import { snapshotAssets } from '../public/js/assets.js';
 import { publicPwaConfig, savePwaConfig, resetPwaConfig, testPwa, importSeasons, inspectSeasons, inspectIngredients, pwaConfig, matchStore } from './pwadb.js';
 import { scheduleMirror, syncMirror, mirrorStatus } from './mirror.js';
 import { importCatalog, catalogImportStatus, startCatalogSync } from './tfbcatalog.js';
+import { s3Configured, S3Error } from './s3.js';
+import { storeMediaFile, freeMediaName, removeMediaFile, mediaStorage, mediaMaxBytes, mediaStorageStatus, checkMediaStorage, startMediaMigration } from './media-store.js';
 import { runConnectionTest, runDeployTests, tcpPing } from './livetest.js';
 
 function sessionToken(req) {
@@ -56,8 +58,10 @@ const ANIM_EXT = new Set(['.gif', '.png', '.webp', '.svg', '.jpg', '.jpeg', '.av
 const VIDEO_EXT = new Set(['.mp4', '.webm', '.mov', '.m4v', '.ogv', '.ogg']);
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
 
+// Un média du bucket OVH est présent par construction (son envoi a été
+// confirmé par le stockage) ; un média local, s'il est sur le disque.
 function mediaList() {
-  return loadMedia().map((m) => ({ ...m, url: 'media/' + encodeURIComponent(m.filename), present: existsSync(join(MEDIA_DIR, m.filename)) }));
+  return loadMedia().map((m) => ({ ...m, url: 'media/' + encodeURIComponent(m.filename), present: m.storage === 's3' || existsSync(join(MEDIA_DIR, m.filename)) }));
 }
 
 function listSurprise() {
@@ -387,6 +391,8 @@ export function syncBundles({ manual = false } = {}) {
 export function startBundleSync() {
   // Catalogue (produits, catégories, prix par magasin) : une fois par jour depuis l'API.
   startCatalogSync(() => scheduleMirror());
+  // Médiathèque sur OVH : le bucket répond-il avec ces clés ? (dit dans la régie)
+  if (s3Configured()) checkMediaStorage().then((r) => console.log(`  médiathèque OVH : ${r.ok ? 'bucket joignable ✓' : r.error}`)).catch(() => {});
   if (!tfbConfigured()) return;
   setTimeout(() => { syncBundles().catch(() => {}); }, 15000);
   setInterval(() => { syncBundles().catch(() => {}); }, 30 * 60000);
@@ -1149,7 +1155,35 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
     // ---- médiathèque agence (upload vidéos/photos taguées) -----------------
     // Accessible admin ET agence ; l'agence n'a accès QU'À ça (+ catalogue &
     // périodes en lecture, pour remplir les tags du formulaire).
-    if (req.method === 'GET' && path === '/media') return send(200, { dir: 'public/media', media: mediaList() });
+    if (req.method === 'GET' && path === '/media') {
+      return send(200, { dir: 'public/media', media: mediaList(), storage: mediaStorage(), maxMb: Math.round(mediaMaxBytes() / 1048576) });
+    }
+    // Envoi en flux (le fichier tel quel, sans base64) : sans limite de 18 Mo,
+    // rangé dans le bucket OVH s'il est configuré, sinon dans public/media/.
+    // Paramètres dans l'adresse : name, kind, moment, productId, seasonId.
+    if (req.method === 'POST' && path === '/media/upload') {
+      const q = url.searchParams;
+      const kind = q.get('kind') === 'photo' ? 'photo' : 'film';
+      const rawName = String(q.get('name') || '').replace(/[^\w.\- ]+/g, '_').slice(0, 120);
+      const ext = extname(rawName).toLowerCase();
+      const length = Number(req.headers['content-length']);
+      const refuse = (code, error) => { req.resume(); return send(code, { error }); };
+      if (!rawName) return refuse(400, 'nom de fichier manquant');
+      if (!(kind === 'photo' ? IMAGE_EXT.has(ext) : VIDEO_EXT.has(ext))) return refuse(400, kind === 'photo' ? 'format image non supporté (.jpg, .png, .webp…)' : 'format vidéo non supporté (.mp4, .webm, .mov…)');
+      if (!Number.isFinite(length) || length <= 0) return refuse(411, 'taille du fichier inconnue (en-tête Content-Length)');
+      if (length > mediaMaxBytes()) return refuse(413, `fichier trop lourd (max ${Math.round(mediaMaxBytes() / 1048576)} Mo)`);
+      const moment = ['matin', 'midi', 'aprem'].includes(q.get('moment')) ? q.get('moment') : 'all';
+      // Convention agence : préfixe selon le moment (1_ matin · 2_ midi · 3_ après-midi).
+      const filename = freeMediaName(MEDIA_DIR, ({ matin: '1_', midi: '2_', aprem: '3_', all: '' })[moment] + rawName);
+      let stored;
+      try { stored = await storeMediaFile(MEDIA_DIR, filename, req, { length }); }
+      catch (e) { return send(e instanceof S3Error ? 502 : 500, { error: String(e.message || e) }); }
+      addMediaRow({ id: 'md' + Date.now().toString(36), filename, kind, moment, productId: q.get('productId') || '', seasonId: q.get('seasonId') || '', size: stored.size, storage: stored.storage, ctype: stored.ctype });
+      scheduleMirror();
+      return send(200, { ok: true, filename, storage: stored.storage, media: mediaList() });
+    }
+    // Ancien envoi (fichier en base64 dans du JSON, 18 Mo au plus) : gardé pour
+    // les pages déjà ouvertes ; même rangement que l'envoi en flux.
     if (req.method === 'POST' && path === '/media') {
       const body = await readBody();
       const kind = body.kind === 'photo' ? 'photo' : 'film';
@@ -1159,15 +1193,15 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       const ext = extname(rawName).toLowerCase();
       if (!(kind === 'photo' ? IMAGE_EXT.has(ext) : VIDEO_EXT.has(ext))) return send(400, { error: kind === 'photo' ? 'format image non supporté (.jpg, .png, .webp…)' : 'format vidéo non supporté (.mp4, .webm, .mov…)' });
       const buf = Buffer.from(mData[1], 'base64');
-      if (buf.length > 18 * 1024 * 1024) return send(413, { error: 'fichier trop lourd pour l’upload (max 18 Mo) — dépose-le dans public/media/ sur le serveur' });
+      if (buf.length > 18 * 1024 * 1024) return send(413, { error: 'fichier trop lourd pour cet envoi (max 18 Mo) — recharge la page : l’envoi en flux n’a pas cette limite' });
       const moment = ['matin', 'midi', 'aprem'].includes(body.moment) ? body.moment : 'all';
-      // Convention agence : préfixe selon le moment (1_ matin · 2_ midi · 3_ après-midi).
-      const filename = ({ matin: '1_', midi: '2_', aprem: '3_', all: '' })[moment] + rawName;
-      try { mkdirSync(MEDIA_DIR, { recursive: true }); } catch { /* déjà là */ }
-      writeFileSync(join(MEDIA_DIR, filename), buf);
-      const media = addMediaRow({ id: 'md' + Date.now().toString(36), filename, kind, moment, productId: body.productId, seasonId: body.seasonId, size: buf.length });
+      const filename = freeMediaName(MEDIA_DIR, ({ matin: '1_', midi: '2_', aprem: '3_', all: '' })[moment] + rawName);
+      let stored;
+      try { stored = await storeMediaFile(MEDIA_DIR, filename, buf); }
+      catch (e) { return send(e instanceof S3Error ? 502 : 500, { error: String(e.message || e) }); }
+      addMediaRow({ id: 'md' + Date.now().toString(36), filename, kind, moment, productId: body.productId, seasonId: body.seasonId, size: stored.size, storage: stored.storage, ctype: stored.ctype });
       scheduleMirror();
-      return send(200, { ok: true, media: media.map((x) => ({ ...x, url: 'media/' + encodeURIComponent(x.filename), present: existsSync(join(MEDIA_DIR, x.filename)) })) });
+      return send(200, { ok: true, filename, storage: stored.storage, media: mediaList() });
     }
     if (req.method === 'PATCH' && (mm = m(/^\/media\/(.+)$/))) {
       const body = await readBody();
@@ -1178,8 +1212,9 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
     if (req.method === 'DELETE' && (mm = m(/^\/media\/(.+)$/))) {
       const row = getMediaRow(decodeURIComponent(mm[1]));
       if (row) {
-        const f = join(MEDIA_DIR, row.filename);
-        if (f.startsWith(MEDIA_DIR) && existsSync(f)) { try { unlinkSync(f); } catch { /* déjà supprimé */ } }
+        // Fichier d'abord (bucket OVH ou disque) : s'il ne part pas, la fiche reste.
+        try { await removeMediaFile(MEDIA_DIR, row); }
+        catch (e) { return send(502, { error: String(e.message || e) }); }
         delMediaRow(row.id);
       }
       scheduleMirror();
@@ -1190,6 +1225,18 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
     if (role === 'agence') {
       const okAgency = req.method === 'GET' && (path === '/catalog' || path === '/seasons');
       if (!okAgency) return send(403, { error: 'Accès agence : réservé à la médiathèque vidéo' });
+    }
+
+    // ---- stockage de la médiathèque (OVHcloud Object Storage) ----------------
+    if (req.method === 'GET' && path === '/media-storage') return send(200, mediaStorageStatus(MEDIA_DIR));
+    if (req.method === 'POST' && path === '/media-storage/check') {
+      await checkMediaStorage();
+      return send(200, mediaStorageStatus(MEDIA_DIR));
+    }
+    if (req.method === 'POST' && path === '/media-storage/migrate') {
+      if (!s3Configured()) return send(409, { error: 'stockage OVH non configuré (secrets OVH_S3_*)', ...mediaStorageStatus(MEDIA_DIR) });
+      startMediaMigration(MEDIA_DIR, () => scheduleMirror());
+      return send(200, mediaStorageStatus(MEDIA_DIR));
     }
 
     if (req.method === 'GET' && path === '/state') return send(200, { ...stateJson(), https: httpsStatus(ctx.basePath) || null });
@@ -1554,15 +1601,9 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       if (body.srvUrl != null) setSetting('srv_url', String(body.srvUrl));
       if (body.srvIp != null) setSetting('srv_ip', String(body.srvIp));
       if (body.srvToken != null) setSetting('srv_token', String(body.srvToken));
-      // Stockage / streaming HD (adresse + identifiants) — documenté, utilisable
-      // pour héberger les vidéos HD hors du serveur local.
-      if (body.hdUrl != null) setSetting('hd_url', String(body.hdUrl));
-      if (body.hdUser != null) setSetting('hd_user', String(body.hdUser));
-      if (body.hdPass != null && String(body.hdPass) !== '') setSetting('hd_pass', String(body.hdPass));
+      // L'ancien « stockage HD » (adresse + mot de passe en base) a laissé la
+      // place au stockage OVH, réglé par secrets (voir /media-storage).
       return send(200, { ok: true });
-    }
-    if (req.method === 'GET' && path === '/hd-storage') {
-      return send(200, { hdUrl: getSetting('hd_url', ''), hdUser: getSetting('hd_user', ''), hasHdPass: !!getSetting('hd_pass', '') });
     }
 
     // Comptes magasin (admin) : un magasin = un compte, mot de passe généré et

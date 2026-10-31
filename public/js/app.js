@@ -174,6 +174,25 @@ const uid = () => 'm' + Date.now().toString(36) + (UIDC++).toString(36);
 // (ex. http://185.180.206.46/pwa_consultant/signage/).
 const apiUrl = (p) => new URL('api/v1' + p, location.href).toString();
 
+// Envoi d'un fichier tel quel (sans base64), avec sa progression (0 → 1).
+function uploadFile(path, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open('POST', apiUrl(path));
+    x.withCredentials = true;
+    x.setRequestHeader('content-type', file.type || 'application/octet-stream');
+    x.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total); };
+    x.onload = () => {
+      let j = {};
+      try { j = JSON.parse(x.responseText || '{}'); } catch { /* corps non JSON */ }
+      if (x.status >= 200 && x.status < 300) resolve(j);
+      else { const e = new Error(j.error || `HTTP ${x.status}`); e.status = x.status; reject(e); }
+    };
+    x.onerror = () => reject(new Error('envoi interrompu (réseau)'));
+    x.send(file);
+  });
+}
+
 async function api(method, path, body) {
   const res = await fetch(apiUrl(path), {
     method,
@@ -207,7 +226,8 @@ class App extends Component {
     wizard: false, wizStep: 0, wizDone: null, wizPublishing: false, wizNonce: 1,
     override: false,
     srvUrl: '', srvIp: '', srvToken: '',
-    hdUrl: '', hdUser: '', hdPass: '', hasHdPass: false, hdSaving: false,
+    // Stockage de la médiathèque (OVHcloud Object Storage, ou ce serveur).
+    mediaStore: null, mediaStoreBusy: false, mediaMaxMb: 4096,
     test: { state: 'idle', rows: [] },
     fleet: [],
     library: [],
@@ -239,7 +259,7 @@ class App extends Component {
     seasons: [], seasonsCurrent: [], seasonsDirty: false, seasonsBusy: false,
     wsTable: '', wsCandidates: [], wsInspected: [], wsDiag: null, mediaLib: [],
     mediaFilter: { kind: 'all', moment: 'all', product: '', season: '', q: '' }, mediaEdit: null,
-    mediaUp: { open: false, moment: 'all', productId: '', seasonId: '', busy: false },
+    mediaUp: { open: false, moment: 'all', productId: '', seasonId: '', busy: false, pct: 0 },
     prodMoments: [], prodMomentsCurrent: '', prodMomentsDirty: false, prodMomentsBusy: false,
     pmCollapsed: {},
     contPreview: null, contPreviewBusy: false,
@@ -378,7 +398,7 @@ class App extends Component {
       });
       this.loadSurprise(); // liste des vidéos « surprise » (dossier serveur)
       this.loadSeasons();  // périodes de l'année
-      this.loadHdStorage(); // réglages stockage/streaming HD
+      this.loadMediaStore(); // stockage de la médiathèque (OVH ou ce serveur)
       this.loadMediaLib(); // médiathèque agence (vue admin)
       this.loadProdMoments(); // périodes de vente + moment courant (Accueil)
       this.refreshFleet();  // écrans (Accueil : « prêt à diffuser »)
@@ -2067,7 +2087,7 @@ class App extends Component {
 
   // ---- médiathèque agence (vue admin dans la régie) -----------------------
   async loadMediaLib() {
-    try { const r = await api('GET', '/media'); this.setState({ mediaLib: r.media || [] }); }
+    try { const r = await api('GET', '/media'); this.setState({ mediaLib: r.media || [], ...(r.maxMb ? { mediaMaxMb: r.maxMb } : {}) }); }
     catch { /* réservé admin : ignore si indisponible */ }
   }
   async delMediaLib(id, name) {
@@ -2085,39 +2105,58 @@ class App extends Component {
   // Dépôt depuis la Médiathèque : même route que l'espace agence (18 Mo au plus).
   async uploadMedia(file) {
     if (!file) return;
-    if (file.size > 18 * 1024 * 1024) { this.showToast(this.t('media.tooBig')); return; }
+    const maxMb = this.state.mediaMaxMb || 4096;
+    if (file.size > maxMb * 1048576) { this.showToast(this.t('media.tooBig', { mb: maxMb })); return; }
     const kind = (file.type || '').startsWith('image/') ? 'photo' : 'film';
     const up = this.state.mediaUp;
-    this.setMediaUp({ busy: true });
+    this.setMediaUp({ busy: true, pct: 0 });
     try {
-      const dataUrl = await new Promise((resolve, reject) => {
-        const fr = new FileReader();
-        fr.onload = () => resolve(fr.result);
-        fr.onerror = () => reject(new Error('lecture du fichier impossible'));
-        fr.readAsDataURL(file);
-      });
-      const r = await api('POST', '/media', { name: file.name, kind, moment: up.moment, productId: up.productId, seasonId: up.seasonId, dataUrl });
-      this.setState({ mediaLib: r.media || [], mediaUp: { ...this.state.mediaUp, busy: false, open: false } });
-      this.showToast(`« ${file.name} » ajouté ✓`);
+      const q = new URLSearchParams({ name: file.name, kind, moment: up.moment, productId: up.productId || '', seasonId: up.seasonId || '' });
+      const r = await uploadFile(`/media/upload?${q}`, file, (p) => this.setMediaUp({ pct: Math.round(p * 100) }));
+      this.setState({ mediaLib: r.media || [], mediaUp: { ...this.state.mediaUp, busy: false, open: false, pct: 0 } });
+      this.showToast(this.t(r.storage === 's3' ? 'media.addedOvh' : 'media.added', { name: r.filename || file.name }));
+      this.loadMediaStore();
     } catch (e) {
-      this.setMediaUp({ busy: false });
+      this.setMediaUp({ busy: false, pct: 0 });
       this.showToast(`Erreur : ${e.message}`);
     }
   }
 
-  // ---- stockage / streaming HD (réglages) ---------------------------------
-  async loadHdStorage() {
-    try { const r = await api('GET', '/hd-storage'); this.setState({ hdUrl: r.hdUrl || '', hdUser: r.hdUser || '', hasHdPass: !!r.hasHdPass }); }
-    catch { /* indisponible */ }
-  }
-  async saveHdStorage() {
-    if (this.state.hdSaving) return;
-    this.setState({ hdSaving: true });
+  // ---- stockage de la médiathèque (OVHcloud Object Storage) ----------------
+  // Réglé par secrets (jamais en base) ; la régie montre l'état, vérifie le
+  // bucket et y envoie les médias encore rangés sur ce serveur.
+  async loadMediaStore() {
     try {
-      await api('POST', '/settings', { hdUrl: this.state.hdUrl, hdUser: this.state.hdUser, ...(this.state.hdPass ? { hdPass: this.state.hdPass } : {}) });
-      this.setState({ hdSaving: false, hasHdPass: this.state.hasHdPass || !!this.state.hdPass, hdPass: '' });
-      this.showToast('Stockage HD enregistré ✓');
-    } catch (e) { this.setState({ hdSaving: false }); this.showToast(`Erreur : ${e.message}`); }
+      const r = await api('GET', '/media-storage');
+      this.setState({ mediaStore: r, mediaMaxMb: r.maxMb || this.state.mediaMaxMb });
+      clearTimeout(this._mediaStorePoll);
+      if (r.job && r.job.running) this._mediaStorePoll = setTimeout(() => this.loadMediaStore(), 1500);
+      else if (this._mediaMigrating) {
+        this._mediaMigrating = false;
+        this.loadMediaLib();
+        this.showToast(this.t('store.migrated', { n: r.job ? r.job.moved : 0, e: r.job ? r.job.errors.length : 0 }));
+      }
+    } catch { /* compte agence, ou indisponible */ }
+  }
+  async checkMediaStore() {
+    if (this.state.mediaStoreBusy) return;
+    this.setState({ mediaStoreBusy: true });
+    try {
+      const r = await api('POST', '/media-storage/check');
+      this.setState({ mediaStoreBusy: false, mediaStore: r });
+      this.showToast(r.check && r.check.ok ? this.t('store.checkOk') : `${this.t('store.checkKo')} : ${(r.check && r.check.error) || '?'}`);
+    } catch (e) { this.setState({ mediaStoreBusy: false }); this.showToast(`Erreur : ${e.message}`); }
+  }
+  async migrateMediaStore() {
+    const s = this.state.mediaStore;
+    if (!s || !s.counts || !s.counts.localOnDisk) return;
+    if (!window.confirm(this.t('store.migrateConfirm', { n: s.counts.localOnDisk }))) return;
+    try {
+      const r = await api('POST', '/media-storage/migrate');
+      this._mediaMigrating = true;
+      this.setState({ mediaStore: r });
+      this._mediaStorePoll = setTimeout(() => this.loadMediaStore(), 1000);
+    } catch (e) { this.showToast(`Erreur : ${e.message}`); }
   }
 
   // ---- table produits (vue Produits) --------------------------------------
@@ -4431,11 +4470,29 @@ class App extends Component {
       moduleCount: st.playlist.length,
       playlistTotal: fmtTime(this.playlistMods().reduce((s, mm) => s + this.moduleDur(mm), 0)),
       srvUrl: st.srvUrl, srvIp: st.srvIp, srvToken: st.srvToken,
-      hdUrl: st.hdUrl, hdUser: st.hdUser, hdPass: st.hdPass, hasHdPass: st.hasHdPass, hdSaving: st.hdSaving,
-      onHdUrl: (e) => this.setState({ hdUrl: e.target.value }),
-      onHdUser: (e) => this.setState({ hdUser: e.target.value }),
-      onHdPass: (e) => this.setState({ hdPass: e.target.value }),
-      saveHd: () => this.saveHdStorage(),
+      store: (() => {
+        const s = st.mediaStore || {};
+        const s3 = s.s3 || {};
+        const c = s.counts || {};
+        const j = s.job || null;
+        const fmtGo = (b) => `${(Math.round((b || 0) / 1e8) / 10).toLocaleString('fr-BE')} Go`;
+        return {
+          known: !!st.mediaStore,
+          ovh: s.mode === 's3',
+          where: s.mode === 's3' ? this.t('store.ovhWhere', { bucket: s3.bucket || '?', host: s3.host || '?', region: s3.region || '?' }) : this.t('store.localWhere'),
+          check: s.check ? (s.check.ok ? this.t('store.checkOkAt', { n: s.check.objects || 0 }) : `${this.t('store.checkKo')} : ${s.check.error}`) : '',
+          checkOk: !!(s.check && s.check.ok),
+          counts: this.t('store.counts', { s3: c.s3 || 0, local: c.local || 0 }),
+          canMigrate: s.mode === 's3' && (c.localOnDisk || 0) > 0 && !(j && j.running),
+          migrateLabel: this.t('store.migrate', { n: c.localOnDisk || 0 }),
+          job: j ? (j.running ? this.t('store.jobRunning', { d: j.done, n: j.total }) : this.t('store.jobDone', { m: j.moved, n: j.total, g: fmtGo(j.bytes) })) : '',
+          jobErrors: j ? j.errors.slice(0, 5) : [],
+          busy: !!st.mediaStoreBusy,
+          maxMb: s.maxMb || st.mediaMaxMb || 4096,
+          check_: () => this.checkMediaStore(),
+          migrate: () => this.migrateMediaStore(),
+        };
+      })(),
       agencyUrl: new URL('agence', location.href).toString(),
       onSrvUrl: (e) => { this.setState({ srvUrl: e.target.value, test: { state: 'idle', rows: [] } }); this.saveSrv(); },
       onSrvIp: (e) => { this.setState({ srvIp: e.target.value, test: { state: 'idle', rows: [] } }); this.saveSrv(); },
@@ -4943,23 +5000,22 @@ class App extends Component {
         `}
       </div>
 
-      <!-- Stockage / streaming HD -->
-      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:26px 28px;margin-top:20px;">
-        <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">Stockage / streaming HD</h2>
-        <p style="margin:0 0 14px;font-size:12px;color:var(--muted);line-height:1.5;">Adresse et identifiants d'un stockage HD externe (pour héberger les grosses vidéos hors du serveur local). Optionnel : par défaut les vidéos vivent dans le dossier <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">public/media/</code> du serveur.</p>
-        <label style="display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:6px;">Adresse du stockage HD</label>
-        <input value=${v.hdUrl} onInput=${v.onHdUrl} placeholder="https://hd-storage.exemple.com/ ou ftp://…" spellcheck="false" style="width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;margin-bottom:14px;" />
-        <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
-          <div style="flex:1 1 200px;min-width:0;">
-            <label style="display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:6px;">Identifiant</label>
-            <input value=${v.hdUser} onInput=${v.onHdUser} placeholder="utilisateur" spellcheck="false" style="width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
-          </div>
-          <div style="flex:1 1 200px;min-width:0;">
-            <label style="display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:6px;">Mot de passe / clé</label>
-            <input type="password" value=${v.hdPass} onInput=${v.onHdPass} placeholder=${v.hasHdPass ? '•••••••• (enregistré)' : 'mot de passe'} style="width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
-          </div>
-        </div>
-        <button onClick=${v.saveHd} disabled=${v.hdSaving} style="padding:11px 22px;font-size:13.5px;font-weight:500;color:#fff;background:var(--accent);border:none;border-radius:8px;cursor:${v.hdSaving ? 'wait' : 'pointer'};">${v.hdSaving ? 'Enregistrement…' : 'Enregistrer le stockage HD'}</button>
+      <!-- Stockage de la médiathèque : OVHcloud Object Storage (réglé par secrets) -->
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:26px 28px;margin-top:20px;" data-media-store=${v.store.ovh ? 's3' : 'local'}>
+        <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${v.t('store.title')}</h2>
+        <p style="margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.5;">${v.t('store.intro')}</p>
+        ${v.store.known ? html`
+          <p style="margin:0 0 6px;font-size:13px;font-weight:500;color:${v.store.ovh ? 'var(--green)' : 'var(--muted-2)'};">${v.store.ovh ? '● ' : '○ '}${v.store.where}</p>
+          ${v.store.check && html`<p style="margin:0 0 6px;font-size:12px;color:${v.store.checkOk ? 'var(--muted-2)' : 'var(--accent)'};">${v.store.check}</p>`}
+          <p style="margin:0 0 12px;font-size:12px;color:var(--muted);">${v.store.counts} · ${v.t('store.max', { mb: v.store.maxMb })}</p>
+          ${!v.store.ovh && html`<p style="margin:0 0 12px;padding:10px 12px;border-radius:8px;background:var(--paper);border:1px solid var(--line);font-size:12px;color:var(--muted-2);line-height:1.6;">${v.t('store.howTo')}</p>`}
+          ${v.store.job && html`<p style="margin:0 0 8px;font-size:12px;color:var(--ink);">${v.store.job}</p>`}
+          ${v.store.jobErrors.map((e) => html`<p style="margin:0 0 4px;font-size:11.5px;color:var(--accent);">${e}</p>`)}
+          ${v.store.ovh && html`<div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn" onClick=${v.store.check_} disabled=${v.store.busy}>${v.store.busy ? v.t('store.checking') : v.t('store.check')}</button>
+            ${v.store.canMigrate && html`<button class="btn btn--primary" onClick=${v.store.migrate} data-media-migrate>${v.store.migrateLabel}</button>`}
+          </div>`}
+        ` : html`<p style="margin:0;font-size:12px;color:var(--muted);">…</p>`}
       </div>
 
       <!-- Matières premières : ingrédient ↔ animation de la bibliothèque -->
@@ -5528,10 +5584,10 @@ class App extends Component {
           </select>
         </label>
         <label class=${'btn btn--primary' + (v.mediaView.up.busy ? ' is-busy' : '')} style="cursor:pointer;">
-          ${icon(ICON.upload, 15)}${v.mediaView.up.busy ? v.t('media.sending') : v.t('media.file')}
+          ${icon(ICON.upload, 15)}${v.mediaView.up.busy ? `${v.t('media.sending')} ${v.mediaView.up.pct || 0} %` : v.t('media.file')}
           <input type="file" accept="video/mp4,video/webm,video/quicktime,image/*" onChange=${v.mediaView.upFile} disabled=${v.mediaView.up.busy} style="display:none;" />
         </label>
-        <p style="margin:0;flex:1 1 100%;font-size:12px;color:var(--muted);">${v.t('media.tooBig')}</p>
+        <p style="margin:0;flex:1 1 100%;font-size:12px;color:var(--muted);" data-media-where>${v.store.ovh ? v.t('media.whereOvh', { mb: v.store.maxMb }) : v.t('media.whereLocal', { mb: v.store.maxMb })}</p>
       </div>`}
 
       <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">

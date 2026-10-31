@@ -716,6 +716,12 @@ function migrate(db) {
   const catCols = db.prepare('PRAGMA table_info(sig_product_categories)').all().map((c) => c.name);
   if (!catCols.includes('img')) db.exec(`ALTER TABLE sig_product_categories ADD COLUMN img TEXT NOT NULL DEFAULT ''`);
 
+  // Médiathèque : où vit le fichier — « local » (public/media du serveur) ou
+  // « s3 » (OVHcloud Object Storage) — et son type, pour le servir tel quel.
+  const mdCols = db.prepare('PRAGMA table_info(sig_media)').all().map((c) => c.name);
+  if (!mdCols.includes('storage')) db.exec(`ALTER TABLE sig_media ADD COLUMN storage TEXT NOT NULL DEFAULT 'local'`);
+  if (!mdCols.includes('ctype')) db.exec(`ALTER TABLE sig_media ADD COLUMN ctype TEXT NOT NULL DEFAULT ''`);
+
   // Langue d'affichage du magasin (les alias produits/catégories la suivent).
   const stCols2 = db.prepare('PRAGMA table_info(sig_stores)').all().map((c) => c.name);
   if (!stCols2.includes('lang')) db.exec(`ALTER TABLE sig_stores ADD COLUMN lang TEXT NOT NULL DEFAULT 'fr'`);
@@ -1551,23 +1557,37 @@ export function buildContinuous(cfg, date = new Date(), ctx = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Médiathèque agence — métadonnées (le fichier vit dans public/media/).
+// Médiathèque — métadonnées. Le fichier vit dans public/media/ (storage
+// « local ») ou dans le bucket OVHcloud (« s3 », voir server/media-store.js) ;
+// son adresse reste media/<fichier> dans les deux cas.
+const mediaRow = (r) => ({
+  id: r.id, filename: r.filename, kind: r.kind, moment: r.moment,
+  productId: r.product_id, seasonId: r.season_id, size: r.size, createdAt: r.created_at,
+  storage: r.storage === 's3' ? 's3' : 'local', ctype: r.ctype || '',
+});
 export function loadMedia() {
-  return getDb().prepare('SELECT * FROM sig_media ORDER BY created_at DESC').all().map((r) => ({
-    id: r.id, filename: r.filename, kind: r.kind, moment: r.moment,
-    productId: r.product_id, seasonId: r.season_id, size: r.size, createdAt: r.created_at,
-  }));
+  return getDb().prepare('SELECT * FROM sig_media ORDER BY created_at DESC').all().map(mediaRow);
 }
 export function addMediaRow(m) {
-  getDb().prepare('INSERT INTO sig_media(id, filename, kind, moment, product_id, season_id, size) VALUES (?, ?, ?, ?, ?, ?, ?)')
+  getDb().prepare('INSERT INTO sig_media(id, filename, kind, moment, product_id, season_id, size, storage, ctype) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .run(String(m.id), String(m.filename), m.kind === 'photo' ? 'photo' : 'film',
       ['matin', 'midi', 'aprem'].includes(m.moment) ? m.moment : 'all',
-      String(m.productId || ''), String(m.seasonId || ''), parseInt(m.size, 10) || 0);
+      String(m.productId || ''), String(m.seasonId || ''), parseInt(m.size, 10) || 0,
+      m.storage === 's3' ? 's3' : 'local', String(m.ctype || ''));
   return loadMedia();
 }
 export function getMediaRow(id) {
   const r = getDb().prepare('SELECT * FROM sig_media WHERE id = ?').get(String(id));
-  return r ? { id: r.id, filename: r.filename, kind: r.kind } : null;
+  return r ? mediaRow(r) : null;
+}
+// Le média servi à l'adresse media/<fichier> (le plus récent si doublon ancien).
+export function mediaByFilename(filename) {
+  const r = getDb().prepare('SELECT * FROM sig_media WHERE filename = ? ORDER BY created_at DESC LIMIT 1').get(String(filename));
+  return r ? mediaRow(r) : null;
+}
+export function setMediaStorage(id, storage, ctype) {
+  getDb().prepare('UPDATE sig_media SET storage = ?, ctype = COALESCE(NULLIF(?, \'\'), ctype) WHERE id = ?')
+    .run(storage === 's3' ? 's3' : 'local', String(ctype || ''), String(id));
 }
 export function delMediaRow(id) { getDb().prepare('DELETE FROM sig_media WHERE id = ?').run(String(id)); }
 // Retouche des tags d'un média (moment, produit, période). Le fichier garde son

@@ -206,10 +206,43 @@ défaut). À l'écran, l'attente sans programme ne montre que le logo — aucun 
 ### Médiathèque (menu Contenus)
 Les vidéos et photos des agences ont leur écran dans le menu de la régie : grille filtrable par
 type, moment de la journée, produit et période, recherche par nom, dépôt d'un fichier avec ses
-tags (18 Mo au plus ; au-delà, `public/media/` par SFTP puis « Actualiser »), retouche des tags
+tags (envoyé tel quel, en flux, avec sa progression — 4 Go au plus, `SIG_MEDIA_MAX_MB`), retouche des tags
 sur chaque carte (`PATCH /api/v1/media/:id` — le fichier garde son nom, le préfixe `1_`/`2_`/`3_`
 n'étant qu'une convention de dépôt) et suppression. Le mode continu lit ces tags à la prochaine
 composition de la boucle. L'espace agence (`/agence`) reste la porte d'entrée des agences.
+
+### Médiathèque sur OVHcloud Object Storage
+Avec un bucket OVHcloud (compatible S3), les fichiers de la médiathèque — régie et agences —
+vivent dans le bucket au lieu du disque du serveur (`server/s3.js`, `server/media-store.js`).
+Leur adresse ne change pas : `media/<fichier>`. La régie **relaie** l'objet du bucket (lecture par
+morceaux `Range`, `ETag` / `If-None-Match` → 304, type et taille rendus) : le cache hors-ligne des
+écrans, l'aperçu de la régie et l'espace agence fonctionnent à l'identique, et le bucket reste
+**privé** (ni accès public, ni règle CORS à poser).
+
+- **Réglage** : secrets GitHub `OVH_S3_ENDPOINT` (ex. `https://s3.gra.io.cloud.ovh.net`),
+  `OVH_S3_BUCKET`, `OVH_S3_ACCESS_KEY`, `OVH_S3_SECRET_KEY` (les quatre, ou rien), `OVH_S3_REGION`
+  facultatif (lu dans l'adresse OVH sinon). La livraison les écrit dans `/etc/signage/signage.env`
+  (`SIG_S3_*`, root, 0600) — **jamais en base**. Adresse du bucket en sous-domaine (forme OVHcloud),
+  ou `SIG_S3_PATH_STYLE=1` ; dossier dans le bucket : `SIG_S3_PREFIX` (défaut `media/`).
+- **Signature AWS v4** faite par la régie, sans dépendance ; vérifiée par les tests sur les
+  exemples de la documentation AWS (URL présignée, GET + Range, PUT, liste) et, à chaque appel,
+  par un S3 simulé qui la recalcule.
+- **Envoi** : `POST /api/v1/media/upload?name&kind&moment&productId&seasonId`, le fichier tel quel
+  dans le corps (plus de base64 ni de limite de 18 Mo) ; envoyé en flux vers le bucket avec sa
+  taille annoncée. Un nom déjà pris devient `nom-2.mp4`. Si OVH refuse ou ne répond pas, l'erreur
+  est dite et **rien n'est enregistré**. Apache laisse passer les gros envois sur cette seule route.
+- **Médias déjà sur le serveur** : Paramètres → *Stockage de la médiathèque* → « Envoyer les N
+  médias de ce serveur vers OVH ». Chaque fichier est copié, sa taille relue dans le bucket, puis
+  il est servi depuis OVH ; la copie locale **reste** sur le serveur (à retirer à la main une fois
+  le bucket vérifié). La même carte dit où vont les fichiers, si le bucket répond (vérifié au
+  démarrage et à la demande) et combien de médias sont de chaque côté.
+- **Suppression** : l'objet du bucket, puis la copie locale s'il en reste une ; si le bucket
+  refuse, la fiche reste.
+- API : `GET /media-storage` (état, jamais les clés) · `POST /media-storage/check` ·
+  `POST /media-storage/migrate`.
+- L'ancienne carte « Stockage / streaming HD » (adresse et mot de passe enregistrés **en base**,
+  jamais utilisés) a laissé la place à celle-ci. Le miroir MySQL masque désormais les réglages
+  sensibles qui seraient en base (mot de passe de la base PWA, `hd_pass`, `srv_token`).
 
 ### Espace magasin (`/magasin`)
 Un compte par magasin (voir « Comptes & sécurité »), utilisable sur tablette ou téléphone :
