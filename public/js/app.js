@@ -52,7 +52,15 @@ const ICON = {
   bolt: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
   send: 'M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z',
   external: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3',
+  clock: 'M12 7v5l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z',
+  store: 'M3 9l1.5-5h15L21 9M4 9v11h16V9M9 20v-6h6v6M3 9h18',
+  ticket: 'M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4zM13 6v12',
+  upload: 'M12 16V4M7 9l5-5 5 5M4 20h16',
+  trash: 'M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14',
+  image: 'M3 5h18v14H3zM8.5 10.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 19',
+  ok: 'M20 6L9 17l-5-5',
 };
+const metaIcon = (d) => html`<span style="display:inline-flex;vertical-align:-2px;margin-right:5px;color:var(--muted);">${icon(d, 13)}</span>`;
 const icon = (d, size = 16) => html`<svg width=${size} height=${size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d=${d} /></svg>`;
 // Écrans de la régie, regroupés comme le menu du module Marketing.
 // `view` : un écran ; `act` : une action (mise en route, rapport).
@@ -1278,7 +1286,7 @@ class App extends Component {
     });
     const playlists = [...this.state.playlists, example];
     this.dirty({ playlists, activePl: id, playlist: [], t: 0, composerTab: 'timeline', scope: 'playlist', filmFilter: 'all' });
-    this.showToast('Film d’exemple « Boucle continue » créé — adapte-le puis publie 🎬');
+    this.showToast('Film d’exemple « Boucle continue » créé — adapte-le puis publie.');
   }
   // Jours de planning d'un film DONNÉ (utilisé dans l'onglet Planning).
   toggleAnyFilmPlanDay(filmId, d) {
@@ -1972,7 +1980,7 @@ class App extends Component {
     const T = (k, vars) => this.t(k, vars);
     const steps = [
       { key: 'catalog', ok: catalogOk, label: T('home.stepCatalog'), hint: catalogOk ? `${products.length} produit(s) · ${(st.catalog.categories || []).length} catégorie(s)` : 'aucun produit — connecte ta base', cta: { label: catalogOk ? 'Voir les produits' : 'Importer le catalogue', go: () => (catalogOk ? this.openProducts() : this.setView('settings')) } },
-      { key: 'film', ok: filmsReady.length > 0, label: T('home.stepFilm'), hint: filmsReady.length ? `${filmsReady.length} film(s)` : 'aucun film avec du contenu', cta: { label: filmsReady.length ? 'Ouvrir le compositeur' : '✨ Créer mon premier film', go: () => (filmsReady.length ? this.setView('composer') : this.startFirstFilm()) } },
+      { key: 'film', ok: filmsReady.length > 0, label: T('home.stepFilm'), hint: filmsReady.length ? `${filmsReady.length} film(s)` : 'aucun film avec du contenu', cta: { label: filmsReady.length ? 'Ouvrir le compositeur' : 'Créer mon premier film', go: () => (filmsReady.length ? this.setView('composer') : this.startFirstFilm()) } },
       { key: 'screen', ok: players.length > 0, label: T('home.stepScreen'), hint: players.length ? `${onlineN}/${players.length} en ligne` : 'aucun écran branché', cta: { label: 'Brancher un écran', go: () => this.openOnboarding() } },
       { key: 'data', ok: dataBits.length > 0, soft: true, label: T('home.stepData'), hint: dataBits.length ? dataBits.join(' · ') : 'saisons · périodes de vente · médias (optionnel mais recommandé)', cta: { label: 'Remplir les périodes', go: () => this.openSeasons() } },
     ];
@@ -2859,12 +2867,12 @@ class App extends Component {
     const iconBtn = 'display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:var(--paper);border:1px solid var(--line);cursor:pointer;font-size:14px;color:var(--ink);';
     const miniBtn = 'display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;background:rgba(255,255,255,0.7);border:1px solid var(--line);cursor:pointer;font-size:12px;color:var(--ink);';
     const tagChipOf = (mm) => (mm.tag && mm.tag.enabled
-      ? h('span', { style: { flex: '0 0 auto', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#fff', background: RUBY, borderRadius: 999, padding: '2px 7px' } }, 'Promo')
+      ? h('span', { style: { flex: '0 0 auto', fontSize: 11, fontWeight: 500, color: '#fff', background: RUBY, borderRadius: 999, padding: '2px 8px' } }, 'Promo')
       : null);
     // Chip de catégorie de bibliothèque (Produit / Fêtes / Promo / Liaison), colorée.
     const catChipOf = (mm) => {
       const t = this.libCatOf(mm);
-      return h('span', { style: { flex: '0 0 auto', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: t.color, background: t.color + '1A', border: `1px solid ${t.color}55`, borderRadius: 999, padding: '2px 7px' } }, t.name);
+      return h('span', { style: { flex: '0 0 auto', fontSize: 11, fontWeight: 500, color: t.color, background: t.color + '1A', borderRadius: 999, padding: '2px 8px' } }, t.name);
     };
 
     const playlist = st.playlist.map((id, i) => {
@@ -2913,7 +2921,7 @@ class App extends Component {
     const layoutOptions = layoutList.map((o) => ({
       icon: o.icon, label: o.label,
       pick: () => this.setSelField('layout', o.id),
-      style: `text-align:left;padding:13px 13px;border-radius:12px;cursor:pointer;background:${m.layout === o.id ? 'rgba(141,29,44,0.08)' : '#FBF8F2'};border:1px solid ${m.layout === o.id ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};color:var(--ink);`,
+      style: `text-align:left;padding:13px 13px;border-radius:12px;cursor:pointer;background:${m.layout === o.id ? 'rgba(141,29,44,0.08)' : '#fff'};border:1px solid ${m.layout === o.id ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};color:var(--ink);`,
     }));
     const MSHORT = { m1: 'Doux', m2: 'Ample', m3: 'Pulsé', none: 'Aucun' };
     const mGroups = [
@@ -2928,7 +2936,7 @@ class App extends Component {
         options: MOTIONS.map((o) => ({
           label: MSHORT[o.id],
           pick: () => this.setSelField(g.key, o.id),
-          style: `text-align:center;padding:9px 6px;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;background:${isCat && cur === o.id ? 'rgba(141,29,44,0.08)' : '#FBF8F2'};border:1px solid ${isCat && cur === o.id ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};color:var(--ink);`,
+          style: `text-align:center;padding:9px 6px;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;background:${isCat && cur === o.id ? 'rgba(141,29,44,0.08)' : '#fff'};border:1px solid ${isCat && cur === o.id ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};color:var(--ink);`,
         })),
       };
     });
@@ -2937,8 +2945,8 @@ class App extends Component {
       name: t.name, price: t.price, img: t.img, active: t.active,
       isIllus: t.src !== 'photo', isPhoto: t.src === 'photo',
       photoLabel: t.src === 'photo' ? 'Photo importée · changer' : 'Importer une photo',
-      thumb: h('img', { src: t.img, alt: '', style: { width: 46, height: 46, objectFit: 'contain', flex: '0 0 auto', background: '#FBF8F2', borderRadius: 8, padding: 3, boxSizing: 'border-box', border: t.src === 'photo' ? '1px solid var(--line)' : 'none' } }),
-      wrapStyle: `display:flex;flex-direction:column;gap:9px;padding:11px 12px;border-radius:12px;border:1px solid var(--line);background:${t.active ? '#FBF8F2' : 'rgba(35,34,32,0.035)'};opacity:${t.active ? 1 : 0.6};`,
+      thumb: h('img', { src: t.img, alt: '', style: { width: 46, height: 46, objectFit: 'contain', flex: '0 0 auto', background: '#fff', borderRadius: 8, padding: 3, boxSizing: 'border-box', border: t.src === 'photo' ? '1px solid var(--line)' : 'none' } }),
+      wrapStyle: `display:flex;flex-direction:column;gap:9px;padding:11px 12px;border-radius:12px;border:1px solid var(--line);background:${t.active ? '#fff' : 'rgba(35,34,32,0.035)'};opacity:${t.active ? 1 : 0.6};`,
       iconBtn,
       delBtn: iconBtn + 'color:var(--accent);',
       eyeStyle: iconBtn + (t.active ? '' : 'background:rgba(141,29,44,0.10);color:var(--accent);'),
@@ -3146,10 +3154,10 @@ class App extends Component {
     }));
     const ageShort = (s) => (s >= 999999 ? '∞' : s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)} min` : `${Math.floor(s / 3600)} h`);
     const kpis = [
-      { label: 'Écrans en ligne', value: `${online}`, sub: `/ ${plCount}`, color: '#2E7D32' },
-      { label: 'Hors ligne', value: `${offline}`, sub: offline ? 'lit le cache' : '—', color: offline ? '#8D1D2C' : '#232220' },
-      { label: 'Prix le + ancien', value: ageShort(oldest), sub: stale ? `${stale} écran(s) périmés` : 'à jour', color: stale ? '#8D1D2C' : '#232220' },
-      { label: 'Playlist · données', value: `v${st.version}`, sub: `prix d${st.dataVer}`, color: '#232220' },
+      { label: 'Écrans en ligne', value: `${online}`, sub: `sur ${plCount}`, tone: plCount && online === plCount ? 'good' : '' },
+      { label: 'Hors ligne', value: `${offline}`, sub: offline ? 'lit le cache' : '—', tone: offline ? 'bad' : '' },
+      { label: 'Prix le + ancien', value: ageShort(oldest), sub: stale ? `${stale} écran(s) périmés` : 'à jour', tone: stale ? 'bad' : 'good' },
+      { label: 'Playlist · données', value: `v${st.version}`, sub: `prix d${st.dataVer}`, tone: '' },
     ];
     const grpCats = (st.catalog.categories || []).map((c) => ({ id: c.id, name: c.name }));
     const grpCatName = new Map(grpCats.map((c) => [c.id, c.name]));
@@ -3302,7 +3310,7 @@ class App extends Component {
       name: isBaseLang ? p.name : ((p.aliases || {})[editLang] || ''),
       namePlaceholder: isBaseLang ? 'Nom du produit' : `${p.name} (${editLang})`,
       isPhoto: p.src === 'photo',
-      thumb: h('img', { src: p.img, alt: '', style: { width: 42, height: 42, objectFit: p.src === 'photo' ? 'cover' : 'contain', flex: '0 0 auto', background: '#FBF8F2', borderRadius: 8, padding: 2, boxSizing: 'border-box' } }),
+      thumb: h('img', { src: p.img, alt: '', style: { width: 42, height: 42, objectFit: p.src === 'photo' ? 'cover' : 'contain', flex: '0 0 auto', background: '#fff', borderRadius: 8, padding: 2, boxSizing: 'border-box' } }),
       onName: (e) => this.setCat((d) => {
         const x = d.products.find((y) => y.id === p.id);
         if (!x) return;
@@ -3345,7 +3353,7 @@ class App extends Component {
       return {
         label: s.store, sub: nDays ? `sem. ${st.planWeek} : ${nDays}/7 jour(s)` : `sem. ${st.planWeek} : vide`,
         toggle: () => this.togglePlanStore(s.id),
-        style: `display:flex;flex-direction:column;gap:2px;align-items:flex-start;padding:11px 15px;border-radius:12px;cursor:pointer;text-align:left;background:${on ? 'rgba(141,29,44,0.06)' : '#FBF8F2'};border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};`,
+        style: `display:flex;flex-direction:column;gap:2px;align-items:flex-start;padding:11px 15px;border-radius:12px;cursor:pointer;text-align:left;background:${on ? 'rgba(141,29,44,0.06)' : '#fff'};border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};`,
         badge: on ? '✓' : '',
       };
     });
@@ -3422,7 +3430,7 @@ class App extends Component {
       return {
         label: s.store, sub: `${s.group} · ${s.players.length} écran(s)`,
         toggle: () => this.toggleTarget(s.id),
-        style: `display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-radius:12px;cursor:pointer;text-align:left;background:${on ? 'rgba(141,29,44,0.06)' : '#FBF8F2'};border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};`,
+        style: `display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-radius:12px;cursor:pointer;text-align:left;background:${on ? 'rgba(141,29,44,0.06)' : '#fff'};border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};`,
         checkStyle: `display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:8px;flex:0 0 auto;font-size:13px;${on ? 'background:var(--accent);color:#fff;' : 'background:#fff;border:1px solid rgba(35,34,32,0.20);color:transparent;'}`,
         check: on ? '✓' : '',
       };
@@ -3891,8 +3899,8 @@ class App extends Component {
       targets, pubSlots,
       setModeFull: () => this.setState({ pubMode: 'full' }),
       setModeData: () => this.setState({ pubMode: 'data' }),
-      modeFullStyle: `text-align:left;padding:14px;border-radius:12px;cursor:pointer;background:${st.pubMode === 'full' ? 'rgba(141,29,44,0.06)' : '#FBF8F2'};border:1px solid ${st.pubMode === 'full' ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};`,
-      modeDataStyle: `text-align:left;padding:14px;border-radius:12px;cursor:pointer;background:${st.pubMode === 'data' ? 'rgba(141,29,44,0.06)' : '#FBF8F2'};border:1px solid ${st.pubMode === 'data' ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};`,
+      modeFullStyle: `text-align:left;padding:14px;border-radius:12px;cursor:pointer;background:${st.pubMode === 'full' ? 'rgba(141,29,44,0.06)' : '#fff'};border:1px solid ${st.pubMode === 'full' ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};`,
+      modeDataStyle: `text-align:left;padding:14px;border-radius:12px;cursor:pointer;background:${st.pubMode === 'data' ? 'rgba(141,29,44,0.06)' : '#fff'};border:1px solid ${st.pubMode === 'data' ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};`,
       whenScheduled: st.pubWhen === 'scheduled',
       setWhenNow: () => this.setState({ pubWhen: 'now' }),
       setWhenScheduled: () => this.setState({ pubWhen: 'scheduled' }),
@@ -4030,7 +4038,7 @@ class App extends Component {
       hasDur: isProduit || isFilmEl || isAnim || isMedia || isPromo || isCampaign || isHtml,
       selName: m.name,
       selTypeLabel: selType ? selType.label : (isLia ? 'Liaison' : 'Catégorie'),
-      selTypeBadge: `display:inline-flex;align-items:center;padding:4px 11px;border-radius:999px;font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;${isLia ? 'background:rgba(35,34,32,0.10);color:var(--muted);' : 'background:rgba(141,29,44,0.12);color:var(--accent);'}`,
+      selTypeBadge: `display:inline-flex;align-items:center;padding:4px 11px;border-radius:999px;font-size:11.5px;font-weight:500;white-space:nowrap;${isLia ? 'background:rgba(35,34,32,0.10);color:var(--muted);' : 'background:rgba(141,29,44,0.12);color:var(--accent);'}`,
       liaisonSub: m.sub || '',
       onSelName: (e) => this.setSelField('name', e.target.value),
       onLiaisonSub: (e) => this.setSelField('sub', e.target.value),
@@ -4140,7 +4148,7 @@ class App extends Component {
       motionSimple: MOTIONS.map((o) => ({
         label: o.label,
         pick: () => this.setSelField('motion', o.id),
-        style: `text-align:left;padding:10px 13px;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;background:${(m.motion || 'm1') === o.id ? 'rgba(141,29,44,0.08)' : '#FBF8F2'};border:1px solid ${(m.motion || 'm1') === o.id ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};color:var(--ink);`,
+        style: `text-align:left;padding:10px 13px;font-size:12.5px;font-weight:500;border-radius:8px;cursor:pointer;background:${(m.motion || 'm1') === o.id ? 'rgba(141,29,44,0.08)' : '#fff'};border:1px solid ${(m.motion || 'm1') === o.id ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};color:var(--ink);`,
       })),
       libTagPicker: this.libCatList().filter((t) => t.active !== false || this.libCatOf(m).id === t.id).map((t) => {
         const on = this.libCatOf(m).id === t.id;
@@ -4314,7 +4322,7 @@ class App extends Component {
     const secHead = (id, title, summary) => html`
       <button onClick=${(e) => this.toggleSec(id, e.currentTarget.parentElement)} style="width:100%;box-sizing:border-box;display:flex;align-items:center;gap:11px;padding:17px 24px;background:transparent;border:none;cursor:pointer;text-align:left;">
         <span style="flex:0 0 auto;display:inline-block;font-size:9px;color:var(--muted);transform:rotate(${secOpen(id) ? '90deg' : '0deg'});transition:transform .15s;">▶</span>
-        <span style="flex:0 1 auto;min-width:0;font-size:13px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${title}</span>
+        <span style="flex:0 0 auto;white-space:nowrap;font-size:13px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${title}</span>
         ${!secOpen(id) && summary ? html`<span style="flex:1 1 auto;min-width:0;text-align:right;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${summary}</span>` : null}
       </button>`;
 
@@ -4325,7 +4333,7 @@ class App extends Component {
         <h2 style="margin:0;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${v.isTimelineTab ? `Aperçu du film « ${this.activeFilm().name} » · 6480 × 3840` : `Aperçu de l'élément · 6480 × 3840`}</h2>
         ${v.isTimelineTab && this.activeFilm().mode === 'continu' ? html`
           <span style="display:inline-flex;align-items:center;gap:8px;">
-            <span style="font-size:11px;font-weight:500;color:var(--muted-2);background:var(--chip);border-radius:999px;padding:3px 10px;">🔄 boucle générée${v.contPreviewMeta ? ` · ${v.contPreviewMeta.slots} slot(s)` : ''}</span>
+            <span style="font-size:11px;font-weight:500;color:var(--muted-2);background:var(--chip);border-radius:999px;padding:3px 10px;">boucle générée${v.contPreviewMeta ? ` · ${v.contPreviewMeta.slots} slot(s)` : ''}</span>
             ${infoTip('Aperçu FIDÈLE : c’est la boucle réellement composée par le serveur (produits de saison, moment, ratios…), telle qu’elle passera à l’écran. Elle reflète les réglages ENREGISTRÉS — après une modif, elle se rafraîchit à l’enregistrement (auto ~1 s) ou via ⟳.')}
             <button onClick=${() => this.loadContPreview()} disabled=${v.contPreviewBusy} title="Recomposer l’aperçu maintenant" style="padding:5px 11px;font-size:11.5px;font-weight:500;color:var(--muted-2);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:${v.contPreviewBusy ? 'wait' : 'pointer'};">⟳ Actualiser</button>
           </span>
@@ -4420,9 +4428,9 @@ class App extends Component {
           ${!st.editingFilm && !shownFilms.length ? html`<span style="font-size:12px;color:var(--muted);">Aucun film dans cette catégorie.</span>` : ''}
           <button onClick=${() => this.setState({ editingFilm: true, editFilmName: this.activeFilm().name })} title="Renommer le film" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,0.7);border:1px solid var(--line);cursor:pointer;font-size:12px;flex:0 0 auto;">✎</button>
           <button onClick=${() => this.newFilm()} title="Nouveau film (vide)" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:14px;font-weight:500;flex:0 0 auto;">＋</button>
-          <button onClick=${() => this.newExampleFilm()} title="Créer un film d'exemple : une boucle continue préréglée, à dupliquer et adapter" style="display:flex;align-items:center;gap:5px;padding:0 11px;height:26px;border-radius:8px;background:var(--chip);color:var(--muted-2);border:1px solid var(--line);cursor:pointer;font-size:12px;font-weight:500;flex:0 0 auto;">✨ Exemple continu</button>
+          <button onClick=${() => this.newExampleFilm()} title="Créer un film d'exemple : une boucle continue préréglée, à dupliquer et adapter" style="display:flex;align-items:center;gap:5px;padding:0 11px;height:26px;border-radius:8px;background:var(--chip);color:var(--muted-2);border:1px solid var(--line);cursor:pointer;font-size:12px;font-weight:500;flex:0 0 auto;">Exemple continu</button>
           <button onClick=${() => this.dupFilm()} title="Dupliquer le film" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,0.7);border:1px solid var(--line);cursor:pointer;font-size:12px;flex:0 0 auto;">⎘</button>
-          <button onClick=${() => this.delFilm()} title="Supprimer le film (les modules restent en bibliothèque)" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,0.7);border:1px solid var(--line);cursor:pointer;font-size:12px;color:var(--accent);flex:0 0 auto;">🗑</button>
+          <button onClick=${() => this.delFilm()} title="Supprimer le film (les modules restent en bibliothèque)" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,0.7);border:1px solid var(--line);cursor:pointer;font-size:12px;color:var(--accent);flex:0 0 auto;">${icon(ICON.trash, 14)}</button>
         </div>
       </div>`;
 
@@ -4435,7 +4443,7 @@ class App extends Component {
       <div style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);">
         <div style="display:flex;align-items:center;gap:6px;">
           ${infoTip('Le film ne monte rien à la main : tu poses des règles (sources, moments, formats, ratios…) et la boucle se compose toute seule, en s’adaptant au fil de la journée, sans republier.')}
-          <span style="font-size:12px;font-weight:500;color:var(--muted-2);">🔄 Boucle continue</span>
+          <span style="font-size:12px;font-weight:500;color:var(--muted-2);">Boucle continue</span>
           <span style="font-size:11.5px;color:var(--muted);">composée en direct · saisons · moments · formats</span>
         </div>
       </div>`;
@@ -4468,7 +4476,7 @@ class App extends Component {
     const contPanel = html`
       <div style="background:#FFFFFF;border:1px solid rgba(141,29,44,0.22);border-radius:12px;padding:18px 20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
-          <h3 style="margin:0;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">🔄 Boucle continue — la régie compose « ${this.activeFilm().name} » en direct</h3>
+          <h3 style="margin:0;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Boucle continue — la régie compose « ${this.activeFilm().name} » en direct</h3>
           <a href=${new URL('film?film=' + this.activeFilm().id, location.href).toString()} target="_blank" style="font-size:12.5px;font-weight:500;color:var(--muted-2);">▶ Aperçu en direct ↗</a>
         </div>
         <div style="display:flex;flex-direction:column;gap:18px;">
@@ -4506,7 +4514,7 @@ class App extends Component {
                 <!-- colonne gauche : les suites -->
                 <div style="flex:0 0 250px;display:flex;flex-direction:column;gap:5px;">
                   ${v.seqRows.map((s) => html`
-                    <div key=${s.id} style="display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:10px;cursor:pointer;border:1px solid ${s.selected ? 'rgba(141,29,44,0.45)' : 'rgba(35,34,32,0.10)'};background:${s.selected ? 'rgba(141,29,44,0.06)' : '#FBF8F2'};" onClick=${s.pick}>
+                    <div key=${s.id} style="display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:10px;cursor:pointer;border:1px solid ${s.selected ? 'rgba(141,29,44,0.45)' : 'rgba(35,34,32,0.10)'};background:${s.selected ? 'rgba(141,29,44,0.06)' : '#fff'};" onClick=${s.pick}>
                       <button onClick=${(e) => { e.stopPropagation(); s.toggleInFilm(); }} title=${s.inFilm ? 'Utilisée dans ce film — cliquer pour retirer' : 'Non utilisée dans ce film'} style="flex:0 0 auto;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;line-height:1;border-radius:5px;cursor:pointer;border:1px solid ${s.inFilm ? '#8D1D2C' : 'rgba(35,34,32,0.28)'};background:${s.inFilm ? '#8D1D2C' : '#fff'};color:#fff;">${s.inFilm ? '✓' : ''}</button>
                       <span style="flex:1 1 auto;min-width:0;font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${s.active ? '#232220' : '#8A847C'};">${s.name}</span>
                       <span style="flex:0 0 auto;font-size:10.5px;color:var(--muted);">${({ debut: '⤒ début', fin: '⤓ fin', boucle: '↻ 1:' + s.ratio })[s.placement]} · ${s.count}</span>
@@ -4582,7 +4590,7 @@ class App extends Component {
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:16px 0 8px;">
               <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Parcours de la bibliothèque · ${cont.orient === 'portrait' ? '9:16 portrait' : '16:9 paysage'}</span>
               ${infoTip('Créer une boucle, c’est passer en revue TOUS les éléments de la bibliothèque : coche ceux qui doivent passer et donne à chacun son ratio « 1 : N » (un passage tous les N slots). Seuls les éléments au format d’écran de cette boucle sont listés, et un élément tagué par moment ne passera qu’à ces moments-là. Décocher garde le ratio en mémoire.')}
-              <span style="font-size:11.5px;font-weight:500;color:${v.contLoopOn ? '#6E4A2B' : '#8A847C'};">${v.contLoopOn} / ${v.contItemRatios.length} actif(s)</span>
+              <span style="font-size:11.5px;font-weight:500;color:${v.contLoopOn ? 'var(--muted-2)' : '#8A847C'};">${v.contLoopOn} / ${v.contItemRatios.length} actif(s)</span>
               ${v.contItemRatios.length ? html`<span style="display:inline-flex;gap:5px;">
                 <button onClick=${v.contLoopAll} style="padding:4px 10px;font-size:11.5px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);">Tout activer</button>
                 <button onClick=${v.contLoopNone} style="padding:4px 10px;font-size:11.5px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);">Tout désactiver</button>
@@ -4590,7 +4598,7 @@ class App extends Component {
             </div>
             <div style="display:flex;flex-direction:column;gap:4px;max-width:470px;max-height:290px;overflow:auto;padding-right:4px;">
               ${v.contItemRatios.length ? v.contItemRatios.map((it) => html`
-                <div key=${it.id} style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:8px;border:1px solid ${it.on ? 'rgba(141,29,44,0.28)' : 'rgba(35,34,32,0.10)'};background:${it.on ? 'rgba(141,29,44,0.05)' : '#FBF8F2'};">
+                <div key=${it.id} style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:8px;border:1px solid ${it.on ? 'rgba(141,29,44,0.28)' : 'rgba(35,34,32,0.10)'};background:${it.on ? 'rgba(141,29,44,0.05)' : '#fff'};">
                   <button onClick=${it.toggle} title=${it.on ? 'Actif dans la boucle — cliquer pour retirer' : 'Inactif — cliquer pour ajouter à la boucle'} style="flex:0 0 auto;width:19px;height:19px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;line-height:1;border-radius:5px;cursor:pointer;border:1px solid ${it.on ? '#8D1D2C' : 'rgba(35,34,32,0.28)'};background:${it.on ? '#8D1D2C' : '#fff'};color:#fff;">${it.on ? '✓' : ''}</button>
                   <span style="flex:0 0 auto;font-size:13px;">${it.icon}</span>
                   <span style="flex:1 1 auto;min-width:0;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${it.on ? '#232220' : '#8A847C'};">${it.name}<span style="color:var(--muted);"> · ${it.moments}</span></span>
@@ -4678,8 +4686,7 @@ class App extends Component {
   ${v.isSettingsView && html`
   <div class="app__body">
     <div style="max-width:640px;">
-      <h1 style="margin:0 0 6px;font-size:24px;font-weight:500;">${v.t('settings.title')}</h1>
-      <p style="margin:0 0 26px;font-size:13.5px;color:var(--muted);">${v.t('settings.subtitle')}</p>
+      <p style="margin:0 0 18px;font-size:13px;color:var(--muted-2);line-height:1.5;">${v.t('settings.subtitle')}</p>
       <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:26px 28px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
           <h2 style="margin:0;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${v.t('settings.serverConn')}</h2>
@@ -4742,7 +4749,7 @@ class App extends Component {
         ${v.ingAnimOptions.length ? '' : html`<p style="margin:0 0 12px;font-size:12px;color:var(--warn);">Aucune animation dans la bibliothèque — crée un élément « animation » dans le Compositeur pour pouvoir en lier une.</p>`}
         <div style="display:flex;flex-direction:column;gap:8px;">
           ${v.ingRows.map((x) => html`
-            <div key=${x.id} style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:9px 11px;border-radius:10px;border:1px solid ${x.active ? 'rgba(35,34,32,0.10)' : 'rgba(35,34,32,0.06)'};background:${x.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};">
+            <div key=${x.id} style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:9px 11px;border-radius:10px;border:1px solid ${x.active ? 'rgba(35,34,32,0.10)' : 'rgba(35,34,32,0.06)'};background:${x.active ? '#fff' : 'rgba(35,34,32,0.03)'};">
               <input key=${'ign-' + x.id} defaultValue=${x.name} onChange=${x.onName} placeholder="Nom de l'ingrédient (ex. Beurre AOP)" style="flex:1 1 180px;min-width:0;padding:7px 10px;font-size:12.5px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;" />
               <input key=${'igr-' + x.id} defaultValue=${x.extRef} onChange=${x.onRef} placeholder="réf. ERP (optionnel)" spellcheck="false" style="flex:0 1 140px;min-width:0;padding:7px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;" />
               <label style="display:inline-flex;align-items:center;gap:6px;flex:1 1 220px;min-width:0;">
@@ -4765,7 +4772,7 @@ class App extends Component {
         </div>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px;">
           <button onClick=${v.saveIngredients} disabled=${v.ingBusy || !v.ingDirty} style="padding:11px 22px;font-size:13.5px;font-weight:500;color:#fff;background:${v.ingDirty ? '#8D1D2C' : 'rgba(141,29,44,0.35)'};border:none;border-radius:8px;cursor:${v.ingBusy ? 'wait' : (v.ingDirty ? 'pointer' : 'default')};">${v.ingBusy ? 'Enregistrement…' : 'Enregistrer les matières premières'}</button>
-          <button onClick=${v.inspectIngredients} title="Cherche la table des ingrédients dans la base de l'ERP (lecture seule, rien n'est importé)" style="padding:9px 16px;font-size:12.5px;font-weight:500;color:var(--muted-2);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">🔎 Diagnostic ERP</button>
+          <button onClick=${v.inspectIngredients} title="Cherche la table des ingrédients dans la base de l'ERP (lecture seule, rien n'est importé)" style="padding:9px 16px;font-size:12.5px;font-weight:500;color:var(--muted-2);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">Diagnostic ERP</button>
         </div>
         ${v.ingDiag && html`
           <div style="margin-top:12px;padding:11px 13px;border-radius:10px;background:var(--paper);border:1px solid var(--line);font-size:12px;color:var(--muted-2);">
@@ -4792,7 +4799,7 @@ class App extends Component {
         <p style="margin:0 0 14px;font-size:12px;color:var(--muted);line-height:1.5;">Le classement des éléments de la bibliothèque. Chaque catégorie dit à quelle <strong>table de la régie</strong> elle est liée : c'est la donnée qui alimente ses éléments. Une catégorie inactive n'est plus proposée au classement, mais les éléments qui la portent restent visibles.</p>
         <div style="display:flex;flex-direction:column;gap:8px;">
           ${v.libCatRows.map((c) => html`
-            <div key=${c.id} style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:9px 11px;border-radius:10px;border:1px solid ${c.active ? 'rgba(35,34,32,0.10)' : 'rgba(35,34,32,0.06)'};background:${c.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};">
+            <div key=${c.id} style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:9px 11px;border-radius:10px;border:1px solid ${c.active ? 'rgba(35,34,32,0.10)' : 'rgba(35,34,32,0.06)'};background:${c.active ? '#fff' : 'rgba(35,34,32,0.03)'};">
               <input key=${'lcc-' + c.id} type="color" defaultValue=${c.color} onChange=${c.onColor} title="Couleur de la catégorie" style="flex:0 0 auto;width:30px;height:30px;padding:0;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;" />
               <input key=${'lcn-' + c.id} defaultValue=${c.name} onChange=${c.onName} placeholder="Nom de la catégorie" style="flex:1 1 150px;min-width:0;padding:7px 10px;font-size:12.5px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;" />
               <label style="display:inline-flex;align-items:center;gap:6px;flex:1 1 210px;min-width:0;">
@@ -4826,7 +4833,7 @@ class App extends Component {
             <p style="margin:0 0 10px;font-size:12px;color:var(--green);font-weight:500;">● https actif — <a href=${hs.base} style="color:var(--green);">${hs.base}</a></p>
             <p style="margin:0 0 10px;font-size:12px;color:${late ? '#8D1D2C' : '#8A847C'};line-height:1.5;">Certificat ${hs.issuer || 'Let\'s Encrypt'} valable jusqu'au ${until}${late ? ' — renouvellement en retard : à vérifier sur le serveur (la livraison dit, à l\'étape HTTPS, qui le renouvelle et si son défi passe)' : ' · renouvelé automatiquement (certificats de 6 jours)'}.</p>
             <p style="margin:0 0 ${onHttp ? 12 : 0}px;font-size:12px;color:var(--muted);line-height:1.5;">Un écran ne <strong>redémarre sans réseau</strong> que s'il est ouvert en https : la page et son code restent alors sur l'écran. Ouvre la régie à cette adresse et ses liens (player, magasin, film) seront tous en https.</p>
-            ${onHttp ? html`<a href=${hs.base} style="display:inline-flex;align-items:center;gap:6px;padding:9px 16px;font-size:12.5px;font-weight:500;color:#fff;background:var(--green);border-radius:999px;">🔒 Ouvrir la régie en https ↗</a>` : ''}
+            ${onHttp ? html`<a href=${hs.base} style="display:inline-flex;align-items:center;gap:6px;padding:9px 16px;font-size:12.5px;font-weight:500;color:#fff;background:var(--green);border-radius:999px;">Ouvrir la régie en https ↗</a>` : ''}
           ` : html`<p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">Pas de https constaté sur ce serveur. La livraison s'appuie sur celui du serveur s'il en a un, et pose sinon un certificat Let's Encrypt pour l'adresse IP (renouvelé automatiquement). En http, les écrans tiennent une coupure réseau page ouverte, mais ne redémarrent pas sans réseau — le navigateur réserve le service worker au https.</p>`}
         </div>`;
       })()}
@@ -4969,8 +4976,7 @@ class App extends Component {
     <div style="margin:0;display:flex;flex-direction:column;gap:16px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
         <div>
-          <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${v.t('products.title')}</h2>
-          <p style="margin:0;font-size:12.5px;color:var(--muted);">${v.t('products.subtitle')}</p>
+          <p style="margin:0;font-size:13px;color:var(--muted-2);line-height:1.5;">${v.t('products.subtitle')}</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Langue d'édition</span>
@@ -4989,16 +4995,16 @@ class App extends Component {
           </div>
           ${v.prodCats.map((c) => html`
             <div onClick=${c.pick} style=${c.cardStyle}>
-              <input value=${c.name} onInput=${c.onName} onClick=${(e) => e.stopPropagation()} placeholder=${c.namePlaceholder} style="flex:1 1 auto;min-width:0;padding:7px 9px;font-size:13.5px;font-weight:500;border:1px solid ${c.on ? 'rgba(141,29,44,0.3)' : 'transparent'};border-radius:8px;background:${c.on ? '#FBF8F2' : 'transparent'};${v.isBaseLang ? '' : 'border-color:rgba(184,134,11,0.5);'}" />
+              <input value=${c.name} onInput=${c.onName} onClick=${(e) => e.stopPropagation()} placeholder=${c.namePlaceholder} style="flex:1 1 auto;min-width:0;padding:7px 9px;font-size:13.5px;font-weight:500;border:1px solid ${c.on ? 'rgba(141,29,44,0.3)' : 'transparent'};border-radius:8px;background:${c.on ? '#fff' : 'transparent'};${v.isBaseLang ? '' : 'border-color:rgba(184,134,11,0.5);'}" />
               <span style="flex:0 0 auto;font-size:11px;color:var(--muted);">${c.count}${c.usedBy ? ' · ⛓' + c.usedBy : ''}</span>
               <button onClick=${c.toggleActive} title="Active / inactive" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;flex:0 0 auto;border:1px solid var(--line);cursor:pointer;background:${c.active ? 'rgba(63,122,82,0.12)' : 'rgba(35,34,32,0.06)'};color:${c.active ? '#2E6E4E' : '#8A847C'};font-size:12px;">${c.active ? '✓' : '⃠'}</button>
-              <button onClick=${c.del} title="Supprimer la catégorie" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;flex:0 0 auto;border:1px solid var(--line);cursor:pointer;background:rgba(255,255,255,0.7);color:var(--accent);font-size:12px;">🗑</button>
+              <button onClick=${c.del} title="Supprimer la catégorie" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;flex:0 0 auto;border:1px solid var(--line);cursor:pointer;background:rgba(255,255,255,0.7);color:var(--accent);font-size:12px;">${icon(ICON.trash, 14)}</button>
             </div>
             ${c.on && v.isBaseLang && html`
               <div onClick=${(e) => e.stopPropagation()} style="display:flex;align-items:center;gap:8px;margin:-4px 0 4px;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.55);border:1px solid var(--line);">
                 ${c.imgOk
                   ? html`<img src=${c.img} alt="" loading="lazy" style="width:30px;height:30px;border-radius:8px;object-fit:contain;flex:0 0 auto;border:1px solid var(--line);background:#fff;" />`
-                  : html`<span title="Aucune illustration" style="width:30px;height:30px;border-radius:8px;flex:0 0 auto;border:1px dashed rgba(35,34,32,0.22);background:var(--chip);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--faint);">🖼</span>`}
+                  : html`<span title="Aucune illustration" style="width:30px;height:30px;border-radius:8px;flex:0 0 auto;border:1px dashed rgba(35,34,32,0.22);background:var(--chip);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--faint);">${icon(ICON.image, 16)}</span>`}
                 <div style="flex:1 1 auto;min-width:0;">
                   <div style="font-size:10.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:3px;">Illustration de la catégorie</div>
                   <input value=${c.img} onInput=${c.onImg} placeholder="assets/… ou URL" spellcheck="false" title="Une catégorie porte une illustration ; un produit porte une photo." style="width:100%;box-sizing:border-box;padding:6px 9px;font-size:11.5px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;" />
@@ -5025,7 +5031,7 @@ class App extends Component {
               <span></span>
               ${v.prodRows.map((p) => html`
                 <div style="display:flex;align-items:center;">${p.thumb}</div>
-                <input value=${p.name} onInput=${p.onName} placeholder=${p.namePlaceholder} style="padding:9px 11px;font-size:13.5px;font-weight:500;border:1px solid ${v.isBaseLang ? 'rgba(35,34,32,0.14)' : 'rgba(184,134,11,0.55)'};border-radius:8px;background:${p.active ? '#FBF8F2' : 'rgba(35,34,32,0.04)'};opacity:${p.active ? 1 : 0.6};min-width:0;" />
+                <input value=${p.name} onInput=${p.onName} placeholder=${p.namePlaceholder} style="padding:9px 11px;font-size:13.5px;font-weight:500;border:1px solid ${v.isBaseLang ? 'rgba(35,34,32,0.14)' : 'rgba(184,134,11,0.55)'};border-radius:8px;background:${p.active ? '#fff' : 'rgba(35,34,32,0.04)'};opacity:${p.active ? 1 : 0.6};min-width:0;" />
                 <div style="display:flex;align-items:center;gap:5px;min-width:0;">
                   <select value=${p.isPhoto ? '' : p.img} onChange=${p.onImg} style="flex:1 1 auto;min-width:0;padding:8px 6px;font-size:11.5px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
                     ${p.isPhoto && html`<option value="">📷 photo</option>`}
@@ -5038,18 +5044,18 @@ class App extends Component {
                     <option value="assets/sweet-tart-small.png">Tarte S</option>
                     <option value="assets/sweet-tart-big.png">Tarte L</option>
                   </select>
-                  <label title="Importer une photo" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;flex:0 0 auto;border:1px dashed rgba(35,34,32,0.3);background:var(--paper);cursor:pointer;font-size:13px;">⬆<input type="file" accept="image/*" onChange=${p.onPhoto} style="display:none;" /></label>
+                  <label title="Importer une photo" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;flex:0 0 auto;border:1px dashed rgba(35,34,32,0.3);background:var(--paper);cursor:pointer;font-size:13px;">${icon(ICON.upload, 14)}<input type="file" accept="image/*" onChange=${p.onPhoto} style="display:none;" /></label>
                 </div>
                 <input value=${p.price} onInput=${p.onPrice} inputmode="decimal" style="padding:9px 10px;font-size:13.5px;font-weight:500;text-align:right;color:var(--accent);border:1px solid var(--line);border-radius:8px;background:#fff;min-width:0;" />
                 ${p.storePrices.map((sp) => html`
-                  <input value=${sp.value} onInput=${sp.onInput} placeholder="défaut" inputmode="decimal" style="padding:9px 10px;font-size:13px;text-align:right;color:${sp.value ? '#8D1D2C' : '#B8B2A8'};font-weight:${sp.value ? 600 : 400};border:1px solid var(--line);border-radius:8px;background:${sp.value ? 'rgba(141,29,44,0.05)' : '#FBF8F2'};min-width:0;" />
+                  <input value=${sp.value} onInput=${sp.onInput} placeholder="défaut" inputmode="decimal" style="padding:9px 10px;font-size:13px;text-align:right;color:${sp.value ? '#8D1D2C' : '#B8B2A8'};font-weight:${sp.value ? 600 : 400};border:1px solid var(--line);border-radius:8px;background:${sp.value ? 'rgba(141,29,44,0.05)' : '#fff'};min-width:0;" />
                 `)}
                 <div style="display:flex;justify-content:center;gap:5px;">
                   <button onClick=${p.toggleActive} title="Actif / inactif (masqué partout à l'écran)" style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid var(--line);cursor:pointer;background:${p.active ? 'rgba(63,122,82,0.12)' : 'rgba(141,29,44,0.08)'};color:${p.active ? '#2E6E4E' : '#8D1D2C'};font-size:13px;">${p.active ? '✓' : '⃠'}</button>
-                  <button onClick=${p.toggleUnavailable} title="En rupture / indisponible — masqué des boucles continues (mode Continu) et signalé. Réactive quand le produit revient." style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;cursor:pointer;border:1px solid ${p.unavailable ? 'rgba(141,29,44,0.4)' : 'rgba(35,34,32,0.12)'};background:${p.unavailable ? 'rgba(141,29,44,0.14)' : '#FBF8F2'};color:${p.unavailable ? '#8D1D2C' : '#C9C3B8'};font-size:14px;">⦸</button>
+                  <button onClick=${p.toggleUnavailable} title="En rupture / indisponible — masqué des boucles continues (mode Continu) et signalé. Réactive quand le produit revient." style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;cursor:pointer;border:1px solid ${p.unavailable ? 'rgba(141,29,44,0.4)' : 'rgba(35,34,32,0.12)'};background:${p.unavailable ? 'rgba(141,29,44,0.14)' : '#fff'};color:${p.unavailable ? '#8D1D2C' : '#C9C3B8'};font-size:14px;">⦸</button>
                 </div>
                 <div style="display:flex;align-items:center;gap:4px;justify-content:flex-end;">
-                  <button onClick=${p.showAppearance} title="Régie → Apparition… — où et quand ce produit passe à l'écran (c'est ce que lit la fiche produit de l'ERP)" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:12px;border:1px solid ${p.appearanceOpen ? 'rgba(141,29,44,0.4)' : 'rgba(35,34,32,0.12)'};background:${p.appearanceOpen ? 'rgba(141,29,44,0.10)' : '#FBF8F2'};color:${p.appearanceOpen ? '#8D1D2C' : '#6E4A2B'};">👁</button>
+                  <button onClick=${p.showAppearance} title="Régie → Apparition… — où et quand ce produit passe à l'écran (c'est ce que lit la fiche produit de l'ERP)" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:12px;border:1px solid ${p.appearanceOpen ? 'rgba(141,29,44,0.4)' : 'rgba(35,34,32,0.12)'};background:${p.appearanceOpen ? 'rgba(141,29,44,0.10)' : '#fff'};color:${p.appearanceOpen ? '#8D1D2C' : 'var(--muted-2)'};">👁</button>
                   <button onClick=${p.up} title="Monter" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;font-size:12px;">↑</button>
                   <button onClick=${p.down} title="Descendre" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;font-size:12px;">↓</button>
                   <button onClick=${p.del} title="Supprimer" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;font-size:12px;color:var(--accent);">✕</button>
@@ -5109,8 +5115,7 @@ class App extends Component {
     <div style="margin:0;display:flex;flex-direction:column;gap:16px;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
         <div>
-          <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${v.t('seasons.title')}</h2>
-          <p style="margin:0;font-size:12.5px;color:var(--muted);max-width:760px;">${v.t('seasons.subtitle')} <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">ws_season</code></p>
+          <p style="margin:0;font-size:13px;color:var(--muted-2);line-height:1.5;max-width:760px;">${v.t('seasons.subtitle')} <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">ws_season</code></p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <input value=${v.wsTable} onInput=${v.onWsTable} placeholder="table (déf. ws_season)" spellcheck="false" title="Nom de la table MySQL des périodes, si différent de ws_season" style="width:170px;padding:9px 11px;font-size:12.5px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:999px;background:#fff;" />
@@ -5138,7 +5143,7 @@ class App extends Component {
         </div>
       ` : ''}
       ${v.wsDiag ? html`
-        <div style="background:${v.wsDiag.imageFound ? 'rgba(63,122,82,0.06)' : '#FBF8F2'};border:1px solid ${v.wsDiag.imageFound ? 'rgba(63,122,82,0.3)' : 'rgba(35,34,32,0.12)'};border-radius:12px;padding:12px 16px;font-size:12px;color:var(--muted-2);line-height:1.6;">
+        <div style="background:${v.wsDiag.imageFound ? 'rgba(63,122,82,0.06)' : '#fff'};border:1px solid ${v.wsDiag.imageFound ? 'rgba(63,122,82,0.3)' : 'rgba(35,34,32,0.12)'};border-radius:12px;padding:12px 16px;font-size:12px;color:var(--muted-2);line-height:1.6;">
           <div style="font-weight:500;color:${v.wsDiag.imageFound ? '#2E6E4E' : '#8D1D2C'};">
             ${v.wsDiag.imageFound
               ? html`🖼 Colonne d'illustration détectée : ${v.wsDiag.imageCols.map((c) => html`<code style="background:var(--chip);padding:1px 5px;border-radius:4px;">${c.column}</code> dans <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">${c.table}</code>${c.sample ? html` · ex. « ${c.sample} »` : ''} `)}`
@@ -5159,7 +5164,7 @@ class App extends Component {
         </div>
         <div style="display:flex;flex-direction:column;gap:10px;">
           ${v.seasonRows.map((s) => html`
-            <div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:${s.current ? 'rgba(63,122,82,0.05)' : '#FBF8F2'};">
+            <div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:${s.current ? 'rgba(63,122,82,0.05)' : '#fff'};">
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                 ${s.imageOk
                   ? html`<img src=${s.image} alt="" loading="lazy" title="Illustration de la période" style="width:28px;height:28px;border-radius:8px;object-fit:cover;flex:0 0 auto;border:1px solid var(--line);background:${s.color};" />`
@@ -5176,7 +5181,7 @@ class App extends Component {
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;padding-left:20px;">
                 ${s.imageOk
                   ? html`<img src=${s.image} alt="Aperçu de l'illustration" loading="lazy" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex:0 0 auto;border:1px solid var(--line);background:#fff;" />`
-                  : html`<span title=${s.image ? 'Valeur non affichable ici' : 'Aucune illustration'} style="width:48px;height:48px;border-radius:8px;flex:0 0 auto;border:1px dashed rgba(35,34,32,0.22);background:var(--chip);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--faint);">🖼</span>`}
+                  : html`<span title=${s.image ? 'Valeur non affichable ici' : 'Aucune illustration'} style="width:48px;height:48px;border-radius:8px;flex:0 0 auto;border:1px dashed rgba(35,34,32,0.22);background:var(--chip);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--faint);">${icon(ICON.image, 16)}</span>`}
                 <div style="display:flex;flex-direction:column;gap:4px;flex:1 1 240px;min-width:0;">
                   <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Illustration</span>
                   <input value=${s.image} onInput=${s.onImage} placeholder="URL/lien direct de l'image (auto-rempli si la table importée a une colonne image)" spellcheck="false" title="Lien direct de l'illustration de la période. Rempli automatiquement à l'import si la table (ex. product_availability_period) expose une colonne image ; sinon colle une URL ici." style="width:100%;box-sizing:border-box;padding:7px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;" />
@@ -5234,7 +5239,7 @@ class App extends Component {
                   <tr>
                     <td style="padding:7px 10px 7px 26px;border-bottom:1px solid var(--line);white-space:nowrap;${p.active ? '' : 'color:var(--faint);'}">${p.name}${p.active ? '' : ' · inactif'}</td>
                     ${p.cells.map((c) => html`<td style="padding:5px 10px;border-bottom:1px solid var(--line);text-align:center;">
-                      <button onClick=${c.toggle} title="Cliquer pour changer" style="width:34px;height:30px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:500;border:1px solid ${c.state === 'incl' ? 'rgba(63,122,82,0.4)' : (c.state === 'excl' ? 'rgba(141,29,44,0.4)' : 'rgba(35,34,32,0.14)')};background:${c.state === 'incl' ? 'rgba(63,122,82,0.14)' : (c.state === 'excl' ? 'rgba(141,29,44,0.12)' : '#FBF8F2')};color:${c.state === 'incl' ? '#2E6E4E' : (c.state === 'excl' ? '#8D1D2C' : '#C9C3B8')};">${c.state === 'incl' ? '✓' : (c.state === 'excl' ? '✕' : '·')}</button>
+                      <button onClick=${c.toggle} title="Cliquer pour changer" style="width:34px;height:30px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:500;border:1px solid ${c.state === 'incl' ? 'rgba(63,122,82,0.4)' : (c.state === 'excl' ? 'rgba(141,29,44,0.4)' : 'rgba(35,34,32,0.14)')};background:${c.state === 'incl' ? 'rgba(63,122,82,0.14)' : (c.state === 'excl' ? 'rgba(141,29,44,0.12)' : '#fff')};color:${c.state === 'incl' ? '#2E6E4E' : (c.state === 'excl' ? '#8D1D2C' : '#C9C3B8')};">${c.state === 'incl' ? '✓' : (c.state === 'excl' ? '✕' : '·')}</button>
                     </td>`)}
                   </tr>
                 `)}
@@ -5252,7 +5257,7 @@ class App extends Component {
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <button onClick=${v.refreshMediaLib} style="padding:7px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">⟳ Rafraîchir</button>
             ${!st.agencyEnabled && html`<span title="Aucun mot de passe agence sur ce serveur (secret SIG_AGENCY_PASSWORD) : l'espace agence refuse toute connexion. Voir Paramètres." style="padding:6px 11px;font-size:11.5px;font-weight:500;color:var(--muted-2);background:rgba(184,134,11,0.12);border:1px solid rgba(184,134,11,0.35);border-radius:999px;">Accès agence fermé</span>`}
-            <a href=${v.agencyUrl} target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:8px 15px;font-size:12.5px;font-weight:500;color:#fff;background:var(--muted-2);border-radius:999px;">🎬 Ouvrir l'espace Agence ↗</a>
+            <a href=${v.agencyUrl} target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:8px 15px;font-size:12.5px;font-weight:500;color:#fff;background:var(--muted-2);border-radius:999px;">Ouvrir l'espace Agence ↗</a>
             <button onClick=${() => v.copyLink(v.agencyUrl)} title="Copier le lien agence" style="padding:8px 13px;font-size:12px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--muted-2);cursor:pointer;">⎘ Lien</button>
           </div>
         </div>
@@ -5288,8 +5293,7 @@ class App extends Component {
     <div style="margin:0;display:flex;flex-direction:column;gap:16px;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
         <div>
-          <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${v.t('promo.title')}</h2>
-          <p style="margin:0;font-size:12.5px;color:var(--muted);max-width:820px;">${v.t('promo.subtitle')}</p>
+          <p style="margin:0;font-size:13px;color:var(--muted-2);line-height:1.5;max-width:820px;">${v.t('promo.subtitle')}</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <button onClick=${v.addPromoType} style="padding:9px 15px;font-size:12.5px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.t('promo.addType')}</button>
@@ -5303,7 +5307,7 @@ class App extends Component {
         </div>
         <div style="display:flex;flex-direction:column;gap:10px;">
           ${v.promoRows.map((t) => html`
-            <div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:${t.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};opacity:${t.active ? 1 : 0.72};">
+            <div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:${t.active ? '#fff' : 'var(--paper)'};opacity:${t.active ? 1 : 0.72};">
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                 <span style="display:inline-flex;align-items:center;gap:7px;padding:5px 13px 5px 11px;border-radius:999px;font-size:12px;font-weight:500;letter-spacing:0.04em;text-transform:uppercase;color:#fff;background:${t.color};flex:0 0 auto;"><span style="font-size:15px;line-height:1;">${t.icon}</span>${t.name || 'Sans nom'}</span>
                 <input value=${t.icon} onInput=${t.onIcon} maxlength="4" title="Icône (emoji)" style="width:56px;text-align:center;padding:9px 6px;font-size:16px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
@@ -5318,7 +5322,7 @@ class App extends Component {
               </div>
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;padding-left:2px;">
                 <input value=${t.descr} onInput=${t.onDescr} placeholder="Description courte (ex. Réduction sur un créneau horaire)" style="flex:1 1 320px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--muted-2);" />
-                <span style="font-size:11px;color:${t.used ? '#6E4A2B' : '#B8B2A8'};">${t.used ? v.t('common.usedBy', { n: t.used }) : v.t('common.unused')}</span>
+                <span style="font-size:11px;color:${t.used ? 'var(--muted-2)' : '#B8B2A8'};">${t.used ? v.t('common.usedBy', { n: t.used }) : v.t('common.unused')}</span>
               </div>
               <div style="margin-top:9px;padding-left:2px;">${momentTagCells(t.moCells)}</div>
             </div>
@@ -5344,8 +5348,7 @@ class App extends Component {
     <div style="margin:0;display:flex;flex-direction:column;gap:16px;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
         <div>
-          <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${v.t('campaign.title')}</h2>
-          <p style="margin:0;font-size:12.5px;color:var(--muted);max-width:840px;">${v.t('campaign.subtitle')}</p>
+          <p style="margin:0;font-size:13px;color:var(--muted-2);line-height:1.5;max-width:840px;">${v.t('campaign.subtitle')}</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <button onClick=${v.addCampaign} style="padding:9px 15px;font-size:12.5px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.t('campaign.add')}</button>
@@ -5359,7 +5362,7 @@ class App extends Component {
         </div>
         <div style="display:flex;flex-direction:column;gap:10px;">
           ${v.campaignRows.map((c) => html`
-            <div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:${c.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};opacity:${c.active ? 1 : 0.72};">
+            <div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:${c.active ? '#fff' : 'var(--paper)'};opacity:${c.active ? 1 : 0.72};">
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                 ${c.imageOk
                   ? html`<img src=${c.image} alt="" loading="lazy" style="width:34px;height:34px;border-radius:8px;object-fit:cover;flex:0 0 auto;border:1px solid var(--line);" />`
@@ -5393,7 +5396,7 @@ class App extends Component {
               </div>
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;">
                 <input value=${c.image} onInput=${c.onImage} placeholder="URL du visuel (optionnel — sinon la photo du produit lié est utilisée)" spellcheck="false" style="flex:1 1 320px;min-width:0;padding:7px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;" />
-                <span style="font-size:11px;color:${c.used ? '#6E4A2B' : '#B8B2A8'};">${c.used ? v.t('common.usedBy', { n: c.used }) : v.t('common.unused')}</span>
+                <span style="font-size:11px;color:${c.used ? 'var(--muted-2)' : '#B8B2A8'};">${c.used ? v.t('common.usedBy', { n: c.used }) : v.t('common.unused')}</span>
               </div>
               <div style="margin-top:9px;">${momentTagCells(c.moCells)}</div>
             </div>
@@ -5421,7 +5424,7 @@ class App extends Component {
         </div>
         <div style="display:flex;flex-direction:column;gap:10px;">
           ${v.tfbShowBundles && v.bundleRows.map((b) => html`
-            <div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:${b.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};opacity:${b.active ? 1 : 0.75};" data-bundle=${b.id}>
+            <div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:${b.active ? '#fff' : 'rgba(35,34,32,0.03)'};opacity:${b.active ? 1 : 0.75};" data-bundle=${b.id}>
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                 <span style="font-size:18px;">🎁</span>
                 <strong style="font-size:14px;color:var(--ink);flex:1 1 200px;min-width:0;overflow-wrap:anywhere;">${b.name}</strong>
@@ -5435,18 +5438,18 @@ class App extends Component {
                 ${b.comp.map((c) => html`<span title=${c.missing ? v.t('bundles.missingProduct') : ''} style="padding:4px 10px;border-radius:999px;font-size:12px;background:${c.missing ? 'rgba(141,29,44,0.07)' : '#fff'};border:1px solid ${c.missing ? 'rgba(141,29,44,0.3)' : 'rgba(35,34,32,0.12)'};color:${c.missing ? '#8D1D2C' : '#232220'};">${c.label}${c.missing ? ' ?' : ''}</span>`)}
               </div>
               <div style="margin-top:8px;font-size:12px;color:var(--muted-2);line-height:1.6;">
-                <div>🕒 ${b.when}${b.dates ? ` · 📅 ${b.dates}` : ''}</div>
-                <div>🏬 ${b.shops}</div>
+                <div>${metaIcon(ICON.clock)}${b.when}${b.dates ? ` · ${metaIcon(ICON.calendar)}${b.dates}` : ''}</div>
+                <div>${metaIcon(ICON.store)}${b.shops}</div>
               </div>
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;">
                 <input value=${b.img} onChange=${b.onImg} placeholder=${v.t('bundles.imgPlaceholder')} style="flex:1 1 260px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--muted-2);" />
-                <span style="font-size:11px;color:${b.used ? '#6E4A2B' : '#B8B2A8'};">${b.used ? v.t('common.usedBy', { n: b.used }) : v.t('common.unused')}</span>
+                <span style="font-size:11px;color:${b.used ? 'var(--muted-2)' : '#B8B2A8'};">${b.used ? v.t('common.usedBy', { n: b.used }) : v.t('common.unused')}</span>
                 <button onClick=${b.create} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.t('bundles.create')}</button>
               </div>
             </div>
           `)}
           ${v.tfbPromoRows.map((p) => html`
-            <div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:${p.active ? '#FBF8F2' : 'rgba(35,34,32,0.03)'};opacity:${p.active ? 1 : 0.75};" data-tfb-promo=${p.id}>
+            <div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:${p.active ? '#fff' : 'rgba(35,34,32,0.03)'};opacity:${p.active ? 1 : 0.75};" data-tfb-promo=${p.id}>
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                 <span style="font-size:18px;">${p.icon}</span>
                 <strong style="font-size:14px;color:var(--ink);flex:1 1 200px;min-width:0;overflow-wrap:anywhere;">${p.name}</strong>
@@ -5460,13 +5463,13 @@ class App extends Component {
                 ${p.targets.map((c) => html`<span title=${c.missing ? v.t('bundles.missingProduct') : ''} style="padding:4px 10px;border-radius:999px;font-size:12px;background:${c.missing ? 'rgba(141,29,44,0.07)' : '#fff'};border:1px solid ${c.missing ? 'rgba(141,29,44,0.3)' : 'rgba(35,34,32,0.12)'};color:${c.missing ? '#8D1D2C' : '#232220'};">${c.label}${c.missing ? ' ?' : ''}</span>`)}
               </div>`}
               <div style="margin-top:8px;font-size:12px;color:var(--muted-2);line-height:1.6;">
-                ${p.kind !== 'voucher' && html`<div>🕒 ${p.when}${p.dates ? ` · 📅 ${p.dates}` : ''}</div>`}
-                ${p.kind === 'voucher' && html`<div>🎟️ ${p.voucher}${p.dates ? ` · 📅 ${p.dates}` : ''}</div>`}
-                ${p.kind !== 'voucher' && html`<div>🏬 ${p.shops}</div>`}
+                ${p.kind !== 'voucher' && html`<div>${metaIcon(ICON.clock)}${p.when}${p.dates ? ` · ${metaIcon(ICON.calendar)}${p.dates}` : ''}</div>`}
+                ${p.kind === 'voucher' && html`<div>${metaIcon(ICON.ticket)}${p.voucher}${p.dates ? ` · ${metaIcon(ICON.calendar)}${p.dates}` : ''}</div>`}
+                ${p.kind !== 'voucher' && html`<div>${metaIcon(ICON.store)}${p.shops}</div>`}
               </div>
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;">
                 <input value=${p.img} onChange=${p.onImg} placeholder=${v.t('bundles.imgPlaceholder')} style="flex:1 1 260px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--muted-2);" />
-                <span style="font-size:11px;color:${p.used ? '#6E4A2B' : '#B8B2A8'};">${p.used ? v.t('common.usedBy', { n: p.used }) : v.t('common.unused')}</span>
+                <span style="font-size:11px;color:${p.used ? 'var(--muted-2)' : '#B8B2A8'};">${p.used ? v.t('common.usedBy', { n: p.used }) : v.t('common.unused')}</span>
                 <button onClick=${p.create} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.t('bundles.create')}</button>
               </div>
             </div>
@@ -5484,8 +5487,7 @@ class App extends Component {
     <div style="margin:0;display:flex;flex-direction:column;gap:16px;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
         <div style="min-width:0;flex:1 1 420px;">
-          <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${v.t('tr.title')}</h2>
-          <p style="margin:0;font-size:12.5px;color:var(--muted);max-width:840px;line-height:1.5;">${v.t('tr.subtitle')}</p>
+          <p style="margin:0;font-size:13px;color:var(--muted-2);line-height:1.5;max-width:840px;line-height:1.5;">${v.t('tr.subtitle')}</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);">${v.t('tr.lang')}
@@ -5500,10 +5502,10 @@ class App extends Component {
 
       <div style="padding:10px 13px;border-radius:12px;font-size:12px;line-height:1.6;background:${v.trConfigured ? 'rgba(63,122,82,0.08)' : 'rgba(201,123,74,0.12)'};color:${v.trConfigured ? '#2E6E4E' : '#8A5A2B'};" data-tr-status=${v.trConfigured ? 'ok' : 'off'}>
         <div>${v.trConfigured ? v.t('tr.claudeReady', { model: v.trModel }) : v.t('tr.claudeOff')}</div>
-        ${v.trRunning && html`<div>⏳ ${v.trProgress}</div>`}
+        ${v.trRunning && html`<div>${v.trProgress}</div>`}
         ${v.trJobText && html`<div style="color:var(--muted-2);">${v.trJobText}</div>`}
         ${v.trJobErrors && html`<div style="color:var(--accent);">⚠ ${v.trJobErrors}</div>`}
-        <div style="color:${v.trHasStores ? '#4A4640' : '#8A5A2B'};">🏬 ${v.trStoresText}</div>
+        <div style="color:${v.trHasStores ? '#4A4640' : '#8A5A2B'};">${metaIcon(ICON.store)}${v.trStoresText}</div>
       </div>
 
       <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:16px 20px 18px;">
@@ -5518,7 +5520,7 @@ class App extends Component {
             <h3 style="margin:10px 0 8px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${g.label} · ${g.n}</h3>
             <div style="display:flex;flex-direction:column;gap:6px;">
               ${g.rows.map((r) => html`
-                <div data-tr-row=${r.key} data-tr-state=${r.state} style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) auto;gap:10px;align-items:center;padding:8px 10px;border-radius:10px;border:1px solid ${r.state === 'proposed' ? 'rgba(141,29,44,0.22)' : 'rgba(35,34,32,0.08)'};background:${r.state === 'proposed' ? 'rgba(141,29,44,0.03)' : (r.state === 'validated' || r.state === 'erp' ? '#fff' : '#FBF8F2')};">
+                <div data-tr-row=${r.key} data-tr-state=${r.state} style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) auto;gap:10px;align-items:center;padding:8px 10px;border-radius:10px;border:1px solid ${r.state === 'proposed' ? 'rgba(141,29,44,0.22)' : 'rgba(35,34,32,0.08)'};background:${r.state === 'proposed' ? 'rgba(141,29,44,0.03)' : (r.state === 'validated' || r.state === 'erp' ? '#fff' : 'var(--paper)')};">
                   <div style="min-width:0;">
                     <div style="font-size:13px;color:var(--ink);font-weight:500;overflow-wrap:anywhere;">${r.source}</div>
                     <div style="font-size:11px;color:var(--muted);overflow-wrap:anywhere;">${r.label}${r.where ? ` · ${r.where}` : ''}</div>
@@ -5548,8 +5550,7 @@ class App extends Component {
   <div class="app__body">
     <div style="display:flex;flex-direction:column;gap:16px;">
       <div>
-        <h2 style="margin:0 0 4px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${v.t('planning.title')}</h2>
-        <p style="margin:0;font-size:12.5px;color:var(--muted);">${v.t('planning.subtitle')}</p>
+        <p style="margin:0;font-size:13px;color:var(--muted-2);line-height:1.5;">${v.t('planning.subtitle')}</p>
       </div>
 
       <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;">
@@ -5647,7 +5648,7 @@ class App extends Component {
                 </span>
               </div>
               <div class="pl-item" onDragOver=${col.onDragOver} onDragLeave=${col.onDragLeave} onDrop=${col.onDrop}
-                style="min-height:96px;border-radius:12px;border:2px dashed ${col.films.length ? 'rgba(35,34,32,0.14)' : 'rgba(35,34,32,0.2)'};background:${col.films.length ? '#fff' : '#FBF8F2'};display:flex;flex-direction:column;gap:7px;padding:12px;">
+                style="min-height:96px;border-radius:12px;border:2px dashed ${col.films.length ? 'rgba(35,34,32,0.14)' : 'rgba(35,34,32,0.2)'};background:${col.films.length ? '#fff' : 'var(--paper)'};display:flex;flex-direction:column;gap:7px;padding:12px;">
                 ${col.films.map((f) => html`
                   <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;background:${f.color}10;border-left:4px solid ${f.color};">
                     <span style="font-size:10px;font-weight:500;color:${f.color};opacity:0.75;">${f.order}</span>
@@ -5709,9 +5710,9 @@ class App extends Component {
             <tbody>
               ${v.planDayMatrix.map((p) => html`
                 <tr>
-                  <td style="padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap;">${p.name}${p.mode === 'continu' ? html` <span style="font-size:9.5px;font-weight:500;color:var(--muted-2);background:var(--chip);border-radius:999px;padding:1px 6px;">🔄 continu</span>` : ''}</td>
+                  <td style="padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap;">${p.name}${p.mode === 'continu' ? html` <span style="font-size:9.5px;font-weight:500;color:var(--muted-2);background:var(--chip);border-radius:999px;padding:1px 6px;">continu</span>` : ''}</td>
                   ${p.days.map((d) => html`<td style="padding:4px 8px;border-bottom:1px solid var(--line);text-align:center;">
-                    <button onClick=${d.toggle} title=${d.on ? 'Proposé ce jour — cliquer pour masquer' : 'Masqué ce jour — cliquer pour proposer'} style="width:30px;height:28px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;border:1px solid ${d.on ? 'rgba(63,122,82,0.4)' : 'rgba(35,34,32,0.14)'};background:${d.on ? 'rgba(63,122,82,0.14)' : '#FBF8F2'};color:${d.on ? '#2E6E4E' : '#C9C3B8'};">${d.on ? '✓' : '·'}</button>
+                    <button onClick=${d.toggle} title=${d.on ? 'Proposé ce jour — cliquer pour masquer' : 'Masqué ce jour — cliquer pour proposer'} style="width:30px;height:28px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;border:1px solid ${d.on ? 'rgba(63,122,82,0.4)' : 'rgba(35,34,32,0.14)'};background:${d.on ? 'rgba(63,122,82,0.14)' : '#fff'};color:${d.on ? '#2E6E4E' : '#C9C3B8'};">${d.on ? '✓' : '·'}</button>
                   </td>`)}
                 </tr>
               `)}
@@ -5728,8 +5729,10 @@ class App extends Component {
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:0 0 22px;">
       ${v.kpis.map((k) => html`
         <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:20px 22px;">
-          <div style="font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">${k.label}</div>
-          <div style="display:flex;align-items:baseline;gap:10px;"><span style="font-size:40px;font-weight:500;color:${k.color};line-height:1;">${k.value}</span><span style="font-size:13px;color:var(--muted);">${k.sub}</span></div>
+          <div style="font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin:0 0 10px;">${k.label}</div>
+          <div style="font-size:32px;font-weight:500;color:var(--ink);line-height:1.1;margin:0 0 10px;">${k.value}</div>
+          ${k.tone ? html`<span style=${`display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;font-size:11.5px;${k.tone === 'bad' ? 'background:rgba(141,29,44,0.08);color:var(--accent);' : 'background:var(--green-soft);color:var(--green);'}`}>${k.sub}</span>`
+            : html`<span style="font-size:13px;color:var(--muted-2);">${k.sub}</span>`}
         </div>
       `)}
     </div>
@@ -5755,7 +5758,7 @@ class App extends Component {
                 <span style="font-size:16px;font-weight:500;">${s.store}</span>
                 <button onClick=${s.startRename} title="Renommer le magasin / l'écran" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,0.8);border:1px solid var(--line);cursor:pointer;font-size:12px;color:var(--muted);">✎</button>
               `}
-              <span style="font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);background:rgba(35,34,32,0.07);border-radius:999px;padding:3px 10px;">${s.group}</span>
+              <span style="font-size:11.5px;font-weight:400;color:var(--muted-2);background:var(--chip);border-radius:999px;padding:3px 10px;">${s.group}</span>
               <button onClick=${s.copyFilm} title="Copier le lien direct du film de ce magasin (à la taille de son combo d'écrans)" style="padding:5px 11px;font-size:11.5px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;">⎘ Lien film</button>
               <a href=${s.filmUrl} target="_blank" title="Ouvrir le film de ce magasin" style="font-size:11.5px;font-weight:500;color:var(--accent);">↗</a>
             </div>
@@ -5863,7 +5866,7 @@ class App extends Component {
                   <div style="min-width:0;">
                     <div style="display:flex;align-items:center;gap:7px;"><a href=${p.playerUrl} target="_blank" title="Ouvrir ce player dans un onglet (test live)" style="font-size:14px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name} <span style="color:var(--faint);font-weight:400;">↗</span></a><span style=${p.kioskStyle}>${p.kioskLabel}</span></div>
                     <div style="font-size:11.5px;color:var(--muted);">${p.hw} · ${p.orient}</div>
-                    ${p.groupOptions.length ? html`<select value=${p.groupId} onChange=${p.setGroup} title=${v.t('sector.playerPick')} style="margin-top:5px;max-width:190px;padding:4px 7px;font-size:11px;font-weight:500;border:1px solid ${p.groupId ? 'rgba(92,88,82,0.4)' : 'rgba(35,34,32,0.16)'};border-radius:8px;background:${p.groupId ? 'rgba(92,88,82,0.08)' : '#FBF8F2'};color:${p.groupId ? '#6E4A2B' : '#4A4640'};cursor:pointer;">
+                    ${p.groupOptions.length ? html`<select value=${p.groupId} onChange=${p.setGroup} title=${v.t('sector.playerPick')} style="margin-top:5px;max-width:190px;padding:4px 7px;font-size:11px;font-weight:500;border:1px solid ${p.groupId ? 'rgba(92,88,82,0.4)' : 'rgba(35,34,32,0.16)'};border-radius:8px;background:${p.groupId ? 'rgba(92,88,82,0.08)' : '#fff'};color:${p.groupId ? 'var(--muted-2)' : '#4A4640'};cursor:pointer;">
                       <option value="">${v.t('sector.storeFilm')}</option>
                       ${p.groupOptions.map((g) => html`<option value=${g.id}>▦ ${g.name}</option>`)}
                     </select>` : ''}
@@ -5893,15 +5896,14 @@ class App extends Component {
   <div class="app__body">
     <div style="display:flex;flex-direction:column;gap:18px;">
       <div>
-        <h1 style="margin:0 0 4px;font-size:21px;font-weight:400;color:var(--ink);">${v.t('home.welcome')}</h1>
-        <p style="margin:0;font-size:13.5px;color:var(--muted);">${v.t('home.intro')} ${home.count === home.total ? v.t('home.allReady') : v.t('home.stepsReady', { n: home.count, total: home.total })}</p>
+        <p style="margin:0;font-size:13px;color:var(--muted-2);line-height:1.5;">${v.t('home.intro')} ${home.count === home.total ? v.t('home.allReady') : v.t('home.stepsReady', { n: home.count, total: home.total })}</p>
       </div>
 
       <!-- Ce qui passe maintenant -->
       <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px 22px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
         <div>
           <div style="font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">${v.t('home.nowPlaying')}</div>
-          <div style="font-size:21px;font-weight:400;color:var(--ink);">${home.film ? home.film.name : v.t('home.noFilm')} ${home.film && home.film.mode === 'continu' ? html`<span style="font-size:11.5px;font-weight:400;color:var(--ink);background:var(--chip);border-radius:999px;padding:4px 10px;margin-left:6px;vertical-align:3px;">🔄 continu</span>` : ''}</div>
+          <div style="font-size:21px;font-weight:400;color:var(--ink);">${home.film ? home.film.name : v.t('home.noFilm')} ${home.film && home.film.mode === 'continu' ? html`<span style="font-size:11.5px;font-weight:400;color:var(--ink);background:var(--chip);border-radius:999px;padding:4px 10px;margin-left:6px;vertical-align:3px;">continu</span>` : ''}</div>
           <div style="font-size:12.5px;color:var(--muted);margin-top:6px;">${v.t('home.moment')} : <strong style="color:var(--ink);font-weight:500;">${MOMENT_FULL[home.moment] || '—'}</strong> · ${v.t('home.activeWeek')} : <strong style="color:var(--ink);font-weight:500;">${home.week}</strong> · ${v.t('home.screens')} : <strong style="color:var(--ink);font-weight:500;">${home.online}/${home.screens}</strong> ${v.t('home.online')}</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -5914,8 +5916,8 @@ class App extends Component {
         <h3 style="margin:0 0 14px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${v.t('home.readyChecklist')}</h3>
         <div style="display:flex;flex-direction:column;gap:10px;">
           ${home.steps.map((s) => html`
-            <div style="display:flex;align-items:center;gap:14px;padding:13px 15px;border-radius:12px;background:${s.ok ? 'rgba(63,122,82,0.06)' : (s.soft ? '#FBF8F2' : 'rgba(201,123,74,0.07)')};border:1px solid ${s.ok ? 'rgba(63,122,82,0.25)' : (s.soft ? 'rgba(35,34,32,0.1)' : 'rgba(201,123,74,0.3)')};">
-              <span style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;font-size:15px;font-weight:500;background:${s.ok ? 'rgba(63,122,82,0.15)' : 'rgba(35,34,32,0.06)'};color:${s.ok ? '#2E6E4E' : '#B8B2A8'};">${s.ok ? '✓' : (s.soft ? '○' : '!')}</span>
+            <div style="display:flex;align-items:center;gap:14px;padding:13px 15px;border-radius:12px;background:#fff;border:1px solid var(--line);">
+              <span style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;font-size:14px;font-weight:500;${s.ok ? 'background:var(--green-soft);color:var(--green);' : (s.soft ? 'background:var(--chip);color:var(--faint);' : 'background:var(--warn-soft);color:var(--warn);')}">${s.ok ? icon(ICON.ok, 15) : (s.soft ? '○' : '!')}</span>
               <div style="flex:1 1 auto;min-width:0;">
                 <div style="font-size:14px;font-weight:500;color:var(--ink);">${s.label}${s.soft && !s.ok ? html` <span style="font-size:11px;font-weight:500;color:var(--muted);">· optionnel</span>` : ''}</div>
                 <div style="font-size:12px;color:var(--muted);">${s.hint}</div>
@@ -5998,7 +6000,7 @@ class App extends Component {
                 <button onClick=${ml.addToPlaylist} title="Ajouter à la playlist" style=${ml.addBtn}>＋</button>
                 <button onClick=${ml.copy} title="Copier" style=${ml.miniBtn}>⧉</button>
                 <button onClick=${ml.dup} title="Dupliquer" style=${ml.miniBtn}>⎘</button>
-                <button onClick=${ml.del} title="Supprimer de la bibliothèque" style=${ml.miniBtnDel}>🗑</button>
+                <button onClick=${ml.del} title="Supprimer de la bibliothèque" style=${ml.miniBtnDel}>${icon(ICON.trash, 14)}</button>
               </div>
             </div>
           </div>
@@ -6168,9 +6170,9 @@ class App extends Component {
                   <div style="margin-top:9px;font-size:12px;color:var(--muted-2);line-height:1.6;">
                     <div style="font-size:13.5px;font-weight:500;color:var(--ink);">${v.tfbPicked.icon} ${v.tfbPicked.name} · <span style="color:var(--accent);">${v.tfbPicked.label}</span></div>
                     ${v.tfbPicked.targets.length ? html`<div>${v.tfbPicked.targets.map((c) => c.label).join(' · ')}</div>` : ''}
-                    <div>🕒 ${v.tfbPicked.when}${v.tfbPicked.dates ? ` · 📅 ${v.tfbPicked.dates}` : ''}</div>
-                    <div>🏬 ${v.tfbPicked.shops}</div>
-                    ${v.tfbPicked.voucher && html`<div>🎟️ ${v.tfbPicked.voucher}</div>`}
+                    <div>${metaIcon(ICON.clock)}${v.tfbPicked.when}${v.tfbPicked.dates ? ` · ${metaIcon(ICON.calendar)}${v.tfbPicked.dates}` : ''}</div>
+                    <div>${metaIcon(ICON.store)}${v.tfbPicked.shops}</div>
+                    ${v.tfbPicked.voucher && html`<div>${metaIcon(ICON.ticket)}${v.tfbPicked.voucher}</div>`}
                     ${!v.tfbPicked.active && html`<div style="margin-top:4px;color:var(--accent);font-weight:500;">${v.t('tfb.inactiveNote')}</div>`}
                   </div>
                 `}
@@ -6235,8 +6237,8 @@ class App extends Component {
                 <div style="margin-top:12px;padding:11px 13px;border-radius:10px;background:var(--paper);border:1px solid var(--line);font-size:12px;color:var(--muted-2);line-height:1.6;">
                   <div style="font-size:14px;font-weight:500;color:var(--ink);">${v.bundlePicked.name} · ${v.bundlePicked.price}${v.bundlePicked.worth ? html` <span style="color:var(--muted);font-weight:400;text-decoration:line-through;">${v.bundlePicked.worth}</span>` : ''}</div>
                   <div>${v.bundlePicked.comp.map((c) => c.label).join(' + ')}</div>
-                  <div>🕒 ${v.bundlePicked.when}</div>
-                  <div>🏬 ${v.bundlePicked.shops}</div>
+                  <div>${metaIcon(ICON.clock)}${v.bundlePicked.when}</div>
+                  <div>${metaIcon(ICON.store)}${v.bundlePicked.shops}</div>
                   ${!v.bundlePicked.active && html`<div style="margin-top:4px;color:var(--accent);font-weight:500;">${v.t('bundles.inactiveNote')}</div>`}
                 </div>
               `}
@@ -6394,7 +6396,7 @@ class App extends Component {
             <!-- bascule : vidéo unique / vidéo surprise (dossier serveur) -->
             <div style="display:inline-flex;background:var(--chip);border-radius:8px;padding:3px;margin-bottom:14px;">
               <button onClick=${() => { if (v.isSurprise) v.toggleSurprise(); }} style="padding:7px 14px;font-size:12.5px;font-weight:500;border:none;border-radius:8px;cursor:pointer;${!v.isSurprise ? 'background:#fff;color:var(--ink);' : 'background:transparent;color:var(--muted);'}">Vidéo unique</button>
-              <button onClick=${() => { if (!v.isSurprise) v.toggleSurprise(); }} style="padding:7px 14px;font-size:12.5px;font-weight:500;border:none;border-radius:8px;cursor:pointer;${v.isSurprise ? 'background:#fff;color:var(--muted-2);' : 'background:transparent;color:var(--muted);'}">🎲 Vidéo surprise</button>
+              <button onClick=${() => { if (!v.isSurprise) v.toggleSurprise(); }} style="padding:7px 14px;font-size:12.5px;font-weight:500;border:none;border-radius:8px;cursor:pointer;${v.isSurprise ? 'background:#fff;color:var(--muted-2);' : 'background:transparent;color:var(--muted);'}">Vidéo surprise</button>
             </div>
 
             ${!v.isSurprise && html`
@@ -6405,7 +6407,7 @@ class App extends Component {
               `}
               <div style="display:flex;gap:10px;">
                 <label style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 12px;font-size:13px;font-weight:500;color:var(--accent);border:1px dashed rgba(141,29,44,0.4);border-radius:10px;background:rgba(141,29,44,0.04);cursor:pointer;">
-                  <span style="font-size:16px;">⬆</span><span>${v.hasVideo ? 'Remplacer la vidéo' : 'Importer une vidéo'}</span>
+                  <span style="display:inline-flex;">${icon(ICON.upload, 15)}</span><span>${v.hasVideo ? 'Remplacer la vidéo' : 'Importer une vidéo'}</span>
                   <input type="file" accept="video/mp4,video/webm,video/*" onChange=${v.onVideoFile} style="display:none;" />
                 </label>
                 ${v.hasVideo && html`<button onClick=${v.clearVideo} style="padding:11px 16px;font-size:13px;font-weight:500;color:var(--accent);background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:10px;cursor:pointer;">Retirer</button>`}
@@ -6430,7 +6432,7 @@ class App extends Component {
                       <button onClick=${() => v.nudgeVid(0, -1)} title="Monter la vidéo" style="border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;font-size:12px;">↑</button>
                       <span></span>
                       <button onClick=${() => v.nudgeVid(-1, 0)} title="Décaler à gauche" style="border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;font-size:12px;">←</button>
-                      <button onClick=${v.resetVid} title="Recentrer et remettre le zoom à 1×" style="border-radius:8px;border:1px solid var(--line);background:${v.vidMoved ? 'rgba(141,29,44,0.10)' : '#FBF8F2'};color:${v.vidMoved ? '#8D1D2C' : '#8A847C'};cursor:pointer;font-size:11px;">⌖</button>
+                      <button onClick=${v.resetVid} title="Recentrer et remettre le zoom à 1×" style="border-radius:8px;border:1px solid var(--line);background:${v.vidMoved ? 'rgba(141,29,44,0.10)' : '#fff'};color:${v.vidMoved ? '#8D1D2C' : '#8A847C'};cursor:pointer;font-size:11px;">⌖</button>
                       <button onClick=${() => v.nudgeVid(1, 0)} title="Décaler à droite" style="border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;font-size:12px;">→</button>
                       <span></span>
                       <button onClick=${() => v.nudgeVid(0, 1)} title="Descendre la vidéo" style="border-radius:8px;border:1px solid var(--line);background:var(--paper);cursor:pointer;font-size:12px;">↓</button>
@@ -6469,7 +6471,7 @@ class App extends Component {
             ${v.isSurprise && html`
               <p style="margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.5;">Le player pioche <strong>une vidéo au hasard</strong> dans le dossier serveur <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">public/surprise/</code> à chaque diffusion — pour surprendre le client. Ajoute des vidéos ici (≤ 18 Mo) ou dépose-les directement dans le dossier par SFTP (gros fichiers).</p>
               <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">
-                <span style="font-size:12.5px;font-weight:500;color:var(--muted-2);">🎲 ${v.surpriseList.length} vidéo(s) dans le dossier</span>
+                <span style="font-size:12.5px;font-weight:500;color:var(--muted-2);">${v.surpriseList.length} vidéo(s) dans le dossier</span>
                 <button onClick=${v.refreshSurprise} style="padding:6px 12px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">⟳ Rafraîchir</button>
               </div>
               ${v.surpriseList.length ? html`
@@ -6486,7 +6488,7 @@ class App extends Component {
                 </div>
               ` : html`<p style="margin:0 0 12px;font-size:12px;color:var(--faint);">Dossier vide — ajoute au moins une vidéo.</p>`}
               <label style="display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 12px;font-size:13px;font-weight:500;color:var(--muted-2);border:1px dashed rgba(92,88,82,0.45);border-radius:10px;background:rgba(92,88,82,0.05);cursor:${v.surpriseBusy ? 'wait' : 'pointer'};">
-                <span style="font-size:16px;">⬆</span><span>${v.surpriseBusy ? 'Envoi…' : 'Ajouter des vidéos au dossier'}</span>
+                <span style="display:inline-flex;">${icon(ICON.upload, 15)}</span><span>${v.surpriseBusy ? 'Envoi…' : 'Ajouter des vidéos au dossier'}</span>
                 <input type="file" accept="video/mp4,video/webm,video/*" multiple onChange=${v.onSurpriseFiles} style="display:none;" />
               </label>
             `}
@@ -6526,7 +6528,7 @@ class App extends Component {
                 </div>`}
                 <div style="display:flex;gap:10px;margin-bottom:10px;">
                   <label style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 12px;font-size:13px;font-weight:500;color:var(--accent);border:1px dashed rgba(141,29,44,0.4);border-radius:10px;background:rgba(141,29,44,0.04);cursor:${v.animBusy ? 'wait' : 'pointer'};">
-                    <span style="font-size:16px;">⬆</span><span>${v.animBusy ? 'Envoi…' : (url ? `Remplacer le ${label}` : `Importer un ${label}`)}</span>
+                    <span style="display:inline-flex;">${icon(ICON.upload, 15)}</span><span>${v.animBusy ? 'Envoi…' : (url ? `Remplacer le ${label}` : `Importer un ${label}`)}</span>
                     <input type="file" accept=".gif,.png,.webp,.svg,.jpg,.jpeg,.avif,.mp4,.webm,.mov,.m4v,.json,image/*,video/*,application/json" onChange=${onPick} style="display:none;" />
                   </label>
                   ${url && html`<button onClick=${clear} style="padding:11px 16px;font-size:13px;font-weight:500;color:var(--accent);background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:10px;cursor:pointer;">Retirer</button>`}
@@ -6614,12 +6616,12 @@ class App extends Component {
             ${secHead('items', 'Liste de prix — table produits', v.itemsSummary)}
             ${secOpen('items') && html`<div style=${secBody}>
             <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
-              <span style="font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--green);background:rgba(63,122,82,0.1);border:1px solid rgba(63,122,82,0.35);border-radius:999px;padding:3px 10px;">⛓ ${v.linkedCatName}</span>
+              <span style="font-size:11.5px;font-weight:500;color:var(--green);background:var(--green-soft);border:none;border-radius:999px;padding:3px 10px;">⛓ ${v.linkedCatName}</span>
             </div>
             <p style="margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.5;">Les lignes viennent de la table produits : noms, prix (et prix par magasin), actifs/inactifs suivent automatiquement. Modifie-les dans la table.</p>
             <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;">
               ${v.linkedRows.map((r) => html`
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:8px;background:${r.active ? '#FBF8F2' : 'rgba(35,34,32,0.04)'};opacity:${r.active ? 1 : 0.55};">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:8px;background:${r.active ? '#fff' : 'rgba(35,34,32,0.04)'};opacity:${r.active ? 1 : 0.55};">
                   <span style="font-size:13.5px;font-weight:500;">${r.name}${r.active ? '' : ' · masqué'}</span>
                   <span style="font-size:13.5px;font-weight:500;color:var(--accent);">${r.price} €</span>
                 </div>
@@ -6687,7 +6689,7 @@ class App extends Component {
                     `}
                     ${it.isPhoto && html`
                       <label style="flex:1 1 auto;display:flex;align-items:center;gap:8px;padding:9px 12px;font-size:12.5px;color:var(--muted);border:1px dashed rgba(35,34,32,0.28);border-radius:8px;background:var(--paper);cursor:pointer;">
-                        <span style="font-size:15px;">⬆</span><span>${it.photoLabel}</span>
+                        <span style="display:inline-flex;">${icon(ICON.upload, 15)}</span><span>${it.photoLabel}</span>
                         <input type="file" accept="image/*" onChange=${it.onPhoto} style="display:none;" />
                       </label>
                     `}
@@ -6847,7 +6849,7 @@ class App extends Component {
           ${v.filmMomentRows.length ? html`
             <div style="display:flex;flex-direction:column;gap:5px;">
               ${v.filmMomentRows.map((r) => html`
-                <div style="display:flex;align-items:center;gap:9px;padding:7px 11px;border-radius:8px;background:${r.empty ? 'rgba(141,29,44,0.06)' : '#FBF8F2'};border:1px solid ${r.empty ? 'rgba(141,29,44,0.25)' : 'rgba(35,34,32,0.08)'};">
+                <div style="display:flex;align-items:center;gap:9px;padding:7px 11px;border-radius:8px;background:${r.empty ? 'rgba(141,29,44,0.06)' : '#fff'};border:1px solid ${r.empty ? 'rgba(141,29,44,0.25)' : 'rgba(35,34,32,0.08)'};">
                   <span style="flex:0 0 auto;font-size:13px;">${r.icon}</span>
                   <span style="flex:0 0 auto;font-size:12.5px;font-weight:500;min-width:120px;">${r.name}</span>
                   <span style="flex:0 0 auto;font-size:11.5px;color:${r.empty ? '#8D1D2C' : '#8A847C'};">${r.empty ? '⚠ rien à ce moment — élément sauté' : r.detail}</span>
@@ -6866,7 +6868,7 @@ class App extends Component {
         <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:20px 22px;">
           <h3 style="margin:0 0 12px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">3 · Diffuser</h3>
           <p style="margin:0 0 14px;font-size:12px;color:var(--muted);line-height:1.55;">Un seul geste : <strong>Diffuser</strong>. La <strong>programmation</strong> et les <strong>magasins</strong> se règlent ci-dessus, sur le film ; le lien de visionnage s'affiche juste après.</p>
-          <button onClick=${v.openPublish} style="width:100%;box-sizing:border-box;padding:14px 18px;font-size:15px;font-weight:500;border-radius:8px;border:none;cursor:pointer;background:var(--accent);color:#fff;">🚀 Diffuser sur le réseau ↗</button>
+          <button onClick=${v.openPublish} style="width:100%;box-sizing:border-box;padding:14px 18px;font-size:15px;font-weight:500;border-radius:8px;border:none;cursor:pointer;background:var(--accent);color:#fff;">Diffuser sur le réseau ↗</button>
           <div style="margin-top:9px;display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--muted);">
             <span>${v.saved ? '✓ Enregistré automatiquement' : (v.dirty ? '✎ Modifications en cours…' : 'Enregistré automatiquement')}</span>
             <button onClick=${v.save} style="padding:4px 10px;font-size:11px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--muted-2);cursor:pointer;">Enregistrer maintenant</button>
@@ -6886,7 +6888,7 @@ class App extends Component {
     <div onClick=${v.closeOnb} style="position:fixed;inset:0;background:rgba(20,15,12,0.5);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:50;">
       <div onClick=${(e) => e.stopPropagation()} style="width:900px;max-width:95vw;max-height:90vh;overflow:auto;background:var(--paper);border-radius:12px;padding:24px 26px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-          <h2 style="margin:0;font-size:19px;font-weight:500;">🎓 Mise en route</h2>
+          <h2 style="margin:0;font-size:19px;font-weight:500;">Mise en route</h2>
           <button onClick=${v.closeOnb} style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:var(--chip);border:1px solid var(--line);cursor:pointer;font-size:14px;">✕</button>
         </div>
         <p style="margin:0 0 16px;font-size:12.5px;color:var(--muted);">Configure chaque magasin pas à pas : écran, langue, test, lien. ${v.onbDoneCount}/${v.onbCount} magasin(s) prêt(s).</p>
@@ -7031,7 +7033,7 @@ class App extends Component {
         <p style=${sub}>Le <strong>Continu</strong> se compose et se met à jour tout seul — recommandé. La <strong>Playlist</strong> est une séquence figée d'éléments que tu choisis.</p>
         <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:24px;">
           <button onClick=${() => this.setFilmMode('continu')} style=${card(wf.mode === 'continu')}>
-            <div style="font-size:16px;font-weight:500;color:var(--ink);">🔄 Continu ${wf.mode === 'continu' ? html`<span style="color:var(--green);">✓</span>` : ''}</div>
+            <div style="font-size:16px;font-weight:500;color:var(--ink);">Continu ${wf.mode === 'continu' ? html`<span style="color:var(--green);">✓</span>` : ''}</div>
             <div style="margin-top:5px;font-size:12.5px;color:var(--muted);line-height:1.5;">Boucle générée automatiquement depuis le catalogue, les saisons et les moments. S'adapte seule.</div>
           </button>
           <button onClick=${() => this.setFilmMode('playlist')} style=${card(wf.mode === 'playlist')}>
@@ -7045,7 +7047,7 @@ class App extends Component {
       body = html`
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
           <h2 style=${h2}>Contenu de la boucle</h2>
-          <button onClick=${() => this.wizExample()} style="padding:8px 14px;font-size:12.5px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">✨ Réglages d'exemple</button>
+          <button onClick=${() => this.wizExample()} style="padding:8px 14px;font-size:12.5px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">Réglages d'exemple</button>
         </div>
         <p style=${sub}>Les essentiels ci-dessous suffisent. Réglages fins (ratios, exceptions, durées) dans le Compositeur.</p>
         <div style="display:flex;flex-direction:column;gap:18px;max-width:640px;">
@@ -7094,7 +7096,7 @@ class App extends Component {
                 </label>`)}
             </div>
           </div>
-          <button onClick=${() => { this.setState({ wizard: false }); this.setView('composer'); }} style="align-self:flex-start;padding:8px 14px;font-size:12.5px;font-weight:500;color:var(--accent);background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:8px;cursor:pointer;">⚙ Réglages avancés dans le Compositeur ↗</button>
+          <button onClick=${() => { this.setState({ wizard: false }); this.setView('composer'); }} style="align-self:flex-start;padding:8px 14px;font-size:12.5px;font-weight:500;color:var(--accent);background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:8px;cursor:pointer;">Réglages avancés dans le Compositeur ↗</button>
         </div>`;
     } else if (st.wizStep === 1) {
       body = html`
@@ -7158,9 +7160,9 @@ class App extends Component {
         <h2 style=${h2}>Prêt à diffuser</h2>
         <p style=${sub}>Vérifie le récapitulatif, puis lance la diffusion réelle sur les écrans ciblés.</p>
         <div style="max-width:560px;display:flex;flex-direction:column;gap:10px;">
-          <div style="display:flex;justify-content:space-between;padding:12px 15px;border-radius:10px;background:#fff;border:1px solid var(--line);"><span style="color:var(--muted);">Film</span><strong>${wf.name} · ${wf.mode === 'continu' ? '🔄 Continu' : '▤ Playlist'}</strong></div>
+          <div style="display:flex;justify-content:space-between;padding:12px 15px;border-radius:10px;background:#fff;border:1px solid var(--line);"><span style="color:var(--muted);">Film</span><strong>${wf.name} · ${wf.mode === 'continu' ? 'Continu' : 'Playlist'}</strong></div>
           <div style="display:flex;justify-content:space-between;padding:12px 15px;border-radius:10px;background:#fff;border:1px solid var(--line);"><span style="color:var(--muted);">Écrans</span><strong>${targeted.length ? `${targeted.length} magasin(s)` : 'Tous les magasins'} · ${nScreens} écran(s)</strong></div>
-          <button onClick=${() => this.wizPublish()} disabled=${st.wizPublishing} style="margin-top:6px;padding:15px 22px;font-size:16px;font-weight:500;color:#fff;background:${st.wizPublishing ? '#B8B2A8' : '#8D1D2C'};border:none;border-radius:12px;cursor:${st.wizPublishing ? 'wait' : 'pointer'};">${st.wizPublishing ? 'Diffusion + tests live…' : '🚀 Diffuser sur le réseau'}</button>
+          <button onClick=${() => this.wizPublish()} disabled=${st.wizPublishing} style="margin-top:6px;padding:15px 22px;font-size:16px;font-weight:500;color:#fff;background:${st.wizPublishing ? '#B8B2A8' : '#8D1D2C'};border:none;border-radius:12px;cursor:${st.wizPublishing ? 'wait' : 'pointer'};">${st.wizPublishing ? 'Diffusion + tests live…' : 'Diffuser sur le réseau'}</button>
           <p style="margin:2px 0 0;font-size:11.5px;color:var(--muted);">La publication est versionnée et testée automatiquement ; le rapport s'ouvre juste après.</p>
         </div>`;
     }
