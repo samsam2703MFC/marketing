@@ -20,6 +20,7 @@ import {
   storeUnavailable, setStoreUnavailable, storeDataStamp, endOfDayBrussels,
   loadBundles, saveSyncedBundles, setBundleImg,
   loadTfbPromos, saveSyncedTfbPromos, setTfbPromoImg, TFB_PROMO_KINDS,
+  loadTfbBadges, saveTfbBadges, tfbBadgeFor, tfbFamilyOf, TFB_FAMILIES,
   translationSources, validateTranslations, rejectTranslations, setTranslation, applyTranslations,
 } from './db.js';
 import { tfbConfigured, tfbPublicConfig, fetchBundles, fetchPromotions, fetchShops, tfbAuthBackoff } from './tfbuddy.js';
@@ -239,6 +240,8 @@ function applyBundles(snap, storeId, date) {
   const prods = new Map(db.prepare('SELECT id, name, price, img, src FROM sig_products').all().map((p) => [p.id, p]));
   const lang = (storeId && (db.prepare('SELECT lang FROM sig_stores WHERE id = ?').get(storeId) || {}).lang) || 'fr';
   const today = brusselsDay(date);
+  // Style de badge choisi pour la famille « bundle » (sinon la puce maison).
+  const badge = tfbBadgeFor('bundle');
   const keep = [];
   for (const m of snap.modules) {
     if (m.type !== 'bundle') { keep.push(m); continue; }
@@ -254,6 +257,7 @@ function applyBundles(snap, storeId, date) {
         : { name: it.name || `Produit ${it.extProductId}`, price: '', img: '', src: 'illus', active: true, qty: it.qty };
     });
     m.bundle = { id: b.id, name: b.name, descr: b.descr, price: b.price, img: b.img, slots: b.schedule, lang };
+    if (badge) m.promo = { ...badge };
     keep.push(m);
   }
   const ids = new Set(keep.map((m) => m.id));
@@ -276,6 +280,10 @@ function applyTfbPromos(snap, storeId, date) {
   const prods = new Map(db.prepare('SELECT id, name, price, img, src, category_id, active FROM sig_products').all().map((p) => [p.id, p]));
   const lang = (storeId && (db.prepare('SELECT lang FROM sig_stores WHERE id = ?').get(storeId) || {}).lang) || 'fr';
   const today = brusselsDay(date);
+  // Badge : le style choisi pour la famille de la promotion (Promotions →
+  // « Style des badges ») ; à défaut, le sous-type propre à l'élément.
+  const badges = loadTfbBadges();
+  const types = new Map(db.prepare('SELECT * FROM sig_promo_types').all().map((t) => [t.id, t]));
   const keep = [];
   for (const m of snap.modules) {
     if (!m.tfbRef) { keep.push(m); continue; }
@@ -295,6 +303,8 @@ function applyTfbPromos(snap, storeId, date) {
     const hp = heroId ? prods.get(heroId) : null;
     m.items = hp ? [{ name: hp.name, price: hp.price, img: hp.img, src: hp.src, active: true, productId: hp.id }] : [];
     m.tfb = { id: p.id, kind: p.kind, name: p.name, descr: p.descr, mech: p.mech, slots: p.schedule, img: p.img, lang };
+    const badge = tfbBadgeFor(tfbFamilyOf(p), badges, types);
+    if (badge) m.promo = badge;
     keep.push(m);
   }
   const keptIds = new Set(keep.map((m) => m.id));
@@ -380,6 +390,8 @@ export function startBundleSync() {
 }
 const bundlesJson = () => ({
   bundles: loadBundles(), promos: loadTfbPromos(), sync: bundleSyncStatus(), tfbuddy: tfbPublicConfig(),
+  // Style des badges : famille TFBuddy → sous-type qui l'habille ('' = maison).
+  badges: loadTfbBadges(),
   // Noms des magasins : la page Promotions les montre sans charger le réseau.
   stores: getDb().prepare('SELECT id, name FROM sig_stores ORDER BY name').all(),
 });
@@ -1227,6 +1239,22 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       if (mb && req.method === 'PATCH') {
         const body = await readBody();
         if (!setBundleImg(mb[1], body.img)) return send(404, { error: 'bundle inconnu' });
+        scheduleMirror();
+        return send(200, { ok: true, ...bundlesJson() });
+      }
+      // Style des badges par famille : { badges: { famille: idSousType | '' } }.
+      // Familles inconnues refusées ; un sous-type absent de la table aussi
+      // (sinon le badge retomberait en silence sur le style maison).
+      if (path === '/tfb-badges' && req.method === 'PUT') {
+        const body = await readBody();
+        const map = body && typeof body.badges === 'object' && body.badges ? body.badges : null;
+        if (!map) return send(400, { error: 'badges requis' });
+        const bad = Object.keys(map).filter((f) => !TFB_FAMILIES.includes(f));
+        if (bad.length) return send(400, { error: `famille inconnue : ${bad.join(', ')}` });
+        const known = new Set(loadPromoTypes().map((t) => t.id));
+        const missing = Object.values(map).map((v) => String(v == null ? '' : v).trim()).filter((v) => v && !known.has(v));
+        if (missing.length) return send(400, { error: `sous-type inconnu : ${missing.join(', ')}` });
+        saveTfbBadges(map);
         scheduleMirror();
         return send(200, { ok: true, ...bundlesJson() });
       }

@@ -562,8 +562,11 @@ function renderModuleInner(h, m, lt, opts) {
     const P0 = m.pos || newPos();
     const cover = m.layout === 'cover' && !!b.img;
     const hero = m.layout === 'hero-right';
-    const chip = (dark) => h('div', { key: 'bchip', style: { display: 'inline-flex', alignItems: 'center', gap: 30, alignSelf: (hero || cover) ? 'flex-start' : 'center', background: dark ? 'rgba(255,255,255,0.18)' : RUBY, color: '#fff', borderRadius: 999, padding: '28px 60px 28px 46px', fontFamily: FUI, fontWeight: 500, fontSize: 88, letterSpacing: '0.12em', textTransform: 'uppercase' } },
-      h('span', { style: { fontSize: 100, lineHeight: 1 } }, '🎁'), h('span', null, L.bundle));
+    // Puce : le style choisi pour la famille « bundle » (m.promo, Promotions →
+    // style des badges) ; à défaut, la puce maison « 🎁 Bundle » rubis.
+    const pb = m.promo || null;
+    const chip = (dark) => h('div', { key: 'bchip', style: { display: 'inline-flex', alignItems: 'center', gap: 30, alignSelf: (hero || cover) ? 'flex-start' : 'center', background: dark ? 'rgba(255,255,255,0.18)' : ((pb && pb.color) || RUBY), color: '#fff', borderRadius: 999, padding: '28px 60px 28px 46px', fontFamily: FUI, fontWeight: 500, fontSize: 88, letterSpacing: '0.12em', textTransform: 'uppercase' } },
+      h('span', { style: { fontSize: 100, lineHeight: 1 } }, (pb && pb.icon) || '🎁'), h('span', null, (pb && pb.name) || L.bundle));
     const priceBlock = (dark) => (price == null ? null : h('div', { key: 'bprice', style: { display: 'flex', alignItems: 'baseline', gap: 70, flexWrap: 'wrap', justifyContent: (hero || cover) ? 'flex-start' : 'center' } },
       h('div', { style: { fontFamily: FUI, fontWeight: 300, fontSize: 420, lineHeight: 1, color: dark ? '#fff' : RUBY } }, eur(price), h('span', { style: { fontSize: 190, verticalAlign: 'super', marginLeft: 14 } }, '€')),
       save != null ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },

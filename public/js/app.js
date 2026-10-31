@@ -61,6 +61,11 @@ const ICON = {
   ok: 'M20 6L9 17l-5-5',
 };
 const metaIcon = (d) => html`<span style="display:inline-flex;vertical-align:-2px;margin-right:5px;color:var(--muted);">${icon(d, 13)}</span>`;
+// Familles TFBuddy habillées par un style de badge (miroir de TFB_FAMILIES,
+// serveur) : une remise programmée sur créneaux est la famille « happy hour ».
+const TFB_FAMILIES = ['bundle', 'buy_x_get_y', 'quantity', 'happy_hour', 'scheduled_discount', 'voucher'];
+// Badge d'une promotion tel qu'à l'écran (icône · libellé, couleur du style).
+const badgePill = (b) => html`<span data-badge style="display:inline-flex;align-items:center;gap:6px;padding:4px 11px 4px 9px;border-radius:999px;font-size:11px;font-weight:500;letter-spacing:0.05em;text-transform:uppercase;color:#fff;background:${b.color};flex:0 0 auto;white-space:nowrap;"><span style="font-size:13px;line-height:1;">${b.icon}</span>${b.name}</span>`;
 const icon = (d, size = 16) => html`<svg width=${size} height=${size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d=${d} /></svg>`;
 // Écrans de la régie, regroupés comme le menu du module Marketing.
 // `view` : un écran ; `act` : une action (mise en route, rapport).
@@ -210,6 +215,8 @@ class App extends Component {
     animBusy: false,   // upload d'un fichier d'animation en cours
     htmlVarSel: '', filmMomentSel: '',
     promoTypes: [], promoDraft: null, promoDirty: false, promoBusy: false, promoSavedAt: 0,
+    // Style des badges : famille TFBuddy → sous-type qui l'habille ('' = maison).
+    tfbBadges: {}, badgeBusy: false,
     // Catégories de la bibliothèque : éditables dans les Paramètres (nom,
     // couleur, table de la régie qui les alimente).
     libCats: [], libSources: [], libCatDraft: null, libCatDirty: false, libCatBusy: false,
@@ -335,7 +342,7 @@ class App extends Component {
         promoTypes: pt.promoTypes || [],
         campaigns: cmp.campaigns || [],
         bundles: bdl.bundles || [], bundleSync: bdl.sync || {}, tfbuddy: bdl.tfbuddy || {}, bundleStores: bdl.stores || [],
-        tfbPromos: bdl.promos || [],
+        tfbPromos: bdl.promos || [], tfbBadges: bdl.badges || {},
         libCats: lc.libCategories || [], libSources: lc.libSources || [],
         ingredients: ing.ingredients || [],
         sequences: sq.sequences || [],
@@ -496,8 +503,44 @@ class App extends Component {
   // suivent instantanément, sans dépendre de l'instantané pris au moment du lien.
   // Badge de promotion résolu pour l'aperçu (icône · couleur · libellé du
   // sous-type), depuis la liste dynamique sig_promo_types.
+  // Famille TFBuddy d'une promotion — miroir de tfbFamilyOf (serveur) : une
+  // remise programmée sur créneaux (jours et heures) est la famille « happy hour ».
+  tfbFamilyOf(p) {
+    if (!p) return '';
+    if (p.kind === 'scheduled_discount') return (p.schedule || []).length ? 'happy_hour' : 'scheduled_discount';
+    return p.kind || '';
+  }
+  // Badge d'une famille : le sous-type choisi dans Promotions → Style des
+  // badges ; null = badge maison (ou sous-type supprimé depuis).
+  familyBadge(family) {
+    const id = (this.state.tfbBadges || {})[family];
+    const t = id ? (this.state.promoTypes || []).find((x) => x.id === id) : null;
+    return t ? { type: t.id, name: t.name, icon: t.icon, color: t.color } : null;
+  }
+  // Badge montré en régie pour une famille : le style choisi, sinon le repli
+  // — puce maison « 🎁 Bundle » rubis, ou le sous-type propre à chaque élément.
+  familyBadgeShown(family) {
+    return this.familyBadge(family) || (family === 'bundle'
+      ? { icon: '🎁', name: this.t('tfb.kind.bundle'), color: '#8D1D2C', house: true }
+      : { icon: '🏷️', name: this.t('badges.ownShort'), color: '#7a736a', house: true });
+  }
+  async setFamilyBadge(family, id) {
+    if (this.state.badgeBusy) return;
+    this.setState({ badgeBusy: true });
+    try {
+      const r = await api('PUT', '/tfb-badges', { badges: { [family]: id } });
+      this.setState({ badgeBusy: false, tfbBadges: r.badges || {} });
+      this.showToast(this.t('badges.saved'));
+    } catch (e) { this.setState({ badgeBusy: false }); this.showToast(`Erreur : ${e.message}`); }
+  }
   promoBadge(m) {
     if (!m || m.type !== 'promotion') return undefined;
+    // Reliée à TFBuddy : le style choisi pour sa famille (comme à l'écran).
+    if (m.tfbRef) {
+      const p = (this.state.tfbPromos || []).find((x) => x.id === m.tfbRef);
+      const fb = p && this.familyBadge(this.tfbFamilyOf(p));
+      if (fb) return fb;
+    }
     const t = (this.state.promoTypes || []).find((x) => x.id === m.promoType);
     return t
       ? { type: t.id, name: t.name, icon: t.icon, color: t.color }
@@ -598,6 +641,7 @@ class App extends Component {
         voucher: b.activation === 'VOUCHER_ONLY', img: b.img || '',
         used: (st.library || []).filter((x) => x.type === 'bundle' && x.bundleRef === b.id).length,
         ...describe(b),
+        badge: this.familyBadgeShown('bundle'),
         onImg: (e) => { const v = e.target.value.trim(); if (v !== (b.img || '')) this.setBundleImg(b.id, v); },
         create: () => this.addBundleElement(b.id),
       })),
@@ -620,7 +664,7 @@ class App extends Component {
     this.setState({ bundleBusy: true });
     try {
       const r = await api('POST', '/bundles/sync');
-      this.setState({ bundleBusy: false, bundles: r.bundles || [], tfbPromos: r.promos || [], bundleSync: r.sync || {}, tfbuddy: r.tfbuddy || {}, bundleStores: r.stores || this.state.bundleStores || [] });
+      this.setState({ bundleBusy: false, bundles: r.bundles || [], tfbPromos: r.promos || [], tfbBadges: r.badges || this.state.tfbBadges || {}, bundleSync: r.sync || {}, tfbuddy: r.tfbuddy || {}, bundleStores: r.stores || this.state.bundleStores || [] });
       this.showToast(r.ok ? this.t('tfb.synced', { n: (r.bundles || []).length + (r.promos || []).length }) : `TFBuddy : ${(r.sync && r.sync.error) || 'erreur'}`);
     } catch (e) { this.setState({ bundleBusy: false }); this.showToast(`Erreur : ${e.message}`); }
   }
@@ -795,8 +839,9 @@ class App extends Component {
   // ---- Promotions TFBuddy (« X achetés = Y offert », quantité, remise
   // programmée, bon d'achat) : un élément « promotion » peut en suivre une.
   tfbPromoTypeFor(p) {
-    const want = p.kind === 'scheduled_discount' ? ((p.schedule || []).length ? 'happy-hour' : 'scheduled')
-      : p.kind === 'voucher' ? 'voucher' : 'bxgy';
+    const want = (this.state.tfbBadges || {})[this.tfbFamilyOf(p)]
+      || (p.kind === 'scheduled_discount' ? ((p.schedule || []).length ? 'happy-hour' : 'scheduled')
+        : p.kind === 'voucher' ? 'voucher' : 'bxgy');
     const types = this.state.promoTypes || [];
     return (types.find((t) => t.id === want) || types.find((t) => t.active !== false) || {}).id || '';
   }
@@ -871,6 +916,7 @@ class App extends Component {
         voucherOnly: p.activation === 'VOUCHER_ONLY', img: p.img || '',
         used: (st.library || []).filter((x) => x.type === 'promotion' && x.tfbRef === p.id).length,
         ...describe(p),
+        badge: this.familyBadgeShown(this.tfbFamilyOf(p)),
         onImg: (e) => { const v = e.target.value.trim(); if (v !== (p.img || '')) this.setTfbPromoImg(p.id, v); },
         create: () => this.addTfbPromoElement(p.id),
       })),
@@ -1031,7 +1077,8 @@ class App extends Component {
     // Élément « bundle » : le bundle TFBuddy et ses produits.
     if (m && m.type === 'bundle') {
       const bi = this.bundleInfo(m);
-      return bi ? { ...m, bundle: bi.bundle, items: bi.items } : { ...m, items: [] };
+      const fb = this.familyBadge('bundle');
+      return bi ? { ...m, bundle: bi.bundle, items: bi.items, ...(fb ? { promo: fb } : {}) } : { ...m, items: [] };
     }
     // Élément « promotion » relié à TFBuddy : sa mécanique, son produit.
     if (m && m.type === 'promotion' && m.tfbRef) {
@@ -3530,7 +3577,7 @@ class App extends Component {
       } else if (st.view === 'promotions') {
         arr.push(crumb(T('nav.composer'), () => this.setView('composer'), false));
         arr.push(crumb(T('nav.promotions'), null, false));
-        arr.push(crumb(T('crumb.promoTypes', { n: (st.promoDraft || st.promoTypes || []).length }) + unsaved(st.promoDirty), null, true));
+        arr.push(crumb(T('crumb.tfbPromos', { n: (st.bundles || []).length + (st.tfbPromos || []).length }) + unsaved(st.promoDirty), null, true));
       } else if (st.view === 'campaigns') {
         arr.push(crumb(T('nav.composer'), () => this.setView('composer'), false));
         arr.push(crumb(T('nav.campaigns'), null, false));
@@ -3710,13 +3757,32 @@ class App extends Component {
       // -- promotions (sous-types dynamiques) --
       promoDirty: st.promoDirty, promoBusy: st.promoBusy,
       promoCount: (st.promoDraft || st.promoTypes || []).length,
+      // -- style des badges : une ligne par famille TFBuddy --
+      badgeFamilies: TFB_FAMILIES.map((f) => {
+        const cur = (st.tfbBadges || {})[f] || '';
+        return {
+          id: f, label: this.t(`badges.fam.${f}`), cur,
+          count: f === 'bundle' ? (st.bundles || []).length : (st.tfbPromos || []).filter((x) => this.tfbFamilyOf(x) === f).length,
+          houseLabel: f === 'bundle' ? this.t('badges.house') : this.t('badges.own'),
+          missing: !!cur && !this.familyBadge(f),
+          preview: this.familyBadgeShown(f),
+          onPick: (e) => this.setFamilyBadge(f, e.target.value),
+        };
+      }),
+      badgeStyleOptions: (st.promoTypes || []).map((t) => ({ id: t.id, label: `${t.icon || ''} ${t.name}${t.active === false ? ` (${this.t('styles.inactive')})` : ''}` })),
+      badgeBusy: !!st.badgeBusy,
       addPromoType: () => this.addPromoType(), savePromoTypes: () => this.savePromoTypesDraft(),
       promoRows: (st.promoDraft || st.promoTypes || []).map((t, i, arr) => {
-        // Nombre d'éléments « promotion » de la bibliothèque qui utilisent ce sous-type.
-        const used = (st.library || []).filter((m) => m.type === 'promotion' && m.promoType === t.id).length;
+        // Familles TFBuddy que ce style habille (Style des badges).
+        const fams = TFB_FAMILIES.filter((f) => (st.tfbBadges || {})[f] === t.id);
+        // Éléments qui portent ce badge à l'écran : promotions (badge de leur
+        // famille quand elles sont reliées) et bundles si ce style les habille.
+        const used = (st.library || []).filter((m) => (m.type === 'promotion' && (this.promoBadge(m) || {}).type === t.id)
+          || (m.type === 'bundle' && fams.includes('bundle'))).length;
         return {
           id: t.id, name: t.name, icon: t.icon || '🏷️', color: t.color || '#C0392B',
           descr: t.descr || '', active: t.active !== false, used,
+          dresses: fams.map((f) => this.t(`badges.fam.${f}`)),
           // La promotion porte elle-même son tag de période (matin/midi/aprem).
           moCells: this.entityMomentCells('promotion', t.id),
           isFirst: i === 0, isLast: i === arr.length - 1,
@@ -3727,7 +3793,10 @@ class App extends Component {
           toggleActive: () => this.updatePromoType(t.id, { active: t.active === false }),
           up: () => this.movePromoType(t.id, -1),
           down: () => this.movePromoType(t.id, 1),
-          del: () => { if (used === 0 || window.confirm(`${used} élément(s) utilisent « ${t.name} ». Supprimer quand même ce sous-type ?`)) this.delPromoType(t.id); },
+          del: () => {
+            const warn = [used ? this.t('styles.delUsed', { n: used, name: t.name }) : '', fams.length ? this.t('styles.delDresses', { list: fams.map((f) => this.t(`badges.fam.${f}`)).join(', ') }) : ''].filter(Boolean);
+            if (!warn.length || window.confirm(`${warn.join('\n')}\n${this.t('styles.delConfirm')}`)) this.delPromoType(t.id);
+          },
         };
       }),
       // -- suites : mini montage à la main dans un film automatique --
@@ -4113,6 +4182,14 @@ class App extends Component {
         pick: () => this.setSelField('promoType', t.id),
       })),
       curPromoType: m.promoType || '',
+      // Reliée à TFBuddy et famille habillée : le badge suit la famille.
+      promoFamily: (() => {
+        if (!isPromo || !m.tfbRef) return null;
+        const p = (st.tfbPromos || []).find((x) => x.id === m.tfbRef);
+        const f = p ? this.tfbFamilyOf(p) : '';
+        const b = f ? this.familyBadge(f) : null;
+        return b ? { label: this.t(`badges.fam.${f}`), badge: b } : null;
+      })(),
       hasPromoTypes: (st.promoTypes || []).some((t) => t.active !== false),
       promoUsesProduct: isPromo && (m.layout === 'hero-right' || m.layout === 'hero-left'),
       goPromoTypes: () => this.openPromotions(),
@@ -5457,19 +5534,110 @@ class App extends Component {
   ${v.isPromotionsView && html`
   <div class="app__body">
     <div style="margin:0;display:flex;flex-direction:column;gap:16px;">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
-        <div>
-          <p style="margin:0;font-size:13px;color:var(--muted-2);line-height:1.5;max-width:820px;">${v.t('promo.subtitle')}</p>
+      <p style="margin:0;font-size:13px;color:var(--muted-2);line-height:1.5;max-width:820px;">${v.t('promo.subtitle')}</p>
+
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;" data-bundles data-tfb>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+          <div style="min-width:0;flex:1 1 320px;">
+            <h3 style="margin:0 0 4px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${v.t('tfb.title', { n: v.tfbTotal })}</h3>
+          </div>
+          <button onClick=${v.syncBundles} disabled=${v.bundleBusy || v.bundleState === 'off'} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:500;border-radius:8px;border:1px solid var(--accent);cursor:${v.bundleBusy || v.bundleState === 'off' ? 'not-allowed' : 'pointer'};background:${v.bundleState === 'off' ? 'rgba(35,34,32,0.08)' : '#8D1D2C'};color:${v.bundleState === 'off' ? '#8A847C' : '#fff'};">${v.bundleBusy ? v.t('bundles.syncing') : v.t('bundles.sync')}</button>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <button onClick=${v.addPromoType} style="padding:9px 15px;font-size:12.5px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.t('promo.addType')}</button>
-          <button onClick=${v.savePromoTypes} disabled=${!v.promoDirty || v.promoBusy} style="padding:9px 18px;font-size:13px;font-weight:500;border-radius:8px;border:1px solid ${v.promoDirty ? 'var(--accent)' : 'var(--line)'};cursor:${v.promoDirty && !v.promoBusy ? 'pointer' : 'not-allowed'};background:${v.promoDirty ? 'var(--accent)' : '#fff'};color:${v.promoDirty ? '#fff' : 'var(--muted)'};">${v.promoBusy ? v.t('common.saving') : (v.promoDirty ? v.t('common.save') : v.t('common.saved'))}</button>
+        <div style="padding:9px 12px;border-radius:10px;font-size:12px;line-height:1.5;margin-bottom:12px;background:${v.bundleState === 'ok' ? 'rgba(63,122,82,0.08)' : (v.bundleState === 'error' ? 'rgba(141,29,44,0.07)' : 'rgba(35,34,32,0.05)')};color:${v.bundleState === 'ok' ? '#2E6E4E' : (v.bundleState === 'error' ? '#8D1D2C' : '#6E675E')};" data-bundle-status=${v.bundleState}>
+          ${v.bundleState === 'ok' ? '● ' : (v.bundleState === 'error' ? '⚠ ' : '○ ')}${v.bundleStatusText}
+          ${v.bundleWarnings.map((w) => html`<div style="color:var(--muted-2);margin-top:3px;">⚠ ${w}</div>`)}
+          ${v.tfbKindLines.map((l) => html`<div style="margin-top:3px;color:${l.ok ? '#4A4640' : '#8D1D2C'};">${l.ok ? '' : '⚠ '}${l.text}</div>`)}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          ${v.tfbFilters.map((f) => html`<button onClick=${f.pick} data-tfb-filter=${f.id} style="padding:6px 13px;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid ${f.active ? 'var(--accent)' : 'var(--line)'};background:${f.active ? 'var(--accent)' : '#fff'};color:${f.active ? '#fff' : 'var(--muted-2)'};">${f.label}</button>`)}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          ${v.tfbShowBundles && v.bundleRows.map((b) => html`
+            <div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:${b.active ? '#fff' : 'rgba(35,34,32,0.03)'};opacity:${b.active ? 1 : 0.75};" data-bundle=${b.id}>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                ${badgePill(b.badge)}
+                <strong style="font-size:14px;color:var(--ink);flex:1 1 200px;min-width:0;overflow-wrap:anywhere;">${b.name}</strong>
+                <span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:500;letter-spacing:0.06em;color:#fff;background:${b.active ? '#2E6E4E' : (b.status === 'DRAFT' ? '#B8860B' : '#8A847C')};">${b.status}</span>
+                ${b.voucher && html`<span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:500;color:var(--muted-2);background:rgba(201,123,74,0.15);">${v.t('bundles.voucher')}</span>`}
+                <span style="font-size:16px;font-weight:500;color:var(--accent);white-space:nowrap;">${b.price}</span>
+                ${b.worth && html`<span style="font-size:12px;color:var(--muted);text-decoration:line-through;white-space:nowrap;">${b.worth}</span>`}
+              </div>
+              ${b.descr && html`<div style="margin-top:4px;font-size:12px;color:var(--muted-2);">${b.descr}</div>`}
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;">
+                ${b.comp.map((c) => html`<span title=${c.missing ? v.t('bundles.missingProduct') : ''} style="padding:4px 10px;border-radius:999px;font-size:12px;background:${c.missing ? 'rgba(141,29,44,0.07)' : '#fff'};border:1px solid ${c.missing ? 'rgba(141,29,44,0.3)' : 'rgba(35,34,32,0.12)'};color:${c.missing ? '#8D1D2C' : '#232220'};">${c.label}${c.missing ? ' ?' : ''}</span>`)}
+              </div>
+              <div style="margin-top:8px;font-size:12px;color:var(--muted-2);line-height:1.6;">
+                <div>${metaIcon(ICON.clock)}${b.when}${b.dates ? html` · ${metaIcon(ICON.calendar)}${b.dates}` : ''}</div>
+                <div>${metaIcon(ICON.store)}${b.shops}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;">
+                <input value=${b.img} onChange=${b.onImg} placeholder=${v.t('bundles.imgPlaceholder')} style="flex:1 1 260px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--muted-2);" />
+                <span style="font-size:11px;color:${b.used ? 'var(--muted-2)' : '#B8B2A8'};">${b.used ? v.t('common.usedBy', { n: b.used }) : v.t('common.unused')}</span>
+                <button onClick=${b.create} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.t('bundles.create')}</button>
+              </div>
+            </div>
+          `)}
+          ${v.tfbPromoRows.map((p) => html`
+            <div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:${p.active ? '#fff' : 'rgba(35,34,32,0.03)'};opacity:${p.active ? 1 : 0.75};" data-tfb-promo=${p.id}>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                ${badgePill(p.badge)}
+                <strong style="font-size:14px;color:var(--ink);flex:1 1 200px;min-width:0;overflow-wrap:anywhere;">${p.name}</strong>
+                <span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:500;color:var(--muted-2);background:rgba(35,34,32,0.07);">${p.kindLabel}</span>
+                <span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:500;letter-spacing:0.06em;color:#fff;background:${p.active ? '#2E6E4E' : (p.status === 'DRAFT' ? '#B8860B' : '#8A847C')};">${p.status}</span>
+                ${p.voucherOnly && html`<span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:500;color:var(--muted-2);background:rgba(201,123,74,0.15);">${v.t('bundles.voucher')}</span>`}
+                <span style="font-size:15px;font-weight:500;color:var(--accent);white-space:nowrap;" data-tfb-label>${p.label}</span>
+              </div>
+              ${p.descr && html`<div style="margin-top:4px;font-size:12px;color:var(--muted-2);">${p.descr}</div>`}
+              ${p.targets.length > 0 && html`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;">
+                ${p.targets.map((c) => html`<span title=${c.missing ? v.t('bundles.missingProduct') : ''} style="padding:4px 10px;border-radius:999px;font-size:12px;background:${c.missing ? 'rgba(141,29,44,0.07)' : '#fff'};border:1px solid ${c.missing ? 'rgba(141,29,44,0.3)' : 'rgba(35,34,32,0.12)'};color:${c.missing ? '#8D1D2C' : '#232220'};">${c.label}${c.missing ? ' ?' : ''}</span>`)}
+              </div>`}
+              <div style="margin-top:8px;font-size:12px;color:var(--muted-2);line-height:1.6;">
+                ${p.kind !== 'voucher' && html`<div>${metaIcon(ICON.clock)}${p.when}${p.dates ? html` · ${metaIcon(ICON.calendar)}${p.dates}` : ''}</div>`}
+                ${p.kind === 'voucher' && html`<div>${metaIcon(ICON.ticket)}${p.voucher}${p.dates ? html` · ${metaIcon(ICON.calendar)}${p.dates}` : ''}</div>`}
+                ${p.kind !== 'voucher' && html`<div>${metaIcon(ICON.store)}${p.shops}</div>`}
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;">
+                <input value=${p.img} onChange=${p.onImg} placeholder=${v.t('bundles.imgPlaceholder')} style="flex:1 1 260px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--muted-2);" />
+                <span style="font-size:11px;color:${p.used ? 'var(--muted-2)' : '#B8B2A8'};">${p.used ? v.t('common.usedBy', { n: p.used }) : v.t('common.unused')}</span>
+                <button onClick=${p.create} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.t('bundles.create')}</button>
+              </div>
+            </div>
+          `)}
+          ${!v.tfbTotal && html`<p style="margin:0;font-size:12.5px;color:var(--muted);padding:6px 0;">${v.bundleState === 'off' ? v.t('bundles.emptyOff') : v.t('tfb.empty')}</p>`}
+        </div>
+        <p style="margin:12px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5;">${v.t('tfb.footer')}</p>
+      </div>
+
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;" data-tfb-badges>
+        <h3 style="margin:0 0 4px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${v.t('badges.title')}</h3>
+        <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;max-width:760px;">${v.t('badges.subtitle')}</p>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
+          ${v.badgeFamilies.map((f) => html`
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;" data-badge-family=${f.id}>
+              <div style="flex:1 1 220px;min-width:0;">
+                <div style="font-size:13.5px;font-weight:500;color:var(--ink);">${f.label}</div>
+                <div style="font-size:11.5px;color:${f.missing ? 'var(--accent)' : 'var(--muted)'};">${v.t('badges.count', { n: f.count })}${f.missing ? ` · ${v.t('badges.missing')}` : ''}</div>
+              </div>
+              <select value=${f.cur} onChange=${f.onPick} disabled=${v.badgeBusy} aria-label=${f.label} style="flex:0 1 270px;min-width:0;padding:8px 10px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;">
+                <option value="">${f.houseLabel}</option>
+                ${v.badgeStyleOptions.map((o) => html`<option value=${o.id}>${o.label}</option>`)}
+              </select>
+              <span style="flex:0 0 190px;display:flex;justify-content:flex-end;">${badgePill(f.preview)}</span>
+            </div>
+          `)}
         </div>
       </div>
 
-      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-          <h3 style="margin:0;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${v.t('promo.count', { n: v.promoCount })}</h3>
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;" data-promo-styles>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+          <div style="min-width:0;flex:1 1 320px;">
+            <h3 style="margin:0 0 4px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${v.t('styles.title', { n: v.promoCount })}</h3>
+            <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;max-width:760px;">${v.t('styles.subtitle')}</p>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <button onClick=${v.addPromoType} style="padding:9px 15px;font-size:12.5px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.t('promo.addType')}</button>
+            <button onClick=${v.savePromoTypes} disabled=${!v.promoDirty || v.promoBusy} style="padding:9px 18px;font-size:13px;font-weight:500;border-radius:8px;border:1px solid ${v.promoDirty ? 'var(--accent)' : 'var(--line)'};cursor:${v.promoDirty && !v.promoBusy ? 'pointer' : 'not-allowed'};background:${v.promoDirty ? 'var(--accent)' : '#fff'};color:${v.promoDirty ? '#fff' : 'var(--muted)'};">${v.promoBusy ? v.t('common.saving') : (v.promoDirty ? v.t('common.save') : v.t('common.saved'))}</button>
+          </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:10px;">
           ${v.promoRows.map((t) => html`
@@ -5477,33 +5645,26 @@ class App extends Component {
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                 <span style="display:inline-flex;align-items:center;gap:7px;padding:5px 13px 5px 11px;border-radius:999px;font-size:12px;font-weight:500;letter-spacing:0.04em;text-transform:uppercase;color:#fff;background:${t.color};flex:0 0 auto;"><span style="font-size:15px;line-height:1;">${t.icon}</span>${t.name || 'Sans nom'}</span>
                 <input value=${t.icon} onInput=${t.onIcon} maxlength="4" title="Icône (emoji)" style="width:56px;text-align:center;padding:9px 6px;font-size:16px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
-                <input value=${t.name} onInput=${t.onName} placeholder="Nom (ex. Happy hour)" style="flex:1 1 180px;min-width:0;padding:9px 11px;font-size:14px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;" />
+                <input value=${t.name} onInput=${t.onName} placeholder=${v.t('styles.namePh')} style="flex:1 1 180px;min-width:0;padding:9px 11px;font-size:14px;font-weight:500;border:1px solid var(--line);border-radius:8px;background:#fff;" />
                 <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);">${v.t('common.color')} <input type="color" value=${t.color} onInput=${t.onColor} title="Couleur du badge" style="width:34px;height:30px;padding:0;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;" /></label>
-                <button onClick=${t.toggleActive} title=${t.active ? 'Actif — proposé dans le Compositeur' : 'Inactif — masqué du choix'} style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid var(--line);cursor:pointer;background:${t.active ? 'rgba(63,122,82,0.12)' : 'rgba(141,29,44,0.08)'};color:${t.active ? '#2E6E4E' : '#8D1D2C'};font-size:13px;">${t.active ? '✓' : '⃠'}</button>
+                <button onClick=${t.toggleActive} title=${t.active ? v.t('styles.on') : v.t('styles.off')} style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid var(--line);cursor:pointer;background:${t.active ? 'rgba(63,122,82,0.12)' : 'rgba(141,29,44,0.08)'};color:${t.active ? '#2E6E4E' : '#8D1D2C'};font-size:13px;">${t.active ? '✓' : '⃠'}</button>
                 <span style="display:flex;align-items:center;gap:4px;flex:0 0 auto;">
                   <button onClick=${t.up} disabled=${t.isFirst} title="Monter" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:${t.isFirst ? 'not-allowed' : 'pointer'};font-size:12px;opacity:${t.isFirst ? 0.4 : 1};">↑</button>
                   <button onClick=${t.down} disabled=${t.isLast} title="Descendre" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:${t.isLast ? 'not-allowed' : 'pointer'};font-size:12px;opacity:${t.isLast ? 0.4 : 1};">↓</button>
-                  <button onClick=${t.del} title="Supprimer ce sous-type" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:13px;color:var(--accent);">✕</button>
+                  <button onClick=${t.del} title=${v.t('styles.del')} style="width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:13px;color:var(--accent);">✕</button>
                 </span>
               </div>
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;padding-left:2px;">
-                <input value=${t.descr} onInput=${t.onDescr} placeholder="Description courte (ex. Réduction sur un créneau horaire)" style="flex:1 1 320px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--muted-2);" />
+                <input value=${t.descr} onInput=${t.onDescr} placeholder=${v.t('styles.descrPh')} style="flex:1 1 320px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--muted-2);" />
                 <span style="font-size:11px;color:${t.used ? 'var(--muted-2)' : '#B8B2A8'};">${t.used ? v.t('common.usedBy', { n: t.used }) : v.t('common.unused')}</span>
               </div>
+              <div style="margin-top:8px;padding-left:2px;font-size:11.5px;color:${t.dresses.length ? 'var(--ink)' : 'var(--muted)'};" data-style-dresses>${t.dresses.length ? v.t('styles.dresses', { list: t.dresses.join(', ') }) : v.t('styles.manual')}</div>
               <div style="margin-top:9px;padding-left:2px;">${momentTagCells(t.moCells)}</div>
             </div>
           `)}
-          ${!v.promoRows.length && html`<p style="margin:0;font-size:12.5px;color:var(--muted);padding:8px 0;">Aucun sous-type de promotion. « + Ajouter une promotion » pour en créer un.</p>`}
+          ${!v.promoRows.length && html`<p style="margin:0;font-size:12.5px;color:var(--muted);padding:8px 0;">${v.t('styles.empty')}</p>`}
         </div>
-        <p style="margin:14px 0 0;font-size:11.5px;color:var(--muted);">Supprimer un sous-type ne casse pas les éléments qui l'utilisaient : ils retombent sur un badge neutre « Offre » jusqu'à ce que tu leur en réassignes un. L'ordre ci-dessus est celui proposé dans le Compositeur.</p>
-      </div>
-
-      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;" data-tfb-pointer>
-        <div style="min-width:0;flex:1 1 320px;">
-          <h3 style="margin:0 0 4px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${v.t('tfb.pointerTitle', { n: v.tfbTotal })}</h3>
-          <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">${v.t('tfb.pointerText')}</p>
-        </div>
-        <button onClick=${v.goCampaigns} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:500;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;">${v.t('tfb.goCampaigns')}</button>
+        <p style="margin:14px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5;">${v.t('styles.footer')}</p>
       </div>
     </div>
   </div>
@@ -5572,77 +5733,12 @@ class App extends Component {
         <p style="margin:14px 0 0;font-size:11.5px;color:var(--muted);">Portée <strong>produit</strong> = la campagne affiche la photo et le prix du produit lié. Portée <strong>gamme thématique</strong> = un thème libre (ex. « Viennoiseries »). Supprimer une campagne ne casse pas les éléments qui la diffusaient : ils affichent un repère neutre jusqu'à réassignation.</p>
       </div>
 
-      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;" data-bundles data-tfb>
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
-          <div style="min-width:0;flex:1 1 320px;">
-            <h3 style="margin:0 0 4px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${v.t('tfb.title', { n: v.tfbTotal })}</h3>
-            <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;max-width:760px;">${v.t('tfb.subtitle')}</p>
-          </div>
-          <button onClick=${v.syncBundles} disabled=${v.bundleBusy || v.bundleState === 'off'} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:500;border-radius:8px;border:1px solid var(--accent);cursor:${v.bundleBusy || v.bundleState === 'off' ? 'not-allowed' : 'pointer'};background:${v.bundleState === 'off' ? 'rgba(35,34,32,0.08)' : '#8D1D2C'};color:${v.bundleState === 'off' ? '#8A847C' : '#fff'};">${v.bundleBusy ? v.t('bundles.syncing') : v.t('bundles.sync')}</button>
+      <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;" data-tfb-pointer>
+        <div style="min-width:0;flex:1 1 320px;">
+          <h3 style="margin:0 0 4px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${v.t('tfb.pointerTitle', { n: v.tfbTotal })}</h3>
+          <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">${v.t('tfb.pointerText')}</p>
         </div>
-        <div style="padding:9px 12px;border-radius:10px;font-size:12px;line-height:1.5;margin-bottom:12px;background:${v.bundleState === 'ok' ? 'rgba(63,122,82,0.08)' : (v.bundleState === 'error' ? 'rgba(141,29,44,0.07)' : 'rgba(35,34,32,0.05)')};color:${v.bundleState === 'ok' ? '#2E6E4E' : (v.bundleState === 'error' ? '#8D1D2C' : '#6E675E')};" data-bundle-status=${v.bundleState}>
-          ${v.bundleState === 'ok' ? '● ' : (v.bundleState === 'error' ? '⚠ ' : '○ ')}${v.bundleStatusText}
-          ${v.bundleWarnings.map((w) => html`<div style="color:var(--muted-2);margin-top:3px;">⚠ ${w}</div>`)}
-          ${v.tfbKindLines.map((l) => html`<div style="margin-top:3px;color:${l.ok ? '#4A4640' : '#8D1D2C'};">${l.ok ? '' : '⚠ '}${l.text}</div>`)}
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-          ${v.tfbFilters.map((f) => html`<button onClick=${f.pick} data-tfb-filter=${f.id} style="padding:6px 13px;font-size:12px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid ${f.active ? 'var(--accent)' : 'var(--line)'};background:${f.active ? 'var(--accent)' : '#fff'};color:${f.active ? '#fff' : 'var(--muted-2)'};">${f.label}</button>`)}
-        </div>
-        <div style="display:flex;flex-direction:column;gap:10px;">
-          ${v.tfbShowBundles && v.bundleRows.map((b) => html`
-            <div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:${b.active ? '#fff' : 'rgba(35,34,32,0.03)'};opacity:${b.active ? 1 : 0.75};" data-bundle=${b.id}>
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <span style="font-size:18px;">🎁</span>
-                <strong style="font-size:14px;color:var(--ink);flex:1 1 200px;min-width:0;overflow-wrap:anywhere;">${b.name}</strong>
-                <span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:500;letter-spacing:0.06em;color:#fff;background:${b.active ? '#2E6E4E' : (b.status === 'DRAFT' ? '#B8860B' : '#8A847C')};">${b.status}</span>
-                ${b.voucher && html`<span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:500;color:var(--muted-2);background:rgba(201,123,74,0.15);">${v.t('bundles.voucher')}</span>`}
-                <span style="font-size:16px;font-weight:500;color:var(--accent);white-space:nowrap;">${b.price}</span>
-                ${b.worth && html`<span style="font-size:12px;color:var(--muted);text-decoration:line-through;white-space:nowrap;">${b.worth}</span>`}
-              </div>
-              ${b.descr && html`<div style="margin-top:4px;font-size:12px;color:var(--muted-2);">${b.descr}</div>`}
-              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;">
-                ${b.comp.map((c) => html`<span title=${c.missing ? v.t('bundles.missingProduct') : ''} style="padding:4px 10px;border-radius:999px;font-size:12px;background:${c.missing ? 'rgba(141,29,44,0.07)' : '#fff'};border:1px solid ${c.missing ? 'rgba(141,29,44,0.3)' : 'rgba(35,34,32,0.12)'};color:${c.missing ? '#8D1D2C' : '#232220'};">${c.label}${c.missing ? ' ?' : ''}</span>`)}
-              </div>
-              <div style="margin-top:8px;font-size:12px;color:var(--muted-2);line-height:1.6;">
-                <div>${metaIcon(ICON.clock)}${b.when}${b.dates ? ` · ${metaIcon(ICON.calendar)}${b.dates}` : ''}</div>
-                <div>${metaIcon(ICON.store)}${b.shops}</div>
-              </div>
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;">
-                <input value=${b.img} onChange=${b.onImg} placeholder=${v.t('bundles.imgPlaceholder')} style="flex:1 1 260px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--muted-2);" />
-                <span style="font-size:11px;color:${b.used ? 'var(--muted-2)' : '#B8B2A8'};">${b.used ? v.t('common.usedBy', { n: b.used }) : v.t('common.unused')}</span>
-                <button onClick=${b.create} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.t('bundles.create')}</button>
-              </div>
-            </div>
-          `)}
-          ${v.tfbPromoRows.map((p) => html`
-            <div style="border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:${p.active ? '#fff' : 'rgba(35,34,32,0.03)'};opacity:${p.active ? 1 : 0.75};" data-tfb-promo=${p.id}>
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <span style="font-size:18px;">${p.icon}</span>
-                <strong style="font-size:14px;color:var(--ink);flex:1 1 200px;min-width:0;overflow-wrap:anywhere;">${p.name}</strong>
-                <span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:500;color:var(--muted-2);background:rgba(35,34,32,0.07);">${p.kindLabel}</span>
-                <span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:500;letter-spacing:0.06em;color:#fff;background:${p.active ? '#2E6E4E' : (p.status === 'DRAFT' ? '#B8860B' : '#8A847C')};">${p.status}</span>
-                ${p.voucherOnly && html`<span style="padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:500;color:var(--muted-2);background:rgba(201,123,74,0.15);">${v.t('bundles.voucher')}</span>`}
-                <span style="font-size:15px;font-weight:500;color:var(--accent);white-space:nowrap;" data-tfb-label>${p.label}</span>
-              </div>
-              ${p.descr && html`<div style="margin-top:4px;font-size:12px;color:var(--muted-2);">${p.descr}</div>`}
-              ${p.targets.length > 0 && html`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;">
-                ${p.targets.map((c) => html`<span title=${c.missing ? v.t('bundles.missingProduct') : ''} style="padding:4px 10px;border-radius:999px;font-size:12px;background:${c.missing ? 'rgba(141,29,44,0.07)' : '#fff'};border:1px solid ${c.missing ? 'rgba(141,29,44,0.3)' : 'rgba(35,34,32,0.12)'};color:${c.missing ? '#8D1D2C' : '#232220'};">${c.label}${c.missing ? ' ?' : ''}</span>`)}
-              </div>`}
-              <div style="margin-top:8px;font-size:12px;color:var(--muted-2);line-height:1.6;">
-                ${p.kind !== 'voucher' && html`<div>${metaIcon(ICON.clock)}${p.when}${p.dates ? ` · ${metaIcon(ICON.calendar)}${p.dates}` : ''}</div>`}
-                ${p.kind === 'voucher' && html`<div>${metaIcon(ICON.ticket)}${p.voucher}${p.dates ? ` · ${metaIcon(ICON.calendar)}${p.dates}` : ''}</div>`}
-                ${p.kind !== 'voucher' && html`<div>${metaIcon(ICON.store)}${p.shops}</div>`}
-              </div>
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;">
-                <input value=${p.img} onChange=${p.onImg} placeholder=${v.t('bundles.imgPlaceholder')} style="flex:1 1 260px;min-width:0;padding:8px 11px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--muted-2);" />
-                <span style="font-size:11px;color:${p.used ? 'var(--muted-2)' : '#B8B2A8'};">${p.used ? v.t('common.usedBy', { n: p.used }) : v.t('common.unused')}</span>
-                <button onClick=${p.create} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.t('bundles.create')}</button>
-              </div>
-            </div>
-          `)}
-          ${!v.tfbTotal && html`<p style="margin:0;font-size:12.5px;color:var(--muted);padding:6px 0;">${v.bundleState === 'off' ? v.t('bundles.emptyOff') : v.t('tfb.empty')}</p>`}
-        </div>
-        <p style="margin:12px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5;">${v.t('tfb.footer')}</p>
+        <button onClick=${v.goBundles} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;">${v.t('tfb.goPromotions')}</button>
       </div>
     </div>
   </div>
@@ -6336,18 +6432,25 @@ class App extends Component {
                   <div style="margin-top:9px;font-size:12px;color:var(--muted-2);line-height:1.6;">
                     <div style="font-size:13.5px;font-weight:500;color:var(--ink);">${v.tfbPicked.icon} ${v.tfbPicked.name} · <span style="color:var(--accent);">${v.tfbPicked.label}</span></div>
                     ${v.tfbPicked.targets.length ? html`<div>${v.tfbPicked.targets.map((c) => c.label).join(' · ')}</div>` : ''}
-                    <div>${metaIcon(ICON.clock)}${v.tfbPicked.when}${v.tfbPicked.dates ? ` · ${metaIcon(ICON.calendar)}${v.tfbPicked.dates}` : ''}</div>
+                    <div>${metaIcon(ICON.clock)}${v.tfbPicked.when}${v.tfbPicked.dates ? html` · ${metaIcon(ICON.calendar)}${v.tfbPicked.dates}` : ''}</div>
                     <div>${metaIcon(ICON.store)}${v.tfbPicked.shops}</div>
                     ${v.tfbPicked.voucher && html`<div>${metaIcon(ICON.ticket)}${v.tfbPicked.voucher}</div>`}
                     ${!v.tfbPicked.active && html`<div style="margin-top:4px;color:var(--accent);font-weight:500;">${v.t('tfb.inactiveNote')}</div>`}
                   </div>
                 `}
                 <p style="margin:8px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5;">${v.t('tfb.editorHelp')}</p>
-              ` : html`<p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">${v.t('tfb.editorNone')} <button onClick=${v.goCampaigns} style="background:none;border:none;padding:0;color:var(--accent);font-weight:500;text-decoration:underline;cursor:pointer;font-size:12px;">${v.t('tfb.goCampaigns')}</button></p>`}
+              ` : html`<p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">${v.t('tfb.editorNone')} <button onClick=${v.goBundles} style="background:none;border:none;padding:0;color:var(--accent);font-weight:500;text-decoration:underline;cursor:pointer;font-size:12px;">${v.t('tfb.goPromotions')}</button></p>`}
             </div>
+            ${v.promoFamily ? html`
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border-radius:10px;background:var(--paper);border:1px solid var(--line);" data-promo-family-badge>
+                ${badgePill(v.promoFamily.badge)}
+                <span style="flex:1 1 220px;min-width:0;font-size:11.5px;color:var(--muted);line-height:1.5;">${v.t('badges.editorFollows', { fam: v.promoFamily.label })}</span>
+                <button onClick=${v.goPromoTypes} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.t('badges.editorChange')}</button>
+              </div>
+            ` : html`
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
-              <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">Le sous-type vient de la base (happy hour, vente flash, bundle…) — modifiable dans <strong>Promotions</strong>. Renseigne l'accroche dans « Nom du module » et le détail dans « Sous-titre ».</p>
-              <button onClick=${v.goPromoTypes} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">🏷️ Gérer les promotions</button>
+              <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">${v.t('badges.editorManual')}</p>
+              <button onClick=${v.goPromoTypes} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.t('badges.editorStyles')}</button>
             </div>
             ${v.hasPromoTypes ? html`
               <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
@@ -6357,10 +6460,11 @@ class App extends Component {
               </div>
               <div style="margin-top:12px;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--paper);border:1px solid var(--line);">
                 <span style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;font-size:12px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#fff;background:${v.promoColor};"><span style="font-size:15px;">${v.promoIcon}</span>${v.promoName}</span>
-                <span style="font-size:11.5px;color:var(--muted);">badge affiché à l'écran</span>
+                <span style="font-size:11.5px;color:var(--muted);">${v.t('badges.onScreen')}</span>
               </div>
             ` : html`
               <div style="padding:12px 14px;border-radius:10px;background:rgba(141,29,44,0.06);border:1px solid rgba(141,29,44,0.2);font-size:12.5px;color:var(--accent);line-height:1.5;">Aucun sous-type de promotion actif. <button onClick=${v.goPromoTypes} style="background:none;border:none;padding:0;color:var(--accent);font-weight:500;text-decoration:underline;cursor:pointer;font-size:12.5px;">Créer un type de promotion →</button></div>
+            `}
             `}
             ${v.promoUsesProduct && html`
               <div style="margin-top:14px;">

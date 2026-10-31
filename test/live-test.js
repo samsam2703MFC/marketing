@@ -1601,6 +1601,53 @@ async function main() {
         await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
       }
     });
+    await step('Style des badges — chaque famille TFBuddy habille ses promotions à l’écran', async () => {
+      const st = await call('GET', '/api/v1/state');
+      const types = new Map((await call('GET', '/api/v1/promo-types')).promoTypes.map((t) => [t.id, t]));
+      const before = (await call('GET', '/api/v1/bundles')).badges;
+      const want = { bundle: '', buy_x_get_y: 'bxgy', quantity: 'bxgy', happy_hour: 'happy-hour', scheduled_discount: 'scheduled', voucher: 'voucher' };
+      if (JSON.stringify(before) !== JSON.stringify(want)) throw new Error(`styles par défaut : ${JSON.stringify(before)}`);
+      const sched = { days: [1, 1, 1, 1, 1, 1, 1], from: '00:00', to: '23:59' };
+      // lt_bg41 porte exprès un autre sous-type (« bon d'achat ») : reliée, la famille l'emporte.
+      const extra = [
+        { id: 'lt_bg41', type: 'promotion', name: 'lt_bg41', tfbRef: 'bx41', promoType: 'voucher', productRef: 'pwp901', layout: 'hero-right', schedule: sched, items: [], tag: {}, pos: {} },
+        { id: 'lt_bg61', type: 'promotion', name: 'lt_bg61', tfbRef: 'sd61', promoType: 'bxgy', productRef: 'pwp902', layout: 'hero-right', schedule: sched, items: [], tag: {}, pos: {} },
+        { id: 'lt_bg31', type: 'bundle', name: 'lt_bg31', bundleRef: 'tfb31', layout: 'composition', schedule: sched, items: [], tag: {}, pos: {} },
+      ];
+      const pls = st.playlists.map((p) => (p.id === st.activePlaylistId ? { ...p, items: [...extra.map((m) => m.id), ...p.items] } : p));
+      await call('PUT', '/api/v1/draft', { modules: [...st.modules, ...extra], playlists: pls, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      const put = (badges) => fetch(BASE + '/api/v1/tfb-badges', { method: 'PUT', headers: { ...(authToken ? { authorization: `Bearer ${authToken}` } : {}), 'content-type': 'application/json' }, body: JSON.stringify({ badges }) });
+      try {
+        await call('POST', '/api/v1/publish', { mode: 'full', targets: [] });
+        const film = async () => {
+          const f = await call('GET', '/api/v1/film?store=st2');
+          return { stamp: f.storeStamp, by: new Map(f.modules.map((m) => [m.id, m])) };
+        };
+        const f0 = await film();
+        const b0 = f0.by.get('lt_bg41').promo;
+        if (!b0 || b0.type !== 'bxgy' || b0.color !== types.get('bxgy').color) throw new Error(`X + Y : badge ${JSON.stringify(b0)} au lieu du style « bxgy » de sa famille`);
+        if ((f0.by.get('lt_bg61').promo || {}).type !== 'happy-hour') throw new Error(`remise sur créneaux : ${JSON.stringify(f0.by.get('lt_bg61').promo)}`);
+        if (f0.by.get('lt_bg31').promo) throw new Error('bundle sans style choisi : la puce maison ne doit pas changer');
+        // La régie habille les bundles et change le style d'une famille : l'écran suit, sans republier.
+        let r = await put({ bundle: 'bundle', buy_x_get_y: 'flash' });
+        if (r.status !== 200) throw new Error(`enregistrement refusé : ${r.status}`);
+        const f1 = await film();
+        const b1 = f1.by.get('lt_bg31').promo;
+        if (!b1 || b1.type !== 'bundle' || b1.icon !== types.get('bundle').icon || b1.color !== types.get('bundle').color) throw new Error(`bundle : ${JSON.stringify(b1)}`);
+        if ((f1.by.get('lt_bg41').promo || {}).type !== 'flash') throw new Error('nouveau style de la famille X + Y absent à l’écran');
+        if (!String(f1.stamp || '').includes('|g:') || f1.stamp === f0.stamp) throw new Error('l’empreinte du magasin ignore le style des badges : les écrans ne rechargeraient pas');
+        // Famille sans style : l'élément reprend son propre sous-type.
+        await put({ buy_x_get_y: '' });
+        if (((await film()).by.get('lt_bg41').promo || {}).type !== 'voucher') throw new Error('sans style de famille, le sous-type de l’élément ne revient pas');
+        // Refus : famille ou sous-type inconnus.
+        if ((r = await put({ nope: 'bxgy' })).status !== 400) throw new Error(`famille inconnue acceptée (${r.status})`);
+        if ((r = await put({ voucher: 'inexistant' })).status !== 400) throw new Error(`sous-type inconnu accepté (${r.status})`);
+        return 'X + Y → « bxgy » malgré le sous-type de l’élément · créneaux → « happy-hour » · bundle maison puis « bundle » · changement sans republier (empreinte |g:) · repli · refus 400';
+      } finally {
+        await put(want);
+        await call('PUT', '/api/v1/draft', { modules: st.modules, playlists: st.playlists, activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+      }
+    });
     await step('Bundles TFBuddy — compte sans MENU.BUNDLE.MANAGE : erreur dite, bundles gardés', async () => {
       tfbMock.revoke(true);
       try {

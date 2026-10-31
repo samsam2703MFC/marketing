@@ -167,7 +167,7 @@ elle en reprend les jetons de couleur, la coquille et le système de boutons
 - **Seule** (`/signage/`, ouverte depuis le rail du cockpit) : barre latérale de 246 px — logo,
   « Marketing en magasin », retour au module (`../marketing/`), bouton **Diffuser** (assistant),
   puis les groupes *Diffusion* (Accueil, Compositeur, Planning, Réseau & supervision),
-  *Contenus* (Produits, Périodes, Traductions), *Campagnes* (Promotions, Campagnes) et
+  *Contenus* (Produits, Périodes, Traductions, Médiathèque), *Campagnes* (Promotions, Campagnes) et
   *Réglages* (Paramètres, Mise en route, Rapport de diffusion).
 - **Dans le cadre du module** (`/marketing` → Marketing en magasin) : le menu du module est
   déjà à gauche, la régie n'en ajoute pas ; ses écrans passent en **onglets soulignés** sous
@@ -409,8 +409,10 @@ un **sous-type**.
 
 - Les **sous-types** (`sig_promo_types`) sont **dynamiques, pilotés par la base** — rien en dur :
   amorcés avec *happy hour, vente flash, bundle de produits, achetez X obtenez Y, remise planifiée,
-  bon d'achat*, puis **gérables en régie** dans l'onglet **Promotions** (icône, couleur, libellé,
-  ordre, actif/inactif). Chaque sous-type compose le **badge** affiché à l'écran.
+  bon d'achat*, puis **gérables en régie** dans **Promotions → Styles de badge** (icône, couleur,
+  libellé, ordre, actif/inactif). Chaque sous-type compose le **badge** affiché à l'écran : il
+  habille les familles de promotions TFBuddy (voir plus bas, « Style des badges ») et les offres
+  saisies à la main (ex. vente flash).
 - À l'affichage, le module résout son badge (`m.promo = { name, icon, color }`) via
   `loadModules()` — côté serveur ET dans l'aperçu régie. Mises en page : **bandeau** (fond aux
   couleurs de l'offre), **centré**, ou **hero** (photo du produit lié + prix).
@@ -552,7 +554,7 @@ semaine (jour ISO 1 = lundi … 7, heure de début incluse, de fin exclue), stat
   consultant au 10/10/2026). Les rôles `admin`, `consultant`, `owner` sont essayés dans cet ordre,
   puis celui qui a marché passe en premier. Identifiants refusés : la synchro automatique attend
   6 h (pas de blocage du compte) ; le bouton de la régie, non.
-- **Synchro** : au démarrage, puis toutes les **30 min**, ou **Promotions → Bundles TFBuddy →
+- **Synchro** : au démarrage, puis toutes les **30 min**, ou **Promotions → Promotions TFBuddy →
   Synchroniser**. La table `sig_bundles` est un **reflet** remplacé à chaque synchro (seul le
   visuel choisi en régie est gardé). Produits TFBuddy `N` = produits de l'import PWA `pwpN` ;
   magasins reliés par la correspondance de l'import PWA, sinon par slug/nom (`GET /shops`). Ce qui
@@ -570,7 +572,7 @@ semaine (jour ISO 1 = lundi … 7, heure de début incluse, de fin exclue), stat
   sans republier.
 - API : `GET /bundles` · `POST /bundles/sync` · `PATCH /bundles/{id}` (visuel).
 
-### Toutes les promotions TFBuddy, regroupées dans Campagnes
+### Toutes les promotions TFBuddy, dans l'écran Promotions
 La même synchro lit aussi les autres familles de promotions de TFBuddy, avec le même compte
 et le même droit (`MENU.BUNDLE.MANAGE`) : **« X achetés = Y offert »**
 (`/admin/promotions/buy-x-get-y`), **promotions de quantité** (`/admin/promotions/quantity`),
@@ -581,11 +583,21 @@ lecture accepte les formes vues dans ses contrats d'écriture (`trigger` / `rewa
 `quantity_promotion`, `discount_type`…). Chaque famille est lue à part : une famille refusée
 n'empêche pas les autres, et son erreur est dite dans la régie.
 
-- **Régie → Campagnes → Promotions TFBuddy** : bundles et autres promotions sur une seule liste,
-  filtrable par famille, avec la mécanique en clair (« 2 achetés = 1 offert », « 3 pour le prix de
-  2 », « -20 % », « Code « RENTREE10 » en caisse »), les produits et catégories visés (signalés
-  s'ils manquent au catalogue), jours et heures, magasins, dates, visuel optionnel, et
-  **＋ Créer l'élément**. La page Promotions renvoie vers cette liste.
+- **Régie → Promotions** : les promotions viennent de TFBuddy, on ne les ressaisit pas. Bundles
+  et autres promotions sur une seule liste, filtrable par famille, avec le badge qu'elles portent
+  à l'écran, la mécanique en clair (« 2 achetés = 1 offert », « 3 pour le prix de 2 », « -20 % »,
+  « Code « RENTREE10 » en caisse »), les produits et catégories visés (signalés s'ils manquent au
+  catalogue), jours et heures, magasins, dates, visuel optionnel, et **＋ Créer l'élément**.
+  Campagnes renvoie vers cette liste.
+- **Style des badges** (même écran) : chaque famille — bundles, « X achetés = Y offert »,
+  promotions de quantité, remises **sur créneaux** (jours et heures, l'ancien « happy hour »),
+  remises **sur dates**, bons d'achat — s'habille d'un sous-type (icône, couleur, libellé). Par
+  défaut : X + Y et quantité → *Achetez X, obtenez Y*, créneaux → *Happy hour*, dates → *Remise
+  planifiée*, bons → *Bon d'achat* ; les bundles gardent la puce maison « 🎁 Bundle » rubis tant
+  qu'aucun style n'est choisi. Une promotion reliée prend le badge de **sa famille** (le sous-type
+  posé sur l'élément ne sert plus que de repli si la famille n'a pas de style). Rangé dans
+  `sig_settings` (`tfb_badges`) ; un changement change l'empreinte du magasin (`|g:`), les écrans
+  suivent **sans republier**. Supprimer un sous-type qui habille une famille la remet sur son repli.
 - **À l'écran** : un élément « promotion » peut **suivre une promotion TFBuddy**
   (`sig_modules.tfb_ref` → `sig_tfb_promos`). Elle passe à ses jours et heures, dans ses magasins,
   entre ses dates, et tombe si elle n'est pas `ACTIVE` ou si tous ses produits sont épuisés au
@@ -593,8 +605,9 @@ n'empêche pas les autres, et son erreur est dite dans la régie.
   langue du magasin (FR / NL / EN), et une remise programmée montre le **prix remisé** « au lieu
   de » le prix du magasin. Une synchro qui change une promotion change l'empreinte du magasin :
   les écrans se resynchronisent sans republier.
-- API : la liste et l'état de chaque famille dans `GET /bundles` (`promos`, `sync.kinds`) ·
-  `POST /bundles/sync` lit tout · `PATCH /tfb-promos/{id}` (visuel).
+- API : la liste et l'état de chaque famille dans `GET /bundles` (`promos`, `sync.kinds`,
+  `badges`) · `POST /bundles/sync` lit tout · `PATCH /tfb-promos/{id}` (visuel) ·
+  `PUT /tfb-badges { badges: { famille: idSousType | '' } }` (famille ou sous-type inconnus → 400).
 
 ### Traductions des écrans (néerlandais des magasins flamands)
 Un magasin dont la langue d'écran est le néerlandais (**Réseau → magasin → langue**) affiche ses
@@ -673,6 +686,7 @@ session admin  : POST /api/v1/login · /logout · GET /me
                  GET /campaigns · PUT /campaigns (campagnes marketing)
                  GET /bundles · POST /bundles/sync · PATCH /bundles/{id} (bundles TFBuddy)
                  PATCH /tfb-promos/{id} (autres promotions TFBuddy : X + Y, quantité, remises, bons)
+                 PUT /tfb-badges (style des badges : famille TFBuddy → sous-type)
                  GET /translations?lang= · POST /translations/propose|validate|reject
                  PUT /translations (traductions des écrans, Claude propose)
                  GET /lib-categories · PUT /lib-categories (classement + table liée)

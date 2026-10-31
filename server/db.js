@@ -926,7 +926,57 @@ export function savePromoTypes(list) {
     db.exec('ROLLBACK');
     throw e;
   }
+  refreshBadgesStamp();
   return loadPromoTypes();
+}
+
+// Style des badges par famille TFBuddy. Les promotions viennent de TFBuddy ;
+// les sous-types saisis en régie servent à les HABILLER : chaque famille
+// prend l'icône, la couleur et le libellé d'un sous-type. Une remise
+// programmée sur créneaux (jours et heures) est une famille à part (« happy
+// hour ») de la remise programmée sur dates. '' = badge maison : pour un
+// bundle, la puce « 🎁 Bundle » rubis ; pour une promotion, son propre
+// sous-type. Rangé dans sig_settings (tfb_badges), une ligne par famille.
+export const TFB_FAMILIES = ['bundle', 'buy_x_get_y', 'quantity', 'happy_hour', 'scheduled_discount', 'voucher'];
+const TFB_BADGE_DEFAULTS = { bundle: '', buy_x_get_y: 'bxgy', quantity: 'bxgy', happy_hour: 'happy-hour', scheduled_discount: 'scheduled', voucher: 'voucher' };
+export function tfbFamilyOf(p) {
+  if (!p) return '';
+  if (p.kind === 'scheduled_discount') return (p.schedule || []).length ? 'happy_hour' : 'scheduled_discount';
+  return TFB_FAMILIES.includes(p.kind) ? p.kind : '';
+}
+export function loadTfbBadges() {
+  let saved = {};
+  try { saved = JSON.parse(getSetting('tfb_badges', '{}')) || {}; } catch { saved = {}; }
+  const out = {};
+  for (const f of TFB_FAMILIES) out[f] = typeof saved[f] === 'string' ? saved[f] : TFB_BADGE_DEFAULTS[f];
+  return out;
+}
+export function saveTfbBadges(map) {
+  const cur = loadTfbBadges();
+  for (const f of TFB_FAMILIES) {
+    if (map && Object.prototype.hasOwnProperty.call(map, f)) cur[f] = String(map[f] == null ? '' : map[f]).trim().slice(0, 64);
+  }
+  setSetting('tfb_badges', JSON.stringify(cur));
+  refreshBadgesStamp();
+  return cur;
+}
+// Badge d'une famille, résolu sur la table des sous-types — null : pas de
+// style choisi (ou sous-type supprimé depuis), le badge maison s'applique.
+export function tfbBadgeFor(family, badges = loadTfbBadges(), types = null) {
+  const id = badges[family];
+  if (!id) return null;
+  const t = types ? types.get(id) : getDb().prepare('SELECT * FROM sig_promo_types WHERE id = ?').get(id);
+  return t ? { type: t.id, name: t.name, icon: t.icon, color: t.color } : null;
+}
+// Empreinte des badges : les écrans rechargent leur film quand un style
+// change (couleur, icône, famille), sans attendre une publication.
+function refreshBadgesStamp() {
+  const badges = loadTfbBadges();
+  const ids = [...new Set(Object.values(badges).filter(Boolean))].sort();
+  const db = getDb();
+  const one = db.prepare('SELECT id, name, icon, color FROM sig_promo_types WHERE id = ?');
+  const body = JSON.stringify([badges, ids.map((id) => one.get(id) || null)]);
+  setSetting('tfb_badges_stamp', createHash('sha1').update(body).digest('hex').slice(0, 12));
 }
 
 // ---------------------------------------------------------------------------
@@ -2114,7 +2164,8 @@ export function storeDataStamp(storeId, now = new Date()) {
   const b = getSetting('bundles_stamp', '');
   const p = getSetting('tfb_promos_stamp', '');
   const t = getSetting('translations_stamp', '');
-  return `${u}${b ? `|b:${b}` : ''}${p ? `|p:${p}` : ''}${t ? `|t:${t}` : ''}`;
+  const g = getSetting('tfb_badges_stamp', '');
+  return `${u}${b ? `|b:${b}` : ''}${p ? `|p:${p}` : ''}${t ? `|t:${t}` : ''}${g ? `|g:${g}` : ''}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -2336,7 +2387,11 @@ export function translationSources(lang) {
     add('campaign', c.id, 'message', c.message, { where: `campagne « ${c.name} »` });
     add('campaign', c.id, 'theme', c.theme, { where: `campagne « ${c.name} »` });
   }
-  for (const t of db.prepare('SELECT id, name FROM sig_promo_types WHERE active = 1 ORDER BY sort_order').all()) add('promo_type', t.id, 'name', t.name);
+  // Sous-types actifs, et ceux qui habillent une famille TFBuddy (même inactifs).
+  const dressing = new Set(Object.values(loadTfbBadges()).filter(Boolean));
+  for (const t of db.prepare('SELECT id, name, active FROM sig_promo_types ORDER BY sort_order').all()) {
+    if (t.active || dressing.has(t.id)) add('promo_type', t.id, 'name', t.name);
+  }
   for (const b of db.prepare("SELECT id, name, descr FROM sig_bundles WHERE status = 'ACTIVE' ORDER BY name").all()) {
     add('bundle', b.id, 'name', b.name);
     add('bundle', b.id, 'descr', b.descr, { where: `bundle « ${b.name} »` });
