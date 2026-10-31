@@ -370,8 +370,16 @@ class App extends Component {
       this.refreshFleet();  // écrans (Accueil : « prêt à diffuser »)
       if (this.activeFilm().mode === 'continu') this.loadContPreview(); // aperçu réel de la boucle
     } catch (e) {
-      if (e.status === 401) this.setState({ loading: false, authRequired: true });
-      else if (e.status === 403) {
+      if (e.status === 401) {
+        // Dans le cadre du module Marketing, sa session suffit : pas de mot de
+        // passe (une seule tentative par chargement ; sinon, connexion classique).
+        if (EMBEDDED && !this._ssoTried) {
+          this._ssoTried = true;
+          const ok = await api('POST', '/sso/marketing').then(() => true, () => false);
+          if (ok) return this.loadState();
+        }
+        this.setState({ loading: false, authRequired: true });
+      } else if (e.status === 403) {
         // Session d'un compte magasin ou agence : chacun dans SON espace.
         const me = await api('GET', '/me').catch(() => null);
         if (me && me.role === 'magasin') { location.href = 'magasin'; return; }

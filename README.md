@@ -173,6 +173,16 @@ elle en reprend les jetons de couleur, la coquille et le système de boutons
   déjà à gauche, la régie n'en ajoute pas ; ses écrans passent en **onglets soulignés** sous
   sa barre supérieure. Détecté tout seul (page dans un cadre) ou forcé par `?embed=1`, comme
   les écrans du module Social. L'espace magasin fait de même dans la version franchisé.
+- **Pas de second mot de passe dans le module** : affichée dans son cadre, la régie demande
+  au module Marketing qui est connecté (sa route `/api/v1/marketing/session`, avec les cookies
+  du navigateur, sauf celui de la régie) et s'ouvre en administrateur pour un administrateur
+  du réseau (`BRAND_ADMIN`) — `POST /api/v1/sso/marketing`, `server/marketing-sso.js`. C'est
+  le module qui fait foi : tant qu'il tourne en identité de développement (`dev_auth`), c'est
+  une commodité, pas un verrou ; quand il vérifiera l'identité (JWT de l'ERP), la régie
+  suivra sans changement. Ouverte seule (`/signage/`), elle garde son mot de passe.
+  Réglages : `SIG_MARKETING_SSO=0` coupe l'ouverture ; `SIG_MARKETING_SSO_URL` donne la route
+  de session du module (défaut `http://127.0.0.1/marketing/api/v1/marketing/session`, le même
+  serveur derrière Apache). L'adresse vient toujours de la configuration, jamais de la requête.
 - **Barre supérieure** : surtitre, titre de l'écran, fil (film › élément au compositeur, état
   de l'écran ailleurs) ; annuler / rétablir, enregistrement, prix, mode urgence, *Voir le
   film*, **Publier** (l'action principale) et la langue de l'interface.

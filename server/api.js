@@ -24,6 +24,7 @@ import {
 } from './db.js';
 import { tfbConfigured, tfbPublicConfig, fetchBundles, fetchPromotions, fetchShops, tfbAuthBackoff } from './tfbuddy.js';
 import { TRANSLATE_MODEL, translateConfigured, translationJob, startTranslationJob } from './translate.js';
+import { marketingSession } from './marketing-sso.js';
 import { randomBytes } from 'node:crypto';
 import { httpsStatus } from './https-status.js';
 import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
@@ -1055,6 +1056,17 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       destroySession(sessionToken(req));
       setCookies.push(`sig_session=; Path=${ctx.cookiePath}; HttpOnly; SameSite=Lax; Max-Age=0`);
       return send(200, { ok: true });
+    }
+    // Ouverte dans le cadre du module Marketing : la session du module suffit,
+    // pas de second mot de passe (voir server/marketing-sso.js).
+    if (req.method === 'POST' && path === '/sso/marketing') {
+      const who = await marketingSession(req);
+      if (!who.ok) return send(who.status, { error: who.error });
+      const token = createSession('admin');
+      const secure = String(req.headers['x-forwarded-proto'] || '').toLowerCase() === 'https' ? '; Secure' : '';
+      setCookies.push(`sig_session=${token}; Path=${ctx.cookiePath}; HttpOnly; SameSite=Lax; Max-Age=2592000${secure}`);
+      console.log(`[marketing] régie ouverte en admin depuis le module Marketing (utilisateur ${who.userId ?? '?'}${who.devAuth ? ', identité de développement du module' : ''})`);
+      return send(200, { ok: true, user: 'admin', role: 'admin', via: 'marketing' });
     }
 
     // ---- film public (visionneuse plein écran, lecture seule) ---------------

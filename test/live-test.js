@@ -6,6 +6,7 @@
 //   node test/live-test.js --local --mutate         → démarre un serveur jetable (BDD temporaire) puis teste
 // Code retour ≠ 0 si un test échoue → utilisable en CI/CD après déploiement.
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -32,6 +33,7 @@ let child = null;
 let authToken = null;
 let tfbMock = null;   // TFBuddy simulé (serveur jetable seulement)
 let aiMock = null;    // API Claude simulée (idem)
+let mkMock = null;    // module Marketing simulé : sa route de session (idem)
 
 function report(label, ok, ms, detail = '') {
   results.push({ label, ok });
@@ -81,6 +83,7 @@ async function main() {
     BASE = `http://127.0.0.1:${port}`;
     tfbMock = await startTfbMock();
     aiMock = await startAnthropicMock();
+    mkMock = await startMarketingMock();
     // Le serveur jetable démarre avec le seed de démonstration (SIG_DEMO=1)
     // pour disposer de modules / magasins / players à tester.
     child = spawn(process.execPath, [join(root, 'server', 'index.js')], {
@@ -88,7 +91,9 @@ async function main() {
       env: { ...process.env, PORT: String(port), SIG_DB: join(dir, 'test.db'), SIG_DEMO: '1',
         TFBUDDY_API_BASE: tfbMock.url, TFBUDDY_PHONE: MOCK_ACCOUNTS.admin.phone, TFBUDDY_PASSWORD: MOCK_ACCOUNTS.admin.password, TFBUDDY_ROLE: '',
         // API Claude simulée : les traductions sont proposées comme en production.
-        ANTHROPIC_API_KEY: MOCK_KEY, ANTHROPIC_BASE_URL: aiMock.url, ANTHROPIC_AUTH_TOKEN: '', SIG_TRANSLATE_MODEL: '' },
+        ANTHROPIC_API_KEY: MOCK_KEY, ANTHROPIC_BASE_URL: aiMock.url, ANTHROPIC_AUTH_TOKEN: '', SIG_TRANSLATE_MODEL: '',
+        // Module Marketing simulé : la régie ouverte dans son cadre reprend sa session.
+        SIG_MARKETING_SSO_URL: mkMock.url, SIG_MARKETING_SSO: '' },
       stdio: 'ignore',
     });
     console.log(`▶ Serveur jetable : ${BASE} (BDD ${join(dir, 'test.db')})`);
@@ -118,6 +123,39 @@ async function main() {
     console.log('\n\x1b[31mConnexion impossible — passe --user=… --password=… (ou SIG_ADMIN_PASSWORD).\x1b[0m\n');
     if (child) child.kill();
     process.exit(1);
+  }
+  if (LOCAL) {
+    // Ouverte dans le cadre du module Marketing, la régie reprend sa session :
+    // pas de second mot de passe (server/marketing-sso.js).
+    const sso = (cookie) => fetch(BASE + '/api/v1/sso/marketing', { method: 'POST', headers: cookie ? { cookie } : {} });
+    await step('Ouverture depuis le Marketing — admin sans mot de passe', async () => {
+      mkMock.reply = { status: 200, body: { authenticated: true, user_id: 7, role: 'BRAND_ADMIN', brand_id: null, shop_ids: null, dev_auth: true } };
+      const res = await sso('PHPSESSID=erp-abc; sig_session=ancien-jeton');
+      if (res.status !== 200) throw new Error(`HTTP ${res.status} : ${(await res.json().catch(() => ({}))).error || ''}`);
+      const cookie = (res.headers.get('set-cookie') || '').split(';')[0];
+      if (!/^sig_session=\w+/.test(cookie)) throw new Error('pas de cookie de session');
+      const st = await fetch(BASE + '/api/v1/state', { headers: { cookie } });
+      if (st.status !== 200) throw new Error(`état refusé avec la session ouverte (HTTP ${st.status})`);
+      const sent = mkMock.lastCookie || '';
+      if (!sent.includes('PHPSESSID=erp-abc')) throw new Error('les cookies du navigateur ne sont pas transmis au module');
+      if (sent.includes('sig_session')) throw new Error('la session de la régie part vers le module');
+      return 'session du module → session admin · cookies du navigateur transmis, sauf celui de la régie';
+    });
+    await step('Ouverture depuis le Marketing — refusée sans session du module, à un franchisé, module muet', async () => {
+      const cases = [
+        [{ status: 200, body: { authenticated: false } }, 401, 'sans session'],
+        [{ status: 200, body: { authenticated: true, role: 'FRANCHISEE', shop_ids: [4] } }, 403, 'franchisé'],
+        [{ status: 401, body: { error: 'Unauthorized' } }, 401, 'module 401'],
+        [{ status: 500, body: null }, 401, 'module en erreur'],
+      ];
+      for (const [reply, want, label] of cases) {
+        mkMock.reply = reply;
+        const res = await sso('');
+        if (res.status !== want) throw new Error(`${label} : HTTP ${res.status} au lieu de ${want}`);
+        if (res.headers.get('set-cookie')) throw new Error(`${label} : une session a été ouverte`);
+      }
+      return cases.map(([, want, label]) => `${label} ${want}`).join(' · ');
+    });
   }
   await step('GET /api/v1/state — brouillon complet', async () => {
     state = await call('GET', '/api/v1/state');
@@ -1677,7 +1715,27 @@ async function main() {
   if (child) child.kill();
   if (tfbMock) tfbMock.close();
   if (aiMock) aiMock.close();
+  if (mkMock) mkMock.close();
   process.exit(ko === 0 ? 0 : 1);
+}
+
+// Module Marketing simulé : sa route de session répond `reply` et garde les
+// cookies reçus (la régie doit transmettre ceux du navigateur, pas le sien).
+function startMarketingMock() {
+  return new Promise((resolve) => {
+    const mock = { reply: { status: 200, body: { authenticated: false } }, lastCookie: '' };
+    const srv = createServer((req, res) => {
+      mock.lastCookie = String(req.headers.cookie || '');
+      const { status, body } = mock.reply;
+      res.writeHead(status, { 'content-type': 'application/json' });
+      res.end(body == null ? 'erreur' : JSON.stringify(body));
+    });
+    srv.listen(0, '127.0.0.1', () => {
+      mock.url = `http://127.0.0.1:${srv.address().port}/marketing/api/v1/marketing/session`;
+      mock.close = () => srv.close();
+      resolve(mock);
+    });
+  });
 }
 
 async function firstToken() {
