@@ -38,11 +38,11 @@ interface ImportMetaEnv {
    */
   readonly VITE_COCKPIT_BASE?: string
   /**
-   * Adresses des deux applications (`/marketing/`, `/marketingc/` sur le serveur), fixées au build
-   * par le déploiement. Elles ne servent qu'à l'écran « Adresses et réglages ».
+   * Adresse de l'application (`/marketing/` sur le serveur), fixée au build par le déploiement.
+   * Elle ne sert qu'à l'écran « Adresses et réglages ». La version franchisée (`/marketingc/`)
+   * est retirée : le module sert au pilotage de la marque.
    */
   readonly VITE_RESEAU_BASE?: string
-  readonly VITE_FRANCHISE_BASE?: string
 }
 
 interface ImportMeta {

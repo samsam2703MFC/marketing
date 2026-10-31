@@ -31,7 +31,6 @@ const absolute = (path: string) => new URL(path, window.location.origin).href
 function addresses(): Address[] {
   const here = env.BASE_URL
   const reseau = env.VITE_RESEAU_BASE || (ROLE === 'BRAND_ADMIN' ? here : null)
-  const franchise = env.VITE_FRANCHISE_BASE || (ROLE === 'FRANCHISEE' ? here : null)
 
   return [
     {
@@ -39,13 +38,6 @@ function addresses(): Address[] {
       role: 'Cette application pour la marque : campagnes, calendrier, réglages',
       path: reseau,
       setting: 'VITE_RESEAU_BASE ← DEPLOY_DIR',
-      screen: true,
-    },
-    {
-      label: 'Marketing — franchisés',
-      role: 'La même application pour les boutiques, limitée à leur périmètre',
-      path: franchise,
-      setting: 'VITE_FRANCHISE_BASE ← DEPLOY_DIR_FRANCHISE',
       screen: true,
     },
     {
@@ -104,7 +96,6 @@ function buildSettings(): Array<{ name: string; value: string | undefined; fallb
     { name: 'VITE_SOCIAL_FRANCHISEE_BASE', value: env.VITE_SOCIAL_FRANCHISEE_BASE, fallback: '/marketing/franchise/', role: 'Module Social & Ads, espace boutique' },
     { name: 'VITE_SIGNAGE_BASE', value: env.VITE_SIGNAGE_BASE, fallback: '/signage/', role: 'Régie d’affichage des écrans des magasins (Marketing en magasin)' },
     { name: 'VITE_RESEAU_BASE', value: env.VITE_RESEAU_BASE, fallback: 'non connue', role: 'Adresse de la version réseau' },
-    { name: 'VITE_FRANCHISE_BASE', value: env.VITE_FRANCHISE_BASE, fallback: 'non connue', role: 'Adresse de la version franchisé' },
     { name: 'VITE_TFBUDDY_BASE_URL', value: env.VITE_TFBUDDY_BASE_URL, fallback: `${DEV_PROXY_PREFIX} (relais de développement)`, role: 'API de l’ERP TFBuddy' },
     { name: 'VITE_TFBUDDY_AUTH_MODE', value: env.VITE_TFBUDDY_AUTH_MODE, fallback: 'phone', role: 'Connexion à l’ERP : phone ou legacy' },
   ]

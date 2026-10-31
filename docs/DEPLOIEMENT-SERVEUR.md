@@ -8,12 +8,13 @@ Hypothèses, à ajuster si votre installation diffère : racine web `/var/www/ht
 
 ## 1. Répertoires
 
-Deux applications distinctes, donc deux répertoires : la vue Réseau (franchiseur) et la vue Franchisé sont des builds séparés, chacun avec sa navigation et ses libellés. Le rôle est figé à la compilation, il n'y a pas de bascule à l'écran.
+Une seule application : le module sert au pilotage de la marque, et seuls les comptes réseau de l'ERP s'y connectent.
 
 | Vue | Répertoire | URL |
 |---|---|---|
 | Réseau (franchiseur) | `/var/www/html/marketing` | `/marketing/?brand=1` |
-| Franchisé | `/var/www/html/marketingc` | `/marketingc/?brand=1` |
+
+La version franchisée (`/var/www/html/marketingc`) est retirée depuis le 31/10/2026 : le déploiement **déplace** son répertoire hors de la racine web, dans `/var/www/private/marketing/retraits/marketingc-<date>` (rien n'est effacé), puis ne la publie plus. La configuration Apache `<Directory /var/www/html/marketingc>` peut être retirée.
 
 L'enseigne du périmètre se lit dans l'adresse : `?brand=1` porte **l'identifiant
 de l'ERP**, pas celui du module. C'est l'ERP qui ouvre le module, et il ne
@@ -39,11 +40,11 @@ et rien d'autre : remplir les écrans d'un périmètre que personne n'a demandé
 serait pire.
 
 ```bash
-sudo mkdir -p /var/www/html/marketing /var/www/html/marketingc
+sudo mkdir -p /var/www/html/marketing
 sudo mkdir -p /var/www/private/marketing
 
 # Le déploiement écrit dans le premier ; le second ne contient que la config.
-sudo chown -R "$USER":www-data /var/www/html/marketing /var/www/html/marketingc /var/www/private/marketing
+sudo chown -R "$USER":www-data /var/www/html/marketing /var/www/private/marketing
 sudo chmod 750 /var/www/private/marketing
 ```
 
@@ -147,12 +148,6 @@ sudo tee /etc/apache2/conf-available/marketing.conf > /dev/null <<'EOF'
     AllowOverride All
     Require all granted
 </Directory>
-
-<Directory /var/www/html/marketingc>
-    Options -Indexes +FollowSymLinks
-    AllowOverride All
-    Require all granted
-</Directory>
 EOF
 
 sudo a2enconf marketing
@@ -238,10 +233,8 @@ curl -s -o /dev/null -w 'pointeur      %{http_code}  (403/404 attendu)\n' "$BASE
 curl -s -o /dev/null -w 'migration     %{http_code}  (403/404 attendu)\n' \
   "$BASE/db/migrations/001_socle_reseau.sql"
 
-# Et la vue Franchisé, qui est une application à part entière.
-F=http://localhost/marketingc
-curl -s -o /dev/null -w 'franchisé     %{http_code}\n' "$F/"
-curl -s -o /dev/null -w 'franchisé api %{http_code}\n' "$F/api/v1/marketing/session"
+# La version franchisée est retirée : 404 attendu.
+curl -s -o /dev/null -w 'marketingc    %{http_code}  (404 attendu)\n' "http://localhost/marketingc/"
 ```
 
 Les trois derniers comptent autant que les deux premiers : un `200` sur `.env` signifie que les identifiants MySQL sont publics.
