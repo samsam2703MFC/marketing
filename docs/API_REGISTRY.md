@@ -581,3 +581,49 @@ Couches : contrôleur `MediaController` (HTTP, validation des paramètres,
 enveloppe) → service `MediaService` (dédoublonnage, classements, sérialisation)
 → dépôt `MediaRepository` (seul SQL) ; fichiers par `MediaStore`.
 
+## 10. Variables et clés du module (novembre 2026)
+
+Le module doit pouvoir être déplacé dans un autre projet : tout ce qui lui
+appartient vit sous `mar_`, ses réglages compris (migration 040).
+
+- **`mar_variable`** `(module, name)` — les réglages, en clair (valeur JSON) :
+  adresses de l'ERP et du webshop, délais, dossier des envois, adresse publique.
+- **`mar_keys`** `(module, name)` — les secrets, **chiffrés** : jetons de l'ERP et
+  du webshop, mot de passe du compte de service, secret de session, jeton de
+  service. Format `x1:` XChaCha20-Poly1305 (libsodium) ou `g1:` AES-256-GCM
+  (OpenSSL), données associées `mar_keys:{module}:{nom}` (une valeur recopiée sous
+  un autre nom ne se déchiffre pas). Clé maîtresse de 32 octets **hors de la
+  base** : `MAR_KEYS_FILE`, à défaut `master.key` à côté du `.env` — tirée une
+  fois par le déploiement, jamais réécrite. La perdre rend les clés illisibles :
+  elle se sauvegarde avec le `.env`.
+- `module` sépare Marketing (`marketing`) et Social & Ads (`social`), qui fait
+  partie du même ensemble et suit le même format.
+
+Lecture (`Config::get`, `Keys::get`) : la base, puis l'environnement (le `.env`
+d'avant, en repli le temps de la transition), puis le défaut. Une valeur posée
+depuis l'écran l'emporte donc sur le fichier. Restent dans l'environnement, par
+construction : l'accès à la base (`MAR_DB_*`), la clé maîtresse
+(`MAR_KEYS_FILE`), le chemin d'installation (`MAR_BASE_PATH`) et l'identité de
+développement (`MAR_DEV_*` — une base modifiable ne doit pas pouvoir ouvrir le
+module à n'importe qui).
+
+Au déploiement, `php db/variables.php import` verse en base ce que le `.env`
+porte encore, sans rien écraser ; `list` donne les noms et leur source, jamais une
+clé.
+
+| Méthode | Chemin | Périmètre | Réponse |
+|---|---|---|---|
+| GET | `…/variables` | marque | enveloppe — chaque réglage avec sa valeur effective et sa source (`base`, `fichier`, `absente`) |
+| PUT | `…/variables/{name}` | marque | `{ value }` — enregistre en base ; accès à la base, identité de développement et secrets refusés (`422`) |
+| DELETE | `…/variables/{name}` | marque | retire de la base ; le fichier reprend |
+| GET | `…/keys` | marque | enveloppe — nom, 4 derniers caractères, source, lisibilité, date ; **jamais la valeur** ; `meta.masterKey.present` |
+| PUT | `…/keys/{name}` | marque | `{ value }` — chiffrée ; la réponse ne la contient pas. `MAR_SESSION_SECRET` et `MAR_SERVICE_TOKEN` refusés : entretenus par le déploiement |
+| DELETE | `…/keys/{name}` | marque | retire de la base |
+
+Écran : Paramètres › Variables et clés. Tests (« Variables et clés ») :
+chiffrement (rien du clair en base), clé maîtresse créée en 0640, valeur
+recopiée sous un autre nom indéchiffrable, autre clé maîtresse → illisible et
+repli sur le fichier, priorité base > fichier, amorçage refusé, 401, 403, 422,
+réponse sans la valeur, import idempotent sans écrasement, secret de session lu
+en base.
+

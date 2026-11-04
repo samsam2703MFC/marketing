@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Marketing\Repository;
 
 use Marketing\Support\AuthContext;
+use Marketing\Support\Config;
 use Marketing\Support\Database;
-use Marketing\Support\Env;
 use Marketing\Support\ErpClient;
 use Marketing\Support\Scope;
 use RuntimeException;
@@ -80,8 +80,8 @@ final class PriceListRepository
         $items = $this->items($itemIds);
         $shops = $this->shops($auth);
 
-        $base     = Env::get('MAR_ERP_API_BASE');
-        $template = Env::get(
+        $base     = Config::get('MAR_ERP_API_BASE');
+        $template = Config::get(
             'MAR_ERP_PRICE_LIST_PATH',
             '/api/v1/shops/{shop}/products/price-list/document'
         ) ?? '';

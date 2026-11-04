@@ -21,6 +21,7 @@ import CampaignFixView from './views/CampaignFixView'
 import LoginView from './views/LoginView'
 import BrochureView from './views/brochure/BrochureView'
 import MediaLibraryView from './views/media/MediaLibraryView'
+import SettingsView from './views/SettingsView'
 import CampaignBuilder from './views/builder/CampaignBuilder'
 import SocialView from './views/SocialView'
 import InStoreView from './views/InStoreView'
@@ -395,6 +396,7 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
           {route === 'addresses' ? <AddressesView /> : null}
           {route === 'brochures' && role === 'BRAND_ADMIN' ? <BrochureView campaignId={campaignId} onOpenCampaign={openCampaign} /> : null}
           {route === 'media' && role === 'BRAND_ADMIN' ? <MediaLibraryView /> : null}
+          {route === 'settings' && role === 'BRAND_ADMIN' ? <SettingsView /> : null}
 
           {route === 'campaign-fix' ? (
             <CampaignFixView

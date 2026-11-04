@@ -27,6 +27,7 @@ use Marketing\Controller\PublicController;
 use Marketing\Controller\ReferenceController;
 use Marketing\Controller\SalesController;
 use Marketing\Controller\SessionController;
+use Marketing\Controller\SettingsController;
 use Marketing\Controller\UploadController;
 use Marketing\Support\Router;
 
@@ -45,6 +46,7 @@ return static function (Router $router): void {
     $campaignVouchers = new CampaignVoucherController();
     $brochures  = new BrochureController();
     $media      = new MediaController();
+    $settings   = new SettingsController();
 
     // Session — publique : elle ne dit que si l'appelant est authentifié.
     // Le front s'en sert pour savoir s'il est embarqué dans l'ERP, auquel cas
@@ -109,6 +111,15 @@ return static function (Router $router): void {
     $router->patch('/api/v1/marketing/media-assets/{id}',            [$media, 'update']);
     $router->put('/api/v1/marketing/media-assets/{id}/thumbnail',    [$media, 'thumbnail']);
     $router->delete('/api/v1/marketing/media-assets/{id}',           [$media, 'destroy']);
+
+    // Réglages et secrets du module, en base (mar_variable, mar_keys) — réseau seul.
+    // Une clé ne se relit jamais : nom, quatre derniers caractères, date et source.
+    $router->get('/api/v1/marketing/variables',            [$settings, 'variables']);
+    $router->put('/api/v1/marketing/variables/{name}',     [$settings, 'putVariable']);
+    $router->delete('/api/v1/marketing/variables/{name}',  [$settings, 'deleteVariable']);
+    $router->get('/api/v1/marketing/keys',                 [$settings, 'keys']);
+    $router->put('/api/v1/marketing/keys/{name}',          [$settings, 'putKey']);
+    $router->delete('/api/v1/marketing/keys/{name}',       [$settings, 'deleteKey']);
 
     // Outils de campagne
     $router->get('/api/v1/marketing/offer-items',     [$catalog, 'offerItems']);

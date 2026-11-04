@@ -7,7 +7,7 @@ namespace Marketing\Service;
 use DateTimeImmutable;
 use DateTimeZone;
 use Marketing\Repository\MediaRepository;
-use Marketing\Support\Env;
+use Marketing\Support\Config;
 use Marketing\Support\MediaStore;
 use Marketing\Support\Session;
 
@@ -293,7 +293,7 @@ final class MediaService
      */
     public static function publicUrl(string $path): string
     {
-        $base = rtrim(trim((string) Env::get('MAR_PUBLIC_BASE_URL', '')), '/');
+        $base = rtrim(trim((string) Config::get('MAR_PUBLIC_BASE_URL', '')), '/');
         if ($base === '') {
             $host = (string) ($_SERVER['HTTP_X_FORWARDED_HOST'] ?? $_SERVER['HTTP_HOST'] ?? '');
             $host = trim(explode(',', $host)[0]);

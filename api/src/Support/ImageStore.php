@@ -299,7 +299,7 @@ final class ImageStore
     /** Nom du dossier public, tel qu'il apparaît dans l'adresse. */
     public static function folder(): string
     {
-        return trim((string) (Env::get('MAR_UPLOAD_FOLDER', 'uploads') ?: 'uploads'), '/');
+        return trim((string) (Config::get('MAR_UPLOAD_FOLDER', 'uploads') ?: 'uploads'), '/');
     }
 
     /**
@@ -312,7 +312,7 @@ final class ImageStore
      */
     public static function directory(): string
     {
-        $configured = trim((string) (Env::get('MAR_UPLOAD_DIR', '') ?: ''));
+        $configured = trim((string) (Config::get('MAR_UPLOAD_DIR', '') ?: ''));
         if ($configured !== '') {
             return rtrim($configured, '/');
         }

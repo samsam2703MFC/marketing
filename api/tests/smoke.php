@@ -4325,6 +4325,137 @@ foreach ($envAvant as $cle => $valeur) {
 }
 AuthContext::set(1, 'BRAND_ADMIN', 1);
 
+// --- Variables et clés du module (mar_variable, mar_keys) -------------------
+// Le module se déplace avec ses réglages : ils vivent en base, les secrets chiffrés
+// par une clé maîtresse gardée hors de la base. Le test ne touche qu'aux noms qu'il
+// pose, et les retire en partant.
+echo "\nVariables et clés\n";
+$nomsTest = ['MAR_ERP_API_TIMEOUT', 'MAR_WEBSHOP_API_BASE', 'MAR_WEBSHOP_API_TOKEN', 'MAR_ERP_API_TOKEN', 'MAR_ERP_API_PASSWORD', 'MAR_SESSION_SECRET', 'MAR_TEST_LIBRE'];
+$purgerReglages = static function () use ($pdo, &$nomsTest): void {
+    $liste = implode(',', array_map([$pdo, 'quote'], $nomsTest));
+    $pdo->exec("DELETE FROM mar_variable WHERE module = 'marketing' AND name IN ($liste)");
+    $pdo->exec("DELETE FROM mar_keys WHERE module = 'marketing' AND name IN ($liste)");
+    \Marketing\Support\Config::forget();
+    \Marketing\Support\Keys::forget();
+};
+$purgerReglages();
+$envReglages = [];
+foreach (array_merge($nomsTest, ['MAR_KEYS_FILE']) as $cle) { $envReglages[$cle] = \Marketing\Support\Env::get($cle); }
+$dossierCles = sys_get_temp_dir() . '/mar_keys_' . getmypid();
+@mkdir($dossierCles, 0700, true);
+\Marketing\Support\Env::set('MAR_KEYS_FILE', $dossierCles . '/master.key');
+\Marketing\Support\Keys::forget();
+
+\Marketing\Support\Keys::put('MAR_WEBSHOP_API_TOKEN', 'jeton-webshop-secret-123456');
+$brut = (string) $pdo->query("SELECT ciphertext FROM mar_keys WHERE module = 'marketing' AND name = 'MAR_WEBSHOP_API_TOKEN'")->fetchColumn();
+\Marketing\Support\Keys::forget();
+check('une clé est chiffrée en base (rien du clair), la clé maîtresse créée hors de la base en 0640, et elle se relit',
+    $brut !== '' && !str_contains($brut, 'jeton-webshop') && preg_match('/^(x1|g1):/', $brut) === 1
+        && is_file($dossierCles . '/master.key') && (fileperms($dossierCles . '/master.key') & 0777) === 0640
+        && \Marketing\Support\Keys::get('MAR_WEBSHOP_API_TOKEN') === 'jeton-webshop-secret-123456');
+check('une valeur chiffrée recopiée sous un autre nom ne se déchiffre pas',
+    \Marketing\Support\Keys::decrypt($brut, 'marketing', 'MAR_ERP_API_TOKEN') === null && \Marketing\Support\Keys::decrypt($brut, 'social', 'MAR_WEBSHOP_API_TOKEN') === null);
+
+// Avec une autre clé maîtresse, la clé en base est illisible : l'environnement reprend, l'écran le dit.
+\Marketing\Support\Env::set('MAR_WEBSHOP_API_TOKEN', 'jeton-du-fichier');
+\Marketing\Support\Env::set('MAR_KEYS_FILE', $dossierCles . '/autre.key');
+file_put_contents($dossierCles . '/autre.key', base64_encode(random_bytes(32)));
+\Marketing\Support\Keys::forget();
+$illisible = array_values(array_filter(\Marketing\Support\Keys::describe(), static fn (array $k): bool => $k['name'] === 'MAR_WEBSHOP_API_TOKEN'))[0] ?? [];
+check('clé maîtresse différente : la clé en base est signalée illisible, et la valeur du fichier sert en repli',
+    ($illisible['readable'] ?? true) === false && \Marketing\Support\Keys::get('MAR_WEBSHOP_API_TOKEN') === 'jeton-du-fichier');
+\Marketing\Support\Env::set('MAR_KEYS_FILE', $dossierCles . '/master.key');
+\Marketing\Support\Keys::forget();
+check('… et redevient lisible avec la bonne clé maîtresse (la base l\'emporte sur le fichier)',
+    \Marketing\Support\Keys::get('MAR_WEBSHOP_API_TOKEN') === 'jeton-webshop-secret-123456');
+
+// Les réglages : la base l'emporte sur le fichier ; l'amorçage ne se règle jamais en base.
+\Marketing\Support\Env::set('MAR_ERP_API_TIMEOUT', '5');
+\Marketing\Support\Config::put('MAR_ERP_API_TIMEOUT', '9');
+$enBase = \Marketing\Support\Config::get('MAR_ERP_API_TIMEOUT', '1');
+\Marketing\Support\Config::delete('MAR_ERP_API_TIMEOUT');
+$apres = \Marketing\Support\Config::get('MAR_ERP_API_TIMEOUT', '1');
+$amorce = null;
+try { \Marketing\Support\Config::put('MAR_DB_PASSWORD', 'x'); } catch (\RuntimeException $e) { $amorce = $e->getMessage(); }
+$devRefuse = null;
+try { \Marketing\Support\Config::put('MAR_DEV_AUTH', '1'); } catch (\RuntimeException $e) { $devRefuse = $e->getMessage(); }
+check('réglage : la base l\'emporte sur le fichier, retiré le fichier reprend ; l\'accès à la base et l\'identité de développement ne se règlent jamais en base',
+    $enBase === '9' && $apres === '5' && $amorce !== null && $devRefuse !== null && \Marketing\Support\Config::get('MAR_DB_NAME') === \Marketing\Support\Env::get('MAR_DB_NAME'));
+
+// Par l'API.
+AuthContext::clear();
+check('variables et clés : 401 sans identité', call($router, 'GET', '/api/v1/marketing/variables')['status'] === 401 && call($router, 'GET', '/api/v1/marketing/keys')['status'] === 401);
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+check('variables et clés : 403 pour une boutique (lecture comme écriture)',
+    call($router, 'GET', '/api/v1/marketing/variables')['status'] === 403 && call($router, 'PUT', '/api/v1/marketing/keys/MAR_ERP_API_TOKEN', [], ['value' => 'x'])['status'] === 403);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$pose = call($router, 'PUT', '/api/v1/marketing/variables/MAR_WEBSHOP_API_BASE', [], ['value' => ' https://webshop.test/api ']);
+$ligne = array_values(array_filter($pose['body']['data'] ?? [], static fn (array $v): bool => $v['name'] === 'MAR_WEBSHOP_API_BASE'))[0] ?? [];
+check('PUT variable : enregistrée en base (source « base »), valeur nettoyée, relue par le code',
+    $pose['status'] === 200 && ($ligne['source'] ?? '') === 'base' && ($ligne['value'] ?? '') === 'https://webshop.test/api'
+        && \Marketing\Support\Config::get('MAR_WEBSHOP_API_BASE') === 'https://webshop.test/api');
+$refusVar = [
+    call($router, 'PUT', '/api/v1/marketing/variables/MAR_DB_PASSWORD', [], ['value' => 'x'])['status'],
+    call($router, 'PUT', '/api/v1/marketing/variables/MAR_ERP_API_TOKEN', [], ['value' => 'x'])['status'],
+    call($router, 'PUT', '/api/v1/marketing/variables/MAR_TEST_LIBRE', [], ['valeur' => 'x'])['status'],
+    call($router, 'PUT', '/api/v1/marketing/variables/MAR_TEST_LIBRE', [], ['value' => ['liste']])['status'],
+];
+check('PUT variable refusé (422) : accès à la base, secret, champ inconnu, valeur qui n\'est pas un texte', array_unique($refusVar) === [422], json_encode($refusVar));
+
+$cle = call($router, 'PUT', '/api/v1/marketing/keys/MAR_ERP_API_TOKEN', [], ['value' => 'jeton-erp-tres-secret-9876']);
+$lue = call($router, 'GET', '/api/v1/marketing/keys');
+$tout = json_encode($lue['body']);
+$ligneCle = array_values(array_filter($lue['body']['data'] ?? [], static fn (array $k): bool => $k['name'] === 'MAR_ERP_API_TOKEN'))[0] ?? [];
+check('PUT clé : enregistrée chiffrée ; ni la réponse ni la lecture ne contiennent la valeur, seulement ses 4 derniers caractères',
+    $cle['status'] === 200 && $lue['status'] === 200 && !str_contains((string) json_encode($cle['body']), 'tres-secret') && !str_contains((string) $tout, 'tres-secret')
+        && ($ligneCle['hint'] ?? '') === '••••9876' && ($ligneCle['source'] ?? '') === 'base' && ($ligneCle['readable'] ?? false) === true
+        && \Marketing\Support\Keys::get('MAR_ERP_API_TOKEN') === 'jeton-erp-tres-secret-9876');
+$refusCle = [
+    call($router, 'PUT', '/api/v1/marketing/keys/MAR_SESSION_SECRET', [], ['value' => str_repeat('z', 40)])['status'],
+    call($router, 'PUT', '/api/v1/marketing/keys/MAR_SERVICE_TOKEN', [], ['value' => str_repeat('z', 40)])['status'],
+    call($router, 'PUT', '/api/v1/marketing/keys/MAR_WEBSHOP_API_BASE', [], ['value' => 'x'])['status'],
+    call($router, 'PUT', '/api/v1/marketing/keys/MAR_ERP_API_TOKEN', [], ['value' => '   '])['status'],
+    call($router, 'DELETE', '/api/v1/marketing/keys/MAR_SERVICE_TOKEN')['status'],
+];
+check('clés refusées (422) : secret de session et jeton de service (entretenus par le déploiement), une variable, une valeur vide, le retrait d\'une clé du déploiement',
+    array_unique($refusCle) === [422], json_encode($refusCle));
+$retrait = call($router, 'DELETE', '/api/v1/marketing/keys/MAR_ERP_API_TOKEN');
+check('DELETE clé : retirée de la base, le fichier reprend', $retrait['status'] === 200 && \Marketing\Support\Keys::get('MAR_ERP_API_TOKEN') === \Marketing\Support\Env::get('MAR_ERP_API_TOKEN'));
+
+// Import du .env : ce qui n'est pas en base y est versé, rien n'est écrasé, une seconde fois ne change rien.
+$purgerReglages();
+\Marketing\Support\Env::set('MAR_WEBSHOP_API_BASE', 'https://depuis-le-fichier.test');
+\Marketing\Support\Env::set('MAR_ERP_API_PASSWORD', 'mot-de-passe-du-fichier');
+\Marketing\Support\Config::put('MAR_ERP_API_TIMEOUT', '7');
+\Marketing\Support\Env::set('MAR_ERP_API_TIMEOUT', '3');
+$premier = \Marketing\Support\Settings::importFromEnvironment();
+$second  = \Marketing\Support\Settings::importFromEnvironment();
+// L'import verse tout ce que l'environnement du test porte (dossiers temporaires compris) : tout est retiré en partant.
+$nomsTest = array_values(array_unique(array_merge($nomsTest, $premier['variables'], $premier['keys'])));
+check('import du .env : variables et clés absentes versées, la valeur déjà en base gardée, la seconde passe ne verse rien',
+    in_array('MAR_WEBSHOP_API_BASE', $premier['variables'], true) && in_array('MAR_ERP_API_PASSWORD', $premier['keys'], true)
+        && !in_array('MAR_ERP_API_TIMEOUT', $premier['variables'], true) && \Marketing\Support\Config::get('MAR_ERP_API_TIMEOUT') === '7'
+        && $second['variables'] === [] && $second['keys'] === []
+        && \Marketing\Support\Keys::get('MAR_ERP_API_PASSWORD') === 'mot-de-passe-du-fichier'
+        && !str_contains((string) $pdo->query("SELECT ciphertext FROM mar_keys WHERE name = 'MAR_ERP_API_PASSWORD'")->fetchColumn(), 'mot-de-passe'),
+    json_encode([$premier, $second]));
+
+// Le secret de session lu en base : la session s'ouvre, et un cookie signé d'un autre secret, non.
+\Marketing\Support\Keys::put('MAR_SESSION_SECRET', str_repeat('k', 40));
+\Marketing\Support\Env::set('MAR_SESSION_SECRET', str_repeat('f', 40));
+$cookie = \Marketing\Support\Session::seal(['user_id' => 5, 'role' => 'BRAND_ADMIN', 'shop_ids' => [], 'label' => 'test']);
+$pdo->exec("DELETE FROM mar_keys WHERE name = 'MAR_SESSION_SECRET'");
+\Marketing\Support\Keys::forget();
+check('le secret de session se lit en base, avant le fichier : un cookie signé du secret en base ne s\'ouvre plus quand le fichier reprend',
+    \Marketing\Support\Session::open($cookie) === null);
+
+$purgerReglages();
+foreach ($envReglages as $cle => $valeur) { \Marketing\Support\Env::set($cle, $valeur); }
+array_map('unlink', glob($dossierCles . '/*') ?: []);
+@rmdir($dossierCles);
+\Marketing\Support\Keys::forget();
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
 // --- Résultat -------------------------------------------------------------
 printf("\n%d réussis, %d échoués\n", $passed, $failed);
 exit($failed === 0 ? 0 : 1);

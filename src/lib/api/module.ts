@@ -2390,3 +2390,59 @@ export async function archiveMedia(id: string): Promise<MediaAsset> {
 export async function setMediaThumbnail(id: string, image: Blob): Promise<MediaAsset> {
   return (await request<Envelope<MediaAsset>>(`${BASE}/media-assets/${id}/thumbnail`, { method: 'PUT', body: image })).data
 }
+
+// ---------------------------------------------------------------------------
+// Réglages et secrets du module, en base (mar_variable, mar_keys) — au standard
+// ---------------------------------------------------------------------------
+
+export type SettingSource = 'base' | 'fichier' | 'absente'
+
+export interface ModuleVariable {
+  name: string
+  group: string
+  label: string
+  help: string
+  value: string | number | boolean | null
+  source: SettingSource
+  updatedAt: string | null
+}
+
+export interface ModuleKey {
+  name: string
+  group: string
+  label: string
+  help: string
+  /** Tirée et entretenue par le déploiement : ne se change pas depuis l'écran. */
+  managedByDeploy: boolean
+  source: SettingSource
+  /** Les quatre derniers caractères, jamais la valeur. */
+  hint: string | null
+  /** Faux : la clé en base ne se déchiffre pas avec la clé maîtresse de ce serveur. */
+  readable: boolean | null
+  updatedAt: string | null
+}
+
+export async function listModuleVariables(): Promise<ModuleVariable[]> {
+  return (await request<Envelope<ModuleVariable[]>>(`${BASE}/variables`)).data
+}
+
+export async function saveModuleVariable(name: string, value: string): Promise<ModuleVariable[]> {
+  return (await request<Envelope<ModuleVariable[]>>(`${BASE}/variables/${encodeURIComponent(name)}`, { method: 'PUT', body: { value } })).data
+}
+
+export async function resetModuleVariable(name: string): Promise<ModuleVariable[]> {
+  return (await request<Envelope<ModuleVariable[]>>(`${BASE}/variables/${encodeURIComponent(name)}`, { method: 'DELETE' })).data
+}
+
+export async function listModuleKeys(): Promise<{ keys: ModuleKey[]; masterKey: boolean }> {
+  const body = await request<Envelope<ModuleKey[]> & { meta: { masterKey?: { present?: boolean } } }>(`${BASE}/keys`)
+  return { keys: body.data, masterKey: body.meta.masterKey?.present === true }
+}
+
+export async function saveModuleKey(name: string, value: string): Promise<ModuleKey[]> {
+  return (await request<Envelope<ModuleKey[]>>(`${BASE}/keys/${encodeURIComponent(name)}`, { method: 'PUT', body: { value } })).data
+}
+
+export async function removeModuleKey(name: string): Promise<ModuleKey[]> {
+  return (await request<Envelope<ModuleKey[]>>(`${BASE}/keys/${encodeURIComponent(name)}`, { method: 'DELETE' })).data
+}
