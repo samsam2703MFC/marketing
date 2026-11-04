@@ -15,6 +15,12 @@ final class Request
         public readonly array $body = [],
         /** @var array<string,string> Segments capturés dans le chemin */
         public readonly array $params = [],
+        /**
+         * Le corps brut d'un envoi de fichier (`Content-Type` image/…, video/… ou
+         * application/octet-stream) : un fichier de 40 Mo ne passe pas par du base64
+         * dans du JSON. Vide pour une requête JSON.
+         */
+        public readonly string $raw = '',
     ) {
     }
 
@@ -22,14 +28,18 @@ final class Request
     {
         $path = self::stripBasePath(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');
         $raw  = file_get_contents('php://input') ?: '';
+        $type = strtolower((string) ($_SERVER['CONTENT_TYPE'] ?? ''));
+        $file = preg_match('#^(image|video)/|^application/octet-stream#', $type) === 1;
 
-        $decoded = $raw === '' ? [] : json_decode($raw, true);
+        $decoded = $raw === '' || $file ? [] : json_decode($raw, true);
 
         return new self(
             strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET'),
             $path,
             $_GET,
             is_array($decoded) ? $decoded : [],
+            [],
+            $file ? $raw : '',
         );
     }
 
@@ -65,7 +75,7 @@ final class Request
 
     public function withParams(array $params): self
     {
-        return new self($this->method, $this->path, $this->query, $this->body, $params);
+        return new self($this->method, $this->path, $this->query, $this->body, $params, $this->raw);
     }
 
     public function param(string $key): ?string

@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Marketing\Repository;
 
 use Marketing\Support\AuthContext;
+use Marketing\Support\Config;
 use Marketing\Support\Database;
-use Marketing\Support\Env;
 use PDO;
 use RuntimeException;
 use Throwable;
@@ -611,7 +611,7 @@ final class ErpSyncRepository
      */
     private function readBrands(string $schema): array
     {
-        $configured = trim((string) (Env::get('MAR_ERP_BRANDS_TABLE', '') ?: ''));
+        $configured = trim((string) (Config::get('MAR_ERP_BRANDS_TABLE', '') ?: ''));
 
         if ($configured !== '') {
             [$brandSchema, $table] = $this->source('MAR_ERP_BRANDS_TABLE', $configured);
@@ -1486,7 +1486,7 @@ final class ErpSyncRepository
         // mais doit exister : une valeur obsolète après une migration de l'ERP
         // ne doit pas faire retomber silencieusement sur une autre colonne.
         if ($variable !== null) {
-            $configured = trim((string) (Env::get($variable, '') ?: ''));
+            $configured = trim((string) (Config::get($variable, '') ?: ''));
             if ($configured !== '') {
                 $match = $find($configured);
                 if ($match === null) {
@@ -1639,7 +1639,7 @@ final class ErpSyncRepository
      */
     private function source(string $variable, string $default): array
     {
-        $value = trim((string) (Env::get($variable, $default) ?: $default));
+        $value = trim((string) (Config::get($variable, $default) ?: $default));
 
         if (preg_match('/^(?:([A-Za-z0-9_]+)\.)?([A-Za-z0-9_]+)$/', $value, $matches) !== 1) {
             throw new RuntimeException(sprintf(

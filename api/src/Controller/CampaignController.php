@@ -81,7 +81,7 @@ final class CampaignController
             'image_url', 'focal_point_y', 'image_fit', 'shop_ids', 'shop_targets', 'shop_item_targets', 'channels', 'lever_targets',
             'color_primary_hex', 'color_secondary_hex', 'color_accent_hex', 'color_ink_hex',
             'sector_ids', 'agency_ask_ids', 'b2b_option_ids', 'uniform_ids', 'format_ids',
-            'retroplanning', 'offer',
+            'retroplanning', 'offer', 'segment_ids', 'messages',
             'challenge_enabled', 'challenge_metric', 'challenge_trigger_pct', 'challenge_prizes',
             'margin_pct_default',
         ]);
@@ -146,7 +146,7 @@ final class CampaignController
             'create_crm_leads', 'b2b_offices_only', 'tracking_action_id', 'tracking_scope', 'tracking_target', 'tracking_baseline', 'image_url', 'focal_point_y', 'image_fit', 'shop_ids', 'shop_targets', 'shop_item_targets', 'channels',
             'color_primary_hex', 'color_secondary_hex', 'color_accent_hex', 'color_ink_hex',
             'lever_targets', 'sector_ids', 'agency_ask_ids', 'b2b_option_ids',
-            'uniform_ids', 'format_ids', 'retroplanning', 'offer',
+            'uniform_ids', 'format_ids', 'retroplanning', 'offer', 'segment_ids', 'messages',
             'challenge_enabled', 'challenge_metric', 'challenge_trigger_pct', 'challenge_prizes',
             'margin_pct_default',
         ]);

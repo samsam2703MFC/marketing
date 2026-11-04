@@ -18,12 +18,16 @@ export type Route =
   | 'campaign-types'
   /** Les adresses du module et les réglages de cette version — réseau seul, lecture seule. */
   | 'addresses'
+  /** Les réglages et les secrets du module, en base (mar_variable, mar_keys) — réseau seul. */
+  | 'settings'
   /** Assistant de création — ouvert depuis « Campagnes », pas depuis le menu. */
   | 'builder'
   /** Compléter les campagnes à qui il manque une donnée pour mesurer leur retour — ouvert depuis « Campagnes ». */
   | 'campaign-fix'
   /** Générateur de brochures : leaflet A5, dépliant A4 3 volets, une version par boutique et par langue — réseau seul. */
   | 'brochures'
+  /** La médiathèque commune : photos et vidéos de tout le marketing (Social, campagnes, brochures, bâches) — réseau seul. */
+  | 'media'
   | 'promotions'
   | 'bundles'
   | 'vouchers'
@@ -99,8 +103,10 @@ const ICONS: Record<string, string> = {
   campaigns: 'M3 11l14-7v16L3 13zM7 14v5',
   'campaign-types': 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7zM8 8h0M17 8h0',
   addresses: 'M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12zM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
+  settings: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5zM12 15v2',
   promotions: 'M19 5L5 19M7 7a1.5 1.5 0 1 0 .01 0M17 17a1.5 1.5 0 1 0 .01 0',
   brochures: 'M3 5l6-2 6 2 6-2v16l-6 2-6-2-6 2zM9 3v16M15 5v16',
+  media: 'M3 5h18v14H3zM3 15l5-5 4 4 3-3 6 6M15.5 9a1.5 1.5 0 1 0 0-.01',
   bundles: 'M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8M12 13v8',
   vouchers: 'M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4zM13 6v12',
   instore: 'M3 4h18v12H3zM8 20h8M12 16v4',
@@ -229,7 +235,12 @@ function item(route: Route, label: string): NavItem {
  */
 const NETWORK: NavGroup[] = [
   // Le calendrier marketing réunit tout ce qui est prévu ou en cours, tous canaux confondus.
-  { label: 'Pilotage', items: [item('dashboard', 'Tableau de bord'), item('calendar', 'Calendrier marketing')] },
+  // La médiathèque est commune à tout le marketing (posts, pubs, campagnes, brochures, bâches) :
+  // elle se range avec les outils transversaux plutôt que sous un canal.
+  {
+    label: 'Pilotage',
+    items: [item('dashboard', 'Tableau de bord'), item('calendar', 'Calendrier marketing'), item('media', 'Médiathèque')],
+  },
   // La campagne au centre : on la crée par l'assistant ; ses posts, pubs et son
   // retour s'ouvrent depuis sa fiche. Les offres et le marketing en magasin en
   // font partie (30/10/2026) : les promotions de l'ERP (bundles, X achetés = Y,
@@ -286,6 +297,8 @@ const NETWORK: NavGroup[] = [
       item('campaign-types', 'Types de campagne'),
       // Où vit chaque écran et avec quels réglages cette version a été construite (sans secret).
       item('addresses', 'Adresses et réglages'),
+      // Les réglages et les secrets du module, en base : il se déplace avec eux.
+      item('settings', 'Variables et clés'),
     ],
   },
 ]

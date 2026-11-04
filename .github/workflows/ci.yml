@@ -592,6 +592,14 @@ jobs:
             chgrp www-data service-token 2>/dev/null
             chmod 640 service-token
             [ -s service-token ] || { echo 'TOKEN_EMPTY'; exit 93; }
+            # La clé maîtresse de mar_keys : tirée une fois, jamais réécrite (la changer rendrait
+            # illisibles toutes les clés enregistrées). Hors de la base, à côté du .env.
+            if [ ! -s master.key ]; then
+              head -c 32 /dev/urandom | base64 > master.key || { echo 'MASTER_FAIL'; exit 95; }
+              echo MASTER_NEW
+            fi
+            chgrp www-data master.key 2>/dev/null
+            chmod 640 master.key
             echo OK
           " 2>&1)
           rc=$?
@@ -599,6 +607,10 @@ jobs:
           case "$out" in
             *DEV_ON*) echo "::warning title=Identité de développement maintenue::vars.MAR_DEV_AUTH=1 — tout visiteur entre en BRAND_ADMIN." ;;
             *DEV_OFF*) echo "Identité de développement : retirée du .env." ;;
+          esac
+          case "$out" in
+            *MASTER_NEW*) echo "Clé maîtresse de mar_keys créée ($CONFIG_DIR/master.key) : à sauvegarder avec le .env — sans elle, les clés en base sont illisibles." ;;
+            *MASTER_FAIL*) echo "::warning title=Clé maîtresse absente::$CONFIG_DIR/master.key n'a pas pu être créé : les secrets restent lus dans le .env." ;;
           esac
           case "$out" in
             *OK*) echo "Connexion : MAR_ERP_AUTH_BASE, MAR_SESSION_SECRET et MAR_SERVICE_TOKEN présents ; service-token à jour." ;;
@@ -628,7 +640,10 @@ jobs:
             a=\$(ls /usr/bin/php* 2>/dev/null | tr '\\n' ','); echo \"DIAG php=\$(php -r 'echo PHP_VERSION;' 2>/dev/null) retenu=\${P:-aucun} autres=\$a\"
             [ -n "\$P" ] || { echo 'PDO_MYSQL_MISSING'; exit 93; }
             [ -f db/migrate.php ] || { echo 'MIGRATE_ABSENT'; exit 92; }
-            \$P db/migrate.php $BASELINE 2>&1
+            \$P db/migrate.php $BASELINE 2>&1 || exit \$?
+            # Les réglages et les secrets du .env versés en base (mar_variable, mar_keys),
+            # sans rien écraser : une valeur posée depuis l'écran l'emporte.
+            [ -f db/variables.php ] && { \$P db/variables.php import 2>&1 || echo 'VARIABLES_IMPORT_FAIL'; }
           " 2>&1)
           rc=$?
           set -e

@@ -9,6 +9,10 @@ Vite 7 + React 19 + TypeScript strict côté écran. Interface en français.
 - Pas de données inventées : ni jeu de démonstration, ni table imitée, ni
   fixture façonnée pour faire passer un écran. Quand une donnée manque pour
   vérifier quelque chose, on la demande.
+- Le module se déplace avec ses réglages : un réglage va dans `mar_variable`, un
+  secret dans `mar_keys` (chiffré), lus par `Config::get` et `Keys::get`. Seuls
+  l'accès à la base, la clé maîtresse et l'identité de développement restent dans
+  l'environnement. Pas de nouvelle variable d'environnement pour le reste.
 - Les migrations vivent dans `db/migrations/`, rejouées deux fois en CI. Les
   fichiers dont le nom contient `_vues` sont **rejoués à chaque passage** : une
   vue n'a donc qu'une seule définition, et elle est dans un fichier `_vues`.

@@ -192,11 +192,32 @@ export interface Position {
   label: string
 }
 
+/** Les cinq familles de supports de l'assistant. */
+export type ChannelGroup = 'boutique' | 'exterieur' | 'social' | 'google' | 'direct'
+
 export interface Channel {
   id: number
   code: string
   label: string
   family: 'DIGITAL' | 'PHYSIQUE'
+  /** Sa famille dans l'assistant (étape « Supports »). */
+  grp: ChannelGroup | null
+  description: string | null
+  /** Budget publicitaire, à valider avant tout engagement. */
+  is_paid: number | boolean
+  /** Délai type avant le lancement, en jours : le rétroplanning le propose. */
+  lead_days: number | null
+  /** L'écran du module qui produit le support (route). */
+  editor: string | null
+}
+
+/** Le message de la campagne, dans une langue : ce que les supports déclinent. */
+export interface CampaignMessage {
+  lang: 'fr' | 'nl'
+  title: string | null
+  hook: string | null
+  offer_line: string | null
+  cta: string | null
 }
 
 export interface Uniform {
@@ -292,6 +313,8 @@ export interface References {
   formats: Format[]
   positions: Position[]
   channels: Channel[]
+  /** Les segments du CRM qu'une campagne peut viser. */
+  crmSegments?: Array<Pick<CrmSegment, 'id' | 'code' | 'label' | 'color_hex'>>
   uniforms: Uniform[]
   offerTemplates: OfferTemplate[]
   tones: Tone[]
@@ -600,7 +623,16 @@ export interface CampaignDraft {
   b2b_option_ids?: number[]
   uniform_ids?: number[]
   format_ids?: number[]
-  channels?: Array<{ channel_id: number; agency_id?: number | null; budget_amount?: number | null }>
+  channels?: Array<{
+    channel_id: number
+    agency_id?: number | null
+    budget_amount?: number | null
+    quantity?: number | null
+    details?: string | null
+    is_enabled?: boolean
+  }>
+  segment_ids?: number[]
+  messages?: CampaignMessage[]
   lever_targets?: Array<{ lever_id: number; target_value: number; target_unit?: string | null }>
   retroplanning?: Array<{ label: string; days_before_launch: number; position_id?: number | null }>
   offer?: {
@@ -683,6 +715,8 @@ export interface CampaignDraftState
     channel_id: number
     agency_id: number | null
     budget_amount: number | null
+    quantity?: number | null
+    details?: string | null
     is_enabled?: boolean
   }>
   /** `target_value` peut être nul : un levier retenu sans chiffre est légitime. */
@@ -2240,4 +2274,270 @@ export interface WebshopNav {
 
 export function getWebshopNav(shop: number): Promise<WebshopNav> {
   return request<WebshopNav>(`${SOCIAL_ROOT}/api/v1/social/catalogue/nav`, { query: { shop } })
+}
+
+// ---------------------------------------------------------------------------
+// Médiathèque commune — route écrite au standard (enveloppe, camelCase, pagination)
+// ---------------------------------------------------------------------------
+
+export interface MediaRef {
+  code: string
+  label: string
+}
+
+export interface MediaCategory extends MediaRef {
+  files: number
+  subcategories: Array<MediaRef & { files: number }>
+}
+
+export interface MediaLibrary {
+  categories: MediaCategory[]
+  seasons: MediaRef[]
+  /** Fichiers dans la médiathèque, non classés, retirés. */
+  counts: { all: number; uncategorized: number; archived: number }
+  limits: {
+    imageMaxBytes: number
+    videoMaxBytes: number
+    imageTypes: string[]
+    videoTypes: string[]
+    /** Ce que PHP accepte en corps de requête sur ce serveur ; nul sans limite. */
+    serverMaxBytes: number | null
+  }
+}
+
+export interface MediaAsset {
+  id: string
+  kind: 'image' | 'video'
+  name: string
+  /** Adresse absolue du fichier d'origine. */
+  url: string
+  /** Vignette de 480 px (couverture, pour une vidéo) ; nulle quand le serveur n'a pas pu la tirer. */
+  thumbnailUrl: string | null
+  /** Version web (2 048 px au plus) : ce qu'un post ou un écran affiche ; l'original s'il est déjà léger. */
+  webUrl: string
+  path: string
+  mimeType: string
+  bytes: number
+  width: number | null
+  height: number | null
+  category: MediaRef | null
+  subcategory: MediaRef | null
+  season: MediaRef | null
+  offerItem: { id: string; name: string } | null
+  shop: { id: string; name: string } | null
+  cutout: boolean
+  source: 'marketing' | 'social'
+  archived: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MediaPage {
+  items: MediaAsset[]
+  page: number
+  perPage: number
+  total: number
+  totalPages: number
+}
+
+export interface MediaQuery {
+  page?: number
+  perPage?: number
+  sort?: string
+  kind?: 'image' | 'video'
+  /** Code de catégorie, ou `none` pour les fichiers non classés. */
+  category?: string
+  subcategory?: string
+  season?: string
+  offerItem?: number
+  shop?: number
+  archived?: boolean
+  name?: string
+}
+
+/** Les champs d'une fiche que l'écran modifie. `null` efface le classement. */
+export interface MediaFields {
+  name?: string
+  category?: string | null
+  subcategory?: string | null
+  season?: string | null
+  offerItemId?: number | null
+  shopId?: number | null
+  cutout?: boolean
+}
+
+interface Envelope<T> {
+  success: boolean
+  data: T
+  meta: { requestId: string; pagination?: { page: number; perPage: number; total: number; totalPages: number }; duplicate?: boolean }
+}
+
+export async function getMediaLibrary(): Promise<MediaLibrary> {
+  return (await request<Envelope<MediaLibrary>>(`${BASE}/media-library`)).data
+}
+
+export async function listMedia(query: MediaQuery = {}): Promise<MediaPage> {
+  const params: Record<string, string | number> = {}
+  if (query.page) params.page = query.page
+  if (query.perPage) params.perPage = query.perPage
+  if (query.sort) params.sort = query.sort
+  if (query.kind) params['filter[kind][eq]'] = query.kind
+  if (query.category === 'none') params['filter[category][isNull]'] = 'true'
+  else if (query.category) params['filter[category][eq]'] = query.category
+  if (query.subcategory) params['filter[subcategory][eq]'] = query.subcategory
+  if (query.season) params['filter[season][eq]'] = query.season
+  if (query.offerItem) params['filter[offerItem][eq]'] = query.offerItem
+  if (query.shop) params['filter[shop][eq]'] = query.shop
+  if (query.archived) params['filter[archived][eq]'] = 'true'
+  if (query.name?.trim()) params['filter[name][contains]'] = query.name.trim()
+
+  const body = await request<Envelope<MediaAsset[]>>(`${BASE}/media-assets`, { query: params })
+  const pagination = body.meta.pagination ?? { page: 1, perPage: body.data.length, total: body.data.length, totalPages: 1 }
+
+  return { items: body.data, ...pagination }
+}
+
+/**
+ * Dépose un fichier tel quel (corps brut : une vidéo de 40 Mo ne passe pas par du base64).
+ * `duplicate` : le même fichier était déjà dans la médiathèque, c'est sa fiche qui revient.
+ */
+export async function uploadMedia(file: Blob, fields: MediaFields = {}): Promise<{ media: MediaAsset; duplicate: boolean }> {
+  const query: Record<string, string | number> = {}
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === undefined || value === null || value === '') continue
+    query[key] = typeof value === 'boolean' ? String(value) : value
+  }
+  const body = await request<Envelope<MediaAsset>>(`${BASE}/media-assets`, { method: 'POST', query, body: file })
+
+  return { media: body.data, duplicate: body.meta.duplicate === true }
+}
+
+export async function updateMedia(id: string, fields: MediaFields & { archived?: boolean }): Promise<MediaAsset> {
+  return (await request<Envelope<MediaAsset>>(`${BASE}/media-assets/${id}`, { method: 'PATCH', body: fields })).data
+}
+
+export async function archiveMedia(id: string): Promise<MediaAsset> {
+  return (await request<Envelope<MediaAsset>>(`${BASE}/media-assets/${id}`, { method: 'DELETE' })).data
+}
+
+/** La couverture d'une vidéo, tirée par le navigateur (le serveur ne lit pas les vidéos). */
+export async function setMediaThumbnail(id: string, image: Blob): Promise<MediaAsset> {
+  return (await request<Envelope<MediaAsset>>(`${BASE}/media-assets/${id}/thumbnail`, { method: 'PUT', body: image })).data
+}
+
+// ---------------------------------------------------------------------------
+// Réglages et secrets du module, en base (mar_variable, mar_keys) — au standard
+// ---------------------------------------------------------------------------
+
+export type SettingSource = 'base' | 'fichier' | 'absente'
+
+export interface ModuleVariable {
+  name: string
+  group: string
+  label: string
+  help: string
+  value: string | number | boolean | null
+  source: SettingSource
+  updatedAt: string | null
+}
+
+export interface ModuleKey {
+  name: string
+  group: string
+  label: string
+  help: string
+  /** Tirée et entretenue par le déploiement : ne se change pas depuis l'écran. */
+  managedByDeploy: boolean
+  source: SettingSource
+  /** Les quatre derniers caractères, jamais la valeur. */
+  hint: string | null
+  /** Faux : la clé en base ne se déchiffre pas avec la clé maîtresse de ce serveur. */
+  readable: boolean | null
+  updatedAt: string | null
+}
+
+export async function listModuleVariables(): Promise<ModuleVariable[]> {
+  return (await request<Envelope<ModuleVariable[]>>(`${BASE}/variables`)).data
+}
+
+export async function saveModuleVariable(name: string, value: string): Promise<ModuleVariable[]> {
+  return (await request<Envelope<ModuleVariable[]>>(`${BASE}/variables/${encodeURIComponent(name)}`, { method: 'PUT', body: { value } })).data
+}
+
+export async function resetModuleVariable(name: string): Promise<ModuleVariable[]> {
+  return (await request<Envelope<ModuleVariable[]>>(`${BASE}/variables/${encodeURIComponent(name)}`, { method: 'DELETE' })).data
+}
+
+export async function listModuleKeys(): Promise<{ keys: ModuleKey[]; masterKey: boolean }> {
+  const body = await request<Envelope<ModuleKey[]> & { meta: { masterKey?: { present?: boolean } } }>(`${BASE}/keys`)
+  return { keys: body.data, masterKey: body.meta.masterKey?.present === true }
+}
+
+export async function saveModuleKey(name: string, value: string): Promise<ModuleKey[]> {
+  return (await request<Envelope<ModuleKey[]>>(`${BASE}/keys/${encodeURIComponent(name)}`, { method: 'PUT', body: { value } })).data
+}
+
+export async function removeModuleKey(name: string): Promise<ModuleKey[]> {
+  return (await request<Envelope<ModuleKey[]>>(`${BASE}/keys/${encodeURIComponent(name)}`, { method: 'DELETE' })).data
+}
+
+// ---------------------------------------------------------------------------
+// Bâches et cadres d'affiche des boutiques (Marketing en magasin) — au standard
+// ---------------------------------------------------------------------------
+
+export interface ShopSupport {
+  id: string
+  shopId: string
+  shopName: string
+  kind: 'bache' | 'affiche'
+  placement: string | null
+  widthCm: number | null
+  heightCm: number | null
+  paperFormat: 'A1' | 'A2' | 'A3' | null
+  quantity: number
+  material: 'pvc' | 'mesh' | null
+  fixing: 'oeillets' | 'fourreaux' | 'sangles' | null
+  note: string | null
+  updatedAt: string
+}
+
+export type ShopSupportInput = Partial<Omit<ShopSupport, 'id' | 'shopId' | 'shopName' | 'updatedAt'>> & { kind: 'bache' | 'affiche' }
+
+/** Tous les supports déclarés (toutes les pages, cent par page). */
+export async function listShopSupports(): Promise<ShopSupport[]> {
+  const out: ShopSupport[] = []
+  for (let page = 1; page <= 20; page++) {
+    const body = await request<Envelope<ShopSupport[]>>(`${BASE}/shop-supports`, { query: { page, perPage: 100 } })
+    out.push(...body.data)
+    if (page >= (body.meta.pagination?.totalPages ?? 1)) break
+  }
+  return out
+}
+
+export async function saveShopSupports(shopId: number, supports: ShopSupportInput[]): Promise<ShopSupport[]> {
+  return (await request<Envelope<ShopSupport[]>>(`${BASE}/shop-supports/${shopId}`, { method: 'PUT', body: { supports } })).data
+}
+
+/** Trois propositions de textes, rédigées par le module Social selon sa charte éditoriale. */
+export interface TextProposal {
+  angle: string
+  fr: string
+  nl: string
+  titre: string
+  titreNl: string
+  surtitre: string
+  phrase: string
+}
+
+export function proposeTexts(input: {
+  produit?: string
+  promo?: string
+  mention?: string
+  gamme?: string
+  operation?: string
+  objectif?: string
+  boutiques?: string[]
+  langues?: Array<'fr' | 'nl'>
+}): Promise<{ variantes: TextProposal[]; modele?: string }> {
+  return request(`${SOCIAL_ROOT}/api/v1/social/redaction/proposer`, { method: 'POST', body: { type: 'Campagne', lien: false, ...input } })
 }

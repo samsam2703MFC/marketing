@@ -26,7 +26,7 @@ final class Session
     /** Le secret de signature, s'il est assez long pour en être un. */
     public static function secret(): ?string
     {
-        $secret = (string) Env::get('MAR_SESSION_SECRET', '');
+        $secret = (string) (Keys::get('MAR_SESSION_SECRET') ?? '');
 
         return strlen($secret) >= 32 ? $secret : null;
     }

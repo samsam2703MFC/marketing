@@ -33,6 +33,10 @@ final class ReferenceRepository
             'formats'         => $this->formats(),
             'positions'       => $this->positions(),
             'channels'        => $this->channels(),
+            // Les segments du CRM qu'une campagne peut viser (étape « Cible »).
+            'crmSegments'     => $this->fetch(
+                'SELECT id, code, label, color_hex, sort_order FROM mar_crm_segment WHERE is_active = 1 ORDER BY sort_order, label'
+            ),
             'uniforms'        => $this->uniforms(),
             'offerTemplates'  => $this->offerTemplates(),
             'tones'           => $this->tones(),
@@ -148,7 +152,7 @@ final class ReferenceRepository
     public function channels(): array
     {
         return $this->fetch(
-            'SELECT id, code, label, family, sort_order
+            'SELECT id, code, label, family, grp, description, is_paid, lead_days, editor, sort_order
                FROM mar_channel WHERE is_active = 1 ORDER BY family, sort_order'
         );
     }

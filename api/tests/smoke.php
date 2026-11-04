@@ -76,6 +76,8 @@ if (!$looksDisposable && getenv('MAR_ALLOW_DESTRUCTIVE_TESTS') !== '1') {
 }
 
 // --- Jeu de données -------------------------------------------------------
+// La médiathèque d'abord : ses lignes pointent vers les boutiques et le catalogue purgés plus bas.
+$pdo->exec('DELETE FROM mar_media');
 $pdo->exec('DELETE FROM mar_crm_lead_event');
 $pdo->exec('DELETE FROM mar_crm_lead');
 $pdo->exec('DELETE FROM mar_campaign_kpi_snapshot');
@@ -3487,6 +3489,228 @@ if (function_exists('imagecreatetruecolor')) {
 array_map('unlink', glob($uploadDir . '/*') ?: []);
 @rmdir($uploadDir);
 
+// --- Médiathèque commune ----------------------------------------------------
+// Écrite au standard : enveloppe, camelCase, pagination, filtres en liste
+// blanche. Réservée au réseau. Un même fichier n'est gardé qu'une fois.
+echo "\nMédiathèque commune\n";
+$identiteAvant = AuthContext::current();
+$mediaDir = sys_get_temp_dir() . '/mar_media_' . getmypid();
+putenv('MAR_UPLOAD_DIR=' . $mediaDir);
+putenv('MAR_PUBLIC_BASE_URL=https://media.test/marketing');
+
+$media = static function (string $method, string $path, array $query = [], array $body = [], string $raw = '') use ($router): array {
+    return $router->dispatch(new Request($method, '/api/v1/marketing' . $path, $query, $body, [], $raw));
+};
+$fichierDe = static function (?string $url) use ($mediaDir): string {
+    return $mediaDir . substr((string) $url, strlen('https://media.test/marketing/uploads'));
+};
+$imagePng = static function (int $w, int $h, bool $transparent, array $rgb = [200, 40, 60]): string {
+    $canvas = imagecreatetruecolor($w, $h);
+    imagealphablending($canvas, false);
+    imagesavealpha($canvas, true);
+    $fond = $transparent ? imagecolorallocatealpha($canvas, 0, 0, 0, 127) : imagecolorallocate($canvas, ...$rgb);
+    imagefilledrectangle($canvas, 0, 0, $w, $h, $fond);
+    imagefilledrectangle($canvas, (int) ($w / 4), (int) ($h / 4), (int) ($w / 2), (int) ($h / 2), imagecolorallocate($canvas, ...$rgb));
+    ob_start();
+    imagepng($canvas, null, 6);
+    imagedestroy($canvas);
+
+    return (string) ob_get_clean();
+};
+
+AuthContext::clear();
+check('médiathèque sans identité : 401', $media('GET', '/media-assets')['status'] === 401);
+
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+$refusFr = [
+    $media('GET', '/media-assets')['status'],
+    $media('GET', '/media-library')['status'],
+    $media('POST', '/media-assets', [], ['content' => base64_encode($png)])['status'],
+];
+check('médiathèque : une identité de boutique reçoit 403 (lecture comme dépôt), code PERM_ROLE_REQUIRED',
+    $refusFr === [403, 403, 403]
+        && ($media('GET', '/media-assets')['body']['error']['code'] ?? null) === 'PERM_ROLE_REQUIRED',
+    json_encode($refusFr));
+
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$lib = $media('GET', '/media-library');
+$cats = $lib['body']['data']['categories'] ?? [];
+$viennoiseries = array_values(array_filter($cats, static fn (array $c): bool => $c['code'] === 'viennoiseries'))[0] ?? [];
+check('médiathèque : les catégories et les saisons de Social, avec leurs sous-catégories',
+    $lib['status'] === 200 && ($lib['body']['success'] ?? false) === true && count($cats) === 8
+        && count($viennoiseries['subcategories'] ?? []) === 4 && count($lib['body']['data']['seasons'] ?? []) === 11
+        && is_string($lib['body']['meta']['requestId'] ?? null));
+
+if (function_exists('imagecreatetruecolor')) {
+    $photo = $imagePng(1600, 1000, false);
+    $depot = $media('POST', '/media-assets', [], ['content' => 'data:image/png;base64,' . base64_encode($photo), 'name' => 'Croissant au beurre',
+        'category' => 'viennoiseries', 'subcategory' => 'croissants', 'season' => 'toute-annee']);
+    $fiche = $depot['body']['data'] ?? [];
+    check('dépôt JSON : 201, fiche en camelCase, URL absolue, classements relus avec leurs libellés',
+        $depot['status'] === 201 && ($fiche['name'] ?? '') === 'Croissant au beurre' && ($fiche['kind'] ?? '') === 'image'
+            && str_starts_with((string) ($fiche['url'] ?? ''), 'https://media.test/marketing/uploads/media/')
+            && ($fiche['category']['label'] ?? '') === 'Viennoiseries' && ($fiche['subcategory']['label'] ?? '') === 'Croissants'
+            && ($fiche['season']['label'] ?? '') === "Toute l'année" && ($fiche['width'] ?? 0) === 1600 && ($fiche['height'] ?? 0) === 1000
+            && ($depot['body']['meta']['duplicate'] ?? null) === false && preg_match('/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/', (string) ($fiche['createdAt'] ?? '')) === 1,
+        json_encode([$depot['status'], $fiche['url'] ?? null, $depot['body']['error'] ?? null]));
+    check('l\'original est gardé tel quel (aucune réduction) et la vignette fait 480 px en JPEG',
+        is_file($fichierDe($fiche['url'] ?? null)) && filesize($fichierDe($fiche['url'] ?? null)) === strlen($photo)
+            && str_ends_with((string) ($fiche['thumbnailUrl'] ?? ''), '.thumb.jpg')
+            && (getimagesize($fichierDe($fiche['thumbnailUrl'] ?? null))[0] ?? 0) === 480);
+
+    check('une photo déjà légère et sous 2 048 px n\'a pas de version web : webUrl est l\'original',
+        ($fiche['webUrl'] ?? '') === ($fiche['url'] ?? 'x'));
+
+    $grande = $media('POST', '/media-assets', ['name' => 'Grande photo'], [], $imagePng(3000, 2000, false, [30, 90, 160]));
+    check('une grande photo reçoit une version web de 2 048 px (ce qu\'un post envoie), l\'original restant intact',
+        $grande['status'] === 201 && str_ends_with((string) ($grande['body']['data']['webUrl'] ?? ''), '.web.jpg')
+            && (getimagesize($fichierDe($grande['body']['data']['webUrl'] ?? null))[0] ?? 0) === 2048
+            && ($grande['body']['data']['width'] ?? 0) === 3000,
+        json_encode($grande['body']['data']['webUrl'] ?? $grande['body']));
+    $pdo->exec("DELETE FROM mar_media WHERE name = 'Grande photo'");
+
+    // Un en-tête PNG qui annonce 30 000 × 30 000 px : le décoder demanderait 4,5 Go. Le dépôt
+    // passe, sans versions réduites, plutôt que de faire tomber PHP sur sa limite de mémoire.
+    $ihdr = pack('NN', 30000, 30000) . "\x08\x06\x00\x00\x00";
+    $geante = "\x89PNG\r\n\x1a\n" . pack('N', 13) . 'IHDR' . $ihdr . pack('N', crc32('IHDR' . $ihdr)) . str_repeat("\x00", 64);
+    $geant = $media('POST', '/media-assets', ['name' => 'Géante'], [], $geante);
+    check('une image trop grande pour la mémoire du serveur est déposée sans vignette, sans planter',
+        $geant['status'] === 201 && ($geant['body']['data']['width'] ?? 0) === 30000
+            && array_key_exists('thumbnailUrl', $geant['body']['data'] ?? []) && $geant['body']['data']['thumbnailUrl'] === null,
+        json_encode([$geant['status'], $geant['body']['error'] ?? null]));
+    $pdo->exec("DELETE FROM mar_media WHERE name = 'Géante'");
+
+    $encore = $media('POST', '/media-assets', [], ['content' => base64_encode($photo), 'name' => 'Autre nom']);
+    check('le même fichier redéposé : 200, même fiche, nom d\'origine gardé (dépôt idempotent)',
+        $encore['status'] === 200 && ($encore['body']['meta']['duplicate'] ?? null) === true
+            && ($encore['body']['data']['id'] ?? null) === ($fiche['id'] ?? 'x') && ($encore['body']['data']['name'] ?? '') === 'Croissant au beurre'
+            && (int) $pdo->query('SELECT COUNT(*) FROM mar_media')->fetchColumn() === 1);
+
+    $detoure = $imagePng(900, 1200, true, [40, 120, 60]);
+    $brut = $media('POST', '/media-assets', ['name' => 'Tarte détourée', 'category' => 'tartes', 'cutout' => 'true', 'source' => 'social'], [], $detoure);
+    check('dépôt en corps brut (sans base64), classements en query ; une photo détourée garde une vignette PNG transparente',
+        $brut['status'] === 201 && ($brut['body']['data']['cutout'] ?? false) === true && ($brut['body']['data']['source'] ?? '') === 'social'
+            && str_ends_with((string) ($brut['body']['data']['thumbnailUrl'] ?? ''), '.thumb.png')
+            && (getimagesize($fichierDe($brut['body']['data']['thumbnailUrl'] ?? null))[1] ?? 0) === 480,
+        json_encode($brut['body']['error'] ?? $brut['body']['data']['thumbnailUrl'] ?? null));
+
+    $mp4 = "\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom" . str_repeat("\x00", 2048);
+    $video = $media('POST', '/media-assets', ['name' => 'Vitrine de Noël'], [], $mp4);
+    $idVideo = (string) ($video['body']['data']['id'] ?? '0');
+    $couverture = $media('PUT', '/media-assets/' . $idVideo . '/thumbnail', [], [], $imagePng(1280, 720, false));
+    check('une vidéo MP4 est acceptée sans vignette, puis reçoit la couverture que le navigateur a tirée',
+        $video['status'] === 201 && ($video['body']['data']['kind'] ?? '') === 'video' && ($video['body']['data']['mimeType'] ?? '') === 'video/mp4'
+            && array_key_exists('thumbnailUrl', $video['body']['data'] ?? []) && $video['body']['data']['thumbnailUrl'] === null
+            && $couverture['status'] === 200 && str_ends_with((string) ($couverture['body']['data']['thumbnailUrl'] ?? ''), '.thumb.jpg'),
+        json_encode([$video['status'], $couverture['status'], $couverture['body']['error'] ?? null]));
+
+    $avant = (int) $pdo->query('SELECT COUNT(*) FROM mar_media')->fetchColumn();
+    $refus = [
+        'svg'              => $media('POST', '/media-assets', [], ['content' => base64_encode('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')]),
+        'php'              => $media('POST', '/media-assets', [], [], '<?php system($_GET["c"]); ?>'),
+        'champ inconnu'    => $media('POST', '/media-assets', [], ['content' => base64_encode($png), 'path' => '/etc/passwd']),
+        'sous-catégorie'   => $media('POST', '/media-assets', [], ['content' => base64_encode($png), 'category' => 'pains', 'subcategory' => 'croissants']),
+        'saison'           => $media('POST', '/media-assets', [], ['content' => base64_encode($png), 'season' => 'carnaval']),
+        'produit'          => $media('POST', '/media-assets', [], ['content' => base64_encode($png), 'offerItemId' => 999999]),
+        'couverture'       => $media('POST', '/media-assets', [], ['content' => base64_encode($mp4), 'poster' => base64_encode($mp4)]),
+        'vide'             => $media('POST', '/media-assets', [], ['content' => '']),
+        'trop lourde'      => $media('POST', '/media-assets', [], [], "\x89PNG\r\n\x1a\n" . str_repeat('x', 20 * 1024 * 1024)),
+    ];
+    $statuts = array_map(static fn (array $r): int => $r['status'], $refus);
+    check('dépôts refusés en 422 VALIDATION_FAILED, champ nommé, rien d\'écrit (SVG, PHP, champ inconnu, sous-catégorie d\'une autre catégorie, saison, produit inconnus, couverture qui n\'est pas une image, vide, trop lourde)',
+        array_unique(array_values($statuts)) === [422]
+            && count(array_filter($refus, static fn (array $r): bool => ($r['body']['error']['code'] ?? '') === 'VALIDATION_FAILED' && ($r['body']['error']['details'][0]['field'] ?? '') !== '')) === count($refus)
+            && (int) $pdo->query('SELECT COUNT(*) FROM mar_media')->fetchColumn() === $avant,
+        json_encode($statuts));
+
+    // Liste : pagination, tri, filtres.
+    $page2 = $media('GET', '/media-assets', ['perPage' => '2', 'page' => '2', 'sort' => 'name']);
+    check('liste : page 2 de 2 par page, total et nombre de pages, tri par nom',
+        $page2['status'] === 200 && count($page2['body']['data'] ?? []) === 1
+            && ($page2['body']['meta']['pagination'] ?? null) === ['page' => 2, 'perPage' => 2, 'total' => 3, 'totalPages' => 2]
+            && ($page2['body']['data'][0]['name'] ?? '') === 'Vitrine de Noël',
+        json_encode($page2['body']['meta']['pagination'] ?? $page2['body']));
+    check('liste : perPage au-delà de 100 ramené à 100',
+        ($media('GET', '/media-assets', ['perPage' => '500'])['body']['meta']['pagination']['perPage'] ?? 0) === 100);
+    $filtres = [
+        'vidéos'              => [['filter' => ['kind' => ['eq' => 'video']]], 1],
+        'catégorie'           => [['filter' => ['category' => ['eq' => 'viennoiseries']]], 1],
+        'non classées'        => [['filter' => ['category' => ['isNull' => 'true']]], 1],
+        'recherche par nom'   => [['filter' => ['name' => ['contains' => 'tarte']]], 1],
+        'recherche par libellé de catégorie' => [['filter' => ['name' => ['contains' => 'viennois']]], 1],
+        'source'              => [['filter' => ['source' => 'social']], 1],
+    ];
+    foreach ($filtres as $cas => [$query, $attendu]) {
+        $r = $media('GET', '/media-assets', $query);
+        check('liste filtrée (' . $cas . ')', $r['status'] === 200 && ($r['body']['meta']['pagination']['total'] ?? -1) === $attendu,
+            json_encode([$r['status'], $r['body']['meta']['pagination']['total'] ?? $r['body']]));
+    }
+    $mauvais = [
+        $media('GET', '/media-assets', ['page' => '0'])['status'],
+        $media('GET', '/media-assets', ['tri' => 'name'])['status'],
+        $media('GET', '/media-assets', ['sort' => 'sha256'])['status'],
+        $media('GET', '/media-assets', ['filter' => ['sha256' => ['eq' => 'x']]])['status'],
+        $media('GET', '/media-assets', ['filter' => ['kind' => ['in' => 'image']]])['status'],
+        $media('GET', '/media-assets', ['filter' => ['kind' => ['eq' => 'pdf']]])['status'],
+    ];
+    check('liste : page 0, paramètre, tri, filtre, opérateur ou valeur hors liste → 422', array_unique($mauvais) === [422], json_encode($mauvais));
+
+    // Modification, retrait, remise.
+    $idPhoto = (string) ($fiche['id'] ?? '0');
+    $patch = $media('PATCH', '/media-assets/' . $idPhoto, [], ['name' => 'Croissant', 'category' => 'patisseries']);
+    check('modification : renommer et changer de catégorie efface la sous-catégorie qui n\'y appartient plus',
+        $patch['status'] === 200 && ($patch['body']['data']['name'] ?? '') === 'Croissant'
+            && ($patch['body']['data']['category']['code'] ?? '') === 'patisseries'
+            && array_key_exists('subcategory', $patch['body']['data'] ?? []) && $patch['body']['data']['subcategory'] === null,
+        json_encode($patch['body']['data'] ?? $patch['body']));
+    $refusPatch = $media('PATCH', '/media-assets/' . $idPhoto, [], ['name' => 'Ne doit pas passer', 'subcategory' => 'croissants']);
+    check('modification refusée (sous-catégorie d\'une autre catégorie) : 422, rien d\'écrit',
+        $refusPatch['status'] === 422 && ($media('GET', '/media-assets/' . $idPhoto)['body']['data']['name'] ?? '') === 'Croissant');
+    $idBoutique = (int) $pdo->query('SELECT id FROM mar_shop ORDER BY id LIMIT 1')->fetchColumn();
+    $idProduit  = (int) $pdo->query('SELECT id FROM mar_offer_item ORDER BY id LIMIT 1')->fetchColumn();
+    $lie = $media('PATCH', '/media-assets/' . $idPhoto, [], ['shopId' => $idBoutique, 'offerItemId' => $idProduit]);
+    check('une photo se rattache à une boutique et à un produit du catalogue, relus par leur nom',
+        $lie['status'] === 200 && ($lie['body']['data']['shop']['id'] ?? '') === (string) $idBoutique && ($lie['body']['data']['shop']['name'] ?? '') !== ''
+            && ($lie['body']['data']['offerItem']['id'] ?? '') === (string) $idProduit
+            && ($media('GET', '/media-assets', ['filter' => ['offerItem' => ['eq' => (string) $idProduit]]])['body']['meta']['pagination']['total'] ?? 0) === 1,
+        json_encode($lie['body']));
+
+    $retrait  = $media('DELETE', '/media-assets/' . $idPhoto);
+    $retrait2 = $media('DELETE', '/media-assets/' . $idPhoto);
+    $liste    = $media('GET', '/media-assets')['body']['meta']['pagination']['total'] ?? -1;
+    $retires  = $media('GET', '/media-assets', ['filter' => ['archived' => ['eq' => 'true']]])['body']['meta']['pagination']['total'] ?? -1;
+    check('retrait : 200 deux fois (idempotent), sorti de la liste, visible parmi les retirés, fichier toujours servi',
+        $retrait['status'] === 200 && $retrait2['status'] === 200 && ($retrait2['body']['data']['archived'] ?? false) === true
+            && $liste === 2 && $retires === 1 && is_file($fichierDe($fiche['url'] ?? null)));
+    $remis = $media('POST', '/media-assets', [], ['content' => base64_encode($photo)]);
+    check('redéposer un fichier retiré le remet dans la médiathèque, avec ses classements',
+        $remis['status'] === 200 && ($remis['body']['data']['archived'] ?? true) === false && ($remis['body']['data']['name'] ?? '') === 'Croissant');
+
+    check('fichier inconnu : 404 RESOURCE_NOT_FOUND en lecture, modification et retrait',
+        $media('GET', '/media-assets/999999')['status'] === 404 && $media('PATCH', '/media-assets/999999', [], ['name' => 'x'])['status'] === 404
+            && $media('DELETE', '/media-assets/999999')['status'] === 404
+            && ($media('GET', '/media-assets/999999')['body']['error']['code'] ?? '') === 'RESOURCE_NOT_FOUND');
+
+    AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+    check('une identité de boutique ne modifie ni ne retire un fichier du réseau (403)',
+        $media('PATCH', '/media-assets/' . $idPhoto, [], ['name' => 'x'])['status'] === 403 && $media('DELETE', '/media-assets/' . $idPhoto)['status'] === 403
+            && $media('GET', '/media-assets/' . $idPhoto)['status'] === 403);
+}
+
+$rmTree = static function (string $dir) use (&$rmTree): void {
+    foreach (glob($dir . '/*') ?: [] as $entry) {
+        is_dir($entry) ? $rmTree($entry) : unlink($entry);
+    }
+    @rmdir($dir);
+};
+$rmTree($mediaDir);
+putenv('MAR_PUBLIC_BASE_URL');
+if ($identiteAvant !== null) {
+    AuthContext::set($identiteAvant->userId, $identiteAvant->role, $identiteAvant->brandId, $identiteAvant->shopIds);
+} else {
+    AuthContext::clear();
+}
+
 // --- Bons de campagne -----------------------------------------------------
 // Les bons vivent dans le webshop ; le module n'en garde rien, pas même le
 // lien. Le webshop est donc simulé ici, au contrat que documente son API.md
@@ -4099,6 +4323,275 @@ check('session : sans identité, les autres routes restent fermées', call($rout
 foreach ($envAvant as $cle => $valeur) {
     \Marketing\Support\Env::set($cle, $valeur);
 }
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+// --- Assistant : supports, cible, message --------------------------------
+// L'assistant réunit tous les supports (en boutique, extérieur, réseaux sociaux,
+// Google, direct) : chaque support garde sa quantité et ses précisions ; la cible
+// vise des segments du CRM ; le message (titre, accroche, offre, appel à l'action)
+// s'écrit par langue.
+echo "\nAssistant : supports, cible, message\n";
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$refsA = call($router, 'GET', '/api/v1/marketing/references')['body'];
+$canaux = array_column($refsA['channels'], null, 'code');
+check('référentiel : chaque support a sa famille dans l\'assistant ; les payants et leur délai sont dits',
+    count(array_filter($refsA['channels'], static fn (array $c): bool => !in_array($c['grp'], ['boutique', 'exterieur', 'social', 'google', 'direct'], true))) === 0
+        && (int) $canaux['meta_ads']['is_paid'] === 1 && (int) $canaux['posts_meta']['is_paid'] === 0
+        && (int) $canaux['leaflet']['lead_days'] === 21 && $canaux['leaflet']['editor'] === 'brochures'
+        && $canaux['affichage']['label'] === 'Bâches extérieures' && $canaux['affichage']['family'] === 'PHYSIQUE',
+    json_encode(array_column($refsA['channels'], 'grp', 'code')));
+$segments = array_column($refsA['crmSegments'] ?? [], 'id', 'code');
+check('référentiel : les segments du CRM sont proposés à la cible', isset($segments['vip'], $segments['dormants']));
+
+$assistant = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name'        => 'Assistant unifié',
+    'status_code' => 'draft',
+    'scope'       => 'RESEAU',
+    'type_id'     => (int) $types['ouverture']['id'],
+    'channels'    => [
+        ['channel_id' => (int) $canaux['affiches']['id'], 'quantity' => 29, 'details' => '  A1 ×6 · A2 ×9 · A3 ×14 — pose J-3  ', 'is_enabled' => false],
+        ['channel_id' => (int) $canaux['meta_ads']['id'], 'budget_amount' => 300, 'quantity' => 0, 'details' => ''],
+    ],
+    'segment_ids' => [(int) $segments['vip'], (int) $segments['dormants'], 999999],
+    'messages'    => [
+        ['lang' => 'fr', 'title' => 'Les bûches de fêtes', 'hook' => 'à partager, à offrir', 'offer_line' => '−10 % en précommande', 'cta' => 'Commander'],
+        ['lang' => 'nl', 'title' => '', 'hook' => ' ', 'offer_line' => '', 'cta' => ''],
+        ['lang' => 'de', 'title' => 'Weihnachten'],
+    ],
+]);
+$idAssistant = (int) ($assistant['body']['inserted_id'] ?? 0);
+$etatA = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $idAssistant))['body'];
+$parCanal = array_column($etatA['channels'] ?? [], null, 'channel_id');
+check('brouillon : un support garde sa quantité et ses précisions (nettoyées) ; une quantité nulle et des précisions vides restent vides',
+    $idAssistant > 0 && (int) ($parCanal[(int) $canaux['affiches']['id']]['quantity'] ?? 0) === 29
+        && ($parCanal[(int) $canaux['affiches']['id']]['details'] ?? '') === 'A1 ×6 · A2 ×9 · A3 ×14 — pose J-3'
+        && array_key_exists('quantity', $parCanal[(int) $canaux['meta_ads']['id']] ?? []) && $parCanal[(int) $canaux['meta_ads']['id']]['quantity'] === null
+        && $parCanal[(int) $canaux['meta_ads']['id']]['details'] === null,
+    json_encode($etatA['channels'] ?? null));
+check('brouillon : la cible vise les segments connus (un identifiant inconnu est ignoré, pas une erreur)',
+    ($etatA['segment_ids'] ?? null) === array_values(array_map('intval', [$segments['vip'], $segments['dormants']])) || ($etatA['segment_ids'] ?? null) === array_values(array_map('intval', [$segments['dormants'], $segments['vip']])),
+    json_encode($etatA['segment_ids'] ?? null));
+check('brouillon : le message revient par langue ; une langue vide ou inconnue n\'est pas gardée',
+    count($etatA['messages'] ?? []) === 1 && ($etatA['messages'][0]['lang'] ?? '') === 'fr' && ($etatA['messages'][0]['title'] ?? '') === 'Les bûches de fêtes'
+        && ($etatA['messages'][0]['cta'] ?? '') === 'Commander',
+    json_encode($etatA['messages'] ?? null));
+
+$repris = call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $idAssistant), [], [
+    'name'        => 'Assistant unifié',
+    'channels'    => [['channel_id' => (int) $canaux['affiches']['id'], 'quantity' => 30, 'details' => 'A2 ×10']],
+    'segment_ids' => [(int) $segments['vip']],
+    'messages'    => [
+        ['lang' => 'fr', 'title' => 'Bûches de fêtes', 'hook' => '', 'offer_line' => '', 'cta' => 'Je précommande'],
+        ['lang' => 'nl', 'title' => 'Feestelijke stronken', 'hook' => '', 'offer_line' => '', 'cta' => 'Bestellen'],
+    ],
+]);
+$deux = call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $idAssistant), [], [
+    'name'        => 'Assistant unifié',
+    'channels'    => [['channel_id' => (int) $canaux['affiches']['id'], 'quantity' => 30, 'details' => 'A2 ×10']],
+    'segment_ids' => [(int) $segments['vip']],
+    'messages'    => [
+        ['lang' => 'fr', 'title' => 'Bûches de fêtes', 'hook' => '', 'offer_line' => '', 'cta' => 'Je précommande'],
+        ['lang' => 'nl', 'title' => 'Feestelijke stronken', 'hook' => '', 'offer_line' => '', 'cta' => 'Bestellen'],
+    ],
+]);
+$etatB = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $idAssistant))['body'];
+check('reprise : supports, segments et messages réécrits à l\'identique, rejouée sans doublon',
+    in_array($repris['status'], [200, 204], true) && in_array($deux['status'], [200, 204], true)
+        && count($etatB['channels'] ?? []) === 1 && (int) ($etatB['channels'][0]['quantity'] ?? 0) === 30
+        && ($etatB['segment_ids'] ?? null) === [(int) $segments['vip']]
+        && count($etatB['messages'] ?? []) === 2 && ($etatB['messages'][1]['title'] ?? '') === 'Feestelijke stronken'
+        && (int) $pdo->query('SELECT COUNT(*) FROM mar_campaign_message WHERE campaign_id = ' . $idAssistant)->fetchColumn() === 2,
+    json_encode([$repris['status'], $etatB['messages'] ?? null, $etatB['segment_ids'] ?? null]));
+call($router, 'DELETE', sprintf('/api/v1/marketing/campaigns/%d', $idAssistant));
+check('supprimer la campagne emporte son message et sa cible',
+    (int) $pdo->query('SELECT COUNT(*) FROM mar_campaign_message WHERE campaign_id = ' . $idAssistant)->fetchColumn() === 0
+        && (int) $pdo->query('SELECT COUNT(*) FROM mar_crm_campaign_target WHERE campaign_id = ' . $idAssistant)->fetchColumn() === 0);
+
+// --- Bâches et affiches des boutiques (mar_shop_support) ------------------------
+echo "\nBâches et affiches des boutiques\n";
+$pdo->exec('DELETE FROM mar_shop_support');
+$boutiqueA = (int) $pdo->query('SELECT id FROM mar_shop ORDER BY id LIMIT 1')->fetchColumn();
+$boutiqueB = (int) $pdo->query('SELECT id FROM mar_shop ORDER BY id LIMIT 1 OFFSET 1')->fetchColumn();
+$declares = ['supports' => [
+    ['kind' => 'bache', 'placement' => 'Façade', 'widthCm' => 300, 'heightCm' => 100, 'quantity' => 1, 'material' => 'pvc', 'fixing' => 'oeillets'],
+    ['kind' => 'bache', 'placement' => 'Clôture du parking', 'widthCm' => 200, 'heightCm' => 80, 'quantity' => 2, 'material' => 'mesh'],
+    ['kind' => 'affiche', 'paperFormat' => 'A2', 'quantity' => 3],
+    ['kind' => 'affiche', 'paperFormat' => 'A3', 'quantity' => 4, 'note' => 'Vitrine côté rue'],
+]];
+AuthContext::clear();
+check('supports des boutiques : 401 sans identité', call($router, 'GET', '/api/v1/marketing/shop-supports')['status'] === 401);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$pose  = call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueA, [], $declares);
+$encore = call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueA, [], $declares);
+$autre = call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueB, [], ['supports' => [['kind' => 'affiche', 'paperFormat' => 'A1', 'quantity' => 2]]]);
+$liste = call($router, 'GET', '/api/v1/marketing/shop-supports');
+check('déclaration des supports d\'une boutique : enregistrée, rejouée sans doublon, relue en camelCase avec la boutique',
+    $pose['status'] === 200 && $encore['status'] === 200 && count($encore['body']['data'] ?? []) === 4
+        && ($liste['body']['meta']['pagination']['total'] ?? 0) === 5
+        && (array_values(array_filter($encore['body']['data'] ?? [], static fn (array $x): bool => $x['placement'] === 'Façade'))[0]['widthCm'] ?? null) === 300
+        && ($encore['body']['data'][0]['shopName'] ?? '') !== ''
+        && $autre['status'] === 200,
+    json_encode([$pose['status'], $pose['body']['error'] ?? null, $liste['body']['meta'] ?? null]));
+check('filtres : par boutique et par nature',
+    (call($router, 'GET', '/api/v1/marketing/shop-supports', ['filter' => ['shop' => ['eq' => (string) $boutiqueB]]])['body']['meta']['pagination']['total'] ?? 0) === 1
+        && (call($router, 'GET', '/api/v1/marketing/shop-supports', ['filter' => ['kind' => ['eq' => 'bache']]])['body']['meta']['pagination']['total'] ?? 0) === 2);
+$refusS = [
+    call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueA, [], ['supports' => [['kind' => 'bache', 'widthCm' => 300]]])['status'],
+    call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueA, [], ['supports' => [['kind' => 'affiche', 'paperFormat' => 'A0']]])['status'],
+    call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueA, [], ['supports' => [['kind' => 'affiche', 'paperFormat' => 'A2', 'widthCm' => 40]]])['status'],
+    call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueA, [], ['supports' => [['kind' => 'bache', 'widthCm' => 300, 'heightCm' => 100, 'material' => 'carton']]])['status'],
+    call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueA, [], ['supports' => [['kind' => 'kakemono']]])['status'],
+    call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueA, [], ['supports' => 'tout'])['status'],
+    call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueA, [], ['supports' => [], 'pirate' => 1])['status'],
+    call($router, 'GET', '/api/v1/marketing/shop-supports', ['filter' => ['kind' => ['eq' => 'kakemono']]])['status'],
+];
+check('supports refusés (422), rien d\'écrit : hauteur manquante, format hors liste, dimension sur une affiche, matière inconnue, nature inconnue, liste attendue, champ inconnu, filtre hors liste',
+    array_unique($refusS) === [422] && (int) $pdo->query('SELECT COUNT(*) FROM mar_shop_support WHERE shop_id = ' . $boutiqueA)->fetchColumn() === 4,
+    json_encode($refusS));
+check('boutique inconnue : 404', call($router, 'PUT', '/api/v1/marketing/shop-supports/999999', [], $declares)['status'] === 404);
+AuthContext::set(77, 'FRANCHISEE', 1, [$boutiqueB]);
+$vue = call($router, 'GET', '/api/v1/marketing/shop-supports');
+check('une boutique ne voit que ses supports, et ne les modifie pas (403) ; ceux d\'une autre boutique ne lui sont pas montrés',
+    ($vue['body']['meta']['pagination']['total'] ?? -1) === 1 && ($vue['body']['data'][0]['shopId'] ?? '') === (string) $boutiqueB
+        && call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueB, [], $declares)['status'] === 403
+        && (call($router, 'GET', '/api/v1/marketing/shop-supports', ['filter' => ['shop' => ['eq' => (string) $boutiqueA]]])['body']['meta']['pagination']['total'] ?? -1) === 0);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+check('pagination : perPage ramené à 100, page 2 vide',
+    (call($router, 'GET', '/api/v1/marketing/shop-supports', ['perPage' => '500'])['body']['meta']['pagination']['perPage'] ?? 0) === 100
+        && count(call($router, 'GET', '/api/v1/marketing/shop-supports', ['page' => '2'])['body']['data'] ?? [1]) === 0);
+$vide = call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueB, [], ['supports' => []]);
+check('une liste vide retire les supports de la boutique', $vide['status'] === 200 && ($vide['body']['data'] ?? [1]) === []);
+$pdo->exec('DELETE FROM mar_shop_support');
+
+// --- Variables et clés du module (mar_variable, mar_keys) -------------------
+// Le module se déplace avec ses réglages : ils vivent en base, les secrets chiffrés
+// par une clé maîtresse gardée hors de la base. Le test ne touche qu'aux noms qu'il
+// pose, et les retire en partant.
+echo "\nVariables et clés\n";
+$nomsTest = ['MAR_ERP_API_TIMEOUT', 'MAR_WEBSHOP_API_BASE', 'MAR_WEBSHOP_API_TOKEN', 'MAR_ERP_API_TOKEN', 'MAR_ERP_API_PASSWORD', 'MAR_SESSION_SECRET', 'MAR_TEST_LIBRE'];
+$purgerReglages = static function () use ($pdo, &$nomsTest): void {
+    $liste = implode(',', array_map([$pdo, 'quote'], $nomsTest));
+    $pdo->exec("DELETE FROM mar_variable WHERE module = 'marketing' AND name IN ($liste)");
+    $pdo->exec("DELETE FROM mar_keys WHERE module = 'marketing' AND name IN ($liste)");
+    \Marketing\Support\Config::forget();
+    \Marketing\Support\Keys::forget();
+};
+$purgerReglages();
+$envReglages = [];
+foreach (array_merge($nomsTest, ['MAR_KEYS_FILE']) as $cle) { $envReglages[$cle] = \Marketing\Support\Env::get($cle); }
+$dossierCles = sys_get_temp_dir() . '/mar_keys_' . getmypid();
+@mkdir($dossierCles, 0700, true);
+\Marketing\Support\Env::set('MAR_KEYS_FILE', $dossierCles . '/master.key');
+\Marketing\Support\Keys::forget();
+
+\Marketing\Support\Keys::put('MAR_WEBSHOP_API_TOKEN', 'jeton-webshop-secret-123456');
+$brut = (string) $pdo->query("SELECT ciphertext FROM mar_keys WHERE module = 'marketing' AND name = 'MAR_WEBSHOP_API_TOKEN'")->fetchColumn();
+\Marketing\Support\Keys::forget();
+check('une clé est chiffrée en base (rien du clair), la clé maîtresse créée hors de la base en 0640, et elle se relit',
+    $brut !== '' && !str_contains($brut, 'jeton-webshop') && preg_match('/^(x1|g1):/', $brut) === 1
+        && is_file($dossierCles . '/master.key') && (fileperms($dossierCles . '/master.key') & 0777) === 0640
+        && \Marketing\Support\Keys::get('MAR_WEBSHOP_API_TOKEN') === 'jeton-webshop-secret-123456');
+check('une valeur chiffrée recopiée sous un autre nom ne se déchiffre pas',
+    \Marketing\Support\Keys::decrypt($brut, 'marketing', 'MAR_ERP_API_TOKEN') === null && \Marketing\Support\Keys::decrypt($brut, 'social', 'MAR_WEBSHOP_API_TOKEN') === null);
+
+// Avec une autre clé maîtresse, la clé en base est illisible : l'environnement reprend, l'écran le dit.
+\Marketing\Support\Env::set('MAR_WEBSHOP_API_TOKEN', 'jeton-du-fichier');
+\Marketing\Support\Env::set('MAR_KEYS_FILE', $dossierCles . '/autre.key');
+file_put_contents($dossierCles . '/autre.key', base64_encode(random_bytes(32)));
+\Marketing\Support\Keys::forget();
+$illisible = array_values(array_filter(\Marketing\Support\Keys::describe(), static fn (array $k): bool => $k['name'] === 'MAR_WEBSHOP_API_TOKEN'))[0] ?? [];
+check('clé maîtresse différente : la clé en base est signalée illisible, et la valeur du fichier sert en repli',
+    ($illisible['readable'] ?? true) === false && \Marketing\Support\Keys::get('MAR_WEBSHOP_API_TOKEN') === 'jeton-du-fichier');
+\Marketing\Support\Env::set('MAR_KEYS_FILE', $dossierCles . '/master.key');
+\Marketing\Support\Keys::forget();
+check('… et redevient lisible avec la bonne clé maîtresse (la base l\'emporte sur le fichier)',
+    \Marketing\Support\Keys::get('MAR_WEBSHOP_API_TOKEN') === 'jeton-webshop-secret-123456');
+
+// Les réglages : la base l'emporte sur le fichier ; l'amorçage ne se règle jamais en base.
+\Marketing\Support\Env::set('MAR_ERP_API_TIMEOUT', '5');
+\Marketing\Support\Config::put('MAR_ERP_API_TIMEOUT', '9');
+$enBase = \Marketing\Support\Config::get('MAR_ERP_API_TIMEOUT', '1');
+\Marketing\Support\Config::delete('MAR_ERP_API_TIMEOUT');
+$apres = \Marketing\Support\Config::get('MAR_ERP_API_TIMEOUT', '1');
+$amorce = null;
+try { \Marketing\Support\Config::put('MAR_DB_PASSWORD', 'x'); } catch (\RuntimeException $e) { $amorce = $e->getMessage(); }
+$devRefuse = null;
+try { \Marketing\Support\Config::put('MAR_DEV_AUTH', '1'); } catch (\RuntimeException $e) { $devRefuse = $e->getMessage(); }
+check('réglage : la base l\'emporte sur le fichier, retiré le fichier reprend ; l\'accès à la base et l\'identité de développement ne se règlent jamais en base',
+    $enBase === '9' && $apres === '5' && $amorce !== null && $devRefuse !== null && \Marketing\Support\Config::get('MAR_DB_NAME') === \Marketing\Support\Env::get('MAR_DB_NAME'));
+
+// Par l'API.
+AuthContext::clear();
+check('variables et clés : 401 sans identité', call($router, 'GET', '/api/v1/marketing/variables')['status'] === 401 && call($router, 'GET', '/api/v1/marketing/keys')['status'] === 401);
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+check('variables et clés : 403 pour une boutique (lecture comme écriture)',
+    call($router, 'GET', '/api/v1/marketing/variables')['status'] === 403 && call($router, 'PUT', '/api/v1/marketing/keys/MAR_ERP_API_TOKEN', [], ['value' => 'x'])['status'] === 403);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$pose = call($router, 'PUT', '/api/v1/marketing/variables/MAR_WEBSHOP_API_BASE', [], ['value' => ' https://webshop.test/api ']);
+$ligne = array_values(array_filter($pose['body']['data'] ?? [], static fn (array $v): bool => $v['name'] === 'MAR_WEBSHOP_API_BASE'))[0] ?? [];
+check('PUT variable : enregistrée en base (source « base »), valeur nettoyée, relue par le code',
+    $pose['status'] === 200 && ($ligne['source'] ?? '') === 'base' && ($ligne['value'] ?? '') === 'https://webshop.test/api'
+        && \Marketing\Support\Config::get('MAR_WEBSHOP_API_BASE') === 'https://webshop.test/api');
+$refusVar = [
+    call($router, 'PUT', '/api/v1/marketing/variables/MAR_DB_PASSWORD', [], ['value' => 'x'])['status'],
+    call($router, 'PUT', '/api/v1/marketing/variables/MAR_ERP_API_TOKEN', [], ['value' => 'x'])['status'],
+    call($router, 'PUT', '/api/v1/marketing/variables/MAR_TEST_LIBRE', [], ['valeur' => 'x'])['status'],
+    call($router, 'PUT', '/api/v1/marketing/variables/MAR_TEST_LIBRE', [], ['value' => ['liste']])['status'],
+];
+check('PUT variable refusé (422) : accès à la base, secret, champ inconnu, valeur qui n\'est pas un texte', array_unique($refusVar) === [422], json_encode($refusVar));
+
+$cle = call($router, 'PUT', '/api/v1/marketing/keys/MAR_ERP_API_TOKEN', [], ['value' => 'jeton-erp-tres-secret-9876']);
+$lue = call($router, 'GET', '/api/v1/marketing/keys');
+$tout = json_encode($lue['body']);
+$ligneCle = array_values(array_filter($lue['body']['data'] ?? [], static fn (array $k): bool => $k['name'] === 'MAR_ERP_API_TOKEN'))[0] ?? [];
+check('PUT clé : enregistrée chiffrée ; ni la réponse ni la lecture ne contiennent la valeur, seulement ses 4 derniers caractères',
+    $cle['status'] === 200 && $lue['status'] === 200 && !str_contains((string) json_encode($cle['body']), 'tres-secret') && !str_contains((string) $tout, 'tres-secret')
+        && ($ligneCle['hint'] ?? '') === '••••9876' && ($ligneCle['source'] ?? '') === 'base' && ($ligneCle['readable'] ?? false) === true
+        && \Marketing\Support\Keys::get('MAR_ERP_API_TOKEN') === 'jeton-erp-tres-secret-9876');
+$refusCle = [
+    call($router, 'PUT', '/api/v1/marketing/keys/MAR_SESSION_SECRET', [], ['value' => str_repeat('z', 40)])['status'],
+    call($router, 'PUT', '/api/v1/marketing/keys/MAR_SERVICE_TOKEN', [], ['value' => str_repeat('z', 40)])['status'],
+    call($router, 'PUT', '/api/v1/marketing/keys/MAR_WEBSHOP_API_BASE', [], ['value' => 'x'])['status'],
+    call($router, 'PUT', '/api/v1/marketing/keys/MAR_ERP_API_TOKEN', [], ['value' => '   '])['status'],
+    call($router, 'DELETE', '/api/v1/marketing/keys/MAR_SERVICE_TOKEN')['status'],
+];
+check('clés refusées (422) : secret de session et jeton de service (entretenus par le déploiement), une variable, une valeur vide, le retrait d\'une clé du déploiement',
+    array_unique($refusCle) === [422], json_encode($refusCle));
+$retrait = call($router, 'DELETE', '/api/v1/marketing/keys/MAR_ERP_API_TOKEN');
+check('DELETE clé : retirée de la base, le fichier reprend', $retrait['status'] === 200 && \Marketing\Support\Keys::get('MAR_ERP_API_TOKEN') === \Marketing\Support\Env::get('MAR_ERP_API_TOKEN'));
+
+// Import du .env : ce qui n'est pas en base y est versé, rien n'est écrasé, une seconde fois ne change rien.
+$purgerReglages();
+\Marketing\Support\Env::set('MAR_WEBSHOP_API_BASE', 'https://depuis-le-fichier.test');
+\Marketing\Support\Env::set('MAR_ERP_API_PASSWORD', 'mot-de-passe-du-fichier');
+\Marketing\Support\Config::put('MAR_ERP_API_TIMEOUT', '7');
+\Marketing\Support\Env::set('MAR_ERP_API_TIMEOUT', '3');
+$premier = \Marketing\Support\Settings::importFromEnvironment();
+$second  = \Marketing\Support\Settings::importFromEnvironment();
+// L'import verse tout ce que l'environnement du test porte (dossiers temporaires compris) : tout est retiré en partant.
+$nomsTest = array_values(array_unique(array_merge($nomsTest, $premier['variables'], $premier['keys'])));
+check('import du .env : variables et clés absentes versées, la valeur déjà en base gardée, la seconde passe ne verse rien',
+    in_array('MAR_WEBSHOP_API_BASE', $premier['variables'], true) && in_array('MAR_ERP_API_PASSWORD', $premier['keys'], true)
+        && !in_array('MAR_ERP_API_TIMEOUT', $premier['variables'], true) && \Marketing\Support\Config::get('MAR_ERP_API_TIMEOUT') === '7'
+        && $second['variables'] === [] && $second['keys'] === []
+        && \Marketing\Support\Keys::get('MAR_ERP_API_PASSWORD') === 'mot-de-passe-du-fichier'
+        && !str_contains((string) $pdo->query("SELECT ciphertext FROM mar_keys WHERE name = 'MAR_ERP_API_PASSWORD'")->fetchColumn(), 'mot-de-passe'),
+    json_encode([$premier, $second]));
+
+// Le secret de session lu en base : la session s'ouvre, et un cookie signé d'un autre secret, non.
+\Marketing\Support\Keys::put('MAR_SESSION_SECRET', str_repeat('k', 40));
+\Marketing\Support\Env::set('MAR_SESSION_SECRET', str_repeat('f', 40));
+$cookie = \Marketing\Support\Session::seal(['user_id' => 5, 'role' => 'BRAND_ADMIN', 'shop_ids' => [], 'label' => 'test']);
+$pdo->exec("DELETE FROM mar_keys WHERE name = 'MAR_SESSION_SECRET'");
+\Marketing\Support\Keys::forget();
+check('le secret de session se lit en base, avant le fichier : un cookie signé du secret en base ne s\'ouvre plus quand le fichier reprend',
+    \Marketing\Support\Session::open($cookie) === null);
+
+$purgerReglages();
+foreach ($envReglages as $cle => $valeur) { \Marketing\Support\Env::set($cle, $valeur); }
+array_map('unlink', glob($dossierCles . '/*') ?: []);
+@rmdir($dossierCles);
+\Marketing\Support\Keys::forget();
 AuthContext::set(1, 'BRAND_ADMIN', 1);
 
 // --- Résultat -------------------------------------------------------------

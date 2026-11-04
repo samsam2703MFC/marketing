@@ -42,8 +42,8 @@ final class WebshopClient
             return true;
         }
 
-        return trim((string) Env::get('MAR_WEBSHOP_API_BASE', '')) !== ''
-            && trim((string) Env::get('MAR_WEBSHOP_API_TOKEN', '')) !== '';
+        return trim((string) Config::get('MAR_WEBSHOP_API_BASE', '')) !== ''
+            && trim((string) (Keys::get('MAR_WEBSHOP_API_TOKEN') ?? '')) !== '';
     }
 
     /** Ce qu'il faut dire à l'écran quand rien n'est configuré. */
@@ -99,13 +99,13 @@ final class WebshopClient
         }
 
         $filtered = array_filter($query, static fn ($value): bool => $value !== null && $value !== '');
-        $url      = rtrim(trim((string) Env::get('MAR_WEBSHOP_API_BASE', '')), '/') . '/' . ltrim($path, '/')
+        $url      = rtrim(trim((string) Config::get('MAR_WEBSHOP_API_BASE', '')), '/') . '/' . ltrim($path, '/')
             . ($filtered === [] ? '' : '?' . http_build_query($filtered));
-        $timeout  = max(1, (int) (Env::get('MAR_WEBSHOP_API_TIMEOUT', '8') ?? '8'));
+        $timeout  = max(1, (int) (Config::get('MAR_WEBSHOP_API_TIMEOUT', '8') ?? '8'));
 
         $headers = [
             'Accept: application/json',
-            'X-Admin-Token: ' . trim((string) Env::get('MAR_WEBSHOP_API_TOKEN', '')),
+            'X-Admin-Token: ' . trim((string) (Keys::get('MAR_WEBSHOP_API_TOKEN') ?? '')),
             'X-Request-Id: ' . sprintf('mar-%s', bin2hex(random_bytes(8))),
         ];
         if ($payload !== null) {

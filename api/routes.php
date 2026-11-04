@@ -21,11 +21,14 @@ use Marketing\Controller\CatalogController;
 use Marketing\Controller\ErpPromotionController;
 use Marketing\Controller\FundController;
 use Marketing\Controller\LeadController;
+use Marketing\Controller\MediaController;
 use Marketing\Controller\NetworkController;
 use Marketing\Controller\PublicController;
 use Marketing\Controller\ReferenceController;
 use Marketing\Controller\SalesController;
 use Marketing\Controller\SessionController;
+use Marketing\Controller\SettingsController;
+use Marketing\Controller\ShopSupportController;
 use Marketing\Controller\UploadController;
 use Marketing\Support\Router;
 
@@ -43,6 +46,9 @@ return static function (Router $router): void {
     $public     = new PublicController();
     $campaignVouchers = new CampaignVoucherController();
     $brochures  = new BrochureController();
+    $media      = new MediaController();
+    $settings   = new SettingsController();
+    $shopSupports = new ShopSupportController();
 
     // Session — publique : elle ne dit que si l'appelant est authentifié.
     // Le front s'en sert pour savoir s'il est embarqué dans l'ERP, auquel cas
@@ -96,6 +102,30 @@ return static function (Router $router): void {
 
     // Visuels de campagne envoyés depuis l'assistant
     $router->post('/api/v1/marketing/uploads', [$uploads, 'store']);
+
+    // Médiathèque commune du marketing (photos et vidéos de Social, des campagnes,
+    // des brochures, des bâches) — écrite au standard : enveloppe, camelCase,
+    // pagination, filtres en liste blanche. Réseau seul (Social : jeton de service).
+    $router->get('/api/v1/marketing/media-library',                  [$media, 'library']);
+    $router->get('/api/v1/marketing/media-assets',                   [$media, 'index']);
+    $router->post('/api/v1/marketing/media-assets',                  [$media, 'store']);
+    $router->get('/api/v1/marketing/media-assets/{id}',              [$media, 'show']);
+    $router->patch('/api/v1/marketing/media-assets/{id}',            [$media, 'update']);
+    $router->put('/api/v1/marketing/media-assets/{id}/thumbnail',    [$media, 'thumbnail']);
+    $router->delete('/api/v1/marketing/media-assets/{id}',           [$media, 'destroy']);
+
+    // Bâches et cadres d'affiche des boutiques (Marketing en magasin), repris par l'assistant.
+    $router->get('/api/v1/marketing/shop-supports',          [$shopSupports, 'index']);
+    $router->put('/api/v1/marketing/shop-supports/{shopId}', [$shopSupports, 'replace']);
+
+    // Réglages et secrets du module, en base (mar_variable, mar_keys) — réseau seul.
+    // Une clé ne se relit jamais : nom, quatre derniers caractères, date et source.
+    $router->get('/api/v1/marketing/variables',            [$settings, 'variables']);
+    $router->put('/api/v1/marketing/variables/{name}',     [$settings, 'putVariable']);
+    $router->delete('/api/v1/marketing/variables/{name}',  [$settings, 'deleteVariable']);
+    $router->get('/api/v1/marketing/keys',                 [$settings, 'keys']);
+    $router->put('/api/v1/marketing/keys/{name}',          [$settings, 'putKey']);
+    $router->delete('/api/v1/marketing/keys/{name}',       [$settings, 'deleteKey']);
 
     // Outils de campagne
     $router->get('/api/v1/marketing/offer-items',     [$catalog, 'offerItems']);

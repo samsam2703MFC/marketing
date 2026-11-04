@@ -6,8 +6,8 @@ namespace Marketing\Repository;
 
 use DateTimeImmutable;
 use Marketing\Support\AuthContext;
+use Marketing\Support\Config;
 use Marketing\Support\Database;
-use Marketing\Support\Env;
 use Marketing\Support\Scope;
 use PDO;
 use RuntimeException;
@@ -412,7 +412,7 @@ final class SalesRepository
      */
     private function source(string $envKey, string $default): array
     {
-        $configured = trim((string) (Env::get($envKey, '') ?: ''));
+        $configured = trim((string) (Config::get($envKey, '') ?: ''));
         $name       = $configured === '' ? $default : $configured;
 
         if (str_contains($name, '.')) {

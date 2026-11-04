@@ -59,11 +59,11 @@ final class ErpClient
     /** Vrai si le jeton vient d'une connexion (téléphone + mot de passe) et non de la configuration. */
     private static function usesLogin(): bool
     {
-        $fixed = Env::get('MAR_ERP_API_TOKEN');
+        $fixed = Keys::get('MAR_ERP_API_TOKEN');
 
         return ($fixed === null || $fixed === '')
-            && trim((string) Env::get('MAR_ERP_API_PHONE', '')) !== ''
-            && (string) Env::get('MAR_ERP_API_PASSWORD', '') !== '';
+            && trim((string) Config::get('MAR_ERP_API_PHONE', '')) !== ''
+            && (string) (Keys::get('MAR_ERP_API_PASSWORD') ?? '') !== '';
     }
 
     /** Oublie le jeton de connexion (tests, ou changement de compte). */
@@ -75,7 +75,7 @@ final class ErpClient
     /** Vrai si l'adresse de l'ERP est renseignée. Sans elle, aucun appel n'est tenté. */
     public static function isConfigured(): bool
     {
-        $base = Env::get('MAR_ERP_API_BASE');
+        $base = Config::get('MAR_ERP_API_BASE');
 
         return $base !== null && trim($base) !== '';
     }
@@ -83,7 +83,7 @@ final class ErpClient
     /** L'adresse de base, sans barre oblique finale. */
     public static function base(): string
     {
-        return rtrim(trim((string) Env::get('MAR_ERP_API_BASE', '')), '/');
+        return rtrim(trim((string) Config::get('MAR_ERP_API_BASE', '')), '/');
     }
 
     /**
@@ -94,7 +94,7 @@ final class ErpClient
      */
     public static function authBase(): string
     {
-        $auth = rtrim(trim((string) Env::get('MAR_ERP_AUTH_BASE', '')), '/');
+        $auth = rtrim(trim((string) Config::get('MAR_ERP_AUTH_BASE', '')), '/');
 
         return $auth !== '' ? $auth : self::base();
     }
@@ -283,7 +283,7 @@ final class ErpClient
      */
     private function token(): ?string
     {
-        $fixed = Env::get('MAR_ERP_API_TOKEN');
+        $fixed = Keys::get('MAR_ERP_API_TOKEN');
         if ($fixed !== null && $fixed !== '') {
             return $fixed;
         }
@@ -301,8 +301,8 @@ final class ErpClient
             ['Accept: application/json', 'Content-Type: application/json', 'X-Request-Id: ' . self::requestId()],
             'POST',
             (string) json_encode([
-                'phone'    => trim((string) Env::get('MAR_ERP_API_PHONE', '')),
-                'password' => (string) Env::get('MAR_ERP_API_PASSWORD', ''),
+                'phone'    => trim((string) Config::get('MAR_ERP_API_PHONE', '')),
+                'password' => (string) (Keys::get('MAR_ERP_API_PASSWORD') ?? ''),
             ])
         );
 
@@ -331,7 +331,7 @@ final class ErpClient
      */
     private function transmit(string $url, array $headers, string $method = 'GET', ?string $payload = null): array
     {
-        $timeout = max(1, (int) (Env::get('MAR_ERP_API_TIMEOUT', '5') ?? '5'));
+        $timeout = max(1, (int) (Config::get('MAR_ERP_API_TIMEOUT', '5') ?? '5'));
 
         if ($this->transport !== null) {
             return ($this->transport)($url, $headers, $timeout, $method, $payload);

@@ -34,7 +34,7 @@ final class Identity
         AuthContext::clear();
         self::$source = null;
 
-        $token   = (string) Env::get('MAR_SERVICE_TOKEN', '');
+        $token   = (string) (Keys::get('MAR_SERVICE_TOKEN') ?? '');
         $offered = (string) ($server['HTTP_X_MARKETING_SERVICE'] ?? '');
         if ($offered !== '') {
             // Un jeton présenté et faux ne retombe pas sur une autre source : c'est une erreur, pas un visiteur.

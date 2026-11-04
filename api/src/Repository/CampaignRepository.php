@@ -1086,6 +1086,8 @@ final class CampaignRepository
             'mar_retroplanning_step',
             'mar_campaign_offer',
             'mar_campaign_asset',
+            'mar_crm_campaign_target',
+            'mar_campaign_message',
         ] as $table) {
             $statement = $connection->prepare(
                 sprintf('DELETE FROM %s WHERE campaign_id = :id', $table)
@@ -1257,8 +1259,8 @@ final class CampaignRepository
         if ($channels !== []) {
             $statement = $connection->prepare(
                 'INSERT INTO mar_campaign_channel
-                    (campaign_id, channel_id, agency_id, budget_amount, is_enabled, created_by)
-                 VALUES (:campaign_id, :channel_id, :agency_id, :budget_amount, :is_enabled, :created_by)'
+                    (campaign_id, channel_id, agency_id, budget_amount, quantity, details, is_enabled, created_by)
+                 VALUES (:campaign_id, :channel_id, :agency_id, :budget_amount, :quantity, :details, :is_enabled, :created_by)'
             );
             foreach ($channels as $channel) {
                 $channelId = (int) ($channel['channel_id'] ?? 0);
@@ -1278,6 +1280,11 @@ final class CampaignRepository
                         ? (int) $channel['agency_id']
                         : null,
                     'budget_amount' => $budget === null || $budget === '' ? 0 : $budget,
+                    // Quantité et précisions du support (assistant, étape « Supports ») : facultatives.
+                    'quantity'      => isset($channel['quantity']) && is_numeric($channel['quantity']) && (int) $channel['quantity'] > 0
+                        ? min((int) $channel['quantity'], 10000000) : null,
+                    'details'       => isset($channel['details']) && trim((string) $channel['details']) !== ''
+                        ? mb_substr(trim((string) $channel['details']), 0, 300) : null,
                     // `is_enabled` était écrit à 1 sans jamais être demandé :
                     // un canal retenu et un canal VALIDÉ ne pouvaient pas se
                     // distinguer, et « Pub physique » recevait des supports
@@ -1346,6 +1353,66 @@ final class CampaignRepository
             $data['image_fit'] ?? null,
             $formats
         );
+        $this->insertSegments($campaignId, self::intList($data['segment_ids'] ?? []));
+        $this->insertMessages($campaignId, is_array($data['messages'] ?? null) ? $data['messages'] : []);
+    }
+
+    /**
+     * Les segments du CRM que la campagne vise (étape « Cible »). Un identifiant
+     * inconnu est ignoré plutôt que de faire échouer tout l'enregistrement.
+     *
+     * @param list<int> $segmentIds
+     */
+    private function insertSegments(int $campaignId, array $segmentIds): void
+    {
+        if ($segmentIds === []) {
+            return;
+        }
+        $place = implode(',', array_fill(0, count($segmentIds), '?'));
+        $known = Database::connection()->prepare("SELECT id FROM mar_crm_segment WHERE is_active = 1 AND id IN ($place)");
+        $known->execute($segmentIds);
+        $insert = Database::connection()->prepare(
+            'INSERT IGNORE INTO mar_crm_campaign_target (campaign_id, segment_id) VALUES (:campaign_id, :segment_id)'
+        );
+        foreach ($known->fetchAll(\PDO::FETCH_COLUMN) as $segmentId) {
+            $insert->execute(['campaign_id' => $campaignId, 'segment_id' => (int) $segmentId]);
+        }
+    }
+
+    /** Les langues du message (étape « Contenus »). */
+    public const MESSAGE_LANGS = ['fr', 'nl'];
+
+    /** Les champs du message et leur longueur maximale. */
+    public const MESSAGE_FIELDS = ['title' => 80, 'hook' => 160, 'offer_line' => 160, 'cta' => 80];
+
+    /**
+     * Le message de la campagne, un par langue : titre, accroche, offre, appel à
+     * l'action. Une langue entièrement vide n'est pas enregistrée.
+     *
+     * @param array<mixed> $messages `[{lang, title, hook, offer_line, cta}]`
+     */
+    private function insertMessages(int $campaignId, array $messages): void
+    {
+        $insert = Database::connection()->prepare(
+            'INSERT INTO mar_campaign_message (campaign_id, lang, title, hook, offer_line, cta)
+             VALUES (:campaign_id, :lang, :title, :hook, :offer_line, :cta)
+             ON DUPLICATE KEY UPDATE title = VALUES(title), hook = VALUES(hook), offer_line = VALUES(offer_line), cta = VALUES(cta)'
+        );
+        foreach ($messages as $message) {
+            if (!is_array($message) || !in_array($message['lang'] ?? null, self::MESSAGE_LANGS, true)) {
+                continue;
+            }
+            $row = ['campaign_id' => $campaignId, 'lang' => $message['lang']];
+            $filled = false;
+            foreach (self::MESSAGE_FIELDS as $field => $max) {
+                $value = trim((string) ($message[$field] ?? ''));
+                $row[$field] = $value === '' ? null : mb_substr($value, 0, $max);
+                $filled = $filled || $value !== '';
+            }
+            if ($filled) {
+                $insert->execute($row);
+            }
+        }
     }
 
     /**
@@ -1728,7 +1795,7 @@ final class CampaignRepository
         );
 
         $channels = Database::connection()->prepare(
-            'SELECT channel_id, agency_id, budget_amount, is_enabled
+            'SELECT channel_id, agency_id, budget_amount, quantity, details, is_enabled
                FROM mar_campaign_channel WHERE campaign_id = :id'
         );
         $channels->execute(['id' => $id]);
@@ -1870,7 +1937,20 @@ final class CampaignRepository
             'retroplanning' => $this->retroplanning($id),
             'pos_questions' => array_map([$this, 'castRow'], $questions->fetchAll()),
             'offer'         => $this->offer($id),
+            'segment_ids'   => $ids('SELECT segment_id FROM mar_crm_campaign_target WHERE campaign_id = :id ORDER BY segment_id'),
+            'messages'      => $this->messages($id),
         ];
+    }
+
+    /** @return list<array{lang:string, title:?string, hook:?string, offer_line:?string, cta:?string}> */
+    private function messages(int $campaignId): array
+    {
+        $statement = Database::connection()->prepare(
+            'SELECT lang, title, hook, offer_line, cta FROM mar_campaign_message WHERE campaign_id = :id ORDER BY lang'
+        );
+        $statement->execute(['id' => $campaignId]);
+
+        return $statement->fetchAll();
     }
 
     /**

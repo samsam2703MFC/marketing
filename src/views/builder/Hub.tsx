@@ -5,9 +5,10 @@ import type { References, SocialAttached } from '../../lib/api/module'
 import type { Draft } from './CampaignBuilder'
 
 /**
- * L'assistant « hub » de la maquette validée : sept étapes qui suivent la vie d'une
- * campagne — on la cadre, on dit ce qu'elle vend, avec quels médias, sur quels canaux,
- * comment on la suit, ce qu'elle coûte et quand, puis ce qu'elle donne.
+ * L'assistant « hub » : huit étapes qui suivent la vie d'une campagne (maquette validée
+ * le 04/11/2026) — on la cadre, on dit à qui elle parle, ce qu'elle vend, sur quels
+ * supports (en boutique, extérieur, réseaux sociaux, Google, direct), avec quel message
+ * décliné partout, ce qu'elle coûte, quand, puis ce qu'elle donne.
  *
  * Chaque étape regroupe une ou plusieurs étapes de saisie de l'assistant (leurs clés) :
  * les règles de chacune — ce qui bloque, où l'on reprend un brouillon — ne changent
@@ -16,12 +17,13 @@ import type { Draft } from './CampaignBuilder'
  */
 export const HUBS: Array<{ label: string; keys: string[] }> = [
   { label: 'Cadrage', keys: ['framing'] },
-  { label: 'Offre & promotions', keys: ['offer', 'objectives', 'pricing', 'vouchers'] },
-  { label: 'Médias', keys: ['photos', 'medias'] },
-  { label: 'Canaux', keys: ['communication'] },
-  { label: 'Suivi & traçabilité', keys: ['tracking'] },
-  { label: 'Budget & planning', keys: ['budget', 'planning'] },
-  { label: 'Récap & résultats', keys: ['review', 'leads'] },
+  { label: 'Cible', keys: ['target'] },
+  { label: 'Produits & offre', keys: ['offer', 'objectives', 'pricing', 'vouchers', 'photos'] },
+  { label: 'Supports', keys: ['communication', 'tracking'] },
+  { label: 'Contenus', keys: ['content', 'medias'] },
+  { label: 'Budget & validation', keys: ['budget'] },
+  { label: 'Planning', keys: ['planning'] },
+  { label: 'Récap', keys: ['review', 'leads'] },
 ]
 
 export function hubIndexOf(key: string): number {
