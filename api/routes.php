@@ -28,6 +28,7 @@ use Marketing\Controller\ReferenceController;
 use Marketing\Controller\SalesController;
 use Marketing\Controller\SessionController;
 use Marketing\Controller\SettingsController;
+use Marketing\Controller\ShopSupportController;
 use Marketing\Controller\UploadController;
 use Marketing\Support\Router;
 
@@ -47,6 +48,7 @@ return static function (Router $router): void {
     $brochures  = new BrochureController();
     $media      = new MediaController();
     $settings   = new SettingsController();
+    $shopSupports = new ShopSupportController();
 
     // Session — publique : elle ne dit que si l'appelant est authentifié.
     // Le front s'en sert pour savoir s'il est embarqué dans l'ERP, auquel cas
@@ -111,6 +113,10 @@ return static function (Router $router): void {
     $router->patch('/api/v1/marketing/media-assets/{id}',            [$media, 'update']);
     $router->put('/api/v1/marketing/media-assets/{id}/thumbnail',    [$media, 'thumbnail']);
     $router->delete('/api/v1/marketing/media-assets/{id}',           [$media, 'destroy']);
+
+    // Bâches et cadres d'affiche des boutiques (Marketing en magasin), repris par l'assistant.
+    $router->get('/api/v1/marketing/shop-supports',          [$shopSupports, 'index']);
+    $router->put('/api/v1/marketing/shop-supports/{shopId}', [$shopSupports, 'replace']);
 
     // Réglages et secrets du module, en base (mar_variable, mar_keys) — réseau seul.
     // Une clé ne se relit jamais : nom, quatre derniers caractères, date et source.

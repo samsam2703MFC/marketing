@@ -4325,6 +4325,144 @@ foreach ($envAvant as $cle => $valeur) {
 }
 AuthContext::set(1, 'BRAND_ADMIN', 1);
 
+// --- Assistant : supports, cible, message --------------------------------
+// L'assistant réunit tous les supports (en boutique, extérieur, réseaux sociaux,
+// Google, direct) : chaque support garde sa quantité et ses précisions ; la cible
+// vise des segments du CRM ; le message (titre, accroche, offre, appel à l'action)
+// s'écrit par langue.
+echo "\nAssistant : supports, cible, message\n";
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$refsA = call($router, 'GET', '/api/v1/marketing/references')['body'];
+$canaux = array_column($refsA['channels'], null, 'code');
+check('référentiel : chaque support a sa famille dans l\'assistant ; les payants et leur délai sont dits',
+    count(array_filter($refsA['channels'], static fn (array $c): bool => !in_array($c['grp'], ['boutique', 'exterieur', 'social', 'google', 'direct'], true))) === 0
+        && (int) $canaux['meta_ads']['is_paid'] === 1 && (int) $canaux['posts_meta']['is_paid'] === 0
+        && (int) $canaux['leaflet']['lead_days'] === 21 && $canaux['leaflet']['editor'] === 'brochures'
+        && $canaux['affichage']['label'] === 'Bâches extérieures' && $canaux['affichage']['family'] === 'PHYSIQUE',
+    json_encode(array_column($refsA['channels'], 'grp', 'code')));
+$segments = array_column($refsA['crmSegments'] ?? [], 'id', 'code');
+check('référentiel : les segments du CRM sont proposés à la cible', isset($segments['vip'], $segments['dormants']));
+
+$assistant = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name'        => 'Assistant unifié',
+    'status_code' => 'draft',
+    'scope'       => 'RESEAU',
+    'type_id'     => (int) $types['ouverture']['id'],
+    'channels'    => [
+        ['channel_id' => (int) $canaux['affiches']['id'], 'quantity' => 29, 'details' => '  A1 ×6 · A2 ×9 · A3 ×14 — pose J-3  ', 'is_enabled' => false],
+        ['channel_id' => (int) $canaux['meta_ads']['id'], 'budget_amount' => 300, 'quantity' => 0, 'details' => ''],
+    ],
+    'segment_ids' => [(int) $segments['vip'], (int) $segments['dormants'], 999999],
+    'messages'    => [
+        ['lang' => 'fr', 'title' => 'Les bûches de fêtes', 'hook' => 'à partager, à offrir', 'offer_line' => '−10 % en précommande', 'cta' => 'Commander'],
+        ['lang' => 'nl', 'title' => '', 'hook' => ' ', 'offer_line' => '', 'cta' => ''],
+        ['lang' => 'de', 'title' => 'Weihnachten'],
+    ],
+]);
+$idAssistant = (int) ($assistant['body']['inserted_id'] ?? 0);
+$etatA = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $idAssistant))['body'];
+$parCanal = array_column($etatA['channels'] ?? [], null, 'channel_id');
+check('brouillon : un support garde sa quantité et ses précisions (nettoyées) ; une quantité nulle et des précisions vides restent vides',
+    $idAssistant > 0 && (int) ($parCanal[(int) $canaux['affiches']['id']]['quantity'] ?? 0) === 29
+        && ($parCanal[(int) $canaux['affiches']['id']]['details'] ?? '') === 'A1 ×6 · A2 ×9 · A3 ×14 — pose J-3'
+        && array_key_exists('quantity', $parCanal[(int) $canaux['meta_ads']['id']] ?? []) && $parCanal[(int) $canaux['meta_ads']['id']]['quantity'] === null
+        && $parCanal[(int) $canaux['meta_ads']['id']]['details'] === null,
+    json_encode($etatA['channels'] ?? null));
+check('brouillon : la cible vise les segments connus (un identifiant inconnu est ignoré, pas une erreur)',
+    ($etatA['segment_ids'] ?? null) === array_values(array_map('intval', [$segments['vip'], $segments['dormants']])) || ($etatA['segment_ids'] ?? null) === array_values(array_map('intval', [$segments['dormants'], $segments['vip']])),
+    json_encode($etatA['segment_ids'] ?? null));
+check('brouillon : le message revient par langue ; une langue vide ou inconnue n\'est pas gardée',
+    count($etatA['messages'] ?? []) === 1 && ($etatA['messages'][0]['lang'] ?? '') === 'fr' && ($etatA['messages'][0]['title'] ?? '') === 'Les bûches de fêtes'
+        && ($etatA['messages'][0]['cta'] ?? '') === 'Commander',
+    json_encode($etatA['messages'] ?? null));
+
+$repris = call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $idAssistant), [], [
+    'name'        => 'Assistant unifié',
+    'channels'    => [['channel_id' => (int) $canaux['affiches']['id'], 'quantity' => 30, 'details' => 'A2 ×10']],
+    'segment_ids' => [(int) $segments['vip']],
+    'messages'    => [
+        ['lang' => 'fr', 'title' => 'Bûches de fêtes', 'hook' => '', 'offer_line' => '', 'cta' => 'Je précommande'],
+        ['lang' => 'nl', 'title' => 'Feestelijke stronken', 'hook' => '', 'offer_line' => '', 'cta' => 'Bestellen'],
+    ],
+]);
+$deux = call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $idAssistant), [], [
+    'name'        => 'Assistant unifié',
+    'channels'    => [['channel_id' => (int) $canaux['affiches']['id'], 'quantity' => 30, 'details' => 'A2 ×10']],
+    'segment_ids' => [(int) $segments['vip']],
+    'messages'    => [
+        ['lang' => 'fr', 'title' => 'Bûches de fêtes', 'hook' => '', 'offer_line' => '', 'cta' => 'Je précommande'],
+        ['lang' => 'nl', 'title' => 'Feestelijke stronken', 'hook' => '', 'offer_line' => '', 'cta' => 'Bestellen'],
+    ],
+]);
+$etatB = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $idAssistant))['body'];
+check('reprise : supports, segments et messages réécrits à l\'identique, rejouée sans doublon',
+    in_array($repris['status'], [200, 204], true) && in_array($deux['status'], [200, 204], true)
+        && count($etatB['channels'] ?? []) === 1 && (int) ($etatB['channels'][0]['quantity'] ?? 0) === 30
+        && ($etatB['segment_ids'] ?? null) === [(int) $segments['vip']]
+        && count($etatB['messages'] ?? []) === 2 && ($etatB['messages'][1]['title'] ?? '') === 'Feestelijke stronken'
+        && (int) $pdo->query('SELECT COUNT(*) FROM mar_campaign_message WHERE campaign_id = ' . $idAssistant)->fetchColumn() === 2,
+    json_encode([$repris['status'], $etatB['messages'] ?? null, $etatB['segment_ids'] ?? null]));
+call($router, 'DELETE', sprintf('/api/v1/marketing/campaigns/%d', $idAssistant));
+check('supprimer la campagne emporte son message et sa cible',
+    (int) $pdo->query('SELECT COUNT(*) FROM mar_campaign_message WHERE campaign_id = ' . $idAssistant)->fetchColumn() === 0
+        && (int) $pdo->query('SELECT COUNT(*) FROM mar_crm_campaign_target WHERE campaign_id = ' . $idAssistant)->fetchColumn() === 0);
+
+// --- Bâches et affiches des boutiques (mar_shop_support) ------------------------
+echo "\nBâches et affiches des boutiques\n";
+$pdo->exec('DELETE FROM mar_shop_support');
+$boutiqueA = (int) $pdo->query('SELECT id FROM mar_shop ORDER BY id LIMIT 1')->fetchColumn();
+$boutiqueB = (int) $pdo->query('SELECT id FROM mar_shop ORDER BY id LIMIT 1 OFFSET 1')->fetchColumn();
+$declares = ['supports' => [
+    ['kind' => 'bache', 'placement' => 'Façade', 'widthCm' => 300, 'heightCm' => 100, 'quantity' => 1, 'material' => 'pvc', 'fixing' => 'oeillets'],
+    ['kind' => 'bache', 'placement' => 'Clôture du parking', 'widthCm' => 200, 'heightCm' => 80, 'quantity' => 2, 'material' => 'mesh'],
+    ['kind' => 'affiche', 'paperFormat' => 'A2', 'quantity' => 3],
+    ['kind' => 'affiche', 'paperFormat' => 'A3', 'quantity' => 4, 'note' => 'Vitrine côté rue'],
+]];
+AuthContext::clear();
+check('supports des boutiques : 401 sans identité', call($router, 'GET', '/api/v1/marketing/shop-supports')['status'] === 401);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$pose  = call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueA, [], $declares);
+$encore = call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueA, [], $declares);
+$autre = call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueB, [], ['supports' => [['kind' => 'affiche', 'paperFormat' => 'A1', 'quantity' => 2]]]);
+$liste = call($router, 'GET', '/api/v1/marketing/shop-supports');
+check('déclaration des supports d\'une boutique : enregistrée, rejouée sans doublon, relue en camelCase avec la boutique',
+    $pose['status'] === 200 && $encore['status'] === 200 && count($encore['body']['data'] ?? []) === 4
+        && ($liste['body']['meta']['pagination']['total'] ?? 0) === 5
+        && (array_values(array_filter($encore['body']['data'] ?? [], static fn (array $x): bool => $x['placement'] === 'Façade'))[0]['widthCm'] ?? null) === 300
+        && ($encore['body']['data'][0]['shopName'] ?? '') !== ''
+        && $autre['status'] === 200,
+    json_encode([$pose['status'], $pose['body']['error'] ?? null, $liste['body']['meta'] ?? null]));
+check('filtres : par boutique et par nature',
+    (call($router, 'GET', '/api/v1/marketing/shop-supports', ['filter' => ['shop' => ['eq' => (string) $boutiqueB]]])['body']['meta']['pagination']['total'] ?? 0) === 1
+        && (call($router, 'GET', '/api/v1/marketing/shop-supports', ['filter' => ['kind' => ['eq' => 'bache']]])['body']['meta']['pagination']['total'] ?? 0) === 2);
+$refusS = [
+    call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueA, [], ['supports' => [['kind' => 'bache', 'widthCm' => 300]]])['status'],
+    call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueA, [], ['supports' => [['kind' => 'affiche', 'paperFormat' => 'A0']]])['status'],
+    call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueA, [], ['supports' => [['kind' => 'affiche', 'paperFormat' => 'A2', 'widthCm' => 40]]])['status'],
+    call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueA, [], ['supports' => [['kind' => 'bache', 'widthCm' => 300, 'heightCm' => 100, 'material' => 'carton']]])['status'],
+    call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueA, [], ['supports' => [['kind' => 'kakemono']]])['status'],
+    call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueA, [], ['supports' => 'tout'])['status'],
+    call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueA, [], ['supports' => [], 'pirate' => 1])['status'],
+    call($router, 'GET', '/api/v1/marketing/shop-supports', ['filter' => ['kind' => ['eq' => 'kakemono']]])['status'],
+];
+check('supports refusés (422), rien d\'écrit : hauteur manquante, format hors liste, dimension sur une affiche, matière inconnue, nature inconnue, liste attendue, champ inconnu, filtre hors liste',
+    array_unique($refusS) === [422] && (int) $pdo->query('SELECT COUNT(*) FROM mar_shop_support WHERE shop_id = ' . $boutiqueA)->fetchColumn() === 4,
+    json_encode($refusS));
+check('boutique inconnue : 404', call($router, 'PUT', '/api/v1/marketing/shop-supports/999999', [], $declares)['status'] === 404);
+AuthContext::set(77, 'FRANCHISEE', 1, [$boutiqueB]);
+$vue = call($router, 'GET', '/api/v1/marketing/shop-supports');
+check('une boutique ne voit que ses supports, et ne les modifie pas (403) ; ceux d\'une autre boutique ne lui sont pas montrés',
+    ($vue['body']['meta']['pagination']['total'] ?? -1) === 1 && ($vue['body']['data'][0]['shopId'] ?? '') === (string) $boutiqueB
+        && call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueB, [], $declares)['status'] === 403
+        && (call($router, 'GET', '/api/v1/marketing/shop-supports', ['filter' => ['shop' => ['eq' => (string) $boutiqueA]]])['body']['meta']['pagination']['total'] ?? -1) === 0);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+check('pagination : perPage ramené à 100, page 2 vide',
+    (call($router, 'GET', '/api/v1/marketing/shop-supports', ['perPage' => '500'])['body']['meta']['pagination']['perPage'] ?? 0) === 100
+        && count(call($router, 'GET', '/api/v1/marketing/shop-supports', ['page' => '2'])['body']['data'] ?? [1]) === 0);
+$vide = call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueB, [], ['supports' => []]);
+check('une liste vide retire les supports de la boutique', $vide['status'] === 200 && ($vide['body']['data'] ?? [1]) === []);
+$pdo->exec('DELETE FROM mar_shop_support');
+
 // --- Variables et clés du module (mar_variable, mar_keys) -------------------
 // Le module se déplace avec ses réglages : ils vivent en base, les secrets chiffrés
 // par une clé maîtresse gardée hors de la base. Le test ne touche qu'aux noms qu'il
