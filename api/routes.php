@@ -21,6 +21,7 @@ use Marketing\Controller\CatalogController;
 use Marketing\Controller\ErpPromotionController;
 use Marketing\Controller\FundController;
 use Marketing\Controller\LeadController;
+use Marketing\Controller\MediaController;
 use Marketing\Controller\NetworkController;
 use Marketing\Controller\PublicController;
 use Marketing\Controller\ReferenceController;
@@ -43,6 +44,7 @@ return static function (Router $router): void {
     $public     = new PublicController();
     $campaignVouchers = new CampaignVoucherController();
     $brochures  = new BrochureController();
+    $media      = new MediaController();
 
     // Session — publique : elle ne dit que si l'appelant est authentifié.
     // Le front s'en sert pour savoir s'il est embarqué dans l'ERP, auquel cas
@@ -96,6 +98,17 @@ return static function (Router $router): void {
 
     // Visuels de campagne envoyés depuis l'assistant
     $router->post('/api/v1/marketing/uploads', [$uploads, 'store']);
+
+    // Médiathèque commune du marketing (photos et vidéos de Social, des campagnes,
+    // des brochures, des bâches) — écrite au standard : enveloppe, camelCase,
+    // pagination, filtres en liste blanche. Réseau seul (Social : jeton de service).
+    $router->get('/api/v1/marketing/media-library',                  [$media, 'library']);
+    $router->get('/api/v1/marketing/media-assets',                   [$media, 'index']);
+    $router->post('/api/v1/marketing/media-assets',                  [$media, 'store']);
+    $router->get('/api/v1/marketing/media-assets/{id}',              [$media, 'show']);
+    $router->patch('/api/v1/marketing/media-assets/{id}',            [$media, 'update']);
+    $router->put('/api/v1/marketing/media-assets/{id}/thumbnail',    [$media, 'thumbnail']);
+    $router->delete('/api/v1/marketing/media-assets/{id}',           [$media, 'destroy']);
 
     // Outils de campagne
     $router->get('/api/v1/marketing/offer-items',     [$catalog, 'offerItems']);

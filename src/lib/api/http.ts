@@ -123,8 +123,23 @@ function isErrorEnvelope(value: unknown): value is ApiErrorEnvelope {
   )
 }
 
+/** L'erreur au format du standard : `{ success: false, error: { code, message, details } }`. */
+function standardErrorMessage(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null) return null
+  const error = (value as { success?: unknown; error?: { message?: unknown; details?: unknown } }).error
+  if ((value as { success?: unknown }).success !== false || typeof error?.message !== 'string') return null
+  const details = Array.isArray(error.details)
+    ? error.details
+        .map((d: unknown) => (typeof d === 'object' && d !== null ? (d as { message?: unknown }).message : null))
+        .filter((m): m is string => typeof m === 'string' && m !== error.message)
+    : []
+  return details.length ? `${error.message} ${details.join(' ')}` : error.message
+}
+
 function describeFailure(payload: unknown, response: Response): string {
   if (isErrorEnvelope(payload) && payload.description) return payload.description
+  const standard = standardErrorMessage(payload)
+  if (standard) return standard
   if (typeof payload === 'string' && payload.trim()) return payload
   return `${response.status} ${response.statusText}`.trim()
 }
@@ -143,6 +158,10 @@ async function execute(
   if (options.body !== undefined) {
     if (options.body instanceof FormData) {
       // Le navigateur pose lui-même le Content-Type et son boundary.
+      payload = options.body
+    } else if (options.body instanceof Blob) {
+      // Un fichier envoyé tel quel (médiathèque) : ni base64, ni JSON.
+      headers['Content-Type'] = options.body.type || 'application/octet-stream'
       payload = options.body
     } else {
       headers['Content-Type'] = 'application/json'

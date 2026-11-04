@@ -252,7 +252,8 @@ final class ImageStore
     }
 
     /** Base64 strict, préfixe `data:` retiré. */
-    private static function decode(string $content): string
+    /** Le binaire d'un contenu base64, avec ou sans préfixe `data:` (la médiathèque s'en sert aussi). */
+    public static function decode(string $content): string
     {
         $content = trim($content);
 
@@ -296,7 +297,7 @@ final class ImageStore
     }
 
     /** Nom du dossier public, tel qu'il apparaît dans l'adresse. */
-    private static function folder(): string
+    public static function folder(): string
     {
         return trim((string) (Env::get('MAR_UPLOAD_FOLDER', 'uploads') ?: 'uploads'), '/');
     }
@@ -309,7 +310,7 @@ final class ImageStore
      * `rsync` déployant sans `--delete`, les visuels y survivent aux mises à
      * jour.
      */
-    private static function directory(): string
+    public static function directory(): string
     {
         $configured = trim((string) (Env::get('MAR_UPLOAD_DIR', '') ?: ''));
         if ($configured !== '') {
@@ -324,7 +325,7 @@ final class ImageStore
     }
 
     /** Compte sous lequel tourne le serveur web, pour nommer le bon coupable. */
-    private static function serverUser(): string
+    public static function serverUser(): string
     {
         if (function_exists('posix_getpwuid') && function_exists('posix_geteuid')) {
             $user = @posix_getpwuid(posix_geteuid());
@@ -336,7 +337,7 @@ final class ImageStore
         return (string) (getenv('USER') ?: getenv('USERNAME') ?: 'inconnu');
     }
 
-    private static function humanBytes(int $bytes): string
+    public static function humanBytes(int $bytes): string
     {
         return $bytes >= 1024 * 1024
             ? sprintf('%.1f Mo', $bytes / 1024 / 1024)

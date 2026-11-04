@@ -129,6 +129,13 @@ entière, pour attraper une colonne ajoutée plus tard.
 | GET | `…/kits` | tenant | tableau |
 | GET | `…/presence` | tenant | objet |
 | POST | `…/uploads` | tenant | objet (visuel de campagne) |
+| GET | `…/media-library` | marque (Social : jeton de service) | enveloppe — catégories, saisons, limites de dépôt — §9 |
+| GET | `…/media-assets?page=&perPage=&sort=&filter[…]` | marque | enveloppe + `data[]` paginé — §9 |
+| POST | `…/media-assets` | marque | enveloppe — `201` créé, `200` + `meta.duplicate` si le fichier y était déjà |
+| GET | `…/media-assets/{id}` | marque | enveloppe |
+| PATCH | `…/media-assets/{id}` | marque | enveloppe — nom, classements, `archived` |
+| PUT | `…/media-assets/{id}/thumbnail` | marque | enveloppe — couverture d'une vidéo |
+| DELETE | `…/media-assets/{id}` | marque | enveloppe — retrait idempotent, le fichier reste servi |
 
 ### 2.5 CRM, prospection, analyse
 
@@ -499,3 +506,74 @@ service `ErpPromotionService` (mise en forme des cinq familles) → dépôt
 `ErpPromotionRepository` (lectures de l'ERP par `ErpClient`, noms et périmètre en
 SQL sur les tables `mar_`). Écart résiduel : le préfixe reste `/api/v1/marketing/`,
 sans segment `{app}`, comme toutes les routes du module (§3.2).
+
+## 9. La médiathèque commune (novembre 2026)
+
+Une seule réserve de photos et de vidéos pour tout le marketing : les posts et
+les publicités du module Social, les visuels de campagne, les brochures, les
+bâches et les affiches. La médiathèque de « Créer un post » vivait dans le
+navigateur (IndexedDB) : chaque poste avait la sienne, et un navigateur vidé la
+perdait. Tables `mar_media`, `mar_media_category`, `mar_media_season` (migration
+039) ; catégories et saisons reprises à l'identique de Social.
+
+**Contrat.** Écrit au standard autant que le permet la cohabitation, comme §8 :
+
+- Réponse `{ success, data, meta: { requestId, … } }` ; erreur
+  `{ success: false, error: { code, message, details[] } }`, codes du catalogue
+  §7.2 (`VALIDATION_FAILED`, `RESOURCE_NOT_FOUND`, `PERM_ROLE_REQUIRED`).
+- Liste : `page` (≥ 1), `perPage` (défaut 25, ramené à 100), `sort` ∈
+  `createdAt | updatedAt | name | bytes` (préfixe `-` : décroissant, défaut
+  `-createdAt`), filtres en liste blanche `filter[kind][eq]` (`image | video`),
+  `filter[category][eq|isNull]`, `filter[subcategory][eq]`, `filter[season][eq]`,
+  `filter[offerItem][eq]`, `filter[shop][eq]`, `filter[source][eq]`
+  (`marketing | social`), `filter[archived][eq]`, `filter[name][contains]` (cherche
+  aussi dans les libellés de catégorie et le nom du produit). Paramètre, filtre,
+  opérateur ou valeur hors liste → `422`.
+- Une fiche : `id`, `kind`, `name`, `url` et `thumbnailUrl` (**absolues**),
+  `path` (relatif à la racine du module), `mimeType`, `bytes`, `width`, `height`,
+  `category`/`subcategory`/`season` `{code, label}`, `offerItem {id, name}`,
+  `shop {id, name}`, `cutout`, `source`, `archived`, `createdAt`, `updatedAt`
+  (ISO 8601 UTC).
+- Dépôt : le fichier **en corps brut** (`Content-Type` image/…, video/… ;
+  classements en query) — une vidéo de 40 Mo ne passe pas par du base64 — ou du
+  JSON `{content, poster?, name?, category?, subcategory?, season?, offerItemId?,
+  shopId?, cutout?, source?}`. Format reconnu aux octets : PNG, JPEG, GIF, WebP,
+  AVIF (20 Mio), MP4, MOV, WebM (45 Mio) ; SVG refusé (il peut porter du script).
+  L'original est gardé tel quel (une bâche a besoin de l'original) ; vignette
+  480 px, PNG si l'image a de la transparence, JPEG sinon. **Idempotent** : un
+  même fichier (empreinte SHA-256) rend la fiche existante (`200`,
+  `meta.duplicate: true`), remise dans la médiathèque si elle en avait été retirée.
+- Retrait (`DELETE`, ou `PATCH {archived: true}`) : la fiche sort de la liste,
+  le fichier reste servi — un post publié ou une brochure peut encore pointer dessus.
+- Réservée au réseau : une identité de boutique reçoit `403`. Le module Social y
+  accède par son jeton de service (identité réseau), avec `source: social`.
+
+**Écarts résiduels, signalés plutôt que contournés :**
+
+- **Stockage local, pas Cloudflare R2 (§13).** Les fichiers sont écrits dans le
+  dossier des envois du module (`MAR_UPLOAD_DIR`, servi sous `/uploads/media/`) ;
+  aucun bucket R2 n'est raccordé à ce module. Le contrat est déjà celui que R2
+  donnera (`url` et `thumbnailUrl` absolues, nom d'objet tiré côté serveur, type
+  en liste blanche, taille par type) : passer à R2 changera `MediaStore`, pas les
+  écrans. Il faut pour cela un bucket et ses clés — à fournir.
+- **Taille des envois.** PHP refuse un corps plus gros que `post_max_size`
+  (souvent 8 Mo par défaut) : le fichier n'arrive pas du tout. `media-library`
+  rend cette valeur (`limits.serverMaxBytes`) et l'écran prévient avant
+  d'envoyer. Pour accepter les vidéos jusqu'à 45 Mio, relever `post_max_size`
+  (64M) et `memory_limit` (256M) dans la configuration PHP du serveur.
+- L'adresse absolue vient de `MAR_PUBLIC_BASE_URL` (l'adresse publique du module)
+  si elle est posée, sinon de l'hôte par lequel la requête est arrivée.
+- Le `401` sans identité garde la forme du routeur (`{status, description}`),
+  commune à tout le module ; préfixe sans segment `{app}` (§3.2).
+
+Tests (`api/tests/smoke.php`, « Médiathèque commune ») : 200 et enveloppe, 401,
+403 (lecture, dépôt, modification, retrait), 422 (SVG, PHP, champ inconnu,
+sous-catégorie d'une autre catégorie, saison ou produit inconnus, couverture qui
+n'est pas une image, vide, trop lourd ; paramètres de liste), 404, pagination et
+`perPage` ramené, filtres, idempotence du dépôt et du retrait, vignettes, vidéo
+et sa couverture.
+
+Couches : contrôleur `MediaController` (HTTP, validation des paramètres,
+enveloppe) → service `MediaService` (dédoublonnage, classements, sérialisation)
+→ dépôt `MediaRepository` (seul SQL) ; fichiers par `MediaStore`.
+

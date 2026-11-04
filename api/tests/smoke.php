@@ -76,6 +76,8 @@ if (!$looksDisposable && getenv('MAR_ALLOW_DESTRUCTIVE_TESTS') !== '1') {
 }
 
 // --- Jeu de données -------------------------------------------------------
+// La médiathèque d'abord : ses lignes pointent vers les boutiques et le catalogue purgés plus bas.
+$pdo->exec('DELETE FROM mar_media');
 $pdo->exec('DELETE FROM mar_crm_lead_event');
 $pdo->exec('DELETE FROM mar_crm_lead');
 $pdo->exec('DELETE FROM mar_campaign_kpi_snapshot');
@@ -3486,6 +3488,206 @@ if (function_exists('imagecreatetruecolor')) {
 
 array_map('unlink', glob($uploadDir . '/*') ?: []);
 @rmdir($uploadDir);
+
+// --- Médiathèque commune ----------------------------------------------------
+// Écrite au standard : enveloppe, camelCase, pagination, filtres en liste
+// blanche. Réservée au réseau. Un même fichier n'est gardé qu'une fois.
+echo "\nMédiathèque commune\n";
+$identiteAvant = AuthContext::current();
+$mediaDir = sys_get_temp_dir() . '/mar_media_' . getmypid();
+putenv('MAR_UPLOAD_DIR=' . $mediaDir);
+putenv('MAR_PUBLIC_BASE_URL=https://media.test/marketing');
+
+$media = static function (string $method, string $path, array $query = [], array $body = [], string $raw = '') use ($router): array {
+    return $router->dispatch(new Request($method, '/api/v1/marketing' . $path, $query, $body, [], $raw));
+};
+$fichierDe = static function (?string $url) use ($mediaDir): string {
+    return $mediaDir . substr((string) $url, strlen('https://media.test/marketing/uploads'));
+};
+$imagePng = static function (int $w, int $h, bool $transparent, array $rgb = [200, 40, 60]): string {
+    $canvas = imagecreatetruecolor($w, $h);
+    imagealphablending($canvas, false);
+    imagesavealpha($canvas, true);
+    $fond = $transparent ? imagecolorallocatealpha($canvas, 0, 0, 0, 127) : imagecolorallocate($canvas, ...$rgb);
+    imagefilledrectangle($canvas, 0, 0, $w, $h, $fond);
+    imagefilledrectangle($canvas, (int) ($w / 4), (int) ($h / 4), (int) ($w / 2), (int) ($h / 2), imagecolorallocate($canvas, ...$rgb));
+    ob_start();
+    imagepng($canvas, null, 6);
+    imagedestroy($canvas);
+
+    return (string) ob_get_clean();
+};
+
+AuthContext::clear();
+check('médiathèque sans identité : 401', $media('GET', '/media-assets')['status'] === 401);
+
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+$refusFr = [
+    $media('GET', '/media-assets')['status'],
+    $media('GET', '/media-library')['status'],
+    $media('POST', '/media-assets', [], ['content' => base64_encode($png)])['status'],
+];
+check('médiathèque : une identité de boutique reçoit 403 (lecture comme dépôt), code PERM_ROLE_REQUIRED',
+    $refusFr === [403, 403, 403]
+        && ($media('GET', '/media-assets')['body']['error']['code'] ?? null) === 'PERM_ROLE_REQUIRED',
+    json_encode($refusFr));
+
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$lib = $media('GET', '/media-library');
+$cats = $lib['body']['data']['categories'] ?? [];
+$viennoiseries = array_values(array_filter($cats, static fn (array $c): bool => $c['code'] === 'viennoiseries'))[0] ?? [];
+check('médiathèque : les catégories et les saisons de Social, avec leurs sous-catégories',
+    $lib['status'] === 200 && ($lib['body']['success'] ?? false) === true && count($cats) === 8
+        && count($viennoiseries['subcategories'] ?? []) === 4 && count($lib['body']['data']['seasons'] ?? []) === 11
+        && is_string($lib['body']['meta']['requestId'] ?? null));
+
+if (function_exists('imagecreatetruecolor')) {
+    $photo = $imagePng(1600, 1000, false);
+    $depot = $media('POST', '/media-assets', [], ['content' => 'data:image/png;base64,' . base64_encode($photo), 'name' => 'Croissant au beurre',
+        'category' => 'viennoiseries', 'subcategory' => 'croissants', 'season' => 'toute-annee']);
+    $fiche = $depot['body']['data'] ?? [];
+    check('dépôt JSON : 201, fiche en camelCase, URL absolue, classements relus avec leurs libellés',
+        $depot['status'] === 201 && ($fiche['name'] ?? '') === 'Croissant au beurre' && ($fiche['kind'] ?? '') === 'image'
+            && str_starts_with((string) ($fiche['url'] ?? ''), 'https://media.test/marketing/uploads/media/')
+            && ($fiche['category']['label'] ?? '') === 'Viennoiseries' && ($fiche['subcategory']['label'] ?? '') === 'Croissants'
+            && ($fiche['season']['label'] ?? '') === "Toute l'année" && ($fiche['width'] ?? 0) === 1600 && ($fiche['height'] ?? 0) === 1000
+            && ($depot['body']['meta']['duplicate'] ?? null) === false && preg_match('/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/', (string) ($fiche['createdAt'] ?? '')) === 1,
+        json_encode([$depot['status'], $fiche['url'] ?? null, $depot['body']['error'] ?? null]));
+    check('l\'original est gardé tel quel (aucune réduction) et la vignette fait 480 px en JPEG',
+        is_file($fichierDe($fiche['url'] ?? null)) && filesize($fichierDe($fiche['url'] ?? null)) === strlen($photo)
+            && str_ends_with((string) ($fiche['thumbnailUrl'] ?? ''), '.thumb.jpg')
+            && (getimagesize($fichierDe($fiche['thumbnailUrl'] ?? null))[0] ?? 0) === 480);
+
+    $encore = $media('POST', '/media-assets', [], ['content' => base64_encode($photo), 'name' => 'Autre nom']);
+    check('le même fichier redéposé : 200, même fiche, nom d\'origine gardé (dépôt idempotent)',
+        $encore['status'] === 200 && ($encore['body']['meta']['duplicate'] ?? null) === true
+            && ($encore['body']['data']['id'] ?? null) === ($fiche['id'] ?? 'x') && ($encore['body']['data']['name'] ?? '') === 'Croissant au beurre'
+            && (int) $pdo->query('SELECT COUNT(*) FROM mar_media')->fetchColumn() === 1);
+
+    $detoure = $imagePng(900, 1200, true, [40, 120, 60]);
+    $brut = $media('POST', '/media-assets', ['name' => 'Tarte détourée', 'category' => 'tartes', 'cutout' => 'true', 'source' => 'social'], [], $detoure);
+    check('dépôt en corps brut (sans base64), classements en query ; une photo détourée garde une vignette PNG transparente',
+        $brut['status'] === 201 && ($brut['body']['data']['cutout'] ?? false) === true && ($brut['body']['data']['source'] ?? '') === 'social'
+            && str_ends_with((string) ($brut['body']['data']['thumbnailUrl'] ?? ''), '.thumb.png')
+            && (getimagesize($fichierDe($brut['body']['data']['thumbnailUrl'] ?? null))[1] ?? 0) === 480,
+        json_encode($brut['body']['error'] ?? $brut['body']['data']['thumbnailUrl'] ?? null));
+
+    $mp4 = "\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom" . str_repeat("\x00", 2048);
+    $video = $media('POST', '/media-assets', ['name' => 'Vitrine de Noël'], [], $mp4);
+    $idVideo = (string) ($video['body']['data']['id'] ?? '0');
+    $couverture = $media('PUT', '/media-assets/' . $idVideo . '/thumbnail', [], [], $imagePng(1280, 720, false));
+    check('une vidéo MP4 est acceptée sans vignette, puis reçoit la couverture que le navigateur a tirée',
+        $video['status'] === 201 && ($video['body']['data']['kind'] ?? '') === 'video' && ($video['body']['data']['mimeType'] ?? '') === 'video/mp4'
+            && array_key_exists('thumbnailUrl', $video['body']['data'] ?? []) && $video['body']['data']['thumbnailUrl'] === null
+            && $couverture['status'] === 200 && str_ends_with((string) ($couverture['body']['data']['thumbnailUrl'] ?? ''), '.thumb.jpg'),
+        json_encode([$video['status'], $couverture['status'], $couverture['body']['error'] ?? null]));
+
+    $avant = (int) $pdo->query('SELECT COUNT(*) FROM mar_media')->fetchColumn();
+    $refus = [
+        'svg'              => $media('POST', '/media-assets', [], ['content' => base64_encode('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')]),
+        'php'              => $media('POST', '/media-assets', [], [], '<?php system($_GET["c"]); ?>'),
+        'champ inconnu'    => $media('POST', '/media-assets', [], ['content' => base64_encode($png), 'path' => '/etc/passwd']),
+        'sous-catégorie'   => $media('POST', '/media-assets', [], ['content' => base64_encode($png), 'category' => 'pains', 'subcategory' => 'croissants']),
+        'saison'           => $media('POST', '/media-assets', [], ['content' => base64_encode($png), 'season' => 'carnaval']),
+        'produit'          => $media('POST', '/media-assets', [], ['content' => base64_encode($png), 'offerItemId' => 999999]),
+        'couverture'       => $media('POST', '/media-assets', [], ['content' => base64_encode($mp4), 'poster' => base64_encode($mp4)]),
+        'vide'             => $media('POST', '/media-assets', [], ['content' => '']),
+        'trop lourde'      => $media('POST', '/media-assets', [], [], "\x89PNG\r\n\x1a\n" . str_repeat('x', 20 * 1024 * 1024)),
+    ];
+    $statuts = array_map(static fn (array $r): int => $r['status'], $refus);
+    check('dépôts refusés en 422 VALIDATION_FAILED, champ nommé, rien d\'écrit (SVG, PHP, champ inconnu, sous-catégorie d\'une autre catégorie, saison, produit inconnus, couverture qui n\'est pas une image, vide, trop lourde)',
+        array_unique(array_values($statuts)) === [422]
+            && count(array_filter($refus, static fn (array $r): bool => ($r['body']['error']['code'] ?? '') === 'VALIDATION_FAILED' && ($r['body']['error']['details'][0]['field'] ?? '') !== '')) === count($refus)
+            && (int) $pdo->query('SELECT COUNT(*) FROM mar_media')->fetchColumn() === $avant,
+        json_encode($statuts));
+
+    // Liste : pagination, tri, filtres.
+    $page2 = $media('GET', '/media-assets', ['perPage' => '2', 'page' => '2', 'sort' => 'name']);
+    check('liste : page 2 de 2 par page, total et nombre de pages, tri par nom',
+        $page2['status'] === 200 && count($page2['body']['data'] ?? []) === 1
+            && ($page2['body']['meta']['pagination'] ?? null) === ['page' => 2, 'perPage' => 2, 'total' => 3, 'totalPages' => 2]
+            && ($page2['body']['data'][0]['name'] ?? '') === 'Vitrine de Noël',
+        json_encode($page2['body']['meta']['pagination'] ?? $page2['body']));
+    check('liste : perPage au-delà de 100 ramené à 100',
+        ($media('GET', '/media-assets', ['perPage' => '500'])['body']['meta']['pagination']['perPage'] ?? 0) === 100);
+    $filtres = [
+        'vidéos'              => [['filter' => ['kind' => ['eq' => 'video']]], 1],
+        'catégorie'           => [['filter' => ['category' => ['eq' => 'viennoiseries']]], 1],
+        'non classées'        => [['filter' => ['category' => ['isNull' => 'true']]], 1],
+        'recherche par nom'   => [['filter' => ['name' => ['contains' => 'tarte']]], 1],
+        'recherche par libellé de catégorie' => [['filter' => ['name' => ['contains' => 'viennois']]], 1],
+        'source'              => [['filter' => ['source' => 'social']], 1],
+    ];
+    foreach ($filtres as $cas => [$query, $attendu]) {
+        $r = $media('GET', '/media-assets', $query);
+        check('liste filtrée (' . $cas . ')', $r['status'] === 200 && ($r['body']['meta']['pagination']['total'] ?? -1) === $attendu,
+            json_encode([$r['status'], $r['body']['meta']['pagination']['total'] ?? $r['body']]));
+    }
+    $mauvais = [
+        $media('GET', '/media-assets', ['page' => '0'])['status'],
+        $media('GET', '/media-assets', ['tri' => 'name'])['status'],
+        $media('GET', '/media-assets', ['sort' => 'sha256'])['status'],
+        $media('GET', '/media-assets', ['filter' => ['sha256' => ['eq' => 'x']]])['status'],
+        $media('GET', '/media-assets', ['filter' => ['kind' => ['in' => 'image']]])['status'],
+        $media('GET', '/media-assets', ['filter' => ['kind' => ['eq' => 'pdf']]])['status'],
+    ];
+    check('liste : page 0, paramètre, tri, filtre, opérateur ou valeur hors liste → 422', array_unique($mauvais) === [422], json_encode($mauvais));
+
+    // Modification, retrait, remise.
+    $idPhoto = (string) ($fiche['id'] ?? '0');
+    $patch = $media('PATCH', '/media-assets/' . $idPhoto, [], ['name' => 'Croissant', 'category' => 'patisseries']);
+    check('modification : renommer et changer de catégorie efface la sous-catégorie qui n\'y appartient plus',
+        $patch['status'] === 200 && ($patch['body']['data']['name'] ?? '') === 'Croissant'
+            && ($patch['body']['data']['category']['code'] ?? '') === 'patisseries'
+            && array_key_exists('subcategory', $patch['body']['data'] ?? []) && $patch['body']['data']['subcategory'] === null,
+        json_encode($patch['body']['data'] ?? $patch['body']));
+    $refusPatch = $media('PATCH', '/media-assets/' . $idPhoto, [], ['name' => 'Ne doit pas passer', 'subcategory' => 'croissants']);
+    check('modification refusée (sous-catégorie d\'une autre catégorie) : 422, rien d\'écrit',
+        $refusPatch['status'] === 422 && ($media('GET', '/media-assets/' . $idPhoto)['body']['data']['name'] ?? '') === 'Croissant');
+    $idBoutique = (int) $pdo->query('SELECT id FROM mar_shop ORDER BY id LIMIT 1')->fetchColumn();
+    $idProduit  = (int) $pdo->query('SELECT id FROM mar_offer_item ORDER BY id LIMIT 1')->fetchColumn();
+    $lie = $media('PATCH', '/media-assets/' . $idPhoto, [], ['shopId' => $idBoutique, 'offerItemId' => $idProduit]);
+    check('une photo se rattache à une boutique et à un produit du catalogue, relus par leur nom',
+        $lie['status'] === 200 && ($lie['body']['data']['shop']['id'] ?? '') === (string) $idBoutique && ($lie['body']['data']['shop']['name'] ?? '') !== ''
+            && ($lie['body']['data']['offerItem']['id'] ?? '') === (string) $idProduit
+            && ($media('GET', '/media-assets', ['filter' => ['offerItem' => ['eq' => (string) $idProduit]]])['body']['meta']['pagination']['total'] ?? 0) === 1,
+        json_encode($lie['body']));
+
+    $retrait  = $media('DELETE', '/media-assets/' . $idPhoto);
+    $retrait2 = $media('DELETE', '/media-assets/' . $idPhoto);
+    $liste    = $media('GET', '/media-assets')['body']['meta']['pagination']['total'] ?? -1;
+    $retires  = $media('GET', '/media-assets', ['filter' => ['archived' => ['eq' => 'true']]])['body']['meta']['pagination']['total'] ?? -1;
+    check('retrait : 200 deux fois (idempotent), sorti de la liste, visible parmi les retirés, fichier toujours servi',
+        $retrait['status'] === 200 && $retrait2['status'] === 200 && ($retrait2['body']['data']['archived'] ?? false) === true
+            && $liste === 2 && $retires === 1 && is_file($fichierDe($fiche['url'] ?? null)));
+    $remis = $media('POST', '/media-assets', [], ['content' => base64_encode($photo)]);
+    check('redéposer un fichier retiré le remet dans la médiathèque, avec ses classements',
+        $remis['status'] === 200 && ($remis['body']['data']['archived'] ?? true) === false && ($remis['body']['data']['name'] ?? '') === 'Croissant');
+
+    check('fichier inconnu : 404 RESOURCE_NOT_FOUND en lecture, modification et retrait',
+        $media('GET', '/media-assets/999999')['status'] === 404 && $media('PATCH', '/media-assets/999999', [], ['name' => 'x'])['status'] === 404
+            && $media('DELETE', '/media-assets/999999')['status'] === 404
+            && ($media('GET', '/media-assets/999999')['body']['error']['code'] ?? '') === 'RESOURCE_NOT_FOUND');
+
+    AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+    check('une identité de boutique ne modifie ni ne retire un fichier du réseau (403)',
+        $media('PATCH', '/media-assets/' . $idPhoto, [], ['name' => 'x'])['status'] === 403 && $media('DELETE', '/media-assets/' . $idPhoto)['status'] === 403
+            && $media('GET', '/media-assets/' . $idPhoto)['status'] === 403);
+}
+
+$rmTree = static function (string $dir) use (&$rmTree): void {
+    foreach (glob($dir . '/*') ?: [] as $entry) {
+        is_dir($entry) ? $rmTree($entry) : unlink($entry);
+    }
+    @rmdir($dir);
+};
+$rmTree($mediaDir);
+putenv('MAR_PUBLIC_BASE_URL');
+if ($identiteAvant !== null) {
+    AuthContext::set($identiteAvant->userId, $identiteAvant->role, $identiteAvant->brandId, $identiteAvant->shopIds);
+} else {
+    AuthContext::clear();
+}
 
 // --- Bons de campagne -----------------------------------------------------
 // Les bons vivent dans le webshop ; le module n'en garde rien, pas même le

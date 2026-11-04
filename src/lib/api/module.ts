@@ -2241,3 +2241,150 @@ export interface WebshopNav {
 export function getWebshopNav(shop: number): Promise<WebshopNav> {
   return request<WebshopNav>(`${SOCIAL_ROOT}/api/v1/social/catalogue/nav`, { query: { shop } })
 }
+
+// ---------------------------------------------------------------------------
+// Médiathèque commune — route écrite au standard (enveloppe, camelCase, pagination)
+// ---------------------------------------------------------------------------
+
+export interface MediaRef {
+  code: string
+  label: string
+}
+
+export interface MediaCategory extends MediaRef {
+  files: number
+  subcategories: Array<MediaRef & { files: number }>
+}
+
+export interface MediaLibrary {
+  categories: MediaCategory[]
+  seasons: MediaRef[]
+  /** Fichiers dans la médiathèque, non classés, retirés. */
+  counts: { all: number; uncategorized: number; archived: number }
+  limits: {
+    imageMaxBytes: number
+    videoMaxBytes: number
+    imageTypes: string[]
+    videoTypes: string[]
+    /** Ce que PHP accepte en corps de requête sur ce serveur ; nul sans limite. */
+    serverMaxBytes: number | null
+  }
+}
+
+export interface MediaAsset {
+  id: string
+  kind: 'image' | 'video'
+  name: string
+  /** Adresse absolue du fichier d'origine. */
+  url: string
+  /** Vignette de 480 px (couverture, pour une vidéo) ; nulle quand le serveur n'a pas pu la tirer. */
+  thumbnailUrl: string | null
+  path: string
+  mimeType: string
+  bytes: number
+  width: number | null
+  height: number | null
+  category: MediaRef | null
+  subcategory: MediaRef | null
+  season: MediaRef | null
+  offerItem: { id: string; name: string } | null
+  shop: { id: string; name: string } | null
+  cutout: boolean
+  source: 'marketing' | 'social'
+  archived: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MediaPage {
+  items: MediaAsset[]
+  page: number
+  perPage: number
+  total: number
+  totalPages: number
+}
+
+export interface MediaQuery {
+  page?: number
+  perPage?: number
+  sort?: string
+  kind?: 'image' | 'video'
+  /** Code de catégorie, ou `none` pour les fichiers non classés. */
+  category?: string
+  subcategory?: string
+  season?: string
+  offerItem?: number
+  shop?: number
+  archived?: boolean
+  name?: string
+}
+
+/** Les champs d'une fiche que l'écran modifie. `null` efface le classement. */
+export interface MediaFields {
+  name?: string
+  category?: string | null
+  subcategory?: string | null
+  season?: string | null
+  offerItemId?: number | null
+  shopId?: number | null
+  cutout?: boolean
+}
+
+interface Envelope<T> {
+  success: boolean
+  data: T
+  meta: { requestId: string; pagination?: { page: number; perPage: number; total: number; totalPages: number }; duplicate?: boolean }
+}
+
+export async function getMediaLibrary(): Promise<MediaLibrary> {
+  return (await request<Envelope<MediaLibrary>>(`${BASE}/media-library`)).data
+}
+
+export async function listMedia(query: MediaQuery = {}): Promise<MediaPage> {
+  const params: Record<string, string | number> = {}
+  if (query.page) params.page = query.page
+  if (query.perPage) params.perPage = query.perPage
+  if (query.sort) params.sort = query.sort
+  if (query.kind) params['filter[kind][eq]'] = query.kind
+  if (query.category === 'none') params['filter[category][isNull]'] = 'true'
+  else if (query.category) params['filter[category][eq]'] = query.category
+  if (query.subcategory) params['filter[subcategory][eq]'] = query.subcategory
+  if (query.season) params['filter[season][eq]'] = query.season
+  if (query.offerItem) params['filter[offerItem][eq]'] = query.offerItem
+  if (query.shop) params['filter[shop][eq]'] = query.shop
+  if (query.archived) params['filter[archived][eq]'] = 'true'
+  if (query.name?.trim()) params['filter[name][contains]'] = query.name.trim()
+
+  const body = await request<Envelope<MediaAsset[]>>(`${BASE}/media-assets`, { query: params })
+  const pagination = body.meta.pagination ?? { page: 1, perPage: body.data.length, total: body.data.length, totalPages: 1 }
+
+  return { items: body.data, ...pagination }
+}
+
+/**
+ * Dépose un fichier tel quel (corps brut : une vidéo de 40 Mo ne passe pas par du base64).
+ * `duplicate` : le même fichier était déjà dans la médiathèque, c'est sa fiche qui revient.
+ */
+export async function uploadMedia(file: Blob, fields: MediaFields = {}): Promise<{ media: MediaAsset; duplicate: boolean }> {
+  const query: Record<string, string | number> = {}
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === undefined || value === null || value === '') continue
+    query[key] = typeof value === 'boolean' ? String(value) : value
+  }
+  const body = await request<Envelope<MediaAsset>>(`${BASE}/media-assets`, { method: 'POST', query, body: file })
+
+  return { media: body.data, duplicate: body.meta.duplicate === true }
+}
+
+export async function updateMedia(id: string, fields: MediaFields & { archived?: boolean }): Promise<MediaAsset> {
+  return (await request<Envelope<MediaAsset>>(`${BASE}/media-assets/${id}`, { method: 'PATCH', body: fields })).data
+}
+
+export async function archiveMedia(id: string): Promise<MediaAsset> {
+  return (await request<Envelope<MediaAsset>>(`${BASE}/media-assets/${id}`, { method: 'DELETE' })).data
+}
+
+/** La couverture d'une vidéo, tirée par le navigateur (le serveur ne lit pas les vidéos). */
+export async function setMediaThumbnail(id: string, image: Blob): Promise<MediaAsset> {
+  return (await request<Envelope<MediaAsset>>(`${BASE}/media-assets/${id}/thumbnail`, { method: 'PUT', body: image })).data
+}
