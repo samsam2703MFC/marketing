@@ -129,6 +129,8 @@ entière, pour attraper une colonne ajoutée plus tard.
 | GET | `…/kits` | tenant | tableau |
 | GET | `…/presence` | tenant | objet |
 | POST | `…/uploads` | tenant | objet (visuel de campagne) |
+| GET | `…/shop-supports?page=&perPage=&filter[shop][eq]=&filter[kind][eq]=` | réseau ; boutique : les siennes | enveloppe + `data[]` paginé — §11 |
+| PUT | `…/shop-supports/{shopId}` | réseau | enveloppe — `{ supports: [...] }` remplace la liste de la boutique, idempotent — §11 |
 | GET | `…/media-library` | marque (Social : jeton de service) | enveloppe — catégories, saisons, limites de dépôt — §9 |
 | GET | `…/media-assets?page=&perPage=&sort=&filter[…]` | marque | enveloppe + `data[]` paginé — §9 |
 | POST | `…/media-assets` | marque | enveloppe — `201` créé, `200` + `meta.duplicate` si le fichier y était déjà |
@@ -626,4 +628,41 @@ recopiée sous un autre nom indéchiffrable, autre clé maîtresse → illisible
 repli sur le fichier, priorité base > fichier, amorçage refusé, 401, 403, 422,
 réponse sans la valeur, import idempotent sans écrasement, secret de session lu
 en base.
+
+## 11. L'assistant réunit tous les supports (novembre 2026)
+
+Maquette validée le 04/11/2026 : huit étapes — Cadrage, **Cible**, Produits &
+offre, **Supports**, **Contenus**, Budget & validation, Planning, Récap.
+Migration 041. Les routes existantes ne changent ni de chemin ni de forme ; elles
+gagnent des champs (ajouts compatibles, §14 du standard) :
+
+- `GET …/references` : chaque `channels[]` porte `grp` (`boutique | exterieur |
+  social | google | direct`), `description`, `is_paid`, `lead_days` (délai type
+  avant le lancement) et `editor` (l'écran qui produit le support) ; `crmSegments[]`
+  liste les segments du CRM. Onze supports rejoignent les huit canaux ; les codes
+  existants, leur famille `PHYSIQUE | DIGITAL` et « Pub physique / Pub digitale »
+  ne changent pas (trois libellés suivent la maquette : Publicité Meta, Google Ads,
+  Newsletter, Bâches extérieures, PLV, Distribution toutes-boîtes).
+- Création et reprise d'un brouillon (`POST …/campaigns`, `PUT …/campaigns/{id}/draft`,
+  `GET …/campaigns/{id}/draft`) : `channels[]` porte `quantity` et `details` ;
+  `segment_ids[]` (segments du CRM visés, un identifiant inconnu est ignoré) ;
+  `messages[]` `{lang: fr | nl, title, hook, offer_line, cta}` — le message que
+  chaque support décline (une langue entièrement vide n'est pas gardée). Plusieurs
+  cibles se cumulent : particuliers (avec leurs segments) et professionnels (avec
+  leurs secteurs) — `client_target = mixte`.
+- `…/shop-supports` (nouvelle, au standard) : les bâches (emplacement, largeur et
+  hauteur en cm, matière `pvc | mesh`, fixation `oeillets | fourreaux | sangles`,
+  quantité) et les cadres d'affiche (`A1 | A2 | A3`, quantité) de chaque boutique,
+  déclarés dans Marketing en magasin › Bâches & affiches, repris par la carte
+  « Bâches extérieures » / « Affiches » de l'assistant. Validation stricte (un champ
+  inconnu ou une valeur hors liste refuse l'envoi entier), écriture réseau seul,
+  lecture filtrée dans le dépôt pour une boutique.
+- « Proposer avec Claude » (étape Contenus) appelle la rédaction du module Social
+  (`…/social/redaction/proposer`), selon sa charte éditoriale : pas de second
+  moteur de rédaction ici.
+
+Tests (« Assistant : supports, cible, message », « Bâches et affiches des
+boutiques ») : référentiel, aller-retour du brouillon, reprise sans doublon,
+suppression en cascade ; 401, 403, 404, 422, pagination, filtres, isolation d'une
+boutique, idempotence, liste vide.
 

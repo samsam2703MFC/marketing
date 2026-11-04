@@ -53,6 +53,16 @@ SELECT * FROM (
 ) AS nouveaux
 WHERE NOT EXISTS (SELECT 1 FROM mar_channel existant WHERE existant.code = nouveaux.code);
 
+-- L'ordre des cartes dans chaque famille, celui de la maquette.
+UPDATE mar_channel SET sort_order = CASE code
+  WHEN 'affiches' THEN 10 WHEN 'ecrans' THEN 11 WHEN 'plv' THEN 12 WHEN 'animation' THEN 13
+  WHEN 'affichage' THEN 20 WHEN 'leaflet' THEN 21 WHEN 'depliant' THEN 22 WHEN 'flyer' THEN 23 WHEN 'partenaires' THEN 24 WHEN 'vehicules' THEN 25
+  WHEN 'posts_meta' THEN 30 WHEN 'meta_ads' THEN 31 WHEN 'stories' THEN 32
+  WHEN 'gbp_post' THEN 40 WHEN 'google_local' THEN 41 WHEN 'avis_google' THEN 42
+  WHEN 'email' THEN 50 WHEN 'sms' THEN 51 WHEN 'pwa_push' THEN 52
+  ELSE sort_order END
+WHERE grp IS NOT NULL;
+
 ALTER TABLE mar_campaign_channel
   ADD COLUMN quantity INT UNSIGNED  NULL COMMENT 'Exemplaires, posts, envois…' AFTER budget_amount,
   ADD COLUMN details  VARCHAR(300) NULL COMMENT 'Formats, dates, consignes du support' AFTER quantity;

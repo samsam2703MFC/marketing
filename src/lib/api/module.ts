@@ -192,11 +192,32 @@ export interface Position {
   label: string
 }
 
+/** Les cinq familles de supports de l'assistant. */
+export type ChannelGroup = 'boutique' | 'exterieur' | 'social' | 'google' | 'direct'
+
 export interface Channel {
   id: number
   code: string
   label: string
   family: 'DIGITAL' | 'PHYSIQUE'
+  /** Sa famille dans l'assistant (étape « Supports »). */
+  grp: ChannelGroup | null
+  description: string | null
+  /** Budget publicitaire, à valider avant tout engagement. */
+  is_paid: number | boolean
+  /** Délai type avant le lancement, en jours : le rétroplanning le propose. */
+  lead_days: number | null
+  /** L'écran du module qui produit le support (route). */
+  editor: string | null
+}
+
+/** Le message de la campagne, dans une langue : ce que les supports déclinent. */
+export interface CampaignMessage {
+  lang: 'fr' | 'nl'
+  title: string | null
+  hook: string | null
+  offer_line: string | null
+  cta: string | null
 }
 
 export interface Uniform {
@@ -292,6 +313,8 @@ export interface References {
   formats: Format[]
   positions: Position[]
   channels: Channel[]
+  /** Les segments du CRM qu'une campagne peut viser. */
+  crmSegments?: Array<Pick<CrmSegment, 'id' | 'code' | 'label' | 'color_hex'>>
   uniforms: Uniform[]
   offerTemplates: OfferTemplate[]
   tones: Tone[]
@@ -600,7 +623,16 @@ export interface CampaignDraft {
   b2b_option_ids?: number[]
   uniform_ids?: number[]
   format_ids?: number[]
-  channels?: Array<{ channel_id: number; agency_id?: number | null; budget_amount?: number | null }>
+  channels?: Array<{
+    channel_id: number
+    agency_id?: number | null
+    budget_amount?: number | null
+    quantity?: number | null
+    details?: string | null
+    is_enabled?: boolean
+  }>
+  segment_ids?: number[]
+  messages?: CampaignMessage[]
   lever_targets?: Array<{ lever_id: number; target_value: number; target_unit?: string | null }>
   retroplanning?: Array<{ label: string; days_before_launch: number; position_id?: number | null }>
   offer?: {
@@ -683,6 +715,8 @@ export interface CampaignDraftState
     channel_id: number
     agency_id: number | null
     budget_amount: number | null
+    quantity?: number | null
+    details?: string | null
     is_enabled?: boolean
   }>
   /** `target_value` peut être nul : un levier retenu sans chiffre est légitime. */
@@ -2445,4 +2479,65 @@ export async function saveModuleKey(name: string, value: string): Promise<Module
 
 export async function removeModuleKey(name: string): Promise<ModuleKey[]> {
   return (await request<Envelope<ModuleKey[]>>(`${BASE}/keys/${encodeURIComponent(name)}`, { method: 'DELETE' })).data
+}
+
+// ---------------------------------------------------------------------------
+// Bâches et cadres d'affiche des boutiques (Marketing en magasin) — au standard
+// ---------------------------------------------------------------------------
+
+export interface ShopSupport {
+  id: string
+  shopId: string
+  shopName: string
+  kind: 'bache' | 'affiche'
+  placement: string | null
+  widthCm: number | null
+  heightCm: number | null
+  paperFormat: 'A1' | 'A2' | 'A3' | null
+  quantity: number
+  material: 'pvc' | 'mesh' | null
+  fixing: 'oeillets' | 'fourreaux' | 'sangles' | null
+  note: string | null
+  updatedAt: string
+}
+
+export type ShopSupportInput = Partial<Omit<ShopSupport, 'id' | 'shopId' | 'shopName' | 'updatedAt'>> & { kind: 'bache' | 'affiche' }
+
+/** Tous les supports déclarés (toutes les pages, cent par page). */
+export async function listShopSupports(): Promise<ShopSupport[]> {
+  const out: ShopSupport[] = []
+  for (let page = 1; page <= 20; page++) {
+    const body = await request<Envelope<ShopSupport[]>>(`${BASE}/shop-supports`, { query: { page, perPage: 100 } })
+    out.push(...body.data)
+    if (page >= (body.meta.pagination?.totalPages ?? 1)) break
+  }
+  return out
+}
+
+export async function saveShopSupports(shopId: number, supports: ShopSupportInput[]): Promise<ShopSupport[]> {
+  return (await request<Envelope<ShopSupport[]>>(`${BASE}/shop-supports/${shopId}`, { method: 'PUT', body: { supports } })).data
+}
+
+/** Trois propositions de textes, rédigées par le module Social selon sa charte éditoriale. */
+export interface TextProposal {
+  angle: string
+  fr: string
+  nl: string
+  titre: string
+  titreNl: string
+  surtitre: string
+  phrase: string
+}
+
+export function proposeTexts(input: {
+  produit?: string
+  promo?: string
+  mention?: string
+  gamme?: string
+  operation?: string
+  objectif?: string
+  boutiques?: string[]
+  langues?: Array<'fr' | 'nl'>
+}): Promise<{ variantes: TextProposal[]; modele?: string }> {
+  return request(`${SOCIAL_ROOT}/api/v1/social/redaction/proposer`, { method: 'POST', body: { type: 'Campagne', lien: false, ...input } })
 }

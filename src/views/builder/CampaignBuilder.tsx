@@ -12,12 +12,13 @@ import { HUBS, HubAttached, HubHeader, HubStepper, HubSummary, LaunchBoard, Soci
 import PricingStep from './PricingStep'
 import PhotosStep from './PhotosStep'
 import { VoucherResults, VouchersStep, useCampaignVouchers } from './VouchersStep'
+import { ContentStep, SupportsGrid, SupportsMilestones, TargetExtras } from './Supports'
 import ProspectList from './ProspectList'
 import RangeCalendar from '../../components/RangeCalendar'
 import { familyImage, seasonImage, seasonLabel } from './illustrations'
 
 /**
- * Assistant de création de campagne, en sept étapes.
+ * Assistant de création de campagne, en huit étapes.
  *
  * Le découpage suit celui de la maquette de référence
  * (design_handoff_marketing_franchise/design/Reseau.dc.html) : cadrage, offre,
@@ -128,6 +129,26 @@ export function blankPricing(): Omit<OfferElement, 'offer_item_id' | 'label' | '
 }
 
 /** Brouillon en cours de saisie. Les nombres restent des chaînes tant qu'on tape. */
+/** Un support retenu (étape « Supports ») ; `valide` dit s'il est arrêté et son budget engagé. */
+export interface ChannelEntry {
+  budget: string
+  agencyId: number | null
+  valide: boolean
+  /** Exemplaires, posts, envois… */
+  quantity: string
+  /** Formats, dates, consignes du support. */
+  details: string
+}
+
+export interface MessageDraft {
+  title: string
+  hook: string
+  offer_line: string
+  cta: string
+}
+
+export const blankMessage = (): MessageDraft => ({ title: '', hook: '', offer_line: '', cta: '' })
+
 export interface Draft {
   // 1 — Type & cadrage
   name: string
@@ -139,6 +160,8 @@ export interface Draft {
   tone: string
   client_target: ClientTarget
   sector_ids: number[]
+  /** Étape « Cible » : les segments du CRM visés. */
+  segment_ids: number[]
   agency_ask_ids: number[]
   agency_note: string
 
@@ -228,7 +251,7 @@ export interface Draft {
    * n'est pas valider : un support qu'on envisage encore n'a rien à faire dans
    * « Pub physique », et son budget n'est pas engagé.
    */
-  channels: Record<number, { budget: string; agencyId: number | null; valide: boolean }>
+  channels: Record<number, ChannelEntry>
   uniform_ids: number[]
   b2b_webshop_enabled: boolean
   b2b_option_ids: number[]
@@ -241,6 +264,9 @@ export interface Draft {
   /** Rempli et recoupé au point focal, ou contenu entier dans le cadre. */
   image_fit: ImageFit
   format_ids: number[]
+
+  /** Étape « Contenus » : le message de la campagne, par langue, que chaque support décline. */
+  messages: Record<'fr' | 'nl', MessageDraft>
 
   // 5 — Planning
   retro: RetroStep[]
@@ -283,6 +309,7 @@ function emptyDraft(refs: References, role: Role): Draft {
     tone: '',
     client_target: 'b2c',
     sector_ids: [],
+    segment_ids: [],
     agency_ask_ids: [],
     agency_note: '',
 
@@ -325,6 +352,7 @@ function emptyDraft(refs: References, role: Role): Draft {
     tracking_baseline: 'N1',
 
     channels: {},
+    messages: { fr: blankMessage(), nl: blankMessage() },
     uniform_ids: [],
     b2b_webshop_enabled: false,
     b2b_option_ids: [],
@@ -365,8 +393,8 @@ interface Step {
 }
 
 const STEPS: Step[] = [
-  // L'ordre suit les sept étapes de l'assistant (Hub.tsx, HUBS) : cadrage, offre & promotions,
-  // médias, canaux, suivi & traçabilité, budget & planning, récap & résultats.
+  // L'ordre suit les huit étapes de l'assistant (Hub.tsx, HUBS) : cadrage, cible, produits &
+  // offre, supports, contenus, budget & validation, planning, récap.
   {
     key: 'framing',
     label: 'Type & cadrage',
@@ -381,6 +409,14 @@ const STEPS: Step[] = [
       }
       return null
     },
+  },
+  {
+    // À qui parle la campagne : particuliers ou professionnels, secteurs du vivier B2B,
+    // segments du CRM, langue de chaque boutique. Rien de bloquant : la cible par défaut
+    // (B2C, toutes les boutiques) est une cible.
+    key: 'target',
+    label: 'Cible',
+    blocking: () => null,
   },
   {
     key: 'offer',
@@ -439,18 +475,8 @@ const STEPS: Step[] = [
     blocking: () => null,
   },
   {
-    // Le visuel décliné par format et les documents joints : l'étape « Médias », avec les
-    // photos des produits. Le visuel lui-même se choisit au cadrage, avec le nom.
-    key: 'medias',
-    label: 'Visuel & documents',
-    blocking: (d) =>
-      d.image_url.trim() !== '' && d.format_ids.length === 0
-        ? 'Choisissez au moins un format à décliner, ou retirez le visuel.'
-        : null,
-  },
-  {
     key: 'communication',
-    label: 'Canaux',
+    label: 'Supports & canaux',
     blocking: (d) => {
       // Un questionnaire activé sans question demanderait à la caisse de poser
       // le vide — et l'équipe s'en apercevrait devant le client.
@@ -474,6 +500,24 @@ const STEPS: Step[] = [
     blocking: (d) =>
       d.tracking_action_id !== null && d.tracking_target.trim() !== '' && !(Number(d.tracking_target) >= 0)
         ? 'La cible du suivi est un nombre positif.'
+        : null,
+  },
+  {
+    // Le message de la campagne, un par langue, et ce que chaque support retenu en fait : on
+    // l'écrit une fois, il se décline partout. Jamais bloquant : une campagne peut avancer
+    // avant que ses textes soient arrêtés.
+    key: 'content',
+    label: 'Message & déclinaisons',
+    blocking: () => null,
+  },
+  {
+    // Le visuel décliné par format et les documents joints : l'étape « Médias », avec les
+    // photos des produits. Le visuel lui-même se choisit au cadrage, avec le nom.
+    key: 'medias',
+    label: 'Visuel & documents',
+    blocking: (d) =>
+      d.image_url.trim() !== '' && d.format_ids.length === 0
+        ? 'Choisissez au moins un format à décliner, ou retirez le visuel.'
         : null,
   },
   {
@@ -688,7 +732,7 @@ export default function CampaignBuilder({
         </p>
       ) : null}
 
-      {/* Sept étapes, reliées : une étape complète reste atteignable même devant, ce qui
+      {/* Huit étapes, reliées : une étape complète reste atteignable même devant, ce qui
           permet de revenir sur le budget d'un brouillon repris sans retraverser six écrans.
           Une étape incomplète placée avant reste barrée — la suivante en dépend. */}
       <HubStepper steps={STEPS} step={step} draft={draft} onGo={setStep} />
@@ -697,6 +741,8 @@ export default function CampaignBuilder({
         <div className="hub-main">
           <section className="card wizard-card">
             {here === 'framing' ? <FramingStep {...shared} role={role} shops={shops.data ?? []} /> : null}
+            {here === 'target' ? <FramingStep {...shared} role={role} shops={shops.data ?? []} part="target" /> : null}
+            {here === 'content' ? <ContentStep {...shared} shops={shops.data ?? []} /> : null}
             {here === 'offer' ? <OfferStep {...shared} /> : null}
             {here === 'objectives' ? <ObjectivesStep {...shared} /> : null}
             {here === 'pricing' ? <PricingStep {...shared} codes={codesParLigne} /> : null}
@@ -854,6 +900,19 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
       // Absent : les campagnes écrites avant la case ne doivent pas changer de
       // sens en se rouvrant — elles étaient toutes enregistrées « activées ».
       valide: channel.is_enabled ?? true,
+      quantity: channel.quantity === null || channel.quantity === undefined ? '' : String(channel.quantity),
+      details: channel.details ?? '',
+    }
+  }
+
+  const messages: Draft['messages'] = { fr: blankMessage(), nl: blankMessage() }
+  for (const message of state.messages ?? []) {
+    if (message.lang !== 'fr' && message.lang !== 'nl') continue
+    messages[message.lang] = {
+      title: message.title ?? '',
+      hook: message.hook ?? '',
+      offer_line: message.offer_line ?? '',
+      cta: message.cta ?? '',
     }
   }
 
@@ -873,6 +932,8 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
     tone: state.tone ?? '',
     client_target: state.client_target ?? base.client_target,
     sector_ids: state.sector_ids,
+    segment_ids: state.segment_ids ?? [],
+    messages,
     agency_ask_ids: state.agency_ask_ids,
     agency_note: state.agency_note ?? '',
 
@@ -1158,8 +1219,12 @@ function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): Cam
       channel_id: Number(channelId),
       agency_id: entry.agencyId,
       budget_amount: entry.budget === '' ? null : Number(entry.budget),
+      quantity: entry.quantity.trim() === '' ? null : Math.max(0, Math.round(Number(entry.quantity))),
+      details: entry.details.trim() === '' ? null : entry.details.trim(),
       is_enabled: entry.valide,
     })),
+    segment_ids: draft.segment_ids,
+    messages: (['fr', 'nl'] as const).map((lang) => ({ lang, ...draft.messages[lang] })),
     lever_targets: Object.entries(draft.targets)
       .filter(([, value]) => value !== '' && Number(value) !== 0)
       .map(([leverId, value]) => ({
@@ -1319,7 +1384,17 @@ function FramingStep({
   shops,
   draft,
   patch,
-}: StepProps & { role: Role; shops: Array<{ id: number; name: string; city: string | null }> }) {
+  part = 'framing',
+}: StepProps & {
+  role: Role
+  shops: Array<{ id: number; name: string; city: string | null; code?: string }>
+  /**
+   * `target` : l'étape « Cible » — cible client, secteurs et comptes du vivier B2B, segments du
+   * CRM, langue des boutiques. Elle réutilise ce que le cadrage calcule du périmètre, d'où un seul
+   * composant en deux parties, comme les médias et les canaux.
+   */
+  part?: 'framing' | 'target'
+}) {
   /**
    * Boutiques qui restreignent le vivier.
    *
@@ -1409,6 +1484,141 @@ function FramingStep({
     } finally {
       setUploading(false)
     }
+  }
+
+  if (part === 'target') {
+    return (
+      <>
+        <h2>À qui s’adresse la campagne ?</h2>
+        <p className="muted">
+          La cible se reprend sur chaque support : la publicité Meta vise le rayon et la langue de chaque
+          boutique, la newsletter les segments du CRM, la prospection B2B les comptes du vivier.
+        </p>
+        {/* Plusieurs cibles à la fois : les particuliers et les professionnels se cochent
+            ensemble (c'est la cible « mixte » du modèle), chacun avec ses segments ou ses
+            secteurs. Au moins une reste cochée : une campagne parle toujours à quelqu'un. */}
+        <h3 className="section-label">
+          Cibles
+          <span className="section-label__aside">cumulables</span>
+        </h3>
+        <div className="choice-row">
+          {([
+            { key: 'b2c', label: 'Particuliers', hint: 'B2C — familles, clients des boutiques' },
+            { key: 'b2b', label: 'Professionnels', hint: 'B2B — bureaux, entreprises, collectivités' },
+          ] as const).map((target) => {
+            const b2c = draft.client_target !== 'b2b'
+            const b2b = draft.client_target !== 'b2c'
+            const on = target.key === 'b2c' ? b2c : b2b
+            const next = { b2c: target.key === 'b2c' ? !b2c : b2c, b2b: target.key === 'b2b' ? !b2b : b2b }
+            return (
+              <button
+                key={target.key}
+                type="button"
+                className={`choice-card${on ? ' is-on' : ''}`}
+                aria-pressed={on}
+                disabled={on && !(target.key === 'b2c' ? b2b : b2c)}
+                title={on && !(target.key === 'b2c' ? b2b : b2c) ? 'Au moins une cible reste retenue.' : undefined}
+                // Sans professionnels, ni secteur ni lead : garder ces choix laisserait un
+                // entonnoir que rien n'alimente.
+                onClick={() => {
+                  const value: ClientTarget = next.b2c && next.b2b ? 'mixte' : next.b2b ? 'b2b' : 'b2c'
+                  patch({
+                    client_target: value,
+                    sector_ids: next.b2b ? draft.sector_ids : [],
+                    create_crm_leads: next.b2b ? draft.create_crm_leads : false,
+                    b2b_offices_only: next.b2b ? draft.b2b_offices_only : false,
+                  })
+                }}
+              >
+                <strong>{on ? '✓ ' : ''}{target.label}</strong>
+                <span className="muted">{target.hint}</span>
+              </button>
+            )
+          })}
+        </div>
+        <p className="muted wizard__hint">
+          {(() => {
+            const parts: string[] = []
+            if (draft.client_target !== 'b2b') {
+              const segs = (refs.crmSegments ?? []).filter((seg) => draft.segment_ids.includes(seg.id)).map((seg) => seg.label)
+              parts.push(`Particuliers${segs.length ? ` (${segs.join(', ')})` : ' (tous les clients)'}`)
+            }
+            if (draft.client_target !== 'b2c') {
+              const secs = refs.b2bSectors.filter((sec) => draft.sector_ids.includes(sec.id)).map((sec) => sec.label)
+              parts.push(`Professionnels${secs.length ? ` (${secs.join(', ')})` : ' (secteurs à choisir)'}`)
+            }
+            return `Cibles retenues : ${parts.join(' · ')}.`
+          })()}
+        </p>
+  
+        {draft.client_target !== 'b2c' ? (
+          <>
+            <h3 className="section-label">Professionnels — secteurs visés</h3>
+            {/* Le nombre affiché est celui des comptes réellement présents dans le
+                vivier, et non un objectif de démarchage : c'est lui qui décide si
+                cocher ce secteur produira des leads.
+  
+                « Tous » d'abord, dans la même rangée que les secteurs : viser
+                l'ensemble du vivier est un cas courant, et le faire à la main
+                demandait autant de clics qu'il y a de types de compte. Le bouton
+                bascule dans les deux sens — c'est aussi le moyen de tout décocher
+                sans reprendre chaque pastille. */}
+            <div className="filters__row">
+              <button
+                type="button"
+                className={`filter${allSectors ? ' is-on' : ''}`}
+                onClick={() =>
+                  patch({ sector_ids: allSectors ? [] : refs.b2bSectors.map((s) => s.id) })
+                }
+                title={
+                  allSectors
+                    ? 'Retirer tous les secteurs'
+                    : `Viser les ${refs.b2bSectors.length} secteurs du vivier`
+                }
+              >
+                Tous
+              </button>
+              {refs.b2bSectors.map((sector) => (
+                <button
+                  key={sector.id}
+                  type="button"
+                  className={`filter${draft.sector_ids.includes(sector.id) ? ' is-on' : ''}`}
+                  onClick={() => patch({ sector_ids: toggle(draft.sector_ids, sector.id) })}
+                  title={
+                    perimetre.length === 0
+                      ? `${effectifDe(sector.id, sector.available_count)} compte(s) dans le vivier`
+                      : `${effectifDe(sector.id, sector.available_count)} compte(s) rattaché(s) aux boutiques choisies`
+                  }
+                >
+                  {sector.label} · {effectifDe(sector.id, sector.available_count)}
+                </button>
+              ))}
+            </div>
+  
+            {/* Les comptes suivent les secteurs, dans le fil du formulaire : ils
+                répondent à la question que les pastilles posent — qui va-t-on
+                réellement démarcher, et depuis quelle boutique. */}
+            <h3 className="section-label">
+              Comptes visés
+              {perimetre.length === 0 ? null : (
+                <span className="section-label__aside">
+                  Rattachés {perimetre.length > 1
+                    ? `aux ${perimetre.length} boutiques choisies`
+                    : 'à la boutique choisie'}
+                </span>
+              )}
+            </h3>
+            <ProspectList
+              sectorIds={draft.sector_ids}
+              shopIds={perimetre}
+              officesOnly={draft.b2b_offices_only}
+              onOfficesOnly={(value) => patch({ b2b_offices_only: value })}
+            />
+          </>
+        ) : null}
+        <TargetExtras refs={refs} draft={draft} patch={patch} shops={shops} />
+      </>
+    )
   }
 
   return (
@@ -1722,94 +1932,7 @@ function FramingStep({
         )
       ) : null}
 
-      <h3 className="section-label">Cible client</h3>
-      <div className="choice-row">
-        {CLIENT_TARGETS.map((target) => (
-          <button
-            key={target.value}
-            type="button"
-            className={`choice-pill${draft.client_target === target.value ? ' is-on' : ''}`}
-            // Une campagne B2C n'a ni secteur ni lead : garder les choix
-            // précédents laisserait un entonnoir que rien n'alimente.
-            onClick={() =>
-              patch({
-                client_target: target.value,
-                sector_ids: target.value === 'b2c' ? [] : draft.sector_ids,
-                create_crm_leads: target.value === 'b2c' ? false : draft.create_crm_leads,
-                b2b_offices_only: target.value === 'b2c' ? false : draft.b2b_offices_only,
-              })
-            }
-          >
-            {target.label}
-          </button>
-        ))}
-      </div>
 
-      {draft.client_target !== 'b2c' ? (
-        <>
-          <h3 className="section-label">Secteurs visés</h3>
-          {/* Le nombre affiché est celui des comptes réellement présents dans le
-              vivier, et non un objectif de démarchage : c'est lui qui décide si
-              cocher ce secteur produira des leads.
-
-              « Tous » d'abord, dans la même rangée que les secteurs : viser
-              l'ensemble du vivier est un cas courant, et le faire à la main
-              demandait autant de clics qu'il y a de types de compte. Le bouton
-              bascule dans les deux sens — c'est aussi le moyen de tout décocher
-              sans reprendre chaque pastille. */}
-          <div className="filters__row">
-            <button
-              type="button"
-              className={`filter${allSectors ? ' is-on' : ''}`}
-              onClick={() =>
-                patch({ sector_ids: allSectors ? [] : refs.b2bSectors.map((s) => s.id) })
-              }
-              title={
-                allSectors
-                  ? 'Retirer tous les secteurs'
-                  : `Viser les ${refs.b2bSectors.length} secteurs du vivier`
-              }
-            >
-              Tous
-            </button>
-            {refs.b2bSectors.map((sector) => (
-              <button
-                key={sector.id}
-                type="button"
-                className={`filter${draft.sector_ids.includes(sector.id) ? ' is-on' : ''}`}
-                onClick={() => patch({ sector_ids: toggle(draft.sector_ids, sector.id) })}
-                title={
-                  perimetre.length === 0
-                    ? `${effectifDe(sector.id, sector.available_count)} compte(s) dans le vivier`
-                    : `${effectifDe(sector.id, sector.available_count)} compte(s) rattaché(s) aux boutiques choisies`
-                }
-              >
-                {sector.label} · {effectifDe(sector.id, sector.available_count)}
-              </button>
-            ))}
-          </div>
-
-          {/* Les comptes suivent les secteurs, dans le fil du formulaire : ils
-              répondent à la question que les pastilles posent — qui va-t-on
-              réellement démarcher, et depuis quelle boutique. */}
-          <h3 className="section-label">
-            Comptes visés
-            {perimetre.length === 0 ? null : (
-              <span className="section-label__aside">
-                Rattachés {perimetre.length > 1
-                  ? `aux ${perimetre.length} boutiques choisies`
-                  : 'à la boutique choisie'}
-              </span>
-            )}
-          </h3>
-          <ProspectList
-            sectorIds={draft.sector_ids}
-            shopIds={perimetre}
-            officesOnly={draft.b2b_offices_only}
-            onOfficesOnly={(value) => patch({ b2b_offices_only: value })}
-          />
-        </>
-      ) : null}
 
     </>
   )
@@ -2249,9 +2372,6 @@ function BudgetStep({
 // 4 — Communication
 // ---------------------------------------------------------------------------
 
-/** `1 250` — le séparateur de milliers du reste de l'assistant. */
-const fr = (value: number): string => value.toLocaleString('fr-BE')
-
 function CommunicationStep({
   refs,
   draft,
@@ -2279,23 +2399,16 @@ function CommunicationStep({
     } else {
       // Retenu, pas encore validé : la case « validé » se coche quand le
       // support est arrêté et son budget engagé.
-      next[channelId] = { budget: '', agencyId: null, valide: false }
+      next[channelId] = { budget: '', agencyId: null, valide: false, quantity: '', details: '' }
     }
     patch({ channels: next })
   }
 
-  const updateChannel = (
-    channelId: number,
-    change: Partial<{ budget: string; agencyId: number | null; valide: boolean }>,
-  ) =>
+  const updateChannel = (channelId: number, change: Partial<ChannelEntry>) =>
     patch({
       channels: { ...draft.channels, [channelId]: { ...draft.channels[channelId], ...change } },
     })
 
-  const families: Array<{ key: 'PHYSIQUE' | 'DIGITAL'; label: string }> = [
-    { key: 'PHYSIQUE', label: 'Supports physiques' },
-    { key: 'DIGITAL', label: 'Canaux digitaux' },
-  ]
 
   if (part === 'medias') {
     return (
@@ -2374,135 +2487,30 @@ function CommunicationStep({
 
   return (
     <>
-      <h2>Canaux</h2>
-      {social}
+      <h2>Sur quels supports la campagne passe-t-elle ?</h2>
       <p className="muted">
-        Chaque canal retenu reçoit le visuel, les couleurs, l’offre et le lien suivi de la campagne. Les
-        canaux validés alimentent les écrans « Pub physique » et « Pub digitale ».
+        Cochez ce que la campagne utilise : chaque support reçoit sa quantité, ses précisions et son budget,
+        puis ses contenus à l’étape suivante — un seul message, décliné partout. Un support « validé » est
+        arrêté et son budget engagé : c’est lui qui alimente « Pub physique » et « Pub digitale ».
       </p>
 
-      {/* Avant les canaux, parce que c'en est un — et le seul qui sorte du
-          réseau tout seul, sans qu'on imprime ni n'achète quoi que ce soit.
-          Décoché par défaut : une campagne oubliée qui ne paraît pas se corrige
-          d'une case cochée, une offre interne parue en vitrine beaucoup moins
-          bien. */}
-      <label className="field webshop">
-        <input
-          type="checkbox"
-          checked={draft.show_web_shop}
-          onChange={(e) => patch({ show_web_shop: e.target.checked })}
-        />
-        <span>
-          <strong>Afficher sur la boutique en ligne</strong>
-          <span className="muted">
-            {draft.show_web_shop
-              ? 'La campagne paraîtra en vitrine du site pendant sa période.'
-              : 'La campagne reste interne : rien ne s’affiche côté client.'}
-          </span>
-        </span>
-      </label>
+      <SupportsGrid
+        refs={refs}
+        draft={draft}
+        patch={patch}
+        agencies={agencies}
+        onToggle={toggleChannel}
+        onChange={updateChannel}
+      />
 
-      {families.map((family) => {
-        const retenus = refs.channels
-          .filter((channel) => channel.family === family.key)
-          .filter((channel) => draft.channels[channel.id] !== undefined)
-        const engage = retenus
-          .filter((channel) => draft.channels[channel.id]?.valide)
-          .reduce((total, channel) => total + Number(draft.channels[channel.id]?.budget || 0), 0)
-        const envisage = retenus
-          .filter((channel) => !draft.channels[channel.id]?.valide)
-          .reduce((total, channel) => total + Number(draft.channels[channel.id]?.budget || 0), 0)
+      {social ? (
+        <>
+          <h3 className="section-label">Posts et publicités rattachés</h3>
+          {social}
+        </>
+      ) : null}
 
-        return (
-        <div key={family.key}>
-          <h3 className="section-label">{family.label}</h3>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Canal</th>
-                  <th className="num">Budget</th>
-                  <th className="num">Validé</th>
-                  <th>Réalisé par</th>
-                </tr>
-              </thead>
-              <tbody>
-                {refs.channels
-                  .filter((channel) => channel.family === family.key)
-                  .map((channel) => {
-                    const entry = draft.channels[channel.id]
-
-                    return (
-                      <tr key={channel.id}>
-                        <td>
-                          <label className="field">
-                            <input
-                              type="checkbox"
-                              checked={entry !== undefined}
-                              onChange={() => toggleChannel(channel.id)}
-                            />
-                            {channel.label}
-                          </label>
-                        </td>
-                        <td className="num">
-                          <input
-                            type="number"
-                            min={0}
-                            step={50}
-                            placeholder="Budget €"
-                            disabled={entry === undefined}
-                            value={entry?.budget ?? ''}
-                            onChange={(e) => updateChannel(channel.id, { budget: e.target.value })}
-                          />
-                        </td>
-                        {/* Retenir n'est pas valider : tant que la case est
-                            vide, le canal reste une intention — il n'alimente
-                            pas « Pub physique » / « Pub digitale » et son
-                            budget compte comme envisagé, pas comme engagé. */}
-                        <td className="num">
-                          <input
-                            type="checkbox"
-                            aria-label={`Valider ${channel.label}`}
-                            disabled={entry === undefined}
-                            checked={entry?.valide ?? false}
-                            onChange={(e) => updateChannel(channel.id, { valide: e.target.checked })}
-                          />
-                        </td>
-                        <td>
-                          <select
-                            disabled={entry === undefined}
-                            value={entry?.agencyId ?? ''}
-                            onChange={(e) =>
-                              updateChannel(channel.id, {
-                                agencyId: e.target.value === '' ? null : Number(e.target.value),
-                              })
-                            }
-                          >
-                            <option value="">Interne</option>
-                            {agencies.map((agency) => (
-                              <option key={agency.id} value={agency.id}>
-                                {agency.name}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                      </tr>
-                    )
-                  })}
-              </tbody>
-            </table>
-          </div>
-          {retenus.length === 0 ? null : (
-            <p className="muted wizard__hint">
-              {fr(engage)} € validés
-              {envisage > 0 ? ` · ${fr(envisage)} € encore à valider` : ''} sur{' '}
-              {retenus.length} {retenus.length > 1 ? 'canaux retenus' : 'canal retenu'}.
-            </p>
-          )}
-        </div>
-        )
-      })}
-
+      <h3 className="section-label">Brief &amp; production</h3>
       {/* Le ton rejoint la communication, comme le brief d'agence : l'étape 1
           décide ce que la campagne est, celle-ci comment elle parle. « Festif »
           ou « Premium » n'engage ni le périmètre ni la cible — cela engage la
@@ -2537,17 +2545,6 @@ function CommunicationStep({
           onChange={(e) => patch({ agency_note: e.target.value })}
         />
       </label>
-
-      <h3 className="section-label">Tenues & accessoires terrain</h3>
-      <ChipList
-        items={refs.uniforms.map((uniform) => ({
-          id: uniform.id,
-          label: uniform.name,
-          hint: uniform.description ?? undefined,
-        }))}
-        selected={draft.uniform_ids}
-        onToggle={(id) => patch({ uniform_ids: toggle(draft.uniform_ids, id) })}
-      />
 
       {draft.client_target !== 'b2c' ? (
         <>
@@ -2742,8 +2739,11 @@ function PlanningStep({ refs, draft, patch }: StepProps) {
       <h2>Rétroplanning</h2>
       <p className="muted">
         Les jalons sont comptés en jours avant le lancement. La date affichée se déduit de la
-        date de début de campagne — elle bouge avec elle plutôt que d’être figée.
+        date de début de campagne — elle bouge avec elle plutôt que d’être figée. Chaque support
+        retenu apporte ses délais types : ils se proposent ci-dessous.
       </p>
+
+      <SupportsMilestones refs={refs} draft={draft} patch={patch} />
 
       <div className="table-scroll">
         <table>
