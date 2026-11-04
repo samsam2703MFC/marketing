@@ -590,6 +590,8 @@ appartient vit sous `mar_`, ses réglages compris (migration 040).
 
 - **`mar_variable`** `(module, name)` — les réglages, en clair (valeur JSON) :
   adresses de l'ERP et du webshop, délais, dossier des envois, adresse publique.
+  La valeur est un `LONGTEXT` (migration 042) : Social y range aussi ses caches
+  (pages et comptes Meta, relevé des fiches Google), qui dépassent 64 Ko.
 - **`mar_keys`** `(module, name)` — les secrets, **chiffrés** : jetons de l'ERP et
   du webshop, mot de passe du compte de service, secret de session, jeton de
   service. Format `x1:` XChaCha20-Poly1305 (libsodium) ou `g1:` AES-256-GCM
