@@ -396,7 +396,7 @@ function MediaSheet({ asset, library, shops, items, onSaved, onRemoved, onClose 
         </button>
       </div>
       <div className={`media__preview${asset.cutout ? ' is-cutout' : ''}`}>
-        {asset.kind === 'video' ? <video src={asset.url} poster={asset.thumbnailUrl ?? undefined} controls preload="metadata" /> : <img src={asset.thumbnailUrl ?? asset.url} alt="" />}
+        {asset.kind === 'video' ? <video src={asset.url} poster={asset.thumbnailUrl ?? undefined} controls preload="metadata" /> : <img src={asset.webUrl ?? asset.thumbnailUrl ?? asset.url} alt="" />}
       </div>
 
       <label className="media__field">

@@ -3558,6 +3558,28 @@ if (function_exists('imagecreatetruecolor')) {
             && str_ends_with((string) ($fiche['thumbnailUrl'] ?? ''), '.thumb.jpg')
             && (getimagesize($fichierDe($fiche['thumbnailUrl'] ?? null))[0] ?? 0) === 480);
 
+    check('une photo déjà légère et sous 2 048 px n\'a pas de version web : webUrl est l\'original',
+        ($fiche['webUrl'] ?? '') === ($fiche['url'] ?? 'x'));
+
+    $grande = $media('POST', '/media-assets', ['name' => 'Grande photo'], [], $imagePng(3000, 2000, false, [30, 90, 160]));
+    check('une grande photo reçoit une version web de 2 048 px (ce qu\'un post envoie), l\'original restant intact',
+        $grande['status'] === 201 && str_ends_with((string) ($grande['body']['data']['webUrl'] ?? ''), '.web.jpg')
+            && (getimagesize($fichierDe($grande['body']['data']['webUrl'] ?? null))[0] ?? 0) === 2048
+            && ($grande['body']['data']['width'] ?? 0) === 3000,
+        json_encode($grande['body']['data']['webUrl'] ?? $grande['body']));
+    $pdo->exec("DELETE FROM mar_media WHERE name = 'Grande photo'");
+
+    // Un en-tête PNG qui annonce 30 000 × 30 000 px : le décoder demanderait 4,5 Go. Le dépôt
+    // passe, sans versions réduites, plutôt que de faire tomber PHP sur sa limite de mémoire.
+    $ihdr = pack('NN', 30000, 30000) . "\x08\x06\x00\x00\x00";
+    $geante = "\x89PNG\r\n\x1a\n" . pack('N', 13) . 'IHDR' . $ihdr . pack('N', crc32('IHDR' . $ihdr)) . str_repeat("\x00", 64);
+    $geant = $media('POST', '/media-assets', ['name' => 'Géante'], [], $geante);
+    check('une image trop grande pour la mémoire du serveur est déposée sans vignette, sans planter',
+        $geant['status'] === 201 && ($geant['body']['data']['width'] ?? 0) === 30000
+            && array_key_exists('thumbnailUrl', $geant['body']['data'] ?? []) && $geant['body']['data']['thumbnailUrl'] === null,
+        json_encode([$geant['status'], $geant['body']['error'] ?? null]));
+    $pdo->exec("DELETE FROM mar_media WHERE name = 'Géante'");
+
     $encore = $media('POST', '/media-assets', [], ['content' => base64_encode($photo), 'name' => 'Autre nom']);
     check('le même fichier redéposé : 200, même fiche, nom d\'origine gardé (dépôt idempotent)',
         $encore['status'] === 200 && ($encore['body']['meta']['duplicate'] ?? null) === true

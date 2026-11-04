@@ -31,6 +31,16 @@ final class MediaStore
     /** Côté long des vignettes. */
     public const THUMB_LONG = 480;
 
+    /**
+     * Version web : 2 048 px de côté long, ce que Meta garde d'une photo. Tirée quand
+     * l'original est plus grand ou plus lourd — un post n'envoie pas l'original d'une bâche.
+     */
+    public const WEB_LONG = 2048;
+    public const WEB_MAX_BYTES = 2 * 1024 * 1024;
+
+    /** Au-delà, on ne décode pas l'image pour en tirer les versions réduites (mémoire). */
+    private const DECODE_MEMORY_CAP = 1536 * 1024 * 1024;
+
     /** Formats reconnus : extension → [nature, type MIME]. */
     private const FORMATS = [
         'png'  => ['image', 'image/png'],
@@ -88,7 +98,7 @@ final class MediaStore
      * tire de sa première seconde) : le serveur n'a pas de quoi lire une vidéo.
      *
      * @param  array{kind:string, extension:string} $info Le résultat de `inspect`.
-     * @return array{path:string, thumb_path:?string}
+     * @return array{path:string, thumb_path:?string, web_path:?string}
      */
     public static function write(string $binary, array $info, ?string $poster = null): array
     {
@@ -102,22 +112,23 @@ final class MediaStore
             throw new RuntimeException('Écriture du fichier impossible sur le serveur.');
         }
 
-        $source = $info['kind'] === 'image' ? $binary : $poster;
-        $thumb  = $source !== null && $source !== '' ? self::thumbnail($source) : null;
-        $thumbName = null;
-        if ($thumb !== null) {
-            $thumbName = $stem . '.thumb.' . $thumb['extension'];
-            if (file_put_contents($directory . '/' . $thumbName, $thumb['binary']) === false) {
-                $thumbName = null;
+        $source  = $info['kind'] === 'image' ? $binary : $poster;
+        $derived = $source !== null && $source !== '' ? self::derivatives($source, $info['kind'] === 'image') : ['thumb' => null, 'web' => null];
+        $folder  = ImageStore::folder() . '/media/' . $month;
+        $paths   = ['path' => $folder . '/' . $name, 'thumb_path' => null, 'web_path' => null];
+
+        foreach (['thumb' => 'thumb_path', 'web' => 'web_path'] as $kind => $column) {
+            $version = $derived[$kind];
+            if ($version === null) {
+                continue;
+            }
+            $file = $stem . '.' . $kind . '.' . $version['extension'];
+            if (file_put_contents($directory . '/' . $file, $version['binary']) !== false) {
+                $paths[$column] = $folder . '/' . $file;
             }
         }
 
-        $folder = ImageStore::folder() . '/media/' . $month;
-
-        return [
-            'path'       => $folder . '/' . $name,
-            'thumb_path' => $thumbName !== null ? $folder . '/' . $thumbName : null,
-        ];
+        return $paths;
     }
 
     /**
@@ -175,40 +186,70 @@ final class MediaStore
         };
     }
 
-    /**
-     * La vignette d'une image : 480 px de côté long, en JPEG — en PNG si l'image
-     * a de la transparence (une photo détourée garde son fond transparent).
-     * `null` sans GD, ou pour un format que GD ne lit pas : l'écran montre alors
-     * l'original, ce qui reste juste, seulement plus lourd.
-     *
-     * @return array{binary:string, extension:string}|null
-     */
+    /** La vignette d'une image (480 px), ou `null`. */
     public static function thumbnail(string $binary): ?array
     {
+        return self::derivatives($binary, false)['thumb'];
+    }
+
+    /**
+     * Les versions réduites d'une image, décodée une seule fois : la vignette (480 px)
+     * et, si `$web` et que l'original est plus grand ou plus lourd, la version web
+     * (2 048 px). JPEG — PNG si l'image a de la transparence (une photo détourée garde
+     * son fond transparent). `null` sans GD, pour un format que GD ne lit pas, ou quand
+     * l'image demanderait plus de mémoire que le serveur n'en accorde : l'écran montre
+     * alors l'original, ce qui reste juste, seulement plus lourd.
+     *
+     * @return array{thumb:?array{binary:string, extension:string}, web:?array{binary:string, extension:string}}
+     */
+    public static function derivatives(string $binary, bool $web = true): array
+    {
+        $none = ['thumb' => null, 'web' => null];
         if (!function_exists('imagecreatefromstring') || !function_exists('imagecopyresampled')) {
-            return null;
+            return $none;
         }
 
         try {
             $extension = self::sniff($binary);
         } catch (RuntimeException) {
-            return null;
+            return $none;
         }
         if (!in_array($extension, ['png', 'jpg', 'gif', 'webp'], true)) {
-            return null;
+            return $none;
+        }
+
+        [$width, $height] = self::dimensions($binary);
+        if ($width === null || $height === null || $width < 1 || $height < 1 || !self::reserveMemory($width, $height, strlen($binary))) {
+            return $none;
         }
 
         $source = @imagecreatefromstring($binary);
         if ($source === false) {
-            return null;
+            return $none;
         }
+        $alpha = $extension !== 'jpg';
 
+        $thumbCanvas = self::resize($source, self::THUMB_LONG, $alpha);
+        // Une image à canal alpha qui n'en use pas part en JPEG : dix fois plus légère.
+        $transparent = $alpha && self::hasTransparency($thumbCanvas, imagesx($thumbCanvas), imagesy($thumbCanvas));
+        $result = ['thumb' => self::encode($thumbCanvas, $transparent, 82), 'web' => null];
+
+        if ($web && (max($width, $height) > self::WEB_LONG || strlen($binary) > self::WEB_MAX_BYTES)) {
+            $result['web'] = self::encode(self::resize($source, self::WEB_LONG, $alpha), $transparent, 88);
+        }
+        imagedestroy($source);
+
+        return $result;
+    }
+
+    /** L'image réduite à `$long` px de côté long (jamais agrandie). */
+    private static function resize(\GdImage $source, int $long, bool $alpha): \GdImage
+    {
         $width  = imagesx($source);
         $height = imagesy($source);
-        $ratio  = min(1, self::THUMB_LONG / max($width, $height, 1));
+        $ratio  = min(1, $long / max($width, $height, 1));
         $tw     = max(1, (int) round($width * $ratio));
         $th     = max(1, (int) round($height * $ratio));
-        $alpha  = $extension !== 'jpg';
 
         $canvas = imagecreatetruecolor($tw, $th);
         if ($alpha) {
@@ -217,17 +258,62 @@ final class MediaStore
             imagefill($canvas, 0, 0, imagecolorallocatealpha($canvas, 0, 0, 0, 127));
         }
         imagecopyresampled($canvas, $source, 0, 0, 0, 0, $tw, $th, $width, $height);
-        imagedestroy($source);
 
-        // Une image à canal alpha qui n'en use pas part en JPEG : dix fois plus légère.
-        $transparent = $alpha && self::hasTransparency($canvas, $tw, $th);
+        return $canvas;
+    }
 
+    /** @return array{binary:string, extension:string}|null */
+    private static function encode(\GdImage $canvas, bool $png, int $quality): ?array
+    {
         ob_start();
-        $written = $transparent ? imagepng($canvas, null, 6) : imagejpeg($canvas, null, 82);
+        $written = $png ? imagepng($canvas, null, 6) : imagejpeg($canvas, null, $quality);
         $output  = (string) ob_get_clean();
         imagedestroy($canvas);
 
-        return $written && $output !== '' ? ['binary' => $output, 'extension' => $transparent ? 'png' : 'jpg'] : null;
+        return $written && $output !== '' ? ['binary' => $output, 'extension' => $png ? 'png' : 'jpg'] : null;
+    }
+
+    /**
+     * Assez de mémoire pour décoder l'image ? GD tient quatre octets par pixel : une
+     * photo de 8 000 × 8 000 en demande 256 Mo, plus que la limite courante de PHP. On
+     * relève la limite pour ce décodage s'il le faut (jusqu'à 1,5 Go) ; sinon on renonce
+     * aux versions réduites plutôt que de faire échouer le dépôt.
+     */
+    private static function reserveMemory(int $width, int $height, int $bytes): bool
+    {
+        $need  = $width * $height * 5 + $bytes * 2 + 32 * 1024 * 1024;
+        $limit = self::iniBytes((string) ini_get('memory_limit'));
+        if ($limit === null) {
+            return $need <= self::DECODE_MEMORY_CAP * 2;
+        }
+        $used = memory_get_usage(true);
+        if ($used + $need <= $limit) {
+            return true;
+        }
+        $wanted = $used + $need;
+        if ($wanted > self::DECODE_MEMORY_CAP) {
+            return false;
+        }
+
+        return @ini_set('memory_limit', (string) $wanted) !== false
+            && (self::iniBytes((string) ini_get('memory_limit')) ?? PHP_INT_MAX) >= $wanted;
+    }
+
+    /** Une taille de php.ini (`8M`, `1G`, `512K`) en octets ; nul pour « pas de limite ». */
+    public static function iniBytes(string $value): ?int
+    {
+        $value = trim($value);
+        if ($value === '' || $value === '0' || $value === '-1') {
+            return null;
+        }
+        $number = (int) $value;
+
+        return $number * match (strtoupper(substr($value, -1))) {
+            'G'     => 1024 ** 3,
+            'M'     => 1024 ** 2,
+            'K'     => 1024,
+            default => 1,
+        };
     }
 
     /** Vrai si un pixel au moins n'est pas opaque (sondage d'une grille de 24 × 24). */

@@ -529,7 +529,9 @@ perdait. Tables `mar_media`, `mar_media_category`, `mar_media_season` (migration
   (`marketing | social`), `filter[archived][eq]`, `filter[name][contains]` (cherche
   aussi dans les libellés de catégorie et le nom du produit). Paramètre, filtre,
   opérateur ou valeur hors liste → `422`.
-- Une fiche : `id`, `kind`, `name`, `url` et `thumbnailUrl` (**absolues**),
+- Une fiche : `id`, `kind`, `name`, `url` (l'original), `thumbnailUrl` (480 px)
+  et `webUrl` (2 048 px : ce qu'un post envoie — l'original s'il est déjà léger),
+  toutes **absolues**,
   `path` (relatif à la racine du module), `mimeType`, `bytes`, `width`, `height`,
   `category`/`subcategory`/`season` `{code, label}`, `offerItem {id, name}`,
   `shop {id, name}`, `cutout`, `source`, `archived`, `createdAt`, `updatedAt`
@@ -540,7 +542,9 @@ perdait. Tables `mar_media`, `mar_media_category`, `mar_media_season` (migration
   shopId?, cutout?, source?}`. Format reconnu aux octets : PNG, JPEG, GIF, WebP,
   AVIF (20 Mio), MP4, MOV, WebM (45 Mio) ; SVG refusé (il peut porter du script).
   L'original est gardé tel quel (une bâche a besoin de l'original) ; vignette
-  480 px, PNG si l'image a de la transparence, JPEG sinon. **Idempotent** : un
+  480 px et version web 2 048 px, PNG si l'image a de la transparence, JPEG
+  sinon. Une image qui demanderait plus de mémoire que le serveur n'en accorde
+  (au-delà de 1,5 Go pour la décoder) est déposée sans versions réduites. **Idempotent** : un
   même fichier (empreinte SHA-256) rend la fiche existante (`200`,
   `meta.duplicate: true`), remise dans la médiathèque si elle en avait été retirée.
 - Retrait (`DELETE`, ou `PATCH {archived: true}`) : la fiche sort de la liste,

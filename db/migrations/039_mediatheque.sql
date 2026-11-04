@@ -13,7 +13,8 @@ SET NAMES utf8mb4;
 -- perdait.
 --
 -- Le fichier est gardé tel qu'il arrive (une bâche de 3 m a besoin de
--- l'original) ; une vignette de 480 px sert aux grilles. Un même fichier
+-- l'original) ; une vignette de 480 px sert aux grilles, une version web de
+-- 2 048 px aux posts (un post n'envoie pas l'original d'une bâche). Un même fichier
 -- déposé deux fois n'est gardé qu'une fois (empreinte SHA-256).
 --
 -- Les catégories et les saisons reprennent celles de la médiathèque de Social,
@@ -43,6 +44,7 @@ CREATE TABLE IF NOT EXISTS mar_media (
   kind             VARCHAR(10)     NOT NULL COMMENT 'image | video',
   file_path        VARCHAR(500)    NOT NULL COMMENT 'Chemin relatif sous le dossier public des envois',
   thumb_path       VARCHAR(500)        NULL COMMENT 'Vignette 480 px (image) ou image de couverture (vidéo)',
+  web_path         VARCHAR(500)        NULL COMMENT 'Version web 2 048 px, quand l''original est plus grand ou plus lourd',
   mime             VARCHAR(60)     NOT NULL,
   bytes            INT UNSIGNED    NOT NULL,
   width            INT UNSIGNED        NULL,

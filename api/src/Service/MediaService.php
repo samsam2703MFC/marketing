@@ -55,6 +55,7 @@ final class MediaService
             'kind'             => $info['kind'],
             'file_path'        => $paths['path'],
             'thumb_path'       => $paths['thumb_path'],
+            'web_path'         => $paths['web_path'],
             'mime'             => $info['mime'],
             'bytes'            => $info['bytes'],
             'width'            => $info['width'],
@@ -241,7 +242,7 @@ final class MediaService
                 'videoTypes'    => ['video/mp4', 'video/quicktime', 'video/webm'],
                 // Ce que PHP accepte en corps de requête sur ce serveur (`post_max_size`) :
                 // au-delà, le fichier n'arrive pas du tout. Nul si PHP ne pose pas de limite.
-                'serverMaxBytes' => self::iniBytes((string) ini_get('post_max_size')),
+                'serverMaxBytes' => MediaStore::iniBytes((string) ini_get('post_max_size')),
             ],
         ];
     }
@@ -262,6 +263,8 @@ final class MediaService
             'name'         => (string) $row['name'],
             'url'          => self::publicUrl((string) $row['file_path']),
             'thumbnailUrl' => $row['thumb_path'] !== null ? self::publicUrl((string) $row['thumb_path']) : null,
+            // Ce qu'un post ou un écran envoie : 2 048 px au plus ; l'original quand il est déjà assez léger.
+            'webUrl'       => self::publicUrl((string) ($row['web_path'] ?? $row['file_path'])),
             'path'         => (string) $row['file_path'],
             'mimeType'     => (string) $row['mime'],
             'bytes'        => (int) $row['bytes'],
@@ -304,24 +307,6 @@ final class MediaService
         }
 
         return $base . '/' . implode('/', array_map('rawurlencode', explode('/', ltrim($path, '/'))));
-    }
-
-    /** Une taille de php.ini (`8M`, `1G`, `512K`) en octets ; nul pour « pas de limite ». */
-    private static function iniBytes(string $value): ?int
-    {
-        $value = trim($value);
-        if ($value === '' || $value === '0' || $value === '-1') {
-            return null;
-        }
-        $number = (int) $value;
-        $unit   = strtoupper(substr($value, -1));
-
-        return $number * match ($unit) {
-            'G'     => 1024 ** 3,
-            'M'     => 1024 ** 2,
-            'K'     => 1024,
-            default => 1,
-        };
     }
 
     /** Une date de la base (heure du serveur) en ISO 8601 UTC. */

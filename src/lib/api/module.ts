@@ -2279,6 +2279,8 @@ export interface MediaAsset {
   url: string
   /** Vignette de 480 px (couverture, pour une vidéo) ; nulle quand le serveur n'a pas pu la tirer. */
   thumbnailUrl: string | null
+  /** Version web (2 048 px au plus) : ce qu'un post ou un écran affiche ; l'original s'il est déjà léger. */
+  webUrl: string
   path: string
   mimeType: string
   bytes: number

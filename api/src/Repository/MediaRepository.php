@@ -25,7 +25,7 @@ final class MediaRepository
     ];
 
     private const SELECT = <<<'SQL'
-        SELECT m.id, m.kind, m.file_path, m.thumb_path, m.mime, m.bytes, m.width, m.height, m.sha256,
+        SELECT m.id, m.kind, m.file_path, m.thumb_path, m.web_path, m.mime, m.bytes, m.width, m.height, m.sha256,
                m.name, m.cutout, m.source, m.created_at, m.updated_at, m.archived_at,
                m.category_code, c.label AS category_label,
                m.subcategory_code, sc.label AS subcategory_label,
