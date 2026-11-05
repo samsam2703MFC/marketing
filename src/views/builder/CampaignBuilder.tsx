@@ -5,6 +5,7 @@ import type { CampaignDraft, ClientTarget, ImageFit, OfferItem, References, Trac
 import type { Role } from '../../lib/navigation'
 import { describeError } from '../../state/auth'
 import ObjectivesStep from './ObjectivesStep'
+import { staffBonusCeiling } from './StaffBonus'
 import LeverKpi from './LeverKpi'
 import Annexes from './Annexes'
 import TrackingStep from './TrackingStep'
@@ -233,6 +234,20 @@ export interface Draft {
   /** Dotation de chaque rang, en clair. L'index vaut le rang. */
   challenge_prizes: string[]
 
+  /** Prime de la marque pour le personnel (étape « Objectifs »). Montants en euros. */
+  staff_bonus_enabled: boolean
+  staff_bonus_who: 'team' | 'named'
+  staff_bonus_rule: 'attainment' | 'per_piece' | 'ranking'
+  staff_bonus_threshold_pct: string
+  staff_bonus_amount: string
+  staff_bonus_extra_pct: string
+  staff_bonus_extra_amount: string
+  staff_bonus_cap_amount: string
+  staff_bonus_form: 'voucher' | 'gift_cheque' | 'franchisee'
+  staff_bonus_paid_on: string
+  /** Équipe de vente par boutique (saisie à la main : l'ERP ne la donne pas). */
+  shop_headcounts: Record<number, string>
+
   // 5 — Budget & leviers
   budget_amount: string
   objective_coef_pct: string
@@ -341,6 +356,17 @@ function emptyDraft(refs: References, role: Role): Draft {
     challenge_trigger_pct: '100',
     shop_triggers: {},
     challenge_prizes: ['', '', ''],
+    staff_bonus_enabled: false,
+    staff_bonus_who: 'team',
+    staff_bonus_rule: 'attainment',
+    staff_bonus_threshold_pct: '100',
+    staff_bonus_amount: '',
+    staff_bonus_extra_pct: '',
+    staff_bonus_extra_amount: '',
+    staff_bonus_cap_amount: '',
+    staff_bonus_form: 'voucher',
+    staff_bonus_paid_on: '',
+    shop_headcounts: {},
 
     budget_amount: '',
     objective_coef_pct: '',
@@ -753,6 +779,27 @@ export default function CampaignBuilder({
                 isBrand={role === 'BRAND_ADMIN'}
                 state={bons}
                 onChanged={() => setBonsVersion((n) => n + 1)}
+                printed={(() => {
+                  const channel = refs.channels.find((c) => c.code === 'bons_imprimes')
+                  if (!channel) return undefined
+                  const entry = draft.channels[channel.id]
+                  return {
+                    on: entry !== undefined,
+                    quantity: entry?.quantity ?? '',
+                    details: entry?.details ?? '',
+                    toggle: () => {
+                      const next = { ...draft.channels }
+                      if (next[channel.id] !== undefined) delete next[channel.id]
+                      else next[channel.id] = { budget: '', agencyId: null, valide: false, quantity: '', details: '' }
+                      patch({ channels: next })
+                    },
+                    set: (change: { quantity?: string; details?: string }) => {
+                      const current = draft.channels[channel.id]
+                      if (!current) return
+                      patch({ channels: { ...draft.channels, [channel.id]: { ...current, ...change } } })
+                    },
+                  }
+                })()}
               />
             ) : null}
             {here === 'photos' ? <PhotosStep {...shared} /> : null}
@@ -987,6 +1034,21 @@ function fromState(state: api.CampaignDraftState, refs: References, role: Role):
     promo_cumulative: state.offer?.is_cumulative ?? false,
 
     challenge_enabled: state.challenge_enabled ?? false,
+    staff_bonus_enabled: state.staff_bonus_enabled ?? false,
+    staff_bonus_who: state.staff_bonus_who ?? 'team',
+    staff_bonus_rule: state.staff_bonus_rule ?? 'attainment',
+    staff_bonus_threshold_pct: state.staff_bonus_threshold_pct === null || state.staff_bonus_threshold_pct === undefined ? '100' : String(Number(state.staff_bonus_threshold_pct)),
+    staff_bonus_amount: numberOrBlank(state.staff_bonus_amount),
+    staff_bonus_extra_pct: numberOrBlank(state.staff_bonus_extra_pct),
+    staff_bonus_extra_amount: numberOrBlank(state.staff_bonus_extra_amount),
+    staff_bonus_cap_amount: numberOrBlank(state.staff_bonus_cap_amount),
+    staff_bonus_form: state.staff_bonus_form ?? 'voucher',
+    staff_bonus_paid_on: state.staff_bonus_paid_on ?? '',
+    shop_headcounts: Object.fromEntries(
+      (state.shop_targets ?? [])
+        .filter((target) => target.staff_headcount !== null && target.staff_headcount !== undefined)
+        .map((target) => [target.shop_id, String(target.staff_headcount)]),
+    ),
     challenge_metric: state.challenge_metric ?? 'attainment',
     challenge_trigger_pct:
       state.challenge_trigger_pct === undefined || state.challenge_trigger_pct === null
@@ -1158,16 +1220,22 @@ function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): Cam
 
     shop_ids: draft.scope === 'LOCALE' ? draft.shop_ids : [],
     // Seuls les objectifs réellement posés voyagent : zéro ou vide = aucun.
-    shop_targets: Object.entries(draft.shop_objectives)
-      .map(([shopId, value]) => ({
-        shop_id: Number(shopId),
-        target_pieces: Number(value),
-        // Le seuil voyage avec l'objectif du même magasin : les deux vivent sur
-        // la même ligne en base, les séparer ici obligerait à les recoller là-bas.
-        challenge_trigger_pct: draft.shop_triggers[Number(shopId)]?.trim() || null,
-      }))
+    shop_targets: [...new Set([...Object.keys(draft.shop_objectives), ...Object.keys(draft.shop_headcounts)])]
+      .map((shopId) => {
+        const headcount = (draft.shop_headcounts[Number(shopId)] ?? '').trim()
+        return {
+          shop_id: Number(shopId),
+          target_pieces: Number(draft.shop_objectives[Number(shopId)] ?? 0),
+          // Le seuil voyage avec l'objectif du même magasin : les deux vivent sur
+          // la même ligne en base, les séparer ici obligerait à les recoller là-bas.
+          challenge_trigger_pct: draft.shop_triggers[Number(shopId)]?.trim() || null,
+          // L'équipe de vente (prime du personnel) vit sur la même ligne.
+          staff_headcount: headcount === '' ? null : Number(headcount),
+        }
+      })
       .filter(
-        (target) => Number.isInteger(target.target_pieces) && target.target_pieces > 0,
+        (target) => (Number.isInteger(target.target_pieces) && target.target_pieces > 0)
+          || (target.staff_headcount !== null && Number.isInteger(target.staff_headcount) && target.staff_headcount >= 0),
       ),
 
     // Le détail boutique × produit. Une combinaison sans objectif ne voyage
@@ -1196,6 +1264,18 @@ function toPayload(draft: Draft, brandId: number | 'all', stepKey?: string): Cam
     challenge_prizes: draft.challenge_enabled
       ? draft.challenge_prizes.map((label) => ({ label: label.trim() }))
       : [],
+    // La prime du personnel : tout voyage, l'interrupteur dit si elle compte. L'éteindre
+    // garde les réglages saisis, qu'on retrouve en la rallumant.
+    staff_bonus_enabled: draft.staff_bonus_enabled,
+    staff_bonus_who: draft.staff_bonus_who,
+    staff_bonus_rule: draft.staff_bonus_rule,
+    staff_bonus_threshold_pct: draft.staff_bonus_threshold_pct.trim() || null,
+    staff_bonus_amount: draft.staff_bonus_amount.trim().replace(',', '.') || null,
+    staff_bonus_extra_pct: draft.staff_bonus_extra_pct.trim() || null,
+    staff_bonus_extra_amount: draft.staff_bonus_extra_amount.trim().replace(',', '.') || null,
+    staff_bonus_cap_amount: draft.staff_bonus_cap_amount.trim().replace(',', '.') || null,
+    staff_bonus_form: draft.staff_bonus_form,
+    staff_bonus_paid_on: draft.staff_bonus_paid_on || null,
     // Les secteurs ne concernent qu'une cible professionnelle : les envoyer
     // pour une campagne B2C peuplerait un entonnoir que rien n'alimente.
     sector_ids: draft.client_target === 'b2c' ? [] : draft.sector_ids,
@@ -2327,6 +2407,17 @@ function BudgetStep({
           ? 'Aucun objectif d’écart : le suivi se fera sur les valeurs absolues ci-dessous.'
           : `Objectif : N-1 ${Number(draft.objective_coef_pct) < 0 ? '−' : '+'} ${Math.abs(Number(draft.objective_coef_pct))} %`}
       </p>
+
+      {draft.staff_bonus_enabled ? (() => {
+        const ceiling = staffBonusCeiling(draft, draft.scope === 'LOCALE' ? draft.shop_ids : shops.map((shop) => shop.id))
+        return (
+          <p className="muted wizard__hint">
+            Prime du personnel (étape « Objectifs ») : {ceiling === null
+              ? 'son plafond se calcule une fois le montant et l’équipe de chaque boutique saisis (une prime à la pièce n’en a pas)'
+              : `${ceiling.toLocaleString('fr-BE', { maximumFractionDigits: 2 })} € au plus`} — à compter dans le budget alloué.
+          </p>
+        )
+      })() : null}
 
       <LeverKpi draft={draft} refs={refs} shops={shops} />
 

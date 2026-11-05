@@ -588,6 +588,8 @@ export interface CampaignDraft {
     shop_id: number
     target_pieces: number
     challenge_trigger_pct?: number | string | null
+    /** Équipe de vente de la boutique, pour la prime du personnel. */
+    staff_headcount?: number | null
   }>
   /**
    * Objectifs croisés boutique × produit — « ici, 900 cougnous ».
@@ -618,6 +620,17 @@ export interface CampaignDraft {
   challenge_trigger_pct?: number | string | null
   /** Dotation par rang. Le rang vient de la position, pas d'un champ. */
   challenge_prizes?: Array<{ label: string }>
+  /** Prime de la marque pour le personnel — facultative. Montants en euros, comme le budget. */
+  staff_bonus_enabled?: boolean
+  staff_bonus_who?: 'team' | 'named' | null
+  staff_bonus_rule?: 'attainment' | 'per_piece' | 'ranking' | null
+  staff_bonus_threshold_pct?: number | string | null
+  staff_bonus_amount?: number | string | null
+  staff_bonus_extra_pct?: number | string | null
+  staff_bonus_extra_amount?: number | string | null
+  staff_bonus_cap_amount?: number | string | null
+  staff_bonus_form?: 'voucher' | 'gift_cheque' | 'franchisee' | null
+  staff_bonus_paid_on?: string | null
   sector_ids?: number[]
   agency_ask_ids?: number[]
   b2b_option_ids?: number[]
@@ -690,6 +703,7 @@ export interface CampaignDraftState
     shop_id: number
     target_pieces: number
     challenge_trigger_pct: number | string | null
+    staff_headcount?: number | null
   }>
   shop_item_targets: Array<{
     shop_id: number
@@ -2540,4 +2554,182 @@ export function proposeTexts(input: {
   langues?: Array<'fr' | 'nl'>
 }): Promise<{ variantes: TextProposal[]; modele?: string }> {
   return request(`${SOCIAL_ROOT}/api/v1/social/redaction/proposer`, { method: 'POST', body: { type: 'Campagne', lien: false, ...input } })
+}
+
+// ---------------------------------------------------------------------------
+// Après la validation : fil de production et kit des franchisés
+// ---------------------------------------------------------------------------
+
+export type ProductionStatus = 'todo' | 'doing' | 'ready' | 'validated'
+export type ProductionShopStatus = 'todo' | 'sent' | 'validated' | 'redo'
+
+export interface ProductionShopSupport {
+  placement: string | null
+  widthCm: number | null
+  heightCm: number | null
+  paperFormat: string | null
+  quantity: number
+  material: string | null
+  fixing: string | null
+}
+
+export interface ProductionShop {
+  shopId: number
+  shopName: string
+  status: ProductionShopStatus
+  note: string | null
+  supports: ProductionShopSupport[]
+}
+
+export interface ProductionSection {
+  code: string
+  label: string
+  group: string
+  groupLabel: string
+  description: string | null
+  editor: string | null
+  quantity: number | null
+  details: string | null
+  agency: string | null
+  isPaid: boolean
+  dueOn: string | null
+  status: ProductionStatus
+  note: string | null
+  validatedAt: string | null
+  perShop: boolean
+  shops: ProductionShop[]
+  shopsValidated?: number
+}
+
+export interface Production {
+  campaignId: number
+  startsOn: string | null
+  endsOn: string | null
+  sections: ProductionSection[]
+  shops: Array<{ shopId: number; shopName: string; city: string | null }>
+  validated: number
+  total: number
+  kitReady: boolean
+}
+
+export async function getProduction(campaignId: number): Promise<Production> {
+  return (await request<Envelope<Production>>(`${BASE}/campaigns/${campaignId}/production-sections`)).data
+}
+
+export async function setProductionSection(campaignId: number, section: string, status: ProductionStatus, note: string | null): Promise<Production> {
+  return (await request<Envelope<Production>>(`${BASE}/campaigns/${campaignId}/production-sections/${encodeURIComponent(section)}`, { method: 'PUT', body: { status, note } })).data
+}
+
+export async function setProductionShop(campaignId: number, section: string, shopId: number, status: ProductionShopStatus, note: string | null): Promise<Production> {
+  return (await request<Envelope<Production>>(`${BASE}/campaigns/${campaignId}/production-sections/${encodeURIComponent(section)}/shops/${shopId}`, { method: 'PUT', body: { status, note } })).data
+}
+
+export interface KitPost {
+  date: string
+  time: string | null
+  title: string
+  text: string | null
+  image: string | null
+  networks: Array<'fb' | 'ig' | 'google'>
+  kind: 'post' | 'story'
+}
+
+export interface KitBonus {
+  rule: 'attainment' | 'per_piece' | 'ranking'
+  who: 'team' | 'named'
+  thresholdPct: number | null
+  amountCents: number | null
+  extraPct: number | null
+  extraAmountCents: number | null
+  capAmountCents: number | null
+  form: string | null
+  formLabel: string | null
+  paidOn: string | null
+  targetPieces: number | null
+  headcount: number | null
+  atThresholdCents: number | null
+  atExtraCents: number | null
+  currency: string
+}
+
+/** Le kit d'une boutique, tel que la tablette le lit. */
+export interface Kit {
+  version: number | null
+  createdAt: string | null
+  readAt: string | null
+  campaign: { id: number; name: string; startsOn: string | null; endsOn: string | null; typeLabel: string | null }
+  shop: { id: number; name: string; city: string | null; erpShopId: string | null }
+  messages: Partial<Record<'fr' | 'nl', { title: string | null; hook: string | null; offerLine: string | null; cta: string | null }>>
+  offer: { title: string | null; mechanicText: string | null; priceLabel: string | null; discountLabel: string | null; startsOn: string | null; endsOn: string | null; items: Array<{ label: string }> } | null
+  dates: Array<{ on: string; label: string; shopTask: boolean }>
+  posts: KitPost[]
+  displays: { baches: ProductionShopSupport[]; affiches: ProductionShopSupport[] }
+  supports: Array<{ code: string; label: string; group: string; quantity: number | null; details: string | null; dueOn: string | null; agency: string | null }>
+  uniforms: string[]
+  counter: { enabled: boolean; questions: string[] }
+  bonus: KitBonus | null
+}
+
+export interface KitVersions {
+  campaignId: number
+  kitReady: boolean
+  validated: number
+  total: number
+  currentVersion: number | null
+  versions: Array<{ version: number; createdAt: string }>
+  shops: Array<{ shopId: number; shopName: string; url: string | null; expiresOn: string | null; sent: boolean; readAt: string | null }>
+  createdVersion?: number
+}
+
+export async function getKitVersions(campaignId: number): Promise<KitVersions> {
+  return (await request<Envelope<KitVersions>>(`${BASE}/campaigns/${campaignId}/kit-versions`)).data
+}
+
+export async function sendKit(campaignId: number, posts: Array<KitPost & { shops: string[] }>): Promise<KitVersions> {
+  return (await request<Envelope<KitVersions>>(`${BASE}/campaigns/${campaignId}/kit-versions`, { method: 'POST', body: { posts } })).data
+}
+
+export async function getKitPreview(campaignId: number, shopId: number): Promise<Kit> {
+  return (await request<Envelope<Kit>>(`${BASE}/campaigns/${campaignId}/kit-previews/${shopId}`)).data
+}
+
+const PUBLIC_BASE = `${API_ROOT}/api/v1/public/marketing`
+
+/** Le kit d'une boutique par son lien personnel : sans session. */
+export async function getPublicKit(token: string): Promise<Kit> {
+  return (await request<Envelope<Kit>>(`${PUBLIC_BASE}/campaign-kits/${encodeURIComponent(token)}`, { anonymous: true })).data
+}
+
+export async function markKitRead(token: string): Promise<{ version: number; readAt: string | null }> {
+  return (await request<Envelope<{ version: number; readAt: string | null }>>(`${PUBLIC_BASE}/campaign-kits/${encodeURIComponent(token)}/read-receipt`, { method: 'PUT', anonymous: true })).data
+}
+
+/**
+ * Les posts de la campagne lus dans Social (Créer un post), au format du kit. Les dark posts
+ * (publicités) n'en sont pas : ils ne paraissent pas sur la page de la boutique.
+ */
+export async function campaignPostsForKit(campaignId: number): Promise<Array<KitPost & { shops: string[] }>> {
+  const state = await getSocialState()
+  const origin = window.location.origin
+  return (state.posts ?? [])
+    .filter((p) => p.campaign === `bo-${campaignId}` && !(p as SocialPost & { dark?: boolean }).dark && /^\d{4}-\d{2}-\d{2}$/.test(p.date ?? ''))
+    .map((p) => {
+      const img = p.img && !p.img.startsWith('data:')
+        ? (/^https?:\/\//.test(p.img) ? p.img : new URL(`${SOCIAL_ROOT}/${p.img.replace(/^\.?\//, '')}`, origin).href)
+        : null
+      const networks: Array<'fb' | 'ig'> = []
+      if (p.fb) networks.push('fb')
+      if (p.ig) networks.push('ig')
+      const text = (p as SocialPost & { text?: string }).text
+      return {
+        date: p.date,
+        time: /^([01]\d|2[0-3]):[0-5]\d$/.test(p.time ?? '') ? p.time : null,
+        title: (p.title || 'Post').slice(0, 200),
+        text: typeof text === 'string' && text.trim() !== '' ? text.slice(0, 600) : null,
+        image: img && img.length <= 500 ? img : null,
+        networks,
+        kind: /story|reel/i.test(p.type ?? '') ? 'story' as const : 'post' as const,
+        shops: (p.shops ?? []).filter((s) => /^\d{1,9}$/.test(s)),
+      }
+    })
 }

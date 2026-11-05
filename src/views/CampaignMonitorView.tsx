@@ -3,6 +3,7 @@ import { module as api } from '../lib/api'
 import { useAsync, formatEur, formatNumber } from '../lib/useAsync'
 import { describeError } from '../state/auth'
 import CampaignBrief from '../components/CampaignBrief'
+import ProductionPanel from './production/ProductionPanel'
 import type { CampaignDetail, FunnelStep, Lead, LeadStatus, TrackingBaseline, TrackingScope } from '../lib/api/module'
 import { useReferences } from '../state/references'
 import { campaignGaps } from '../lib/completeness'
@@ -98,6 +99,15 @@ export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, 
 
       {campaign.error ? <p className="error">{campaign.error}</p> : null}
       {campaign.data ? <h2 className="screen-subtitle">{campaign.data.name}</h2> : null}
+
+      {/* Après la validation : le fil de production de chaque section, puis le kit des franchisés. */}
+      {campaign.data && campaign.data.status_code !== 'draft' ? (
+        <ProductionPanel
+          campaignId={campaignId}
+          brandAdmin={brandAdmin}
+          onOpenEditor={(editor) => { if (editor === 'brochures') onBrochures?.(); else if (editor === 'social-post') onCreatePost?.() }}
+        />
+      ) : null}
 
       {/* Ce qui manque pour mesurer le retour de la campagne, nommé avant ses chiffres. */}
       {campaign.data && onComplete && (brandAdmin || campaign.data.scope === 'LOCALE') ? <GapsNotice campaign={campaign.data} onComplete={onComplete} /> : null}

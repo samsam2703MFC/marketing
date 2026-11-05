@@ -4639,3 +4639,30 @@ table.vouchers--list th:nth-child(7) { width: 9%; }
 @media (max-width: 1100px) { .supports.has-sheet { grid-template-columns: minmax(0, 1fr); } .supports__sheet { position: static; } }
 
 .content__fields input { width: 100%; box-sizing: border-box; }
+
+/* Prime de la marque pour le personnel (étape « Objectifs ») */
+.bonus { margin-top: 16px; }
+.bonus__form { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 10px 14px; align-items: center; margin-top: 14px; font-size: 12.5px; }
+.bonus__k { color: var(--muted); font-size: 12px; }
+.bonus__row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.bonus__in { width: 70px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font: inherit; font-size: 13px; background: #fff; }
+.bonus__in--date { width: 150px; }
+.bonus__in--sm { width: 52px; padding: 4px 8px; }
+.bonus__rules { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.bonus__rules button { text-align: left; border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; font: inherit; font-size: 12px; background: #fff; color: var(--muted-2); line-height: 1.4; cursor: pointer; }
+.bonus__rules button b { display: block; color: var(--ink); font-weight: 500; font-size: 13px; }
+.bonus__rules button.is-on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.bonus__table { margin-top: 14px; }
+.bonus__table h4 { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.bonus__table table { min-width: 0; }
+.bonus__total td { font-weight: 600; }
+.bonus__note { font-size: 12px; margin: 10px 0 0; }
+@media (max-width: 760px) { .bonus__form { grid-template-columns: 1fr; } .bonus__rules { grid-template-columns: 1fr; } }
+
+/* Bons imprimés (étape « Bons ») */
+.vouchers__printed { margin: 12px 0 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.vouchers__printed.is-on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.vouchers__printed-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-top: 10px; }
+.vouchers__printed-row .field input { width: 120px; }
+.vouchers__printed-details input { width: 280px !important; max-width: 100%; }
+.vouchers__printed-row .vouchers__hint { flex-basis: 100%; margin: 0; }

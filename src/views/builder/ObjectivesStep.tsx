@@ -2,6 +2,7 @@ import { Fragment, useState } from 'react'
 import { module as api } from '../../lib/api'
 import { useAsync } from '../../lib/useAsync'
 import type { SalesQuantities, ShopSalesRow } from '../../lib/api/module'
+import StaffBonus from './StaffBonus'
 import type { Draft } from './CampaignBuilder'
 import AnalysisPeriod from './AnalysisPeriod'
 
@@ -1668,6 +1669,8 @@ export default function ObjectivesStep({
 
         </div>
       )}
+      {/* La prime de la marque pour le personnel : facultative, elle s'appuie sur les objectifs posés ci-dessus. */}
+      <StaffBonus draft={draft} patch={patch} />
     </>
   )
 }
