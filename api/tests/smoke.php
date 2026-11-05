@@ -1266,7 +1266,7 @@ check('le nom est repris', $etat['name'] === 'Brouillon repris');
 check(
     'les objectifs de pièces reviennent avec le brouillon',
     ($etat['shop_targets'] ?? null) === [
-        ['shop_id' => 2, 'target_pieces' => 75, 'challenge_trigger_pct' => null],
+        ['shop_id' => 2, 'target_pieces' => 75, 'challenge_trigger_pct' => null, 'staff_headcount' => null],
     ],
     json_encode($etat['shop_targets'] ?? null)
 );
@@ -4593,6 +4593,157 @@ array_map('unlink', glob($dossierCles . '/*') ?: []);
 @rmdir($dossierCles);
 \Marketing\Support\Keys::forget();
 AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+// --- Fil de production et kit des franchisés -------------------------------
+// Après la validation : une section par support coché (plus le message, les consignes,
+// les tenues) ; les bâches et les affiches se valident boutique par boutique ; le kit
+// s'envoie quand tout est validé, chaque boutique le lit par son lien personnel.
+echo "\nFil de production et kit des franchisés\n";
+\Marketing\Support\Env::set('MAR_SESSION_SECRET', str_repeat('p', 40));
+\Marketing\Support\Keys::forget();
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$canauxP = array_column(call($router, 'GET', '/api/v1/marketing/references')['body']['channels'], null, 'code');
+[$sA, $sB] = array_map('intval', $pdo->query('SELECT id FROM mar_shop WHERE brand_id = 1 ORDER BY id LIMIT 2')->fetchAll(PDO::FETCH_COLUMN));
+$pdo->exec('DELETE FROM mar_shop_support WHERE shop_id IN (' . $sA . ',' . $sB . ')');
+call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $sA, [], ['supports' => [['kind' => 'bache', 'placement' => 'Façade', 'widthCm' => 300, 'heightCm' => 100, 'quantity' => 1]]]);
+$prod = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name' => 'Production et kit', 'status_code' => 'draft', 'scope' => 'RESEAU', 'type_id' => (int) $types['ouverture']['id'],
+    'starts_on' => '2026-12-01', 'ends_on' => '2026-12-31', 'shop_ids' => [$sA, $sB], 'uniform_ids' => [1],
+    'pos_survey_enabled' => true, 'pos_questions' => [['label' => 'Vous avez réservé votre bûche ?', 'answer_type' => 'yes_no']],
+    'channels' => [
+        ['channel_id' => (int) $canauxP['affichage']['id'], 'quantity' => 2],
+        ['channel_id' => (int) $canauxP['posts_meta']['id'], 'quantity' => 6],
+        ['channel_id' => (int) $canauxP['goodies']['id'], 'quantity' => 300, 'details' => 'Sacs kraft'],
+    ],
+    'messages' => [['lang' => 'fr', 'title' => 'Les bûches de fêtes', 'hook' => 'à partager', 'offer_line' => '−10 %', 'cta' => 'Commander']],
+    'shop_targets' => [['shop_id' => $sA, 'target_pieces' => 520, 'staff_headcount' => 5], ['shop_id' => $sB, 'target_pieces' => 430, 'staff_headcount' => 4]],
+    'staff_bonus_enabled' => true, 'staff_bonus_who' => 'team', 'staff_bonus_rule' => 'attainment', 'staff_bonus_threshold_pct' => 100,
+    'staff_bonus_amount' => 40, 'staff_bonus_extra_pct' => 120, 'staff_bonus_extra_amount' => 10, 'staff_bonus_cap_amount' => 200,
+    'staff_bonus_form' => 'voucher', 'staff_bonus_paid_on' => '2027-01-15',
+]);
+$idP = (int) ($prod['body']['inserted_id'] ?? 0);
+$brouillonP = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/draft', $idP))['body'];
+check('prime du personnel : enregistrée et relue (règle, montants, forme, date, équipe par boutique)',
+    ($brouillonP['staff_bonus_enabled'] ?? false) === true && ($brouillonP['staff_bonus_rule'] ?? '') === 'attainment'
+        && (float) ($brouillonP['staff_bonus_amount'] ?? 0) === 40.0 && ($brouillonP['staff_bonus_paid_on'] ?? '') === '2027-01-15'
+        && array_column($brouillonP['shop_targets'] ?? [], 'staff_headcount', 'shop_id') === [$sA => 5, $sB => 4],
+    json_encode([$prod['status'], $prod['body'], $brouillonP['shop_targets'] ?? null]));
+$refusPrime = [
+    call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $idP), [], $brouillonP + ['staff_bonus_rule' => 'loterie'])['status'],
+    call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $idP), [], ['staff_bonus_rule' => 'loterie'] + $brouillonP)['status'],
+    call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $idP), [], ['staff_bonus_amount' => -5] + $brouillonP)['status'],
+    call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $idP), [], ['staff_bonus_paid_on' => '2027-02-30'] + $brouillonP)['status'],
+    call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/draft', $idP), [], ['staff_bonus_amount' => null] + $brouillonP)['status'],
+];
+check('prime du personnel : refusée si règle inconnue, montant négatif, date impossible, ou sans montant',
+    $refusPrime[0] === 200 && array_unique(array_slice($refusPrime, 1)) === [422]
+        && (string) $pdo->query("SELECT staff_bonus_rule FROM mar_campaign WHERE id = $idP")->fetchColumn() === 'attainment',
+    json_encode($refusPrime));
+$urlP = sprintf('/api/v1/marketing/campaigns/%d/production-sections', $idP);
+check('production : une campagne en brouillon n\'a pas encore de fil (409)', call($router, 'GET', $urlP)['status'] === 409);
+call($router, 'PATCH', sprintf('/api/v1/marketing/campaigns/%d', $idP), [], ['status_code' => 'planned']);
+$filP = call($router, 'GET', $urlP);
+$codesP = array_column($filP['body']['data']['sections'] ?? [], 'code');
+$bachesP = array_values(array_filter($filP['body']['data']['sections'] ?? [], static fn ($x) => $x['code'] === 'affichage'))[0] ?? [];
+check('production : les sections viennent de la campagne, dans l\'ordre du fil, avec leur échéance ; les bâches par boutique, avec leurs emplacements',
+    $filP['status'] === 200 && $codesP === ['message', 'goodies', 'consignes', 'tenues', 'affichage', 'posts_meta', 'prime']
+        && ($filP['body']['data']['total'] ?? 0) === 7 && ($filP['body']['data']['kitReady'] ?? true) === false
+        && $bachesP['perShop'] === true && count($bachesP['shops']) === 2 && $bachesP['dueOn'] === '2026-11-24'
+        && ($bachesP['shops'][0]['supports'][0]['widthCm'] ?? null) === 300,
+    json_encode([$filP['status'], $codesP, $bachesP['dueOn'] ?? null]));
+AuthContext::clear();
+check('production : 401 sans identité', call($router, 'GET', $urlP)['status'] === 401);
+AuthContext::set(77, 'FRANCHISEE', 1, [$sA]);
+$filF = call($router, 'GET', $urlP);
+$bachesF = array_values(array_filter($filF['body']['data']['sections'] ?? [], static fn ($x) => $x['code'] === 'affichage'))[0] ?? [];
+check('production : le franchisé ne voit que sa boutique', $filF['status'] === 200 && array_column($bachesF['shops'] ?? [], 'shopId') === [$sA]);
+check('production : le franchisé ne fait pas avancer une section (403)', call($router, 'PUT', $urlP . '/message', [], ['status' => 'validated'])['status'] === 403);
+check('production : le franchisé ne touche pas au BAT d\'une autre boutique (404) ni ne l\'« envoie » (422)',
+    call($router, 'PUT', $urlP . '/affichage/shops/' . $sB, [], ['status' => 'validated'])['status'] === 404
+        && call($router, 'PUT', $urlP . '/affichage/shops/' . $sA, [], ['status' => 'sent'])['status'] === 422);
+$redo = call($router, 'PUT', $urlP . '/affichage/shops/' . $sA, [], ['status' => 'redo', 'note' => 'La grille ne fait que 180 cm']);
+check('production : le franchisé renvoie son BAT avec son retour', $redo['status'] === 200
+    && (array_values(array_filter($redo['body']['data']['sections'], static fn ($x) => $x['code'] === 'affichage'))[0]['shops'][0]['note'] ?? '') === 'La grille ne fait que 180 cm');
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$refusP = [
+    call($router, 'PUT', $urlP . '/message', [], ['status' => 'fini'])['status'],
+    call($router, 'PUT', $urlP . '/message', [], ['status' => 'validated', 'pirate' => 1])['status'],
+    call($router, 'PUT', $urlP . '/message', [], ['status' => 'validated', 'note' => str_repeat('x', 301)])['status'],
+];
+check('production : mise à jour invalide (422) — état hors liste, champ inconnu, note trop longue', array_unique($refusP) === [422], json_encode($refusP));
+check('production : section ou campagne inconnue (404)', call($router, 'PUT', $urlP . '/fax', [], ['status' => 'validated'])['status'] === 404
+    && call($router, 'GET', '/api/v1/marketing/campaigns/999999/production-sections')['status'] === 404
+    && call($router, 'PUT', $urlP . '/message/shops/' . $sA, [], ['status' => 'validated'])['status'] === 404);
+check('production : les bâches ne se ferment pas tant qu\'une boutique n\'a pas validé (409)', call($router, 'PUT', $urlP . '/affichage', [], ['status' => 'validated'])['status'] === 409);
+foreach ([$sA, $sB] as $s) { call($router, 'PUT', $urlP . '/affichage/shops/' . $s, [], ['status' => 'validated']); }
+foreach (['message', 'affichage', 'goodies', 'consignes', 'tenues'] as $code) { call($router, 'PUT', $urlP . '/' . $code, [], ['status' => 'validated']); }
+$deux = [call($router, 'PUT', $urlP . '/message', [], ['status' => 'validated']), call($router, 'PUT', $urlP . '/message', [], ['status' => 'validated'])];
+check('production : valider deux fois revient au même (idempotent)', $deux[0]['status'] === 200 && $deux[0]['body']['data']['validated'] === $deux[1]['body']['data']['validated']);
+$kitUrl = sprintf('/api/v1/marketing/campaigns/%d/kit-versions', $idP);
+$postsKit = ['posts' => [
+    ['date' => '2026-12-01', 'time' => '07:30', 'title' => 'Lancement', 'networks' => ['fb', 'ig'], 'kind' => 'post', 'shops' => [], 'image' => 'https://exemple.test/a.jpg'],
+    ['date' => '2026-12-03', 'time' => '16:00', 'title' => 'Story d\'une autre boutique', 'networks' => ['ig'], 'kind' => 'story', 'shops' => ['424242']],
+]];
+check('kit : pas d\'envoi tant qu\'une section reste à valider (409)', call($router, 'POST', $kitUrl, [], $postsKit)['status'] === 409);
+call($router, 'PUT', $urlP . '/posts_meta', [], ['status' => 'validated']);
+call($router, 'PUT', $urlP . '/prime', [], ['status' => 'validated']);
+$refusK = [
+    call($router, 'POST', $kitUrl, [], ['posts' => [['date' => '2026-13-01', 'title' => 'x']]])['status'],
+    call($router, 'POST', $kitUrl, [], ['posts' => [['date' => '2026-12-01', 'title' => 'x', 'image' => 'javascript:alert(1)']]])['status'],
+    call($router, 'POST', $kitUrl, [], ['posts' => 'tout'])['status'],
+    call($router, 'POST', $kitUrl, [], ['pirate' => 1])['status'],
+];
+check('kit : envoi invalide (422) — date, image, liste, champ inconnu', array_unique($refusK) === [422], json_encode($refusK));
+AuthContext::set(77, 'FRANCHISEE', 1, [$sA]);
+check('kit : le franchisé n\'envoie pas le kit (403)', call($router, 'POST', $kitUrl, [], $postsKit)['status'] === 403);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$envoi = call($router, 'POST', $kitUrl, [], $postsKit);
+$liens = array_column($envoi['body']['data']['shops'] ?? [], 'url', 'shopId');
+$tokenA = (string) (explode('?kit=', (string) ($liens[$sA] ?? ''))[1] ?? '');
+check('kit : envoyé — une version, un lien par boutique', $envoi['status'] === 201 && ($envoi['body']['data']['currentVersion'] ?? 0) === 1
+    && strlen($tokenA) === 43 && count(array_filter($liens)) === 2 && $liens[$sA] !== $liens[$sB],
+    json_encode([$envoi['status'], $envoi['body']['error'] ?? null]));
+check('kit : la base ne garde pas le lien, seulement son empreinte',
+    (int) $pdo->query("SELECT COUNT(*) FROM mar_campaign_kit_link WHERE campaign_id = $idP AND token_hash = '" . hash('sha256', $tokenA) . "'")->fetchColumn() === 1
+        && !str_contains(json_encode($pdo->query("SELECT * FROM mar_campaign_kit_link WHERE campaign_id = $idP")->fetchAll()), $tokenA));
+AuthContext::clear();
+$lu = call($router, 'GET', '/api/v1/public/marketing/campaign-kits/' . $tokenA);
+$kitA = $lu['body']['data'] ?? [];
+check('kit : lu par son lien, sans session — la boutique, ses bâches, ses posts, ses tenues, ses consignes, ses dates',
+    $lu['status'] === 200 && ($kitA['shop']['id'] ?? 0) === $sA && ($kitA['version'] ?? 0) === 1 && array_key_exists('readAt', $kitA) && $kitA['readAt'] === null
+        && count($kitA['displays']['baches'] ?? []) === 1 && array_column($kitA['posts'] ?? [], 'title') === ['Lancement']
+        && ($kitA['uniforms'] ?? []) !== [] && ($kitA['counter']['questions'][0] ?? '') === 'Vous avez réservé votre bûche ?'
+        && ($kitA['messages']['fr']['title'] ?? '') === 'Les bûches de fêtes'
+        && in_array('Pose des bâches', array_column($kitA['dates'] ?? [], 'label'), true)
+        && ($kitA['bonus']['amountCents'] ?? 0) === 4000 && ($kitA['bonus']['headcount'] ?? 0) === 5
+        && ($kitA['bonus']['atThresholdCents'] ?? 0) === 20000 && ($kitA['bonus']['atExtraCents'] ?? 0) === 20000 && ($kitA['bonus']['targetPieces'] ?? 0) === 520,
+    json_encode([$lu['status'], $kitA['displays'] ?? null, $kitA['posts'] ?? null, $kitA['uniforms'] ?? null, $kitA['counter'] ?? null, $kitA['readAt'] ?? 'absent', array_column($kitA['dates'] ?? [], 'label')]));
+$r1 = call($router, 'PUT', '/api/v1/public/marketing/campaign-kits/' . $tokenA . '/read-receipt');
+$r2 = call($router, 'PUT', '/api/v1/public/marketing/campaign-kits/' . $tokenA . '/read-receipt');
+check('kit : accusé de lecture idempotent — la première lecture reste', $r1['status'] === 200 && ($r1['body']['data']['readAt'] ?? null) !== null
+    && $r1['body']['data']['readAt'] === ($r2['body']['data']['readAt'] ?? ''), json_encode([$r1, $r2]));
+check('kit : lien inconnu ou mal formé (404)', call($router, 'GET', '/api/v1/public/marketing/campaign-kits/' . str_repeat('A', 43))['status'] === 404
+    && call($router, 'GET', '/api/v1/public/marketing/campaign-kits/court')['status'] === 404);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$suivi = call($router, 'GET', $kitUrl)['body']['data']['shops'] ?? [];
+check('kit : le réseau voit qui l\'a lu', ($suivi[array_search($sA, array_column($suivi, 'shopId'), true)]['readAt'] ?? null) !== null
+    && ($suivi[array_search($sB, array_column($suivi, 'shopId'), true)]['readAt'] ?? null) === null
+    && ($suivi[array_search($sB, array_column($suivi, 'shopId'), true)]['sent'] ?? false) === true);
+$v2 = call($router, 'POST', $kitUrl, [], $postsKit);
+$tokenA2 = (string) (explode('?kit=', (string) (array_column($v2['body']['data']['shops'] ?? [], 'url', 'shopId')[$sA] ?? ''))[1] ?? '');
+AuthContext::clear();
+$lu2 = call($router, 'GET', '/api/v1/public/marketing/campaign-kits/' . $tokenA);
+check('kit : une nouvelle version garde le même lien, et sa lecture repart de zéro',
+    $tokenA2 === $tokenA && ($lu2['body']['data']['version'] ?? 0) === 2 && array_key_exists('readAt', $lu2['body']['data'] ?? []) && $lu2['body']['data']['readAt'] === null);
+AuthContext::set(77, 'FRANCHISEE', 1, [$sA]);
+check('kit : aperçu — le franchisé voit le sien, pas celui d\'une autre boutique',
+    call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/kit-previews/%d', $idP, $sA))['status'] === 200
+        && call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d/kit-previews/%d', $idP, $sB))['status'] === 404);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$pdo->exec('DELETE FROM mar_campaign WHERE id = ' . $idP);
+$pdo->exec('DELETE FROM mar_shop_support WHERE shop_id IN (' . $sA . ',' . $sB . ')');
+\Marketing\Support\Env::set('MAR_SESSION_SECRET', null);
+\Marketing\Support\Keys::forget();
 
 // --- Résultat -------------------------------------------------------------
 printf("\n%d réussis, %d échoués\n", $passed, $failed);

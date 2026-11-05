@@ -20,9 +20,11 @@ use Marketing\Controller\CampaignVoucherController;
 use Marketing\Controller\CatalogController;
 use Marketing\Controller\ErpPromotionController;
 use Marketing\Controller\FundController;
+use Marketing\Controller\KitController;
 use Marketing\Controller\LeadController;
 use Marketing\Controller\MediaController;
 use Marketing\Controller\NetworkController;
+use Marketing\Controller\ProductionController;
 use Marketing\Controller\PublicController;
 use Marketing\Controller\ReferenceController;
 use Marketing\Controller\SalesController;
@@ -49,6 +51,8 @@ return static function (Router $router): void {
     $media      = new MediaController();
     $settings   = new SettingsController();
     $shopSupports = new ShopSupportController();
+    $production = new ProductionController();
+    $kits       = new KitController();
 
     // Session — publique : elle ne dit que si l'appelant est authentifié.
     // Le front s'en sert pour savoir s'il est embarqué dans l'ERP, auquel cas
@@ -64,6 +68,10 @@ return static function (Router $router): void {
     // montants en centimes. Les routes ci-dessous gardent leur forme jusqu'à la
     // bascule v2 — voir docs/API_REGISTRY.md.
     $router->get('/api/v1/public/marketing/campaigns', [$public, 'campaigns'], true);
+    // Le kit d'une boutique, par son lien personnel (lecture seule) : la tablette de la
+    // boutique n'a pas de session du module. Même format que la vitrine.
+    $router->get('/api/v1/public/marketing/campaign-kits/{token}', [$kits, 'show'], true);
+    $router->put('/api/v1/public/marketing/campaign-kits/{token}/read-receipt', [$kits, 'read'], true);
 
     // Référentiels
     $router->get('/api/v1/marketing/references', [$references, 'index']);
@@ -93,6 +101,14 @@ return static function (Router $router): void {
     $router->put('/api/v1/marketing/campaigns/{id}/lever-targets', [$campaigns, 'leverTargets']);
     $router->post('/api/v1/marketing/campaigns/{id}/offer-items', [$campaigns, 'addOfferItems']);
     // Brochures (leaflet A5, dépliant A4) : les réglages du générateur ; le contenu vient de …/print.
+    // Après la validation : le fil de production (une section par support) et le kit des
+    // franchisés. Routes au format du standard (enveloppe, camelCase).
+    $router->get('/api/v1/marketing/campaigns/{id}/production-sections',                          [$production, 'index']);
+    $router->put('/api/v1/marketing/campaigns/{id}/production-sections/{section}',                [$production, 'update']);
+    $router->put('/api/v1/marketing/campaigns/{id}/production-sections/{section}/shops/{shopId}', [$production, 'updateShop']);
+    $router->get('/api/v1/marketing/campaigns/{id}/kit-versions',                                 [$kits, 'index']);
+    $router->post('/api/v1/marketing/campaigns/{id}/kit-versions',                                [$kits, 'store']);
+    $router->get('/api/v1/marketing/campaigns/{id}/kit-previews/{shopId}',                        [$kits, 'preview']);
     $router->get('/api/v1/marketing/campaigns/{id}/brochures',          [$brochures, 'index']);
     $router->put('/api/v1/marketing/campaigns/{id}/brochures/{format}', [$brochures, 'save']);
     $router->delete('/api/v1/marketing/campaigns/{id}',         [$campaigns, 'destroy']);

@@ -24,6 +24,10 @@ final class CampaignRepository
      * @var list<string>
      */
     private const CHALLENGE_METRICS = ['attainment', 'pieces', 'growth'];
+    /** Prime de la marque pour le personnel : pour qui, selon quelle règle, sous quelle forme. */
+    public const STAFF_BONUS_WHO   = ['team', 'named'];
+    public const STAFF_BONUS_RULES = ['attainment', 'per_piece', 'ranking'];
+    public const STAFF_BONUS_FORMS = ['voucher', 'gift_cheque', 'franchisee'];
 
     /**
      * Palette par défaut d'une campagne, et rôle de chaque couleur.
@@ -467,6 +471,7 @@ final class CampaignRepository
         }
 
         $data = $this->validatedChallenge($data);
+        $data = $this->validatedStaffBonus($data);
         $data = $this->validatedColors($data);
         $data = $this->validatedTracking($data);
 
@@ -690,6 +695,59 @@ final class CampaignRepository
             }
 
             $data[$champ] = strtoupper($valeur);
+        }
+
+        return $data;
+    }
+
+    /**
+     * La prime de la marque pour le personnel (étape « Objectifs »), validée.
+     * Facultative ; attachée, elle dit pour qui, selon quelle règle, combien
+     * (en euros, comme le budget de la campagne), sous quelle forme et quand.
+     *
+     * @param  array<string,mixed> $data
+     * @return array<string,mixed>
+     */
+    private function validatedStaffBonus(array $data): array
+    {
+        if (!array_key_exists('staff_bonus_enabled', $data)) {
+            return $data;
+        }
+        $data['staff_bonus_enabled'] = !empty($data['staff_bonus_enabled']);
+        foreach ([['staff_bonus_who', self::STAFF_BONUS_WHO, 'Pour qui'], ['staff_bonus_rule', self::STAFF_BONUS_RULES, 'Règle de la prime'],
+                  ['staff_bonus_form', self::STAFF_BONUS_FORMS, 'Forme de la prime']] as [$key, $allowed, $label]) {
+            $value = $data[$key] ?? null;
+            if ($value === null || $value === '') {
+                $data[$key] = null;
+            } elseif (!is_string($value) || !in_array($value, $allowed, true)) {
+                throw new RuntimeException(sprintf('%s : attendu %s.', $label, implode(', ', $allowed)));
+            }
+        }
+        foreach (['staff_bonus_threshold_pct' => 999.99, 'staff_bonus_extra_pct' => 999.99] as $key => $max) {
+            $value = $data[$key] ?? null;
+            if ($value === null || $value === '') {
+                $data[$key] = null;
+            } elseif (!is_numeric($value) || (float) $value < 0 || (float) $value > $max) {
+                throw new RuntimeException('Un seuil de la prime doit rester entre 0 et 999,99 %.');
+            }
+        }
+        foreach (['staff_bonus_amount', 'staff_bonus_extra_amount', 'staff_bonus_cap_amount'] as $key) {
+            $value = $data[$key] ?? null;
+            if ($value === null || $value === '') {
+                $data[$key] = null;
+            } elseif (!is_numeric($value) || (float) $value < 0 || (float) $value > 99999999.99) {
+                throw new RuntimeException('Un montant de la prime doit être un nombre positif.');
+            }
+        }
+        $paid = $data['staff_bonus_paid_on'] ?? null;
+        if ($paid === null || $paid === '') {
+            $data['staff_bonus_paid_on'] = null;
+        } elseif (!is_string($paid) || preg_match('/^\d{4}-\d{2}-\d{2}$/', $paid) !== 1
+            || !checkdate((int) substr($paid, 5, 2), (int) substr($paid, 8, 2), (int) substr($paid, 0, 4))) {
+            throw new RuntimeException('Date de versement de la prime : AAAA-MM-JJ attendu.');
+        }
+        if ($data['staff_bonus_enabled'] && ($data['staff_bonus_amount'] ?? null) === null) {
+            throw new RuntimeException('Une prime attachée dit son montant.');
         }
 
         return $data;
@@ -1109,6 +1167,23 @@ final class CampaignRepository
     {
         $connection = Database::connection();
 
+        // La prime du personnel vit sur la campagne ; elle ne s'écrit que si l'appel la porte.
+        if (array_key_exists('staff_bonus_enabled', $data)) {
+            $connection->prepare(
+                'UPDATE mar_campaign SET staff_bonus_enabled = :enabled, staff_bonus_who = :who, staff_bonus_rule = :rule,
+                        staff_bonus_threshold_pct = :threshold, staff_bonus_amount = :amount, staff_bonus_extra_pct = :extra_pct,
+                        staff_bonus_extra_amount = :extra_amount, staff_bonus_cap_amount = :cap, staff_bonus_form = :form,
+                        staff_bonus_paid_on = :paid_on
+                  WHERE id = :id'
+            )->execute([
+                'enabled' => !empty($data['staff_bonus_enabled']) ? 1 : 0, 'who' => $data['staff_bonus_who'] ?? null,
+                'rule' => $data['staff_bonus_rule'] ?? null, 'threshold' => $data['staff_bonus_threshold_pct'] ?? null,
+                'amount' => $data['staff_bonus_amount'] ?? null, 'extra_pct' => $data['staff_bonus_extra_pct'] ?? null,
+                'extra_amount' => $data['staff_bonus_extra_amount'] ?? null, 'cap' => $data['staff_bonus_cap_amount'] ?? null,
+                'form' => $data['staff_bonus_form'] ?? null, 'paid_on' => $data['staff_bonus_paid_on'] ?? null, 'id' => $campaignId,
+            ]);
+        }
+
         $shopIds  = self::intList($data['shop_ids'] ?? []);
         $channels = is_array($data['channels'] ?? null) ? $data['channels'] : [];
         $targets  = is_array($data['lever_targets'] ?? null) ? $data['lever_targets'] : [];
@@ -1126,9 +1201,15 @@ final class CampaignRepository
         // ses rattachements, uniquement pour porter les objectifs.
         $targetsByShop  = [];
         $triggersByShop = [];
+        $headcountByShop = [];
         foreach (is_array($data['shop_targets'] ?? null) ? $data['shop_targets'] : [] as $target) {
             $shopId = (int) ($target['shop_id'] ?? 0);
             $pieces = (int) ($target['target_pieces'] ?? 0);
+            // L'équipe de vente de la boutique (prime du personnel) : saisie à la main.
+            $headcount = $target['staff_headcount'] ?? null;
+            if ($shopId > 0 && $headcount !== null && $headcount !== '' && (int) $headcount >= 0) {
+                $headcountByShop[$shopId] = min(999, (int) $headcount);
+            }
             if ($shopId > 0 && $pieces > 0) {
                 $targetsByShop[$shopId] = $pieces;
             }
@@ -1143,20 +1224,21 @@ final class CampaignRepository
         }
 
         $shopRows = array_values(array_unique(
-            [...$shopIds, ...array_keys($targetsByShop), ...array_keys($triggersByShop)]
+            [...$shopIds, ...array_keys($targetsByShop), ...array_keys($triggersByShop), ...array_keys($headcountByShop)]
         ));
 
         if ($shopRows !== []) {
             $statement = $connection->prepare(
                 'INSERT INTO mar_campaign_shop
-                    (campaign_id, shop_id, target_pieces, challenge_trigger_pct, created_by)
-                 VALUES (:campaign_id, :shop_id, :target_pieces, :challenge_trigger_pct, :created_by)'
+                    (campaign_id, shop_id, target_pieces, staff_headcount, challenge_trigger_pct, created_by)
+                 VALUES (:campaign_id, :shop_id, :target_pieces, :staff_headcount, :challenge_trigger_pct, :created_by)'
             );
             foreach ($shopRows as $shopId) {
                 $statement->execute([
                     'campaign_id'           => $campaignId,
                     'shop_id'               => $shopId,
                     'target_pieces'         => $targetsByShop[$shopId] ?? null,
+                    'staff_headcount'       => $headcountByShop[$shopId] ?? null,
                     'challenge_trigger_pct' => $triggersByShop[$shopId] ?? null,
                     'created_by'            => $auth->userId,
                 ]);
@@ -1804,7 +1886,7 @@ final class CampaignRepository
         // boutique dont on a réglé le seuil sans encore poser d'objectif ne
         // doit pas voir son réglage disparaître à la reprise.
         $shopTargets = Database::connection()->prepare(
-            'SELECT shop_id, target_pieces, challenge_trigger_pct
+            'SELECT shop_id, target_pieces, staff_headcount, challenge_trigger_pct
                FROM mar_campaign_shop
               WHERE campaign_id = :id
                 AND (target_pieces IS NOT NULL OR challenge_trigger_pct IS NOT NULL)'
@@ -1900,6 +1982,16 @@ final class CampaignRepository
                 )
             ),
             'challenge_enabled'     => (bool) $campaign['challenge_enabled'],
+            'staff_bonus_enabled'       => (bool) ($campaign['staff_bonus_enabled'] ?? false),
+            'staff_bonus_who'           => $campaign['staff_bonus_who'] ?? null,
+            'staff_bonus_rule'          => $campaign['staff_bonus_rule'] ?? null,
+            'staff_bonus_threshold_pct' => $campaign['staff_bonus_threshold_pct'] ?? null,
+            'staff_bonus_amount'        => $campaign['staff_bonus_amount'] ?? null,
+            'staff_bonus_extra_pct'     => $campaign['staff_bonus_extra_pct'] ?? null,
+            'staff_bonus_extra_amount'  => $campaign['staff_bonus_extra_amount'] ?? null,
+            'staff_bonus_cap_amount'    => $campaign['staff_bonus_cap_amount'] ?? null,
+            'staff_bonus_form'          => $campaign['staff_bonus_form'] ?? null,
+            'staff_bonus_paid_on'       => $campaign['staff_bonus_paid_on'] ?? null,
             'challenge_metric'      => $campaign['challenge_metric'],
             'challenge_trigger_pct' => $campaign['challenge_trigger_pct'],
             'challenge_prizes'      => array_map(
@@ -1915,6 +2007,7 @@ final class CampaignRepository
                     'shop_id'               => (int) $row['shop_id'],
                     'target_pieces'         => (int) ($row['target_pieces'] ?? 0),
                     'challenge_trigger_pct' => $row['challenge_trigger_pct'],
+                    'staff_headcount'       => $row['staff_headcount'] !== null ? (int) $row['staff_headcount'] : null,
                 ],
                 $shopTargets->fetchAll()
             ),

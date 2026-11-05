@@ -668,3 +668,64 @@ boutiques ») : référentiel, aller-retour du brouillon, reprise sans doublon,
 suppression en cascade ; 401, 403, 404, 422, pagination, filtres, isolation d'une
 boutique, idempotence, liste vide.
 
+
+## 12. Après la validation : fil de production, kit des franchisés, prime (novembre 2026)
+
+Maquette validée le 05/11/2026. Migration 043, seed 007. Routes nouvelles au
+standard (enveloppe `{success, data, meta}`, camelCase, codes d'erreur du §7.2,
+montants du kit en centimes) ; écart résiduel : préfixe sans segment `{app}`
+pour les routes réseau, comme le reste du module.
+
+- `GET …/campaigns/{id}/production-sections` — le fil de production : une
+  section par élément de la campagne (le message, chaque support coché, les
+  consignes si des questions en caisse, les tenues, la vitrine, la prime), dans
+  l'ordre des familles, avec son état `todo | doing | ready | validated`, son
+  échéance (`dueOn` = début − délai du support) et, pour les bâches (`affichage`)
+  et les affiches, le BAT de chaque boutique avec ses emplacements déclarés.
+  Liste bornée par la campagne (une trentaine de sections au plus) : pas de
+  pagination. 409 `RESOURCE_STATE_INVALID` tant que la campagne est en brouillon.
+- `PUT …/production-sections/{section}` `{status, note}` — réseau seul (403
+  sinon). Une section par boutique ne se valide qu'une fois toutes les boutiques
+  d'accord (409). Idempotent.
+- `PUT …/production-sections/{section}/shops/{shopId}` `{status, note}` — le
+  réseau : `todo | sent | validated | redo` ; le franchisé, pour ses boutiques
+  seulement (404 sinon) : `validated | redo` avec son retour. Un BAT qui repart
+  rouvre la section.
+- `GET …/campaigns/{id}/kit-versions` — versions envoyées, lien et lecture de
+  chaque boutique (un franchisé ne voit que les siennes).
+- `POST …/campaigns/{id}/kit-versions` `{posts: [...]}` — réseau seul ; 409 tant
+  qu'une section reste à valider. Fige une version : un kit par boutique (message,
+  offre, dates de la boutique, calendrier des posts, bâches et affiches,
+  supports, tenues, questions en caisse, prime). Les posts viennent de Social
+  (Créer un post, posts rattachés à `bo-{id}`, hors dark posts), lus par l'écran
+  et validés ici (dates, heures, adresses d'image http(s), 300 au plus). 201.
+- `GET …/campaigns/{id}/kit-previews/{shopId}` — le kit tel qu'il partirait
+  (sans les posts, que l'écran ajoute).
+- `GET /api/v1/public/marketing/campaign-kits/{token}` — **publique** : le kit
+  d'une boutique par son lien personnel, en lecture seule, sur la tablette.
+  Lien de 43 caractères, HMAC du secret de session et d'un sel ; la base n'en
+  garde que l'empreinte (sha256). Stable d'une version à l'autre ; valable
+  jusqu'à 30 jours après la fin de la campagne (60 jours au moins). 404 si
+  inconnu ou expiré.
+- `PUT /api/v1/public/marketing/campaign-kits/{token}/read-receipt` —
+  **publique**, idempotente : la première lecture de la version reste.
+
+Le PDF est l'impression du kit (A4, une page par partie, couverture) : la page
+du lien propose « Télécharger le PDF ». Il n'y a pas de moteur PDF sur le serveur.
+
+Prime de la marque pour le personnel — création et reprise d'un brouillon
+gagnent (ajouts compatibles) : `staff_bonus_enabled`, `staff_bonus_who`
+(`team | named`), `staff_bonus_rule` (`attainment | per_piece | ranking`),
+`staff_bonus_threshold_pct`, `staff_bonus_amount`, `staff_bonus_extra_pct`,
+`staff_bonus_extra_amount`, `staff_bonus_cap_amount` (en euros, comme le budget
+de la campagne), `staff_bonus_form` (`voucher | gift_cheque | franchisee`),
+`staff_bonus_paid_on` ; `shop_targets[].staff_headcount` (l'équipe de vente,
+saisie à la main). Une prime attachée sans montant est refusée (422).
+
+Supports ajoutés (seed 007) : `bons_imprimes` (cartes remises en caisse avec le
+code d'un bon ; la caisse n'applique pas encore les codes du webshop, la carte
+porte un QR vers le webshop) et `goodies` (sacs, stickers, badges).
+
+Tests (« Fil de production et kit des franchisés ») : 200, 401, 403, 404, 409,
+422, isolation d'une boutique, idempotence, lien sans session, empreinte seule
+en base, nouvelle version au même lien, prime enregistrée et refusée.

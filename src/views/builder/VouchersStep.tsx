@@ -173,12 +173,15 @@ export function VouchersStep({
   isBrand,
   state,
   onChanged,
+  printed,
 }: {
   draft: Draft
   campaignId: number | null
   isBrand: boolean
   state: VouchersState
   onChanged: () => void
+  /** Le support « Bons imprimés » : les cartes remises en caisse, avec le code d'un bon. */
+  printed?: { on: boolean; quantity: string; details: string; toggle: () => void; set: (change: { quantity?: string; details?: string }) => void }
 }) {
   const attached = useAttached(campaignId)
   const [panel, setPanel] = useState<'none' | 'create' | 'attach'>('none')
@@ -230,6 +233,30 @@ export function VouchersStep({
         posées à l’étape « Prix » : elles ne s’appliquent alors au webshop qu’avec le code. Créez-le ici, ou
         rattachez un bon qui existe déjà.
       </p>
+
+      {printed ? (
+        <section className={`vouchers__printed${printed.on ? ' is-on' : ''}`}>
+          <button type="button" className={printed.on ? 'switch is-on' : 'switch'} aria-pressed={printed.on} onClick={printed.toggle}>
+            <span className="switch__track" aria-hidden="true" />
+            <span className="switch__label">Imprimer le bon et le remettre en boutique</span>
+            <span className="switch__hint">
+              Une carte remise en caisse, avec le code du bon et un QR qui ouvre le webshop code déjà saisi. Elle devient le support
+              « Bons imprimés » : elle passe dans le fil de production et dans le kit des franchisés.
+            </span>
+          </button>
+          {printed.on ? (
+            <div className="vouchers__printed-row">
+              <label className="field">Cartes au total
+                <input inputMode="numeric" value={printed.quantity} placeholder="2000" onChange={(e) => printed.set({ quantity: e.target.value.replace(/[^\d]/g, '').slice(0, 7) })} />
+              </label>
+              <label className="field vouchers__printed-details">Quand la remettre
+                <input value={printed.details} maxLength={300} placeholder="avec chaque bûche retirée" onChange={(e) => printed.set({ details: e.target.value })} />
+              </label>
+              <p className="vouchers__hint">La caisse n’applique pas encore les codes du webshop : en boutique, le bon se lit par son QR, qui mène au webshop.</p>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       {campaignId === null ? (
         <p className="pending">La campagne s’enregistre à l’étape suivante : ses bons se créent ensuite.</p>

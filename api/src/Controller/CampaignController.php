@@ -83,6 +83,8 @@ final class CampaignController
             'sector_ids', 'agency_ask_ids', 'b2b_option_ids', 'uniform_ids', 'format_ids',
             'retroplanning', 'offer', 'segment_ids', 'messages',
             'challenge_enabled', 'challenge_metric', 'challenge_trigger_pct', 'challenge_prizes',
+            'staff_bonus_enabled', 'staff_bonus_who', 'staff_bonus_rule', 'staff_bonus_threshold_pct', 'staff_bonus_amount',
+            'staff_bonus_extra_pct', 'staff_bonus_extra_amount', 'staff_bonus_cap_amount', 'staff_bonus_form', 'staff_bonus_paid_on',
             'margin_pct_default',
         ]);
 
@@ -148,6 +150,8 @@ final class CampaignController
             'lever_targets', 'sector_ids', 'agency_ask_ids', 'b2b_option_ids',
             'uniform_ids', 'format_ids', 'retroplanning', 'offer', 'segment_ids', 'messages',
             'challenge_enabled', 'challenge_metric', 'challenge_trigger_pct', 'challenge_prizes',
+            'staff_bonus_enabled', 'staff_bonus_who', 'staff_bonus_rule', 'staff_bonus_threshold_pct', 'staff_bonus_amount',
+            'staff_bonus_extra_pct', 'staff_bonus_extra_amount', 'staff_bonus_cap_amount', 'staff_bonus_form', 'staff_bonus_paid_on',
             'margin_pct_default',
         ]);
 
