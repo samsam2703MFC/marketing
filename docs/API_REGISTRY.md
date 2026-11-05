@@ -88,11 +88,10 @@ entière, pour attraper une colonne ajoutée plus tard.
 | GET | `…/campaigns/{id}/brochures` | tenant | tableau `[{format, settings, updated_at}]` — réglages du générateur de brochures, un par format |
 | PUT | `…/campaigns/{id}/brochures/{format}` | tenant (écriture : marque, ou boutique sur sa campagne locale) | `{status, message}` — `format` ∈ `leaflet-a5`, `depliant-a4` ; remplace les réglages du format, idempotent |
 | GET | `…/campaigns/{id}/roi-costs` | marque | tableau |
-| GET | `…/campaigns/{id}/vouchers` | tenant (résultats limités aux boutiques de l'appelant) | objet `{configured, message, can_edit, vouchers, totals, campaign_promotions}` |
-| POST | `…/campaigns/{id}/vouchers` | tenant (écriture : marque, ou boutique sur sa campagne locale) | `{status, message, inserted_id}` — `inserted_id` = le code |
-| PATCH | `…/campaigns/{id}/vouchers/{code}` | même règle d'écriture | `{status, message}` — bon créé pour la campagne seulement |
-| PUT | `…/campaigns/{id}/vouchers/{code}` | même règle ; un franchisé ne rattache que les bons de ses boutiques | `201` rattaché, `200` déjà rattaché (idempotent), `409` suivi par une autre campagne |
-| DELETE | `…/campaigns/{id}/vouchers/{code}` | même règle d'écriture | `{status, message}` — un bon créé ici est suspendu |
+| GET | `…/campaigns/{id}/vouchers` | tenant (résultats limités aux boutiques de l'appelant) | objet `{configured, message, can_edit, vouchers, totals, campaign_promotions}` — anciens bons du webshop, **lecture seule** depuis le 05/11/2026 (§7) ; `can_edit` toujours faux |
+| GET | `…/campaigns/{id}/erp-vouchers` | tenant | enveloppe — `data {campaignId, configured, message, canEdit, vouchers[], lines[]}` — bons de TFBuddy (§13) |
+| POST | `…/campaigns/{id}/erp-vouchers` | tenant (écriture : marque, ou boutique sur sa campagne locale) | enveloppe, `201` — le bon créé dans TFBuddy, relu |
+| PATCH | `…/campaigns/{id}/erp-vouchers/{voucherId}` | même règle d'écriture | enveloppe — `{status: ACTIVE \| INACTIVE}`, idempotent |
 | GET | `…/campaigns/{id}/leads` | tenant | tableau |
 | POST | `…/campaigns/{id}/leads/generate` | tenant | objet |
 | GET | `…/campaign-offers` | tenant | tableau |
@@ -121,8 +120,6 @@ entière, pour attraper une colonne ajoutée plus tard.
 | GET | `…/bundles` | tenant | tableau |
 | GET | `…/vouchers` | tenant | tableau |
 | GET | `…/erp-promotions?family=&page=&perPage=` | tenant (franchisé : réseau + ses boutiques) | enveloppe + `data[]` paginé — §8 |
-| GET | `…/webshop-vouchers?q=` | marque ; franchisé : bons de ses boutiques | objet `{configured, message, vouchers}` (200 au plus) |
-| GET | `…/webshop-offices?q=` | marque | tableau |
 | GET | `…/diffusion` | tenant | objet |
 | GET | `…/agencies` | — | tableau |
 | GET | `…/agencies/{id}/campaigns` | tenant | tableau |
@@ -403,6 +400,15 @@ servi en vue franchisé, où il faudrait filtrer dans le navigateur. L'ouvrir au
 franchisés demande une route de ce module, filtrée par périmètre côté serveur.
 
 ## 7. Les bons de campagne (octobre 2026)
+
+> **Remplacé le 05/11/2026 par le §13** : les bons se créent dans TFBuddy et
+> valent en caisse comme au webshop. Les routes d'écriture décrites ici
+> (`POST`, `PATCH`, `PUT`, `DELETE …/campaigns/{id}/vouchers`,
+> `GET …/webshop-vouchers`, `GET …/webshop-offices`) sont **retirées** ; seule la
+> lecture `GET …/campaigns/{id}/vouchers` reste, pour voir les anciens bons et
+> ce qu'ils ont rapporté. Le texte ci-dessous décrit le moteur tel qu'il a
+> fonctionné. Retrait sans fenêtre de dépréciation : le seul client de ces
+> routes est l'écran du module, livré dans le même déploiement.
 
 Un bon — code que le client tape au webshop — se crée dans l'assistant comme une
 promotion (sous-étape « Bons » de « Offre & promotions »), mais il vit dans le
@@ -723,9 +729,92 @@ de la campagne), `staff_bonus_form` (`voucher | gift_cheque | franchisee`),
 saisie à la main). Une prime attachée sans montant est refusée (422).
 
 Supports ajoutés (seed 007) : `bons_imprimes` (cartes remises en caisse avec le
-code d'un bon ; la caisse n'applique pas encore les codes du webshop, la carte
-porte un QR vers le webshop) et `goodies` (sacs, stickers, badges).
+code d'un bon ; depuis le §13, ce bon vit dans TFBuddy et vaut en caisse comme
+au webshop) et `goodies` (sacs, stickers, badges).
 
 Tests (« Fil de production et kit des franchisés ») : 200, 401, 403, 404, 409,
 422, isolation d'une boutique, idempotence, lien sans session, empreinte seule
 en base, nouvelle version au même lien, prime enregistrée et refusée.
+
+## 13. Les bons dans TFBuddy (novembre 2026)
+
+Décision du 05/11/2026 : « le webshop doit venir de TFBuddy ». Le webshop
+applique les bons de TFBuddy (même moteur que la caisse) : un bon créé ici vaut
+**en caisse et au webshop**. La remise vient de l'étape « Prix » ; les anciens
+bons du webshop restent visibles en lecture (§7).
+
+**Ce qu'est un bon.** Une campagne de bons de l'ERP
+(`/api/v1/admin/voucher-campaigns` : un code pour tous `SHARED`, ou des codes
+uniques `UNIQUE`) rattachée à **une** promotion de l'ERP en mode
+`VOUCHER_ONLY` — elle ne vaut qu'avec le code. La promotion est faite d'une ligne
+de l'étape Prix (`mar_campaign_offer_item`) :
+
+| Mécanique de la ligne | Promotion de l'ERP |
+|---|---|
+| `PERCENT` | `scheduled-product-discount`, `PERCENTAGE_DISCOUNT` |
+| `CROSSED_PRICE` | `scheduled-product-discount`, `FIXED_PRICE` |
+| `BUY_X_GET_Y` | `buy-x-get-y`, récompense `FREE`, la moins chère |
+| `BUNDLE_FIXED`, `FREE_DELIVERY`, produit sans référence ERP, valeur non saisie | refusée (`422`, raison nommée) |
+
+Périmètre de la promotion : les boutiques de la campagne (`SELECTED_SHOPS`,
+`mar_shop.erp_shop_id`), ou tout le réseau (`ALL_SHOPS`). Plafond par ticket de
+l'offre repris. Fin : celle saisie, sinon celle de l'offre, sinon celle de la
+campagne.
+
+**Séquence d'écriture** (celle du cockpit, essayée sur l'ERP le 24/10/2026) :
+1. `POST /admin/promotions/{famille}` — `status: INACTIVE`, `activation_mode: VOUCHER_ONLY` ;
+2. `POST /admin/voucher-campaigns` — `status: DRAFT`, code commun ou limite d'une utilisation par code ;
+3. codes uniques : `POST …/{id}/codes/generate` par lots de 100 (`length: 8`, préfixe saisi, ou trois lettres de chaque boutique) ;
+4. `PUT …/{id}/promotion` `{id_promotion, confirm_activation_mode_change: true}` (`409` = déjà rattachée) ;
+5. activation, seulement si elle est demandée : `PATCH` de la promotion puis de la campagne de bons
+   (`PATCH …/{id}/status` ; l'ERP le refuse pour un bon `UNIQUE` : repli sur `PATCH …/{id}`).
+   Suspension : le même chemin avec `INACTIVE`.
+
+L'ERP n'a pas de transaction : si une étape échoue, le message dit ce qui reste
+dans l'ERP (« la promotion n° … reste inactive », « le bon n° … reste en
+brouillon ») et le module ne garde rien. Rien ne passe en caisse avant
+l'activation, qui reste un geste explicite (confirmation à l'écran).
+
+**Stockage.** Migration 044 : `mar_campaign_erp_voucher` — le lien entre la
+campagne et le bon de l'ERP (l'ERP n'a pas de champ pour la campagne), et de quoi
+le retrouver (`erp_voucher_campaign_id` unique, `erp_promotion_id`, famille, type
+de code, code commun, codes demandés). L'état, les codes et les utilisations sont
+**relus dans l'ERP** à chaque lecture (`GET …/{id}` et `…/{id}/codes`, 200 par
+page) ; un bon illisible est dit (`readError`), jamais tu.
+
+**Contrat** (au standard, comme les routes nouvelles) :
+- `GET …/campaigns/{id}/erp-vouchers` → `data {campaignId, configured, message,
+  canEdit, vouchers[], lines[]}`. Un bon : `id, name, offerItemId,
+  erpVoucherCampaignId, erpPromotionId, promotionFamily, codeType, sharedCode,
+  codesRequested, createdAt, status (DRAFT | ACTIVE | INACTIVE), validTo,
+  redemptions, complete, missing[], codes[] {code, status, usages, limit},
+  codesTotal, readError`. Une ligne : `offerItemId, label, mechanic,
+  mechanicLabel, summary, eligible, reason`. Collections bornées par la
+  campagne (quelques bons, lignes de l'offre) : pas de pagination.
+- `POST …/campaigns/{id}/erp-vouchers` — champs en liste blanche :
+  `offerItemId` (requis), `codeType` (`SHARED | UNIQUE`), `sharedCode` (4 à 20
+  `A-Z 0-9 -`, tiré au hasard si vide), `usageLimitTotal`, `count` (1 à 2000,
+  `UNIQUE`), `perShop`, `prefix` (8 au plus), `validFrom`, `validTo`
+  (AAAA-MM-JJ), `usageLimitPerCustomer`, `activate`. `201` avec le bon relu ;
+  une activation refusée après création répond `201` avec `warning`.
+- `PATCH …/campaigns/{id}/erp-vouchers/{voucherId}` `{status}` — idempotent.
+- Erreurs : `401` ; `403 PERM_ROLE_REQUIRED` (franchisé sur une campagne
+  réseau) ; `404 RESOURCE_NOT_FOUND` (campagne invisible pour l'appelant, bon
+  d'une autre campagne) ; `422 VALIDATION_FAILED` (champ nommé, ou refus de
+  l'ERP avec sa raison) ; `502/503 DEPENDENCY_UNAVAILABLE` (ERP qui refuse le
+  compte, ou `MAR_ERP_API_BASE` vide).
+- Accès à l'ERP : celui du §8 (`MAR_ERP_API_TOKEN`, ou le compte de service) ; il
+  doit pouvoir **écrire** les promotions et les campagnes de bons.
+
+**Écarts résiduels.** Préfixe sans segment `{app}` (§3.2). `POST` sans clé
+d'idempotence : deux envois créent deux bons dans l'ERP — l'écran bloque le
+bouton pendant l'écriture. Pas d'OpenAPI du module (l'écart du §3 vaut ici).
+
+Tests (« Bons dans TFBuddy », ERP simulé aux formes de son swagger et de la fiche
+relue par le cockpit — aucun compte de test TFBuddy) : 401, 200, lignes
+éligibles et raisons, 422 (champ inconnu, codes sans nombre, code illisible, fin
+avant début, prix de formule, produit hors ERP), 404, ordre et corps des appels,
+codes par lots (100 + 100 + 50), activation et repli `UNIQUE`, suspension
+idempotente, refus de l'ERP sans trace, 403 franchisé, isolation d'une boutique,
+ERP non configuré (503). Le premier vrai bon se crée en production, par un geste
+de la personne qui pilote la campagne.

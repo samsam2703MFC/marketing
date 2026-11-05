@@ -4369,6 +4369,42 @@ table.vouchers--list th:nth-child(7) { width: 9%; }
   table.vouchers { table-layout: auto; min-width: 640px; }
 }
 
+/* Bons dans TFBuddy (05/11/2026) : la liste, les codes uniques et le formulaire de création. */
+.erpv { margin-top: 22px; }
+table.erpv__table th:first-child { width: 26%; }
+table.erpv__table th:nth-child(2) { width: 15%; }
+table.erpv__table th:nth-child(3) { width: 19%; }
+table.erpv__table th:nth-child(4) { width: 13%; }
+table.erpv__table th:nth-child(5) { width: 12%; }
+.erpv__notice { margin: 8px 0 0; padding: 8px 12px; border-radius: 10px; font-size: 12.5px; line-height: 1.45; background: rgba(63, 122, 82, .1); color: var(--green); }
+.erpv__st { display: inline-flex; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: normal; line-height: 1.35; }
+.erpv__st--ok { background: rgba(63, 122, 82, .12); color: var(--green); }
+.erpv__st--no { background: var(--chip); color: var(--muted-2); }
+.erpv__st--wa { background: var(--prize-soft); color: var(--prize-ink); }
+.erpv__codes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; max-height: 220px; overflow: auto; }
+.erpv__codes span { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 600; letter-spacing: .03em; padding: 3px 8px; border-radius: 6px; background: var(--chip); color: var(--ink); }
+.erpv__codes span.is-used { background: rgba(63, 122, 82, .12); color: var(--green); }
+.erpv__codes span.is-off { color: var(--faint); text-decoration: line-through; }
+.erpv__codes span.muted { font-family: inherit; font-weight: 400; background: none; color: var(--muted); }
+.erpv__form { display: grid; gap: 10px; border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px 20px; margin-top: 16px; background: #fffdfa; }
+.erpv__form h4 { margin: 0; font-size: 15px; }
+.erpv__k { margin-top: 6px; font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.erpv__lines { display: grid; gap: 8px; }
+.erpv__line { margin: 0; display: grid; gap: 2px; text-align: left; font: inherit; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fff; cursor: pointer; color: var(--ink); }
+.erpv__line b { font-size: 13px; }
+.erpv__line span { font-size: 12px; color: var(--muted-2); }
+.erpv__line small { font-size: 11.5px; color: var(--prize-ink); }
+.erpv__line.is-on { border: 2px solid var(--accent); padding: 9px 11px; background: rgba(141, 29, 44, .04); }
+.erpv__line:disabled { cursor: default; background: #faf8f5; }
+.erpv__line:disabled b, .erpv__line:disabled span { color: var(--muted); }
+.erpv__row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; }
+.erpv__row .field input { min-width: 0; width: 170px; }
+.erpv__check { display: inline-flex; gap: 7px; align-items: center; font-size: 13px; color: var(--ink); }
+.erpv__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+@media (max-width: 720px) {
+  .erpv__row .field, .erpv__row .field input { width: 100%; }
+}
+
 /* ==========================================================================
    Générateur de brochures (Campagnes › Brochures & leaflets)
    Les pages elles-mêmes sont dans src/views/brochure/brochure.css (en mm).

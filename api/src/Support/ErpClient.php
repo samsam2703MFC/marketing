@@ -172,6 +172,42 @@ final class ErpClient
     }
 
     /**
+     * Une écriture JSON (POST, PUT, PATCH, DELETE). Le statut et le corps décodé
+     * sont rendus tels quels : c'est l'appelant qui sait ce qu'un 409 ou un 422
+     * de l'ERP veut dire pour lui. Seuls l'absence de droit (401, 403 après une
+     * nouvelle connexion) et un corps illisible lèvent une erreur.
+     *
+     * @param  array<string,mixed>|null $body
+     * @return array{status:int, body:array<mixed>}
+     */
+    public function write(string $method, string $path, ?array $body = null): array
+    {
+        $url     = $this->url($path, []);
+        $payload = $body === null ? null : (string) json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        [$status, $raw] = $this->send($url, $method, $payload);
+        if ($status === 401 && self::usesLogin()) {
+            self::$sessionToken = null;
+            [$status, $raw] = $this->send($url, $method, $payload);
+        }
+        if ($status === 401 || $status === 403) {
+            $raison = json_decode($raw, true);
+            $raison = is_array($raison) ? ($raison['description'] ?? $raison['message'] ?? null) : null;
+            throw new RuntimeException(sprintf(
+                'L\'ERP refuse l\'écriture (HTTP %d) : le compte de service n\'a pas ce droit%s.',
+                $status,
+                is_string($raison) && $raison !== '' ? ' — ' . mb_substr($raison, 0, 160) : ''
+            ));
+        }
+        $decoded = $raw === '' ? [] : json_decode($raw, true);
+        if (!is_array($decoded)) {
+            throw new RuntimeException(sprintf('Réponse illisible de l\'ERP sur %s %s (HTTP %d).', $method, $path, $status));
+        }
+
+        return ['status' => $status, 'body' => $decoded];
+    }
+
+    /**
      * Connexion d'une personne à l'ERP, pour ouvrir sa session dans ce module :
      * le réalm `admin`, celui des comptes du réseau. Le jeton rendu n'est pas
      * gardé. Le statut est rendu tel quel — c'est l'appelant qui sait ce qu'un
@@ -259,7 +295,7 @@ final class ErpClient
     }
 
     /** @return array{0:int, 1:string} */
-    private function send(string $url): array
+    private function send(string $url, string $method = 'GET', ?string $payload = null): array
     {
         $token = $this->token();
 
@@ -273,8 +309,11 @@ final class ErpClient
         if ($token !== null && $token !== '') {
             $headers[] = 'Authorization: Bearer ' . $token;
         }
+        if ($payload !== null) {
+            $headers[] = 'Content-Type: application/json';
+        }
 
-        return $this->transmit($url, $headers);
+        return $this->transmit($url, $headers, $method, $payload);
     }
 
     /**
