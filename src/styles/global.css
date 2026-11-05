@@ -3854,8 +3854,6 @@ table select,
 
 /* Le champ de fichier natif affiche « Aucun fichier sélectionné » en anglais
    selon le poste : on l'habille d'un bouton et on le masque. */
-.photos__envoi { position: relative; overflow: hidden; cursor: pointer; }
-.photos__envoi input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 
 /* Une gamme n'est pas un produit : pas de case, pas de dépôt, rien à décider.
    Le bloc se distingue donc de la liste des produits — fond neutre et
