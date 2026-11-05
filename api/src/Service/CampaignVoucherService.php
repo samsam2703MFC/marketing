@@ -12,7 +12,10 @@ use Marketing\Support\WebshopClient;
 use Throwable;
 
 /**
- * Les bons d'une campagne.
+ * Les bons d'une campagne dans l'ancien moteur du webshop — en LECTURE seule
+ * depuis le 05/11/2026 : les bons se créent dans TFBuddy (ErpVoucherService) et
+ * valent en caisse comme au webshop. Ceux d'avant restent visibles ici, avec ce
+ * qu'ils ont rapporté. Ce qui suit décrit le moteur tel qu'il a fonctionné.
  *
  * Un bon se crée comme une promotion — une mécanique, ce qu'elle touche, quand
  * elle vaut — mais il vit dans le moteur de bons du webshop : c'est lui qui
@@ -35,8 +38,6 @@ use Throwable;
  */
 final class CampaignVoucherService
 {
-    private const MECHANICS = ['percent', 'fixed', 'product', 'free_delivery', 'promotions'];
-
     /** Les mécaniques de l'étape Prix que le panier du webshop sait appliquer. */
     private const WEBSHOP_PROMOTIONS = ['PERCENT', 'CROSSED_PRICE', 'BUY_X_GET_Y'];
 
@@ -54,12 +55,12 @@ final class CampaignVoucherService
      */
     public function forCampaign(AuthContext $auth, int $campaignId): array
     {
-        $campaign = $this->campaign($auth, $campaignId, false);
+        $campaign = $this->campaign($auth, $campaignId);
         $lines    = $this->refs->campaignPromotions($campaignId);
         $out      = [
             'configured' => $this->webshop->isConfigured(),
             'message'    => null,
-            'can_edit'   => $this->writable($auth, $campaign),
+            'can_edit' => false,
             'vouchers'   => [],
             'totals'     => null,
             // Ce qu'un bon « promotions » peut déclencher : l'étape Prix telle
@@ -130,427 +131,17 @@ final class CampaignVoucherService
         return $out;
     }
 
-    /**
-     * Crée un bon dans le webshop, suivi par la campagne dès sa création.
-     *
-     * @param  array<string,mixed> $input
-     * @return array{code:string}
-     */
-    public function create(AuthContext $auth, int $campaignId, array $input): array
-    {
-        $campaign = $this->campaign($auth, $campaignId, true);
-        $this->assertConfigured();
-
-        $code    = $this->normalizedCode($input['code'] ?? '', true);
-        $payload = $this->fields($auth, $campaign, $input, null) + [
-            'code'        => $code,
-            'create_only' => true,
-            'active'      => true,
-            'id_shop'     => $this->issuerShop($campaign),
-            'campaign_id' => $campaignId,
-        ] + $this->provenance($campaign);
-
-        [$status, $body] = $this->webshop->post('/franchisor/voucher', $payload);
-        if ($status === 409) {
-            throw new VoucherError(sprintf(
-                'Le code %s existe déjà dans le webshop : choisissez-en un autre, ou rattachez ce bon existant.',
-                $code
-            ), 409);
-        }
-        if ($status >= 400 || !is_string($body['code'] ?? null)) {
-            throw new VoucherError('Le webshop refuse le bon : ' . (string) ($body['error'] ?? 'motif non précisé') . '.', 422);
-        }
-
-        return ['code' => (string) $body['code']];
-    }
-
-    /**
-     * Modifie un bon CRÉÉ pour la campagne. Ce qui n'est pas envoyé garde sa
-     * valeur du webshop — jamais une valeur par défaut.
-     *
-     * @param array<string,mixed> $input
-     */
-    public function update(AuthContext $auth, int $campaignId, string $code, array $input): void
-    {
-        $campaign = $this->campaign($auth, $campaignId, true);
-        $current  = $this->followed($campaignId, $this->normalizedCode($code, false));
-
-        if (($current['marCampaignOrigin'] ?? null) !== 'created') {
-            throw new VoucherError('Un bon rattaché se modifie là où il a été créé : la campagne ne fait que le suivre.', 422);
-        }
-
-        $payload = $this->fields($auth, $campaign, $input, $current) + [
-            'code'    => (string) $current['code'],
-            'active'  => (bool) ($current['active'] ?? true),
-            'id_shop' => $current['shopId'] ?? null,
-        ] + $this->provenance($campaign);
-
-        [$status, $body] = $this->webshop->post('/franchisor/voucher', $payload);
-        if ($status >= 400) {
-            throw new VoucherError('Le webshop refuse la modification : ' . (string) ($body['error'] ?? 'motif non précisé') . '.', 422);
-        }
-    }
-
-    /**
-     * Rattache un bon existant. Idempotent : le rattacher deux fois à la même
-     * campagne ne fait rien la seconde fois.
-     *
-     * @return array{created:bool}
-     */
-    public function attach(AuthContext $auth, int $campaignId, string $code): array
-    {
-        $this->campaign($auth, $campaignId, true);
-        $code = $this->normalizedCode($code, false);
-        $this->assertConfigured();
-
-        $row = $this->webshop->get('/franchisor/voucher-codes', ['codes' => $code])[0] ?? null;
-        if (!is_array($row)) {
-            throw new VoucherError('Ce bon n\'existe pas dans le webshop.', 404);
-        }
-
-        // Un franchisé ne rattache que les bons de ses boutiques : ni ceux de la
-        // marque, ni ceux d'une autre boutique.
-        if (!$auth->isBrandAdmin()) {
-            $mine = $this->refs->erpShopIds(Scope::shopIds($auth) ?? []);
-            if (!isset($row['shopId']) || !in_array((int) $row['shopId'], $mine, true)) {
-                throw new VoucherError('Ce bon n\'a pas été émis par votre boutique.', 403);
-            }
-        }
-
-        [$status, $body] = $this->webshop->post('/franchisor/voucher-campaign', ['code' => $code, 'campaign_id' => $campaignId]);
-        if ($status === 409) {
-            $other = (int) ($body['campaignId'] ?? 0);
-            $name  = $auth->isBrandAdmin() ? ($this->refs->campaignNames([$other])[$other] ?? null) : null;
-            throw new VoucherError($name !== null
-                ? sprintf('Ce bon est déjà suivi par la campagne « %s ».', $name)
-                : 'Ce bon est déjà suivi par une autre campagne.', 409);
-        }
-        if ($status >= 400) {
-            throw new VoucherError('Le webshop refuse le rattachement : ' . (string) ($body['error'] ?? 'motif non précisé') . '.', 422);
-        }
-
-        return ['created' => (bool) ($body['created'] ?? true)];
-    }
-
-    /**
-     * Retire un bon de la campagne. Un bon créé pour elle est SUSPENDU dans le
-     * webshop (il cesse de valoir, ses commandes passées le citent toujours) ;
-     * un bon rattaché reste tel quel.
-     */
-    public function detach(AuthContext $auth, int $campaignId, string $code): void
-    {
-        $this->campaign($auth, $campaignId, true);
-        $current = $this->followed($campaignId, $this->normalizedCode($code, false));
-        $code    = (string) $current['code'];
-
-        if (($current['marCampaignOrigin'] ?? null) === 'created') {
-            [$status, $body] = $this->webshop->post('/franchisor/voucher-active', ['code' => $code, 'active' => false]);
-            if ($status >= 400) {
-                throw new VoucherError('Le webshop refuse de suspendre le bon : ' . (string) ($body['error'] ?? 'motif non précisé') . '.', 422);
-            }
-        }
-
-        [$status, $body] = $this->webshop->post('/franchisor/voucher-campaign', [
-            'code' => $code, 'campaign_id' => null, 'from_campaign' => $campaignId,
-        ]);
-        if ($status >= 400) {
-            throw new VoucherError('Le webshop refuse de détacher le bon : ' . (string) ($body['error'] ?? 'motif non précisé') . '.', $status === 409 ? 409 : 422);
-        }
-    }
-
-    /**
-     * Les bons du webshop qu'on peut rattacher, avec la campagne qui les suit.
-     *
-     * @return array<string,mixed>
-     */
-    public function available(AuthContext $auth, string $query): array
-    {
-        if (!$this->webshop->isConfigured()) {
-            return ['configured' => false, 'message' => WebshopClient::missingConfiguration(), 'vouchers' => []];
-        }
-
-        $params = ['q' => trim($query)];
-        if (!$auth->isBrandAdmin()) {
-            $mine = $this->refs->erpShopIds(Scope::shopIds($auth) ?? []);
-            if ($mine === []) {
-                return ['configured' => true, 'message' => null, 'vouchers' => []];
-            }
-            $params['shops'] = implode(',', $mine);
-        }
-
-        $rows  = array_values(array_filter($this->webshop->get('/franchisor/voucher-codes', $params), 'is_array'));
-        $names = $this->refs->campaignNames(array_map(
-            static fn (array $row): int => (int) ($row['marCampaignId'] ?? 0),
-            $rows
-        ));
-
-        return [
-            'configured' => true,
-            'message'    => null,
-            'vouchers'   => array_map(fn (array $row): array => ['code' => (string) $row['code']] + $this->describe($row) + [
-                'campaign_id'   => isset($row['marCampaignId']) ? (int) $row['marCampaignId'] : null,
-                'campaign_name' => isset($row['marCampaignId']) ? ($names[(int) $row['marCampaignId']] ?? null) : null,
-            ], $rows),
-        ];
-    }
-
-    /**
-     * Bureaux du webshop, pour un bon qui leur est réservé. Réservé à la marque :
-     * la liste couvre les clients B2B de tout le réseau.
-     *
-     * @return list<array{id:int, name:string, city:?string}>
-     */
-    public function offices(AuthContext $auth, string $query): array
-    {
-        if (!$auth->isBrandAdmin()) {
-            throw new VoucherError('La liste des bureaux du réseau est réservée à la marque.', 403);
-        }
-        $this->assertConfigured();
-
-        return array_values(array_map(static fn (array $row): array => [
-            'id'   => (int) $row['id'],
-            'name' => (string) $row['name'],
-            'city' => isset($row['city']) ? (string) $row['city'] : null,
-        ], array_filter($this->webshop->get('/franchisor/offices', ['q' => trim($query)]), 'is_array')));
-    }
-
     // ─────────────────────────────────────────────────────────────────────────
 
     /** @return array<string,mixed> */
-    private function campaign(AuthContext $auth, int $id, bool $write): array
+    private function campaign(AuthContext $auth, int $id): array
     {
         $campaign = $this->campaigns->find($auth, $id);
         if ($campaign === null) {
             throw new VoucherError('Campagne introuvable.', 404);
         }
-        if ($write && !$this->writable($auth, $campaign)) {
-            throw new VoucherError('Les bons d\'une campagne réseau se gèrent au niveau du réseau.', 403);
-        }
 
         return $campaign;
-    }
-
-    /** @param array<string,mixed> $campaign */
-    private function writable(AuthContext $auth, array $campaign): bool
-    {
-        return $auth->isBrandAdmin() || ($campaign['scope'] ?? null) === 'LOCALE';
-    }
-
-    private function assertConfigured(): void
-    {
-        if (!$this->webshop->isConfigured()) {
-            throw new VoucherError(WebshopClient::missingConfiguration(), 503);
-        }
-    }
-
-    /**
-     * Le bon tel que le webshop le sert, s'il est bien suivi par CETTE campagne.
-     *
-     * @return array<string,mixed>
-     */
-    private function followed(int $campaignId, string $code): array
-    {
-        $this->assertConfigured();
-        $row = $this->webshop->get('/franchisor/voucher-codes', ['codes' => $code])[0] ?? null;
-        if (!is_array($row) || (int) ($row['marCampaignId'] ?? 0) !== $campaignId) {
-            throw new VoucherError('Ce bon n\'est pas suivi par cette campagne.', 404);
-        }
-
-        return $row;
-    }
-
-    /** Code saisi : majuscules, chiffres et tirets. Vide permis à la création (le webshop le génère). */
-    private function normalizedCode(mixed $value, bool $emptyAllowed): string
-    {
-        $code = strtoupper(trim((string) $value));
-        if ($code === '' && $emptyAllowed) {
-            return '';
-        }
-        if (preg_match('/^[A-Z0-9][A-Z0-9-]{2,29}$/', $code) !== 1) {
-            throw new VoucherError('Code attendu : 3 à 30 caractères, lettres, chiffres et tirets.', 422);
-        }
-
-        return $code;
-    }
-
-    /**
-     * Émetteur : la marque pour une campagne réseau, LA boutique d'une campagne
-     * locale — son bon ne vaut que chez elle, comme un bon du BO franchisé.
-     *
-     * @param array<string,mixed> $campaign
-     */
-    private function issuerShop(array $campaign): ?int
-    {
-        if (($campaign['scope'] ?? null) !== 'LOCALE') {
-            return null;
-        }
-
-        $shops = $this->refs->campaignShopIds((int) $campaign['id']);
-        if (count($shops) !== 1) {
-            throw new VoucherError(
-                'Un bon de boutique ne vaut que dans une boutique : cette campagne locale en compte '
-                . count($shops) . '. Créez le bon depuis une campagne d\'une seule boutique.',
-                422
-            );
-        }
-
-        $erp = $this->refs->erpShopIds($shops);
-        if ($erp === []) {
-            throw new VoucherError('La boutique de cette campagne n\'est pas rapprochée de l\'ERP (reprise ERP à relancer) : le webshop ne la connaîtrait pas.', 422);
-        }
-
-        return $erp[0];
-    }
-
-    /**
-     * @param  array<string,mixed> $campaign
-     * @return array<string,mixed>
-     */
-    private function provenance(array $campaign): array
-    {
-        return [
-            'source'      => 'marketing',
-            'reason_kind' => 'MARKETING',
-            'reason_note' => mb_substr(sprintf('Campagne #%d — %s', (int) $campaign['id'], (string) ($campaign['name'] ?? '')), 0, 255),
-        ];
-    }
-
-    /**
-     * La définition du bon, au vocabulaire du webshop. À la modification, ce
-     * que l'appelant n'envoie pas reprend la valeur actuelle du bon.
-     *
-     * @param  array<string,mixed>      $campaign
-     * @param  array<string,mixed>      $input
-     * @param  array<string,mixed>|null $current Le bon tel que le webshop le sert.
-     * @return array<string,mixed>
-     */
-    private function fields(AuthContext $auth, array $campaign, array $input, ?array $current): array
-    {
-        $has = static fn (string $key): bool => array_key_exists($key, $input);
-
-        $mechanic = $has('mechanic') ? (string) $input['mechanic'] : ($current !== null ? self::mechanicOf($current) : '');
-        if (!in_array($mechanic, self::MECHANICS, true)) {
-            throw new VoucherError('Mécanique attendue : pourcentage, montant, produit offert, livraison offerte ou promotions de la campagne.');
-        }
-
-        // Promotions de l'étape Prix : relues en base au moment d'écrire — ce
-        // qui part au webshop est ce que la campagne porte, pas ce que l'écran
-        // en a gardé. Sans liste envoyée, une modification reprend celles que
-        // le bon déclenche déjà, aux valeurs du moment.
-        $promotions = null;
-        if ($mechanic === 'promotions') {
-            $lines  = $this->refs->campaignPromotions((int) $campaign['id']);
-            $chosen = $has('promotions')
-                ? $input['promotions']
-                : ($current !== null ? self::chosenOf($current, $lines) : []);
-            $promotions = self::promotionsPayload($chosen, $lines);
-        }
-
-        // Le produit visé : une référence du catalogue, traduite en produit ERP.
-        $productId = isset($current['scopeProductId']) ? (int) $current['scopeProductId'] : null;
-        $maxQty    = isset($current['scopeMaxQty']) ? (int) $current['scopeMaxQty'] : null;
-        if ($has('offer_item_id')) {
-            $item = $input['offer_item_id'];
-            if ($item === null || $item === '' || $item === 0) {
-                $productId = null;
-            } else {
-                $product = $this->refs->erpProduct((int) $item);
-                if ($product === null) {
-                    throw new VoucherError('Ce produit ne vient pas du catalogue de l\'ERP : le panier du webshop ne le reconnaîtrait pas.');
-                }
-                $productId = $product['erp_product_id'];
-            }
-        }
-        if ($has('max_qty')) {
-            $maxQty = self::optionalInt($input['max_qty'], 'Le plafond de pièces', 1, 99);
-        }
-        if ($mechanic === 'product') {
-            if ($productId === null) {
-                throw new VoucherError('Produit offert : choisissez le produit.');
-            }
-            $maxQty ??= 1;
-        }
-        if ($mechanic === 'free_delivery' || $mechanic === 'promotions') {
-            $productId = null;
-        }
-        if ($productId === null) {
-            $maxQty = null;
-        }
-
-        $value = null;
-        if ($mechanic === 'product') {
-            $value = 100.0;
-        } elseif ($mechanic !== 'free_delivery' && $mechanic !== 'promotions') {
-            $value = $has('value')
-                ? self::optionalNumber($input['value'])
-                : ($current !== null && self::mechanicOf($current) === $mechanic && isset($current['value']) ? (float) $current['value'] : null);
-            if ($mechanic === 'percent' && ($value === null || $value <= 0 || $value > 100)) {
-                throw new VoucherError('Une remise en pourcentage va de 1 à 100 %.');
-            }
-            if ($mechanic === 'fixed' && ($value === null || $value <= 0 || $value > 10000)) {
-                throw new VoucherError('Une remise en euros doit être un montant positif.');
-            }
-        }
-
-        $minOrder = $has('min_order') ? (self::optionalNumber($input['min_order']) ?? 0.0) : (float) ($current['minOrder'] ?? 0);
-        if ($minOrder < 0 || $minOrder > 100000) {
-            throw new VoucherError('La commande minimum doit être un montant positif.');
-        }
-
-        $starts = $has('starts_on')
-            ? self::optionalDate($input['starts_on'], 'La date de début')
-            : ($current !== null ? self::dayOf($current['startsAt'] ?? null) : self::dayOf($campaign['starts_on'] ?? null));
-        $ends = $has('ends_on')
-            ? self::optionalDate($input['ends_on'], 'La date de fin')
-            : ($current !== null ? self::dayOf($current['expiresAt'] ?? null) : self::dayOf($campaign['ends_on'] ?? null));
-        if ($starts !== null && $ends !== null && $ends < $starts) {
-            throw new VoucherError('La date de fin précède la date de début.');
-        }
-
-        $usage = $has('usage_total')
-            ? self::optionalInt($input['usage_total'], 'Le nombre d\'utilisations', 1, 1000000)
-            : (isset($current['usageLimit']) ? (int) $current['usageLimit'] : null);
-        $perCustomer = $has('per_customer')
-            ? self::optionalInt($input['per_customer'], 'La limite par client', 1, 1000)
-            : (isset($current['perCustomer']) ? (int) $current['perCustomer'] : null);
-
-        $targetKind = $has('target_kind') ? strtoupper((string) $input['target_kind']) : (string) ($current['targetKind'] ?? 'NETWORK');
-        $targetId   = $has('target_id')
-            ? (($input['target_id'] === null || $input['target_id'] === '') ? null : (int) $input['target_id'])
-            : (isset($current['targetId']) ? (int) $current['targetId'] : null);
-        if (!in_array($targetKind, ['NETWORK', 'OFFICE'], true) && ($current === null || $has('target_kind'))) {
-            throw new VoucherError('Pour qui : tout le monde, ou un bureau.');
-        }
-        if ($targetKind === 'OFFICE') {
-            if (!$auth->isBrandAdmin() && ($current === null || $has('target_kind') || $has('target_id'))) {
-                throw new VoucherError('Un bon réservé à un bureau se crée au niveau du réseau.', 403);
-            }
-            if ($targetId === null || $targetId <= 0) {
-                throw new VoucherError('Choisissez le bureau à qui le bon est réservé.');
-            }
-        }
-        if ($targetKind === 'NETWORK') {
-            $targetId = null;
-        }
-
-        $promos = $promotions === null ? [] : [
-            'promos'     => $promotions['promos'],
-            'cumulative' => $promotions['cumulative'],
-        ];
-
-        return $promos + [
-            'type'             => $mechanic === 'product' ? 'percent' : ($mechanic === 'promotions' ? 'promos' : $mechanic),
-            'value'            => $value,
-            'min_order'        => $minOrder,
-            'max_uses'         => $usage ?? '',
-            'per_customer'     => $perCustomer,
-            'starts_at'        => $starts ?? '',
-            'expires_at'       => $ends !== null ? $ends . ' 23:59:59' : null,
-            'scope_product_id' => $productId,
-            'scope_max_qty'    => $maxQty,
-            'target_kind'      => $targetKind,
-            'target_id'        => $targetId,
-        ];
     }
 
     /**

@@ -50,7 +50,7 @@ final class WebshopClient
     public static function missingConfiguration(): string
     {
         return 'La connexion au webshop n\'est pas configurée sur ce serveur '
-            . '(MAR_WEBSHOP_API_BASE et MAR_WEBSHOP_API_TOKEN) : les bons ne peuvent être ni lus ni créés.';
+            . '(MAR_WEBSHOP_API_BASE et MAR_WEBSHOP_API_TOKEN) : les anciens bons du webshop ne peuvent pas être relus.';
     }
 
     /**

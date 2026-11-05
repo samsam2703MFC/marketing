@@ -3721,14 +3721,11 @@ AuthContext::clear();
 check('bons : sans contexte, refusé', call($router, 'GET', '/api/v1/marketing/campaigns/10/vouchers')['status'] === 401);
 
 // Sans connexion au webshop configurée (le cas du routeur réel ici) : l'écran
-// le dit, la création est refusée en 503 — jamais une liste vide qui ferait
-// croire qu'il n'y a pas de bon.
+// le dit — jamais une liste vide qui ferait croire qu'il n'y a pas de bon.
 AuthContext::set(1, 'BRAND_ADMIN', 1);
 $response = call($router, 'GET', '/api/v1/marketing/campaigns/10/vouchers');
 check('bons : sans connexion, la lecture le dit', $response['status'] === 200
     && ($response['body']['configured'] ?? null) === false && is_string($response['body']['message'] ?? null));
-check('bons : sans connexion, la création est refusée (503)',
-    call($router, 'POST', '/api/v1/marketing/campaigns/10/vouchers', [], ['mechanic' => 'percent', 'value' => 10])['status'] === 503);
 
 $pdo->exec('UPDATE mar_shop SET erp_shop_id = 900 + id');
 // Identifiant attribué par la base : les tests précédents créent déjà des
@@ -3859,125 +3856,41 @@ $vc = new \Marketing\Controller\CampaignVoucherController(new \Marketing\Service
     new \Marketing\Support\WebshopClient($fake)
 ));
 $vouchersRouter->get('/api/v1/marketing/campaigns/{id}/vouchers', [$vc, 'index']);
-$vouchersRouter->post('/api/v1/marketing/campaigns/{id}/vouchers', [$vc, 'store']);
-$vouchersRouter->patch('/api/v1/marketing/campaigns/{id}/vouchers/{code}', [$vc, 'update']);
-$vouchersRouter->put('/api/v1/marketing/campaigns/{id}/vouchers/{code}', [$vc, 'attach']);
-$vouchersRouter->delete('/api/v1/marketing/campaigns/{id}/vouchers/{code}', [$vc, 'destroy']);
-$vouchersRouter->get('/api/v1/marketing/webshop-vouchers', [$vc, 'available']);
-$vouchersRouter->get('/api/v1/marketing/webshop-offices', [$vc, 'offices']);
 $V = '/api/v1/marketing/campaigns/';
 
-// Création, par la marque, sur une campagne réseau.
-$response = call($vouchersRouter, 'POST', $V . '10/vouchers', [], ['mechanic' => 'percent', 'value' => '10', 'min_order' => '25', 'code' => 'ete10', 'usage_total' => 500]);
-$sent = $ws['last'] ?? [];
-check('bons : création (201)', $response['status'] === 201 && ($response['body']['inserted_id'] ?? '') === 'ETE10', json_encode($response['body']));
-check('bons : créé strictement, suivi par la campagne, émis par la marque',
-    ($sent['create_only'] ?? false) === true && ($sent['campaign_id'] ?? 0) === 10 && array_key_exists('id_shop', $sent) && $sent['id_shop'] === null);
-check('bons : valable sur les dates de la campagne',
-    ($sent['starts_at'] ?? '') === '2026-07-01' && ($sent['expires_at'] ?? '') === '2026-08-31 23:59:59', json_encode([$sent['starts_at'] ?? null, $sent['expires_at'] ?? null]));
-check('bons : la remise part telle quelle', ($sent['type'] ?? '') === 'percent' && ($sent['value'] ?? 0) == 10 && ($sent['min_order'] ?? 0) == 25 && ($sent['max_uses'] ?? 0) === 500);
-check('bons : provenance marketing', ($sent['source'] ?? '') === 'marketing' && str_contains((string) ($sent['reason_note'] ?? ''), 'Barbecue été'));
-
-check('bons : un code déjà pris est refusé (409)',
-    call($vouchersRouter, 'POST', $V . '10/vouchers', [], ['mechanic' => 'percent', 'value' => 5, 'code' => 'ETE10'])['status'] === 409);
-check('bons : pourcentage au-delà de 100 refusé (422)',
-    call($vouchersRouter, 'POST', $V . '10/vouchers', [], ['mechanic' => 'percent', 'value' => 150])['status'] === 422);
-check('bons : code illisible refusé (422)',
-    call($vouchersRouter, 'POST', $V . '10/vouchers', [], ['mechanic' => 'fixed', 'value' => 5, 'code' => 'a'])['status'] === 422);
-check('bons : fin avant début refusée (422)',
-    call($vouchersRouter, 'POST', $V . '10/vouchers', [], ['mechanic' => 'fixed', 'value' => 5, 'starts_on' => '2026-08-10', 'ends_on' => '2026-08-01'])['status'] === 422);
-check('bons : produit offert sans produit refusé (422)',
-    call($vouchersRouter, 'POST', $V . '10/vouchers', [], ['mechanic' => 'product'])['status'] === 422);
-check('bons : mécanique inconnue refusée (422)',
-    call($vouchersRouter, 'POST', $V . '10/vouchers', [], ['mechanic' => 'magie'])['status'] === 422);
-check('bons : campagne inexistante (404)',
-    call($vouchersRouter, 'POST', $V . '999/vouchers', [], ['mechanic' => 'percent', 'value' => 10])['status'] === 404);
-
-$response = call($vouchersRouter, 'POST', $V . '10/vouchers', [], ['mechanic' => 'product', 'offer_item_id' => $buche, 'code' => 'ETE-BUCHE']);
-$sent = $ws['last'] ?? [];
-check('bons : produit offert = 100 % sur 1 pièce du produit ERP',
-    $response['status'] === 201 && ($sent['type'] ?? '') === 'percent' && ($sent['value'] ?? 0) == 100
-    && ($sent['scope_product_id'] ?? 0) === 99501 && ($sent['scope_max_qty'] ?? 0) === 1);
-
-check('bons : bon réservé à un bureau sans bureau refusé (422)',
-    call($vouchersRouter, 'POST', $V . '10/vouchers', [], ['mechanic' => 'free_delivery', 'target_kind' => 'OFFICE'])['status'] === 422);
-
-// Une campagne locale émet un bon de SA boutique.
-$response = call($vouchersRouter, 'POST', $V . '11/vouchers', [], ['mechanic' => 'free_delivery', 'code' => 'UCCLE-PORT']);
-check('bons : campagne locale → bon de sa boutique', $response['status'] === 201 && ($ws['last']['id_shop'] ?? null) === 902);
-
-// Rattacher un bon existant : idempotent, une seule campagne.
-$response = call($vouchersRouter, 'PUT', $V . '10/vouchers/bienvenue10');
-check('bons : rattacher un bon existant (201)', $response['status'] === 201, json_encode($response['body']));
-check('bons : le rattacher à nouveau ne fait rien (200)', call($vouchersRouter, 'PUT', $V . '10/vouchers/BIENVENUE10')['status'] === 200);
-$response = call($vouchersRouter, 'PUT', $V . '11/vouchers/BIENVENUE10');
-check('bons : une seule campagne par bon (409, nommée)', $response['status'] === 409
-    && str_contains((string) ($response['body']['description'] ?? ''), 'Barbecue été'));
-check('bons : bon inconnu du webshop (404)', call($vouchersRouter, 'PUT', $V . '10/vouchers/INCONNU')['status'] === 404);
-
-// Lecture : les bons suivis et ce qu'ils ont donné.
+// Depuis le 05/11/2026 les bons se créent dans TFBuddy : ceux de l'ancien moteur
+// du webshop se lisent encore (ce qu'ils ont donné), ne s'écrivent plus.
+$ws['vouchers']['ETE10'] = ['type' => 'percent', 'value' => 10.0, 'shopId' => null, 'shopName' => null, 'camp' => 10, 'origin' => 'created'];
+$ws['vouchers']['BIENVENUE10'] += ['camp' => 10, 'origin' => 'attached'];
 $response = call($vouchersRouter, 'GET', $V . '10/vouchers');
 $list = array_column($response['body']['vouchers'] ?? [], null, 'code');
-check('bons : la campagne liste ses trois bons', $response['status'] === 200 && count($list) === 3, implode(',', array_keys($list)));
-check('bons : l\'origine est dite', ($list['ETE10']['origin'] ?? '') === 'created' && ($list['BIENVENUE10']['origin'] ?? '') === 'attached');
-check('bons : produit offert reconnu', ($list['ETE-BUCHE']['mechanic'] ?? '') === 'product' && ($list['ETE-BUCHE']['scope_max_qty'] ?? 0) === 1);
-check('bons : ce qu\'ils ont donné, tout le réseau pour la marque',
-    ($list['BIENVENUE10']['results']['orders'] ?? 0) === 5 && ($response['body']['totals']['revenue'] ?? 0) == 140
-    && ($response['body']['totals']['average_basket'] ?? 0) == 28);
-
-// Le franchisé : il lit la campagne réseau, ne la modifie pas, et ne voit
-// les résultats que de SA boutique.
+check('bons du webshop : la campagne liste les siens, en lecture seule, l\'origine dite', $response['status'] === 200 && count($list) === 2
+    && ($response['body']['can_edit'] ?? true) === false && ($list['ETE10']['origin'] ?? '') === 'created' && ($list['BIENVENUE10']['origin'] ?? '') === 'attached',
+    implode(',', array_keys($list)));
+check('bons du webshop : ce qu\'ils ont donné, tout le réseau pour la marque',
+    ($list['BIENVENUE10']['results']['orders'] ?? 0) === 5 && ($response['body']['totals']['revenue'] ?? 0) == 140);
+$ws['calls'] = [];
+$absentes = [
+    call($router, 'POST', $V . '10/vouchers', [], ['mechanic' => 'percent', 'value' => 10])['status'],
+    call($router, 'PATCH', $V . '10/vouchers/ETE10', [], ['value' => 15])['status'],
+    call($router, 'PUT', $V . '10/vouchers/NAMUR5')['status'],
+    call($router, 'DELETE', $V . '10/vouchers/ETE10')['status'],
+    call($router, 'GET', '/api/v1/marketing/webshop-vouchers')['status'],
+    call($router, 'GET', '/api/v1/marketing/webshop-offices')['status'],
+];
+check('bons du webshop : plus aucune route d\'écriture (créer, modifier, rattacher, retirer, chercher), rien n\'est écrit au webshop',
+    array_diff($absentes, [404, 405]) === [] && $ws['calls'] === [], json_encode([$absentes, $ws['calls']]));
 AuthContext::set(77, 'FRANCHISEE', 1, [1]);
 $response = call($vouchersRouter, 'GET', $V . '10/vouchers');
 $list = array_column($response['body']['vouchers'] ?? [], null, 'code');
-check('bons : franchisé, lecture seule sur une campagne réseau', $response['status'] === 200 && ($response['body']['can_edit'] ?? true) === false);
-check('bons : franchisé, résultats de sa boutique seulement',
+check('bons du webshop : franchisé, résultats de sa boutique seulement',
     ($list['BIENVENUE10']['results']['orders'] ?? 0) === 3 && count($list['BIENVENUE10']['results']['by_shop'] ?? []) === 1);
-check('bons : franchisé, création sur la campagne réseau refusée (403)',
-    call($vouchersRouter, 'POST', $V . '10/vouchers', [], ['mechanic' => 'percent', 'value' => 10])['status'] === 403);
-check('bons : franchisé, campagne d\'une autre boutique invisible (404)',
-    call($vouchersRouter, 'GET', $V . '11/vouchers')['status'] === 404);
-check('bons : franchisé, bon de la marque non rattachable (403)',
-    call($vouchersRouter, 'PUT', $V . $namur . '/vouchers/LIVRE')['status'] === 404
-    && call($vouchersRouter, 'PUT', $V . $namur . '/vouchers/BIENVENUE10')['status'] === 403);
-check('bons : franchisé, bon de sa boutique rattachable (201)', call($vouchersRouter, 'PUT', $V . $namur . '/vouchers/NAMUR5')['status'] === 201);
-check('bons : franchisé, bon réservé à un bureau refusé (403)',
-    call($vouchersRouter, 'POST', $V . $namur . '/vouchers', [], ['mechanic' => 'percent', 'value' => 5, 'target_kind' => 'OFFICE', 'target_id' => 7])['status'] === 403);
-$response = call($vouchersRouter, 'POST', $V . $namur . '/vouchers', [], ['mechanic' => 'percent', 'value' => 5]);
-check('bons : franchisé, bon de sa campagne locale, émis par sa boutique', $response['status'] === 201 && ($ws['last']['id_shop'] ?? null) === 901);
-$response = call($vouchersRouter, 'GET', '/api/v1/marketing/webshop-vouchers');
-check('bons : franchisé, ne liste que les bons de ses boutiques',
-    $response['status'] === 200 && array_column($response['body']['vouchers'] ?? [], 'code') === ['NAMUR5', 'M-GENERE']);
-check('bons : franchisé, bureaux réservés à la marque (403)', call($vouchersRouter, 'GET', '/api/v1/marketing/webshop-offices')['status'] === 403);
-
-// Modifier, puis retirer.
+check('bons du webshop : franchisé, campagne d\'une autre boutique invisible (404)', call($vouchersRouter, 'GET', $V . '11/vouchers')['status'] === 404);
 AuthContext::set(1, 'BRAND_ADMIN', 1);
-$response = call($vouchersRouter, 'PATCH', $V . '10/vouchers/ETE10', [], ['value' => 15]);
-check('bons : modifier un bon créé (200)', $response['status'] === 200 && ($ws['last']['value'] ?? 0) == 15 && empty($ws['last']['create_only']));
-check('bons : ce qui n\'est pas envoyé garde sa valeur',
-    ($ws['last']['min_order'] ?? 0) == 25 && ($ws['last']['starts_at'] ?? '') === '2026-07-01' && ($ws['last']['max_uses'] ?? 0) === 500);
-check('bons : un bon rattaché ne se modifie pas d\'ici (422)',
-    call($vouchersRouter, 'PATCH', $V . '10/vouchers/BIENVENUE10', [], ['value' => 20])['status'] === 422);
-
-check('bons : retirer un bon créé (200)', call($vouchersRouter, 'DELETE', $V . '10/vouchers/ETE10')['status'] === 200);
-check('bons : … il est suspendu dans le webshop, et ne suit plus la campagne',
-    ($ws['vouchers']['ETE10']['active'] ?? true) === false && array_key_exists('camp', $ws['vouchers']['ETE10'] ?? []) && $ws['vouchers']['ETE10']['camp'] === null);
-// Par référence : une fonction fléchée copierait $ws au moment de sa création.
-$suspensions = static function () use (&$ws): int {
-    return count(array_filter($ws['calls'], static fn (string $c): bool => str_ends_with($c, '/voucher-active')));
-};
-$avant = $suspensions();
-check('bons : retirer un bon rattaché le laisse actif',
-    call($vouchersRouter, 'DELETE', $V . '10/vouchers/BIENVENUE10')['status'] === 200 && $suspensions() === $avant);
-check('bons : retirer deux fois → 404', call($vouchersRouter, 'DELETE', $V . '10/vouchers/BIENVENUE10')['status'] === 404);
-$response = call($vouchersRouter, 'GET', '/api/v1/marketing/webshop-vouchers', ['q' => 'NAMUR']);
-check('bons : la marque voit qui suit un bon',
-    ($response['body']['vouchers'][0]['campaign_name'] ?? '') === 'Rentrée Namur', json_encode($response['body']['vouchers'][0] ?? null));
-check('bons : bureaux (marque)', (call($vouchersRouter, 'GET', '/api/v1/marketing/webshop-offices')['body'][0]['name'] ?? '') === 'Bureau Dupont');
 
 // Un bon qui DÉCLENCHE les promotions de l'étape Prix. Une campagne réseau,
-// son offre et quatre lignes en promotion : deux que le panier du webshop sait
-// appliquer, un prix de formule (pas au webshop) et un produit hors ERP.
+// son offre et quatre lignes en promotion : deux qui deviennent un bon de l'ERP
+// (offre liée, pourcentage), un prix de formule et un produit hors ERP qui ne le peuvent pas.
 $pdo->exec("INSERT INTO mar_campaign (brand_id, type_id, name, scope, status_code, starts_on, ends_on, budget_amount)
     VALUES (1, 7, 'Noël bûches', 'RESEAU', 'planned', '2026-12-01', '2026-12-31', 800)");
 $noel = (int) $pdo->lastInsertId();
@@ -3998,57 +3911,158 @@ $ligne->execute([$noelOffer, $choco, 'Bûche Chocolat', 2, 'PERCENT', 15, null, 
 $ligne->execute([$noelOffer, $formule, 'Formule Réveillon', 3, 'BUNDLE_FIXED', null, 24.00, null, null, 29.00]);
 $ligne->execute([$noelOffer, $libre, 'Bûche maison', 4, 'CROSSED_PRICE', null, 15.00, null, null, 18.00]);
 
-$response = call($vouchersRouter, 'GET', $V . $noel . '/vouchers');
-$promos = array_column($response['body']['campaign_promotions'] ?? [], null, 'offer_item_id');
-check('promotions : l\'étape Prix est listée', $response['status'] === 200 && count($promos) === 4, json_encode($response['body']['campaign_promotions'] ?? null));
-check('promotions : offre liée et pourcentage partent au webshop, en clair',
-    ($promos[$praline]['webshop'] ?? false) === true && ($promos[$praline]['text'] ?? '') === '2 achetés → 1 offert'
-    && ($promos[$choco]['webshop'] ?? false) === true && ($promos[$choco]['text'] ?? '') === '−15 %');
-check('promotions : le prix de formule et le produit hors ERP disent pourquoi non',
-    ($promos[$formule]['webshop'] ?? true) === false && str_contains((string) ($promos[$formule]['reason'] ?? ''), 'Prix de formule')
-    && ($promos[$libre]['webshop'] ?? true) === false && str_contains((string) ($promos[$libre]['reason'] ?? ''), 'ERP'));
-
-check('promotions : sans promotion cochée, refusé (422)',
-    call($vouchersRouter, 'POST', $V . $noel . '/vouchers', [], ['mechanic' => 'promotions', 'promotions' => []])['status'] === 422);
-$response = call($vouchersRouter, 'POST', $V . $noel . '/vouchers', [], ['mechanic' => 'promotions', 'promotions' => [$praline, $formule]]);
-check('promotions : un prix de formule coché est refusé, nommé (422)', $response['status'] === 422
-    && str_contains((string) ($response['body']['description'] ?? ''), 'Formule Réveillon'));
-check('promotions : une ligne d\'une autre campagne est refusée (422)',
-    call($vouchersRouter, 'POST', $V . $noel . '/vouchers', [], ['mechanic' => 'promotions', 'promotions' => [$buche]])['status'] === 422);
-
-$response = call($vouchersRouter, 'POST', $V . $noel . '/vouchers', [], ['mechanic' => 'promotions', 'promotions' => [$praline, $choco], 'code' => 'reve-noel']);
-$sent = $ws['last'] ?? [];
-check('promotions : bon créé (201)', $response['status'] === 201 && ($response['body']['inserted_id'] ?? '') === 'REVE-NOEL', json_encode($response['body']));
-check('promotions : le webshop reçoit le type « promos », sans remise propre',
-    ($sent['type'] ?? '') === 'promos' && array_key_exists('value', $sent) && $sent['value'] === null
-    && array_key_exists('scope_product_id', $sent) && $sent['scope_product_id'] === null);
-check('promotions : chaque promotion part avec son produit ERP et ses valeurs',
-    json_encode($sent['promos'] ?? null) === json_encode([
-        ['productId' => 99601, 'mechanic' => 'BUY_X_GET_Y', 'percent' => null, 'price' => null, 'buy' => 2, 'get' => 1, 'maxQty' => 4],
-        ['productId' => 99602, 'mechanic' => 'PERCENT', 'percent' => 15, 'price' => null, 'buy' => null, 'get' => null, 'maxQty' => 4],
-    ]), json_encode($sent['promos'] ?? null));
-check('promotions : « non cumulable » de l\'étape Prix suit le bon', ($sent['cumulative'] ?? null) === false);
-
-$response = call($vouchersRouter, 'GET', $V . $noel . '/vouchers');
-$bon = array_column($response['body']['vouchers'] ?? [], null, 'code')['REVE-NOEL'] ?? [];
-check('promotions : relu comme un bon « promotions », rapproché des lignes de l\'offre',
-    ($bon['mechanic'] ?? '') === 'promotions' && array_column($bon['promotions'] ?? [], 'offer_item_id') === [$praline, $choco]
-    && ($bon['promotions_changed'] ?? null) === false, json_encode($bon));
-
-// L'étape Prix change après l'envoi : la liste le dit, « Mettre à jour » renvoie.
-$pdo->exec(sprintf('UPDATE mar_campaign_offer_item SET discount_pct = 20 WHERE campaign_offer_id = %d AND offer_item_id = %d', $noelOffer, $choco));
-$bon = array_column(call($vouchersRouter, 'GET', $V . $noel . '/vouchers')['body']['vouchers'] ?? [], null, 'code')['REVE-NOEL'] ?? [];
-check('promotions : un changement à l\'étape Prix est signalé', ($bon['promotions_changed'] ?? null) === true);
-$response = call($vouchersRouter, 'PATCH', $V . $noel . '/vouchers/REVE-NOEL', [], ['usage_total' => 300]);
-check('promotions : une modification renvoie les promotions du moment',
-    $response['status'] === 200 && ($ws['last']['promos'][1]['percent'] ?? 0) == 20 && ($ws['last']['max_uses'] ?? 0) === 300);
-$bon = array_column(call($vouchersRouter, 'GET', $V . $noel . '/vouchers')['body']['vouchers'] ?? [], null, 'code')['REVE-NOEL'] ?? [];
-check('promotions : … et le signal retombe', ($bon['promotions_changed'] ?? null) === false);
-$response = call($vouchersRouter, 'PATCH', $V . $noel . '/vouchers/REVE-NOEL', [], ['promotions' => [$choco]]);
-check('promotions : décocher une promotion', $response['status'] === 200 && count($ws['last']['promos'] ?? []) === 1);
-$response = call($vouchersRouter, 'PATCH', $V . $noel . '/vouchers/REVE-NOEL', [], ['mechanic' => 'percent', 'value' => 10]);
-check('promotions : repasser en pourcentage n\'envoie plus de promotions',
-    $response['status'] === 200 && ($ws['last']['type'] ?? '') === 'percent' && !array_key_exists('promos', $ws['last'] ?? []));
+// --- Bons dans TFBuddy (route erp-vouchers) -------------------------------
+// Un bon = une campagne de bons de l'ERP rattachée à une promotion en mode
+// « bon seulement », créée depuis une ligne de l'étape Prix. L'ERP est simulé :
+// les formes sont celles de son swagger et de la fiche relue par le cockpit
+// (src/promos_bons.php, essai du 24/10/2026).
+echo "\nBons dans TFBuddy\n";
+$erpV = ['promos' => [], 'vcs' => [], 'calls' => [], 'refusePromo' => false];
+$erpFake = static function (string $url, array $headers, int $timeout, string $method = 'GET', ?string $payload = null) use (&$erpV): array {
+    unset($headers, $timeout);
+    $path = (string) parse_url($url, PHP_URL_PATH);
+    parse_str((string) parse_url($url, PHP_URL_QUERY), $q);
+    $in = $payload !== null && $payload !== '' ? (array) json_decode($payload, true) : [];
+    $erpV['calls'][] = [$method, $path, $in];
+    $json = static fn (int $st, array $b): array => [$st, (string) json_encode($b)];
+    if ($method === 'POST' && preg_match('#^/api/v1/admin/promotions/(buy-x-get-y|scheduled-product-discount)$#', $path, $m)) {
+        if ($erpV['refusePromo']) { return $json(422, ['status' => 'error', 'description' => 'INVALID_PROMOTION_DATA', 'errors' => ['reward' => 'reward.product_ids is required.']]); }
+        $id = 500 + count($erpV['promos']);
+        $erpV['promos'][$id] = $in + ['family' => $m[1]];
+        return $json(201, ['status' => 'success', 'message' => 'created', 'data' => ['id' => $id]]);
+    }
+    if ($method === 'PATCH' && preg_match('#^/api/v1/admin/promotions/[a-z-]+/(\d+)$#', $path, $m)) {
+        $erpV['promos'][(int) $m[1]]['status'] = $in['status'] ?? null;
+        return $json(200, ['data' => ['id' => (int) $m[1]]]);
+    }
+    if ($method === 'POST' && $path === '/api/v1/admin/voucher-campaigns') {
+        $id = 700 + count($erpV['vcs']);
+        $erpV['vcs'][$id] = ['campaign' => $in + ['id' => $id], 'codes' => []];
+        return $json(201, ['status' => 'success', 'data' => ['campaign' => ['id' => $id]]]);
+    }
+    if (preg_match('#^/api/v1/admin/voucher-campaigns/(\d+)(/.*)?$#', $path, $m)) {
+        $id = (int) $m[1]; $rest = $m[2] ?? '';
+        if (!isset($erpV['vcs'][$id])) { return $json(404, ['status' => 'error', 'description' => 'NOT_FOUND']); }
+        $vc = &$erpV['vcs'][$id];
+        if ($method === 'POST' && $rest === '/codes/generate') {
+            for ($i = 0; $i < (int) $in['count']; $i++) { $vc['codes'][] = ['id' => count($vc['codes']) + 1, 'code' => ($in['prefix'] ?? '') . sprintf('%08d', count($vc['codes']) + 1), 'status' => 'ACTIVE', 'usage_count' => 0, 'usage_limit' => 1]; }
+            return $json(201, ['status' => 'success']);
+        }
+        if ($method === 'PUT' && $rest === '/promotion') { $vc['campaign']['id_promotion'] = $in['id_promotion']; return $json(200, ['status' => 'success']); }
+        if ($method === 'PATCH' && $rest === '/status') {
+            if (($vc['campaign']['code_type'] ?? '') === 'UNIQUE') { return $json(422, ['status' => 'error', 'description' => 'shared_code is not supported for UNIQUE campaigns']); }
+            $vc['campaign']['status'] = $in['status']; return $json(200, ['status' => 'success']);
+        }
+        if ($method === 'PATCH' && $rest === '') { $vc['campaign']['status'] = $in['status'] ?? $vc['campaign']['status']; return $json(200, ['status' => 'success']); }
+        if ($method === 'GET' && $rest === '') {
+            $promo = $erpV['promos'][(int) ($vc['campaign']['id_promotion'] ?? 0)] ?? null;
+            return $json(200, ['data' => ['campaign' => $vc['campaign'], 'shared_code' => $vc['campaign']['shared_code'] ?? null, 'redemptions_total' => 3,
+                'configuration_complete' => $promo !== null, 'missing_requirements' => $promo === null ? ['promotion'] : []]]);
+        }
+        if ($method === 'GET' && $rest === '/codes') {
+            $page = (int) ($q['page'] ?? 1); $limit = (int) ($q['limit'] ?? 25);
+            return $json(200, ['items' => array_slice($vc['codes'], ($page - 1) * $limit, $limit),
+                'pagination' => ['page' => $page, 'limit' => $limit, 'total' => count($vc['codes']), 'pages' => (int) ceil(count($vc['codes']) / max(1, $limit))]]);
+        }
+    }
+    return $json(404, ['status' => 'error', 'description' => 'NOT_FOUND']);
+};
+$baseErpAvant = getenv('MAR_ERP_API_BASE');
+\Marketing\Support\Env::set('MAR_ERP_API_BASE', 'https://erp.test');
+$evRouter = new Router();
+$evc = new \Marketing\Controller\ErpVoucherController(new \Marketing\Service\ErpVoucherService(
+    new \Marketing\Repository\CampaignRepository(), new \Marketing\Repository\CampaignVoucherRepository(),
+    new \Marketing\Repository\ErpVoucherRepository(), new \Marketing\Support\ErpClient($erpFake)
+));
+$evRouter->get('/api/v1/marketing/campaigns/{id}/erp-vouchers', [$evc, 'index']);
+$evRouter->post('/api/v1/marketing/campaigns/{id}/erp-vouchers', [$evc, 'store']);
+$evRouter->patch('/api/v1/marketing/campaigns/{id}/erp-vouchers/{voucherId}', [$evc, 'update']);
+$EV = '/api/v1/marketing/campaigns/' . $noel . '/erp-vouchers';
+AuthContext::clear();
+check('bons TFBuddy : 401 sans identité', call($router, 'GET', $EV)['status'] === 401);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$lu = call($evRouter, 'GET', $EV);
+$lignes = array_column($lu['body']['data']['lines'] ?? [], null, 'label');
+check('bons TFBuddy : les lignes de l\'étape Prix, et lesquelles deviennent un bon (offre liée, pourcentage) ou pourquoi non',
+    $lu['status'] === 200 && $lu['body']['data']['configured'] === true && $lu['body']['data']['vouchers'] === []
+        && $lignes['Bûche Praliné']['eligible'] && $lignes['Bûche Chocolat']['eligible']
+        && !$lignes['Formule Réveillon']['eligible'] && str_contains((string) $lignes['Formule Réveillon']['reason'], 'mécanique')
+        && !$lignes['Bûche maison']['eligible'] && str_contains((string) $lignes['Bûche maison']['reason'], 'produit de l\'ERP'),
+    json_encode($lu['body']['data']['lines'] ?? null));
+$refusEv = [
+    call($evRouter, 'POST', $EV, [], ['offerItemId' => $choco, 'pirate' => 1])['status'],
+    call($evRouter, 'POST', $EV, [], ['offerItemId' => $choco, 'codeType' => 'UNIQUE'])['status'],
+    call($evRouter, 'POST', $EV, [], ['offerItemId' => $choco, 'sharedCode' => 'a b'])['status'],
+    call($evRouter, 'POST', $EV, [], ['offerItemId' => $choco, 'validFrom' => '2026-12-10', 'validTo' => '2026-12-01'])['status'],
+    call($evRouter, 'POST', $EV, [], ['offerItemId' => $formule])['status'],
+    call($evRouter, 'POST', $EV, [], ['offerItemId' => $libre])['status'],
+    call($evRouter, 'POST', $EV, [], ['offerItemId' => $buche])['status'],
+];
+check('bons TFBuddy : refusés (422) — champ inconnu, codes uniques sans nombre, code illisible, fin avant début, prix de formule, produit hors ERP, ligne d\'une autre campagne ; rien n\'est écrit dans l\'ERP',
+    array_unique($refusEv) === [422] && $erpV['calls'] === [], json_encode($refusEv));
+check('bons TFBuddy : campagne inconnue (404)', call($evRouter, 'GET', '/api/v1/marketing/campaigns/999999/erp-vouchers')['status'] === 404);
+$cree = call($evRouter, 'POST', $EV, [], ['offerItemId' => $choco, 'codeType' => 'SHARED', 'sharedCode' => 'noel15', 'usageLimitTotal' => 500, 'activate' => true]);
+$ordre = array_map(static fn ($c) => $c[0] . ' ' . preg_replace('#\d+#', 'N', $c[1]), array_values(array_filter($erpV['calls'], static fn ($c) => $c[0] !== 'GET')));
+$promoEnvoyee = $erpV['calls'][0][2] ?? [];
+$campEnvoyee = $erpV['calls'][1][2] ?? [];
+check('bons TFBuddy : un code pour tous — promotion inactive « bon seulement », campagne en brouillon, rattachement, puis activation (dans cet ordre)',
+    $cree['status'] === 201 && $ordre === ['POST /api/vN/admin/promotions/scheduled-product-discount', 'POST /api/vN/admin/voucher-campaigns',
+        'PUT /api/vN/admin/voucher-campaigns/N/promotion', 'PATCH /api/vN/admin/promotions/scheduled-product-discount/N', 'PATCH /api/vN/admin/voucher-campaigns/N'],
+    json_encode([$cree['status'], $cree['body']['error'] ?? null, $ordre]));
+check('bons TFBuddy : la promotion vient de la ligne Prix (produit ERP, −15 %, tout le réseau, plafond par ticket, fin de l\'offre)',
+    ($promoEnvoyee['activation_mode'] ?? '') === 'VOUCHER_ONLY' && ($promoEnvoyee['status'] ?? '') === 'INACTIVE'
+        && ($promoEnvoyee['reward_product_ids'] ?? []) === [99602] && ($promoEnvoyee['discount_type'] ?? '') === 'PERCENTAGE_DISCOUNT'
+        && (float) ($promoEnvoyee['discount_value'] ?? 0) === 15.0 && ($promoEnvoyee['shop_scope_type'] ?? '') === 'ALL_SHOPS'
+        && ($promoEnvoyee['max_applications_per_transaction'] ?? 0) === 4 && ($promoEnvoyee['valid_to'] ?? '') === '2026-12-31 23:59:00',
+    json_encode($promoEnvoyee));
+check('bons TFBuddy : la campagne de bons — code commun, sans date de début, limite totale',
+    ($campEnvoyee['code_type'] ?? '') === 'SHARED' && ($campEnvoyee['shared_code'] ?? '') === 'NOEL15' && ($campEnvoyee['status'] ?? '') === 'DRAFT'
+        && array_key_exists('valid_from', $campEnvoyee) && $campEnvoyee['valid_from'] === null && ($campEnvoyee['usage_limit_total'] ?? 0) === 500,
+    json_encode($campEnvoyee));
+check('bons TFBuddy : relu actif et complet, avec ses utilisations', ($cree['body']['data']['status'] ?? '') === 'ACTIVE' && ($cree['body']['data']['complete'] ?? false) === true
+    && ($cree['body']['data']['sharedCode'] ?? '') === 'NOEL15' && ($cree['body']['data']['redemptions'] ?? 0) === 3, json_encode($cree['body']['data'] ?? null));
+$erpV['calls'] = [];
+$uniques = call($evRouter, 'POST', $EV, [], ['offerItemId' => $praline, 'codeType' => 'UNIQUE', 'count' => 250, 'prefix' => 'reve-']);
+$gen = array_values(array_filter($erpV['calls'], static fn ($c) => str_ends_with($c[1], '/codes/generate')));
+$bxgy = $erpV['calls'][0][2] ?? [];
+check('bons TFBuddy : codes uniques — offre liée (2 achetés + 1 offert), 250 codes en lots de 100, laissé en brouillon',
+    $uniques['status'] === 201 && array_column(array_column($gen, 2), 'count') === [100, 100, 50] && ($gen[0][2]['prefix'] ?? '') === 'REVE-'
+        && ($bxgy['trigger']['quantity'] ?? 0) === 2 && ($bxgy['reward']['quantity'] ?? 0) === 1 && ($bxgy['reward']['type'] ?? '') === 'FREE'
+        && ($uniques['body']['data']['status'] ?? '') === 'DRAFT' && ($uniques['body']['data']['codesTotal'] ?? 0) === 250,
+    json_encode([$uniques['status'], $uniques['body']['error'] ?? null, $uniques['body']['data']['codesTotal'] ?? null]));
+$idU = (int) ($uniques['body']['data']['id'] ?? 0);
+$act = call($evRouter, 'PATCH', $EV . '/' . $idU, [], ['status' => 'ACTIVE']);
+$sus = call($evRouter, 'PATCH', $EV . '/' . $idU, [], ['status' => 'INACTIVE']);
+check('bons TFBuddy : activer puis suspendre un bon à codes uniques (l\'ERP refuse /status pour eux : repli sur la fiche)',
+    $act['status'] === 200 && ($act['body']['data']['status'] ?? '') === 'ACTIVE' && $sus['status'] === 200 && ($sus['body']['data']['status'] ?? '') === 'INACTIVE',
+    json_encode([$act['body']['error'] ?? null, $sus['body']['error'] ?? null]));
+$sus2 = call($evRouter, 'PATCH', $EV . '/' . $idU, [], ['status' => 'INACTIVE']);
+check('bons TFBuddy : suspendre deux fois revient au même (idempotent)',
+    $sus2['status'] === 200 && ($sus2['body']['data']['status'] ?? '') === 'INACTIVE', json_encode($sus2['body']['error'] ?? null));
+check('bons TFBuddy : statut inconnu (422), bon inconnu (404)', call($evRouter, 'PATCH', $EV . '/' . $idU, [], ['status' => 'SUPPRIME'])['status'] === 422
+    && call($evRouter, 'PATCH', $EV . '/999999', [], ['status' => 'ACTIVE'])['status'] === 404);
+$erpV['refusePromo'] = true; $avantRefus = count($erpV['vcs']);
+$refuse = call($evRouter, 'POST', $EV, [], ['offerItemId' => $choco]);
+check('bons TFBuddy : l\'ERP refuse la promotion — 422 avec sa raison, pas de campagne de bons, rien de gardé',
+    $refuse['status'] === 422 && str_contains((string) ($refuse['body']['error']['message'] ?? ''), 'INVALID_PROMOTION_DATA') && count($erpV['vcs']) === $avantRefus
+        && (int) $pdo->query('SELECT COUNT(*) FROM mar_campaign_erp_voucher WHERE campaign_id = ' . $noel)->fetchColumn() === 2,
+    json_encode($refuse['body']));
+$erpV['refusePromo'] = false;
+$liste = call($evRouter, 'GET', $EV)['body']['data']['vouchers'] ?? [];
+check('bons TFBuddy : la campagne relit ses deux bons dans l\'ERP', count($liste) === 2 && array_column($liste, 'codeType') === ['UNIQUE', 'SHARED']);
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+check('bons TFBuddy : franchisé, lecture sans écriture sur une campagne réseau (403)',
+    (call($evRouter, 'GET', $EV)['body']['data']['canEdit'] ?? true) === false && call($evRouter, 'POST', $EV, [], ['offerItemId' => $choco])['status'] === 403);
+check('bons TFBuddy : franchisé, campagne locale d\'une autre boutique invisible (404)',
+    call($evRouter, 'GET', '/api/v1/marketing/campaigns/11/erp-vouchers')['status'] === 404
+        && call($evRouter, 'POST', '/api/v1/marketing/campaigns/11/erp-vouchers', [], ['offerItemId' => $choco])['status'] === 404);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+\Marketing\Support\Env::set('MAR_ERP_API_BASE', null);
+$sansErp = call($evRouter, 'GET', $EV);
+check('bons TFBuddy : sans ERP configuré, la lecture le dit et la création répond 503',
+    ($sansErp['body']['data']['configured'] ?? true) === false && call($evRouter, 'POST', $EV, [], ['offerItemId' => $choco])['status'] === 503);
+\Marketing\Support\Env::set('MAR_ERP_API_BASE', $baseErpAvant === false ? null : $baseErpAvant);
+$pdo->exec('DELETE FROM mar_campaign_erp_voucher WHERE campaign_id = ' . $noel);
 
 // --- Promotions de l'ERP (route erp-promotions) ---------------------------
 // La lecture passe par l'API de l'ERP. Les corps rendus par le transport sont

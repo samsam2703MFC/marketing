@@ -3,6 +3,9 @@ import type { ChangeEvent, DragEvent } from 'react'
 import * as api from '../../lib/api/module'
 import type { MediaAsset, MediaFields, MediaLibrary, MediaQuery } from '../../lib/api/module'
 import { useAsync } from '../../lib/useAsync'
+import { SourceBrowser, addToLibrary } from './SourceBrowser'
+import { SOURCE_LABEL, imageSize } from './sources'
+import type { ImageSource, SourceImage } from './sources'
 import './media.css'
 
 /**
@@ -31,7 +34,123 @@ interface Upload {
   message?: string
 }
 
+/**
+ * La médiathèque commune, vue Réseau. Trois sources, comme dans « Créer un post » : les fichiers
+ * déposés, les photos du webshop (lues dans TFBuddy par Social) et le design system de la marque.
+ */
 export default function MediaLibraryView() {
+  const [source, setSource] = useState<ImageSource>('mediatheque')
+  // Une image versée depuis le webshop ou le design system : la liste des fichiers se relit.
+  const [filesKey, setFilesKey] = useState(0)
+
+  return (
+    <>
+      <div className="seg media-sources" role="tablist" aria-label="Source des images">
+        {(Object.keys(SOURCE_LABEL) as ImageSource[]).map((s) => (
+          <button key={s} type="button" role="tab" aria-selected={source === s} className={source === s ? 'is-on' : ''} onClick={() => setSource(s)}>
+            {SOURCE_LABEL[s]}
+          </button>
+        ))}
+      </div>
+      {source === 'mediatheque' ? (
+        <FilesLibrary key={filesKey} />
+      ) : (
+        <ExternalLibrary key={source} source={source} onAdded={() => setFilesKey((k) => k + 1)} />
+      )}
+    </>
+  )
+}
+
+/** Les photos du webshop ou le design system : on les parcourt, on les verse dans la médiathèque. */
+function ExternalLibrary({ source, onAdded }: { source: 'webshop' | 'design'; onAdded: () => void }) {
+  const library = useAsync(() => api.getMediaLibrary(), [])
+  const [selected, setSelected] = useState<SourceImage | null>(null)
+  const [size, setSize] = useState<{ width: number | null; height: number | null } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!selected) return
+    let cancelled = false
+    setSize(null)
+    void imageSize(selected.url).then((s) => !cancelled && setSize(s))
+    return () => {
+      cancelled = true
+    }
+  }, [selected])
+
+  async function add(item: SourceImage) {
+    setBusy(true)
+    setMessage(null)
+    setError(null)
+    try {
+      const { media, duplicate } = await addToLibrary(source, item, library.data ?? null)
+      setMessage(duplicate ? `Déjà dans la médiathèque : « ${media.name} ».` : `Ajoutée à la médiathèque (onglet Fichiers) : « ${media.name} ».`)
+      if (!duplicate) onAdded()
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="media media--ext">
+      <section className="media__main">
+        <SourceBrowser
+          source={source}
+          selectedKey={selected?.key ?? null}
+          onSelect={(item) => {
+            setSelected(item)
+            setMessage(null)
+            setError(null)
+          }}
+        />
+      </section>
+
+      {selected ? (
+        <aside className="media__sheet card" aria-label="Image">
+          <div className="media__sheet-head">
+            <b>{selected.name}</b>
+            <button type="button" className="btn btn--ghost btn--sm" onClick={() => setSelected(null)}>
+              Fermer
+            </button>
+          </div>
+          <div className={`media__preview${selected.cutout ? ' is-cutout' : ''}`}>
+            <img src={selected.url} alt="" />
+          </div>
+          <dl className="media__facts">
+            <dt>Source</dt>
+            <dd>{source === 'webshop' ? 'Webshop (TFBuddy)' : 'Design system de la marque'}</dd>
+            <dt>Classement</dt>
+            <dd>{[selected.group, selected.detail].filter(Boolean).join(' › ') || '—'}</dd>
+            <dt>Taille</dt>
+            <dd>{size === null ? '…' : size.width && size.height ? `${size.width} × ${size.height} px` : 'illisible'}</dd>
+          </dl>
+          <div className="media__actions">
+            <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void add(selected)}>
+              {busy ? 'Versement…' : 'Ajouter à la médiathèque'}
+            </button>
+            <a className="btn" href={selected.url} target="_blank" rel="noreferrer">
+              Ouvrir l’original
+            </a>
+          </div>
+          {message ? <p className="muted media__note">{message}</p> : null}
+          {error ? <p className="error media__note">{error}</p> : null}
+          <p className="muted media__note">
+            L’image reste {source === 'webshop' ? 'sur le webshop' : 'dans le design system'} ; l’ajouter en fait un fichier de la
+            médiathèque, à classer, utilisable partout : posts, campagnes, brochures, bâches et affiches. Le choix d’un visuel de
+            campagne la verse d’office.
+          </p>
+        </aside>
+      ) : null}
+    </div>
+  )
+}
+
+/** Les fichiers de la médiathèque : dépôt, classement, retrait. */
+function FilesLibrary() {
   const [libraryKey, setLibraryKey] = useState(0)
   const library = useAsync(() => api.getMediaLibrary(), [libraryKey])
   const shops = useAsync(() => api.listShops(), [])

@@ -116,7 +116,9 @@
   font: 13px 'Gotham', system-ui, sans-serif;
 }
 
-.media .seg {
+.media .seg,
+.mpick .seg,
+.seg.media-sources {
   display: inline-flex;
   gap: 2px;
   padding: 3px;
@@ -124,7 +126,9 @@
   background: var(--chip);
 }
 
-.media .seg button {
+.media .seg button,
+.mpick .seg button,
+.seg.media-sources button {
   margin: 0;
   padding: 6px 11px;
   border: 0;
@@ -135,7 +139,9 @@
   cursor: pointer;
 }
 
-.media .seg button.is-on {
+.media .seg button.is-on,
+.mpick .seg button.is-on,
+.seg.media-sources button.is-on {
   background: #fff;
   color: var(--ink);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
@@ -454,5 +460,63 @@
   .media__sheet {
     position: static;
     max-height: none;
+  }
+}
+
+/* Sources hors fichiers (photos du webshop, design system) : même grille, fiche à droite. */
+.media-sources {
+  margin-bottom: 14px;
+}
+
+.media--ext,
+.media--ext:not(:has(.media__sheet)) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.media--ext:has(.media__sheet) {
+  grid-template-columns: minmax(0, 1fr) 340px;
+}
+
+/* Sélecteur d'image (assistant de campagne, etc.) : la médiathèque en fenêtre. */
+.mpick {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: rgba(28, 26, 23, 0.45);
+}
+
+.mpick__box {
+  width: min(1100px, 100%);
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 18px;
+  overflow: hidden;
+}
+
+.mpick__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-bottom: 10px;
+}
+
+.mpick__head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.mpick__body {
+  overflow: auto;
+  min-height: 0;
+}
+
+@media (max-width: 1180px) {
+  .media--ext:has(.media__sheet) {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

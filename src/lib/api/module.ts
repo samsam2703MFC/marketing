@@ -1210,56 +1210,9 @@ export interface CampaignVouchers {
   campaign_promotions: CampaignPromotion[]
 }
 
-/** Ce que l'écran envoie pour créer ou modifier un bon. */
-export interface VoucherInput {
-  mechanic?: VoucherMechanic
-  value?: string
-  offer_item_id?: number | null
-  max_qty?: string
-  min_order?: string
-  code?: string
-  starts_on?: string
-  ends_on?: string
-  usage_total?: string
-  per_customer?: string
-  target_kind?: 'NETWORK' | 'OFFICE'
-  target_id?: number | null
-  /** Mécanique « promotions » : les lignes de l'étape Prix cochées. */
-  promotions?: number[]
-}
-
+/** Les bons de l'ancien moteur du webshop, en lecture seule depuis le 05/11/2026 (les nouveaux sont dans TFBuddy). */
 export function campaignVouchers(campaignId: number): Promise<CampaignVouchers> {
   return request<CampaignVouchers>(`${BASE}/campaigns/${campaignId}/vouchers`)
-}
-
-/** `inserted_id` : le code du bon créé (généré par le webshop si on n'en donne pas). */
-export function createCampaignVoucher(campaignId: number, input: VoucherInput): Promise<{ message: string; inserted_id: string }> {
-  return request(`${BASE}/campaigns/${campaignId}/vouchers`, { method: 'POST', body: input })
-}
-
-export function updateCampaignVoucher(campaignId: number, code: string, input: VoucherInput): Promise<{ message: string }> {
-  return request(`${BASE}/campaigns/${campaignId}/vouchers/${encodeURIComponent(code)}`, { method: 'PATCH', body: input })
-}
-
-export function attachCampaignVoucher(campaignId: number, code: string): Promise<{ message: string }> {
-  return request(`${BASE}/campaigns/${campaignId}/vouchers/${encodeURIComponent(code)}`, { method: 'PUT' })
-}
-
-export function detachCampaignVoucher(campaignId: number, code: string): Promise<{ message: string }> {
-  return request(`${BASE}/campaigns/${campaignId}/vouchers/${encodeURIComponent(code)}`, { method: 'DELETE' })
-}
-
-export interface AttachableVoucher extends WebshopVoucher {
-  campaign_id: number | null
-  campaign_name: string | null
-}
-
-export function webshopVouchers(query: string): Promise<{ configured: boolean; message: string | null; vouchers: AttachableVoucher[] }> {
-  return request(`${BASE}/webshop-vouchers`, { query: { q: query } })
-}
-
-export function webshopOffices(query: string): Promise<Array<{ id: number; name: string; city: string | null }>> {
-  return request(`${BASE}/webshop-offices`, { query: { q: query } })
 }
 
 // ---------------------------------------------------------------------------
@@ -2290,6 +2243,36 @@ export function getWebshopNav(shop: number): Promise<WebshopNav> {
   return request<WebshopNav>(`${SOCIAL_ROOT}/api/v1/social/catalogue/nav`, { query: { shop } })
 }
 
+/**
+ * Le catalogue du webshop avec ses images, tel que « Créer un post » le présente : photo de chaque
+ * produit, illustration de chaque rayon et de chaque catégorie, photo de chaque gamme. Lu par le
+ * module Social dans TFBuddy (30 min de cache), sans boutique : la structure seule, sans prix.
+ */
+export interface WebshopCatalogue {
+  groupes: Array<{ id: number; name: string; image: string | null; cats: number[]; n: number }>
+  categories: Array<{ id: number; name: string; image: string | null; groupe: number | null; n: number }>
+  produits: Array<{ id: number; name: string; image: string | null; cat: number | null; groupe: number | null }>
+  gammes: Array<{ id: number; name: string; image: string | null; n: number }>
+  lu?: string
+}
+
+export function getWebshopCatalogue(): Promise<WebshopCatalogue> {
+  return request<WebshopCatalogue>(`${SOCIAL_ROOT}/api/v1/social/catalogue/nav`)
+}
+
+/** Adresse absolue d'un fichier servi par le module Social (les illustrations du design system). */
+export function socialAssetUrl(path: string): string {
+  return new URL(`${SOCIAL_ROOT}/${path.replace(/^\/+/, '')}`, window.location.origin).href
+}
+
+/**
+ * Une image du webshop servie par Social (même origine) : les photos du webshop sont sur
+ * Cloudflare R2, sans en-tête CORS, et ne se lisent pas directement depuis le navigateur.
+ */
+export function webshopImageProxyUrl(url: string): string {
+  return `${SOCIAL_ROOT}/api/v1/social/media/webshop?u=${encodeURIComponent(url)}`
+}
+
 // ---------------------------------------------------------------------------
 // Médiathèque commune — route écrite au standard (enveloppe, camelCase, pagination)
 // ---------------------------------------------------------------------------
@@ -2732,4 +2715,75 @@ export async function campaignPostsForKit(campaignId: number): Promise<Array<Kit
         shops: (p.shops ?? []).filter((s) => /^\d{1,9}$/.test(s)),
       }
     })
+}
+
+// ---------------------------------------------------------------------------
+// Bons dans TFBuddy (campagne de bons + promotion « bon seulement »)
+// ---------------------------------------------------------------------------
+
+export interface ErpVoucherLine {
+  offerItemId: number
+  label: string
+  mechanic: string
+  mechanicLabel: string
+  summary: string
+  eligible: boolean
+  reason: string | null
+}
+
+export interface ErpVoucher {
+  id: number
+  name: string
+  offerItemId: number | null
+  erpVoucherCampaignId: number
+  erpPromotionId: number | null
+  promotionFamily: string
+  codeType: 'SHARED' | 'UNIQUE'
+  sharedCode: string | null
+  codesRequested: number
+  createdAt: string
+  status: 'DRAFT' | 'ACTIVE' | 'INACTIVE' | null
+  validTo: string | null
+  redemptions: number | null
+  complete: boolean | null
+  missing: string[]
+  codes: Array<{ code: string; status: string; usages: number; limit: number | null }>
+  codesTotal: number | null
+  readError: string | null
+  warning?: string
+}
+
+export interface ErpVouchers {
+  campaignId: number
+  configured: boolean
+  message: string | null
+  canEdit: boolean
+  vouchers: ErpVoucher[]
+  lines: ErpVoucherLine[]
+}
+
+export interface ErpVoucherInput {
+  offerItemId: number
+  codeType: 'SHARED' | 'UNIQUE'
+  sharedCode?: string
+  count?: number
+  perShop?: boolean
+  prefix?: string
+  validFrom?: string
+  validTo?: string
+  usageLimitTotal?: number
+  usageLimitPerCustomer?: number
+  activate?: boolean
+}
+
+export async function getErpVouchers(campaignId: number): Promise<ErpVouchers> {
+  return (await request<Envelope<ErpVouchers>>(`${BASE}/campaigns/${campaignId}/erp-vouchers`)).data
+}
+
+export async function createErpVoucher(campaignId: number, input: ErpVoucherInput): Promise<ErpVoucher> {
+  return (await request<Envelope<ErpVoucher>>(`${BASE}/campaigns/${campaignId}/erp-vouchers`, { method: 'POST', body: input })).data
+}
+
+export async function setErpVoucherStatus(campaignId: number, id: number, status: 'ACTIVE' | 'INACTIVE'): Promise<ErpVoucher> {
+  return (await request<Envelope<ErpVoucher>>(`${BASE}/campaigns/${campaignId}/erp-vouchers/${id}`, { method: 'PATCH', body: { status } })).data
 }
