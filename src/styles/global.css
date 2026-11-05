@@ -1763,8 +1763,7 @@ select:disabled {
   width: 70px;
 }
 
-/* Deux façons d'apporter le visuel, sur une même ligne : le fichier depuis le
-   poste, ou l'adresse d'une image déjà en ligne. */
+/* Le visuel de la campagne : choisi dans la médiathèque (fichiers, webshop, illustrations). */
 .visual-source {
   display: flex;
   align-items: flex-end;
@@ -1774,23 +1773,14 @@ select:disabled {
 
 .visual-source .field--grow {
   margin-top: 0.6rem;
+  flex: 1 1 260px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 
 .visual-source .btn {
   margin-bottom: 1px;
-}
-
-/* Le champ natif reste dans le libellé pour garder le clavier et le clic,
-   sans imposer son bouton « Parcourir » au reste de la barre. */
-.visual-source__file {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  border: 0;
-  clip: rect(0 0 0 0);
-  overflow: hidden;
-  white-space: nowrap;
 }
 
 /* Visuel de la campagne, choisi avec son identité : l'aperçu à gauche, le

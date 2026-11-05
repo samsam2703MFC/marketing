@@ -16,6 +16,8 @@ import { VoucherResults, VouchersStep, useCampaignVouchers } from './VouchersSte
 import { ContentStep, SupportsGrid, SupportsMilestones, TargetExtras } from './Supports'
 import ProspectList from './ProspectList'
 import RangeCalendar from '../../components/RangeCalendar'
+import MediaPicker from '../media/MediaPicker'
+import type { PickedImage } from '../media/sources'
 import { familyImage, seasonImage, seasonLabel } from './illustrations'
 
 /**
@@ -1516,54 +1518,22 @@ function FramingStep({
     refs.b2bSectors.length > 0 &&
     refs.b2bSectors.every((sector) => draft.sector_ids.includes(sector.id))
 
-  const [uploading, setUploading] = useState(false)
-  const [uploadError, setUploadError] = useState<string | null>(null)
-  const [uploadNote, setUploadNote] = useState<string | null>(null)
+  // Le visuel se choisit dans la médiathèque (fichiers, photos du webshop, illustrations).
+  const [picking, setPicking] = useState(false)
+  const [visualNote, setVisualNote] = useState<string | null>(null)
 
-  /** Envoie le fichier choisi, puis retient l'adresse rendue par le serveur. */
-  async function sendVisual(file: File): Promise<void> {
-    setUploading(true)
-    setUploadError(null)
-    setUploadNote(null)
-
-    try {
-      const content = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(String(reader.result))
-        reader.onerror = () => reject(new Error('Fichier illisible.'))
-        reader.readAsDataURL(file)
-      })
-
-      const image = await api.uploadImage(content)
-
-      // `BASE_URL` porte le sous-répertoire d'installation : le chemin rendu
-      // par le serveur est relatif à la racine de l'application, pas à celle
-      // du domaine.
-      patch({ image_url: `${import.meta.env.BASE_URL}${image.path}` })
-
-      // Ce que le serveur a fait de l'image se dit : une réduction silencieuse
-      // ferait douter du fichier envoyé le jour où l'imprimeur pose la question.
-      const size =
-        image.width !== null && image.height !== null ? `${image.width} × ${image.height} px` : ''
-
-      if (image.resized && image.original_width !== null) {
-        setUploadNote(
-          `Réduite de ${image.original_width} × ${image.original_height} px à ${size} — le maximum` +
-            ' utile à 300 dpi pour un 100 × 150 mm avec 3 mm de fond perdu.',
-        )
-      } else if (image.below_print) {
-        setUploadNote(
-          `${size} : en dessous de 1 182 × 1 772 px, l’impression à 300 dpi manquera de netteté.` +
-            ' Le visuel reste utilisable à l’écran.',
-        )
-      } else if (size !== '') {
-        setUploadNote(`${size} — bon pour l’impression à 300 dpi.`)
-      }
-    } catch (cause: unknown) {
-      setUploadError(describeError(cause))
-    } finally {
-      setUploading(false)
-    }
+  /** Retient l'image choisie ; ce qu'elle vaut à l'impression se dit tout de suite. */
+  function chooseVisual(image: PickedImage, note: string | null): void {
+    setPicking(false)
+    patch({ image_url: image.url, ...(image.cutout ? { image_fit: 'contain' as ImageFit } : {}) })
+    const size = image.width !== null && image.height !== null ? `${image.width} × ${image.height} px` : null
+    const quality =
+      size === null
+        ? null
+        : Math.max(image.width!, image.height!) < 1772 || Math.min(image.width!, image.height!) < 1182
+          ? `${size} : en dessous de 1 182 × 1 772 px, l’impression à 300 dpi manquera de netteté. Le visuel reste utilisable à l’écran.`
+          : `${size} — bon pour l’impression à 300 dpi.`
+    setVisualNote([`« ${image.name} »`, quality, note].filter(Boolean).join(' · '))
   }
 
   if (part === 'target') {
@@ -1771,48 +1741,40 @@ function FramingStep({
           la ligne. Il se choisit donc ici ; ses déclinaisons par format
           restent à l'étape « Communication », qui les produit. */}
       <div className="visual-source">
-        <label className="field field--grow">
-          Photo ou illustration — adresse
-          <input
-            type="url"
-            value={draft.image_url}
-            placeholder="https://…"
-            onChange={(e) => patch({ image_url: e.target.value })}
-          />
-        </label>
-
-        {/* Le fichier passe par le même champ : une fois écrit sur le serveur,
-            c'est son adresse qui est enregistrée avec la campagne. Rien de
-            particulier à relire ensuite — un visuel envoyé et un visuel lié
-            se comportent pareil. */}
-        <label className={uploading ? 'btn is-busy' : 'btn'}>
-          {uploading ? 'Envoi…' : 'Envoyer un fichier'}
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/gif,image/webp,image/avif"
-            disabled={uploading}
-            className="visual-source__file"
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              // Le champ est vidé aussitôt : sans cela, renvoyer le même
-              // fichier après une erreur ne déclencherait aucun événement.
-              e.target.value = ''
-              if (file) void sendVisual(file)
+        <span className="field field--grow">
+          Photo ou illustration
+          <span className="muted">
+            {draft.image_url.trim() === ''
+              ? 'Aucune : choisissez-la dans la médiathèque.'
+              : 'Ci-dessous, avec son cadrage.'}
+          </span>
+        </span>
+        <button type="button" className="btn" onClick={() => setPicking(true)}>
+          {draft.image_url.trim() === '' ? 'Choisir dans la médiathèque' : 'Changer'}
+        </button>
+        {draft.image_url.trim() !== '' ? (
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={() => {
+              patch({ image_url: '' })
+              setVisualNote(null)
             }}
-          />
-        </label>
+          >
+            Retirer
+          </button>
+        ) : null}
       </div>
 
-      {uploadError !== null ? <p className="error">{uploadError}</p> : null}
-      {uploadNote !== null ? <p className="muted">{uploadNote}</p> : null}
+      {picking ? <MediaPicker title="Photo ou illustration de la campagne" onPick={chooseVisual} onClose={() => setPicking(false)} /> : null}
+      {visualNote !== null ? <p className="muted">{visualNote}</p> : null}
 
       {draft.image_url.trim() === '' ? (
         <p className="muted">
-          Facultative. Envoyez un fichier depuis votre poste — PNG, JPEG, GIF, WebP ou AVIF,
-          3 Mo au plus — ou collez l’adresse d’une image déjà en ligne. Une image plus grande
-          que le format d’impression (1 252 × 1 843 px, soit 100 × 150 mm à 300 dpi avec 3 mm de
-          fond perdu) est réduite automatiquement. Elle se déclinera ensuite dans les formats
-          d’affichage à l’étape « Médias ».
+          Facultative. Elle se choisit dans la médiathèque : ses fichiers, les photos du webshop (produits,
+          rayons, gammes) ou les illustrations de la marque — une image du webshop ou une illustration y est
+          versée en la choisissant. Pour l’impression, visez 1 252 × 1 843 px au moins (100 × 150 mm à 300 dpi
+          avec 3 mm de fond perdu). Elle se déclinera ensuite dans les formats d’affichage à l’étape « Médias ».
         </p>
       ) : (
         <div className="visual-pick">

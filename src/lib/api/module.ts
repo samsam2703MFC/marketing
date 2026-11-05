@@ -2243,6 +2243,36 @@ export function getWebshopNav(shop: number): Promise<WebshopNav> {
   return request<WebshopNav>(`${SOCIAL_ROOT}/api/v1/social/catalogue/nav`, { query: { shop } })
 }
 
+/**
+ * Le catalogue du webshop avec ses images, tel que « Créer un post » le présente : photo de chaque
+ * produit, illustration de chaque rayon et de chaque catégorie, photo de chaque gamme. Lu par le
+ * module Social dans TFBuddy (30 min de cache), sans boutique : la structure seule, sans prix.
+ */
+export interface WebshopCatalogue {
+  groupes: Array<{ id: number; name: string; image: string | null; cats: number[]; n: number }>
+  categories: Array<{ id: number; name: string; image: string | null; groupe: number | null; n: number }>
+  produits: Array<{ id: number; name: string; image: string | null; cat: number | null; groupe: number | null }>
+  gammes: Array<{ id: number; name: string; image: string | null; n: number }>
+  lu?: string
+}
+
+export function getWebshopCatalogue(): Promise<WebshopCatalogue> {
+  return request<WebshopCatalogue>(`${SOCIAL_ROOT}/api/v1/social/catalogue/nav`)
+}
+
+/** Adresse absolue d'un fichier servi par le module Social (les illustrations du design system). */
+export function socialAssetUrl(path: string): string {
+  return new URL(`${SOCIAL_ROOT}/${path.replace(/^\/+/, '')}`, window.location.origin).href
+}
+
+/**
+ * Une image du webshop servie par Social (même origine) : les photos du webshop sont sur
+ * Cloudflare R2, sans en-tête CORS, et ne se lisent pas directement depuis le navigateur.
+ */
+export function webshopImageProxyUrl(url: string): string {
+  return `${SOCIAL_ROOT}/api/v1/social/media/webshop?u=${encodeURIComponent(url)}`
+}
+
 // ---------------------------------------------------------------------------
 // Médiathèque commune — route écrite au standard (enveloppe, camelCase, pagination)
 // ---------------------------------------------------------------------------
