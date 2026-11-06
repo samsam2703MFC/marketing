@@ -1,0 +1,32 @@
+/* Écrans du module Social réécrits dans le Marketing (docs/PORTAILS.md, étape 2f) — design system du Marketing. */
+.social-native { display: flex; flex-direction: column; gap: 14px; }
+.social-native .seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--chip); }
+.social-native .seg button {
+  margin: 0; padding: 6px 11px; border: 0; border-radius: 7px; background: transparent;
+  color: var(--muted-2); font: inherit; font-size: 12.5px; font-weight: 400; cursor: pointer;
+}
+.social-native .seg button.is-on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
+.social-native .warning { margin: 0; padding: 10px 14px; border-radius: 8px; background: #F6E7CE; color: #7A5207; font-size: 12.5px; }
+.social-native .kpi__value.is-alerte { color: #8D1D2C; }
+.social-native .kpi__value.is-bon { color: #3f7a52; }
+
+.bilan td { vertical-align: top; }
+.bilan__boutique { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; }
+.bilan__place {
+  width: 28px; height: 28px; border-radius: 50%; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--chip); color: var(--muted-2); font-size: 13px;
+}
+.bilan__place.is-premier { background: #8D1D2C; color: #fff; font-weight: 700; }
+.bilan__chiffre { font-size: 17px; line-height: 1.2; }
+.bilan__chiffre.is-bon { color: #3f7a52; }
+.bilan__chiffre.is-alerte { color: #8D1D2C; }
+.bilan__sous { font-size: 11.5px; margin: 3px 0 6px; line-height: 1.4; }
+.bilan__retard { color: #8D1D2C; }
+.bilan__rang { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 6px; background: var(--chip); color: var(--muted-2); }
+.bilan__rang.is-premier { background: #E2F0E8; color: #0F6B4A; }
+.bilan__rang.is-dernier { background: #F6DCDF; color: #8D1D2C; }
+.bilan__conseil { font-size: 12.5px; line-height: 1.45; margin-bottom: 4px; }
+.bilan__legende { font-size: 11.5px; line-height: 1.55; }
+.social-native a { color: #8D1D2C; }
+.social-native a:hover { color: var(--ink); }
+.social-native__periode { font-size: 12.5px; }
