@@ -72,7 +72,7 @@ Chaque étape est mise en ligne séparément, après accord.
 | 2b. Design system sur Social | fait — `social/public/_ds/marketing.css` + styles en ligne |
 | 2c. Tables `mar_` du cockpit | **définitions** reprises par la migration `045_tables_reprises_du_cockpit.sql` (23 tables, sans clé étrangère vers `ceo_shop`). **Reste** : le code du cockpit qui les lit et les écrit (voir l'écart ci-dessous) |
 | 2e. Social n'existe plus seul : `/marketing/social/` ouvert seul renvoie au même écran dans le rail du Marketing (`?ecran=social-…`) | fait |
-| 2f. Écrans de Social réécrits dans le Marketing, un par un, puis `social/` effacé (renvois gardés pour Meta, QR codes, ERP) | en cours — faits : **Bilan des boutiques**, **Suivi (Abonnés & budget)** (`src/views/social/`, routes dans `SOCIAL_NATIVES`) ; reste : Retour, Contrôle, Leads, Grille, Franchise, Google, Campagnes, Repost, Paramètres, Calendrier, Publicités, Post, puis l'espace franchisé |
+| 2f. Écrans de Social réécrits dans le Marketing, un par un, puis `social/` effacé (renvois gardés pour Meta, QR codes, ERP) | en cours — faits : **Bilan des boutiques**, **Suivi (Abonnés & budget)**, **Retour sur opération** ; couche commune portée (`src/lib/social/` : formats, référentiels, état /state, ROI) (`src/views/social/`, routes dans `SOCIAL_NATIVES`) ; reste : Contrôle, Leads, Grille, Franchise, Google, Campagnes, Repost, Paramètres, Calendrier, Publicités, Post, puis l'espace franchisé |
 | 2d. Signage | à faire |
 | 3 à 7 | à faire |
 
