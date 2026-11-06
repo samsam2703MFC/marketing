@@ -20,7 +20,10 @@
 >
 > **Décisions du 06/11/2026** qui priment sur l'existant : (1) **aucune pilule** — pastilles, badges, étiquettes
 > et boutons sont des rectangles aux coins arrondis (§2, §5) ; le Marketing a encore des pilules à aligner
-> (pastilles et badges d'écran, boutons et étiquettes du kit, pastille de mécanique des brochures). (2) **Documents : version A** (§13.4, §13.6).
+> (pastilles et badges d'écran, boutons et étiquettes du kit, pastille de mécanique des brochures). (2) **Documents : version A** (§13.4, §13.6). (3) **Pas de gras** : le texte est en
+> trait normal, le gras est réservé à une liste fermée d'accents (§4.3) — dans le rail, seule l'entrée
+> sélectionnée est en gras. Le Marketing met encore presque tout son texte en gras (déclaration 400 = fichier
+> Regular) : à aligner.
 
 ---
 
@@ -157,24 +160,32 @@ Règles de couleur :
 
 ## 4. Typographie
 
-### 4.1 La police — et le piège des graisses
+### 4.1 La police et ses deux graisses
 
-Police unique : **Gotham**, deux fichiers (copier depuis `marketing/public/fonts/`), déclarés **exactement** :
+Police unique : **Gotham**, deux fichiers (copier depuis `marketing/public/fonts/`), déclarés **exactement** ainsi —
+la même déclaration pour les écrans, les documents de gestion et les e-mails :
 
 ```css
-@font-face { font-family: 'Gotham'; src: url('/fonts/Gotham_Regular.otf') format('opentype'); font-weight: 400; font-display: swap; }
-@font-face { font-family: 'Gotham'; src: url('/fonts/Gotham_Medium.otf')  format('opentype'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Gotham'; src: url('/fonts/Gotham_Medium.otf')  format('opentype'); font-weight: 400; font-display: swap; } /* texte */
+@font-face { font-family: 'Gotham'; src: url('/fonts/Gotham_Regular.otf') format('opentype'); font-weight: 700; font-display: swap; } /* accents */
 ```
 
-| `font-weight` CSS | Fichier | Rendu à l'écran |
-|---|---|---|
-| `400` (défaut) | `Gotham_Regular.otf` | trait **appuyé, presque gras** — le plus fort du système |
-| `500` | `Gotham_Medium.otf` | trait **moyen**, visiblement **plus léger** que le 400 malgré son nom |
-| `600` / `700` | aucun fichier | le navigateur prend le 500 et l'épaissit (gras synthétique) |
+**Attention aux noms de fichier, ils trompent** : `Gotham_Medium.otf` est le trait **normal** du système (celui du
+texte), `Gotham_Regular.otf` est un trait **appuyé, presque gras** (celui des accents). D'où la déclaration
+ci-dessus, où 400 charge « Medium » et 700 charge « Regular ».
 
-**Dans ce système, 500 est plus léger que 400.** Ne « remets pas d'ordre » dans les chiffres : reprends les
-graisses de chaque composant telles qu'écrites ici. N'ajoute pas d'autre fichier Gotham (Light, Book…).
-Si le module est servi sous un sous-répertoire, adapte le **chemin** `/fonts/` à sa racine, pas les valeurs.
+| `font-weight` CSS | Fichier chargé | Usage |
+|---|---|---|
+| `400` (défaut) | `Gotham_Medium.otf` | **tout le texte** : titres, libellés, tableaux, boutons, onglets, champs, pastilles |
+| `700` | `Gotham_Regular.otf` | **uniquement** les accents de la liste fermée du §4.3 |
+| `500`, `600` | — | **interdits** : 500 retombe sur le 400, 600 sur le 700 ; ils brouillent la règle |
+
+N'ajoute pas d'autre fichier Gotham à l'interface (Light, Book…). Si le module est servi sous un sous-répertoire,
+adapte le **chemin** `/fonts/` à sa racine, pas les valeurs.
+
+**Écart du Marketing (à aligner)** : il déclare encore `400 = Gotham_Regular` et `500 = Gotham_Medium`, si bien que son
+texte courant sort presque gras et que ses « 500 » sont plus maigres ; seul son rail a déjà été allégé (entrées en 500,
+sélection en 400). Dans un autre module, applique la déclaration ci-dessus, pas celle du Marketing.
 
 Supprime toute autre police d'interface du module (Inter, Roboto, Arial, polices système imposées…). Une
 police **de contenu** propre à un visuel (affiche, post composé) peut rester dans ce visuel seulement.
@@ -183,39 +194,56 @@ police **de contenu** propre à un visuel (affiche, post composé) peut rester d
 
 | Taille | Graisse | Usage |
 |---|---|---|
-| 26 px | 400, `letter-spacing: -0.01em` | **titre de page** (`h1` de la barre supérieure) |
-| 24 px | 500, `-0.02em`, `line-height: 1.15` | grande valeur de KPI |
+| 26 px | 400, `letter-spacing: -0.01em` | **titre de page** (`h1` de la barre supérieure) — la taille fait la hiérarchie, pas le gras |
+| 24 px | **700** (accent), `-0.02em`, `line-height: 1.15` | grande valeur de KPI |
 | 21 px | 400 | sous-titre d'écran (`.screen-subtitle`) |
-| 22 px | 500 | valeur d'un bandeau de KPI |
-| 18 px | 500 | titre d'un écran vide / d'attente |
-| 16 px | 600 | titre de fenêtre modale |
-| 15 px | 500 | titre de bloc, de fiche |
-| 14 px | 500 | libellé d'interrupteur |
-| 13 px | 400–500 | **texte courant** : tableaux, boutons, rail, champs de recherche |
-| 12.5 px | 400–500 | texte secondaire : champs de formulaire, pastilles, filtres, aides |
+| 22 px | **700** (accent) | valeur d'un bandeau de KPI |
+| 18 px | 400 | titre d'un écran vide / d'attente |
+| 16 px | 400 | titre de fenêtre modale |
+| 15 px | 400 | titre de bloc, de fiche |
+| 14 px | 400 | libellé d'interrupteur |
+| 13 px | 400 | **texte courant** : tableaux, boutons, rail, champs de recherche |
+| 12.5 px | 400 | texte secondaire : champs de formulaire, pastilles, filtres, aides |
 | 12 px | 400 | petits boutons, notes, liens discrets |
 | 11.5 px | 400 | pastilles de statut (`.chip`), légendes à droite d'un titre |
-| 11 px | 600 | étiquettes d'avertissement (`.tag-warn`), kicker de la barre supérieure |
-| 10.5 px | 400–600, capitales | en-têtes de tableau, libellés de KPI, sous-ligne de cellule, badges |
-| 10 px | 500–600, capitales | libellés de groupe du rail, nom du module |
+| 11 px | 400 | étiquettes d'avertissement (`.tag-warn`), kicker de la barre supérieure |
+| 10.5 px | 400, capitales | en-têtes de tableau, libellés de KPI, sous-ligne de cellule, badges |
+| 10 px | 400, capitales | libellés de groupe du rail, nom du module |
 
 Capitales espacées (toujours `text-transform: uppercase`, jamais tapées en majuscules) :
 
 | Élément | Taille | Espacement | Couleur |
 |---|---|---|---|
 | Kicker de page (« Vue Réseau ») | 11 px | `0.18em` | `--muted` |
-| `h2` de bloc | 0.95rem (15,2 px), 500 | `0.06em` | `--muted` |
-| Libellé de section (`.section-label`) | 0.72rem (11,5 px), 600 | `0.08em` | `--muted` |
+| `h2` de bloc | 0.95rem (15,2 px), 400 | `0.06em` | `--muted` |
+| Libellé de section (`.section-label`) | 0.72rem (11,5 px), 400 | `0.08em` | `--muted` |
 | En-tête de tableau | 10.5 px, 400 | `0.06em` | `--muted` |
-| Libellé de KPI | 10.5 px, 600 | `0.08em` | `--faint` |
-| Libellé de groupe du rail | 10 px, 500 | `0.14em` | `--faint` |
-| Nom du module dans le rail | 10 px, 600 | `0.2em` | `--accent` |
+| Libellé de KPI | 10.5 px, 400 | `0.08em` | `--faint` |
+| Libellé de groupe du rail | 10 px, 400 | `0.14em` | `--faint` |
+| Nom du module dans le rail | 10 px, 400 | `0.2em` | `--accent` |
 
 Interlignage : `normal` pour l'interface ; `1.45`–`1.6` pour un paragraphe d'aide de plusieurs lignes ;
 `1.15` pour une grande valeur chiffrée. Les nombres alignés en colonne (tableaux) : `text-align: right`
 (`.num`).
 
 ---
+
+### 4.3 Le gras : une liste fermée d'accents
+
+**Le texte n'est jamais en gras.** Titres, libellés, en-têtes de tableau, cellules, boutons, onglets, champs,
+pastilles, aides : `font-weight: 400`. La hiérarchie se fait par la **taille**, la **couleur** et l'**espace**,
+pas par la graisse. Pas de `<b>` / `<strong>` pour « faire ressortir » un mot dans une phrase d'interface.
+
+`font-weight: 700` est réservé à cette liste, et à elle seule :
+
+| Où | Accents en gras (700) |
+|---|---|
+| Rail | **l'entrée sélectionnée — c'est le seul gras du rail** (ni le nom du module, ni l'enseigne, ni le bouton d'action, ni les libellés de groupe) |
+| Écrans | la valeur d'un chiffre clé (KPI, 22–24 px) |
+| Documents de gestion (version A) | titre de la pièce, nom du destinataire, désignation de chaque ligne, valeurs des références (date, échéance, référence, conditions), total dû |
+| E-mails (version A) | numéro de pièce, montant et échéance dans le texte, nom dans la signature, libellé du bouton |
+
+Ajouter un accent à cette liste est une **décision** : propose-le dans ton compte rendu, ne l'applique pas d'office.
 
 ## 5. Espacements et rayons
 
@@ -286,10 +314,10 @@ enfants qui sont bornés).
 ### 7.2 Titres dans la page
 
 ```css
-h2 { font-size: 0.95rem; font-weight: 500; margin: 0 0 0.5rem; text-transform: uppercase;
+h2 { font-size: 0.95rem; font-weight: 400; margin: 0 0 0.5rem; text-transform: uppercase;
   letter-spacing: 0.06em; color: var(--muted); }                /* titre de carte/bloc */
 .screen-subtitle { font-size: 21px; font-weight: 400; color: var(--ink); margin: 4px 0 14px; }
-.section-label { margin: 1.5rem 0 0; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em;
+.section-label { margin: 1.5rem 0 0; font-size: 0.72rem; font-weight: 400; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--muted); }
 .section-label__aside { float: right; font-size: 11.5px; font-weight: 400; text-transform: none;
   letter-spacing: normal; color: var(--muted); }                /* légende à droite d'un titre */
@@ -311,7 +339,7 @@ h2 { font-size: 0.95rem; font-weight: 500; margin: 0 0 0.5rem; text-transform: u
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   min-height: 36px; margin: 0; padding: 7px 16px;
   border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink);
-  font: 500 13px/1.2 'Gotham', system-ui, sans-serif;
+  font: 400 13px/1.2 'Gotham', system-ui, sans-serif;
   text-decoration: none; white-space: nowrap; cursor: pointer;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
@@ -381,7 +409,7 @@ l'aspect natif, alignées avec leur libellé (`gap: 7px`, 13 px, `--ink`).
 
 /* Pastille de choix (option d'un formulaire) : liseré bordeaux 2 px et fond teinté quand choisie */
 .choice-pill { margin: 0; background: #fff; border: 1px solid rgba(34, 34, 34, 0.14); border-radius: 10px;
-  padding: 9px 16px; font-size: 12.5px; font-weight: 500; color: var(--muted-2); cursor: pointer;
+  padding: 9px 16px; font-size: 12.5px; font-weight: 400; color: var(--muted-2); cursor: pointer;
   transition: border-color 0.15s, background 0.15s, color 0.15s; }
 .choice-pill.is-on { border: 2px solid var(--accent); background: rgba(141, 29, 44, 0.05);
   color: var(--accent); padding: 8px 15px; }                     /* 1 px de padding en moins : rien ne bouge */
@@ -389,7 +417,7 @@ l'aspect natif, alignées avec leur libellé (`gap: 7px`, 13 px, `--ink`).
 /* Sélecteur segmenté (2 à 4 vues d'une même liste : Tout / Photos / Vidéos) */
 .seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--chip); }
 .seg button { margin: 0; padding: 6px 11px; border: 0; border-radius: 7px; background: transparent;
-  color: var(--muted-2); font: 500 12.5px 'Gotham', system-ui, sans-serif; cursor: pointer; }
+  color: var(--muted-2); font: 400 12.5px 'Gotham', system-ui, sans-serif; cursor: pointer; }
 .seg button.is-on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
 ```
 
@@ -399,7 +427,7 @@ l'aspect natif, alignées avec leur libellé (`gap: 7px`, 13 px, `--ink`).
 .page-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 16px; border-bottom: 1px solid var(--line); }
 .page-tabs__tab { margin: 0 0 -1px; padding: 8px 12px; border: none; border-bottom: 2px solid transparent;
   border-radius: 0; background: none; color: var(--muted-2); font: inherit; font-size: 13px;
-  font-weight: 500; cursor: pointer; }
+  font-weight: 400; cursor: pointer; }
 .page-tabs__tab:hover { color: var(--ink); }
 .page-tabs__tab.is-on { color: var(--accent); border-bottom-color: var(--accent); }
 ```
@@ -430,10 +458,10 @@ Pas de bordure verticale entre colonnes, pas de rayure. Une ligne de total : fon
 .dot { width: 8px; height: 8px; border-radius: 50%; }      /* point de couleur d'un canal, d'un levier */
 
 .badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 6px;
-  font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; font-weight: 600; }
+  font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; font-weight: 400; }
 .badge--ok { background: rgba(63, 122, 82, 0.12); color: var(--green); }
 
-.tag-warn, .tag-stop { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600;
+.tag-warn, .tag-stop { display: inline-flex; align-items: center; font-size: 11px; font-weight: 400;
   padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
 .tag-warn { background: var(--prize-soft); color: var(--prize-ink); }   /* à vérifier, incomplet */
 .tag-stop { background: var(--stop-soft); color: var(--stop); }         /* arrêt : valeur négative */
@@ -452,8 +480,8 @@ Pas de bordure verticale entre colonnes, pas de rayure. Une ligne de total : fon
 ```css
 .kpi-row { display: flex; flex-wrap: wrap; padding: 4px 0; }
 .kpi { flex: 1; min-width: 176px; padding: 13px 18px; border-left: 3px solid var(--line); }
-.kpi__value { font-size: 24px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.15; }
-.kpi__label { font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+.kpi__value { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+.kpi__label { font-size: 10.5px; font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--faint); margin-top: 5px; }
 .kpi__note { font-size: 12px; color: var(--muted); margin-top: 3px; }
 ```
@@ -471,14 +499,14 @@ français (« 06/11/2026 » ou « 6 nov. 2026 »).
   border-radius: 999px; background: #fff; box-shadow: 0 1px 2px rgba(28, 26, 23, 0.25); transition: transform 0.15s ease; }
 .switch.is-on .switch__track { background: var(--prize); }
 .switch.is-on .switch__track::after { transform: translateX(16px); }
-.switch__label { font-size: 14px; font-weight: 500; }
+.switch__label { font-size: 14px; font-weight: 400; }
 .switch__hint { font-size: 12.5px; color: var(--muted); }
 /* <button class="switch" aria-pressed="true|false"> : un bouton qui porte son libellé et son explication */
 
 .confirm { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
   padding: 24px; background: rgba(24, 18, 20, 0.42); }
 .confirm__box { width: min(460px, 100%); padding: 22px 24px; }          /* + .card */
-.confirm__box h3 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
+.confirm__box h3 { margin: 0 0 8px; font-size: 16px; font-weight: 400; }
 .confirm__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 .confirm__danger { color: #fff; background: var(--danger); border-color: var(--danger); }
 ```
@@ -501,29 +529,29 @@ suit le texte. Pas d'icône pleine, pas d'icône de couleur, pas d'emoji. Catalo
 .sidebar__head { padding: 20px 16px 8px; }
 .sidebar__logo { height: 26px; display: block; }   /* img/logo.png (708 × 121), copié depuis marketing/public/img/ */
 .sidebar__kicker { font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent);
-  font-weight: 600; margin-top: 9px; }              /* « Module Social », « Cockpit »… */
+  font-weight: 400; margin-top: 9px; }              /* « Module Social », « Cockpit »… */
 
 .sidebar__back { padding: 6px 12px 4px; }
 .sidebar__back a { display: flex; align-items: center; gap: 9px; background: var(--paper); border-radius: 10px;
   padding: 11px 13px; font-size: 13px; color: var(--muted-2); text-decoration: none; }   /* « Retour à l’ERP » */
 
-.sidebar__brand { margin: 10px 12px 0; padding: 8px 10px; font-size: 13px; font-weight: 600; color: var(--ink);
+.sidebar__brand { margin: 10px 12px 0; padding: 8px 10px; font-size: 13px; font-weight: 400; color: var(--ink);
   background: var(--table-head); border-radius: 9px; }   /* enseigne du périmètre : se lit, ne se choisit pas */
 
 .sidebar__groups { padding: 2px 12px 0; }
 .sidebar__group { margin-top: 18px; }
 .sidebar__group-label { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint);
-  font-weight: 500; padding: 0 10px 8px; }
+  font-weight: 400; padding: 0 10px 8px; }
 
 .sidebar__action { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 2px 12px 8px;
-  padding: 9px 12px; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 500;
+  padding: 9px 12px; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 400;
   font-size: 13px; text-decoration: none; }        /* au plus un par rail : la création principale du module */
 .sidebar__action:hover, .sidebar__action.is-active { background: #6f1622; color: #fff; }
 
 .sidebar__item { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 9px;
-  font-size: 13px; font-weight: 500; color: var(--muted-2); text-decoration: none; transition: all 0.15s; }
+  font-size: 13px; font-weight: 400; color: var(--muted-2); text-decoration: none; transition: all 0.15s; }
 .sidebar__item:hover { background: var(--paper); }
-.sidebar__item.is-active { background: rgba(141, 29, 44, 0.08); color: var(--accent); font-weight: 400; }
+.sidebar__item.is-active { background: rgba(141, 29, 44, 0.08); color: var(--accent); font-weight: 700; }  /* le seul gras du rail */
 
 .sidebar__item:focus-visible, .sidebar__back a:focus-visible, .sidebar__action:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -531,15 +559,15 @@ suit le texte. Pas d'icône pleine, pas d'icône de couleur, pas d'emoji. Catalo
 .sidebar__account { display: grid; gap: 4px; margin: 18px 16px 0; padding: 10px 12px; border: 1px solid var(--line);
   border-radius: 10px; font-size: 12px; }
 .sidebar__account.is-dev { border-color: rgba(141, 29, 44, 0.45); background: rgba(141, 29, 44, 0.04); }
-.sidebar__account-who { color: var(--ink); font-weight: 500; }
+.sidebar__account-who { color: var(--ink); font-weight: 400; }
 .sidebar__account.is-dev .sidebar__account-who { color: var(--accent); }
 ```
 
 | Entrée du rail | Fond | Texte + icône | Graisse |
 |---|---|---|---|
-| Au repos | transparent | `--muted-2` | **500** (plus léger) |
-| Survol | `--paper` | `--muted-2` | 500 |
-| Active | `rgba(141,29,44,.08)` | `--accent` | **400** (plus appuyé) |
+| Au repos | transparent | `--muted-2` | 400 (trait normal) |
+| Survol | `--paper` | `--muted-2` | 400 |
+| Active | `rgba(141,29,44,.08)` | `--accent` | **700 — le seul gras du rail** |
 
 Mesures : entrée ≈ 34 px de haut, **accolées** (aucun espace entre elles), icône à 10 px du bord, texte à
 9 px de l'icône. Libellé sur une ligne (2 à 4 mots) : raccourcir plutôt qu'élargir le rail.
@@ -684,7 +712,9 @@ Ouverte seule (sans `embed=1`), la même page affiche le rail du §8 à gauche e
 
 ## 11. Pièges déjà rencontrés (ne pas les refaire)
 
-- **Graisses inversées** : 500 est plus léger que 400 (§4.1). « Corriger » vers 400/600 alourdit tout.
+- **Gras partout** : recopier la déclaration de police du Marketing (400 = fichier Regular) met tout le texte presque
+  en gras. Déclaration du §4.1 (400 = fichier Medium, 700 = fichier Regular) et gras limité à la liste du §4.3.
+- **500 / 600** : interdits ; un titre se distingue par sa taille, pas par un demi-gras.
 - **Second rail dans le cadre** : respecter `embed=1` et le propager aux liens (§9).
 - **Logo ou polices cassés sous un sous-répertoire** : chemins relatifs à la racine d'installation du module.
 - **Bordeaux partout** : réservé à l'action principale, la sélection et le focus. Deux boutons bordeaux pleins
@@ -702,7 +732,8 @@ Ouverte seule (sans `embed=1`), la même page affiche le rail du §8 à gauche e
 
 ## 12. Checklist d'acceptation (à cocher dans ton compte rendu)
 
-- [ ] Gotham partout, deux `@font-face` identiques (400 = Regular, 500 = Medium), aucune autre police d'interface.
+- [ ] Gotham partout, deux `@font-face` du §4.1 (400 = fichier Medium, 700 = fichier Regular), aucune autre police d'interface.
+- [ ] Aucun gras hors de la liste du §4.3 (recherche de `font-weight: 500|600|700|bold`, de `<b>` et `<strong>`) ; dans le rail, seule l'entrée sélectionnée.
 - [ ] Jetons du §3 posés ; plus aucune couleur d'interface en dur hors jetons (vérifié par recherche).
 - [ ] Tailles de texte toutes dans l'échelle du §4.2 ; capitales par `text-transform` avec les espacements du tableau.
 - [ ] Fond papier, blocs blancs bordés `#e6e0d8`, aucune ombre hors interrupteur et sélecteur segmenté.
@@ -710,7 +741,7 @@ Ouverte seule (sans `embed=1`), la même page affiche le rail du §8 à gauche e
 - [ ] Champs, filtres, pastilles, onglets, tableaux, cartes, badges conformes au §7.
 - [ ] Focus clavier visible partout (contour bordeaux 2 px).
 - [ ] Aucune pilule : pastilles, badges, étiquettes, boutons en rectangles aux coins de 4 à 8 px (recherche de `999px`).
-- [ ] Page seule : rail du §8 (246 px, entrées 500 / active 400, une seule active) + barre supérieure.
+- [ ] Page seule : rail du §8 (246 px, entrées 400 / active 700, une seule active) + barre supérieure.
 - [ ] Page incorporée (`?embed=1` dans un cadre) : pas de rail, barre supérieure propre à la page, liens qui gardent `embed=1`, aucun défilement horizontal à 1194 px.
 - [ ] Aucune route cassée, aucun comportement changé, aucun texte en anglais, aucune donnée inventée.
 - [ ] Captures avant / après de chaque page, seule et incorporée, à 1440 × 1000.
@@ -770,18 +801,16 @@ choisir, puis généraliser la version retenue.
 | PDF composé par le serveur (wkhtmltopdf / Chromium sans tête, cockpit) | `'Gotham', Helvetica, Arial, sans-serif` avec `@font-face` en chemin de fichier absolu ; sinon Helvetica | la note de campagne actuelle tombe sur `Helvetica, Arial` : à aligner |
 | E-mail | `'Gotham', Helvetica, Arial, sans-serif` | les messageries ignorent les polices web : Helvetica/Arial s'affichera le plus souvent, la mise en page doit tenir avec |
 
-**Documents de gestion et e-mails (version A) : graisses « naturelles ».** Déclare Gotham pour qu'un `<b>` soit
-réellement plus gras que le texte courant — l'inverse du piège du §4.1 :
+**Documents de gestion et e-mails (version A)** : la déclaration du §4.1, en adresse absolue (plus le Light si besoin) :
 
 ```css
 @font-face { font-family: 'Gotham'; src: url('{racine absolue}/fonts/Gotham_Light.otf');   font-weight: 300; font-display: block; }
 @font-face { font-family: 'Gotham'; src: url('{racine absolue}/fonts/Gotham_Medium.otf');  font-weight: 400; font-display: block; } /* texte courant */
 @font-face { font-family: 'Gotham'; src: url('{racine absolue}/fonts/Gotham_Regular.otf'); font-weight: 700; font-display: block; } /* gras */
 ```
-Avec cette déclaration : texte en 400, mise en valeur en 700 (`<b>`, titre de pièce, total dû, nom du
-destinataire, désignations, valeurs des références). N'emploie pas 500 ni 600 dans un document de gestion.
-Les maquettes l'ont montré : avec la déclaration de l'écran (400 = Regular), le corps du texte sort presque gras et
-les `<b>` en 500 sortent **plus maigres** que lui.
+Texte en 400 ; 700 seulement pour les accents des documents listés au §4.3. Les maquettes l'ont montré : avec
+l'ancienne déclaration (400 = fichier Regular), le corps du texte sort presque gras et les mises en valeur en 500
+sortent **plus maigres** que lui.
 
 **Documents de campagne (kit, brochures)** : déclaration de `fontFaces()`, à reprendre telle quelle — ils posent
 leurs graisses une à une et ont été réglés ainsi :
@@ -795,8 +824,8 @@ leurs graisses une à une et ont été réglés ainsi :
 ```
 - `font-display: block` : on attend la police avant d'imprimer (`document.fonts.ready`), sinon la première page sort
   en police de secours.
-- Dans cette déclaration de campagne, le piège du §4.1 vaut : **500 (Medium) est plus léger que 400 (Regular)** ;
-  300 = Light, le plus fin.
+- Cette déclaration de campagne est l'inverse du §4.1 : 400 y charge le fichier Regular (appuyé) et 500 le
+  fichier Medium (normal) ; 300 = Light, le plus fin. Elle reste propre aux brochures et au kit, réglés ainsi.
 - **Vank** (display, capitales) : titres de couverture et grands titres de campagne uniquement. **Playwrite**
   (script) : une phrase d'accroche, jamais un montant ni une mention légale. Un document de gestion n'emploie
   **ni Vank ni Playwrite** : Gotham seule.
@@ -1013,7 +1042,7 @@ Facebook 820 × 312, landing 800 × 800, post Instagram 1 080 × 1 080, post Fac
 
 - [ ] Données toutes lues dans le système, source de chaque mention légale listée, aucune valeur d'exemple.
 - [ ] Gotham chargée en adresse absolue et attendue avant l'impression (`document.fonts.ready`) ; repli Helvetica/Arial prévu.
-- [ ] Graisses 300 / 400 / 500 comme au §13.2 ; Vank et Playwrite absents des documents de gestion.
+- [ ] Déclaration de police du §4.1 (400 texte, 700 accents du §4.3) ; Vank et Playwrite absents des documents de gestion.
 - [ ] Un seul Ruby par zone : filet d'en-tête, total dû, bouton ; aucun rouge pour un négatif.
 - [ ] Montants « 1 234,50 € », dates « 06/11/2026 », nombres alignés à droite.
 - [ ] `print-color-adjust: exact` sur les blocs colorés ; fonds blancs derrière les PNG ; pas d'`object-fit` en PDF serveur.
