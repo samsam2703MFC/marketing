@@ -1,0 +1,193 @@
+/* Espace franchisé · Mes réseaux (Calendrier.dc.html réécrit) — design system du Marketing. */
+.fcal { max-width: 1440px; }
+/* Le bouton global de l'application a une marge et un fond bordeaux : les boutons de l'écran posent les leurs. */
+:where(.fcal) button:not(.btn) { margin: 0; }
+.fcal h1 { margin: 2px 0 0; font-size: 26px; font-weight: 400; line-height: 1.15; letter-spacing: -0.01em; color: var(--ink); }
+.fcal__onglets { align-self: flex-start; overflow-x: auto; max-width: 100%; }
+.fcal__tete { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.fcal__titre { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.fcal__outils { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.fcal__nav { display: inline-flex; align-items: center; gap: 4px; }
+.fcal__etiquette { font-size: 11px; font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.fcal__etiquette.is-clair { color: #E8D9C4; }
+.fcal__petit { font-size: 11.5px; line-height: 1.45; }
+.fcal .is-or { color: var(--prize-ink, #7A5207); }
+.fcal__bloc-titre { font-size: 14px; }
+.fcal__ligne-tete { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.fcal__message { margin: 0; padding: 12px 14px; border-radius: 8px; background: #fff; border: 1px solid var(--line); border-left: 3px solid var(--accent); font-size: 13px; line-height: 1.55; color: var(--muted-2); }
+.fcal__champ { font: inherit; font-size: 13px; line-height: 1.4; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; resize: vertical; flex: 1 1 220px; min-width: 0; }
+.fcal__champ:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+.fcal__pre { margin: 0; font-size: 13px; line-height: 1.5; white-space: pre-wrap; color: var(--ink); }
+.fcal__actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.fcal__bloc { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; margin: 0; }
+.fcal__point { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; margin-right: 5px; vertical-align: middle; }
+.fcal__statut { display: inline-flex; align-self: flex-start; font-size: 11px; font-weight: 400; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+.fcal__statut.is-or { background: #F6E7CE; }
+.fcal__vide { padding: 16px; text-align: center; font-size: 12.5px; }
+
+/* Ma semaine. */
+.fcal__semaine-carte { background: var(--ink); color: #fff; border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.fcal__rang { font-size: 12px; padding: 3px 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.18); color: #fff; }
+.fcal__rang.is-premier { background: var(--accent); }
+.fcal__tuiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.fcal__tuile { font: inherit; text-align: left; color: #fff; background: rgba(255, 255, 255, 0.07); border: 0; border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; cursor: pointer; }
+.fcal__tuile:hover { background: rgba(255, 255, 255, 0.12); }
+.fcal__tuile-lab { font-size: 11px; color: #E8D9C4; }
+.fcal__tuile-val { font-size: 20px; font-weight: 700; }
+.fcal__tuile-val.is-bon { color: #9FD8B5; }
+.fcal__tuile-sub { font-size: 11px; line-height: 1.35; color: #CFC6BA; }
+.fcal__conseil { font-size: 12px; line-height: 1.45; color: #F4EFE8; }
+
+/* Reposts proposés par le réseau. */
+.fcal__repost { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; margin: 0; border-color: #F2C9A0; }
+.fcal__repost-ligne { display: flex; gap: 12px; align-items: flex-start; border-top: 1px solid var(--line); padding-top: 10px; flex-wrap: wrap; }
+.fcal__repost-img { width: 72px; height: 72px; border-radius: 8px; object-fit: cover; flex: 0 0 auto; background: var(--chip); }
+.fcal__repost-texte { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.fcal__repost-actions { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
+.fcal__refus { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; margin-top: 4px; }
+
+/* Indicateurs et sources. */
+.fcal__kpis { margin: 0; padding: 4px 0; }
+.fcal__kpis .kpi:first-child { border-left-color: transparent; }
+.fcal__kpi-alerte { border-left-color: var(--accent); }
+.fcal__sources { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; margin: 0; }
+.fcal__source { font: inherit; display: inline-flex; align-items: center; gap: 7px; padding: 3px 10px 3px 3px; border-radius: 8px; border: 1px solid var(--accent); background: rgba(141, 29, 44, 0.06); color: var(--ink); font-size: 12px; cursor: pointer; }
+.fcal__source.is-off { border-color: var(--line); background: #fff; opacity: 0.5; }
+.fcal__source-pic { position: relative; width: 26px; height: 26px; flex: 0 0 auto; }
+.fcal__source-pic img { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; background: var(--chip); display: block; }
+.fcal__source-net { position: absolute; right: -3px; bottom: -3px; width: 13px; height: 13px; border-radius: 50%; color: #fff; font-size: 8px; line-height: 1; display: flex; align-items: center; justify-content: center; border: 1.5px solid #fff; }
+.fcal__source-nom { max-width: 190px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fcal__source-n { font-size: 11px; color: var(--accent); }
+.fcal__sources-fin { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.fcal__sources-fin .fcal__petit { max-width: 340px; text-align: right; }
+
+/* Le calendrier et son panneau. */
+.fcal__corps { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.fcal__gauche { flex: 1 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.fcal__droite { flex: 0 1 340px; min-width: 280px; display: flex; flex-direction: column; gap: 12px; }
+.fcal__mois { padding: 0; overflow: hidden; margin: 0; }
+.fcal__dows, .fcal__grille { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.fcal__dows { background: var(--table-head, #FBF9F5); }
+.fcal__dows span { padding: 8px 10px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.fcal__cellule { min-height: 110px; border-top: 1px solid var(--line); border-left: 1px solid var(--line); padding: 6px; display: flex; flex-direction: column; gap: 4px; background: #fff; min-width: 0; }
+.fcal__cellule:nth-child(7n + 1) { border-left: 0; }
+.fcal__cellule.is-hors { background: var(--paper); }
+.fcal__cellule.is-hors .fcal__num { color: var(--faint); }
+.fcal__cellule-tete { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.fcal__num { font-size: 12px; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--ink); }
+.fcal__num.is-auj { background: var(--accent); color: #fff; font-weight: 700; }
+.fcal__plus { width: 20px; height: 20px; border-radius: 6px; border: 1px solid rgba(141, 29, 44, 0.35); background: #fff; color: var(--accent); font-size: 14px; line-height: 1; padding: 0; cursor: pointer; }
+.fcal__item { font: inherit; color: var(--ink); text-align: left; border: 1px solid rgba(34, 34, 34, 0.08); border-left: 3px solid; border-radius: 6px; padding: 3px 5px; background: #fff; cursor: pointer; display: flex; gap: 5px; align-items: center; min-width: 0; }
+.fcal__item.is-mien { background: #FBF7F2; }
+.fcal__item.is-reseau { background: var(--paper); }
+.fcal__item.is-faible, .fcal__carte.is-faible { opacity: 0.6; }
+.fcal__item img { width: 22px; height: 22px; border-radius: 3px; object-fit: cover; background: var(--chip); flex: 0 0 auto; }
+.fcal__item-texte { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.fcal__item-texte > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: var(--ink); }
+.fcal__item-texte > span.muted { font-size: 10px; color: var(--muted); }
+.fcal__semaine { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.fcal__jour { margin: 0; padding: 8px; min-height: 380px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.fcal__jour.is-auj { background: #FBF3F4; }
+.fcal__jour-tete { display: flex; flex-direction: column; gap: 2px; padding: 2px 2px 6px; border-bottom: 1px solid var(--line); }
+.fcal__jour-num { display: flex; align-items: center; justify-content: space-between; font-size: 20px; }
+.fcal__jour.is-auj .fcal__jour-num > span { color: var(--accent); }
+.fcal__jour-items { display: flex; flex-direction: column; gap: 8px; }
+.fcal__carte { font: inherit; color: var(--ink); text-align: left; padding: 0; border-radius: 8px; border: 1px solid rgba(34, 34, 34, 0.08); border-top: 3px solid; background: #fff; overflow: hidden; cursor: pointer; display: flex; flex-direction: column; }
+.fcal__carte img { width: 100%; height: 76px; object-fit: cover; display: block; background: var(--chip); }
+.fcal__carte-texte { padding: 6px 7px 7px; display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 10px; }
+.fcal__carte-titre { font-size: 12px; line-height: 1.3; color: var(--ink); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+.fcal__liste { margin: 0; padding: 0; overflow: hidden; }
+.fcal__liste table { min-width: 760px; }
+.fcal__liste tbody tr { cursor: pointer; }
+.fcal__liste tbody tr:hover td, .fcal__liste tr.is-sel td { background: var(--table-head, #FBF9F5); }
+.fcal__liste-titre { max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fcal__mini { width: 28px; height: 28px; object-fit: cover; border-radius: 4px; background: var(--chip); display: block; }
+
+/* La fiche. */
+.fcal__fiche { padding: 0; overflow: hidden; margin: 0; }
+.fcal__fiche-img { position: relative; width: 100%; height: 0; padding-bottom: 72%; background: var(--chip); }
+.fcal__fiche-img img { position: absolute; inset: 0; width: 100%; height: 100%; }
+.fcal__fermer { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border-radius: 50%; border: 0; background: rgba(28, 26, 23, 0.72); color: #fff; font-size: 16px; line-height: 1; cursor: pointer; }
+.fcal__fiche-corps { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.fcal__fiche-titre { font-size: 15px; line-height: 1.3; }
+.fcal__compte { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.fcal__compte img { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; background: var(--chip); }
+.fcal__compte > span { display: flex; flex-direction: column; min-width: 0; }
+.fcal__compte .muted { font-size: 11px; }
+.fcal__chiffres { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.fcal__chiffres > div { background: var(--table-head, #FBF9F5); border-radius: 8px; padding: 7px 8px; display: flex; flex-direction: column; gap: 1px; }
+.fcal__chiffres > div > span:first-child { font-size: 16px; font-weight: 700; }
+.fcal__chiffres > div > span:last-child { font-size: 10.5px; color: var(--muted); }
+.fcal__chiffres > div.is-bleu { background: #E8F0FD; color: #1F4FA8; }
+.fcal__refuse { padding: 8px 10px; border-radius: 8px; background: #F6DCDF; color: var(--accent); font-size: 12.5px; line-height: 1.45; }
+.fcal__attente { padding: 8px 10px; border-radius: 8px; background: #F6E7CE; color: #7A5207; font-size: 12.5px; line-height: 1.45; }
+.fcal__boost { display: flex; flex-direction: column; gap: 6px; }
+.fcal__boost-etat { padding: 8px 10px; border-radius: 8px; font-size: 12px; line-height: 1.45; background: var(--chip); color: var(--muted-2); }
+.fcal__boost-etat.is-boostee { background: #E2F0E8; color: var(--green); }
+.fcal__boost-etat.is-attente { background: #F6E7CE; color: #7A5207; }
+.fcal__lien { align-self: flex-start; padding-left: 0; color: var(--accent); }
+.fcal__avenir { font: inherit; color: var(--ink); text-align: left; display: flex; align-items: center; gap: 8px; border: 0; background: transparent; padding: 4px 0; cursor: pointer; min-width: 0; }
+.fcal__avenir img { width: 34px; height: 34px; border-radius: 6px; object-fit: cover; background: var(--chip); flex: 0 0 auto; }
+.fcal__avenir > span:nth-child(2) { display: flex; flex-direction: column; gap: 1px; flex: 1 1 auto; min-width: 0; font-size: 12.5px; }
+.fcal__avenir > span:nth-child(2) > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fcal__avenir .muted { font-size: 11px; }
+.fcal__legende { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+
+/* Suivi et analyse. */
+.fcal__onglet { display: flex; flex-direction: column; gap: 12px; }
+.fcal__suivi { display: flex; flex-direction: column; gap: 4px; }
+.fcal__suivi-barres { display: flex; gap: 2px; }
+.fcal__suivi-barres > span { flex: 1 1 0; min-width: 1px; cursor: pointer; display: flex; }
+.fcal__suivi-barres.is-budget { align-items: flex-end; height: 112px; }
+.fcal__suivi-barres.is-budget > span { align-items: flex-end; height: 100%; }
+.fcal__suivi-barres.is-budget > span > span { width: 100%; background: var(--accent); border-radius: 2px 2px 0 0; opacity: 0.85; }
+.fcal__suivi-barres.is-pubs { height: 16px; }
+.fcal__suivi-barres.is-pubs > span { align-items: center; justify-content: center; }
+.fcal__suivi-barres.is-pubs > span > span { border-radius: 50%; background: #1877F2; }
+.fcal__suivi-barres.is-flux > span { flex-direction: column; height: 64px; justify-content: center; }
+.fcal__suivi-barres.is-flux .is-up { display: block; margin-top: auto; background: var(--green); border-radius: 2px 2px 0 0; }
+.fcal__suivi-barres.is-flux .is-down { display: block; margin-bottom: auto; background: var(--danger); border-radius: 0 0 2px 2px; margin-top: 1px; }
+.fcal__suivi-dates { display: flex; justify-content: space-between; font-size: 10.5px; }
+.fcal__graphes { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 12px; }
+.fcal__top { display: grid; grid-template-columns: 36px minmax(0, 1.6fr) minmax(80px, 1fr) 64px; gap: 10px; align-items: center; padding: 5px 4px; border-radius: 8px; text-decoration: none; color: var(--ink); }
+.fcal__top:hover { background: var(--table-head, #FBF9F5); }
+.fcal__top img { width: 36px; height: 36px; border-radius: 6px; object-fit: cover; background: var(--chip); }
+.fcal__top-nom { display: flex; flex-direction: column; gap: 1px; min-width: 0; font-size: 12.5px; }
+.fcal__top-nom > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fcal__top-nom .muted { font-size: 11px; }
+.fcal__top-barre { height: 8px; background: var(--chip); border-radius: 4px; overflow: hidden; }
+.fcal__top-barre > span { display: block; height: 100%; border-radius: 4px; }
+.fcal__top-val { text-align: right; font-size: 13px; }
+.fcal__details { padding: 12px 16px; margin: 0; }
+.fcal__details summary { cursor: pointer; font-size: 13px; color: var(--muted-2); }
+.fcal__details table { margin-top: 10px; }
+
+.fcal__toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 80; background: var(--ink); color: #fff; border-radius: 8px; padding: 10px 16px; font-size: 13px; max-width: calc(100vw - 32px); }
+
+@media (max-width: 1100px) {
+  .fcal__semaine { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fcal__jour { min-height: 0; }
+}
+@media (max-width: 760px) {
+  .fcal h1 { font-size: 22px; }
+  .fcal__droite { flex: 1 1 100%; min-width: 0; }
+  .fcal__kpis .kpi { min-width: 46%; padding: 10px 12px; }
+  .fcal__graphes { grid-template-columns: minmax(0, 1fr); }
+  .fcal__sources-fin { margin-left: 0; width: 100%; justify-content: space-between; }
+  .fcal__sources-fin .fcal__petit { text-align: left; }
+  /* Mois : des cases compactes, la vignette seule ; le détail s'ouvre en bas de l'écran. */
+  .fcal__dows span { padding: 6px 0; font-size: 9.5px; letter-spacing: 0.02em; text-align: center; }
+  .fcal__cellule { min-height: 62px; padding: 3px 2px; gap: 3px; align-items: center; }
+  .fcal__item { padding: 1px; border-left-width: 2px; justify-content: center; width: 100%; }
+  .fcal__item img { width: 100%; max-width: 30px; height: 26px; }
+  .fcal__item-texte, .fcal__plus { display: none; }
+  .fcal__semaine { grid-template-columns: minmax(0, 1fr); }
+  .fcal__jour-items { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fcal__liste table { min-width: 0; }
+  .fcal__cache-mob { display: none; }
+  .fcal__fiche { position: fixed; left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); max-height: 70vh; overflow-y: auto; z-index: 65; }
+  .fcal__fiche-img { padding-bottom: 46%; }
+  .fcal__fermer { width: 36px; height: 36px; font-size: 18px; }
+  .fcal__top { grid-template-columns: 36px minmax(0, 1fr) 56px; }
+  .fcal__top-barre { display: none; }
+}
