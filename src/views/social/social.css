@@ -27,8 +27,8 @@
 .bilan__rang.is-dernier { background: #F6DCDF; color: #8D1D2C; }
 .bilan__conseil { font-size: 12.5px; line-height: 1.45; margin-bottom: 4px; }
 .bilan__legende { font-size: 11.5px; line-height: 1.55; }
-.social-native a { color: #8D1D2C; }
-.social-native a:hover { color: var(--ink); }
+.social-native a:not(.btn) { color: #8D1D2C; }
+.social-native a:not(.btn):hover { color: var(--ink); }
 .social-native__periode { font-size: 12.5px; }
 
 .social-native .is-bon { color: #3f7a52; }
@@ -71,3 +71,56 @@
 .suivi__jauge { height: 8px; background: var(--chip); border-radius: 6px; overflow: hidden; }
 .suivi__jauge > span { display: block; height: 100%; background: #8D1D2C; }
 @media (max-width: 760px) { .suivi__cartes { grid-template-columns: 1fr; } .suivi__rang { grid-template-columns: 24px 1fr 80px; } .suivi__jauge, .suivi__rang .num:nth-of-type(n+2) { display: none; } }
+
+.social-native .is-moyen { color: #7A5207; }
+.social-native h3 { margin: 0 0 10px; font-size: 13px; font-weight: 400; }
+.retour__vide { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.retour__vide p { margin: 0; max-width: 720px; line-height: 1.5; }
+.retour__operations { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.retour__operation {
+  display: flex; align-items: center; gap: 12px; text-align: left; background: #fff; border: 1px solid #e6e0d8; border-radius: 10px;
+  padding: 12px 14px; cursor: pointer; font: inherit; color: inherit;
+}
+.retour__operation.is-on { border-color: #8D1D2C; box-shadow: inset 0 0 0 1px #8D1D2C; }
+.retour__icone { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.retour__icone img { width: 26px; height: 26px; object-fit: contain; }
+.retour__operation-nom { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; font-size: 14px; }
+.retour__operation-nom .muted { font-size: 11px; }
+.retour__heros { display: grid; grid-template-columns: minmax(260px, 1.3fr) repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.retour__hero { display: flex; flex-direction: column; gap: 8px; margin: 0; }
+.retour__ca { font-size: 34px; font-weight: 700; line-height: 1; }
+.retour__sous { font-size: 12px; }
+.retour__objectif { display: flex; justify-content: space-between; font-size: 11px; }
+.retour__hero .bilan__rang { align-self: flex-start; }
+.retour__deux { display: flex; gap: 14px; flex-wrap: wrap; }
+.retour__deux > .card { flex: 1 1 360px; margin: 0; }
+.retour__meta { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.retour__meta .suivi__fait > span:nth-child(2) { font-size: 16px; }
+.retour__produits { font-size: 11px; margin-left: 8px; }
+.retour__ventes { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+.retour__ventes-tete { display: flex; justify-content: space-between; font-size: 12px; }
+.retour__barre { display: grid; grid-template-columns: 78px minmax(0, 1fr) 90px; gap: 8px; align-items: center; font-size: 11px; }
+.retour__barre .suivi__jauge { height: 10px; border-radius: 3px; }
+.retour__fort { color: var(--ink); font-weight: 700; }
+.retour__comparaison-tete { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.retour__comparaison-tete h3 { margin: 0; }
+.retour__comparaison { display: grid; grid-template-columns: 140px minmax(0, 1fr) 110px; gap: 12px; align-items: center; margin-bottom: 8px; font-size: 13px; }
+.retour__piste { position: relative; height: 22px; border-radius: 4px; background: var(--chip); overflow: hidden; }
+.retour__plein { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+.retour__nd { position: absolute; left: 8px; top: 4px; font-size: 11px; }
+.retour__objectif-trait { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--ink); }
+.retour__tableau td, .retour__tableau th { white-space: nowrap; }
+.retour__tableau tr.is-focus td { background: #FBF3F4; }
+.retour__tableau tr.is-sans td { background: #FCFAF7; }
+.retour__tableau tr.retour__total td { background: var(--panel, #FBF9F5); font-weight: 700; }
+.retour__classement { display: flex; flex-direction: column; gap: 8px; }
+.retour__rang {
+  display: grid; grid-template-columns: 28px minmax(160px, 1.6fr) repeat(4, minmax(90px, 1fr)) 140px; gap: 10px; align-items: center;
+  border: 0; background: var(--panel, #FBF9F5); border-radius: 8px; padding: 10px 12px; cursor: pointer; text-align: left; font: inherit; color: inherit;
+}
+.retour__rang.is-on { background: #FBF3F4; }
+.retour__rang .bilan__rang { justify-self: end; }
+.retour__rang-no { font-size: 18px; color: #8D1D2C; }
+.retour__chiffre { display: flex; flex-direction: column; font-size: 13px; }
+.retour__chiffre .muted { font-size: 10px; }
+@media print { .filters, .retour__operations { display: none; } }
