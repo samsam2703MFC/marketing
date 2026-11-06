@@ -1,0 +1,55 @@
+/*
+ * Studio visuel de « Créer un post » (repris de social/public/Posts Facebook.dc.html).
+ * Le visuel exporté garde les polices de la marque sous des noms à part : l'interface du Marketing
+ * déclare son propre Gotham (400 = Medium) et ne doit pas en changer.
+ */
+@font-face { font-family: 'Studio Gotham'; src: url('/fonts/Gotham_Light.otf') format('opentype'); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Studio Gotham'; src: url('/fonts/Gotham_Regular_New.otf') format('opentype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Studio Gotham'; src: url('/fonts/Gotham_Medium.otf') format('opentype'); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Studio Vank'; src: url('/fonts/GC_Vank.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; unicode-range: U+0020-007E; }
+@font-face { font-family: 'Studio Playwrite'; src: url('/fonts/PlaywriteDEVA-Light.ttf') format('truetype'); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Studio Playwrite'; src: url('/fonts/PlaywriteDEVA-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+
+.studio { position: relative; width: 100%; }
+.studio__apercu { position: relative; width: 100%; overflow: hidden; background: #F5EFE4; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+
+/* Un texte du visuel se modifie sur place : le champ vit hors de la planche, l'export ne le voit pas. */
+.studio__edition {
+  position: absolute; z-index: 30; display: flex; align-items: center; gap: 6px; box-sizing: border-box;
+  padding: 4px 4px 4px 10px; background: #fff; border: 1px solid #8D1D2C; border-radius: 8px;
+}
+.studio__edition-nom { flex: 0 0 auto; font-size: 11px; color: #8D1D2C; white-space: nowrap; }
+.studio__edition input { flex: 1 1 auto; min-width: 0; font: inherit; font-size: 14px; color: var(--ink); border: 0; outline: none; background: transparent; padding: 6px 2px; }
+.studio__edition button { flex: 0 0 auto; width: 28px; height: 28px; border-radius: 6px; border: 0; background: #8D1D2C; color: #fff; font-size: 14px; line-height: 1; cursor: pointer; }
+
+/* Paysage (1,91:1) : les styles en pile (Épuré, Ruby, Noir) passent en deux colonnes, la photo à droite. */
+.studio [data-format="paysage"] .pf-pile { padding-right: calc(50% + 24px) !important; justify-content: center; }
+/* Texte posé : le × qui l'efface, au survol ou quand il est sélectionné (jamais à l'export). */
+.studio .pf-etq .pf-x { display: none; }
+.studio .pf-etq:hover .pf-x, .studio .pf-etq.pf-sel .pf-x { display: flex; }
+.studio [data-format="paysage"] .pf-pile > .pf-photo + * { margin-top: 28px !important; }
+.studio [data-format="paysage"] .pf-pile > .pf-photo { position: absolute !important; right: 72px !important; top: 64px !important; bottom: 64px !important; width: calc(50% - 96px) !important; height: auto !important; margin: 0 !important; }
+/* Story (9:16) : le haut et le bas (≈ 250 px) sont couverts par l'interface d'Instagram. La mise en page se resserre
+   au centre ; le fond, la photo plein cadre, son dégradé, le bandeau du bas et le filet restent bord à bord. */
+.studio [data-format="story"] { --sh: 200px; }
+.studio [data-format="story"] .pf-root { border-top: var(--sh) solid transparent; border-bottom: var(--sh) solid transparent; background-origin: border-box; overflow: visible !important; }
+.studio [data-format="story"] .pf-bleed { top: calc(-1 * var(--sh)) !important; bottom: auto !important; height: calc(100% + 2 * var(--sh)) !important; }
+.studio [data-format="story"] .pf-bas { bottom: calc(-1 * var(--sh)) !important; padding-bottom: calc(80px + var(--sh)) !important; }
+.studio [data-format="story"] .pf-colonne { top: calc(-1 * var(--sh)) !important; height: calc(100% + 2 * var(--sh)) !important; padding-top: calc(48px + var(--sh)) !important; padding-bottom: calc(48px + var(--sh)) !important; }
+.studio [data-format="story"] .pf-cadre { top: calc(32px - var(--sh)) !important; bottom: calc(32px - var(--sh)) !important; }
+/* Couleur de chaque texte du visuel, au choix (palette de la marque) : la classe pf-c-… active la variable --c-…. */
+.studio .pf-c-eyebrow .pf-t-eyebrow { color: var(--c-eyebrow) !important; }
+.studio .pf-c-title .pf-t-title { color: var(--c-title) !important; }
+.studio .pf-c-phrase .pf-t-phrase { color: var(--c-phrase) !important; }
+.studio .pf-c-price .pf-t-price { color: var(--c-price) !important; }
+.studio .pf-c-unit .pf-t-unit { color: var(--c-unit) !important; }
+.studio .pf-c-promo .pf-t-promo { color: var(--c-promo) !important; }
+.studio .pf-c-promosub .pf-t-promosub { color: var(--c-promosub) !important; }
+.studio .pf-c-site .pf-t-site { color: var(--c-site) !important; }
+/* Un clic sur un texte du visuel ouvre sa couleur ; le texte choisi est entouré (jamais à l'export). */
+.studio .pf-pick [class*="pf-t-"] { cursor: pointer; }
+.studio .pf-pick [class*="pf-t-"]:hover { outline: 2px dashed rgba(141, 29, 44, 0.55); outline-offset: 6px; }
+.studio .pf-sel-eyebrow .pf-t-eyebrow, .studio .pf-sel-title .pf-t-title, .studio .pf-sel-phrase .pf-t-phrase, .studio .pf-sel-price .pf-t-price,
+.studio .pf-sel-unit .pf-t-unit, .studio .pf-sel-promo .pf-t-promo, .studio .pf-sel-promosub .pf-t-promosub, .studio .pf-sel-site .pf-t-site {
+  outline: 3px solid rgba(141, 29, 44, 0.85) !important; outline-offset: 6px;
+}

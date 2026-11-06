@@ -1,7 +1,7 @@
-import { useCallback, useState } from 'react'
+import { useEffect, useState } from 'react'
 import * as api from './lib/api/module'
 import { useAsync } from './lib/useAsync'
-import { SOCIAL_NATIVES, SOCIAL_PAGES, socialPageFor, socialRoute, tabsFor, titleFor } from './lib/navigation'
+import { ESPACE_BOUTIQUE, SOCIAL_NATIVES, tabsFor, titleFor } from './lib/navigation'
 import type { Role, Route } from './lib/navigation'
 import Sidebar from './components/Sidebar'
 import DashboardView from './views/DashboardView'
@@ -23,7 +23,7 @@ import BrochureView from './views/brochure/BrochureView'
 import MediaLibraryView from './views/media/MediaLibraryView'
 import SettingsView from './views/SettingsView'
 import CampaignBuilder from './views/builder/CampaignBuilder'
-import SocialView from './views/SocialView'
+import PostView from './views/social/PostView'
 import CalendrierView from './views/social/CalendrierView'
 import PublicitesView from './views/social/PublicitesView'
 import LeadsView from './views/social/LeadsView'
@@ -165,25 +165,12 @@ const REGLAGES_SOCIAL: Record<string, { tab: string; section?: string }> = {
   conn: { tab: 'conn' }, google: { tab: 'google' }, tpl: { tab: 'tpl' }, grp: { tab: 'grp' },
   rights: { tab: 'rights' }, log: { tab: 'log' }, tfb: { tab: 'tfb' },
   cles: { tab: 'api', section: 'cles' }, ids: { tab: 'api', section: 'ids' }, pf: { tab: 'api', section: 'pf' },
-  version: { tab: 'api', section: 'version' }, dsa: { tab: 'api', section: 'dsa' },
+  version: { tab: 'api', section: 'version' }, dsa: { tab: 'api', section: 'dsa' }, ia: { tab: 'ia' },
 }
 
 function screenFromUrl(): Route | null {
   const ecran = new URLSearchParams(window.location.search).get('ecran') ?? ''
-  return Object.prototype.hasOwnProperty.call(SOCIAL_PAGES, ecran) || SOCIAL_NATIVES.has(ecran as Route) ? (ecran as Route) : null
-}
-
-/**
- * Ce que l'adresse transmet à l'écran « Créer un post » encore servi par le module Social : le post à
- * modifier (`&id=`) et le post de la marque (`&marque=1`), posés par les écrans réécrits (Repost…).
- */
-function postQueryFromUrl(): string {
-  if (screenFromUrl() !== 'social-post') return ''
-  const params = new URLSearchParams(window.location.search)
-  const id = params.get('id') ?? ''
-  return [/^[\w-]{1,64}$/.test(id) ? `id=${encodeURIComponent(id)}` : '', params.get('marque') === '1' ? 'marque=1' : '']
-    .filter(Boolean)
-    .join('&')
+  return SOCIAL_NATIVES.has(ecran as Route) ? (ecran as Route) : null
 }
 
 /** La campagne à présélectionner dans « Créer un post » quand Social renvoie ici (`&op=19`). */
@@ -220,6 +207,15 @@ function resolveBrand(brands: api.Brand[], requested: number): api.Brand | undef
 interface Account {
   via: 'erp' | 'dev' | 'service' | null
   label: string | null
+}
+
+/** Une page de l'espace boutique : une application à part (/marketing/franchise/<page>), la boutique suit. */
+function RenvoiEspace({ page }: { page: string }) {
+  useEffect(() => {
+    const shop = new URLSearchParams(window.location.search).get('shop') ?? ''
+    window.location.assign(`${import.meta.env.BASE_URL}franchise/${page}${shop ? `?shop=${encodeURIComponent(shop)}` : ''}`)
+  }, [page])
+  return <p className="muted">Ouverture de l’espace boutique…</p>
 }
 
 function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: () => void; onLogout: () => void }) {
@@ -260,14 +256,6 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
     setFrameKey((key) => key + 1)
     setRoute(next)
   }
-
-  /**
-   * Navigation à l'intérieur du cadre du module Social : le menu suit l'écran
-   * affiché, sans recharger le cadre (même instance, adresse inchangée).
-   */
-  const followSocial = useCallback((key: string) => {
-    setRoute((current) => socialRoute(key, current) ?? current)
-  }, [])
 
   /**
    * « Créer un post » du module Social depuis le suivi d'une campagne, qui est
@@ -333,11 +321,10 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
   }
 
   const refs = references.data
-  const social = socialPageFor(role, route)
   // Paramètres Social réécrits : la route dit l'onglet et la section (« social-set-cles » → api / cles).
   const reglages = route.startsWith('social-set-') ? REGLAGES_SOCIAL[route.slice(11)] ?? null : null
   // Un écran d'une autre application, dans un cadre : il porte son propre titre et prend toute la surface.
-  const framed = social !== null || route === 'instore'
+  const framed = route === 'instore'
   const tabs = tabsFor(role, route)
 
   // Une adresse qui nomme une enseigne inconnue n'affiche pas « tout » : les
@@ -472,9 +459,17 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
             />
           ) : null}
 
-          {social ? (
-            <SocialView key={frameKey} file={social.file} query={[social.query, frameKey === 0 && route === 'social-post' ? postQueryFromUrl() : ''].filter(Boolean).join('&') || undefined} space={social.space} campaignId={postFor} onPage={followSocial} />
+          {route === 'social-post' && role !== 'FRANCHISEE' ? (
+            <PostView
+              key={frameKey}
+              operation={postFor}
+              onRetour={() => navigate('social-cal')}
+              onCreerPub={(id) => allerSocial('social-ads', 'new=1&post=' + encodeURIComponent(id))}
+              onVoirPubs={(id) => allerSocial('social-ads', id ? 'ad=' + encodeURIComponent(id) : '')}
+              onParametresIa={() => navigate('social-set-ia')}
+            />
           ) : null}
+          {ESPACE_BOUTIQUE[route] && role === 'FRANCHISEE' ? <RenvoiEspace page={ESPACE_BOUTIQUE[route]} /> : null}
 
           {route === 'social-bilan' && role !== 'FRANCHISEE' ? <BilanView /> : null}
           {route === 'social-suivi' && role !== 'FRANCHISEE' ? <SuiviView /> : null}

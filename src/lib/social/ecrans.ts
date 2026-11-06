@@ -1,7 +1,6 @@
 import type { Boutique, EtatSocial, Objet, Serveur } from './store'
 import { parId } from './store'
 import { CONN } from './refs'
-import { ROOTS } from '../api/module'
 
 /**
  * Lectures communes aux écrans Calendrier et Publicités (reprises de social/public/social-data.js,
@@ -155,9 +154,16 @@ export function alertes(etat: EtatSocial, serveur: Serveur): Alerte[] {
 
 export const libelleConnexion = (st: string) => (CONN[st] ?? CONN.none).label ?? ''
 
-/** Une page de l'ancien module Social, ouverte dans le cadre (`embed=1`) — pour un lien qui n'a pas encore d'écran réécrit. */
+/** Les anciens écrans de Social et leur écran du Marketing. */
+const ECRANS: Record<string, string> = {
+  'SA Calendrier.dc.html': 'social-cal', 'SA Post.dc.html': 'social-post', 'SA Controle.dc.html': 'social-ctrl',
+  'SA Parametres.dc.html': 'social-set-conn', 'SA Publicites.dc.html': 'social-ads', 'SA Leads.dc.html': 'social-leads',
+  'SA Grille.dc.html': 'social-grid', 'SA Campagnes.dc.html': 'social-camp', 'SA Repost.dc.html': 'social-repost',
+}
+
+/** L'écran du Marketing qui a remplacé une page de l'ancien module Social (`?ecran=social-…`). */
 export function pageSocial(fichier: string, q?: string): string {
-  return `${ROOTS.social}${encodeURI(fichier)}?${[q, 'embed=1'].filter(Boolean).join('&')}`
+  return `${window.location.pathname}?${[`ecran=${ECRANS[fichier] ?? 'social-cal'}`, q].filter(Boolean).join('&')}`
 }
 
 /** Un objet du serveur lu comme un dictionnaire (les champs non typés du store). */

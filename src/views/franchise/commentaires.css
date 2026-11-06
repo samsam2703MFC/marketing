@@ -1,0 +1,19 @@
+/* Commentaires de l'espace franchisé (social/franchisee/Commentaires.dc.html) — design system du Marketing.
+   Les classes communes (gg__…) viennent de ../social/google.css. */
+.fcom__grille { display: grid; grid-template-columns: 150px minmax(240px, 2fr) minmax(170px, 1.1fr) minmax(220px, 1.5fr) 118px; min-width: 960px; }
+.fcom__publication { font-size: 12px; line-height: 1.4; color: var(--muted-2); word-break: break-word; }
+.fcom__suggestion { font-size: 12px; line-height: 1.45; color: var(--muted-2); background: var(--table-head, #FBF9F5); border-radius: 8px; padding: 7px 9px; }
+.fcom__gauche { align-self: flex-start; }
+.fcom__reseau { font-size: 11.5px; line-height: 1.4; }
+
+/* Téléphone (social/franchisee/mobile.css) : une ligne du tableau devient une carte. */
+@media (max-width: 760px) {
+  .fcom .gg__table { overflow: visible; background: transparent; border: 0; padding: 0; }
+  .fcom__grille { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+  .fcom__grille .gg__th { display: none; }
+  .fcom__grille .gg__cellule { border-bottom: 0; padding: 6px 14px; }
+  .fcom__grille .fcom__c1 { margin-top: 10px; border-radius: 12px 12px 0 0; padding-top: 14px; flex-direction: row; align-items: center; flex-wrap: wrap; }
+  .fcom__grille .fcom__cz { border-radius: 0 0 12px 12px; padding-bottom: 14px; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 12px; }
+  .fcom .gg__etat { margin-left: 0; }
+  .fcom .gg__kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

@@ -3,7 +3,7 @@ import { socialApi } from './store'
 /**
  * Appels de l'écran « Contrôle des posts » (repris de social/public/social-data.js) : les publications des Pages
  * et comptes Instagram entre deux dates, lues en direct chez Meta par le serveur du module (GET /meta/calendriers,
- * social/src/calendriers.php). Rien n'est gardé en base.
+ * api/social/src/calendriers.php). Rien n'est gardé en base.
  */
 export interface PostCalendrier {
   id: string

@@ -1,7 +1,7 @@
 import { charger, socialApi } from './store'
 
 /**
- * Le repost automatique (social/src/repost.php) : chaque nouveau post de la Page de la marque repris sur les Pages
+ * Le repost automatique (api/social/src/repost.php) : chaque nouveau post de la Page de la marque repris sur les Pages
  * des boutiques. Réglage, suivi des publications reprises et gestes du réseau — tout se passe sur le serveur du
  * module (Meta, file, espace franchisé). Chaque geste rend l'écran à jour (mêmes routes que social-data.js).
  */

@@ -1,0 +1,31 @@
+/* Avis Google de l'espace franchisé (social/franchisee/Google.dc.html) — design system du Marketing.
+   Les classes communes (gg__…) viennent de ../social/google.css. */
+.fgg__ligne { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fgg__rep.is-atteint .gg__badge { background: rgba(45, 122, 62, 0.12); color: #2d7a3e; }
+.fgg__rep.is-sous .gg__badge { background: rgba(141, 29, 44, 0.1); color: #8D1D2C; }
+.fgg__effort { font-size: 13px; border-radius: 8px; padding: 8px 10px; background: var(--chip); color: var(--muted); }
+.fgg__rep.is-atteint .fgg__effort { background: rgba(45, 122, 62, 0.08); color: #2d7a3e; }
+.fgg__rep.is-sous .fgg__effort { background: rgba(141, 29, 44, 0.05); color: #8D1D2C; }
+.fgg__reseau-n { font-size: 26px; line-height: 1; font-weight: 700; color: var(--ink); }
+
+.fgg__qr { margin: 0; padding: 18px 20px; display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+.fgg__qr-code { width: 150px; height: 150px; flex: 0 0 auto; }
+.fgg__qr-corps { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.fgg__objectif { font-size: 15px; line-height: 1.35; }
+.fgg__gagnes { font-size: 12px; }
+.fgg__qr-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.fgg__reseau { font-size: 11.5px; line-height: 1.4; }
+
+/* Téléphone (social/franchisee/mobile.css) : le QR au-dessus, une ligne du tableau devient une carte. */
+@media (max-width: 760px) {
+  .fgg__qr { flex-direction: column; align-items: stretch; }
+  .fgg__qr-code { align-self: center; }
+  .fgg .gg__table { overflow: visible; background: transparent; border: 0; padding: 0; }
+  .fgg__grille { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+  .fgg__grille .gg__th { display: none; }
+  .fgg__grille .gg__cellule { border-bottom: 0; padding: 6px 14px; }
+  .fgg__grille .fgg__c1 { margin-top: 10px; border-radius: 12px 12px 0 0; padding-top: 14px; flex-direction: row; align-items: center; flex-wrap: wrap; }
+  .fgg__grille .fgg__cz { border-radius: 0 0 12px 12px; padding-bottom: 14px; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 12px; }
+  .fgg .gg__etat { margin-left: 0; }
+  .fgg .gg__kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

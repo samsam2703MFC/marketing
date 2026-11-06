@@ -1,0 +1,52 @@
+# API Social du Marketing — servie sous /marketing/social (et l'ancienne /social, que Meta,
+# les QR codes et l'ERP appellent encore). Plus aucun écran ici : les anciennes adresses des
+# écrans renvoient au même écran du Marketing (/marketing/?ecran=social-…), paramètres compris.
+DirectoryIndex disabled
+RewriteEngine On
+
+# API → contrôleur frontal
+RewriteRule ^api/v1/social(/.*)?$ api/index.php [L,QSA]
+
+# Les visuels déposés ne s'exécutent jamais, et un visuel absent rend 404.
+RewriteRule ^uploads/.*\.(php|phtml|phar|phps|cgi|pl|py|sh|htaccess)$ - [F,L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^uploads/ - [R=404,L]
+
+# --- Anciens écrans → le Marketing ------------------------------------------------------------
+RewriteRule ^(index\.html)?$ /marketing/?ecran=social-cal [R=302,L]
+RewriteRule ^SA\ Calendrier\.dc\.html$ /marketing/?ecran=social-cal [R=302,L,QSA]
+RewriteRule ^SA\ Grille\.dc\.html$ /marketing/?ecran=social-grid [R=302,L,QSA]
+RewriteRule ^SA\ Franchise\.dc\.html$ /marketing/?ecran=social-fr [R=302,L,QSA]
+RewriteRule ^SA\ Post\.dc\.html$ /marketing/?ecran=social-post [R=302,L,QSA]
+RewriteRule ^Posts\ Facebook\.dc\.html$ /marketing/?ecran=social-post [R=302,L,QSA]
+RewriteRule ^SA\ Repost\.dc\.html$ /marketing/?ecran=social-repost [R=302,L,QSA]
+RewriteRule ^SA\ Campagnes\.dc\.html$ /marketing/?ecran=social-camp [R=302,L,QSA]
+RewriteRule ^SA\ Publicites\.dc\.html$ /marketing/?ecran=social-ads [R=302,L,QSA]
+RewriteRule ^SA\ Leads\.dc\.html$ /marketing/?ecran=social-leads [R=302,L,QSA]
+RewriteRule ^SA\ Retour\.dc\.html$ /marketing/?ecran=social-roi [R=302,L,QSA]
+RewriteRule ^SA\ Suivi\.dc\.html$ /marketing/?ecran=social-suivi [R=302,L,QSA]
+RewriteRule ^SA\ Controle\.dc\.html$ /marketing/?ecran=social-ctrl [R=302,L,QSA]
+RewriteRule ^SA\ Google\.dc\.html$ /marketing/?ecran=social-google [R=302,L,QSA]
+RewriteRule ^SA\ Bilan\.dc\.html$ /marketing/?ecran=social-bilan [R=302,L,QSA]
+# Paramètres : l'onglet (et la section de l'onglet API) choisit l'écran.
+RewriteCond %{QUERY_STRING} (^|&)tab=api(&|$)
+RewriteCond %{QUERY_STRING} (^|&)section=(cles|ids|pf|version|dsa)(&|$)
+RewriteRule ^SA\ Parametres\.dc\.html$ /marketing/?ecran=social-set-%2 [R=302,L]
+RewriteCond %{QUERY_STRING} (^|&)tab=api(&|$)
+RewriteRule ^SA\ Parametres\.dc\.html$ /marketing/?ecran=social-set-cles [R=302,L]
+RewriteCond %{QUERY_STRING} (^|&)tab=(conn|google|tpl|grp|rights|log|tfb)(&|$)
+RewriteRule ^SA\ Parametres\.dc\.html$ /marketing/?ecran=social-set-%2 [R=302,L]
+RewriteRule ^SA\ Parametres\.dc\.html$ /marketing/?ecran=social-set-conn [R=302,L]
+
+<IfModule mod_headers.c>
+  <FilesMatch "^uploads/">
+    Header set X-Content-Type-Options "nosniff"
+  </FilesMatch>
+</IfModule>
+
+# Un post peut porter jusqu'à 10 images 1080 × 1350 (carrousel panoramique) et leurs
+# photos sources : le corps JSON dépasse alors les 8 Mo par défaut de PHP.
+<IfModule mod_php.c>
+  php_value post_max_size 64M
+  php_value memory_limit 256M
+</IfModule>

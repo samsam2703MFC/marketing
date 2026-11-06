@@ -2763,7 +2763,7 @@ export async function setErpVoucherStatus(campaignId: number, id: number, status
 
 export type BilanPeriode = 'semaine' | 'mois' | 'trimestre' | 'annee'
 
-/** Une boutique du bilan (social/src/bilan.php). */
+/** Une boutique du bilan (api/social/src/bilan.php). */
 export interface BilanLigne {
   id: string
   nom: string
