@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { module as api } from '../../lib/api'
 import { useAsync } from '../../lib/useAsync'
-import { describeError } from '../../state/auth'
+import MediaPicker from '../media/MediaPicker'
+import type { PickedImage } from '../media/sources'
 import { seasonImage, seasonLabel } from './illustrations'
 import type { Draft } from './CampaignBuilder'
 
@@ -16,7 +17,8 @@ import type { Draft } from './CampaignBuilder'
  *   • la photo part-elle à l'impression ? Un dépliant de six produits ne les
  *     montre pas tous ;
  *   • laquelle ? Celle du catalogue par défaut — la fiche produit de l'ERP —,
- *     ou une photo propre à la campagne ;
+ *     ou une photo propre à la campagne, choisie dans la médiathèque (ses
+ *     fichiers, les photos du webshop, les illustrations de la marque) ;
  *   • et sinon, on le voit tout de suite : un produit sans photo nulle part
  *     s'affiche comme tel, au lieu de laisser découvrir le trou sur l'épreuve
  *     de l'imprimeur.
@@ -34,8 +36,9 @@ export default function PhotosStep({
   patch: (change: Partial<Draft>) => void
 }) {
   const catalogue = useAsync(() => api.listOfferItems(), [])
-  const [encours, setEncours] = useState<number | null>(null)
-  const [erreur, setErreur] = useState<string | null>(null)
+  // Le produit dont on choisit la photo dans la médiathèque, et ce qu'on en a dit.
+  const [choix, setChoix] = useState<number | null>(null)
+  const [notes, setNotes] = useState<Record<number, string>>({})
 
   const items = draft.offer_items
 
@@ -69,31 +72,19 @@ export default function PhotosStep({
       offer_items: items.map((item, rang) => (rang === index ? { ...item, ...change } : item)),
     })
 
-  const televerser = async (index: number, file: File | null) => {
-    if (file === null) return
-
-    setEncours(index)
-    setErreur(null)
-
-    try {
-      const content = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(String(reader.result))
-        reader.onerror = () => reject(new Error('Fichier illisible.'))
-        reader.readAsDataURL(file)
-      })
-
-      const image = await api.uploadImage(content)
-
-      // `BASE_URL` porte le sous-répertoire d'installation : le chemin rendu par
-      // le serveur est relatif à la racine de l'application, pas à celle du
-      // domaine.
-      majItem(index, { image_url: `${import.meta.env.BASE_URL}${image.path}`, show_photo: true })
-    } catch (echec) {
-      setErreur(describeError(echec))
-    } finally {
-      setEncours(null)
-    }
+  /** Retient la photo choisie ; ce qu'elle vaut à l'impression se dit sous le produit. */
+  const choisir = (index: number, image: PickedImage, note: string | null) => {
+    setChoix(null)
+    majItem(index, { image_url: image.url, show_photo: true })
+    const w = image.width
+    const h = image.height
+    const qualite =
+      w === null || h === null
+        ? null
+        : Math.min(w, h) < 1000
+          ? `${w} × ${h} px : un peu juste pour l’impression à 300 dpi au-delà de 8 cm de côté.`
+          : `${w} × ${h} px.`
+    setNotes((n) => ({ ...n, [index]: [`« ${image.name} »`, qualite, note].filter(Boolean).join(' · ') }))
   }
 
   const blocGammes =
@@ -159,7 +150,8 @@ export default function PhotosStep({
       <h2>Photos produits</h2>
       <p className="muted">
         Ce qui part dans le dossier d’impression. La photo du catalogue sert par défaut ; une
-        photo déposée ici ne vaut que pour cette campagne et ne change rien au catalogue.
+        autre se choisit dans la médiathèque — ses fichiers, les photos du webshop ou les
+        illustrations de la marque — et ne vaut que pour cette campagne : le catalogue ne change pas.
       </p>
 
       <p className="photos__bilan">
@@ -172,8 +164,6 @@ export default function PhotosStep({
           </span>
         ) : null}
       </p>
-
-      {erreur === null ? null : <p className="error">{erreur}</p>}
 
       <ul className="photos">
         {produits.map((index) => {
@@ -220,14 +210,9 @@ export default function PhotosStep({
                 </label>
 
                 <div className="photos__actions">
-                  <label className="btn btn--sm photos__envoi">
-                    {encours === index ? 'Envoi…' : propre ? 'Remplacer' : 'Déposer une photo'}
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      onChange={(e) => televerser(index, e.target.files?.[0] ?? null)}
-                    />
-                  </label>
+                  <button type="button" className="btn btn--sm" onClick={() => setChoix(index)}>
+                    {propre ? 'Changer' : 'Choisir dans la médiathèque'}
+                  </button>
 
                   {/* Revenir au catalogue plutôt qu'effacer : la photo de la
                       fiche produit reste la référence, celle-ci n'était qu'un
@@ -236,17 +221,30 @@ export default function PhotosStep({
                     <button
                       type="button"
                       className="btn btn--danger btn--sm"
-                      onClick={() => majItem(index, { image_url: '' })}
+                      onClick={() => {
+                        majItem(index, { image_url: '' })
+                        setNotes(({ [index]: _retiree, ...reste }) => reste)
+                      }}
                     >
                       {duCatalogue === null ? 'Retirer la photo' : 'Reprendre celle du catalogue'}
                     </button>
                   ) : null}
                 </div>
+                {notes[index] ? <span className="muted photos__source">{notes[index]}</span> : null}
               </div>
             </li>
           )
         })}
       </ul>
+
+      {choix !== null && items[choix] ? (
+        <MediaPicker
+          title={`Photo de « ${items[choix].label} »`}
+          initialSearch={items[choix].label}
+          onPick={(image, note) => choisir(choix, image, note)}
+          onClose={() => setChoix(null)}
+        />
+      ) : null}
 
       {blocGammes}
     </>

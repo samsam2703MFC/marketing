@@ -831,37 +831,6 @@ export function listOfferItems(): Promise<OfferItem[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Visuels
-// ---------------------------------------------------------------------------
-
-/** Image écrite sur le serveur, rendue par son chemin public. */
-export interface UploadedImage {
-  /** Chemin relatif à la racine de l'application (`uploads/…`). */
-  path: string
-  bytes: number
-  width: number | null
-  height: number | null
-  /** Dimensions avant réduction au format d'impression. */
-  original_width: number | null
-  original_height: number | null
-  /** Vrai si le serveur a réduit l'image à l'envoi. */
-  resized: boolean
-  /** Vrai si l'image reste sous le format d'impression 300 dpi. */
-  below_print: boolean
-}
-
-/**
- * Envoie une image et rend son chemin.
- *
- * Le contenu voyage en base64 dans le corps JSON, comme le reste du module :
- * un envoi multipart obligerait le routeur à porter les fichiers pour un seul
- * appel.
- */
-export function uploadImage(content: string): Promise<UploadedImage> {
-  return request<UploadedImage>(`${BASE}/uploads`, { method: 'POST', body: { content } })
-}
-
-// ---------------------------------------------------------------------------
 // Ventes réelles — l'historique qui éclaire l'étape « Objectifs »
 // ---------------------------------------------------------------------------
 

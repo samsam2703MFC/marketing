@@ -23,10 +23,13 @@ export function pickedFromAsset(asset: MediaAsset): PickedImage {
  */
 export default function MediaPicker({
   title = 'Choisir une image',
+  initialSearch = '',
   onPick,
   onClose,
 }: {
   title?: string
+  /** La recherche posée à l'ouverture, dans chaque source (le nom du produit, par exemple). */
+  initialSearch?: string
   onPick: (image: PickedImage, note: string | null) => void
   onClose: () => void
 }) {
@@ -81,9 +84,9 @@ export default function MediaPicker({
         {busy ? <p className="muted">Versement dans la médiathèque…</p> : null}
         <div className="mpick__body">
           {source === 'mediatheque' ? (
-            <LibraryFiles library={library.data ?? null} onPick={(asset) => onPick(pickedFromAsset(asset), null)} onError={setError} />
+            <LibraryFiles library={library.data ?? null} initialSearch={initialSearch} onPick={(asset) => onPick(pickedFromAsset(asset), null)} onError={setError} />
           ) : (
-            <SourceBrowser source={source} selectedKey={busy} onSelect={(item) => void pickExternal(item)} />
+            <SourceBrowser source={source} initialSearch={initialSearch} selectedKey={busy} onSelect={(item) => void pickExternal(item)} />
           )}
         </div>
       </div>
@@ -94,15 +97,17 @@ export default function MediaPicker({
 /** Les images de la médiathèque, avec un dépôt direct : l'image déposée est aussitôt choisie. */
 function LibraryFiles({
   library,
+  initialSearch,
   onPick,
   onError,
 }: {
   library: api.MediaLibrary | null
+  initialSearch: string
   onPick: (asset: MediaAsset) => void
   onError: (message: string | null) => void
 }) {
-  const [search, setSearch] = useState('')
-  const [name, setName] = useState('')
+  const [search, setSearch] = useState(initialSearch)
+  const [name, setName] = useState(initialSearch)
   const [category, setCategory] = useState('')
   const [list, setList] = useState<MediaAsset[]>([])
   const [page, setPage] = useState<api.MediaPage | null>(null)

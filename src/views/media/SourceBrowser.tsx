@@ -12,16 +12,18 @@ const STEP = 60
  */
 export function SourceBrowser({
   source,
+  initialSearch = '',
   selectedKey,
   onSelect,
 }: {
   source: 'webshop' | 'design'
+  initialSearch?: string
   selectedKey: string | null
   onSelect: (item: SourceImage) => void
 }) {
   const [items, setItems] = useState<SourceImage[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(initialSearch)
   const [group, setGroup] = useState('')
   const [shown, setShown] = useState(STEP)
 
