@@ -1,9 +1,12 @@
-# Prompt agent de code — Design system « L'Atelier By » : adapter les pages incorporées au module Marketing
+# Prompt agent de code — Design system « L'Atelier By » : pages incorporées et documents
 
 > **À donner tel quel à un agent de code**, ouvert dans le dépôt du module dont les pages sont incorporées
 > (Social, régie des écrans, cockpit, espace franchisé…). Joindre les deux captures, rangées à côté de ce
 > document : `docs/design-system/rail-reference.png` (le rail) et `docs/design-system/page-reference.png`
 > (une page complète du Marketing, à 1440 × 1000).
+>
+> Il couvre les **écrans** (§0–§12) et les **documents** — PDF, impression, offres de prix, factures,
+> e-mails et signatures (§13).
 >
 > Ce fichier est la **référence commune** du design de tous les modules. Quand le Marketing change une valeur
 > (couleur, taille, composant), on la change ici dans le même commit.
@@ -700,3 +703,271 @@ Ouverte seule (sans `embed=1`), la même page affiche le rail du §8 à gauche e
 - [ ] Aucune route cassée, aucun comportement changé, aucun texte en anglais, aucune donnée inventée.
 - [ ] Captures avant / après de chaque page, seule et incorporée, à 1440 × 1000.
 - [ ] Compte rendu : fichiers touchés, table de correspondance, écarts restants (compteurs, composants propres au module) et pourquoi.
+
+---
+
+## 13. Documents : mise en page (PDF, impression, e-mails)
+
+Ce chapitre couvre **tout ce qui sort de l'écran** : documents de campagne (kit, brochures, affiches), documents
+de gestion (offre de prix, facture, note de crédit, bon de commande, relevé, note de campagne) et e-mails
+(messages, signature, pied). Il ne remplace pas les §1–§12 : un document reprend la même police, les mêmes
+couleurs et la même retenue, adaptées au papier.
+
+**D'où viennent les valeurs.** Deux références existent déjà et sont **relevées** ici :
+- le Marketing : kit franchisé imprimé en A4 (`src/views/production/production.css`), brochures A5 et A4
+  (`src/views/brochure/brochure.css`, `src/lib/brochure.ts`), géométrie des visuels (`docs/DONNEES-IMPRESSION.md`) ;
+- le cockpit : la **note de campagne** (PDF et e-mail, `consultant_BO/src/mkt_brief.php`) et le design system de
+  la marque (`consultant_BO/public/assets/ds/global.css`, tiré de `LAtelier_Design_System.docx` du 09/04/2026).
+
+Pour l'offre de prix, la facture, la note de crédit, le bon de commande et la signature d'e-mail, **aucun modèle
+n'existe encore** : leurs mises en page ci-dessous sont **dérivées** de la note de campagne (même en-tête, mêmes
+tableaux, même pied). Elles sont marquées « dérivé — à valider » : produis un premier exemplaire, fais-le valider,
+puis généralise.
+
+### 13.1 Règles communes à tout document
+
+- **Une seule couleur de marque**, le Ruby `#8D1D2C` : filet d'en-tête, total à payer, bouton d'un e-mail,
+  couverture d'un kit. Jamais pour un montant négatif ni une erreur.
+- **Pas d'ombre, pas de dégradé, pas de fond de page coloré** sur un document de gestion (le papier est blanc,
+  l'encre coûte) ; les couvertures pleines sont réservées aux documents de campagne.
+- **Toute donnée vient du système** (ERP, module, configuration) : raison sociale, adresse, numéro d'entreprise,
+  TVA, IBAN, conditions, numéros de pièce. **Rien n'est écrit en dur dans un gabarit**, rien n'est inventé ; une
+  donnée absente bloque l'émission avec un message, elle n'est pas remplacée par un exemple.
+- **Langue du destinataire** (FR ou NL selon sa fiche), libellés traduits, apostrophes typographiques.
+- **Formats** : montants « 1 234,50 € » (espace fine insécable U+202F pour les milliers, virgule décimale, € après
+  le nombre) ; dates « 06/11/2026 » dans les tableaux, « 6 novembre 2026 » dans le texte ; pourcentages « 6 % ».
+- **Nombres alignés à droite**, libellés à gauche ; pas de bordure verticale entre colonnes ; filet de ligne
+  `rgba(34,34,34,.06)` ; en-têtes de colonne en petites capitales espacées.
+- **Pagination** dès deux pages : « Page 1 / 2 » dans le pied ; l'en-tête de tableau se répète ; une ligne ne se
+  coupe pas (`break-inside: avoid`).
+- **Couleurs imprimées exactement** : `-webkit-print-color-adjust: exact; print-color-adjust: exact;` sur tout
+  bloc coloré (sans cela le navigateur supprime les fonds à l'impression).
+- **Images** : fond blanc derrière tout PNG transparent (un PNG sans fond sort **noir** dans les moteurs PDF du
+  serveur) ; pas d'`object-fit` dans un PDF serveur (non rendu : recadrer l'image avant, comme
+  `mktBriefVignette`) ; logo en PNG ≥ 2× la taille affichée.
+
+### 13.2 Polices dans un document
+
+| Où | Pile de polices | Pourquoi |
+|---|---|---|
+| PDF composé par le navigateur (kit, brochures) | `'Gotham'` chargée par `@font-face` en **adresse absolue** | la fenêtre d'impression n'a pas la base de l'application (voir `fontFaces()`) |
+| PDF composé par le serveur (wkhtmltopdf / Chromium sans tête, cockpit) | `'Gotham', Helvetica, Arial, sans-serif` avec `@font-face` en chemin de fichier absolu ; sinon Helvetica | la note de campagne actuelle tombe sur `Helvetica, Arial` : à aligner |
+| E-mail | `'Gotham', Helvetica, Arial, sans-serif` | les messageries ignorent les polices web : Helvetica/Arial s'affichera le plus souvent, la mise en page doit tenir avec |
+
+Fichiers et graisses des documents (déclaration de `fontFaces()`, à reprendre telle quelle) :
+
+```css
+@font-face { font-family: 'Gotham';     src: url('{racine absolue}/fonts/Gotham_Light.otf');            font-weight: 300; font-display: block; }
+@font-face { font-family: 'Gotham';     src: url('{racine absolue}/fonts/Gotham_Regular.otf');          font-weight: 400; font-display: block; }
+@font-face { font-family: 'Gotham';     src: url('{racine absolue}/fonts/Gotham_Medium.otf');           font-weight: 500; font-display: block; }
+@font-face { font-family: 'Vank';       src: url('{racine absolue}/fonts/GC_Vank.ttf');                 font-weight: 400; font-display: block; }
+@font-face { font-family: 'Playwrite';  src: url('{racine absolue}/fonts/PlaywriteDEVA-Regular.ttf');   font-weight: 400; font-display: block; }
+```
+- `font-display: block` : on attend la police avant d'imprimer (`document.fonts.ready`), sinon la première page sort
+  en police de secours.
+- Le piège du §4.1 vaut ici aussi : **500 (Medium) est plus léger que 400 (Regular)** ; 300 = Light, le plus fin.
+- **Vank** (display, capitales) : titres de couverture et grands titres de campagne uniquement. **Playwrite**
+  (script) : une phrase d'accroche, jamais un montant ni une mention légale. Un document de gestion n'emploie
+  **ni Vank ni Playwrite** : Gotham seule.
+
+### 13.3 Palettes
+
+| Famille de documents | Palette |
+|---|---|
+| Gestion (offre, facture, note de crédit, bon de commande, relevé, note de campagne, e-mail) | celle du back-office (§3) : encre `#1c1a17`, gris `#7a736a`, pâle `#b8b2a8`, filet `#e6e0d8`, fond de ligne `#fbf9f5`, marque `#8D1D2C`, vert `#3f7a52` |
+| Campagne (kit, brochures, affiches, cartes, bâches) | la palette **de la campagne**, variables `--p` principale, `--s` aplat, `--a` accent, `--i` encre ; par défaut `#8D1D2C`, `#E8D9C0`, `#B0821A`, `#241C1A` (`CampaignRepository::COLORS`) ; crème des fonds et textes clairs `#F5EFE4` |
+| Marque (couverture, signature, éléments institutionnels) | design system de la marque : Ruby `#8D1D2C`, Abricot `#F2C9A0`, Beige `#EAE4DC`, Noir `#222222`, Pop-Up `#78554B` |
+
+Le kit franchisé emploie en plus : texte `#2B2724`, gris `#6B655E` / `#8A847C`, filet `#E6E0D8` / `#F0EBE4`,
+ligne de tâche `#FDF3E2`, rose clair sur Ruby `#E8C9CD`.
+
+### 13.4 Documents de gestion — gabarit A4 (dérivé de la note de campagne)
+
+**Page** : `@page { size: A4; margin: 14mm 14mm 16mm; }` (celle du kit) — ou, pour un PDF serveur sans `@page`,
+`body { margin: 0; padding: 26px 30px; }` (celle de la note de campagne). Fond blanc. Texte de base 11 px
+(≈ 8,25 pt), interligne 1,5.
+
+**Zones, de haut en bas :**
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│ [logo 34 px]                         OFFRE DE PRIX            │  en-tête
+│                                       N° OP-2026-0142 · 06/11/2026
+│━━━━━━━━━━━━━━━━━━━━━━━ filet 2 px Ruby ━━━━━━━━━━━━━━━━━━━━━━━━│
+│ ÉMETTEUR                    │ DESTINATAIRE                    │  parties
+│ raison sociale, adresse,    │ nom, adresse, n° TVA client     │
+│ n° d'entreprise / TVA       │                                 │
+│ RÉFÉRENCES : date · échéance / validité · réf. client · conditions │
+│ ┌───────────────────────────────────────────────────────────┐ │
+│ │ DÉSIGNATION        QTÉ   PU HT    TVA   TOTAL HT          │ │  lignes
+│ │ …                                                          │ │
+│ └───────────────────────────────────────────────────────────┘ │
+│                                   Total HT          1 234,50 € │  totaux
+│                                   TVA 6 %              74,07 € │
+│                                   TOTAL TTC         1 308,57 € │  (Ruby)
+│ PAIEMENT : IBAN · BIC · communication · échéance               │
+│ (offre) Bon pour accord : date, nom, signature                │
+│───────────────────────────────────────────────────────────────│
+│ mentions légales, 9 px gris                     Page 1 / 1    │  pied
+└───────────────────────────────────────────────────────────────┘
+```
+
+Valeurs : en-tête, libellés, tableaux, encadré et pied sont **relevés** dans la note de campagne ; le titre de pièce
+(`.doc__type b`) et le bloc des totaux sont **dérivés — à valider** :
+
+```css
+.doc { font-family: 'Gotham', Helvetica, Arial, sans-serif; color: #1c1a17; font-size: 11px; line-height: 1.5; }
+/* En-tête : logo à gauche, type de pièce à droite, filet Ruby */
+.doc__head { display: flex; justify-content: space-between; align-items: flex-end;
+  border-bottom: 2px solid #8D1D2C; padding-bottom: 10px; margin-bottom: 18px; }
+.doc__logo { height: 34px; }
+.doc__type { text-align: right; font-size: 10px; color: #7a736a; line-height: 1.5; }
+.doc__type b { display: block; font-size: 15px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #1c1a17; }
+/* Petit libellé de bloc */
+.doc__label { font-size: 8.5px; letter-spacing: 0.07em; text-transform: uppercase; color: #7a736a; margin-bottom: 5px; }
+/* Titre d'un document narratif (note) : kicker 9 px Ruby, titre 21 px */
+.doc__kicker { font-size: 9px; letter-spacing: 0.09em; text-transform: uppercase; color: #8D1D2C; }
+.doc__title { font-size: 21px; margin: 3px 0 0; font-weight: 600; }
+/* Tableau des lignes */
+.doc table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.doc th { padding: 6px 8px; border-bottom: 1px solid #e6e0d8; font-size: 8.5px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: #7a736a; font-weight: 400; text-align: left; }
+.doc td { padding: 7px 8px; border-bottom: 1px solid rgba(34, 34, 34, 0.06); vertical-align: top; }
+.doc .num { text-align: right; white-space: nowrap; }
+.doc tr { break-inside: avoid; }
+/* Totaux, alignés à droite, le dû en Ruby */
+.doc__totals { width: 46%; margin: 12px 0 0 auto; }
+.doc__totals td { border: 0; padding: 4px 0; }
+.doc__totals .is-due td { padding-top: 8px; border-top: 1px solid #e6e0d8; font-size: 13px; font-weight: 600; color: #8D1D2C; }
+/* Encadré (paiement, conditions, mot) : filet gauche 3 px */
+.doc__box { border-left: 3px solid #8D1D2C; padding: 2px 0 2px 12px; margin: 16px 0; }
+/* Pied : mentions légales */
+.doc__foot { margin-top: 14px; padding-top: 9px; border-top: 1px solid #e6e0d8; font-size: 9px; color: #7a736a; line-height: 1.6; }
+/* Une ligne qui concerne le destinataire : fond pâle, gras */
+.doc tr.is-mine td { background: #fbf9f5; font-weight: 600; }
+```
+
+Pour un PDF serveur (wkhtmltopdf) : mêmes valeurs **en styles en ligne** et en `<table cellpadding="0"
+cellspacing="0">` (le flexbox y est mal rendu) — c'est ainsi qu'est écrite la note de campagne.
+
+Ce qui change d'une pièce à l'autre (dérivé — à valider) :
+
+| Pièce | Titre (`.doc__type b`) | Spécifique |
+|---|---|---|
+| Offre de prix | « Offre de prix » / « Offerte » | date de **validité** ; conditions ; encadré « Bon pour accord » (date, nom, signature) ; pas d'IBAN obligatoire |
+| Facture | « Facture » / « Factuur » | numéro de facture de l'ERP ; date d'échéance ; encadré paiement (IBAN, BIC, communication — structurée si l'ERP la fournit) ; total TTC en Ruby |
+| Note de crédit | « Note de crédit » / « Creditnota » | renvoi à la facture d'origine (n° et date) ; montants **positifs** avec la mention « à déduire » (pas de rouge, pas de signe négatif isolé) |
+| Bon de commande | « Bon de commande » / « Bestelbon » | date et lieu de livraison ou de retrait ; pas de bloc paiement |
+| Relevé / rappel | « Relevé de compte » / « Rappel » | tableau des pièces ouvertes (n°, date, échéance, montant, solde) ; total dû en Ruby |
+| Note de campagne (existe) | « Note de campagne » | kicker + titre 21 px, tuiles de chiffres, « Le mot du responsable », rétroplanning, annexes |
+
+Les mentions légales (raison sociale, siège, numéro d'entreprise, TVA, RPM, IBAN, conditions générales) viennent
+de la configuration de l'émetteur : **liste-les dans ton compte rendu avec leur source** ; s'il en manque, dis-le,
+n'écris rien à la place.
+
+### 13.5 Documents de campagne (relevés)
+
+**Kit franchisé — PDF A4** (impression de la page du kit) :
+
+```css
+@media print {
+  @page { size: A4; margin: 14mm 14mm 16mm; }
+  .kit__cover { display: flex; flex-direction: column; justify-content: flex-end; height: 250mm;
+    background: #8D1D2C; color: #F5EFE4; padding: 18mm; break-after: page; print-color-adjust: exact; }
+  .kit__cover h1 { font-size: 40px; line-height: 1; margin: 0 0 8px; text-transform: uppercase; }
+  .kit__cover-k { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #E8C9CD; margin-bottom: 10px; }
+  .kit__cover-shop { font-size: 22px; font-weight: 500; margin-top: 40px; }
+  .kit__cover-dates { font-size: 13px; color: #E8C9CD; margin-top: 4px; }
+  .kit__sec { break-before: page; }          /* une partie par page */
+  .kit__posts { grid-template-columns: repeat(2, 1fr); }
+  .kit__post, .kit__table tr { break-inside: avoid; }
+}
+```
+Dans le corps : titres de partie 22 px 500 `#2B2724` ; sous-titres 11 px capitales `.1em` `#8A847C` 600 ;
+texte d'introduction 14 px `#6B655E` ; tableaux 14 px, en-têtes 11 px capitales `.08em`, cadre `#E6E0D8` rayon
+12 px ; message encadré 15 px interligne 1,5 sur blanc, filet `#E6E0D8`, rayon 12 px.
+
+**Brochures** (`src/lib/brochure.ts`, `brochure.css`) — tout en millimètres, la même feuille sert l'aperçu et
+l'impression :
+
+| Grandeur | Valeur |
+|---|---|
+| Leaflet A5 | 148 × 210 mm, recto-verso, 6 produits au plus |
+| Dépliant A4 | 297 × 210 mm, 3 volets roulés ; volets extérieurs 97 / 100 / 100 mm, intérieurs 100 / 100 / 97 mm ; 9 produits au plus |
+| Fond perdu | 3 mm de chaque côté (`BLEED`) |
+| Traits de coupe | 7 mm (`MARKS`), en option ; pointillés de coupe `0.3mm dashed rgba(141,29,44,.6)`, plis `0.3mm dashed rgba(36,28,26,.35)` |
+| Page imprimée | `@page { size: {format + fonds perdus}; margin: 0 }`, une page par face (`break-after: page`) |
+| Épreuve | filigrane « ÉPREUVE » / « PROEF » 24 mm, Gotham 500, `rgba(141,29,44,.14)`, incliné −32° ; prix à confirmer imprimés « ? € » hachurés or |
+| Polices | Gotham 300/400/500, **Vank** pour les titres (capitales), **Playwrite** pour l'accroche |
+| Couleurs | palette de la campagne (`--p --s --a --i`), crème `#F5EFE4` pour les textes sur couleur |
+| Modèles | Fêtes, Épuré, Ruby, Abricot, Noir, Duo, Carte |
+
+Échelle typographique d'une couverture A5 (`--u = 1`) : logo 9 mm de haut ; surtitre 3,3 mm capitales `0.3em`
+avec filets ; titre Vank 18 mm interligne 0,95 ; accroche Playwrite 5 mm ; bandeau bas 28 mm sur `--p` ; appel à
+l'action 3,8 mm capitales `0.18em`. Produits : nom 3,9 mm capitales `0.04em`, prix 6 mm en `--p`, prix barré
+3,4 mm à 60 % ; pastille de mécanique (−15 %, 2 + 1) en `--a`, texte blanc 2,8 mm.
+
+**Visuels imprimés** (`docs/DONNEES-IMPRESSION.md`) : format fini 100 × 150 mm à 300 dpi, fond perdu 3 mm,
+soit **1 252 × 1 843 px** ; sous 1 182 × 1 772 px, l'image est signalée trop petite. Formats écran : header
+Facebook 820 × 312, landing 800 × 800, post Instagram 1 080 × 1 080, post Facebook 1 200 × 630, PWA 1 080 × 1 920.
+
+### 13.6 E-mails
+
+Couleurs, tailles, en-tête et pied sont **relevés** dans la note de campagne envoyée par e-mail ; la table de
+600 px, le bouton et la signature sont **dérivés — à valider** :
+
+- **Structure** : `<table>` de **600 px** de large, centrée, cellules en `cellpadding="0" cellspacing="0"`,
+  **styles en ligne uniquement** (les messageries suppriment `<style>` et ignorent flexbox et variables CSS).
+- **Fond** blanc ; marges intérieures 26 px / 30 px (celles de la note).
+- **En-tête** : logo 34 px de haut à gauche, objet du message à droite en 10 px `#7a736a`, filet bas 2 px
+  `#8D1D2C`, 10 px sous le logo, 18 px avant le corps.
+- **Corps** : `font-family: 'Gotham', Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6;
+  color: #1c1a17;` ; titres 21 px 600 ; petits libellés 8.5–9 px capitales `.07em` `#7a736a` ; tableaux 11 px
+  comme au §13.4.
+- **Bouton** (une seule action par message), « à l'épreuve des messageries » :
+  ```html
+  <table cellpadding="0" cellspacing="0" role="presentation"><tr>
+    <td style="background:#8D1D2C;border-radius:8px">
+      <a href="{lien}" style="display:inline-block;padding:12px 22px;font:500 14px 'Gotham',Helvetica,Arial,sans-serif;color:#ffffff;text-decoration:none">Voir le kit</a>
+    </td></tr></table>
+  ```
+- **Images** : largeur et hauteur en attributs, `alt` toujours renseigné, fond blanc derrière les PNG, aucune
+  information portée par une image seule (beaucoup de messageries bloquent les images).
+- **Pied** (relevé) : filet haut `1px solid #e6e0d8`, 14 px au-dessus, 9 px au-dessus du texte ; 9 px `#7a736a`
+  interligne 1,6 : qui envoie, pourquoi la personne reçoit ce message, lien de désinscription s'il s'agit d'un
+  envoi marketing, mentions de l'émetteur.
+
+**Signature d'e-mail** (dérivé du bloc « Création : agence » de la note — à valider) :
+
+```html
+<table cellpadding="0" cellspacing="0" role="presentation" style="margin-top:16px;font-family:'Gotham',Helvetica,Arial,sans-serif">
+  <tr>
+    <td valign="middle" style="padding-right:12px;border-right:2px solid #8D1D2C">
+      <img src="{logo absolu}" alt="L'Atelier By" height="26" style="height:26px;display:block">
+    </td>
+    <td valign="middle" style="padding-left:12px;line-height:1.5">
+      <div style="font-size:13px;font-weight:600;color:#1c1a17">{Prénom Nom}</div>
+      <div style="font-size:11px;color:#7a736a">{Fonction} · {Boutique ou service}</div>
+      <div style="font-size:11px;color:#7a736a">{téléphone E.164 lisible} · <a href="{site}" style="color:#8D1D2C;text-decoration:none">{site}</a></div>
+    </td>
+  </tr>
+</table>
+```
+- Toutes les valeurs viennent de la fiche de la personne (ERP / annuaire) ; une ligne vide disparaît, elle ne
+  laisse ni séparateur ni « · » orphelin.
+- Pas de citation, pas de bannière promotionnelle, pas d'icônes de réseaux sociaux en image dans la signature
+  (un lien texte suffit) ; une seule couleur : le Ruby.
+- Version texte brut fournie avec chaque e-mail (nom, fonction, téléphone, site, une ligne chacun).
+
+### 13.7 Checklist des documents
+
+- [ ] Données toutes lues dans le système, source de chaque mention légale listée, aucune valeur d'exemple.
+- [ ] Gotham chargée en adresse absolue et attendue avant l'impression (`document.fonts.ready`) ; repli Helvetica/Arial prévu.
+- [ ] Graisses 300 / 400 / 500 comme au §13.2 ; Vank et Playwrite absents des documents de gestion.
+- [ ] Un seul Ruby par zone : filet d'en-tête, total dû, bouton ; aucun rouge pour un négatif.
+- [ ] Montants « 1 234,50 € », dates « 06/11/2026 », nombres alignés à droite.
+- [ ] `print-color-adjust: exact` sur les blocs colorés ; fonds blancs derrière les PNG ; pas d'`object-fit` en PDF serveur.
+- [ ] Pagination « Page n / N », en-têtes de tableau répétés, lignes non coupées.
+- [ ] Documents de campagne : format, fond perdu 3 mm, traits de coupe 7 mm, filigrane d'épreuve conformes au §13.5.
+- [ ] E-mails : table 600 px, styles en ligne, un seul bouton, signature et pied conformes, version texte.
+- [ ] Un exemplaire de chaque pièce « dérivé — à valider » présenté pour validation avant généralisation.
