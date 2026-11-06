@@ -4,6 +4,8 @@
  * `--u` met à l'échelle un panneau : 1 pour une page A5, la largeur du volet
  * rapportée à 148 mm pour la couverture d'un dépliant.
  * Palette de la campagne : --p (principale), --s (secondaire), --a (accent), --i (encre).
+ * Police : 'GothamPrint' (fontFaces, Pages.tsx) — les graisses réglées pour l'impression, à part de
+ * celles de l'écran (design system §13.2).
  */
 
 .bro-page { position: relative; overflow: hidden; background: #fff; flex: 0 0 auto; }
@@ -13,13 +15,13 @@
 .bro-marks { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 4; }
 .bro-page__watermark {
   position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; pointer-events: none;
-  font: 500 24mm 'Gotham', system-ui, sans-serif; letter-spacing: 0.12em; color: rgba(141, 29, 44, 0.14);
+  font: 500 24mm 'GothamPrint', system-ui, sans-serif; letter-spacing: 0.12em; color: rgba(141, 29, 44, 0.14);
   transform: rotate(-32deg);
 }
 
 .bro-face {
   position: relative; overflow: hidden; text-align: left;
-  font-family: 'Gotham', system-ui, sans-serif; font-weight: 400; line-height: 1.3; color: var(--i);
+  font-family: 'GothamPrint', system-ui, sans-serif; font-weight: 400; line-height: 1.3; color: var(--i);
   -webkit-print-color-adjust: exact; print-color-adjust: exact;
 }
 .bro-face *, .bro-face *::before, .bro-face *::after { box-sizing: border-box; }
@@ -47,7 +49,7 @@
 .bro-eyebrow::before, .bro-eyebrow::after { content: ''; flex: 0 0 auto; width: calc(var(--u) * 9mm); height: 0.3mm; background: currentColor; }
 .bro-titlebox { flex: 0 0 auto; max-width: 100%; max-height: calc(var(--u) * 60mm); margin-top: calc(var(--u) * 5mm); overflow: hidden; }
 .bro-title {
-  font-family: 'Vank', 'Gotham', serif; font-weight: 400; font-size: calc(var(--u) * 18mm); line-height: 0.95;
+  font-family: 'Vank', 'GothamPrint', serif; font-weight: 400; font-size: calc(var(--u) * 18mm); line-height: 0.95;
   letter-spacing: 0.01em; text-transform: uppercase; color: var(--p); white-space: pre-line; overflow-wrap: anywhere;
 }
 .bro-phrase {
@@ -111,7 +113,7 @@
 }
 .bro-mech {
   display: inline-block; margin-top: calc(var(--u) * 1.4mm); padding: calc(var(--u) * 0.6mm) calc(var(--u) * 2.2mm);
-  border-radius: 99mm; background: var(--a); color: #fff; font-weight: 500; font-size: calc(var(--u) * 2.8mm); letter-spacing: 0.04em;
+  border-radius: 1.2mm; background: var(--a); color: #fff; font-weight: 500; font-size: calc(var(--u) * 2.8mm); letter-spacing: 0.04em;
 }
 .bro-items { display: grid; gap: calc(var(--u) * 4.5mm); }
 .bro-items--dense { gap: calc(var(--u) * 2.6mm); }
@@ -133,7 +135,7 @@
 
 /* ---------- verso du leaflet ---------- */
 .bro-back { position: absolute; inset: 0; display: flex; flex-direction: column; padding: calc(var(--u) * 12mm) calc(var(--u) * 11mm) 0; }
-.bro-h { font-family: 'Vank', 'Gotham', serif; font-weight: 400; font-size: calc(var(--u) * 9.5mm); line-height: 1; letter-spacing: 0.02em; text-transform: uppercase; color: var(--p); white-space: pre-line; }
+.bro-h { font-family: 'Vank', 'GothamPrint', serif; font-weight: 400; font-size: calc(var(--u) * 9.5mm); line-height: 1; letter-spacing: 0.02em; text-transform: uppercase; color: var(--p); white-space: pre-line; }
 .bro-h--small { font-size: calc(var(--u) * 8mm); }
 .bro-sub { margin-top: calc(var(--u) * 1.5mm); font-family: 'Playwrite', cursive; font-size: calc(var(--u) * 4.2mm); color: var(--a); white-space: pre-line; }
 .bro-back__products { flex: 1 1 0; min-height: 0; overflow: hidden; margin: calc(var(--u) * 6mm) 0 calc(var(--u) * 74mm); }
@@ -146,7 +148,7 @@
   display: grid; grid-template-columns: 1fr auto; gap: calc(var(--u) * 5mm); align-items: center;
   background: var(--p); color: #F5EFE4;
 }
-.bro-who { font-family: 'Vank', 'Gotham', serif; font-size: calc(var(--u) * 7.2mm); line-height: 1.05; letter-spacing: 0.03em; text-transform: uppercase; }
+.bro-who { font-family: 'Vank', 'GothamPrint', serif; font-size: calc(var(--u) * 7.2mm); line-height: 1.05; letter-spacing: 0.03em; text-transform: uppercase; }
 .bro-shop p, .bro-spine p { margin-top: calc(var(--u) * 2mm); font-size: calc(var(--u) * 3.6mm); line-height: 1.55; }
 .bro-qrbox { display: flex; flex-direction: column; align-items: center; padding: 1.5mm; border-radius: 1.2mm; background: #fff; color: #241C1A; text-align: center; }
 .bro-qrbox span { display: block; max-width: 30mm; margin-top: 0.8mm; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 2.2mm; letter-spacing: 0.03em; }
