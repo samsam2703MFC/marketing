@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import * as api from './lib/api/module'
 import { useAsync } from './lib/useAsync'
-import { socialPageFor, socialRoute, tabsFor, titleFor } from './lib/navigation'
+import { SOCIAL_PAGES, socialPageFor, socialRoute, tabsFor, titleFor } from './lib/navigation'
 import type { Role, Route } from './lib/navigation'
 import Sidebar from './components/Sidebar'
 import DashboardView from './views/DashboardView'
@@ -129,6 +129,9 @@ function brandFromUrl(): number | 'all' | 'invalide' {
  * le tableau de bord, comme sans paramètre.
  */
 function campaignFromUrl(): { route: Route; campaignId: number | null } | null {
+  const ecran = screenFromUrl()
+  if (ecran !== null) return { route: ecran, campaignId: null }
+
   const params = new URLSearchParams(window.location.search)
   if (params.get('nouvelle') === '1') return { route: 'builder', campaignId: null }
 
@@ -138,6 +141,23 @@ function campaignFromUrl(): { route: Route; campaignId: number | null } | null {
   if (!Number.isInteger(id) || id <= 0) return null
 
   return { route: params.get('assistant') === '1' ? 'builder' : 'campaign', campaignId: id }
+}
+
+/**
+ * Écran du module Social & Ads désigné par l'adresse : `?ecran=social-cal`. Ouvert seul, un écran
+ * de Social (/marketing/social/…) renvoie ici, sur le même écran dans le rail du Marketing : le
+ * module Social n'existe plus que comme écrans du Marketing (docs/PORTAILS.md). Un nom inconnu est ignoré.
+ */
+function screenFromUrl(): Route | null {
+  const ecran = new URLSearchParams(window.location.search).get('ecran') ?? ''
+  return Object.prototype.hasOwnProperty.call(SOCIAL_PAGES, ecran) ? (ecran as Route) : null
+}
+
+/** La campagne à présélectionner dans « Créer un post » quand Social renvoie ici (`&op=19`). */
+function postFromUrl(): number | null {
+  if (screenFromUrl() === null) return null
+  const op = Number(new URLSearchParams(window.location.search).get('op') ?? '')
+  return Number.isInteger(op) && op > 0 ? op : null
 }
 
 /**
@@ -173,7 +193,7 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
   const role = ROLE
   const [route, setRoute] = useState<Route>(() => campaignFromUrl()?.route ?? 'dashboard')
   const [campaignId, setCampaignId] = useState<number | null>(() => campaignFromUrl()?.campaignId ?? null)
-  const [postFor, setPostFor] = useState<number | null>(null)
+  const [postFor, setPostFor] = useState<number | null>(postFromUrl)
   // L'étape où rouvrir l'assistant, quand « Compléter les campagnes » y renvoie.
   const [builderStep, setBuilderStep] = useState<string | null>(null)
   const [frameKey, setFrameKey] = useState(0)

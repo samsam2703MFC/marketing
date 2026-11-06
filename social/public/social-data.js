@@ -475,6 +475,27 @@
     } catch (e) {}
   }
 
+  // Ouvert seul (ni `embed=1` ni cadre), un écran du réseau renvoie au MÊME écran dans le rail du
+  // Marketing (`/marketing/?ecran=social-…`) : Social n'existe plus que comme écrans du Marketing
+  // (docs/PORTAILS.md, 06/11/2026). L'espace franchisé (QR codes) et l'API ne sont pas concernés.
+  // `?seul=1` garde l'écran seul (dépannage).
+  if (!embed && window.parent === window && param('seul') !== '1') {
+    try {
+      const f = decodeURIComponent(location.pathname.split('/').pop());
+      const k = Object.keys(PAGES).find(x => PAGES[x] === f);
+      if (k) {
+        let ecran = 'social-' + k;
+        if (k === 'set') {
+          const tab = param('tab') || 'conn', section = param('section') || '';
+          ecran = 'social-set-' + (tab === 'api' ? (['cles', 'ids', 'pf', 'version', 'dsa'].includes(section) ? section : 'cles')
+            : (['conn', 'google', 'tpl', 'grp', 'rights', 'log', 'tfb'].includes(tab) ? tab : 'conn'));
+        }
+        const op = param('op'), q = ['ecran=' + ecran, op && /^\d+$/.test(op) ? 'op=' + op : ''].filter(Boolean).join('&');
+        location.replace('/marketing/?' + q);
+      }
+    } catch (e) {}
+  }
+
   // ---------- Meta Graph / Marketing API ----------
   const META = {
     versions: ['v25.0', 'v26.0'], version: 'v25.0', base: 'https://graph.facebook.com/',
