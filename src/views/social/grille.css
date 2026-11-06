@@ -1,0 +1,88 @@
+/* Grille Instagram (module Social, réécrit dans le Marketing) — design system du Marketing. */
+.grille code { font-family: ui-monospace, monospace; font-size: 10.5px; color: var(--faint); }
+.grille__espace { flex: 1 1 auto; }
+.grille__sans { font-size: 10px; opacity: 0.75; }
+.grille__avis { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.grille__petit { font-size: 12px; line-height: 1.5; }
+
+.grille__corps { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+.grille__profil { flex: 0 0 auto; width: 484px; max-width: 100%; box-sizing: border-box; padding: 14px; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.grille__profil-tete { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.grille__lu { font-size: 11px; }
+.grille__cases { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; }
+.grille__case { position: relative; width: 100%; height: 0; padding-bottom: 133.333%; overflow: hidden; background: var(--chip); cursor: pointer; }
+.grille__case.is-prog { background: #fff; cursor: grab; box-shadow: inset 0 0 0 2px var(--accent); }
+.grille__case.is-attente { box-shadow: inset 0 0 0 2px #D97B29; }
+.grille__case.is-sel { box-shadow: inset 0 0 0 3px var(--ink); }
+.grille__case img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.grille__case.is-ligne img { opacity: 0.92; }
+.grille__video { position: absolute; top: 6px; right: 6px; font-size: 12px; color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); }
+.grille__texte { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 10px; text-align: center; font-size: 11px; color: var(--muted-2); }
+.grille__badge {
+  position: absolute; top: 6px; left: 6px; max-width: calc(100% - 12px); box-sizing: border-box; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 10px; border-radius: 6px; padding: 3px 7px; background: var(--ink); color: #fff;
+}
+.grille__badge.is-prog { background: #fff; color: var(--accent); }
+.grille__badge.is-frise { background: var(--accent); color: #fff; }
+.grille__drapeau { position: absolute; left: 6px; bottom: 6px; font-size: 10px; border-radius: 6px; padding: 2px 6px; background: var(--prize-soft); color: var(--prize-ink); }
+.grille__drapeau--libre { position: static; }
+.grille__vide { font-size: 12px; padding: 20px 0; text-align: center; }
+
+.grille__droite { flex: 1 1 360px; min-width: 300px; display: flex; flex-direction: column; gap: 12px; }
+.grille__droite > .card { margin: 0; }
+.grille__sel { border-color: var(--accent); display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; font-size: 13px; }
+.grille__sel-genre { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.grille__sel-titre { font-size: 15px; }
+.grille__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+
+.grille__bloc { display: flex; flex-direction: column; gap: 10px; padding: 16px; }
+.grille__bloc-titre { font-size: 15px; }
+.grille__ab-tete { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.grille__alerte { font-size: 12px; line-height: 1.45; color: var(--prize-ink); background: var(--prize-soft); border-radius: 6px; padding: 8px 10px; }
+.grille__kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.grille__kpi { background: var(--table-head); border-radius: 8px; padding: 9px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.grille__kpi-nom { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grille__kpi-val { font-size: 22px; font-weight: 700; line-height: 1.15; }
+.grille__kpi-sous { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.grille__controle { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 1.5; }
+.grille__tag { flex: 0 0 auto; font-size: 11px; border-radius: 6px; padding: 3px 8px; background: var(--chip); color: var(--muted-2); }
+.grille__tag.is-ok { background: rgba(63, 122, 82, 0.12); color: var(--green); }
+.grille__tag.is-warn { background: var(--prize-soft); color: var(--prize-ink); }
+.grille__legende-cases { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; align-items: center; }
+.grille__legende-cases > span { display: flex; align-items: center; gap: 6px; }
+.grille__ech { width: 18px; height: 24px; background: var(--chip); box-sizing: border-box; }
+.grille__ech.is-prog { background: #fff; box-shadow: inset 0 0 0 2px var(--accent); }
+.grille__prose { font-size: 13px; line-height: 1.55; color: var(--muted-2); }
+
+/* Graphiques */
+.grille__graphe { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 16px 18px; margin: 0; }
+.grille__graphe-tete { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px 16px; flex-wrap: wrap; }
+.grille__graphe-nom { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 14px; }
+.grille__graphe-nom .muted { font-size: 11px; line-height: 1.4; }
+.grille__legende { display: flex; gap: 6px 14px; flex-wrap: wrap; align-items: center; }
+.grille__legende > span { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted-2); }
+.grille__legende > span > span { flex: 0 0 auto; }
+.grille__trace { position: relative; user-select: none; }
+.grille__ligne { position: absolute; left: 44px; right: 10px; border-top: 1px solid; }
+.grille__grad { position: absolute; left: 0; width: 38px; text-align: right; font-size: 10px; line-height: 12px; color: var(--muted); }
+.grille__svg { position: absolute; left: 44px; top: 12px; width: calc(100% - 54px); overflow: visible; }
+.grille__repere { position: absolute; top: 12px; border-left: 1px solid rgba(34, 34, 34, 0.35); pointer-events: none; }
+.grille__point { position: absolute; transform: translate(-50%, -50%); border-radius: 50%; box-shadow: 0 0 0 2px #fff; pointer-events: none; }
+.grille__date { position: absolute; bottom: 0; transform: translateX(-50%); font-size: 10px; line-height: 12px; color: var(--muted); white-space: nowrap; }
+.grille__zone { position: absolute; left: 44px; right: 10px; top: 0; bottom: 0; cursor: pointer; touch-action: pan-y; }
+.grille__bulle {
+  position: absolute; top: 2px; background: var(--ink); color: #fff; border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.45;
+  pointer-events: none; z-index: 5; min-width: 150px; max-width: 260px;
+}
+.grille__bulle-ligne { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grille__barres { position: absolute; left: 44px; right: 10px; top: 12px; display: flex; }
+.grille__barres > span { position: relative; flex: 1 1 0; min-width: 0; height: 100%; }
+.grille__haut { position: absolute; left: 1px; right: 1px; border-radius: 4px 4px 0 0; }
+.grille__bas { position: absolute; left: 1px; right: 1px; border-radius: 0 0 4px 4px; }
+.grille__note { font-size: 11px; line-height: 1.45; color: var(--prize-ink); background: var(--prize-soft); border-radius: 6px; padding: 6px 8px; }
+
+.grille__toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 60; max-width: min(640px, 92vw);
+  background: var(--ink); color: #fff; border-radius: 8px; padding: 11px 16px; font-size: 13px;
+}
