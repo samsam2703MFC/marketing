@@ -16,6 +16,10 @@ Vite 7 + React 19 + TypeScript strict côté écran. Interface en français.
 - Les migrations vivent dans `db/migrations/`, rejouées deux fois en CI. Les
   fichiers dont le nom contient `_vues` sont **rejoués à chaque passage** : une
   vue n'a donc qu'une seule définition, et elle est dans un fichier `_vues`.
+- Le module **Social & Ads** vit dans `social/` (repris du dépôt `social` le 06/11/2026) : pages
+  `.dc.html` et API PHP à lui, recette `social/bin/tests.php`, déploiement
+  `.github/workflows/social.yml` (adresses `/marketing/social/` et `/marketing/franchise/`).
+  La réorganisation en quatre portails et le registre des tables : `docs/PORTAILS.md`.
 - La suite `api/tests/smoke.php` doit passer deux fois de suite sur la même
   base : un test qui laisse une trace n'est vrai qu'une fois.
 

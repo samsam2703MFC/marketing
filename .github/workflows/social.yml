@@ -1,0 +1,114 @@
+name: Social & Ads
+
+# Le module Social & Ads fait partie du portail Marketing (docs/PORTAILS.md) : son code vit dans
+# `social/` depuis le 06/11/2026 (repris du dépôt `social`, commit 6780032). Il garde son
+# déploiement à lui, inchangé : mêmes dossiers sur le serveur (/var/www/social,
+# /var/www/social_franchisee), mêmes adresses (/marketing/social, /marketing/franchise, et les
+# anciennes /social, /social_franchisee que Meta, les QR codes et l'ERP appellent encore).
+#
+# Recette (MySQL, Graph Meta simulé) sur chaque PR qui touche `social/` ; déploiement quand
+# `main` reçoit un changement de `social/`, ou « Run workflow ».
+#
+# Secrets : ceux du déploiement Marketing (SSH_HOST, SSH_USER, SSH_PASSWORD ou SSH_KEY ; les noms
+# DEPLOY_* sont acceptés aussi). Le script serveur s'exécute en root (sudo si le compte ne l'est pas).
+
+on:
+  push:
+    branches: [main]
+    paths: ['social/**', '.github/workflows/social.yml']
+  pull_request:
+    paths: ['social/**', '.github/workflows/social.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-social
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: social
+
+jobs:
+  tests:
+    name: Recette Social
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: social_test
+        ports: ['3306:3306']
+        options: --health-cmd="mysqladmin ping -proot" --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntaxe PHP et JS
+        run: |
+          fail=0
+          for f in $(find src public bin config -name '*.php'); do php -l "$f" >/dev/null || { echo "::error file=social/$f::syntaxe PHP"; fail=1; }; done
+          for f in public/social-data.js public/montage.js public/franchise-visuel.js franchisee/franchise-data.js franchisee/config.js; do node --check "$f" || fail=1; done
+          bash -n bin/deploy.sh || fail=1
+          bash -n bin/franchisee-build.sh || fail=1
+          exit $fail
+      - name: Recette (MySQL, Graph Meta simulé)
+        env:
+          SOCIAL_TEST_DSN: "mysql:host=127.0.0.1;port=3306;dbname=social_test;charset=utf8mb4"
+          SOCIAL_TEST_USER: root
+          SOCIAL_TEST_PASS: root
+        run: php bin/tests.php
+
+  deploy:
+    name: Déploiement Social
+    needs: tests
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST || secrets.DEPLOY_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER || secrets.DEPLOY_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY || secrets.DEPLOY_SSH_KEY }}
+      SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+      SRC_DIR: /opt/social_src
+      APP_BASE: http://185.180.206.46/marketing/social
+    steps:
+      - uses: actions/checkout@v4
+      - name: Préparer l'accès SSH
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD || secrets.DEPLOY_PASSWORD || secrets.DEPLOY_SSH_PASSWORD }}
+        run: |
+          if [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ]; then
+            echo "::error title=Déploiement non configuré::SSH_HOST / SSH_USER absents (les mêmes secrets que le déploiement Marketing)."
+            exit 1
+          fi
+          install -m 700 -d ~/.ssh
+          OPTS="-p $SSH_PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=30 -o ServerAliveInterval=15"
+          sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+          if [ -n "$SSH_KEY" ]; then
+            printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy; chmod 600 ~/.ssh/id_deploy
+            if ssh $OPTS -i ~/.ssh/id_deploy -o BatchMode=yes "$SSH_USER@$SSH_HOST" 'echo SSH_PROBE_OK' 2>/dev/null | grep -q SSH_PROBE_OK; then
+              echo "SSH_RUN=ssh $OPTS -i $HOME/.ssh/id_deploy" >> "$GITHUB_ENV"; echo "Authentification par clé."; exit 0
+            fi
+            echo "::warning::clé SSH inutilisable, repli sur le mot de passe"
+          fi
+          [ -n "$SSHPASS" ] || { echo "::error::ni clé utilisable ni mot de passe SSH"; exit 1; }
+          echo "SSH_RUN=sshpass -e ssh $OPTS" >> "$GITHUB_ENV"; echo "Authentification par mot de passe."
+      - name: Transférer et déployer
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD || secrets.DEPLOY_PASSWORD || secrets.DEPLOY_SSH_PASSWORD }}
+        run: |
+          SUDO=""; [ "$SSH_USER" = "root" ] || SUDO="sudo"
+          tar -czf - --exclude='.git' . | $SSH_RUN "$SSH_USER@$SSH_HOST" \
+            "$SUDO rm -rf ${SRC_DIR} && $SUDO mkdir -p ${SRC_DIR} && $SUDO tar -xzf - -C ${SRC_DIR}"
+          $SSH_RUN "$SSH_USER@$SSH_HOST" "cd ${SRC_DIR} && $SUDO bash bin/deploy.sh"
+      - name: Recette publique
+        run: |
+          fail=0
+          st=$(curl -fsS "${APP_BASE}/api/v1/social/status" || echo '{}'); echo "$st"
+          echo "$st" | grep -q '"db":true' || { echo "::error::${APP_BASE}/api/v1/social/status : base injoignable"; fail=1; }
+          curl -fsS "${APP_BASE}/SA%20Calendrier.dc.html" | grep -q 'SANav' || { echo "::error::le calendrier n'est pas servi"; fail=1; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' "${APP_BASE}/api/v1/social/state")
+          [ "$code" = "200" ] || [ "$code" = "401" ] || { echo "::error::/state répond HTTP $code"; fail=1; }
+          curl -fsS "${APP_BASE}/api/v1/social/status" | grep -q 'TOK\|EAA' && { echo "::error::une clé fuit dans /status"; fail=1; }
+          [ "$fail" = "0" ] && echo "Social & Ads en ligne : ${APP_BASE}/"
+          exit $fail
