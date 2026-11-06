@@ -2,8 +2,9 @@
 
 > **À donner tel quel à un agent de code**, ouvert dans le dépôt du module dont les pages sont incorporées
 > (Social, régie des écrans, cockpit, espace franchisé…). Joindre les deux captures, rangées à côté de ce
-> document : `docs/design-system/rail-reference.png` (le rail) et `docs/design-system/page-reference.png`
-> (une page complète du Marketing, à 1440 × 1000).
+> document : `docs/design-system/rail-reference.png` (le rail), `docs/design-system/page-reference.png`
+> (une page complète du Marketing, à 1440 × 1000) et, pour les documents, `docs/design-system/document-reference.png`
+> (facture A4, e-mail d'envoi et signature — version A retenue le 06/11/2026).
 >
 > Il couvre les **écrans** (§0–§12) et les **documents** — PDF, impression, offres de prix, factures,
 > e-mails et signatures (§13).
@@ -16,6 +17,10 @@
 > Toutes les valeurs ci-dessous en sont relevées. Les rares ajouts sont signalés comme tels : le focus clavier
 > du rail, la forme d'un compteur dans le rail, le script du mode incorporé et les noms génériques donnés à
 > quelques classes (`.toolbar`, `.chip--neutral`, `.badge--ok`).
+>
+> **Décisions du 06/11/2026** qui priment sur l'existant : (1) **aucune pilule** — pastilles, badges, étiquettes
+> et boutons sont des rectangles aux coins arrondis (§2, §5) ; le Marketing a encore des pilules à aligner
+> (pastilles et badges d'écran, boutons et étiquettes du kit, pastille de mécanique des brochures). (2) **Documents : version A** (§13.4, §13.6).
 
 ---
 
@@ -70,6 +75,9 @@ libellés (sauf faute ou anglais), mêmes comportements.
 - **Un bouton FAIT, une pastille CHOISIT** : les deux ne se ressemblent jamais. Le bordeaux plein = l'action
   principale ; une sélection = liseré bordeaux sur fond teinté.
 - **Petites tailles, beaucoup d'air** : l'essentiel du texte est entre 11 et 13 px ; les titres sont rares.
+- **Rectangles aux coins arrondis, jamais de pilule** : une pastille, un badge, une étiquette, un bouton ou un
+  onglet a des coins de 4 à 8 px, pas un bord entièrement rond (`border-radius: 999px`). Seules formes rondes
+  admises : la piste et le curseur de l'interrupteur, et le point de couleur de 8 px.
 - **Chaque donnée à une seule place** : un écran à plusieurs vues = des onglets, pas plusieurs entrées de menu.
 
 ---
@@ -219,7 +227,8 @@ Interlignage : `normal` pour l'interface ; `1.45`–`1.6` pour un paragraphe d'a
 | 9 px | entrées du rail, sélecteur segmenté, cartouche d'enseigne |
 | 10 px | pastilles de choix, cartouches (retour à l'ERP, bloc compte) |
 | 12 px | **cartes, blocs, tableaux encadrés, interrupteur** |
-| 999 px | pastilles de statut, badges, piste d'interrupteur |
+| 6 px | **pastilles de statut, badges** (rectangles, jamais en pilule) |
+| 999 px / 50 % | **uniquement** la piste et le curseur de l'interrupteur, le point de couleur (8 px) — jamais une pastille, un badge, une étiquette ni un bouton |
 
 Rythme : marges et écarts en **4 / 6 / 8 / 10 / 12 / 14 / 16 / 18 / 22 / 24 px**. Une carte : `padding: 1.25rem`
 (20 px). Une page : `22px 24px 40px`. Écart entre blocs d'une page : 16 px ; entre éléments d'une barre
@@ -415,12 +424,12 @@ Pas de bordure verticale entre colonnes, pas de rayure. Une ligne de total : fon
 ### 7.9 Pastilles d'état, badges, étiquettes
 
 ```css
-.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px;
   font-size: 11.5px; white-space: nowrap; }
 .chip--neutral { background: var(--chip); color: var(--ink); }
-.dot { width: 8px; height: 8px; border-radius: 999px; }      /* point de couleur d'un canal, d'un levier */
+.dot { width: 8px; height: 8px; border-radius: 50%; }      /* point de couleur d'un canal, d'un levier */
 
-.badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px;
+.badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 6px;
   font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; font-weight: 600; }
 .badge--ok { background: rgba(63, 122, 82, 0.12); color: var(--green); }
 
@@ -686,6 +695,8 @@ Ouverte seule (sans `embed=1`), la même page affiche le rail du §8 à gauche e
 - **Tailles hors échelle** (15,5 px, 17 px, 0.83rem…) : ramener à l'échelle du §4.2.
 - **Pastille qui ressemble à un bouton** ou l'inverse (§2, §7.4, §7.6).
 - **Libellé sur deux lignes dans le rail** : raccourcir, ne pas élargir.
+- **Pilules** (`border-radius: 999px`) sur une pastille, un badge, une étiquette ou un bouton : remplacer par un
+  rectangle aux coins de 4 à 8 px (§5).
 
 ---
 
@@ -698,6 +709,7 @@ Ouverte seule (sans `embed=1`), la même page affiche le rail du §8 à gauche e
 - [ ] Boutons : une seule action principale bordeaux par écran ; autres actions en `.btn` / `--ghost` / `--danger`.
 - [ ] Champs, filtres, pastilles, onglets, tableaux, cartes, badges conformes au §7.
 - [ ] Focus clavier visible partout (contour bordeaux 2 px).
+- [ ] Aucune pilule : pastilles, badges, étiquettes, boutons en rectangles aux coins de 4 à 8 px (recherche de `999px`).
 - [ ] Page seule : rail du §8 (246 px, entrées 500 / active 400, une seule active) + barre supérieure.
 - [ ] Page incorporée (`?embed=1` dans un cadre) : pas de rail, barre supérieure propre à la page, liens qui gardent `embed=1`, aucun défilement horizontal à 1194 px.
 - [ ] Aucune route cassée, aucun comportement changé, aucun texte en anglais, aucune donnée inventée.
@@ -719,10 +731,14 @@ couleurs et la même retenue, adaptées au papier.
 - le cockpit : la **note de campagne** (PDF et e-mail, `consultant_BO/src/mkt_brief.php`) et le design system de
   la marque (`consultant_BO/public/assets/ds/global.css`, tiré de `LAtelier_Design_System.docx` du 09/04/2026).
 
-Pour l'offre de prix, la facture, la note de crédit, le bon de commande et la signature d'e-mail, **aucun modèle
-n'existe encore** : leurs mises en page ci-dessous sont **dérivées** de la note de campagne (même en-tête, mêmes
-tableaux, même pied). Elles sont marquées « dérivé — à valider » : produis un premier exemplaire, fais-le valider,
-puis généralise.
+**Version A retenue (06/11/2026).** La facture A4 et son e-mail d'envoi ont été maquettés en trois versions (A
+Sobre, B Bandeau, C Marque) ; la **version A — Sobre** a été choisie. Capture : `docs/design-system/document-reference.png`.
+Ses valeurs (§13.4, §13.6) **font foi pour tous les documents de gestion et tous les e-mails de l'ERP**. Les
+autres pièces (offre de prix, note de crédit, bon de commande, relevé) prennent le même gabarit ; seuls leurs
+blocs propres (tableau du §13.4) restent à valider sur un premier exemplaire.
+
+Règle de travail pour toute nouvelle mise en page de document : **montrer trois versions** en capture, faire
+choisir, puis généraliser la version retenue.
 
 ### 13.1 Règles communes à tout document
 
@@ -754,7 +770,21 @@ puis généralise.
 | PDF composé par le serveur (wkhtmltopdf / Chromium sans tête, cockpit) | `'Gotham', Helvetica, Arial, sans-serif` avec `@font-face` en chemin de fichier absolu ; sinon Helvetica | la note de campagne actuelle tombe sur `Helvetica, Arial` : à aligner |
 | E-mail | `'Gotham', Helvetica, Arial, sans-serif` | les messageries ignorent les polices web : Helvetica/Arial s'affichera le plus souvent, la mise en page doit tenir avec |
 
-Fichiers et graisses des documents (déclaration de `fontFaces()`, à reprendre telle quelle) :
+**Documents de gestion et e-mails (version A) : graisses « naturelles ».** Déclare Gotham pour qu'un `<b>` soit
+réellement plus gras que le texte courant — l'inverse du piège du §4.1 :
+
+```css
+@font-face { font-family: 'Gotham'; src: url('{racine absolue}/fonts/Gotham_Light.otf');   font-weight: 300; font-display: block; }
+@font-face { font-family: 'Gotham'; src: url('{racine absolue}/fonts/Gotham_Medium.otf');  font-weight: 400; font-display: block; } /* texte courant */
+@font-face { font-family: 'Gotham'; src: url('{racine absolue}/fonts/Gotham_Regular.otf'); font-weight: 700; font-display: block; } /* gras */
+```
+Avec cette déclaration : texte en 400, mise en valeur en 700 (`<b>`, titre de pièce, total dû, nom du
+destinataire, désignations, valeurs des références). N'emploie pas 500 ni 600 dans un document de gestion.
+Les maquettes l'ont montré : avec la déclaration de l'écran (400 = Regular), le corps du texte sort presque gras et
+les `<b>` en 500 sortent **plus maigres** que lui.
+
+**Documents de campagne (kit, brochures)** : déclaration de `fontFaces()`, à reprendre telle quelle — ils posent
+leurs graisses une à une et ont été réglés ainsi :
 
 ```css
 @font-face { font-family: 'Gotham';     src: url('{racine absolue}/fonts/Gotham_Light.otf');            font-weight: 300; font-display: block; }
@@ -765,7 +795,8 @@ Fichiers et graisses des documents (déclaration de `fontFaces()`, à reprendre 
 ```
 - `font-display: block` : on attend la police avant d'imprimer (`document.fonts.ready`), sinon la première page sort
   en police de secours.
-- Le piège du §4.1 vaut ici aussi : **500 (Medium) est plus léger que 400 (Regular)** ; 300 = Light, le plus fin.
+- Dans cette déclaration de campagne, le piège du §4.1 vaut : **500 (Medium) est plus léger que 400 (Regular)** ;
+  300 = Light, le plus fin.
 - **Vank** (display, capitales) : titres de couverture et grands titres de campagne uniquement. **Playwrite**
   (script) : une phrase d'accroche, jamais un montant ni une mention légale. Un document de gestion n'emploie
   **ni Vank ni Playwrite** : Gotham seule.
@@ -781,7 +812,7 @@ Fichiers et graisses des documents (déclaration de `fontFaces()`, à reprendre 
 Le kit franchisé emploie en plus : texte `#2B2724`, gris `#6B655E` / `#8A847C`, filet `#E6E0D8` / `#F0EBE4`,
 ligne de tâche `#FDF3E2`, rose clair sur Ruby `#E8C9CD`.
 
-### 13.4 Documents de gestion — gabarit A4 (dérivé de la note de campagne)
+### 13.4 Documents de gestion — gabarit A4 (version A, retenue le 06/11/2026)
 
 **Page** : `@page { size: A4; margin: 14mm 14mm 16mm; }` (celle du kit) — ou, pour un PDF serveur sans `@page`,
 `body { margin: 0; padding: 26px 30px; }` (celle de la note de campagne). Fond blanc. Texte de base 11 px
@@ -812,45 +843,64 @@ ligne de tâche `#FDF3E2`, rose clair sur Ruby `#E8C9CD`.
 └───────────────────────────────────────────────────────────────┘
 ```
 
-Valeurs : en-tête, libellés, tableaux, encadré et pied sont **relevés** dans la note de campagne ; le titre de pièce
-(`.doc__type b`) et le bloc des totaux sont **dérivés — à valider** :
+Valeurs de la **version A** (capture `docs/design-system/document-reference.png`), graisses naturelles du §13.2 :
 
 ```css
-.doc { font-family: 'Gotham', Helvetica, Arial, sans-serif; color: #1c1a17; font-size: 11px; line-height: 1.5; }
-/* En-tête : logo à gauche, type de pièce à droite, filet Ruby */
+.doc { font: 400 11px/1.5 'Gotham', Helvetica, Arial, sans-serif; color: #1c1a17; }
+.doc__page { padding: 52px 54px 40px; }   /* A4 = 794 × 1123 px à 96 dpi ; en PDF : @page { size: A4; margin: 14mm 14mm 16mm } */
+
+/* En-tête : logo à gauche, type de pièce à droite, filet Ruby 2 px */
 .doc__head { display: flex; justify-content: space-between; align-items: flex-end;
-  border-bottom: 2px solid #8D1D2C; padding-bottom: 10px; margin-bottom: 18px; }
+  border-bottom: 2px solid #8D1D2C; padding-bottom: 12px; margin-bottom: 22px; }
 .doc__logo { height: 34px; }
-.doc__type { text-align: right; font-size: 10px; color: #7a736a; line-height: 1.5; }
-.doc__type b { display: block; font-size: 15px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #1c1a17; }
-/* Petit libellé de bloc */
-.doc__label { font-size: 8.5px; letter-spacing: 0.07em; text-transform: uppercase; color: #7a736a; margin-bottom: 5px; }
-/* Titre d'un document narratif (note) : kicker 9 px Ruby, titre 21 px */
-.doc__kicker { font-size: 9px; letter-spacing: 0.09em; text-transform: uppercase; color: #8D1D2C; }
-.doc__title { font-size: 21px; margin: 3px 0 0; font-weight: 600; }
-/* Tableau des lignes */
+.doc__type { text-align: right; font-size: 10px; color: #7a736a; line-height: 1.5; }      /* « N° 2026-001428 · 06/11/2026 » */
+.doc__type b { display: block; font-size: 15px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #1c1a17; }
+
+/* Petits libellés en capitales */
+.doc__label { font-size: 8.5px; letter-spacing: .07em; text-transform: uppercase; color: #7a736a; margin-bottom: 5px; }
+
+/* Parties : émetteur | destinataire (nom du destinataire en 700) */
+.doc__parties { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 18px; }
+.doc__parties p { margin: 0; }
+
+/* Références : 4 colonnes entre deux filets (date, échéance ou validité, réf. client, conditions) */
+.doc__refs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 10px 0;
+  border-top: 1px solid #e6e0d8; border-bottom: 1px solid #e6e0d8; margin-bottom: 18px; }
+.doc__refs .v { font-size: 11px; font-weight: 700; }
+
+/* Lignes */
 .doc table { width: 100%; border-collapse: collapse; font-size: 11px; }
-.doc th { padding: 6px 8px; border-bottom: 1px solid #e6e0d8; font-size: 8.5px; letter-spacing: 0.06em;
+.doc th { padding: 6px 8px; border-bottom: 1px solid #e6e0d8; font-size: 8.5px; letter-spacing: .06em;
   text-transform: uppercase; color: #7a736a; font-weight: 400; text-align: left; }
-.doc td { padding: 7px 8px; border-bottom: 1px solid rgba(34, 34, 34, 0.06); vertical-align: top; }
-.doc .num { text-align: right; white-space: nowrap; }
+.doc td { padding: 8px; border-bottom: 1px solid rgba(34, 34, 34, .06); vertical-align: top; }
+.doc td b { font-weight: 700; }                                   /* désignation */
+.doc .sub { display: block; font-size: 9.5px; color: #7a736a; margin-top: 1px; }   /* précision sous la désignation */
+.doc .num { text-align: right; white-space: nowrap; }             /* quantités, prix, TVA, totaux */
 .doc tr { break-inside: avoid; }
-/* Totaux, alignés à droite, le dû en Ruby */
-.doc__totals { width: 46%; margin: 12px 0 0 auto; }
-.doc__totals td { border: 0; padding: 4px 0; }
-.doc__totals .is-due td { padding-top: 8px; border-top: 1px solid #e6e0d8; font-size: 13px; font-weight: 600; color: #8D1D2C; }
-/* Encadré (paiement, conditions, mot) : filet gauche 3 px */
-.doc__box { border-left: 3px solid #8D1D2C; padding: 2px 0 2px 12px; margin: 16px 0; }
-/* Pied : mentions légales */
-.doc__foot { margin-top: 14px; padding-top: 9px; border-top: 1px solid #e6e0d8; font-size: 9px; color: #7a736a; line-height: 1.6; }
-/* Une ligne qui concerne le destinataire : fond pâle, gras */
-.doc tr.is-mine td { background: #fbf9f5; font-weight: 600; }
+
+/* Totaux : à droite, 46 % de large ; le dû en Ruby gras */
+.doc__totals { width: 46%; margin: 14px 0 0 auto; }
+.doc__totals td { border: 0; padding: 4px 8px; }
+.doc__totals .is-due td { padding-top: 9px; border-top: 1px solid #e6e0d8; font-size: 13px; font-weight: 700; color: #8D1D2C; }
+
+/* Encadré (paiement, conditions, bon pour accord) : filet gauche Ruby 3 px */
+.doc__box { border-left: 3px solid #8D1D2C; padding: 2px 0 2px 12px; margin: 24px 0 0; }
+.doc__box td { border: 0; padding: 2px 16px 2px 0; }
+.doc__box .k { color: #7a736a; width: 110px; }                    /* IBAN, BIC, Communication… */
+
+/* Pied : mentions légales à gauche, « Page n / N » à droite, en bas de chaque page */
+.doc__foot { position: absolute; left: 54px; right: 54px; bottom: 34px; padding-top: 9px; border-top: 1px solid #e6e0d8;
+  font-size: 8.5px; color: #7a736a; line-height: 1.6; display: flex; justify-content: space-between; gap: 24px; }
 ```
+
+Ce que la version A **ne fait pas** : pas de bandeau ni d'aplat de couleur, pas de bloc beige, pas de cadre autour des
+références ou du paiement, pas de Vank ni de Playwrite, aucune pilule ; le Ruby n'apparaît qu'à trois endroits —
+filet d'en-tête, total dû, filet de l'encadré.
 
 Pour un PDF serveur (wkhtmltopdf) : mêmes valeurs **en styles en ligne** et en `<table cellpadding="0"
 cellspacing="0">` (le flexbox y est mal rendu) — c'est ainsi qu'est écrite la note de campagne.
 
-Ce qui change d'une pièce à l'autre (dérivé — à valider) :
+Ce qui change d'une pièce à l'autre (même gabarit ; blocs propres à valider sur un premier exemplaire) :
 
 | Pièce | Titre (`.doc__type b`) | Spécifique |
 |---|---|---|
@@ -905,7 +955,8 @@ l'impression :
 Échelle typographique d'une couverture A5 (`--u = 1`) : logo 9 mm de haut ; surtitre 3,3 mm capitales `0.3em`
 avec filets ; titre Vank 18 mm interligne 0,95 ; accroche Playwrite 5 mm ; bandeau bas 28 mm sur `--p` ; appel à
 l'action 3,8 mm capitales `0.18em`. Produits : nom 3,9 mm capitales `0.04em`, prix 6 mm en `--p`, prix barré
-3,4 mm à 60 % ; pastille de mécanique (−15 %, 2 + 1) en `--a`, texte blanc 2,8 mm.
+3,4 mm à 60 % ; pastille de mécanique (−15 %, 2 + 1) en `--a`, texte blanc 2,8 mm — en rectangle aux coins
+arrondis (aujourd'hui en pilule dans le Marketing, à aligner).
 
 **Visuels imprimés** (`docs/DONNEES-IMPRESSION.md`) : format fini 100 × 150 mm à 300 dpi, fond perdu 3 mm,
 soit **1 252 × 1 843 px** ; sous 1 182 × 1 772 px, l'image est signalée trop petite. Formats écran : header
@@ -913,22 +964,21 @@ Facebook 820 × 312, landing 800 × 800, post Instagram 1 080 × 1 080, post Fac
 
 ### 13.6 E-mails
 
-Couleurs, tailles, en-tête et pied sont **relevés** dans la note de campagne envoyée par e-mail ; la table de
-600 px, le bouton et la signature sont **dérivés — à valider** :
+**Version A retenue (06/11/2026)** — capture `docs/design-system/document-reference.png`, colonne de droite :
 
 - **Structure** : `<table>` de **600 px** de large, centrée, cellules en `cellpadding="0" cellspacing="0"`,
   **styles en ligne uniquement** (les messageries suppriment `<style>` et ignorent flexbox et variables CSS).
 - **Fond** blanc ; marges intérieures 26 px / 30 px (celles de la note).
-- **En-tête** : logo 34 px de haut à gauche, objet du message à droite en 10 px `#7a736a`, filet bas 2 px
-  `#8D1D2C`, 10 px sous le logo, 18 px avant le corps.
+- **En-tête** : logo 30 px de haut à gauche, objet du message à droite en 10 px `#7a736a`, filet bas 2 px
+  `#8D1D2C`, 10 px sous le logo, 20 px avant le corps.
 - **Corps** : `font-family: 'Gotham', Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6;
-  color: #1c1a17;` ; titres 21 px 600 ; petits libellés 8.5–9 px capitales `.07em` `#7a736a` ; tableaux 11 px
-  comme au §13.4.
+  color: #1c1a17;` ; paragraphes espacés de 12 px ; mise en valeur en 700 (numéro de pièce, montant, échéance) ;
+  titres 21 px 700 ; petits libellés 8.5–9 px capitales `.07em` `#7a736a` ; tableaux 11 px comme au §13.4.
 - **Bouton** (une seule action par message), « à l'épreuve des messageries » :
   ```html
   <table cellpadding="0" cellspacing="0" role="presentation"><tr>
     <td style="background:#8D1D2C;border-radius:8px">
-      <a href="{lien}" style="display:inline-block;padding:12px 22px;font:500 14px 'Gotham',Helvetica,Arial,sans-serif;color:#ffffff;text-decoration:none">Voir le kit</a>
+      <a href="{lien}" style="display:inline-block;padding:12px 22px;font:700 14px 'Gotham',Helvetica,Arial,sans-serif;color:#ffffff;text-decoration:none">Voir la facture</a>
     </td></tr></table>
   ```
 - **Images** : largeur et hauteur en attributs, `alt` toujours renseigné, fond blanc derrière les PNG, aucune
@@ -937,16 +987,16 @@ Couleurs, tailles, en-tête et pied sont **relevés** dans la note de campagne e
   interligne 1,6 : qui envoie, pourquoi la personne reçoit ce message, lien de désinscription s'il s'agit d'un
   envoi marketing, mentions de l'émetteur.
 
-**Signature d'e-mail** (dérivé du bloc « Création : agence » de la note — à valider) :
+**Signature d'e-mail** (version A) : logo, filet vertical Ruby 2 px, trois lignes.
 
 ```html
 <table cellpadding="0" cellspacing="0" role="presentation" style="margin-top:16px;font-family:'Gotham',Helvetica,Arial,sans-serif">
   <tr>
     <td valign="middle" style="padding-right:12px;border-right:2px solid #8D1D2C">
-      <img src="{logo absolu}" alt="L'Atelier By" height="26" style="height:26px;display:block">
+      <img src="{logo absolu}" alt="L'Atelier By" height="24" style="height:24px;display:block">
     </td>
     <td valign="middle" style="padding-left:12px;line-height:1.5">
-      <div style="font-size:13px;font-weight:600;color:#1c1a17">{Prénom Nom}</div>
+      <div style="font-size:13px;font-weight:700;color:#1c1a17">{Prénom Nom}</div>
       <div style="font-size:11px;color:#7a736a">{Fonction} · {Boutique ou service}</div>
       <div style="font-size:11px;color:#7a736a">{téléphone E.164 lisible} · <a href="{site}" style="color:#8D1D2C;text-decoration:none">{site}</a></div>
     </td>
@@ -970,4 +1020,7 @@ Couleurs, tailles, en-tête et pied sont **relevés** dans la note de campagne e
 - [ ] Pagination « Page n / N », en-têtes de tableau répétés, lignes non coupées.
 - [ ] Documents de campagne : format, fond perdu 3 mm, traits de coupe 7 mm, filigrane d'épreuve conformes au §13.5.
 - [ ] E-mails : table 600 px, styles en ligne, un seul bouton, signature et pied conformes, version texte.
-- [ ] Un exemplaire de chaque pièce « dérivé — à valider » présenté pour validation avant généralisation.
+- [ ] Gabarit et valeurs de la **version A** (§13.4, §13.6) ; graisses naturelles (400 = Medium, 700 = Regular).
+- [ ] Aucune pilule : boutons, badges, étiquettes en rectangles aux coins de 4 à 8 px.
+- [ ] Un premier exemplaire de chaque autre pièce (offre, note de crédit, bon de commande, relevé) présenté pour
+      validation avant généralisation — et toute nouvelle mise en page montrée en **trois versions**.
