@@ -470,6 +470,10 @@ tbody td {
   padding: 9px 10px;
   border-radius: 9px;
   font-size: 13px;
+  /* Un cran plus léger que l'entrée choisie, qui reste la plus appuyée du rail. Attention aux
+     chiffres : le fichier déclaré en 500 (Gotham_Medium) est moins gras que celui déclaré en 400
+     (Gotham_Regular, presque un gras) — 500 allège donc bien le trait. */
+  font-weight: 500;
   color: var(--muted-2);
   text-decoration: none;
   transition: all 0.15s;
@@ -482,6 +486,7 @@ tbody td {
 .sidebar__item.is-active {
   background: rgba(141, 29, 44, 0.08);
   color: var(--accent);
+  font-weight: 400;
 }
 
 /* Barre supérieure */
