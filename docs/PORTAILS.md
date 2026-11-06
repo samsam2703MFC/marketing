@@ -63,6 +63,27 @@ Chaque étape est mise en ligne séparément, après accord.
 6. API v2 et client TFBuddy unique dans chaque portail.
 7. Kits d'export, répétition d'un export sur une base vierge.
 
+## Avancement
+
+| Étape | État |
+|---|---|
+| 1. Registre | fait (ce document) |
+| 2a. Social versé dans `marketing/social/` | fait — déploiement `.github/workflows/social.yml`, adresses inchangées |
+| 2b. Design system sur Social | fait — `social/public/_ds/marketing.css` + styles en ligne |
+| 2c. Tables `mar_` du cockpit | **définitions** reprises par la migration `045_tables_reprises_du_cockpit.sql` (23 tables, sans clé étrangère vers `ceo_shop`). **Reste** : le code du cockpit qui les lit et les écrit (voir l'écart ci-dessous) |
+| 2d. Signage | à faire |
+| 3 à 7 | à faire |
+
+### Écart ouvert : le cockpit écrit encore dans les tables du Marketing
+
+Le cockpit lit et écrit des tables `mar_` dans ~40 000 lignes : une ancienne copie de l'API du
+module (`public/api/marketing/`), la mesure des campagnes (`src/mesure.php`), le contrôle des posts
+(`src/brand_guard.php`, `src/fbcontrole.php`), les posts sociaux (`src/social_publication.php`), la
+newsletter clients (`src/newsletter*.php`), les objectifs produits, le brief (`src/mkt_brief.php`) et
+des lectures dans `src/endpoints.php` / `src/writes.php`. Chaque bloc passe dans le Marketing (écran +
+API) ; le cockpit garde, au besoin, une lecture par `/api/v1/integration/marketing/…`. Jusque-là, le
+cockpit ne crée plus ces tables : c'est la migration 045 du Marketing qui les définit.
+
 ## À faire hors du code
 
 - Renommer sur GitHub `consultant_BO` → `pilotage-reseau` et `atelier-espace-candidat` → `recrutement`
