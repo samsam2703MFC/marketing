@@ -19,11 +19,10 @@
 > quelques classes (`.toolbar`, `.chip--neutral`, `.badge--ok`).
 >
 > **Décisions du 06/11/2026** qui priment sur l'existant : (1) **aucune pilule** — pastilles, badges, étiquettes
-> et boutons sont des rectangles aux coins arrondis (§2, §5) ; le Marketing a encore des pilules à aligner
-> (pastilles et badges d'écran, boutons et étiquettes du kit, pastille de mécanique des brochures). (2) **Documents : version A** (§13.4, §13.6). (3) **Pas de gras** : le texte est en
-> trait normal, le gras est réservé à une liste fermée d'accents (§4.3) — dans le rail, seule l'entrée
-> sélectionnée est en gras. Le Marketing met encore presque tout son texte en gras (déclaration 400 = fichier
-> Regular) : à aligner.
+> et boutons sont des rectangles aux coins arrondis (§2, §5). (2) **Documents : version A** (§13.4, §13.6).
+> (3) **Pas de gras** : le texte est en trait normal, le gras est réservé à une liste fermée d'accents (§4.3) —
+> dans le rail, seule l'entrée sélectionnée est en gras. Le Marketing applique ces trois règles depuis le
+> 06/11/2026 : il est de nouveau la référence vivante, captures comprises.
 
 ---
 
@@ -79,8 +78,9 @@ libellés (sauf faute ou anglais), mêmes comportements.
   principale ; une sélection = liseré bordeaux sur fond teinté.
 - **Petites tailles, beaucoup d'air** : l'essentiel du texte est entre 11 et 13 px ; les titres sont rares.
 - **Rectangles aux coins arrondis, jamais de pilule** : une pastille, un badge, une étiquette, un bouton ou un
-  onglet a des coins de 4 à 8 px, pas un bord entièrement rond (`border-radius: 999px`). Seules formes rondes
-  admises : la piste et le curseur de l'interrupteur, et le point de couleur de 8 px.
+  onglet a des coins de 4 à 8 px, pas un bord entièrement rond (`border-radius: 999px`). Restent ronds les
+  **cercles** — même largeur et même hauteur : point de couleur (8 px), numéro d'étape, médaille de classement,
+  curseur et piste de l'interrupteur. Ce qui est interdit, c'est la **pilule** : une forme allongée aux bouts ronds.
 - **Chaque donnée à une seule place** : un écran à plusieurs vues = des onglets, pas plusieurs entrées de menu.
 
 ---
@@ -183,9 +183,9 @@ ci-dessus, où 400 charge « Medium » et 700 charge « Regular ».
 N'ajoute pas d'autre fichier Gotham à l'interface (Light, Book…). Si le module est servi sous un sous-répertoire,
 adapte le **chemin** `/fonts/` à sa racine, pas les valeurs.
 
-**Écart du Marketing (à aligner)** : il déclare encore `400 = Gotham_Regular` et `500 = Gotham_Medium`, si bien que son
-texte courant sort presque gras et que ses « 500 » sont plus maigres ; seul son rail a déjà été allégé (entrées en 500,
-sélection en 400). Dans un autre module, applique la déclaration ci-dessus, pas celle du Marketing.
+Le Marketing applique cette déclaration (`src/styles/global.css`, 06/11/2026), avec une règle de base qui remet
+titres, en-têtes de tableau et `<b>` en trait normal : `h1, h2, h3, h4, h5, h6, th, b, strong { font-weight: 400; }`.
+Reprends-la telle quelle ; les accents du §4.3 le disent dans leur propre règle.
 
 Supprime toute autre police d'interface du module (Inter, Roboto, Arial, polices système imposées…). Une
 police **de contenu** propre à un visuel (affiche, post composé) peut rester dans ce visuel seulement.
@@ -256,7 +256,7 @@ Ajouter un accent à cette liste est une **décision** : propose-le dans ton com
 | 10 px | pastilles de choix, cartouches (retour à l'ERP, bloc compte) |
 | 12 px | **cartes, blocs, tableaux encadrés, interrupteur** |
 | 6 px | **pastilles de statut, badges** (rectangles, jamais en pilule) |
-| 999 px / 50 % | **uniquement** la piste et le curseur de l'interrupteur, le point de couleur (8 px) — jamais une pastille, un badge, une étiquette ni un bouton |
+| 999 px / 50 % | **uniquement** les cercles (point de couleur, numéro d'étape, médaille, interrupteur) et la barre de progression fine — jamais une pastille, un badge, une étiquette ni un bouton |
 
 Rythme : marges et écarts en **4 / 6 / 8 / 10 / 12 / 14 / 16 / 18 / 22 / 24 px**. Une carte : `padding: 1.25rem`
 (20 px). Une page : `22px 24px 40px`. Écart entre blocs d'une page : 16 px ; entre éléments d'une barre
@@ -812,20 +812,22 @@ Texte en 400 ; 700 seulement pour les accents des documents listés au §4.3. Le
 l'ancienne déclaration (400 = fichier Regular), le corps du texte sort presque gras et les mises en valeur en 500
 sortent **plus maigres** que lui.
 
-**Documents de campagne (kit, brochures)** : déclaration de `fontFaces()`, à reprendre telle quelle — ils posent
-leurs graisses une à une et ont été réglés ainsi :
+**Brochures imprimées** : déclaration de `fontFaces()` (`src/views/brochure/Pages.tsx`), sous une famille **à part**,
+`'GothamPrint'`, pour que cette feuille injectée dans l'écran ne redéfinisse pas la `'Gotham'` de l'interface. Les
+brochures posent leurs graisses une à une et ont été réglées ainsi :
 
 ```css
-@font-face { font-family: 'Gotham';     src: url('{racine absolue}/fonts/Gotham_Light.otf');            font-weight: 300; font-display: block; }
-@font-face { font-family: 'Gotham';     src: url('{racine absolue}/fonts/Gotham_Regular.otf');          font-weight: 400; font-display: block; }
-@font-face { font-family: 'Gotham';     src: url('{racine absolue}/fonts/Gotham_Medium.otf');           font-weight: 500; font-display: block; }
+@font-face { font-family: 'GothamPrint'; src: url('{racine absolue}/fonts/Gotham_Light.otf');          font-weight: 300; font-display: block; }
+@font-face { font-family: 'GothamPrint'; src: url('{racine absolue}/fonts/Gotham_Regular.otf');        font-weight: 400; font-display: block; }
+@font-face { font-family: 'GothamPrint'; src: url('{racine absolue}/fonts/Gotham_Medium.otf');         font-weight: 500; font-display: block; }
 @font-face { font-family: 'Vank';       src: url('{racine absolue}/fonts/GC_Vank.ttf');                 font-weight: 400; font-display: block; }
 @font-face { font-family: 'Playwrite';  src: url('{racine absolue}/fonts/PlaywriteDEVA-Regular.ttf');   font-weight: 400; font-display: block; }
 ```
 - `font-display: block` : on attend la police avant d'imprimer (`document.fonts.ready`), sinon la première page sort
   en police de secours.
-- Cette déclaration de campagne est l'inverse du §4.1 : 400 y charge le fichier Regular (appuyé) et 500 le
-  fichier Medium (normal) ; 300 = Light, le plus fin. Elle reste propre aux brochures et au kit, réglés ainsi.
+- Cette déclaration d'impression est l'inverse du §4.1 : 400 y charge le fichier Regular (appuyé) et 500 le
+  fichier Medium (normal) ; 300 = Light, le plus fin. Elle reste propre aux brochures. Le **kit franchisé** suit,
+  lui, la déclaration et les règles de l'écran (§4.1, §4.3).
 - **Vank** (display, capitales) : titres de couverture et grands titres de campagne uniquement. **Playwrite**
   (script) : une phrase d'accroche, jamais un montant ni une mention légale. Un document de gestion n'emploie
   **ni Vank ni Playwrite** : Gotham seule.
@@ -985,7 +987,7 @@ l'impression :
 avec filets ; titre Vank 18 mm interligne 0,95 ; accroche Playwrite 5 mm ; bandeau bas 28 mm sur `--p` ; appel à
 l'action 3,8 mm capitales `0.18em`. Produits : nom 3,9 mm capitales `0.04em`, prix 6 mm en `--p`, prix barré
 3,4 mm à 60 % ; pastille de mécanique (−15 %, 2 + 1) en `--a`, texte blanc 2,8 mm — en rectangle aux coins
-arrondis (aujourd'hui en pilule dans le Marketing, à aligner).
+arrondis (rayon 1,2 mm).
 
 **Visuels imprimés** (`docs/DONNEES-IMPRESSION.md`) : format fini 100 × 150 mm à 300 dpi, fond perdu 3 mm,
 soit **1 252 × 1 843 px** ; sous 1 182 × 1 772 px, l'image est signalée trop petite. Formats écran : header

@@ -539,9 +539,11 @@ export function fontFaces(): string {
   const face = (family: string, file: string, weight: number) =>
     `@font-face{font-family:'${family}';src:url('${root}${file}');font-weight:${weight};font-display:block}`
   return [
-    face('Gotham', 'Gotham_Light.otf', 300),
-    face('Gotham', 'Gotham_Regular.otf', 400),
-    face('Gotham', 'Gotham_Medium.otf', 500),
+    // Famille à part : les brochures gardent les graisses réglées pour l'impression, et
+    // cette feuille injectée dans l'écran ne redéfinit pas la 'Gotham' de l'interface.
+    face('GothamPrint', 'Gotham_Light.otf', 300),
+    face('GothamPrint', 'Gotham_Regular.otf', 400),
+    face('GothamPrint', 'Gotham_Medium.otf', 500),
     face('Vank', 'GC_Vank.ttf', 400),
     face('Playwrite', 'PlaywriteDEVA-Regular.ttf', 400),
   ].join('\n')
