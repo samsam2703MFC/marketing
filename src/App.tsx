@@ -25,6 +25,7 @@ import SettingsView from './views/SettingsView'
 import CampaignBuilder from './views/builder/CampaignBuilder'
 import SocialView from './views/SocialView'
 import BilanView from './views/social/BilanView'
+import SuiviView from './views/social/SuiviView'
 import InStoreView from './views/InStoreView'
 import { ReferencesProvider } from './state/references'
 
@@ -438,6 +439,7 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
           ) : null}
 
           {route === 'social-bilan' && role !== 'FRANCHISEE' ? <BilanView /> : null}
+          {route === 'social-suivi' && role !== 'FRANCHISEE' ? <SuiviView /> : null}
 
           {route === 'builder' ? (
             <CampaignBuilder

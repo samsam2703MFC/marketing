@@ -2809,3 +2809,45 @@ export interface SocialBilan {
 export function getSocialBilan(periode: BilanPeriode, forcer = false): Promise<SocialBilan> {
   return request<SocialBilan>(`${SOCIAL_ROOT}/api/v1/social/bilan?periode=${periode}${forcer ? '&forcer=1' : ''}`)
 }
+
+/** Une série d'abonnés jour par jour d'un réseau (gagnés, perdus). */
+export interface SuiviReseau {
+  followers?: number | null
+  net?: number | null
+  gagnes?: number | null
+  perdus?: number | null
+  username?: string
+  motif?: string
+  serie?: Record<string, { gagnes?: number; perdus?: number }>
+}
+
+/** Une Page suivie : abonnés Facebook + Instagram face au budget publicitaire (social/src, /suivi/abonnes). */
+export interface SuiviLigne {
+  id?: string
+  name: string
+  picture?: string | null
+  shopName?: string | null
+  facebook?: SuiviReseau
+  instagram?: SuiviReseau | null
+  abonnesNet: number | null
+  depense: number
+  depenseJours?: Record<string, number>
+  coutParAbonne: number | null
+}
+
+export interface SocialSuivi {
+  du: string
+  au: string
+  jours: number
+  le?: string
+  demo?: boolean
+  devise: string
+  nonAttribue?: number
+  erreurs?: string[]
+  lignes: SuiviLigne[]
+}
+
+/** Abonnés des Pages face au budget publicitaire, sur 7, 28 ou 90 jours (lu en direct chez Meta). */
+export function getSocialSuivi(jours: 7 | 28 | 90): Promise<SocialSuivi> {
+  return request<SocialSuivi>(`${SOCIAL_ROOT}/api/v1/social/suivi/abonnes?jours=${jours}`)
+}

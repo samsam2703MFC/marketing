@@ -141,6 +141,10 @@ function describeFailure(payload: unknown, response: Response): string {
   const standard = standardErrorMessage(payload)
   if (standard) return standard
   if (typeof payload === 'string' && payload.trim()) return payload
+  // Le module Social (servi sous /marketing/social) répond `{ "error": "message" }`.
+  if (payload && typeof payload === 'object' && typeof (payload as { error?: unknown }).error === 'string') {
+    return (payload as { error: string }).error
+  }
   return `${response.status} ${response.statusText}`.trim()
 }
 
