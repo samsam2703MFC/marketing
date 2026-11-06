@@ -69,7 +69,7 @@ BO_DIR="$BO_DIR" BO_URL="$BO_URL" PUBLIC_URL="$PUBLIC_URL" php -r '
 chmod 640 "$CFG"; chown www-data:www-data "$CFG"
 
 # --- 5. Apache : alias /social (et /marketing/social) -------------------------------
-log "Apache : alias $MKT_ALIAS et $ALIAS_PATH → $TARGET_DIR/public ; $MKT_FR_ALIAS et $FR_ALIAS → renvois"
+log "Apache : alias $MKT_ALIAS et $ALIAS_PATH → $TARGET_DIR/public ; $FR_ALIAS → renvois vers $MKT_FR_ALIAS"
 cat > /etc/apache2/conf-available/social.conf <<APACHE
 # API Social du Marketing. Sous /marketing, avant le dossier de son application : ces chemins-là sont à l'API.
 Alias ${MKT_ALIAS} ${TARGET_DIR}/public
@@ -78,8 +78,8 @@ Alias ${ALIAS_PATH} ${TARGET_DIR}/public
     AllowOverride All
     Require all granted
 </Directory>
-# Ancien espace franchisé : renvois vers les pages du Marketing.
-Alias ${MKT_FR_ALIAS} ${TARGET_DIR}/espace
+# Ancien espace franchisé : renvois vers l'espace boutique du Marketing (/marketing/franchise, servi
+# par l'application du Marketing elle-même).
 Alias ${FR_ALIAS} ${TARGET_DIR}/espace
 <Directory ${TARGET_DIR}/espace>
     AllowOverride All
@@ -122,9 +122,9 @@ r=$(loc "http://127.0.0.1${MKT_ALIAS}/SA%20Calendrier.dc.html?op=3")
 r=$(loc "http://127.0.0.1${MKT_ALIAS}/SA%20Parametres.dc.html?tab=api&section=dsa")
 [[ "$r" == 302*"ecran=social-set-dsa" ]] && log "OK  Paramètres → onglet" || { warn "SA Parametres → $r"; fail=1; }
 r=$(loc "http://127.0.0.1${FR_ALIAS}/publier?shop=4")
-[[ "$r" == 302*"ecran=sf-pub&shop=4" ]] && log "OK  ancien espace franchisé → Marketing" || { warn "${FR_ALIAS}/publier → $r"; fail=1; }
-r=$(loc "http://127.0.0.1${MKT_FR_ALIAS}/calendrier")
-[[ "$r" == 302*"ecran=sf-cal" ]] && log "OK  ${MKT_FR_ALIAS} → Marketing" || { warn "${MKT_FR_ALIAS}/calendrier → $r"; fail=1; }
+[[ "$r" == 302*"${MKT_FR_ALIAS}/publier?shop=4" ]] && log "OK  ancien espace franchisé → espace boutique" || { warn "${FR_ALIAS}/publier → $r"; fail=1; }
+code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1${MKT_FR_ALIAS}/publier")
+[[ "$code" == "200" ]] && log "OK  espace boutique servi (${MKT_FR_ALIAS}/publier)" || { warn "${MKT_FR_ALIAS}/publier → HTTP $code"; fail=1; }
 code=$(curl -s -o /dev/null -w '%{http_code}' "$LOCAL_BASE/uploads/__absent__.png")
 [[ "$code" == "404" ]] && log "OK  un visuel absent rend 404" || warn "uploads absent → HTTP $code (404 attendu)"
 code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1${MKT_ALIAS}/Affiche%20avis.html")

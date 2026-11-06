@@ -199,7 +199,7 @@ function socStateGet(): array
         // Ce qui est unique au réseau (Instagram, compte publicitaire) ne se suit pas boutique par boutique.
         'reseau' => ['instagram' => socIgUnique(), 'publicite' => socPubReseau()],
         'ftemplates' => sfModeles(),
-        'franchise' => ['rules' => sfRegles(), 'url' => (string) (socSetting('url_franchise') ?? '/social_franchisee/')],
+        'franchise' => ['rules' => sfRegles(), 'url' => (string) (socSetting('url_franchise') ?? '/marketing/franchise/')],
         // Commentaires et avis Google à traiter (rouges, oranges, en retard) : les pastilles du menu.
         'alertes' => socCommentairesAlertes() + ['boost' => socBoostEnAttente(), 'messages' => socMessagesAlertes()],
         'activity' => array_map(static fn ($r) => ['at' => substr((string) $r['at'], 0, 16), 'who' => $r['who'], 'what' => $r['what'], 'detail' => $r['detail']],

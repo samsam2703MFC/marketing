@@ -21,6 +21,13 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     base: env.VITE_BASE || '/',
+    // Deux applications : le Marketing (index.html) et l'espace boutique des franchisés (franchise/index.html,
+    // servi sous /marketing/franchise/).
+    build: {
+      rollupOptions: {
+        input: { main: 'index.html', franchise: 'franchise/index.html' },
+      },
+    },
     server: {
       port: 5173,
       proxy: {

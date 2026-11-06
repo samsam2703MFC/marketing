@@ -4,6 +4,7 @@ import { DAYS, MONTHS, addDays, d2, dLabel, dShort, iso } from '../social/format
 import { HORS_SESSION, ErreurFranchise, deconnexion, envoyerAnnulation, envoyerPost, lireEtat, poserBoutique } from './api'
 import { fill as remplirModele, vars as varsModele } from './visuel'
 import type { ModeleVisuel } from './visuel'
+import { adresseEspace } from '../../franchise/routes'
 
 /**
  * Espace franchisé — l'état de la boutique, lu à l'API du module Social & Ads (`GET /franchise/etat`), et les
@@ -540,8 +541,7 @@ export const libelleAcces = (via: string) =>
 /** Les pages de l'espace franchisé : leur entrée dans le rail du Marketing (`sf-<page>`). */
 export type PageFranchise = 'cal' | 'pub' | 'com' | 'msg' | 'google' | 'camp' | 'ig'
 
-/** L'adresse d'une page de l'espace dans le Marketing : `?ecran=sf-<page>&<paramètres>`. */
+/** L'adresse d'une page de l'espace boutique : `/marketing/franchise/<page>?<paramètres>`. */
 export function lienFranchise(page: PageFranchise, query?: string): string {
-  const q = [`ecran=sf-${page}`, query ?? ''].filter(Boolean).join('&')
-  return `${window.location.pathname}?${q}`
+  return adresseEspace(page, query ?? '')
 }

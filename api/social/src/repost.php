@@ -680,7 +680,7 @@ function socRepostVue(int $jours = 14, bool $relire = false): array
         'reglage' => $c, 'jours' => $jours, 'shops' => $shops, 'lignes' => $lignes, 'chiffres' => $chiffres, 'alertes' => array_values($alertes), 'attente' => $attente,
         'aVenir' => socRepostAVenir($c, $shops, $relire),
         'guet' => socSetting('repost_guet'), 'marque' => ['name' => $b['name'], 'pageId' => (string) ($b['ids']['page_id'] ?? ''), 'fb' => (string) $b['fb']],
-        'instagramUnique' => socIgUnique(), 'metaConfigure' => Meta::configured(), 'franchiseUrl' => (string) (socSetting('url_franchise') ?? '/social_franchisee/'),
+        'instagramUnique' => socIgUnique(), 'metaConfigure' => Meta::configured(), 'franchiseUrl' => (string) (socSetting('url_franchise') ?? '/marketing/franchise/'),
     ];
 }
 

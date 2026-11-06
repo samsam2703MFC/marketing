@@ -987,7 +987,8 @@ jobs:
 
   social-deploy:
     name: Déploiement API Social
-    needs: [test, social-test]
+    # Après le Marketing : l'espace boutique (/marketing/franchise) est servi par son application.
+    needs: [deploy, social-test]
     concurrency:
       group: deploy-social
       cancel-in-progress: false

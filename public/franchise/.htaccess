@@ -1,0 +1,13 @@
+# Espace boutique (/marketing/franchise) : une application à part du Marketing, routée par le chemin
+# (/marketing/franchise/publier, /calendrier…). Tout ce qui n'est pas un fichier réel l'ouvre.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{REQUEST_FILENAME} -f
+  RewriteRule ^ - [L]
+  RewriteRule ^ index.html [L]
+</IfModule>
+<IfModule mod_headers.c>
+  <FilesMatch "^index\.html$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+</IfModule>

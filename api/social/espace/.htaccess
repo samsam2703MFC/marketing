@@ -1,14 +1,16 @@
-# Ancien espace franchisé (/marketing/franchise, /social_franchisee) : ses pages vivent dans le
-# Marketing (/marketing/?ecran=sf-…). Chaque ancienne adresse — propre (« publier ») ou en
-# « .dc.html » (liens de l'ERP, favoris) — renvoie à la même page, paramètres compris (?shop=).
+# Ancien espace franchisé (/social_franchisee) : il vit dans le Marketing, espace boutique
+# (/marketing/franchise/<page>). Chaque ancienne adresse — propre (« publier ») ou en « .dc.html »
+# (liens de l'ERP, favoris, QR codes) — renvoie à la même page, paramètres compris (?shop=).
 DirectoryIndex disabled
 RewriteEngine On
-RewriteRule ^(index\.html)?$ /marketing/?ecran=sf-cal [R=302,L,QSA]
-RewriteRule ^(calendrier|Calendrier\.dc\.html)/?$ /marketing/?ecran=sf-cal [R=302,L,QSA]
-RewriteRule ^(publier|Publier\.dc\.html)/?$ /marketing/?ecran=sf-pub [R=302,L,QSA]
-RewriteRule ^(operations|Campagnes\.dc\.html)/?$ /marketing/?ecran=sf-camp [R=302,L,QSA]
-RewriteRule ^(instagram|Instagram\.dc\.html)/?$ /marketing/?ecran=sf-ig [R=302,L,QSA]
-RewriteRule ^(commentaires|Commentaires\.dc\.html)/?$ /marketing/?ecran=sf-com [R=302,L,QSA]
-RewriteRule ^(messages|Messages\.dc\.html)/?$ /marketing/?ecran=sf-msg [R=302,L,QSA]
-RewriteRule ^(avis-google|Google\.dc\.html)/?$ /marketing/?ecran=sf-google [R=302,L,QSA]
-RewriteRule ^ /marketing/?ecran=sf-cal [R=302,L]
+RewriteRule ^(index\.html)?$ /marketing/franchise/calendrier [R=302,L,QSA]
+RewriteRule ^(calendrier|Calendrier\.dc\.html)/?$ /marketing/franchise/calendrier [R=302,L,QSA]
+RewriteRule ^Suivi\.dc\.html$ /marketing/franchise/calendrier?vue=suivi [R=302,L,QSA]
+RewriteRule ^Promotions\.dc\.html$ /marketing/franchise/calendrier?vue=liste [R=302,L,QSA]
+RewriteRule ^(publier|Publier\.dc\.html)/?$ /marketing/franchise/publier [R=302,L,QSA]
+RewriteRule ^(operations|Campagnes\.dc\.html)/?$ /marketing/franchise/operations [R=302,L,QSA]
+RewriteRule ^(instagram|Instagram\.dc\.html)/?$ /marketing/franchise/instagram [R=302,L,QSA]
+RewriteRule ^(commentaires|Commentaires\.dc\.html)/?$ /marketing/franchise/commentaires [R=302,L,QSA]
+RewriteRule ^(messages|Messages\.dc\.html)/?$ /marketing/franchise/messages [R=302,L,QSA]
+RewriteRule ^(avis-google|Google\.dc\.html)/?$ /marketing/franchise/avis-google [R=302,L,QSA]
+RewriteRule ^ /marketing/franchise/calendrier [R=302,L]

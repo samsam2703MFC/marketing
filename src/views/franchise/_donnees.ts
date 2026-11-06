@@ -1,6 +1,7 @@
-import { useSyncExternalStore } from 'react'
 import { socialApi } from '../../lib/social/store'
 import { imageSocial } from '../../lib/social/refs'
+import { adresseEspace } from '../../franchise/routes'
+import { charger, etatFranchise, useFranchise as useStore } from '../../lib/franchise/store'
 
 /**
  * Espace franchisé — la couche de données des écrans Commentaires, Messages, Avis Google, Publicités & opérations,
@@ -86,14 +87,19 @@ interface Courant {
   etat: EtatFranchise | null
 }
 
-let courant: Courant = { chargement: 'attente', erreur: null, etat: null }
-const abonnes = new Set<() => void>()
-let lecture: Promise<void> | null = null
+/*
+ * L'état de la boutique est celui du store de l'espace (src/lib/franchise/store.ts) : une seule lecture de
+ * `/franchise/etat`, une seule boutique ouverte pour toutes les pages, quelle que soit la page qui la lit.
+ */
 
-function publier(suite: Partial<Courant>) {
-  courant = { ...courant, ...suite }
-  abonnes.forEach((f) => f())
-}
+/** Lit (ou relit) l'état de la boutique (franchise-data.js : `load()`). */
+export const load = (): Promise<void> => charger()
+
+/** L'état de la boutique, chargé au premier écran qui le demande (franchise-data.js : `SF.state()` et `SF.error`). */
+export const useFranchise = (): Courant => useStore() as unknown as Courant
+
+/** L'état déjà lu (null tant qu'il ne l'est pas). */
+export const state = () => etatFranchise() as unknown as EtatFranchise | null
 
 const message = (e: unknown) => {
   const status = (e as { status?: number } | null)?.status
@@ -101,39 +107,10 @@ const message = (e: unknown) => {
   return e instanceof Error ? e.message : String(e)
 }
 
-/** Lit (ou relit) l'état de la boutique (franchise-data.js : `load()`). Une lecture en cours est partagée. */
-export function load(): Promise<void> {
-  if (lecture) return lecture
-  lecture = socialApi<EtatFranchise>('GET', '/franchise/etat')
-    .then((r) => {
-      if (!r || !r.shop) throw new Error('Espace indisponible : le module Social n’a pas rendu de boutique.')
-      publier({ chargement: 'pret', erreur: null, etat: r })
-    })
-    .catch((e: unknown) => publier({ chargement: courant.etat ? 'pret' : 'erreur', erreur: message(e) }))
-    .finally(() => {
-      lecture = null
-    })
-  return lecture
-}
-
-function abonner(f: () => void) {
-  abonnes.add(f)
-  if (courant.chargement === 'attente' && !lecture) void load()
-  return () => abonnes.delete(f)
-}
-
-/** L'état de la boutique, chargé au premier écran qui le demande (franchise-data.js : `SF.state()` et `SF.error`). */
-export function useFranchise(): Courant {
-  return useSyncExternalStore(abonner, () => courant)
-}
-
-/** L'état déjà lu (null tant qu'il ne l'est pas). */
-export const state = () => courant.etat
-
 /** L'id de la boutique ouverte, ajouté à chaque appel (franchise-data.js : `STATE.shop.id`). */
 function shop(): string {
-  const s = courant.etat?.shop?.id
-  if (!s) throw new Error(courant.erreur || 'Espace boutique pas encore chargé.')
+  const s = state()?.shop?.id
+  if (!s) throw new Error('Espace boutique pas encore chargé.')
   return String(s)
 }
 const q = (extra = '') => `shop=${encodeURIComponent(shop())}${extra ? `&${extra}` : ''}`
@@ -510,9 +487,9 @@ export type PageFranchise = keyof typeof ROUTES_FRANCHISE
 /** Suivre un lien vers une autre page de l'espace, avec ses paramètres (`post=…`, `vue=semaine&date=…`). */
 export type Naviguer = (page: PageFranchise, query: string) => void
 
-/** L'adresse d'une page de l'espace dans le Marketing : `?ecran=sf-…&<paramètres>`. */
+/** L'adresse d'une page de l'espace boutique (`/marketing/franchise/<page>?<paramètres>`). */
 export function href(page: PageFranchise, query = ''): string {
-  return `${window.location.pathname}?${[`ecran=${ROUTES_FRANCHISE[page]}`, query].filter(Boolean).join('&')}`
+  return adresseEspace(page, query)
 }
 
 /** Les props d'un lien de l'espace : l'adresse, et `onNaviguer` s'il est donné (sans recharger la page). */
@@ -544,7 +521,7 @@ export function dateHeure(x: string | null | undefined): string {
 export function maintenant(): string {
   const now = new Date()
   const jour =
-    courant.etat?.today ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    state()?.today ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   return `${jour} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
 }
 
