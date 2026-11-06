@@ -9,103 +9,104 @@
 <x-dc>
 <helmet>
   <link rel="stylesheet" href="_ds/l-atelier-by-8504a4e3-7796-44da-b087-3fbd9dcb8dcd/global.css">
+  <link rel="stylesheet" href="_ds/marketing.css">
   <script src="_ds/l-atelier-by-8504a4e3-7796-44da-b087-3fbd9dcb8dcd/_ds_bundle.js"></script>
   <script src="config.js"></script>
   <script src="franchise-data.js"></script>
   <script src="graphes.js"></script>
-  <style>html,body{margin:0;padding:0;background:#EAE4DC;-webkit-font-smoothing:antialiased;}
+  <style>html,body{margin:0;padding:0;background:#faf7f2;-webkit-font-smoothing:antialiased;}
     /* La règle « section » du design system (48 px, pages vitrines) ne vaut pas pour les cartes des écrans. */
     section{padding-top:0;padding-bottom:0;} a{color:#8D1D2C;} button{font-family:var(--font-ui);}</style>
 </helmet>
-<div class="sf-shell" style="display:flex;min-height:100vh;background:#EAE4DC;font-family:var(--font-ui);color:#222222;">
+<div class="sf-shell" style="display:flex;min-height:100vh;background:#faf7f2;font-family:var(--font-ui);color:#1c1a17;">
   <dc-import name="FNav" active="ig" hint-size="228px,100vh"></dc-import>
   <main class="sf-main" style="flex:1 1 auto;min-width:0;padding:20px 24px 32px;display:flex;flex-direction:column;gap:14px;">
     <sc-if value="{{ hasError }}" hint-placeholder-val="{{ false }}"><div style="background:#F6DCDF;color:#8D1D2C;border-radius:10px;padding:14px 16px;font-size:14px;">{{ error }}</div></sc-if>
 
     <header style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;">
       <div style="display:flex;flex-direction:column;gap:4px;">
-        <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:#666666;">{{ eyebrow }}</span>
-        <h1 style="font-family:var(--font-display);font-weight:400;font-size:30px;line-height:1.1;margin:0;color:#232220;">GRILLE INSTAGRAM</h1>
+        <span style="font-size:11px;font-weight:400;letter-spacing:0.08em;text-transform:uppercase;color:#7a736a;">{{ eyebrow }}</span>
+        <h1 style="font-family:var(--font-ui);font-weight:400;font-size:26px;line-height:1.15;letter-spacing:-0.01em;margin:0;color:#1c1a17;">Grille Instagram</h1>
         <span style="font-size:13px;color:#4A443E;">Le profil tel qu’il sera : les posts programmés au-dessus de ceux déjà en ligne.</span>
       </div>
-      <a href="{{ calHref }}" style="height:36px;padding:0 14px;border-radius:8px;border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;font-size:13px;font-weight:500;display:flex;align-items:center;text-decoration:none;color:#222222;">Voir le calendrier</a>
+      <a href="{{ calHref }}" style="height:36px;padding:0 14px;border-radius:8px;border:1px solid #e6e0d8;background:#FFFFFF;font-size:13px;font-weight:400;display:flex;align-items:center;text-decoration:none;color:#1c1a17;">Voir le calendrier</a>
     </header>
 
     <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;">
       <!-- La grille -->
-      <section style="flex:0 0 auto;background:#FFFFFF;border-radius:12px;border:0.5px solid rgba(34,34,34,0.12);padding:14px;display:flex;flex-direction:column;gap:12px;width:484px;max-width:100%;box-sizing:border-box;">
+      <section style="flex:0 0 auto;background:#FFFFFF;border-radius:12px;border:1px solid #e6e0d8;padding:14px;display:flex;flex-direction:column;gap:12px;width:484px;max-width:100%;box-sizing:border-box;">
         <div style="display:flex;align-items:center;gap:14px;">
           <img src="{{ pic }}" alt="" style="width:64px;height:64px;border-radius:50%;object-fit:cover;background:#F4EFE8;border:2px solid #FFFFFF;box-shadow:0 0 0 2px #DD2A7B;flex:0 0 auto;">
           <div style="display:flex;flex-direction:column;gap:3px;min-width:0;flex:1 1 auto;">
-            <span style="font-size:16px;font-weight:600;">{{ handle }}</span>
+            <span style="font-size:16px;font-weight:400;">{{ handle }}</span>
             <span style="font-size:13px;color:#444444;">{{ name }}</span>
-            <span style="font-size:12px;color:#666666;"><strong style="font-weight:600;color:#222222;">{{ followers }}</strong> abonnés · <strong style="font-weight:600;color:#222222;">{{ nMedia }}</strong> en ligne · <strong style="font-weight:600;color:#8D1D2C;">{{ nSched }}</strong> programmé(s)</span>
+            <span style="font-size:12px;color:#7a736a;"><strong style="font-weight:400;color:#1c1a17;">{{ followers }}</strong> abonnés · <strong style="font-weight:400;color:#1c1a17;">{{ nMedia }}</strong> en ligne · <strong style="font-weight:400;color:#8D1D2C;">{{ nSched }}</strong> programmé(s)</span>
           </div>
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-          <span style="font-size:11px;color:#666666;">{{ readLabel }}</span>
+          <span style="font-size:11px;color:#7a736a;">{{ readLabel }}</span>
           <span style="display:flex;gap:8px;align-items:center;">
-            <a href="{{ profileHref }}" target="_blank" rel="noopener" style="font-size:12px;font-weight:500;white-space:nowrap;">Ouvrir Instagram ↗</a>
-            <button onClick="{{ refresh }}" disabled="{{ loading }}" style="border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:500;cursor:pointer;">{{ refreshLabel }}</button>
+            <a href="{{ profileHref }}" target="_blank" rel="noopener" style="font-size:12px;font-weight:400;white-space:nowrap;">Ouvrir Instagram ↗</a>
+            <button onClick="{{ refresh }}" disabled="{{ loading }}" style="border:1px solid #e6e0d8;background:#FFFFFF;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:400;cursor:pointer;">{{ refreshLabel }}</button>
           </span>
         </div>
         <sc-if value="{{ hasErr }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#8A4B00;background:#FCE7C8;border-radius:6px;padding:8px 10px;">{{ errText }}</span></sc-if>
-        <sc-if value="{{ loading }}" hint-placeholder-val="{{ false }}"><div style="padding:30px 10px;text-align:center;font-size:13px;color:#666666;">Lecture du compte Instagram chez Meta…</div></sc-if>
+        <sc-if value="{{ loading }}" hint-placeholder-val="{{ false }}"><div style="padding:30px 10px;text-align:center;font-size:13px;color:#7a736a;">Lecture du compte Instagram chez Meta…</div></sc-if>
         <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;">
           <sc-for list="{{ cells }}" as="c" hint-placeholder-count="9">
             <div onClick="{{ c.click }}" title="{{ c.tip }}" style="position:relative;width:100%;height:0;padding-bottom:133.333%;overflow:hidden;background:{{ c.bg }};cursor:pointer;">
               <sc-if value="{{ c.hasImg }}" hint-placeholder-val="{{ true }}"><img src="{{ c.src }}" alt="" loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;"></sc-if>
-              <sc-if value="{{ c.isText }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:10px;text-align:center;font-size:11px;font-weight:500;color:#3A3530;">{{ c.alt }}</span></sc-if>
+              <sc-if value="{{ c.isText }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:10px;text-align:center;font-size:11px;font-weight:400;color:#3A3530;">{{ c.alt }}</span></sc-if>
               <span style="position:absolute;inset:0;box-shadow:{{ c.ring }};pointer-events:none;"></span>
               <sc-if value="{{ c.isVideo }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:6px;right:6px;font-size:12px;color:#FFFFFF;text-shadow:0 1px 3px rgba(0,0,0,0.5);">▶</span></sc-if>
-              <sc-if value="{{ c.hasBadge }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:6px;left:6px;max-width:calc(100% - 12px);box-sizing:border-box;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px;font-weight:600;border-radius:999px;padding:3px 7px;background:{{ c.badgeBg }};color:{{ c.badgeFg }};">{{ c.badge }}</span></sc-if>
-              <sc-if value="{{ c.hasFlag }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:6px;bottom:6px;font-size:10px;font-weight:600;border-radius:6px;padding:2px 6px;background:#FCE7C8;color:#7A4100;">{{ c.flag }}</span></sc-if>
+              <sc-if value="{{ c.hasBadge }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:6px;left:6px;max-width:calc(100% - 12px);box-sizing:border-box;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px;font-weight:400;border-radius:6px;padding:3px 7px;background:{{ c.badgeBg }};color:{{ c.badgeFg }};">{{ c.badge }}</span></sc-if>
+              <sc-if value="{{ c.hasFlag }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:6px;bottom:6px;font-size:10px;font-weight:400;border-radius:6px;padding:2px 6px;background:#FCE7C8;color:#7A4100;">{{ c.flag }}</span></sc-if>
               <sc-if value="{{ c.hasFoot }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:0;right:0;bottom:0;padding:16px 6px 5px;font-size:10px;color:#FFFFFF;background:linear-gradient(transparent,rgba(0,0,0,0.55));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ c.foot }}</span></sc-if>
             </div>
           </sc-for>
         </div>
-        <sc-if value="{{ empty }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#666666;padding:20px 0;text-align:center;">{{ emptyText }}</span></sc-if>
+        <sc-if value="{{ empty }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#7a736a;padding:20px 0;text-align:center;">{{ emptyText }}</span></sc-if>
       </section>
 
       <section style="flex:1 1 340px;min-width:280px;display:flex;flex-direction:column;gap:12px;">
         <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ false }}">
           <div style="background:#FFFFFF;border-radius:12px;border:1.5px solid #8D1D2C;padding:14px 16px;display:flex;flex-direction:column;gap:7px;">
-            <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:#8D1D2C;">{{ sel.kind }}</span>
-            <span style="font-size:15px;font-weight:600;line-height:1.35;overflow-wrap:anywhere;">{{ sel.title }}</span>
+            <span style="font-size:11px;font-weight:400;letter-spacing:0.08em;text-transform:uppercase;color:#8D1D2C;">{{ sel.kind }}</span>
+            <span style="font-size:15px;font-weight:400;line-height:1.35;overflow-wrap:anywhere;">{{ sel.title }}</span>
             <span style="font-size:13px;color:#3A3530;">{{ sel.when }}</span>
             <sc-if value="{{ sel.hasStats }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:#3A3530;">{{ sel.stats }}</span></sc-if>
-            <span style="font-size:12px;color:#666666;line-height:1.5;">{{ sel.help }}</span>
+            <span style="font-size:12px;color:#7a736a;line-height:1.5;">{{ sel.help }}</span>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
-              <sc-if value="{{ sel.hasOpen }}" hint-placeholder-val="{{ false }}"><a href="{{ sel.href }}" target="{{ sel.target }}" rel="noopener" style="border-radius:8px;padding:7px 12px;font-size:12px;font-weight:500;background:#8D1D2C;color:#FFFFFF;text-decoration:none;">{{ sel.openLabel }}</a></sc-if>
-              <button onClick="{{ unselect }}" style="border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:500;cursor:pointer;">Fermer</button>
+              <sc-if value="{{ sel.hasOpen }}" hint-placeholder-val="{{ false }}"><a href="{{ sel.href }}" target="{{ sel.target }}" rel="noopener" style="border-radius:8px;padding:7px 12px;font-size:12px;font-weight:400;background:#8D1D2C;color:#FFFFFF;text-decoration:none;">{{ sel.openLabel }}</a></sc-if>
+              <button onClick="{{ unselect }}" style="border:1px solid #e6e0d8;background:#FFFFFF;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:400;cursor:pointer;">Fermer</button>
             </div>
           </div>
         </sc-if>
         <!-- À droite de la grille : abonnés (évolution, gagnés / perdus), comptes touchés, interactions par publication -->
         <sc-if value="{{ ab.hasAb }}" hint-placeholder-val="{{ true }}">
-          <div style="background:#FFFFFF;border-radius:12px;border:0.5px solid rgba(34,34,34,0.12);padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
+          <div style="background:#FFFFFF;border-radius:12px;border:1px solid #e6e0d8;padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
             <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;">
-              <span style="font-size:15px;font-weight:600;">Abonnés · 30 derniers jours</span>
-              <span style="font-size:11px;color:#666666;">{{ ab.lu }}</span>
+              <span style="font-size:15px;font-weight:400;">Abonnés · 30 derniers jours</span>
+              <span style="font-size:11px;color:#7a736a;">{{ ab.lu }}</span>
             </div>
-            <sc-if value="{{ ab.loading }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#666666;padding:10px 0;">Lecture des abonnés chez Meta…</span></sc-if>
+            <sc-if value="{{ ab.loading }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#7a736a;padding:10px 0;">Lecture des abonnés chez Meta…</span></sc-if>
             <sc-if value="{{ ab.hasMessage }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#8A4B00;background:#FCE7C8;border-radius:6px;padding:8px 10px;line-height:1.45;">{{ ab.message }}</span></sc-if>
             <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;">
               <sc-for list="{{ ab.kpis }}" as="k" hint-placeholder-count="3">
                 <div style="background:#F7F3EE;border-radius:8px;padding:9px 10px;display:flex;flex-direction:column;gap:2px;min-width:0;">
-                  <span style="font-size:10px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ k.label }}</span>
-                  <span style="font-size:20px;font-weight:300;line-height:1.15;color:#222222;">{{ k.value }}</span>
-                  <span style="font-size:11px;color:#666666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ k.sub }}">{{ k.sub }}</span>
+                  <span style="font-size:10px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ k.label }}</span>
+                  <span style="font-size:20px;font-weight:300;line-height:1.15;color:#1c1a17;">{{ k.value }}</span>
+                  <span style="font-size:11px;color:#7a736a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ k.sub }}">{{ k.sub }}</span>
                 </div>
               </sc-for>
             </div>
-            <sc-if value="{{ ab.hasNote }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#666666;line-height:1.45;">{{ ab.note }}</span></sc-if>
+            <sc-if value="{{ ab.hasNote }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#7a736a;line-height:1.45;">{{ ab.note }}</span></sc-if>
           </div>
         </sc-if>
             <sc-for list="{{ ab.cards }}" as="ch" hint-placeholder-count="0">
-              <div style="background:#FFFFFF;border:0.5px solid rgba(34,34,34,0.10);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:10px;min-width:0;">
+              <div style="background:#FFFFFF;border:1px solid #e6e0d8;border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:10px;min-width:0;">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px 16px;flex-wrap:wrap;">
-                  <span style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-size:14px;font-weight:500;color:#222222;">{{ ch.title }}</span><span style="font-size:11px;color:#666666;line-height:1.4;">{{ ch.sub }}</span></span>
+                  <span style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-size:14px;font-weight:400;color:#1c1a17;">{{ ch.title }}</span><span style="font-size:11px;color:#7a736a;line-height:1.4;">{{ ch.sub }}</span></span>
                   <span style="display:flex;gap:6px 14px;flex-wrap:wrap;align-items:center;">
                     <sc-for list="{{ ch.legend }}" as="l" hint-placeholder-count="2"><span style="display:flex;align-items:center;gap:6px;font-size:11px;color:#444444;"><span style="width:{{ l.w }};height:{{ l.h }};border-radius:{{ l.r }};background:{{ l.c }};box-shadow:{{ l.ring }};flex:0 0 auto;"></span>{{ l.n }}</span></sc-for>
                   </span>
@@ -127,8 +128,8 @@
                     <sc-for list="{{ ch.xl }}" as="x" hint-placeholder-count="5"><span style="position:absolute;bottom:0;left:{{ x.left }};transform:translateX(-50%);font-size:10px;line-height:12px;color:#8A847C;white-space:nowrap;">{{ x.label }}</span></sc-for>
                     <div onPointerMove="{{ ch.move }}" onPointerLeave="{{ ch.leave }}" onClick="{{ ch.click }}" style="position:absolute;left:44px;right:10px;top:0;bottom:0;cursor:pointer;touch-action:pan-y;"></div>
                     <sc-if value="{{ ch.hasTip }}" hint-placeholder-val="{{ false }}">
-                      <div style="position:absolute;top:2px;left:{{ ch.crossLeft }};transform:{{ ch.tipX }};background:#232220;color:#FFFFFF;border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.45;pointer-events:none;z-index:5;min-width:150px;max-width:260px;box-shadow:0 4px 14px rgba(0,0,0,0.18);">
-                        <div style="font-weight:600;margin-bottom:2px;">{{ ch.tipTitle }}</div>
+                      <div style="position:absolute;top:2px;left:{{ ch.crossLeft }};transform:{{ ch.tipX }};background:#1c1a17;color:#FFFFFF;border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.45;pointer-events:none;z-index:5;min-width:150px;max-width:260px;box-shadow:0 4px 14px rgba(0,0,0,0.18);">
+                        <div style="font-weight:400;margin-bottom:2px;">{{ ch.tipTitle }}</div>
                         <sc-for list="{{ ch.tipLines }}" as="t" hint-placeholder-count="2"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ t }}</div></sc-for>
                       </div>
                     </sc-if>
@@ -153,8 +154,8 @@
                     <sc-for list="{{ ch.xl }}" as="x" hint-placeholder-count="5"><span style="position:absolute;bottom:0;left:{{ x.left }};transform:translateX(-50%);font-size:10px;line-height:12px;color:#8A847C;white-space:nowrap;">{{ x.label }}</span></sc-for>
                     <div onPointerMove="{{ ch.move }}" onPointerLeave="{{ ch.leave }}" onClick="{{ ch.click }}" style="position:absolute;left:44px;right:10px;top:0;bottom:0;cursor:pointer;touch-action:pan-y;"></div>
                     <sc-if value="{{ ch.hasTip }}" hint-placeholder-val="{{ false }}">
-                      <div style="position:absolute;top:2px;left:{{ ch.crossLeft }};transform:{{ ch.tipX }};background:#232220;color:#FFFFFF;border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.45;pointer-events:none;z-index:5;min-width:150px;max-width:260px;box-shadow:0 4px 14px rgba(0,0,0,0.18);">
-                        <div style="font-weight:600;margin-bottom:2px;">{{ ch.tipTitle }}</div>
+                      <div style="position:absolute;top:2px;left:{{ ch.crossLeft }};transform:{{ ch.tipX }};background:#1c1a17;color:#FFFFFF;border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.45;pointer-events:none;z-index:5;min-width:150px;max-width:260px;box-shadow:0 4px 14px rgba(0,0,0,0.18);">
+                        <div style="font-weight:400;margin-bottom:2px;">{{ ch.tipTitle }}</div>
                         <sc-for list="{{ ch.tipLines }}" as="t" hint-placeholder-count="2"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ t }}</div></sc-for>
                       </div>
                     </sc-if>
@@ -164,26 +165,26 @@
                 <sc-if value="{{ ch.hasNote }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;line-height:1.45;color:#8A4B00;background:#FCE7C8;border-radius:6px;padding:6px 8px;">{{ ch.note }}</span></sc-if>
               </div>
             </sc-for>
-        <div style="background:#FFFFFF;border-radius:12px;border:0.5px solid rgba(34,34,34,0.12);padding:16px;display:flex;flex-direction:column;gap:8px;">
-          <span style="font-size:15px;font-weight:600;">Bientôt sur le profil</span>
-          <sc-if value="{{ noSoon }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#666666;">Rien de programmé pour l’instant.</span></sc-if>
+        <div style="background:#FFFFFF;border-radius:12px;border:1px solid #e6e0d8;padding:16px;display:flex;flex-direction:column;gap:8px;">
+          <span style="font-size:15px;font-weight:400;">Bientôt sur le profil</span>
+          <sc-if value="{{ noSoon }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#7a736a;">Rien de programmé pour l’instant.</span></sc-if>
           <sc-for list="{{ soon }}" as="u" hint-placeholder-count="0">
-            <button onClick="{{ u.open }}" style="text-align:left;border:none;background:transparent;padding:6px 0;border-top:0.5px solid rgba(34,34,34,0.06);cursor:pointer;display:flex;gap:10px;align-items:center;">
+            <button onClick="{{ u.open }}" style="text-align:left;border:none;background:transparent;padding:6px 0;border-top:1px solid #e6e0d8;cursor:pointer;display:flex;gap:10px;align-items:center;">
               <img src="{{ u.img }}" alt="" style="width:34px;height:45px;border-radius:4px;object-fit:cover;background:#F5EFE4;flex:0 0 auto;">
-              <span style="display:flex;flex-direction:column;gap:1px;min-width:0;flex:1 1 auto;"><span style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ u.title }}</span><span style="font-size:11px;color:#666666;">{{ u.when }} · {{ u.who }}</span></span>
+              <span style="display:flex;flex-direction:column;gap:1px;min-width:0;flex:1 1 auto;"><span style="font-size:12px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ u.title }}</span><span style="font-size:11px;color:#7a736a;">{{ u.when }} · {{ u.who }}</span></span>
             </button>
           </sc-for>
         </div>
-        <div style="background:#FFFFFF;border-radius:12px;border:0.5px solid rgba(34,34,34,0.12);padding:16px;display:flex;flex-direction:column;gap:8px;">
-          <span style="font-size:15px;font-weight:600;">Légende</span>
+        <div style="background:#FFFFFF;border-radius:12px;border:1px solid #e6e0d8;padding:16px;display:flex;flex-direction:column;gap:8px;">
+          <span style="font-size:15px;font-weight:400;">Légende</span>
           <div style="display:flex;flex-wrap:wrap;gap:14px;font-size:13px;align-items:center;">
             <span style="display:flex;align-items:center;gap:6px;"><span style="width:18px;height:24px;box-shadow:inset 0 0 0 2px #8D1D2C;box-sizing:border-box;"></span>Programmé</span>
-            <span style="display:flex;align-items:center;gap:6px;"><span style="width:18px;height:24px;background:#EAE4DC;"></span>Déjà en ligne (lu chez Instagram)</span>
-            <span style="display:flex;align-items:center;gap:6px;"><span style="font-size:10px;font-weight:600;border-radius:999px;padding:3px 7px;background:#8D1D2C;color:#FFFFFF;">Frise</span>3 posts qui forment une ligne</span>
+            <span style="display:flex;align-items:center;gap:6px;"><span style="width:18px;height:24px;background:#EDE7DE;"></span>Déjà en ligne (lu chez Instagram)</span>
+            <span style="display:flex;align-items:center;gap:6px;"><span style="font-size:10px;font-weight:400;border-radius:6px;padding:3px 7px;background:#8D1D2C;color:#FFFFFF;">Frise</span>3 posts qui forment une ligne</span>
           </div>
         </div>
-        <div style="background:#FFFFFF;border-radius:12px;border:0.5px solid rgba(34,34,34,0.12);padding:16px;display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:1.55;color:#3A3530;">
-          <span style="font-size:15px;font-weight:600;color:#222222;">Comment ça marche</span>
+        <div style="background:#FFFFFF;border-radius:12px;border:1px solid #e6e0d8;padding:16px;display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:1.55;color:#3A3530;">
+          <span style="font-size:15px;font-weight:400;color:#1c1a17;">Comment ça marche</span>
           <sc-for list="{{ how }}" as="h" hint-placeholder-count="3"><span>{{ h }}</span></sc-for>
         </div>
       </section>
@@ -281,7 +282,7 @@ class Component extends DCLogic {
       const badge = c.sched ? (first ? (p.frise ? 'Frise · ' : '') + when(p) : '') : (c.m.frise && c.m.frise.tile === 0 ? 'Frise publiée' : '');
       return { src: SF.media(c.src), hasImg: !!c.src, isText: !c.src, alt: c.sched ? p.title : (c.m.caption || 'Publication'), isVideo: !c.sched && !!c.m.video,
         bg: c.sched ? '#FFFFFF' : '#EAE4DC', ring: isSel(c) ? 'inset 0 0 0 3px #232220' : c.sched ? 'inset 0 0 0 2px ' + (pending ? '#D97B29' : '#8D1D2C') : 'none',
-        hasBadge: !!badge, badge, badgeBg: c.sched ? (p.frise ? '#8D1D2C' : '#FFFFFF') : '#232220', badgeFg: c.sched ? (p.frise ? '#FFFFFF' : '#8D1D2C') : '#FFFFFF',
+        hasBadge: !!badge, badge, badgeBg: c.sched ? (p.frise ? '#8D1D2C' : '#FFFFFF') : '#1c1a17', badgeFg: c.sched ? (p.frise ? '#FFFFFF' : '#8D1D2C') : '#FFFFFF',
         hasFlag: pending && first, flag: 'à valider',
         hasFoot: !c.sched && (c.m.likes != null || c.m.comments != null), foot: !c.sched ? ((c.m.likes != null ? '♥ ' + fmt(c.m.likes) : '') + (c.m.comments != null ? '  💬 ' + fmt(c.m.comments) : '')) : '',
         tip: c.sched ? p.title + ' — programmé le ' + SF.dLabel(p.date) + ' à ' + p.time + (p.frise ? ' · frise, case ' + (c.tile + 1) + '/3' : '') : (c.m.caption || '') + ' — ' + SF.dLabel(String(c.m.at).slice(0, 10)),

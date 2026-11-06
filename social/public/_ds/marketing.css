@@ -1,0 +1,15 @@
+/* Design system du portail Marketing (docs/DESIGN_SYSTEM.md), posé APRÈS global.css sur chaque écran
+   de Social. La famille « Gotham UI » sert l'interface : 400 = Gotham_Medium (le trait du texte),
+   700 = Gotham_Regular (trait appuyé : seulement les accents). La famille « Gotham » de global.css
+   (sept graisses) reste celle des visuels de posts, du studio et des montages : on n'y touche pas. */
+@font-face { font-family: 'Gotham UI'; src: url('l-atelier-by-8504a4e3-7796-44da-b087-3fbd9dcb8dcd/fonts/Gotham_Medium.otf') format('opentype'); font-weight: 100 600; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Gotham UI'; src: url('l-atelier-by-8504a4e3-7796-44da-b087-3fbd9dcb8dcd/fonts/Gotham_Regular.otf') format('opentype'); font-weight: 700 900; font-style: normal; font-display: swap; }
+:root {
+  --font-ui: 'Gotham UI', 'Gotham', system-ui, sans-serif !important;
+  --ink: #1c1a17; --muted-2: #5c5852; --muted: #7a736a; --faint: #B8B2A8;
+  --paper: #faf7f2; --panel: #FBF9F5; --chip: #EDE7DE; --line: #e6e0d8; --accent: #8D1D2C;
+}
+html, body { background: var(--paper); color: var(--ink); }
+/* Pas de gras : le gras est réservé aux accents (entrée active du rail, valeurs d'indicateurs). */
+b, strong { font-weight: 400; }
+::selection { background: rgba(141, 29, 44, .14); }

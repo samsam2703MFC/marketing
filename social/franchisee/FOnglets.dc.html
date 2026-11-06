@@ -9,11 +9,12 @@
 <x-dc>
 <helmet>
   <link rel="stylesheet" href="_ds/l-atelier-by-8504a4e3-7796-44da-b087-3fbd9dcb8dcd/global.css">
+  <link rel="stylesheet" href="_ds/marketing.css">
   <script src="_ds/l-atelier-by-8504a4e3-7796-44da-b087-3fbd9dcb8dcd/_ds_bundle.js"></script>
   <script src="config.js"></script>
   <script src="franchise-data.js"></script>
 </helmet>
-<div class="sf-tabs" style="display:flex;align-items:flex-end;gap:2px;border-bottom:1px solid rgba(34,34,34,0.14);font-family:var(--font-ui);">
+<div class="sf-tabs" style="display:flex;align-items:flex-end;gap:2px;border-bottom:1px solid #e6e0d8;font-family:var(--font-ui);">
   <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4">
     <a href="{{ t.href }}" onClick="{{ t.click }}" style="display:flex;align-items:center;gap:7px;padding:10px 16px 9px;margin-bottom:-1px;border-bottom:2px solid {{ t.line }};font-size:14px;font-weight:{{ t.w }};color:{{ t.fg }};text-decoration:none;white-space:nowrap;">
       <span style="width:20px;height:20px;border-radius:6px;background:{{ t.icBg }};color:{{ t.icFg }};font-size:12px;display:flex;align-items:center;justify-content:center;">{{ t.ic }}</span>{{ t.label }}
@@ -36,7 +37,7 @@ class Component extends DCLogic {
       .concat(st.rules.voirAvisGoogle !== false ? [['google', 'Avis Google', '★', SF.href('google')]] : [])
       .concat([['pub', 'Créer un post', '+', SF.href('pub')]]);
     return { tabs: defs.map(([k, label, ic, href]) => { const on = k === active;
-      return { label, ic, href, fg: on ? '#8D1D2C' : '#444444', w: on ? 600 : 500, line: on ? '#8D1D2C' : 'transparent', icBg: on ? '#8D1D2C' : '#EAE4DC', icFg: on ? '#FFFFFF' : '#666666',
+      return { label, ic, href, fg: on ? '#8D1D2C' : '#444444', w: on ? 600 : 500, line: on ? '#8D1D2C' : 'transparent', icBg: on ? '#8D1D2C' : '#EAE4DC', icFg: on ? '#FFFFFF' : '#7a736a',
         click: (e) => { const VUES = ['cal', 'analyse', 'suivi']; if (typeof pick === 'function' && VUES.includes(k) && VUES.includes(active)) { e.preventDefault(); pick(k); } } }; }) };
   }
 }

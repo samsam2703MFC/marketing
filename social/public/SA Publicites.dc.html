@@ -9,88 +9,89 @@
 <x-dc>
 <helmet>
   <link rel="stylesheet" href="_ds/l-atelier-by-8504a4e3-7796-44da-b087-3fbd9dcb8dcd/global.css">
+  <link rel="stylesheet" href="_ds/marketing.css">
   <script src="_ds/l-atelier-by-8504a4e3-7796-44da-b087-3fbd9dcb8dcd/_ds_bundle.js"></script>
   <script src="social-data.js"></script>
   <style>
-    html,body{margin:0;padding:0;background:#EAE4DC;-webkit-font-smoothing:antialiased;}
+    html,body{margin:0;padding:0;background:#faf7f2;-webkit-font-smoothing:antialiased;}
     /* La règle « section » du design system (48 px, pages vitrines) ne vaut pas pour les cartes des écrans. */
     section{padding-top:0;padding-bottom:0;}
     a{color:#8D1D2C;} a:hover{color:#232220;}
     select,input,button{font-family:var(--font-ui);}
   </style>
 </helmet>
-<div style="display:flex;min-height:100vh;background:#EAE4DC;font-family:var(--font-ui);color:#222222;">
+<div style="display:flex;min-height:100vh;background:#faf7f2;font-family:var(--font-ui);color:#1c1a17;">
   <dc-import name="SANav" active="ads" hint-size="228px,100vh"></dc-import>
   <main style="flex:1 1 auto;min-width:0;padding:20px 24px 32px;display:flex;flex-direction:column;gap:14px;">
 
     <header style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;">
       <div style="display:flex;flex-direction:column;gap:4px;">
-        <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:#666666;">Meta Ads · comptes publicitaires des boutiques</span>
-        <h1 style="font-family:var(--font-display);font-weight:400;font-size:30px;line-height:1.1;margin:0;color:#232220;">PUBLICITES META</h1>
+        <span style="font-size:11px;font-weight:400;letter-spacing:0.08em;text-transform:uppercase;color:#7a736a;">Meta Ads · comptes publicitaires des boutiques</span>
+        <h1 style="font-family:var(--font-ui);font-weight:400;font-size:26px;line-height:1.15;letter-spacing:-0.01em;margin:0;color:#1c1a17;">Publicités Meta</h1>
       </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;">
-        <span style="font-size:11px;color:#666666;line-height:1.35;max-width:320px;text-align:right;">{{ impNote }}</span>
-        <button onClick="{{ regOpenBtn }}" title="Mettre en pause automatiquement les pubs dont le coût par clic dépasse un seuil" style="height:36px;padding:0 14px;border-radius:8px;border:0.5px solid {{ regBtnBorder }};background:#FFFFFF;color:#222222;font-size:14px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:7px;" style-hover="background:#F4EFE8;"><span style="width:7px;height:7px;border-radius:50%;background:{{ regDot }};"></span>{{ regBtnLabel }}</button>
-        <button onClick="{{ importMeta }}" title="Relit chez Meta les campagnes de vos comptes publicitaires (créées dans le Gestionnaire de publicités, par une agence…) et met à jour l’état et la dépense de toutes les pubs. Automatique toutes les heures." style="height:36px;padding:0 14px;border-radius:8px;border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;color:#222222;font-size:14px;font-weight:500;cursor:pointer;opacity:{{ impOp }};" style-hover="background:#F4EFE8;">{{ impLabel }}</button>
-        <button onClick="{{ openWiz }}" style="height:36px;padding:0 16px;border-radius:8px;border:none;background:#8D1D2C;color:#FFFFFF;font-size:14px;font-weight:500;cursor:pointer;" style-hover="background:#7A1826;">Nouvelle publicité</button>
+        <span style="font-size:11px;color:#7a736a;line-height:1.35;max-width:320px;text-align:right;">{{ impNote }}</span>
+        <button onClick="{{ regOpenBtn }}" title="Mettre en pause automatiquement les pubs dont le coût par clic dépasse un seuil" style="height:36px;padding:0 14px;border-radius:8px;border:0.5px solid {{ regBtnBorder }};background:#FFFFFF;color:#1c1a17;font-size:14px;font-weight:400;cursor:pointer;display:inline-flex;align-items:center;gap:7px;" style-hover="background:#F4EFE8;"><span style="width:7px;height:7px;border-radius:50%;background:{{ regDot }};"></span>{{ regBtnLabel }}</button>
+        <button onClick="{{ importMeta }}" title="Relit chez Meta les campagnes de vos comptes publicitaires (créées dans le Gestionnaire de publicités, par une agence…) et met à jour l’état et la dépense de toutes les pubs. Automatique toutes les heures." style="height:36px;padding:0 14px;border-radius:8px;border:1px solid #e6e0d8;background:#FFFFFF;color:#1c1a17;font-size:14px;font-weight:400;cursor:pointer;opacity:{{ impOp }};" style-hover="background:#F4EFE8;">{{ impLabel }}</button>
+        <button onClick="{{ openWiz }}" style="height:36px;padding:0 16px;border-radius:8px;border:none;background:#8D1D2C;color:#FFFFFF;font-size:14px;font-weight:400;cursor:pointer;" style-hover="background:#7A1826;">Nouvelle publicité</button>
       </div>
     </header>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
       <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="5">
         <div style="background:#FFFFFF;border:0.5px solid {{ k.border }};border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;">
-          <span style="font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;">{{ k.label }}</span>
-          <span style="font-size:24px;font-weight:300;line-height:1.1;color:{{ k.color }};">{{ k.value }}</span>
-          <span style="font-size:11px;color:#666666;">{{ k.sub }}</span>
+          <span style="font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;">{{ k.label }}</span>
+          <span style="font-size:24px;font-weight:700;line-height:1.1;color:{{ k.color }};">{{ k.value }}</span>
+          <span style="font-size:11px;color:#7a736a;">{{ k.sub }}</span>
         </div>
       </sc-for>
     </div>
 
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-      <sc-for list="{{ actTabs }}" as="t" hint-placeholder-count="3"><button onClick="{{ t.pick }}" style="display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:500;cursor:pointer;border:0.5px solid {{ t.border }};background:{{ t.bg }};color:{{ t.fg }};"><span style="width:7px;height:7px;border-radius:50%;background:{{ t.dot }};"></span>{{ t.label }}</button></sc-for>
+      <sc-for list="{{ actTabs }}" as="t" hint-placeholder-count="3"><button onClick="{{ t.pick }}" style="display:inline-flex;align-items:center;gap:6px;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:400;cursor:pointer;border:0.5px solid {{ t.border }};background:{{ t.bg }};color:{{ t.fg }};"><span style="width:7px;height:7px;border-radius:50%;background:{{ t.dot }};"></span>{{ t.label }}</button></sc-for>
       <span style="width:1px;height:22px;background:rgba(34,34,34,0.14);margin:0 4px;"></span>
-      <sc-for list="{{ srcTabs }}" as="t" hint-placeholder-count="3"><button onClick="{{ t.pick }}" style="border-radius:999px;padding:6px 12px;font-size:12px;font-weight:500;cursor:pointer;border:0.5px solid {{ t.border }};background:{{ t.bg }};color:{{ t.fg }};">{{ t.label }}</button></sc-for>
+      <sc-for list="{{ srcTabs }}" as="t" hint-placeholder-count="3"><button onClick="{{ t.pick }}" style="border-radius:8px;padding:6px 12px;font-size:12px;font-weight:400;cursor:pointer;border:0.5px solid {{ t.border }};background:{{ t.bg }};color:{{ t.fg }};">{{ t.label }}</button></sc-for>
       <sc-if value="{{ impErr }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;line-height:1.4;color:#8D1D2C;">{{ impErrText }}</span></sc-if>
     </div>
 
     <sc-for list="{{ aRelancer }}" as="x" hint-placeholder-count="0">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#F6DCDF;border-radius:10px;padding:10px 14px;">
-        <span style="flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:2px;"><span style="font-size:13px;font-weight:500;color:#8D1D2C;">« {{ x.name }} » n’a pas été créée chez Meta</span><span style="font-size:12px;line-height:1.4;color:#6b1420;">{{ x.reason }}</span></span>
-        <button onClick="{{ x.relancer }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;" style-hover="background:#7A1826;">Corriger et relancer</button>
+        <span style="flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:2px;"><span style="font-size:13px;font-weight:400;color:#8D1D2C;">« {{ x.name }} » n’a pas été créée chez Meta</span><span style="font-size:12px;line-height:1.4;color:#6b1420;">{{ x.reason }}</span></span>
+        <button onClick="{{ x.relancer }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:400;cursor:pointer;white-space:nowrap;" style-hover="background:#7A1826;">Corriger et relancer</button>
       </div>
     </sc-for>
 
     <!-- Règle de pause automatique (marque) -->
     <sc-if value="{{ regOpen }}" hint-placeholder-val="{{ false }}">
-      <section style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:16px;display:flex;flex-direction:column;gap:10px;">
-        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;"><span style="font-size:15px;font-weight:500;">Règle de pause automatique</span><span style="font-size:11px;color:#666666;">{{ regLe }}</span></div>
+      <section style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:16px;display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;"><span style="font-size:15px;font-weight:400;">Règle de pause automatique</span><span style="font-size:11px;color:#7a736a;">{{ regLe }}</span></div>
         <span style="font-size:12px;line-height:1.5;color:#444444;">Toutes les heures, à la relecture des pubs créées ici : une pub active dont le coût par clic dépasse le seuil, une fois la dépense minimale atteinte, est mise en pause chez Meta — le motif s’affiche dans son suivi. Reprise à la main, elle n’est plus jamais repausée. Ni les campagnes récupérées de Meta ni les pubs de notoriété (qui ne visent pas le clic) ne sont concernées. Les seuils se fixent par devise de compte publicitaire.</span>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;cursor:pointer;"><input type="checkbox" checked="{{ regActive }}" onChange="{{ regToggle }}" style="accent-color:#8D1D2C;margin:0;width:16px;height:16px;">Mettre en pause automatiquement les pubs trop chères</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;cursor:pointer;"><input type="checkbox" checked="{{ regActive }}" onChange="{{ regToggle }}" style="accent-color:#8D1D2C;margin:0;width:16px;height:16px;">Mettre en pause automatiquement les pubs trop chères</label>
         <sc-for list="{{ regRows }}" as="r" hint-placeholder-count="1">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:#444444;background:#F4EFE8;border-radius:8px;padding:8px 10px;">
-            <span style="font-weight:600;min-width:38px;">{{ r.dev }}</span>
-            <label style="display:flex;align-items:center;gap:6px;">Coût par clic au-delà de <input type="number" min="0" step="0.05" value="{{ r.cpc }}" onChange="{{ r.setCpc }}" placeholder="—" style="width:78px;font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:6px 8px;outline:none;background:#FFFFFF;">{{ r.sym }}</label>
-            <label style="display:flex;align-items:center;gap:6px;">une fois <input type="number" min="1" step="1" value="{{ r.min }}" onChange="{{ r.setMin }}" style="width:78px;font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:6px 8px;outline:none;background:#FFFFFF;">{{ r.sym }} dépensés</label>
+            <span style="font-weight:400;min-width:38px;">{{ r.dev }}</span>
+            <label style="display:flex;align-items:center;gap:6px;">Coût par clic au-delà de <input type="number" min="0" step="0.05" value="{{ r.cpc }}" onChange="{{ r.setCpc }}" placeholder="—" style="width:78px;font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:6px 8px;outline:none;background:#FFFFFF;">{{ r.sym }}</label>
+            <label style="display:flex;align-items:center;gap:6px;">une fois <input type="number" min="1" step="1" value="{{ r.min }}" onChange="{{ r.setMin }}" style="width:78px;font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:6px 8px;outline:none;background:#FFFFFF;">{{ r.sym }} dépensés</label>
             <span style="color:#8A847C;">{{ r.note }}</span>
           </div>
         </sc-for>
         <sc-if value="{{ regHasErr }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;line-height:1.45;color:#8D1D2C;">{{ regErr }}</span></sc-if>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;"><button onClick="{{ regSave }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:500;cursor:pointer;opacity:{{ regSaveOp }};">{{ regSaveLabel }}</button><button onClick="{{ regClose }}" style="border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:500;cursor:pointer;">Fermer</button></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;"><button onClick="{{ regSave }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:400;cursor:pointer;opacity:{{ regSaveOp }};">{{ regSaveLabel }}</button><button onClick="{{ regClose }}" style="border:1px solid #e6e0d8;background:#FFFFFF;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:400;cursor:pointer;">Fermer</button></div>
       </section>
     </sc-if>
 
     <!-- À booster (marque) : demandes des boutiques, meilleurs posts de la semaine -->
-    <section style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
+    <section style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-        <div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-size:15px;font-weight:500;">À booster</span><span style="font-size:12px;color:#666666;line-height:1.4;">{{ bstSub }}</span></div>
+        <div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-size:15px;font-weight:400;">À booster</span><span style="font-size:12px;color:#7a736a;line-height:1.4;">{{ bstSub }}</span></div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-          <sc-for list="{{ bstTabs }}" as="t" hint-placeholder-count="2"><button onClick="{{ t.pick }}" style="border-radius:999px;padding:6px 12px;font-size:12px;font-weight:500;cursor:pointer;border:0.5px solid {{ t.border }};background:{{ t.bg }};color:{{ t.fg }};">{{ t.label }}</button></sc-for>
-          <button onClick="{{ bstRefresh }}" title="Relit les publications de la semaine chez Meta (sinon gardées deux heures)" style="border:none;background:transparent;color:#8D1D2C;padding:6px 4px;font-size:12px;font-weight:500;cursor:pointer;opacity:{{ bstOp }};">{{ bstRefreshLabel }}</button>
-          <button onClick="{{ bstToggle }}" style="border:none;background:transparent;color:#666666;padding:6px 4px;font-size:12px;cursor:pointer;">{{ bstToggleLabel }}</button>
+          <sc-for list="{{ bstTabs }}" as="t" hint-placeholder-count="2"><button onClick="{{ t.pick }}" style="border-radius:8px;padding:6px 12px;font-size:12px;font-weight:400;cursor:pointer;border:0.5px solid {{ t.border }};background:{{ t.bg }};color:{{ t.fg }};">{{ t.label }}</button></sc-for>
+          <button onClick="{{ bstRefresh }}" title="Relit les publications de la semaine chez Meta (sinon gardées deux heures)" style="border:none;background:transparent;color:#8D1D2C;padding:6px 4px;font-size:12px;font-weight:400;cursor:pointer;opacity:{{ bstOp }};">{{ bstRefreshLabel }}</button>
+          <button onClick="{{ bstToggle }}" style="border:none;background:transparent;color:#7a736a;padding:6px 4px;font-size:12px;cursor:pointer;">{{ bstToggleLabel }}</button>
         </div>
       </div>
       <sc-if value="{{ bstShow }}" hint-placeholder-val="{{ true }}">
-        <sc-if value="{{ bstEmpty }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;line-height:1.45;color:#666666;">{{ bstEmptyText }}</span></sc-if>
+        <sc-if value="{{ bstEmpty }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;line-height:1.45;color:#7a736a;">{{ bstEmptyText }}</span></sc-if>
         <sc-if value="{{ bstHasErr }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;line-height:1.45;color:#8D1D2C;">{{ bstErr }}</span></sc-if>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;">
           <sc-for list="{{ bstCards }}" as="b" hint-placeholder-count="0">
@@ -98,23 +99,23 @@
               <div style="display:flex;gap:10px;padding:10px;">
                 <img src="{{ b.img }}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:8px;background:#F4EFE8;flex:0 0 auto;">
                 <div style="display:flex;flex-direction:column;gap:3px;min-width:0;">
-                  <span style="font-size:11px;color:#666666;">{{ b.where }}</span>
-                  <span style="font-size:13px;font-weight:500;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">{{ b.titre }}</span>
+                  <span style="font-size:11px;color:#7a736a;">{{ b.where }}</span>
+                  <span style="font-size:13px;font-weight:400;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">{{ b.titre }}</span>
                   <span style="font-size:11px;color:#444444;">{{ b.facts }}</span>
                 </div>
               </div>
               <sc-if value="{{ b.hasMsg }}" hint-placeholder-val="{{ false }}"><span style="margin:0 10px 8px;font-size:12px;line-height:1.45;background:#F4EFE8;border-radius:8px;padding:7px 9px;">« {{ b.msg }} » — {{ b.par }}</span></sc-if>
-              <sc-if value="{{ b.hasBadge }}" hint-placeholder-val="{{ false }}"><span style="margin:0 10px 8px;align-self:flex-start;font-size:11px;font-weight:500;border-radius:999px;padding:2px 8px;background:{{ b.badgeBg }};color:{{ b.badgeFg }};">{{ b.badge }}</span></sc-if>
+              <sc-if value="{{ b.hasBadge }}" hint-placeholder-val="{{ false }}"><span style="margin:0 10px 8px;align-self:flex-start;font-size:11px;font-weight:400;border-radius:6px;padding:2px 8px;background:{{ b.badgeBg }};color:{{ b.badgeFg }};">{{ b.badge }}</span></sc-if>
               <sc-if value="{{ b.refusing }}" hint-placeholder-val="{{ false }}">
                 <div style="margin:0 10px 8px;display:flex;flex-direction:column;gap:6px;">
-                  <input type="text" value="{{ b.refusTxt }}" onChange="{{ b.setRefus }}" placeholder="Un mot pour la boutique (facultatif)" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:6px 8px;outline:none;background:#FFFFFF;">
-                  <div style="display:flex;gap:6px;flex-wrap:wrap;"><button onClick="{{ b.refusOk }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:500;cursor:pointer;">Refuser la demande</button><button onClick="{{ b.refusCancel }}" style="border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:500;cursor:pointer;">Annuler</button></div>
+                  <input type="text" value="{{ b.refusTxt }}" onChange="{{ b.setRefus }}" placeholder="Un mot pour la boutique (facultatif)" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:6px 8px;outline:none;background:#FFFFFF;">
+                  <div style="display:flex;gap:6px;flex-wrap:wrap;"><button onClick="{{ b.refusOk }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:400;cursor:pointer;">Refuser la demande</button><button onClick="{{ b.refusCancel }}" style="border:1px solid #e6e0d8;background:#FFFFFF;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:400;cursor:pointer;">Annuler</button></div>
                 </div>
               </sc-if>
-              <div style="margin-top:auto;display:flex;gap:8px;align-items:center;padding:8px 10px;border-top:0.5px solid rgba(34,34,34,0.08);">
-                <sc-if value="{{ b.canBoost }}" hint-placeholder-val="{{ false }}"><button onClick="{{ b.boost }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:500;cursor:pointer;">{{ b.boostLabel }}</button></sc-if>
-                <sc-if value="{{ b.canRefuse }}" hint-placeholder-val="{{ false }}"><button onClick="{{ b.refuse }}" style="border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:500;cursor:pointer;">Refuser</button></sc-if>
-                <sc-if value="{{ b.hasLink }}" hint-placeholder-val="{{ false }}"><a href="{{ b.link }}" target="_blank" rel="noopener" style="font-size:12px;font-weight:500;margin-left:auto;">Voir le post ↗</a></sc-if>
+              <div style="margin-top:auto;display:flex;gap:8px;align-items:center;padding:8px 10px;border-top:1px solid #e6e0d8;">
+                <sc-if value="{{ b.canBoost }}" hint-placeholder-val="{{ false }}"><button onClick="{{ b.boost }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:400;cursor:pointer;">{{ b.boostLabel }}</button></sc-if>
+                <sc-if value="{{ b.canRefuse }}" hint-placeholder-val="{{ false }}"><button onClick="{{ b.refuse }}" style="border:1px solid #e6e0d8;background:#FFFFFF;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:400;cursor:pointer;">Refuser</button></sc-if>
+                <sc-if value="{{ b.hasLink }}" hint-placeholder-val="{{ false }}"><a href="{{ b.link }}" target="_blank" rel="noopener" style="font-size:12px;font-weight:400;margin-left:auto;">Voir le post ↗</a></sc-if>
               </div>
             </div>
           </sc-for>
@@ -124,125 +125,125 @@
 
     <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;">
       <!-- Tableau -->
-      <section style="flex:1 1 640px;min-width:0;background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);overflow:auto;">
+      <section style="flex:1 1 640px;min-width:0;background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;overflow:auto;">
         <div style="display:grid;grid-template-columns:minmax(190px,2fr) 150px 112px 120px minmax(140px,1.2fr) minmax(120px,1.1fr);min-width:870px;">
-          <sc-for list="{{ head }}" as="h" hint-placeholder-count="5"><span style="padding:10px 12px;font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;border-bottom:0.5px solid rgba(34,34,34,0.10);">{{ h }}</span></sc-for>
+          <sc-for list="{{ head }}" as="h" hint-placeholder-count="5"><span style="padding:10px 12px;font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;border-bottom:1px solid #e6e0d8;">{{ h }}</span></sc-for>
           <sc-for list="{{ rows }}" as="r" hint-placeholder-count="0">
             <div onClick="{{ r.pick }}" style="display:contents;cursor:pointer;">
-              <span style="padding:10px 12px;border-bottom:0.5px solid rgba(34,34,34,0.06);background:{{ r.bg }};display:flex;align-items:center;gap:10px;min-width:0;">
+              <span style="padding:10px 12px;border-bottom:1px solid #e6e0d8;background:{{ r.bg }};display:flex;align-items:center;gap:10px;min-width:0;">
                 <img src="{{ r.img }}" alt="" style="width:32px;height:32px;object-fit:contain;border-radius:6px;background:#F4EFE8;flex:0 0 auto;">
-                <span style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ r.name }}</span><span style="display:flex;align-items:center;gap:5px;font-size:11px;color:#666666;"><sc-if value="{{ r.isMeta }}" hint-placeholder-val="{{ false }}"><span title="Créée hors du module, récupérée chez Meta" style="font-size:10px;font-weight:600;border-radius:999px;padding:1px 6px;background:#E3EBF8;color:#1F4E9A;">Meta</span></sc-if>{{ r.objective }}</span></span>
+                <span style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-size:13px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ r.name }}</span><span style="display:flex;align-items:center;gap:5px;font-size:11px;color:#7a736a;"><sc-if value="{{ r.isMeta }}" hint-placeholder-val="{{ false }}"><span title="Créée hors du module, récupérée chez Meta" style="font-size:10px;font-weight:400;border-radius:6px;padding:1px 6px;background:#E3EBF8;color:#1F4E9A;">Meta</span></sc-if>{{ r.objective }}</span></span>
               </span>
-              <span style="padding:10px 12px;border-bottom:0.5px solid rgba(34,34,34,0.06);background:{{ r.bg }};display:flex;flex-direction:column;justify-content:center;gap:3px;">
-                <sc-if value="{{ r.hasStatusSel }}" hint-placeholder-val="{{ false }}"><select value="{{ r.status }}" onChange="{{ r.setStatus }}" title="Mettre en pause, reprendre ou arrêter chez Meta" style="align-self:flex-start;max-width:100%;font-size:11px;font-weight:500;border-radius:999px;padding:3px 6px;border:0.5px solid rgba(34,34,34,0.18);background:{{ r.stBg }};color:{{ r.stFg }};cursor:pointer;font-family:inherit;"><sc-for list="{{ r.statusOpts }}" as="o" hint-placeholder-count="0"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select></sc-if>
-                <sc-if value="{{ r.noStatusSel }}" hint-placeholder-val="{{ true }}"><span style="align-self:flex-start;font-size:11px;font-weight:500;border-radius:999px;padding:3px 8px;background:{{ r.stBg }};color:{{ r.stFg }};">{{ r.status }}</span></sc-if>
+              <span style="padding:10px 12px;border-bottom:1px solid #e6e0d8;background:{{ r.bg }};display:flex;flex-direction:column;justify-content:center;gap:3px;">
+                <sc-if value="{{ r.hasStatusSel }}" hint-placeholder-val="{{ false }}"><select value="{{ r.status }}" onChange="{{ r.setStatus }}" title="Mettre en pause, reprendre ou arrêter chez Meta" style="align-self:flex-start;max-width:100%;font-size:11px;font-weight:400;border-radius:8px;padding:3px 6px;border:1px solid #e6e0d8;background:{{ r.stBg }};color:{{ r.stFg }};cursor:pointer;font-family:inherit;"><sc-for list="{{ r.statusOpts }}" as="o" hint-placeholder-count="0"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select></sc-if>
+                <sc-if value="{{ r.noStatusSel }}" hint-placeholder-val="{{ true }}"><span style="align-self:flex-start;font-size:11px;font-weight:400;border-radius:6px;padding:3px 8px;background:{{ r.stBg }};color:{{ r.stFg }};">{{ r.status }}</span></sc-if>
                 <sc-if value="{{ r.hasReason }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;line-height:1.35;color:#8D1D2C;">{{ r.reason }}</span></sc-if>
               </span>
-              <span title="{{ r.clicksTip }}" style="padding:10px 12px;border-bottom:0.5px solid rgba(34,34,34,0.06);background:{{ r.bg }};display:flex;flex-direction:column;justify-content:center;gap:2px;"><span style="font-size:14px;font-weight:500;color:#222222;">{{ r.clicks }}</span><span style="font-size:11px;color:#666666;">{{ r.clicksSub }}</span></span>
-              <span style="padding:10px 12px;border-bottom:0.5px solid rgba(34,34,34,0.06);background:{{ r.bg }};font-size:12px;display:flex;flex-direction:column;justify-content:center;gap:2px;"><span>{{ r.budget }}</span><span style="font-size:11px;color:#666666;">{{ r.scope }}</span><sc-if value="{{ r.budEditable }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;font-weight:500;color:#8D1D2C;">Modifier ›</span></sc-if></span>
-              <span style="padding:10px 12px;border-bottom:0.5px solid rgba(34,34,34,0.06);background:{{ r.bg }};display:flex;flex-direction:column;justify-content:center;gap:4px;">
+              <span title="{{ r.clicksTip }}" style="padding:10px 12px;border-bottom:1px solid #e6e0d8;background:{{ r.bg }};display:flex;flex-direction:column;justify-content:center;gap:2px;"><span style="font-size:14px;font-weight:400;color:#1c1a17;">{{ r.clicks }}</span><span style="font-size:11px;color:#7a736a;">{{ r.clicksSub }}</span></span>
+              <span style="padding:10px 12px;border-bottom:1px solid #e6e0d8;background:{{ r.bg }};font-size:12px;display:flex;flex-direction:column;justify-content:center;gap:2px;"><span>{{ r.budget }}</span><span style="font-size:11px;color:#7a736a;">{{ r.scope }}</span><sc-if value="{{ r.budEditable }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;font-weight:400;color:#8D1D2C;">Modifier ›</span></sc-if></span>
+              <span style="padding:10px 12px;border-bottom:1px solid #e6e0d8;background:{{ r.bg }};display:flex;flex-direction:column;justify-content:center;gap:4px;">
                 <span style="font-size:11px;color:#444444;">{{ r.spentLabel }}</span>
-                <span style="height:5px;border-radius:999px;background:#EAE4DC;overflow:hidden;"><span style="display:block;height:100%;width:{{ r.spentPct }};background:{{ r.barColor }};"></span></span>
+                <span style="height:5px;border-radius:6px;background:#EDE7DE;overflow:hidden;"><span style="display:block;height:100%;width:{{ r.spentPct }};background:{{ r.barColor }};"></span></span>
               </span>
-              <span style="padding:10px 12px;border-bottom:0.5px solid rgba(34,34,34,0.06);background:{{ r.bg }};font-size:12px;color:#444444;display:flex;flex-direction:column;justify-content:center;gap:2px;"><span>{{ r.campName }}</span><span style="font-size:11px;color:#666666;">{{ r.shops }}</span><span style="font-size:11px;color:#8A847C;">{{ r.period }}</span></span>
+              <span style="padding:10px 12px;border-bottom:1px solid #e6e0d8;background:{{ r.bg }};font-size:12px;color:#444444;display:flex;flex-direction:column;justify-content:center;gap:2px;"><span>{{ r.campName }}</span><span style="font-size:11px;color:#7a736a;">{{ r.shops }}</span><span style="font-size:11px;color:#8A847C;">{{ r.period }}</span></span>
             </div>
           </sc-for>
-          <sc-if value="{{ noRows }}" hint-placeholder-val="{{ false }}"><div style="grid-column:1 / -1;padding:28px 16px;text-align:center;font-size:13px;color:#666666;">{{ noRowsText }}</div></sc-if>
+          <sc-if value="{{ noRows }}" hint-placeholder-val="{{ false }}"><div style="grid-column:1 / -1;padding:28px 16px;text-align:center;font-size:13px;color:#7a736a;">{{ noRowsText }}</div></sc-if>
         </div>
       </section>
 
       <!-- Suivi -->
       <aside style="flex:0 1 330px;min-width:290px;display:{{ asideDisp }};flex-direction:column;gap:14px;">
         <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ false }}">
-          <div style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:16px;display:flex;flex-direction:column;gap:12px;">
+          <div style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:16px;display:flex;flex-direction:column;gap:12px;">
             <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
               <div style="display:flex;flex-direction:column;gap:4px;min-width:0;">
-                <span style="font-size:15px;font-weight:500;">{{ d.name }}</span>
-                <span style="font-size:12px;color:#666666;">{{ d.sub }}</span>
+                <span style="font-size:15px;font-weight:400;">{{ d.name }}</span>
+                <span style="font-size:12px;color:#7a736a;">{{ d.sub }}</span>
               </div>
-              <span style="display:flex;align-items:center;gap:6px;"><span style="font-size:11px;font-weight:500;border-radius:999px;padding:3px 8px;background:{{ d.stBg }};color:{{ d.stFg }};white-space:nowrap;">{{ d.status }}</span><button onClick="{{ closeSel }}" title="Fermer le suivi" aria-label="Fermer le suivi" style="border:none;background:transparent;font-size:18px;line-height:1;color:#666666;cursor:pointer;padding:0 2px;font-family:inherit;">×</button></span>
+              <span style="display:flex;align-items:center;gap:6px;"><span style="font-size:11px;font-weight:400;border-radius:6px;padding:3px 8px;background:{{ d.stBg }};color:{{ d.stFg }};white-space:nowrap;">{{ d.status }}</span><button onClick="{{ closeSel }}" title="Fermer le suivi" aria-label="Fermer le suivi" style="border:none;background:transparent;font-size:18px;line-height:1;color:#7a736a;cursor:pointer;padding:0 2px;font-family:inherit;">×</button></span>
             </div>
             <sc-if value="{{ d.budEditable }}" hint-placeholder-val="{{ false }}">
-              <div style="border:0.5px solid rgba(34,34,34,0.12);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;">
-                <span style="font-size:13px;font-weight:500;">{{ d.budTitle }}</span>
+              <div style="border:1px solid #e6e0d8;border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;">
+                <span style="font-size:13px;font-weight:400;">{{ d.budTitle }}</span>
                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                  <input type="number" min="0" step="0.5" value="{{ d.budVal }}" onChange="{{ d.setBudEd }}" style="width:92px;font-size:14px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:7px 9px;outline:none;">
-                  <span style="font-size:12px;color:#666666;">{{ d.budUnit }}</span>
-                  <sc-for list="{{ d.budSteps }}" as="b" hint-placeholder-count="0"><button onClick="{{ b.pick }}" style="border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;border-radius:999px;padding:5px 9px;font-size:11px;font-weight:500;cursor:pointer;">{{ b.label }}</button></sc-for>
+                  <input type="number" min="0" step="0.5" value="{{ d.budVal }}" onChange="{{ d.setBudEd }}" style="width:92px;font-size:14px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:7px 9px;outline:none;">
+                  <span style="font-size:12px;color:#7a736a;">{{ d.budUnit }}</span>
+                  <sc-for list="{{ d.budSteps }}" as="b" hint-placeholder-count="0"><button onClick="{{ b.pick }}" style="border:1px solid #e6e0d8;background:#FFFFFF;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:400;cursor:pointer;">{{ b.label }}</button></sc-for>
                 </div>
-                <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#444444;">Plafond de dépense <input type="number" min="0" value="{{ d.capVal }}" onChange="{{ d.setCapEd }}" style="width:92px;font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:6px 8px;outline:none;"><span style="color:#666666;">{{ d.budSym }}</span></label>
-                <span style="font-size:11px;line-height:1.45;color:#666666;">{{ d.budHint }}</span>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#444444;">Plafond de dépense <input type="number" min="0" value="{{ d.capVal }}" onChange="{{ d.setCapEd }}" style="width:92px;font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:6px 8px;outline:none;"><span style="color:#7a736a;">{{ d.budSym }}</span></label>
+                <span style="font-size:11px;line-height:1.45;color:#7a736a;">{{ d.budHint }}</span>
                 <sc-if value="{{ d.hasBudErr }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;line-height:1.45;color:#8D1D2C;">{{ d.budErr }}</span></sc-if>
-                <button onClick="{{ d.saveBud }}" disabled="{{ d.budSaveDis }}" style="align-self:flex-start;border:none;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:500;cursor:pointer;opacity:{{ d.budSaveOp }};">{{ d.budSaveLabel }}</button>
+                <button onClick="{{ d.saveBud }}" disabled="{{ d.budSaveDis }}" style="align-self:flex-start;border:none;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:400;cursor:pointer;opacity:{{ d.budSaveOp }};">{{ d.budSaveLabel }}</button>
               </div>
             </sc-if>
             <sc-if value="{{ d.hasMetaErr }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;line-height:1.45;background:#F6DCDF;color:#8D1D2C;border-radius:8px;padding:8px 10px;">{{ d.metaErr }}</span></sc-if>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-              <div style="background:#F4EFE8;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:2px;"><span style="font-size:11px;color:#666666;">Dépensé</span><span style="font-size:18px;font-weight:300;">{{ d.spent }}</span></div>
-              <div style="background:#F4EFE8;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:2px;"><span style="font-size:11px;color:#666666;">Restant</span><span style="font-size:18px;font-weight:300;">{{ d.left }}</span></div>
+              <div style="background:#F4EFE8;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:2px;"><span style="font-size:11px;color:#7a736a;">Dépensé</span><span style="font-size:18px;font-weight:300;">{{ d.spent }}</span></div>
+              <div style="background:#F4EFE8;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:2px;"><span style="font-size:11px;color:#7a736a;">Restant</span><span style="font-size:18px;font-weight:300;">{{ d.left }}</span></div>
             </div>
             <div style="display:flex;flex-direction:column;gap:4px;">
-              <div style="display:flex;justify-content:space-between;font-size:11px;color:#666666;"><span>Dépense quotidienne</span><span>Plafond {{ d.cap }}</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:#7a736a;"><span>Dépense quotidienne</span><span>Plafond {{ d.cap }}</span></div>
               <div style="height:56px;display:flex;align-items:flex-end;gap:2px;"><sc-for list="{{ d.bars }}" as="b" hint-placeholder-count="0"><span title="{{ b.tip }}" style="flex:1;height:{{ b.h }};background:{{ b.c }};border-radius:2px 2px 0 0;"></span></sc-for></div>
             </div>
             <sc-if value="{{ d.capAlert }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;line-height:1.45;background:#FCE7C8;color:#6b3d0a;border-radius:8px;padding:8px 10px;">{{ d.capText }}</span></sc-if>
             <sc-if value="{{ d.exhausted }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;line-height:1.45;background:#F6DCDF;color:#8D1D2C;border-radius:8px;padding:8px 10px;">Budget épuisé : la diffusion est suspendue par Meta. Augmentez le budget ou arrêtez la publicité.</span></sc-if>
             <sc-if value="{{ d.hasAuto }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;line-height:1.45;background:{{ d.autoBg }};color:{{ d.autoFg }};border-radius:8px;padding:8px 10px;">{{ d.autoText }}</span></sc-if>
             <sc-if value="{{ d.hasBoost }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;line-height:1.45;color:#444444;">{{ d.boostText }} <sc-if value="{{ d.hasBoostLink }}" hint-placeholder-val="{{ false }}"><a href="{{ d.boostLink }}" target="_blank" rel="noopener">Voir le post ↗</a></sc-if></span></sc-if>
-            <sc-if value="{{ d.refused }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;line-height:1.45;background:#F6DCDF;color:#8D1D2C;border-radius:8px;padding:8px 10px;"><strong style="font-weight:500;">Refusée par Meta.</strong> {{ d.reason }}</span></sc-if>
+            <sc-if value="{{ d.refused }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;line-height:1.45;background:#F6DCDF;color:#8D1D2C;border-radius:8px;padding:8px 10px;"><strong style="font-weight:400;">Refusée par Meta.</strong> {{ d.reason }}</span></sc-if>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <sc-if value="{{ d.canPause }}" hint-placeholder-val="{{ false }}"><button onClick="{{ pause }}" style="border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:500;cursor:pointer;">Mettre en pause</button></sc-if>
-              <sc-if value="{{ d.canResume }}" hint-placeholder-val="{{ false }}"><button onClick="{{ resume }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:500;cursor:pointer;">Reprendre</button></sc-if>
-              <sc-if value="{{ d.canTopUp }}" hint-placeholder-val="{{ false }}"><button onClick="{{ topUp }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:500;cursor:pointer;">{{ d.topUpLabel }}</button></sc-if>
-              <sc-if value="{{ d.canFix }}" hint-placeholder-val="{{ false }}"><button onClick="{{ fixAd }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:500;cursor:pointer;">{{ d.fixLabel }}</button></sc-if>
-              <sc-if value="{{ d.canStop }}" hint-placeholder-val="{{ false }}"><button onClick="{{ stop }}" style="border:none;background:transparent;color:#8D1D2C;padding:8px 4px;font-size:13px;font-weight:500;cursor:pointer;">Arrêter</button></sc-if>
+              <sc-if value="{{ d.canPause }}" hint-placeholder-val="{{ false }}"><button onClick="{{ pause }}" style="border:1px solid #e6e0d8;background:#FFFFFF;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:400;cursor:pointer;">Mettre en pause</button></sc-if>
+              <sc-if value="{{ d.canResume }}" hint-placeholder-val="{{ false }}"><button onClick="{{ resume }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:400;cursor:pointer;">Reprendre</button></sc-if>
+              <sc-if value="{{ d.canTopUp }}" hint-placeholder-val="{{ false }}"><button onClick="{{ topUp }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:400;cursor:pointer;">{{ d.topUpLabel }}</button></sc-if>
+              <sc-if value="{{ d.canFix }}" hint-placeholder-val="{{ false }}"><button onClick="{{ fixAd }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:400;cursor:pointer;">{{ d.fixLabel }}</button></sc-if>
+              <sc-if value="{{ d.canStop }}" hint-placeholder-val="{{ false }}"><button onClick="{{ stop }}" style="border:none;background:transparent;color:#8D1D2C;padding:8px 4px;font-size:13px;font-weight:400;cursor:pointer;">Arrêter</button></sc-if>
             </div>
-            <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Campagne du Marketing (opération) — pour le Retour sur opération<select value="{{ d.campaign }}" onChange="{{ attach }}" style="font-size:13px;color:#222222;background:#F4EFE8;border:0.5px solid rgba(34,34,34,0.10);border-radius:6px;padding:8px 10px;"><option value="">Hors opération</option><sc-for list="{{ d.campOptions }}" as="c" hint-placeholder-count="0"><option value="{{ c.id }}">{{ c.name }}</option></sc-for></select></label>
+            <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Campagne du Marketing (opération) — pour le Retour sur opération<select value="{{ d.campaign }}" onChange="{{ attach }}" style="font-size:13px;color:#1c1a17;background:#F4EFE8;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;"><option value="">Hors opération</option><sc-for list="{{ d.campOptions }}" as="c" hint-placeholder-count="0"><option value="{{ c.id }}">{{ c.name }}</option></sc-for></select></label>
             <sc-if value="{{ d.isMeta }}" hint-placeholder-val="{{ false }}">
-              <div style="display:flex;flex-direction:column;gap:8px;border-top:0.5px solid rgba(34,34,34,0.08);padding-top:10px;">
-                <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:500;">Campagne Meta</span><a href="{{ d.lienMeta }}" target="_blank" rel="noopener" style="font-size:12px;font-weight:500;color:#8D1D2C;">Gestionnaire de publicités ↗</a></div>
-                <span style="font-size:11px;color:#666666;line-height:1.45;">{{ d.metaFacts }}</span>
+              <div style="display:flex;flex-direction:column;gap:8px;border-top:1px solid #e6e0d8;padding-top:10px;">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:400;">Campagne Meta</span><a href="{{ d.lienMeta }}" target="_blank" rel="noopener" style="font-size:12px;font-weight:400;color:#8D1D2C;">Gestionnaire de publicités ↗</a></div>
+                <span style="font-size:11px;color:#7a736a;line-height:1.45;">{{ d.metaFacts }}</span>
                 <sc-if value="{{ d.hasNote }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;line-height:1.45;background:#FCE7C8;color:#6b3d0a;border-radius:8px;padding:8px 10px;">{{ d.note }}</span></sc-if>
                 <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;">
-                  <sc-for list="{{ d.metrics }}" as="mt" hint-placeholder-count="6"><div style="background:#F4EFE8;border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:1px;min-width:0;"><span style="font-size:10px;color:#666666;">{{ mt.k }}</span><span style="font-size:14px;font-weight:500;">{{ mt.v }}</span></div></sc-for>
+                  <sc-for list="{{ d.metrics }}" as="mt" hint-placeholder-count="6"><div style="background:#F4EFE8;border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:1px;min-width:0;"><span style="font-size:10px;color:#7a736a;">{{ mt.k }}</span><span style="font-size:14px;font-weight:400;">{{ mt.v }}</span></div></sc-for>
                 </div>
-                <span style="font-size:11px;color:#666666;line-height:1.45;">Pause, reprise, arrêt, budget et plafond s’appliquent à la campagne chez Meta. Le reste (ciblage, créas) se règle dans le Gestionnaire de publicités ; relu toutes les heures.</span>
+                <span style="font-size:11px;color:#7a736a;line-height:1.45;">Pause, reprise, arrêt, budget et plafond s’appliquent à la campagne chez Meta. Le reste (ciblage, créas) se règle dans le Gestionnaire de publicités ; relu toutes les heures.</span>
               </div>
             </sc-if>
             <sc-if value="{{ d.hasStats }}" hint-placeholder-val="{{ false }}">
-              <div style="display:flex;flex-direction:column;gap:6px;border-top:0.5px solid rgba(34,34,34,0.08);padding-top:10px;">
-                <span style="font-size:13px;font-weight:500;">Résultats par variante</span>
+              <div style="display:flex;flex-direction:column;gap:6px;border-top:1px solid #e6e0d8;padding-top:10px;">
+                <span style="font-size:13px;font-weight:400;">Résultats par variante</span>
                 <div style="display:grid;grid-template-columns:70px repeat(4,minmax(0,1fr));gap:4px 8px;font-size:12px;">
-                  <span style="color:#666666;">Variante</span><span style="color:#666666;">Impr.</span><span style="color:#666666;">Clics</span><span style="color:#666666;">CTR</span><span style="color:#666666;">Dépense</span>
+                  <span style="color:#7a736a;">Variante</span><span style="color:#7a736a;">Impr.</span><span style="color:#7a736a;">Clics</span><span style="color:#7a736a;">CTR</span><span style="color:#7a736a;">Dépense</span>
                   <sc-for list="{{ d.stats }}" as="vs" hint-placeholder-count="0"><span style="font-weight:{{ vs.w }};color:{{ vs.c }};">{{ vs.variant }}{{ vs.best }}</span><span>{{ vs.impressions }}</span><span>{{ vs.clicks }}</span><span style="font-weight:{{ vs.w }};color:{{ vs.c }};">{{ vs.ctr }}</span><span>{{ vs.spend }}</span></sc-for>
                 </div>
                 <sc-if value="{{ d.hasAb }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;line-height:1.5;border-radius:6px;padding:6px 9px;background:{{ d.abBg }};color:{{ d.abFg }};">{{ d.abTexte }}</span></sc-if>
               </div>
             </sc-if>
             <sc-if value="{{ d.isDark }}" hint-placeholder-val="{{ false }}">
-              <div style="display:flex;flex-direction:column;gap:8px;border-top:0.5px solid rgba(34,34,34,0.08);padding-top:10px;">
-                <span style="font-size:13px;font-weight:500;">Dark posts · {{ d.darkCount }}</span>
-                <span style="font-size:11px;color:#666666;line-height:1.45;">Visibles seulement en sponsorisé. {{ d.darkNote }}</span>
+              <div style="display:flex;flex-direction:column;gap:8px;border-top:1px solid #e6e0d8;padding-top:10px;">
+                <span style="font-size:13px;font-weight:400;">Dark posts · {{ d.darkCount }}</span>
+                <span style="font-size:11px;color:#7a736a;line-height:1.45;">Visibles seulement en sponsorisé. {{ d.darkNote }}</span>
                 <sc-for list="{{ d.dark }}" as="dk" hint-placeholder-count="0">
                   <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;">
                     <span style="flex:1 1 120px;min-width:0;">{{ dk.label }}</span>
                     <sc-if value="{{ dk.hasFb }}" hint-placeholder-val="{{ false }}"><a href="{{ dk.link }}" target="_blank" rel="noopener">Facebook ↗</a></sc-if>
                     <sc-if value="{{ dk.hasIg }}" hint-placeholder-val="{{ false }}"><a href="{{ dk.linkIg }}" target="_blank" rel="noopener">Instagram ↗</a></sc-if>
-                    <span style="color:#666666;">{{ dk.comments }}</span>
+                    <span style="color:#7a736a;">{{ dk.comments }}</span>
                   </div>
                 </sc-for>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                  <button onClick="{{ showComments }}" style="border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;border-radius:8px;padding:7px 11px;font-size:12px;font-weight:500;cursor:pointer;">{{ d.comLabel }}</button>
-                  <button onClick="{{ syncComments }}" style="border:none;background:transparent;color:#8D1D2C;padding:7px 4px;font-size:12px;font-weight:500;cursor:pointer;">{{ d.syncLabel }}</button>
+                  <button onClick="{{ showComments }}" style="border:1px solid #e6e0d8;background:#FFFFFF;border-radius:8px;padding:7px 11px;font-size:12px;font-weight:400;cursor:pointer;">{{ d.comLabel }}</button>
+                  <button onClick="{{ syncComments }}" style="border:none;background:transparent;color:#8D1D2C;padding:7px 4px;font-size:12px;font-weight:400;cursor:pointer;">{{ d.syncLabel }}</button>
                 </div>
                 <sc-if value="{{ d.comOpen }}" hint-placeholder-val="{{ false }}">
                   <div style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow:auto;">
-                    <sc-if value="{{ d.comEmpty }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#666666;">Aucun commentaire pour l’instant.</span></sc-if>
+                    <sc-if value="{{ d.comEmpty }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#7a736a;">Aucun commentaire pour l’instant.</span></sc-if>
                     <sc-for list="{{ d.comments }}" as="cm" hint-placeholder-count="0">
                       <div style="background:{{ cm.bg }};border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:3px;opacity:{{ cm.op }};">
-                        <div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;color:#666666;"><span><strong style="font-weight:600;color:#222222;">{{ cm.author }}</strong> · {{ cm.where }}</span><span>{{ cm.at }}</span></div>
+                        <div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;color:#7a736a;"><span><strong style="font-weight:400;color:#1c1a17;">{{ cm.author }}</strong> · {{ cm.where }}</span><span>{{ cm.at }}</span></div>
                         <span style="font-size:12px;line-height:1.45;">{{ cm.message }}</span>
-                        <button onClick="{{ cm.toggle }}" style="align-self:flex-end;border:none;background:transparent;color:#8D1D2C;font-size:11px;font-weight:500;cursor:pointer;padding:2px;">{{ cm.action }}</button>
+                        <button onClick="{{ cm.toggle }}" style="align-self:flex-end;border:none;background:transparent;color:#8D1D2C;font-size:11px;font-weight:400;cursor:pointer;padding:2px;">{{ cm.action }}</button>
                       </div>
                     </sc-for>
                   </div>
@@ -259,16 +260,16 @@
   <sc-if value="{{ wizOpen }}" hint-placeholder-val="{{ false }}">
     <div style="position:fixed;inset:0;background:rgba(35,34,32,0.55);z-index:40;display:flex;align-items:center;justify-content:center;padding:20px;">
       <div style="background:#FFFFFF;border-radius:12px;width:100%;max-width:920px;height:min(780px,94vh);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(35,34,32,0.3);">
-        <div style="padding:16px 22px;border-bottom:0.5px solid rgba(34,34,34,0.10);display:flex;flex-direction:column;gap:12px;">
+        <div style="padding:16px 22px;border-bottom:1px solid #e6e0d8;display:flex;flex-direction:column;gap:12px;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-            <span style="display:flex;flex-direction:column;gap:2px;"><span style="font-size:16px;font-weight:500;">Nouvelle publicité Meta</span><span style="font-size:11px;color:#666666;">Marketing API {{ apiVersion }} · campagne → ad set → créa → pub</span></span>
+            <span style="display:flex;flex-direction:column;gap:2px;"><span style="font-size:16px;font-weight:400;">Nouvelle publicité Meta</span><span style="font-size:11px;color:#7a736a;">Marketing API {{ apiVersion }} · campagne → ad set → créa → pub</span></span>
             <button onClick="{{ closeWiz }}" style="width:30px;height:30px;border-radius:50%;border:none;background:#F4EFE8;cursor:pointer;font-size:14px;">×</button>
           </div>
           <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;">
             <sc-for list="{{ steps }}" as="st" hint-placeholder-count="5">
               <button onClick="{{ st.go }}" style="border:none;background:transparent;padding:0;cursor:pointer;display:flex;flex-direction:column;gap:4px;text-align:left;">
-                <span style="height:4px;border-radius:999px;background:{{ st.bar }};"></span>
-                <span style="font-size:11px;font-weight:500;color:{{ st.fg }};">{{ st.n }} · {{ st.label }}</span>
+                <span style="height:4px;border-radius:6px;background:{{ st.bar }};"></span>
+                <span style="font-size:11px;font-weight:400;color:{{ st.fg }};">{{ st.n }} · {{ st.label }}</span>
                 <span style="font-family:ui-monospace,monospace;font-size:9px;color:#8A847C;">{{ st.tech }}</span>
               </button>
             </sc-for>
@@ -280,67 +281,67 @@
           <!-- 1 CAMPAGNE -->
           <sc-if value="{{ s1 }}" hint-placeholder-val="{{ true }}">
             <div style="display:flex;gap:12px;flex-wrap:wrap;">
-              <label style="flex:2 1 260px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Nom de la campagne Meta <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">name *</span><input type="text" value="{{ w.name }}" onChange="{{ setName }}" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;"></label>
-              <label style="flex:1 1 200px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Opération Franchise Buddy<select value="{{ w.campaign }}" onChange="{{ setCampaign }}" style="font-size:13px;color:#222222;background:#F4EFE8;border:0.5px solid rgba(34,34,34,0.10);border-radius:6px;padding:8px 10px;"><option value="">Hors opération</option><sc-for list="{{ campOptions }}" as="c" hint-placeholder-count="0"><option value="{{ c.id }}">{{ c.name }}</option></sc-for></select></label>
+              <label style="flex:2 1 260px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Nom de la campagne Meta <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">name *</span><input type="text" value="{{ w.name }}" onChange="{{ setName }}" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;"></label>
+              <label style="flex:1 1 200px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Opération Franchise Buddy<select value="{{ w.campaign }}" onChange="{{ setCampaign }}" style="font-size:13px;color:#1c1a17;background:#F4EFE8;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;"><option value="">Hors opération</option><sc-for list="{{ campOptions }}" as="c" hint-placeholder-count="0"><option value="{{ c.id }}">{{ c.name }}</option></sc-for></select></label>
             </div>
-            <div style="display:flex;align-items:baseline;gap:8px;border-bottom:0.5px solid rgba(34,34,34,0.08);padding-bottom:6px;"><span style="font-size:13px;font-weight:500;">Objectif</span><span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">objective *</span></div>
+            <div style="display:flex;align-items:baseline;gap:8px;border-bottom:1px solid #e6e0d8;padding-bottom:6px;"><span style="font-size:13px;font-weight:400;">Objectif</span><span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">objective *</span></div>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;">
               <sc-for list="{{ objectives }}" as="o" hint-placeholder-count="0">
                 <button onClick="{{ o.pick }}" style="text-align:left;border:1.5px solid {{ o.ring }};background:{{ o.bg }};border-radius:10px;padding:12px;cursor:pointer;display:flex;flex-direction:column;gap:5px;">
                   <img src="{{ o.icon }}" alt="" style="width:30px;height:30px;object-fit:contain;">
-                  <span style="font-size:13px;font-weight:500;">{{ o.label }}</span>
-                  <span style="font-size:11px;color:#666666;line-height:1.4;">{{ o.desc }}</span>
+                  <span style="font-size:13px;font-weight:400;">{{ o.label }}</span>
+                  <span style="font-size:11px;color:#7a736a;line-height:1.4;">{{ o.desc }}</span>
                   <span style="font-family:ui-monospace,monospace;font-size:9px;color:#8A847C;">{{ o.id }}</span>
                 </button>
               </sc-for>
             </div>
             <div style="display:flex;flex-direction:column;gap:6px;">
               <span style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Catégorie spéciale <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">special_ad_categories * · [] par défaut</span></span>
-              <div style="display:flex;gap:6px;flex-wrap:wrap;"><sc-for list="{{ specialCats }}" as="sc" hint-placeholder-count="0"><button onClick="{{ sc.toggle }}" style="border-radius:999px;padding:6px 11px;font-size:12px;font-weight:500;cursor:pointer;border:0.5px solid {{ sc.border }};background:{{ sc.bg }};color:{{ sc.fg }};">{{ sc.name }}</button></sc-for></div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;"><sc-for list="{{ specialCats }}" as="sc" hint-placeholder-count="0"><button onClick="{{ sc.toggle }}" style="border-radius:8px;padding:6px 11px;font-size:12px;font-weight:400;cursor:pointer;border:0.5px solid {{ sc.border }};background:{{ sc.bg }};color:{{ sc.fg }};">{{ sc.name }}</button></sc-for></div>
               <sc-if value="{{ hasSpecial }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#8A4B00;background:#FCE7C8;border-radius:6px;padding:6px 9px;">Catégorie spéciale : Meta impose un rayon d'au moins 15 km, tous âges et tous genres.</span></sc-if>
             </div>
             <div style="display:flex;gap:16px;flex-wrap:wrap;">
-              <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Compte publicitaire <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">act_{ad_account_id}</span><div style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;align-self:flex-start;"><button onClick="{{ accShop }}" disabled="{{ asDis }}" title="{{ asTitle }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:500;cursor:{{ asCursor }};opacity:{{ asOp }};background:{{ asBg }};color:{{ asFg }};">Un par boutique</button><button onClick="{{ accNet }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:500;cursor:pointer;background:{{ anBg }};color:{{ anFg }};">Compte réseau</button></div><span style="font-size:11px;color:#666666;">{{ accountNote }}</span></div>
-              <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Niveau du budget <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">is_adset_budget_sharing_enabled</span><div style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;align-self:flex-start;"><button onClick="{{ blAdset }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:500;cursor:pointer;background:{{ baBg }};color:{{ baFg }};">Ad set (ABO)</button><button onClick="{{ blCamp }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:500;cursor:pointer;background:{{ bcBg }};color:{{ bcFg }};">Campagne (CBO)</button></div></div>
-              <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Statut à la création <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">status *</span><div style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;align-self:flex-start;"><button onClick="{{ stPaused }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:500;cursor:pointer;background:{{ spBg }};color:{{ spFg }};">En pause</button><button onClick="{{ stActive }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:500;cursor:pointer;background:{{ saBg }};color:{{ saFg }};">Active</button></div></div>
+              <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Compte publicitaire <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">act_{ad_account_id}</span><div style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;align-self:flex-start;"><button onClick="{{ accShop }}" disabled="{{ asDis }}" title="{{ asTitle }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:400;cursor:{{ asCursor }};opacity:{{ asOp }};background:{{ asBg }};color:{{ asFg }};">Un par boutique</button><button onClick="{{ accNet }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:400;cursor:pointer;background:{{ anBg }};color:{{ anFg }};">Compte réseau</button></div><span style="font-size:11px;color:#7a736a;">{{ accountNote }}</span></div>
+              <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Niveau du budget <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">is_adset_budget_sharing_enabled</span><div style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;align-self:flex-start;"><button onClick="{{ blAdset }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:400;cursor:pointer;background:{{ baBg }};color:{{ baFg }};">Ad set (ABO)</button><button onClick="{{ blCamp }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:400;cursor:pointer;background:{{ bcBg }};color:{{ bcFg }};">Campagne (CBO)</button></div></div>
+              <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Statut à la création <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">status *</span><div style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;align-self:flex-start;"><button onClick="{{ stPaused }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:400;cursor:pointer;background:{{ spBg }};color:{{ spFg }};">En pause</button><button onClick="{{ stActive }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:400;cursor:pointer;background:{{ saBg }};color:{{ saFg }};">Active</button></div></div>
             </div>
             <div style="display:flex;gap:12px;flex-wrap:wrap;">
-              <label style="flex:1 1 220px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Stratégie d'enchère <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">bid_strategy</span><select value="{{ w.bid }}" onChange="{{ setBid }}" style="font-size:13px;color:#222222;background:#F4EFE8;border:0.5px solid rgba(34,34,34,0.10);border-radius:6px;padding:8px 10px;"><sc-for list="{{ bidOptions }}" as="b" hint-placeholder-count="0"><option value="{{ b.id }}">{{ b.label }}</option></sc-for></select></label>
-              <label style="flex:0 1 150px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">{{ capLabel }} <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">spend_cap · {{ capCents }}</span><input type="number" min="0" value="{{ w.spendCap }}" onChange="{{ setSpendCap }}" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;"><span style="font-size:11px;color:#666666;font-weight:400;">{{ capHint }}</span></label>
+              <label style="flex:1 1 220px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Stratégie d'enchère <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">bid_strategy</span><select value="{{ w.bid }}" onChange="{{ setBid }}" style="font-size:13px;color:#1c1a17;background:#F4EFE8;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;"><sc-for list="{{ bidOptions }}" as="b" hint-placeholder-count="0"><option value="{{ b.id }}">{{ b.label }}</option></sc-for></select></label>
+              <label style="flex:0 1 150px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">{{ capLabel }} <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">spend_cap · {{ capCents }}</span><input type="number" min="0" value="{{ w.spendCap }}" onChange="{{ setSpendCap }}" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;"><span style="font-size:11px;color:#7a736a;font-weight:400;">{{ capHint }}</span></label>
               <span style="flex:0 1 150px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Type d'achat <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">buying_type</span><span style="font-size:13px;padding:8px 0;">Enchères · AUCTION</span></span>
             </div>
           </sc-if>
 
           <!-- 2 AD SET -->
           <sc-if value="{{ s2 }}" hint-placeholder-val="{{ false }}">
-            <div style="display:flex;align-items:baseline;gap:8px;border-bottom:0.5px solid rgba(34,34,34,0.08);padding-bottom:6px;"><span style="font-size:13px;font-weight:500;">Optimisation et diffusion</span><span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">optimization_goal · destination_type · billing_event</span></div>
+            <div style="display:flex;align-items:baseline;gap:8px;border-bottom:1px solid #e6e0d8;padding-bottom:6px;"><span style="font-size:13px;font-weight:400;">Optimisation et diffusion</span><span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">optimization_goal · destination_type · billing_event</span></div>
             <div style="display:flex;gap:12px;flex-wrap:wrap;">
-              <label style="flex:1 1 200px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Optimiser pour <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">optimization_goal *</span><select value="{{ w.goal }}" onChange="{{ setGoal }}" style="font-size:13px;color:#222222;background:#F4EFE8;border:0.5px solid rgba(34,34,34,0.10);border-radius:6px;padding:8px 10px;"><sc-for list="{{ goalOptions }}" as="g" hint-placeholder-count="0"><option value="{{ g }}">{{ g }}</option></sc-for></select></label>
-              <sc-if value="{{ hasDest }}" hint-placeholder-val="{{ true }}"><label style="flex:1 1 200px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Destination <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">destination_type</span><select value="{{ w.dest }}" onChange="{{ setDest }}" style="font-size:13px;color:#222222;background:#F4EFE8;border:0.5px solid rgba(34,34,34,0.10);border-radius:6px;padding:8px 10px;"><sc-for list="{{ destOptions }}" as="g" hint-placeholder-count="0"><option value="{{ g }}">{{ g }}</option></sc-for></select></label></sc-if>
+              <label style="flex:1 1 200px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Optimiser pour <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">optimization_goal *</span><select value="{{ w.goal }}" onChange="{{ setGoal }}" style="font-size:13px;color:#1c1a17;background:#F4EFE8;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;"><sc-for list="{{ goalOptions }}" as="g" hint-placeholder-count="0"><option value="{{ g }}">{{ g }}</option></sc-for></select></label>
+              <sc-if value="{{ hasDest }}" hint-placeholder-val="{{ true }}"><label style="flex:1 1 200px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Destination <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">destination_type</span><select value="{{ w.dest }}" onChange="{{ setDest }}" style="font-size:13px;color:#1c1a17;background:#F4EFE8;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;"><sc-for list="{{ destOptions }}" as="g" hint-placeholder-count="0"><option value="{{ g }}">{{ g }}</option></sc-for></select></label></sc-if>
               <span style="flex:1 1 160px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Facturation <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">billing_event *</span><span style="font-size:13px;padding:8px 0;">IMPRESSIONS</span></span>
               <span style="flex:1 1 220px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Objet promu <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">promoted_object</span><span style="font-size:12px;padding:8px 0;font-family:ui-monospace,monospace;">{{ promotedObject }}</span></span>
             </div>
-            <div style="display:flex;align-items:baseline;gap:8px;border-bottom:0.5px solid rgba(34,34,34,0.08);padding-bottom:6px;"><span style="font-size:13px;font-weight:500;">Budget et calendrier</span><span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">daily_budget / lifetime_budget · start_time · end_time</span></div>
-            <sc-if value="{{ budgetAtCampaign }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#666666;">Budget fixé au niveau campagne (CBO) : il est saisi ici mais envoyé sur l'objet campagne.</span></sc-if>
+            <div style="display:flex;align-items:baseline;gap:8px;border-bottom:1px solid #e6e0d8;padding-bottom:6px;"><span style="font-size:13px;font-weight:400;">Budget et calendrier</span><span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">daily_budget / lifetime_budget · start_time · end_time</span></div>
+            <sc-if value="{{ budgetAtCampaign }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#7a736a;">Budget fixé au niveau campagne (CBO) : il est saisi ici mais envoyé sur l'objet campagne.</span></sc-if>
             <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-              <div style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;align-self:flex-start;"><button onClick="{{ btDaily }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:500;cursor:pointer;background:{{ bdBg }};color:{{ bdFg }};">Quotidien</button><button onClick="{{ btTotal }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:500;cursor:pointer;background:{{ btBg }};color:{{ btFg }};">Total (lifetime)</button></div>
-              <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">{{ amountLabel }} <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">{{ amountTech }}</span><input type="number" min="1" value="{{ w.amount }}" onChange="{{ setAmount }}" style="width:110px;font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;"></label>
-              <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Début <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">start_time</span><input type="date" value="{{ w.start }}" onChange="{{ setStart }}" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;"></label>
-              <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Fin <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">{{ endTech }}</span><input type="date" value="{{ w.end }}" onChange="{{ setEnd }}" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;"></label>
-              <sc-if value="{{ needsBidAmount }}" hint-placeholder-val="{{ false }}"><label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">{{ bidLabel }} <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">bid_amount · {{ bidCents }}</span><input type="number" step="0.05" value="{{ w.bidAmount }}" onChange="{{ setBidAmount }}" style="width:100px;font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;"></label></sc-if>
+              <div style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;align-self:flex-start;"><button onClick="{{ btDaily }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:400;cursor:pointer;background:{{ bdBg }};color:{{ bdFg }};">Quotidien</button><button onClick="{{ btTotal }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:400;cursor:pointer;background:{{ btBg }};color:{{ btFg }};">Total (lifetime)</button></div>
+              <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">{{ amountLabel }} <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">{{ amountTech }}</span><input type="number" min="1" value="{{ w.amount }}" onChange="{{ setAmount }}" style="width:110px;font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;"></label>
+              <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Début <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">start_time</span><input type="date" value="{{ w.start }}" onChange="{{ setStart }}" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;"></label>
+              <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Fin <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">{{ endTech }}</span><input type="date" value="{{ w.end }}" onChange="{{ setEnd }}" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;"></label>
+              <sc-if value="{{ needsBidAmount }}" hint-placeholder-val="{{ false }}"><label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">{{ bidLabel }} <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">bid_amount · {{ bidCents }}</span><input type="number" step="0.05" value="{{ w.bidAmount }}" onChange="{{ setBidAmount }}" style="width:100px;font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;"></label></sc-if>
             </div>
             <div style="background:#F4EFE8;border-radius:8px;padding:10px 12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;">
-              <sc-for list="{{ budgetFacts }}" as="b" hint-placeholder-count="3"><span style="display:flex;flex-direction:column;gap:2px;"><span style="font-size:11px;color:#666666;">{{ b.label }}</span><span style="font-size:15px;font-weight:500;color:{{ b.color }};">{{ b.value }}</span></span></sc-for>
+              <sc-for list="{{ budgetFacts }}" as="b" hint-placeholder-count="3"><span style="display:flex;flex-direction:column;gap:2px;"><span style="font-size:11px;color:#7a736a;">{{ b.label }}</span><span style="font-size:15px;font-weight:400;color:{{ b.color }};">{{ b.value }}</span></span></sc-for>
             </div>
             <sc-if value="{{ overCap }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;line-height:1.45;background:#F6DCDF;color:#8D1D2C;border-radius:8px;padding:9px 12px;">{{ overCapText }}</span></sc-if>
             <sc-if value="{{ overCamp }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;line-height:1.45;background:#FCE7C8;color:#6b3d0a;border-radius:8px;padding:9px 12px;">{{ overCampText }}</span></sc-if>
 
-            <div style="display:flex;align-items:baseline;gap:8px;border-bottom:0.5px solid rgba(34,34,34,0.08);padding-bottom:6px;"><span style="font-size:13px;font-weight:500;">Audience</span><span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">targeting *</span></div>
-            <span style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Boutiques et rayon de diffusion <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">geo_locations.custom_locations [{latitude, longitude, radius, distance_unit: "kilometer"}]</span><span style="font-size:12px;line-height:1.45;color:#666666;">{{ audHelp }}</span></span>
-            <div style="border:0.5px solid rgba(34,34,34,0.10);border-radius:8px;overflow:hidden;flex-shrink:0;">
+            <div style="display:flex;align-items:baseline;gap:8px;border-bottom:1px solid #e6e0d8;padding-bottom:6px;"><span style="font-size:13px;font-weight:400;">Audience</span><span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">targeting *</span></div>
+            <span style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Boutiques et rayon de diffusion <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">geo_locations.custom_locations [{latitude, longitude, radius, distance_unit: "kilometer"}]</span><span style="font-size:12px;line-height:1.45;color:#7a736a;">{{ audHelp }}</span></span>
+            <div style="border:1px solid #e6e0d8;border-radius:8px;overflow:hidden;flex-shrink:0;">
               <sc-for list="{{ audShops }}" as="a" hint-placeholder-count="6">
-                <div style="display:grid;grid-template-columns:140px minmax(0,1fr) 56px 170px;align-items:center;gap:10px;padding:8px 12px;border-bottom:0.5px solid rgba(34,34,34,0.06);background:{{ a.bg }};">
-                  <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;cursor:pointer;"><input type="checkbox" checked="{{ a.on }}" onChange="{{ a.toggle }}" disabled="{{ a.dis }}" style="accent-color:#8D1D2C;margin:0;">{{ a.name }}</label>
+                <div style="display:grid;grid-template-columns:140px minmax(0,1fr) 56px 170px;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid #e6e0d8;background:{{ a.bg }};">
+                  <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;cursor:pointer;"><input type="checkbox" checked="{{ a.on }}" onChange="{{ a.toggle }}" disabled="{{ a.dis }}" style="accent-color:#8D1D2C;margin:0;">{{ a.name }}</label>
                   <input type="range" min="{{ a.min }}" max="40" value="{{ a.radius }}" onChange="{{ a.setRadius }}" disabled="{{ a.rDis }}" style="accent-color:#8D1D2C;width:100%;">
                   <span style="font-size:12px;">{{ a.radius }} km</span>
                   <span style="font-size:10px;color:{{ a.noteFg }};font-family:{{ a.noteFont }};">{{ a.note }}</span>
@@ -348,41 +349,41 @@
               </sc-for>
             </div>
             <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;">
-              <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Âge <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">age_min · age_max</span><span style="display:flex;align-items:center;gap:6px;"><input type="number" min="18" max="65" value="{{ w.ageMin }}" onChange="{{ setAgeMin }}" disabled="{{ hasSpecial }}" style="width:58px;font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;">à<input type="number" min="18" max="65" value="{{ w.ageMax }}" onChange="{{ setAgeMax }}" disabled="{{ hasSpecial }}" style="width:58px;font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;">ans</span></label>
-              <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Genre <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">genders</span><div style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;align-self:flex-start;"><button onClick="{{ gAll }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:500;cursor:pointer;background:{{ g0Bg }};color:{{ g0Fg }};">Tous</button><button onClick="{{ gMen }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:500;cursor:pointer;background:{{ g1Bg }};color:{{ g1Fg }};">Hommes</button><button onClick="{{ gWomen }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:500;cursor:pointer;background:{{ g2Bg }};color:{{ g2Fg }};">Femmes</button></div></div>
+              <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Âge <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">age_min · age_max</span><span style="display:flex;align-items:center;gap:6px;"><input type="number" min="18" max="65" value="{{ w.ageMin }}" onChange="{{ setAgeMin }}" disabled="{{ hasSpecial }}" style="width:58px;font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;">à<input type="number" min="18" max="65" value="{{ w.ageMax }}" onChange="{{ setAgeMax }}" disabled="{{ hasSpecial }}" style="width:58px;font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;">ans</span></label>
+              <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Genre <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">genders</span><div style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;align-self:flex-start;"><button onClick="{{ gAll }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:400;cursor:pointer;background:{{ g0Bg }};color:{{ g0Fg }};">Tous</button><button onClick="{{ gMen }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:400;cursor:pointer;background:{{ g1Bg }};color:{{ g1Fg }};">Hommes</button><button onClick="{{ gWomen }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:400;cursor:pointer;background:{{ g2Bg }};color:{{ g2Fg }};">Femmes</button></div></div>
               <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#444444;cursor:pointer;padding-bottom:8px;"><input type="checkbox" checked="{{ w.advantage }}" onChange="{{ toggleAdvantage }}" style="accent-color:#8D1D2C;margin:0;">Audience Advantage+ <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">targeting_automation.advantage_audience</span></label>
             </div>
             <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:#444444;">Langue de la pub <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">targeting.locales · une créa par langue</span>
-              <div style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;align-self:flex-start;flex-wrap:wrap;"><sc-for list="{{ langOpts }}" as="lo" hint-placeholder-count="4"><button onClick="{{ lo.pick }}" style="border:none;border-radius:6px;padding:6px 11px;font-size:12px;font-weight:500;cursor:pointer;background:{{ lo.bg }};color:{{ lo.fg }};box-shadow:{{ lo.shadow }};">{{ lo.label }}</button></sc-for></div>
-              <span style="font-size:12px;line-height:1.45;color:#666666;">{{ langHelp }}</span>
+              <div style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;align-self:flex-start;flex-wrap:wrap;"><sc-for list="{{ langOpts }}" as="lo" hint-placeholder-count="4"><button onClick="{{ lo.pick }}" style="border:none;border-radius:6px;padding:6px 11px;font-size:12px;font-weight:400;cursor:pointer;background:{{ lo.bg }};color:{{ lo.fg }};box-shadow:{{ lo.shadow }};">{{ lo.label }}</button></sc-for></div>
+              <span style="font-size:12px;line-height:1.45;color:#7a736a;">{{ langHelp }}</span>
             </div>
-            <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Centres d'intérêt <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">flexible_spec [{interests:[{id, name}]}]</span><div style="display:flex;gap:6px;flex-wrap:wrap;"><sc-for list="{{ interests }}" as="i" hint-placeholder-count="0"><button onClick="{{ i.toggle }}" style="border-radius:999px;padding:6px 11px;font-size:12px;font-weight:500;cursor:pointer;border:0.5px solid {{ i.border }};background:{{ i.bg }};color:{{ i.fg }};">{{ i.name }}</button></sc-for></div></div>
-            <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Plateformes <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">publisher_platforms</span><div style="display:flex;gap:6px;flex-wrap:wrap;"><sc-for list="{{ platforms }}" as="p" hint-placeholder-count="0"><button onClick="{{ p.toggle }}" style="border-radius:999px;padding:6px 11px;font-size:12px;font-weight:500;cursor:pointer;border:0.5px solid {{ p.border }};background:{{ p.bg }};color:{{ p.fg }};">{{ p.name }}</button></sc-for></div></div>
+            <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Centres d'intérêt <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">flexible_spec [{interests:[{id, name}]}]</span><div style="display:flex;gap:6px;flex-wrap:wrap;"><sc-for list="{{ interests }}" as="i" hint-placeholder-count="0"><button onClick="{{ i.toggle }}" style="border-radius:8px;padding:6px 11px;font-size:12px;font-weight:400;cursor:pointer;border:0.5px solid {{ i.border }};background:{{ i.bg }};color:{{ i.fg }};">{{ i.name }}</button></sc-for></div></div>
+            <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Plateformes <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">publisher_platforms</span><div style="display:flex;gap:6px;flex-wrap:wrap;"><sc-for list="{{ platforms }}" as="p" hint-placeholder-count="0"><button onClick="{{ p.toggle }}" style="border-radius:8px;padding:6px 11px;font-size:12px;font-weight:400;cursor:pointer;border:0.5px solid {{ p.border }};background:{{ p.bg }};color:{{ p.fg }};">{{ p.name }}</button></sc-for></div></div>
             <div style="display:flex;gap:12px;flex-wrap:wrap;">
-              <label style="flex:1 1 220px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Bénéficiaire (UE) <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">dsa_beneficiary *</span><input type="text" value="{{ w.dsaB }}" onChange="{{ setDsaB }}" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;"></label>
-              <label style="flex:1 1 220px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Payeur (UE) <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">dsa_payor *</span><input type="text" value="{{ w.dsaP }}" onChange="{{ setDsaP }}" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;"></label>
+              <label style="flex:1 1 220px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Bénéficiaire (UE) <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">dsa_beneficiary *</span><input type="text" value="{{ w.dsaB }}" onChange="{{ setDsaB }}" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;"></label>
+              <label style="flex:1 1 220px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Payeur (UE) <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">dsa_payor *</span><input type="text" value="{{ w.dsaP }}" onChange="{{ setDsaP }}" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;"></label>
             </div>
-            <span style="font-size:13px;background:#F4EFE8;border-radius:8px;padding:10px 12px;">Audience estimée : <strong style="font-weight:500;">{{ audSize }}</strong> personnes</span>
+            <span style="font-size:13px;background:#F4EFE8;border-radius:8px;padding:10px 12px;">Audience estimée : <strong style="font-weight:400;">{{ audSize }}</strong> personnes</span>
           </sc-if>
 
           <!-- 3 CRÉA -->
           <sc-if value="{{ s3 }}" hint-placeholder-val="{{ false }}">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-              <div style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;align-self:flex-start;"><button onClick="{{ csExisting }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:500;cursor:pointer;background:{{ ceBg }};color:{{ ceFg }};">Sponsoriser un post existant</button><button onClick="{{ csNew }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:500;cursor:pointer;background:{{ cnBg }};color:{{ cnFg }};" title="Meta crée un post visible seulement en sponsorisé : ni sur le mur de la Page, ni sur la grille Instagram.">Dark post (pub uniquement)</button></div>
+              <div style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;align-self:flex-start;"><button onClick="{{ csExisting }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:400;cursor:pointer;background:{{ ceBg }};color:{{ ceFg }};">Sponsoriser un post existant</button><button onClick="{{ csNew }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:400;cursor:pointer;background:{{ cnBg }};color:{{ cnFg }};" title="Meta crée un post visible seulement en sponsorisé : ni sur le mur de la Page, ni sur la grille Instagram.">Dark post (pub uniquement)</button></div>
               <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;">{{ creaTech }}</span>
             </div>
-            <span style="font-size:12px;color:#666666;">{{ creaHint }}</span>
+            <span style="font-size:12px;color:#7a736a;">{{ creaHint }}</span>
             <sc-if value="{{ hasBoostW }}" hint-placeholder-val="{{ false }}">
               <div style="display:flex;gap:12px;align-items:center;border:2px solid #8D1D2C;border-radius:10px;padding:10px;flex-wrap:wrap;">
                 <img src="{{ boostW.img }}" alt="" style="width:84px;height:84px;object-fit:cover;border-radius:8px;background:#F4EFE8;flex:0 0 auto;">
                 <div style="flex:1 1 220px;display:flex;flex-direction:column;gap:3px;min-width:0;">
-                  <span style="font-size:11px;color:#666666;">{{ boostW.where }}</span>
-                  <span style="font-size:13px;font-weight:500;line-height:1.35;">{{ boostW.titre }}</span>
-                  <span style="font-size:11px;color:#666666;">{{ boostW.note }}</span>
+                  <span style="font-size:11px;color:#7a736a;">{{ boostW.where }}</span>
+                  <span style="font-size:13px;font-weight:400;line-height:1.35;">{{ boostW.titre }}</span>
+                  <span style="font-size:11px;color:#7a736a;">{{ boostW.note }}</span>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
-                  <sc-if value="{{ boostW.hasLink }}" hint-placeholder-val="{{ false }}"><a href="{{ boostW.link }}" target="_blank" rel="noopener" style="font-size:12px;font-weight:500;">Voir le post ↗</a></sc-if>
-                  <button onClick="{{ boostClear }}" style="border:none;background:transparent;color:#8D1D2C;font-size:12px;font-weight:500;cursor:pointer;padding:2px;">Choisir plutôt un post du module</button>
+                  <sc-if value="{{ boostW.hasLink }}" hint-placeholder-val="{{ false }}"><a href="{{ boostW.link }}" target="_blank" rel="noopener" style="font-size:12px;font-weight:400;">Voir le post ↗</a></sc-if>
+                  <button onClick="{{ boostClear }}" style="border:none;background:transparent;color:#8D1D2C;font-size:12px;font-weight:400;cursor:pointer;padding:2px;">Choisir plutôt un post du module</button>
                 </div>
               </div>
             </sc-if>
@@ -390,45 +391,45 @@
               <sc-for list="{{ creatives }}" as="c" hint-placeholder-count="0">
                 <button onClick="{{ c.pick }}" style="display:block;padding:0;border-radius:10px;border:2px solid {{ c.ring }};background:#FFFFFF;cursor:pointer;overflow:clip;text-align:left;">
                   <span style="display:block;position:relative;height:0;padding-bottom:70%;background:#F4EFE8;"><img src="{{ c.img }}" alt="" style="position:absolute;left:10px;top:8px;width:calc(100% - 20px);height:calc(100% - 16px);object-fit:contain;"></span>
-                  <span style="display:block;padding:7px 9px 9px;"><span style="display:block;font-size:12px;font-weight:500;color:#222222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ c.title }}</span><span style="display:block;font-size:10px;color:#666666;">{{ c.meta }}</span><span style="display:inline-block;margin-top:4px;font-size:10px;font-weight:500;border-radius:999px;padding:2px 7px;background:{{ c.fmtBg }};color:{{ c.fmtFg }};">{{ c.fmt }}</span></span>
+                  <span style="display:block;padding:7px 9px 9px;"><span style="display:block;font-size:12px;font-weight:400;color:#1c1a17;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ c.title }}</span><span style="display:block;font-size:10px;color:#7a736a;">{{ c.meta }}</span><span style="display:inline-block;margin-top:4px;font-size:10px;font-weight:400;border-radius:6px;padding:2px 7px;background:{{ c.fmtBg }};color:{{ c.fmtFg }};">{{ c.fmt }}</span></span>
                 </button>
               </sc-for>
             </div>
             <sc-if value="{{ isNewCrea }}" hint-placeholder-val="{{ false }}">
-              <div style="display:flex;align-items:baseline;gap:8px;border-bottom:0.5px solid rgba(34,34,34,0.08);padding-bottom:6px;"><span style="font-size:13px;font-weight:500;">Contenu de la créa</span><span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">object_story_spec.link_data</span></div>
-              <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Texte principal <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">message</span><textarea value="{{ w.message }}" onChange="{{ setMessage }}" rows="3" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;resize:vertical;line-height:1.5;"></textarea></label>
+              <div style="display:flex;align-items:baseline;gap:8px;border-bottom:1px solid #e6e0d8;padding-bottom:6px;"><span style="font-size:13px;font-weight:400;">Contenu de la créa</span><span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">object_story_spec.link_data</span></div>
+              <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Texte principal <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">message</span><textarea value="{{ w.message }}" onChange="{{ setMessage }}" rows="3" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;resize:vertical;line-height:1.5;"></textarea></label>
               <div style="display:flex;gap:12px;flex-wrap:wrap;">
-                <label style="flex:1 1 220px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Titre <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">name</span><input type="text" value="{{ w.headline }}" onChange="{{ setHeadline }}" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;"></label>
-                <label style="flex:1 1 220px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Description <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">description</span><input type="text" value="{{ w.description }}" onChange="{{ setDescription }}" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;"></label>
+                <label style="flex:1 1 220px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Titre <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">name</span><input type="text" value="{{ w.headline }}" onChange="{{ setHeadline }}" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;"></label>
+                <label style="flex:1 1 220px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Description <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">description</span><input type="text" value="{{ w.description }}" onChange="{{ setDescription }}" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;"></label>
               </div>
               <sc-if value="{{ needsNl }}" hint-placeholder-val="{{ false }}">
                 <div style="background:#F4EFE8;border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;">
-                  <span style="font-size:12px;font-weight:500;">Version néerlandaise · {{ nlShopsLabel }} <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;">une créa par langue · targeting.locales</span></span>
-                  <textarea value="{{ w.messageNl }}" onChange="{{ setMessageNl }}" rows="2" placeholder="Hoofdtekst (NL)" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;resize:vertical;line-height:1.5;"></textarea>
-                  <input type="text" value="{{ w.headlineNl }}" onChange="{{ setHeadlineNl }}" placeholder="Titel (NL)" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;">
+                  <span style="font-size:12px;font-weight:400;">Version néerlandaise · {{ nlShopsLabel }} <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;">une créa par langue · targeting.locales</span></span>
+                  <textarea value="{{ w.messageNl }}" onChange="{{ setMessageNl }}" rows="2" placeholder="Hoofdtekst (NL)" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;resize:vertical;line-height:1.5;"></textarea>
+                  <input type="text" value="{{ w.headlineNl }}" onChange="{{ setHeadlineNl }}" placeholder="Titel (NL)" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;">
                 </div>
               </sc-if>
             </sc-if>
             <sc-if value="{{ noBoostW }}" hint-placeholder-val="{{ true }}">
-            <div style="border-top:0.5px solid rgba(34,34,34,0.08);padding-top:10px;display:flex;flex-direction:column;gap:8px;">
+            <div style="border-top:1px solid #e6e0d8;padding-top:10px;display:flex;flex-direction:column;gap:8px;">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-                <span style="font-size:13px;font-weight:500;">Variantes à tester (A/B) <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;">une créa et une pub par variante dans chaque ad set</span></span>
-                <sc-if value="{{ canAddVariant }}" hint-placeholder-val="{{ true }}"><button onClick="{{ addVariant }}" style="border:0.5px dashed rgba(34,34,34,0.3);background:#FFFFFF;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:500;cursor:pointer;">+ Ajouter une variante</button></sc-if>
+                <span style="font-size:13px;font-weight:400;">Variantes à tester (A/B) <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;">une créa et une pub par variante dans chaque ad set</span></span>
+                <sc-if value="{{ canAddVariant }}" hint-placeholder-val="{{ true }}"><button onClick="{{ addVariant }}" style="border:0.5px dashed rgba(34,34,34,0.3);background:#FFFFFF;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:400;cursor:pointer;">+ Ajouter une variante</button></sc-if>
               </div>
-              <span style="font-size:12px;color:#666666;line-height:1.5;">{{ variantHint }}</span>
+              <span style="font-size:12px;color:#7a736a;line-height:1.5;">{{ variantHint }}</span>
               <sc-for list="{{ variants }}" as="vr" hint-placeholder-count="0">
-                <div style="border:0.5px solid rgba(34,34,34,0.12);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;">
+                <div style="border:1px solid #e6e0d8;border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;">
                   <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-                    <span style="font-size:12px;font-weight:600;">Variante {{ vr.letter }}</span>
-                    <button onClick="{{ vr.remove }}" style="border:none;background:transparent;color:#8D1D2C;font-size:12px;font-weight:500;cursor:pointer;padding:4px;">Retirer</button>
+                    <span style="font-size:12px;font-weight:400;">Variante {{ vr.letter }}</span>
+                    <button onClick="{{ vr.remove }}" style="border:none;background:transparent;color:#8D1D2C;font-size:12px;font-weight:400;cursor:pointer;padding:4px;">Retirer</button>
                   </div>
-                  <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">{{ vr.postLabel }}<select value="{{ vr.post }}" onChange="{{ vr.setPost }}" style="font-size:13px;color:#222222;background:#F4EFE8;border:0.5px solid rgba(34,34,34,0.10);border-radius:6px;padding:8px 10px;"><option value="">{{ vr.samePost }}</option><sc-for list="{{ vr.options }}" as="o" hint-placeholder-count="0"><option value="{{ o.id }}">{{ o.label }}</option></sc-for></select></label>
+                  <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">{{ vr.postLabel }}<select value="{{ vr.post }}" onChange="{{ vr.setPost }}" style="font-size:13px;color:#1c1a17;background:#F4EFE8;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;"><option value="">{{ vr.samePost }}</option><sc-for list="{{ vr.options }}" as="o" hint-placeholder-count="0"><option value="{{ o.id }}">{{ o.label }}</option></sc-for></select></label>
                   <sc-if value="{{ isNewCrea }}" hint-placeholder-val="{{ false }}">
-                    <textarea value="{{ vr.message }}" onChange="{{ vr.setMessage }}" rows="2" placeholder="Texte principal — vide : celui de la variante A" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;resize:vertical;line-height:1.5;"></textarea>
-                    <input type="text" value="{{ vr.headline }}" onChange="{{ vr.setHeadline }}" placeholder="Titre — vide : celui de la variante A" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;">
+                    <textarea value="{{ vr.message }}" onChange="{{ vr.setMessage }}" rows="2" placeholder="Texte principal — vide : celui de la variante A" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;resize:vertical;line-height:1.5;"></textarea>
+                    <input type="text" value="{{ vr.headline }}" onChange="{{ vr.setHeadline }}" placeholder="Titre — vide : celui de la variante A" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;">
                     <sc-if value="{{ needsNl }}" hint-placeholder-val="{{ false }}">
-                      <textarea value="{{ vr.messageNl }}" onChange="{{ vr.setMessageNl }}" rows="2" placeholder="Hoofdtekst (NL) — leeg: die van variant A" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;resize:vertical;line-height:1.5;"></textarea>
-                      <input type="text" value="{{ vr.headlineNl }}" onChange="{{ vr.setHeadlineNl }}" placeholder="Titel (NL) — leeg: die van variant A" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;">
+                      <textarea value="{{ vr.messageNl }}" onChange="{{ vr.setMessageNl }}" rows="2" placeholder="Hoofdtekst (NL) — leeg: die van variant A" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;resize:vertical;line-height:1.5;"></textarea>
+                      <input type="text" value="{{ vr.headlineNl }}" onChange="{{ vr.setHeadlineNl }}" placeholder="Titel (NL) — leeg: die van variant A" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;">
                     </sc-if>
                   </sc-if>
                 </div>
@@ -436,26 +437,26 @@
             </div>
             </sc-if>
             <div style="display:flex;gap:12px;flex-wrap:wrap;">
-              <label style="flex:2 1 260px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Lien de destination <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">link *</span><input type="url" value="{{ w.link }}" onChange="{{ setLink }}" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;"></label>
-              <label style="flex:1 1 180px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Bouton <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">call_to_action.type</span><select value="{{ w.cta }}" onChange="{{ setCta }}" style="font-size:13px;color:#222222;background:#F4EFE8;border:0.5px solid rgba(34,34,34,0.10);border-radius:6px;padding:8px 10px;"><sc-for list="{{ ctaOptions }}" as="c" hint-placeholder-count="0"><option value="{{ c.id }}">{{ c.label }}</option></sc-for></select></label>
+              <label style="flex:2 1 260px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Lien de destination <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">link *</span><input type="url" value="{{ w.link }}" onChange="{{ setLink }}" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;"></label>
+              <label style="flex:1 1 180px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Bouton <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">call_to_action.type</span><select value="{{ w.cta }}" onChange="{{ setCta }}" style="font-size:13px;color:#1c1a17;background:#F4EFE8;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;"><sc-for list="{{ ctaOptions }}" as="c" hint-placeholder-count="0"><option value="{{ c.id }}">{{ c.label }}</option></sc-for></select></label>
             </div>
             <sc-if value="{{ hasCtaHint }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;line-height:1.45;background:#FCE7C8;color:#6b3d0a;border-radius:8px;padding:8px 10px;">{{ ctaHint }}</span></sc-if>
             <sc-if value="{{ isLeads }}" hint-placeholder-val="{{ false }}">
-              <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Formulaire de leads <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">call_to_action.value.lead_gen_form_id *</span><select value="{{ w.leadForm }}" onChange="{{ setLeadForm }}" style="font-size:13px;color:#222222;background:#F4EFE8;border:0.5px solid rgba(34,34,34,0.10);border-radius:6px;padding:8px 10px;"><option value="">Choisir un formulaire actif…</option><sc-for list="{{ leadOptions }}" as="l" hint-placeholder-count="0"><option value="{{ l.id }}">{{ l.name }}</option></sc-for></select></label>
-              <a href="{{ leadsHref }}" style="font-size:12px;font-weight:500;">Gérer les formulaires de leads →</a>
+              <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Formulaire de leads <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">call_to_action.value.lead_gen_form_id *</span><select value="{{ w.leadForm }}" onChange="{{ setLeadForm }}" style="font-size:13px;color:#1c1a17;background:#F4EFE8;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;"><option value="">Choisir un formulaire actif…</option><sc-for list="{{ leadOptions }}" as="l" hint-placeholder-count="0"><option value="{{ l.id }}">{{ l.name }}</option></sc-for></select></label>
+              <a href="{{ leadsHref }}" style="font-size:12px;font-weight:400;">Gérer les formulaires de leads →</a>
             </sc-if>
-            <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Paramètres de suivi <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">url_tags</span><input type="text" value="{{ w.urlTags }}" onChange="{{ setUrlTags }}" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;font-family:ui-monospace,monospace;font-size:12px;"></label>
-            <span style="font-size:11px;color:#666666;">Identité Instagram : compte de chaque boutique <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">object_story_spec.instagram_user_id</span></span>
+            <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Paramètres de suivi <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">url_tags</span><input type="text" value="{{ w.urlTags }}" onChange="{{ setUrlTags }}" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;font-family:ui-monospace,monospace;font-size:12px;"></label>
+            <span style="font-size:11px;color:#7a736a;">Identité Instagram : compte de chaque boutique <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">object_story_spec.instagram_user_id</span></span>
           </sc-if>
 
           <!-- 4 PUB -->
           <sc-if value="{{ s4 }}" hint-placeholder-val="{{ false }}">
             <div style="display:flex;gap:12px;flex-wrap:wrap;">
-              <label style="flex:2 1 260px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Nom de la pub <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">name *</span><input type="text" value="{{ w.adName }}" onChange="{{ setAdName }}" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;outline:none;"></label>
-              <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Statut <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">status *</span><div style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;align-self:flex-start;"><button onClick="{{ adPaused }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:500;cursor:pointer;background:{{ apBg }};color:{{ apFg }};">En pause</button><button onClick="{{ adActive }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:500;cursor:pointer;background:{{ aaBg }};color:{{ aaFg }};">Active</button></div></div>
+              <label style="flex:2 1 260px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Nom de la pub <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">name *</span><input type="text" value="{{ w.adName }}" onChange="{{ setAdName }}" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;outline:none;"></label>
+              <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Statut <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">status *</span><div style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;align-self:flex-start;"><button onClick="{{ adPaused }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:400;cursor:pointer;background:{{ apBg }};color:{{ apFg }};">En pause</button><button onClick="{{ adActive }}" style="border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:400;cursor:pointer;background:{{ aaBg }};color:{{ aaFg }};">Active</button></div></div>
             </div>
             <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="checkbox" checked="{{ w.pixel }}" onChange="{{ togglePixel }}" style="accent-color:#8D1D2C;margin:0;">Suivre les conversions du webshop avec le pixel {{ pixelId }} <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;letter-spacing:0;text-transform:none;">tracking_specs · conversion_domain: latelierby.be</span></label>
-            <span style="font-size:12px;color:#666666;line-height:1.5;">{{ createNote }}</span>
+            <span style="font-size:12px;color:#7a736a;line-height:1.5;">{{ createNote }}</span>
           </sc-if>
 
           <!-- 5 RÉCAP -->
@@ -463,26 +464,26 @@
             <div style="display:flex;gap:16px;flex-wrap:wrap;">
               <div style="flex:0 0 160px;height:160px;border-radius:10px;background:#F4EFE8;display:flex;align-items:center;justify-content:center;"><img src="{{ recapImg }}" alt="" style="max-width:130px;max-height:130px;object-fit:contain;"></div>
               <div style="flex:1 1 300px;display:grid;grid-template-columns:130px 1fr;gap:7px 12px;font-size:13px;align-content:start;">
-                <sc-for list="{{ recap }}" as="r" hint-placeholder-count="8"><span style="color:#666666;">{{ r.k }}</span><span>{{ r.v }}</span></sc-for>
+                <sc-for list="{{ recap }}" as="r" hint-placeholder-count="8"><span style="color:#7a736a;">{{ r.k }}</span><span>{{ r.v }}</span></sc-for>
               </div>
             </div>
             <div style="display:flex;flex-direction:column;gap:8px;">
-              <span style="font-size:13px;font-weight:500;">Appels API envoyés par Franchise Buddy · {{ callsNote }}</span>
+              <span style="font-size:13px;font-weight:400;">Appels API envoyés par Franchise Buddy · {{ callsNote }}</span>
               <sc-for list="{{ calls }}" as="c" hint-placeholder-count="4">
-                <div style="border:0.5px solid rgba(34,34,34,0.12);border-radius:8px;overflow:hidden;flex-shrink:0;">
-                  <div style="background:#232220;color:#F2C9A0;font-family:ui-monospace,monospace;font-size:11px;padding:7px 10px;">{{ c.title }}</div>
-                  <pre style="margin:0;padding:10px;font-family:ui-monospace,monospace;font-size:11px;line-height:1.45;background:#FAF7F2;color:#222222;white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto;">{{ c.body }}</pre>
+                <div style="border:1px solid #e6e0d8;border-radius:8px;overflow:hidden;flex-shrink:0;">
+                  <div style="background:#1c1a17;color:#F2C9A0;font-family:ui-monospace,monospace;font-size:11px;padding:7px 10px;">{{ c.title }}</div>
+                  <pre style="margin:0;padding:10px;font-family:ui-monospace,monospace;font-size:11px;line-height:1.45;background:#FAF7F2;color:#1c1a17;white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto;">{{ c.body }}</pre>
                 </div>
               </sc-for>
             </div>
           </sc-if>
         </div>
 
-        <div style="padding:12px 22px;border-top:0.5px solid rgba(34,34,34,0.10);display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <div style="padding:12px 22px;border-top:1px solid #e6e0d8;display:flex;align-items:center;justify-content:space-between;gap:10px;">
           <span style="font-size:12px;color:#8D1D2C;">{{ stepErr }}</span>
           <div style="display:flex;gap:8px;">
-            <sc-if value="{{ canBack }}" hint-placeholder-val="{{ false }}"><button onClick="{{ back }}" style="border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:500;cursor:pointer;">Retour</button></sc-if>
-            <button onClick="{{ fwd }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:500;cursor:pointer;">{{ fwdLabel }}</button>
+            <sc-if value="{{ canBack }}" hint-placeholder-val="{{ false }}"><button onClick="{{ back }}" style="border:1px solid #e6e0d8;background:#FFFFFF;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:400;cursor:pointer;">Retour</button></sc-if>
+            <button onClick="{{ fwd }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:400;cursor:pointer;">{{ fwdLabel }}</button>
           </div>
         </div>
       </div>
@@ -490,7 +491,7 @@
   </sc-if>
 
   <sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
-    <div style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#232220;color:#FFFFFF;border-radius:8px;padding:11px 16px;font-size:13px;z-index:60;box-shadow:0 12px 30px rgba(35,34,32,0.3);">{{ toast }}</div>
+    <div style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1c1a17;color:#FFFFFF;border-radius:8px;padding:11px 16px;font-size:13px;z-index:60;box-shadow:0 12px 30px rgba(35,34,32,0.3);">{{ toast }}</div>
   </sc-if>
 </div>
 </x-dc>
@@ -692,7 +693,7 @@ class Component extends DCLogic {
     const monthAds = ads.filter(a => endOf(a) >= SA.TODAY.slice(0, 8) + '01');
     const kpis = [
       { label: 'Actives', value: active.length, sub: sumMoney(active) + ' dépensés', color: '#0F6B4A', border: 'rgba(34,34,34,0.10)' },
-      { label: 'Dépensé · pubs de ' + SA.MONTHS[+SA.TODAY.slice(5, 7) - 1], value: sumMoney(monthAds), sub: 'cumul des pubs en cours ce mois-ci, tous comptes', color: '#222222', border: 'rgba(34,34,34,0.10)' },
+      { label: 'Dépensé · pubs de ' + SA.MONTHS[+SA.TODAY.slice(5, 7) - 1], value: sumMoney(monthAds), sub: 'cumul des pubs en cours ce mois-ci, tous comptes', color: '#1c1a17', border: 'rgba(34,34,34,0.10)' },
       { label: 'En revue Meta', value: ads.filter(a => a.status === 'En revue').length, sub: 'validation en cours', color: '#8A4B00', border: 'rgba(34,34,34,0.10)' },
       { label: 'Refusées', value: ads.filter(a => a.status === 'Refusée').length, sub: 'à corriger', color: '#8D1D2C', border: ads.some(a => a.status === 'Refusée') ? '#8D1D2C' : 'rgba(34,34,34,0.10)' },
       { label: 'Budget épuisé', value: ads.filter(a => a.status === 'Budget épuisé').length, sub: 'diffusion suspendue', color: '#8D1D2C', border: ads.some(a => a.status === 'Budget épuisé') ? '#F2C9A0' : 'rgba(34,34,34,0.10)' },
@@ -749,9 +750,9 @@ class Component extends DCLogic {
       const dark = (SA.DARK || []).filter(x => x.ad === a.id), multi = new Set(dark.map(x => x.lang)).size > 1 || dark.some(x => x.lang === 'nl'), com = s.com && s.com.ad === a.id ? s.com : null;
       const nCom = dark.reduce((x, y) => x + (y.comments || 0), 0);
       // Le verdict A/B (taux de clic, test de deux proportions) calculé par le serveur à chaque relecture.
-      const ab = a.ab || null, AB = { gagnante: ['#E2F0E8', '#0F6B4A'], tendance: ['#FFF8EC', '#8A4B00'], egalite: ['#F4EFE8', '#444444'], tot: ['#F4EFE8', '#666666'] }, [abBg, abFg] = AB[ab && ab.statut] || AB.tot;
+      const ab = a.ab || null, AB = { gagnante: ['#E2F0E8', '#0F6B4A'], tendance: ['#FFF8EC', '#8A4B00'], egalite: ['#F4EFE8', '#444444'], tot: ['#F4EFE8', '#7a736a'] }, [abBg, abFg] = AB[ab && ab.statut] || AB.tot;
       Object.assign(d, { hasAb: !!(ab && ab.texte) && stats.length > 1, abTexte: ab ? ab.texte : '', abBg, abFg });
-      Object.assign(d, { hasStats: stats.length > 1, stats: stats.map(x => ({ variant: x.variant, best: best && best.variant === x.variant ? ' ★' : '', w: best && best.variant === x.variant ? 600 : 400, c: best && best.variant === x.variant ? '#0F6B4A' : '#222222',
+      Object.assign(d, { hasStats: stats.length > 1, stats: stats.map(x => ({ variant: x.variant, best: best && best.variant === x.variant ? ' ★' : '', w: best && best.variant === x.variant ? 600 : 400, c: best && best.variant === x.variant ? '#0F6B4A' : '#1c1a17',
           impressions: SA.fmt(x.impressions), clicks: SA.fmt(x.clicks), ctr: x.ctr == null ? '—' : SA.pct(x.ctr), spend: money(a, x.spend) })),
         isDark: !!a.dark, darkCount: dark.length || 'en attente', darkNote: dark.length ? 'Relus chez Meta après la création de la pub (et toutes les heures).' : (SA.live ? 'Ils apparaissent ici dès que Meta les a créés (relu toutes les heures).' : 'Mode démonstration : créez une pub « Dark post » pour voir la liste.'),
         dark: dark.map(x => ({ label: ((SA.byId(SA.SHOPS, x.shop) || {}).name || x.shop) + (multi ? ' · ' + String(x.lang).toUpperCase() : '') + (a.variants > 1 ? ' · ' + x.variant : ''), hasFb: !!x.link, link: x.link, hasIg: !!x.linkIg, linkIg: x.linkIg,
@@ -764,7 +765,7 @@ class Component extends DCLogic {
     // assistant
     const w = s.w, M = SA.META;
     const seg = (on) => on ? ['#8D1D2C', '#FFFFFF'] : ['transparent', '#444444'];
-    const chip = (on) => ({ bg: on ? '#8D1D2C' : '#FFFFFF', fg: on ? '#FFFFFF' : '#222222', border: on ? '#8D1D2C' : 'rgba(34,34,34,0.18)' });
+    const chip = (on) => ({ bg: on ? '#8D1D2C' : '#FFFFFF', fg: on ? '#FFFFFF' : '#1c1a17', border: on ? '#8D1D2C' : 'rgba(34,34,34,0.18)' });
     const W = (patch) => this.setState({ w: Object.assign({}, this.state.w, patch), err: '' });
     const sg = (pairs) => { const o = {}; pairs.forEach(([k, on]) => { const [bg, fg] = seg(on); o[k + 'Bg'] = bg; o[k + 'Fg'] = fg; }); return o; };
     if (a) {
@@ -846,7 +847,7 @@ class Component extends DCLogic {
       const J = (o) => JSON.stringify(o, null, 2);
       wiz = Object.assign({
         s1: s.step === 1, s2: s.step === 2, s3: s.step === 3, s4: s.step === 4, s5: s.step === 5, w, apiVersion: meta.version || M.version,
-        steps: [['Campagne', 'campaigns'], ['Ad set', 'adsets'], ['Créa', 'adcreatives'], ['Pub', 'ads'], ['Récapitulatif', 'POST ×4']].map(([label, tech], i) => ({ n: i + 1, label, tech, bar: i + 1 <= s.step ? '#8D1D2C' : '#EAE4DC', fg: i + 1 === s.step ? '#8D1D2C' : i + 1 < s.step ? '#222222' : '#8A847C', go: () => { if (i + 1 < s.step) this.setState({ step: i + 1, err: '' }); } })),
+        steps: [['Campagne', 'campaigns'], ['Ad set', 'adsets'], ['Créa', 'adcreatives'], ['Pub', 'ads'], ['Récapitulatif', 'POST ×4']].map(([label, tech], i) => ({ n: i + 1, label, tech, bar: i + 1 <= s.step ? '#8D1D2C' : '#EAE4DC', fg: i + 1 === s.step ? '#8D1D2C' : i + 1 < s.step ? '#1c1a17' : '#8A847C', go: () => { if (i + 1 < s.step) this.setState({ step: i + 1, err: '' }); } })),
         setName: (e) => W({ name: e.target.value }), campOptions: camps.filter(c => c.status !== 'terminée').map(c => ({ id: c.id, name: c.name })), setCampaign: (e) => W({ campaign: e.target.value, urlTags: w.urlTags.replace(/utm_campaign=[^&]*/, 'utm_campaign=' + (e.target.value || 'hors-campagne')) }),
         objectives: M.objectives.map(o => ({ id: o.id, label: o.label, desc: o.desc, icon: o.icon, ring: w.objective === o.id ? '#8D1D2C' : 'rgba(34,34,34,0.12)', bg: w.objective === o.id ? '#FBF3F4' : '#FFFFFF',
           pick: () => W({ objective: o.id, goal: o.goals[0], dest: o.dest[0], cta: o.id === 'OUTCOME_LEADS' ? 'SIGN_UP' : o.id === 'OUTCOME_SALES' ? 'ORDER_NOW' : o.id === 'OUTCOME_ENGAGEMENT' ? 'MESSAGE_PAGE' : o.id === 'OUTCOME_TRAFFIC' ? 'ORDER_NOW' : 'GET_DIRECTIONS' }) })),
@@ -864,7 +865,7 @@ class Component extends DCLogic {
         amountLabel: (w.budgetType === 'daily' ? 'Montant / jour' : 'Montant total') + (w.account === 'boutique' ? ' par boutique (' + sym + ')' : ' (' + sym + ') · réparti entre les boutiques'), amountTech: budgetKey + ' = ' + SA.cents(w.amount), endTech: w.budgetType === 'lifetime' ? 'end_time *' : 'end_time',
         setAmount: (e) => W({ amount: +e.target.value }), setStart: (e) => W({ start: e.target.value }), setEnd: (e) => W({ end: e.target.value }),
         needsBidAmount: encheresMontant.includes(w.bid), setBidAmount: (e) => W({ bidAmount: +e.target.value }), bidCents: SA.cents(w.bidAmount),
-        budgetFacts: [{ label: 'Durée', value: days + ' jours', color: '#222222' }, { label: 'Dépense estimée', value: m$(est), color: w.spendCap > 0 && est > w.spendCap ? '#8D1D2C' : '#222222' }, { label: 'Plafond (spend_cap)', value: w.spendCap > 0 ? m$(w.spendCap) : 'aucun', color: '#222222' }].concat(camp && dev === 'EUR' ? [{ label: 'Reste sur l’opération', value: SA.eur(campLeft), color: campLeft < est ? '#8A4B00' : '#0F6B4A' }] : []),
+        budgetFacts: [{ label: 'Durée', value: days + ' jours', color: '#1c1a17' }, { label: 'Dépense estimée', value: m$(est), color: w.spendCap > 0 && est > w.spendCap ? '#8D1D2C' : '#1c1a17' }, { label: 'Plafond (spend_cap)', value: w.spendCap > 0 ? m$(w.spendCap) : 'aucun', color: '#1c1a17' }].concat(camp && dev === 'EUR' ? [{ label: 'Reste sur l’opération', value: SA.eur(campLeft), color: campLeft < est ? '#8A4B00' : '#0F6B4A' }] : []),
         overCap: w.spendCap > 0 && est > w.spendCap, overCapText: 'La dépense estimée (' + m$(est) + ') dépasse le plafond de ' + m$(w.spendCap) + ' : la diffusion s\u2019arrêtera au plafond, soit environ ' + Math.floor(days * w.spendCap / est) + ' jours sur ' + days + '.',
         overCamp: !!camp && dev === 'EUR' && campLeft < est, overCampText: camp ? 'Il reste ' + SA.eur(campLeft) + ' sur le budget de « ' + camp.name + ' ».' : '',
         audHelp: 'Cochez les boutiques autour desquelles diffuser, puis réglez le rayon de chacune. ' + (w.account === 'reseau' ? 'Chaque boutique cochée a son ad set : sa zone, sa Page Facebook, sa langue ; le budget se répartit entre elles.'
@@ -873,7 +874,7 @@ class Component extends DCLogic {
           note: ok ? M.geo[sh.id][0].toFixed(4) + ', ' + M.geo[sh.id][1].toFixed(4) : 'Sans compte pub propre : passez en « Compte réseau » (étape 1)', noteFg: ok ? '#8A847C' : '#8D1D2C', noteFont: ok ? 'ui-monospace,monospace' : 'inherit',
           toggle: () => W({ shops: on ? w.shops.filter(x => x !== sh.id) : w.shops.concat(sh.id) }), setRadius: (e) => W({ radius: Object.assign({}, w.radius, { [sh.id]: Math.max(minR, +e.target.value) }) }) }; }),
         setAgeMin: (e) => W({ ageMin: Math.min(+e.target.value, w.ageMax) }), setAgeMax: (e) => W({ ageMax: Math.max(+e.target.value, w.ageMin) }),
-        langOpts: LANG_PUB.map(([k, label]) => ({ label, bg: (w.lang || 'shop') === k ? '#FFFFFF' : 'transparent', fg: (w.lang || 'shop') === k ? '#222222' : '#444444',
+        langOpts: LANG_PUB.map(([k, label]) => ({ label, bg: (w.lang || 'shop') === k ? '#FFFFFF' : 'transparent', fg: (w.lang || 'shop') === k ? '#1c1a17' : '#444444',
           shadow: (w.lang || 'shop') === k ? '0 1px 2px rgba(0,0,0,0.08)' : 'none', pick: () => W({ lang: k }) })),
         langHelp: langHelp(),
         gAll: () => W({ gender: 'all' }), gMen: () => !special && W({ gender: 'men' }), gWomen: () => !special && W({ gender: 'women' }), toggleAdvantage: () => W({ advantage: !w.advantage }),
@@ -901,7 +902,7 @@ class Component extends DCLogic {
             remove: () => W({ variants: w.variants.filter((_, j) => j !== i) }) };
         }),
         creatives: (w.boost ? [] : pool.slice(0, 18)).map(p => ({ img: p.img, title: p.title, meta: p.dark ? (diffused(p) ? 'Dark post déjà diffusé · réutilisé' : 'Dark post') : SA.dShort(p.date) + ' · ' + p.status, ring: w.post === p.id ? '#8D1D2C' : 'rgba(34,34,34,0.10)',
-          fmt: this.fmtOf(p).label, fmtBg: p.dark ? '#232220' : '#F4EFE8', fmtFg: p.dark ? '#F2C9A0' : '#444444',
+          fmt: this.fmtOf(p).label, fmtBg: p.dark ? '#1c1a17' : '#F4EFE8', fmtFg: p.dark ? '#F2C9A0' : '#444444',
           pick: () => W({ post: p.id, message: w.message || SA.fill(p.text || '', sid0, null, 'fr'), messageNl: w.messageNl || SA.fill(p.textNl || '', (SA.SHOPS[0] || {}).id, null, 'nl'), headline: w.headline || p.title, adName: w.adName || p.title + ' · ' + obj.label.toLowerCase() }) })),
         needsNl: nlPour().length > 0, nlShopsLabel: ['nl', 'both'].includes(w.lang) ? 'toutes les boutiques cochées' : nlPour().map(id => SA.byId(SA.SHOPS, id).name).join(', '),
         setMessageNl: (e) => W({ messageNl: e.target.value }), setHeadlineNl: (e) => W({ headlineNl: e.target.value }),
@@ -940,7 +941,7 @@ class Component extends DCLogic {
     const cardsD = (dm.demandes || []).map(x => { const refusing = !!(s.refus && s.refus.id === x.id), st2 = x.statut, att = st2 === 'attente';
       return { img: x.img || bubble, where: x.shopNom + ' · ' + x.canal + ' · proposé le ' + SA.dShort(String(x.le).slice(0, 10)), titre: x.titre, facts: x.datePost ? 'Publié le ' + SA.dShort(x.datePost) : '',
         hasMsg: !!x.message, msg: x.message, par: x.par, border: att ? '#8D1D2C' : 'rgba(34,34,34,0.12)',
-        hasBadge: !att, badge: st2 === 'boostee' ? 'Boostée' + (x.traitePar ? ' par ' + x.traitePar : '') : 'Refusée' + (x.reponse ? ' : ' + x.reponse : ''), badgeBg: st2 === 'boostee' ? '#DCEFE6' : '#F4EFE8', badgeFg: st2 === 'boostee' ? '#0F6B4A' : '#666666',
+        hasBadge: !att, badge: st2 === 'boostee' ? 'Boostée' + (x.traitePar ? ' par ' + x.traitePar : '') : 'Refusée' + (x.reponse ? ' : ' + x.reponse : ''), badgeBg: st2 === 'boostee' ? '#DCEFE6' : '#F4EFE8', badgeFg: st2 === 'boostee' ? '#0F6B4A' : '#7a736a',
         refusing, refusTxt: refusing ? s.refus.txt : '', setRefus: (e) => this.setState({ refus: { id: x.id, txt: e.target.value } }), refusOk: () => this.refuser(x.id, s.refus ? s.refus.txt : ''), refusCancel: () => this.setState({ refus: null }),
         canBoost: att && !refusing, boostLabel: 'Booster', boost: () => this.openBoost(x, x.id), canRefuse: att && !refusing, refuse: () => this.setState({ refus: { id: x.id, txt: '' } }),
         hasLink: !!x.permalink, link: x.permalink || '#' }; });
@@ -950,7 +951,7 @@ class Component extends DCLogic {
     const cards = tab === 'demandes' ? cardsD : cardsM;
     const bandVals = {
       bstTabs: [['demandes', 'Demandes des boutiques (' + (dm.attente || 0) + ')'], ['meilleurs', 'Meilleurs posts de la semaine (' + (mb.posts || []).length + ')']].map(([id, label]) => ({ label,
-        bg: tab === id ? '#8D1D2C' : '#FFFFFF', fg: tab === id ? '#FFFFFF' : '#222222', border: tab === id ? '#8D1D2C' : 'rgba(34,34,34,0.18)', pick: () => this.setState({ bst: Object.assign({}, B, { tab: id, show: true }) }) })),
+        bg: tab === id ? '#8D1D2C' : '#FFFFFF', fg: tab === id ? '#FFFFFF' : '#1c1a17', border: tab === id ? '#8D1D2C' : 'rgba(34,34,34,0.18)', pick: () => this.setState({ bst: Object.assign({}, B, { tab: id, show: true }) }) })),
       bstSub: tab === 'demandes' ? 'Les publications que les boutiques vous proposent de booster, depuis le calendrier de leur espace. Vous décidez ; la pub part de leur compte publicitaire, ou du compte réseau.'
         : 'La publication la plus engageante de chaque boutique ces 7 derniers jours, comparée à l’habitude de son compte' + (B.meilleurs && B.meilleurs.le ? ' · lu chez Meta le ' + SA.dShort(B.meilleurs.le.slice(0, 10)) + ' à ' + B.meilleurs.le.slice(11, 16) : '') + '.',
       bstShow: B.show, bstToggle: () => this.setState({ bst: Object.assign({}, B, { show: !B.show }) }), bstToggleLabel: B.show ? 'Masquer' : 'Afficher',
@@ -994,10 +995,10 @@ class Component extends DCLogic {
       impErrText: (() => { const r = SA.metaImport && SA.metaImport(); return r && (r.erreurs || []).length ? 'Dernière relecture : ' + r.erreurs.join(' · ') : ''; })(),
       actTabs: (() => { const base = ads.filter(bySrc), nA = base.filter(isAct).length;
         return [['active', 'Actives (' + nA + ')', '#1F8A60'], ['inactive', 'Non actives (' + (base.length - nA) + ')', '#B8B2A8'], ['all', 'Toutes (' + base.length + ')', '#8D1D2C']]
-          .map(([id, label, dot]) => ({ label, dot: act === id ? '#FFFFFF' : dot, bg: act === id ? (id === 'active' ? '#0F6B4A' : '#8D1D2C') : '#FFFFFF', fg: act === id ? '#FFFFFF' : '#222222',
+          .map(([id, label, dot]) => ({ label, dot: act === id ? '#FFFFFF' : dot, bg: act === id ? (id === 'active' ? '#0F6B4A' : '#8D1D2C') : '#FFFFFF', fg: act === id ? '#FFFFFF' : '#1c1a17',
             border: act === id ? (id === 'active' ? '#0F6B4A' : '#8D1D2C') : 'rgba(34,34,34,0.18)', pick: () => this.setState({ act: id }) })); })(),
       noRows: !sorted.length, noRowsText: act === 'active' ? 'Aucune publicité active pour l’instant. Voir « Non actives » ou « Toutes ».' : act === 'inactive' ? 'Aucune publicité non active.' : 'Aucune publicité.',
-      srcTabs: (() => { const base = ads.filter(byAct), nM = base.filter(a => a.origin === 'meta').length; return [['all', 'Toutes sources (' + base.length + ')'], ['module', 'Créées ici (' + (base.length - nM) + ')'], ['meta', 'Récupérées de Meta (' + nM + ')']]; })().map(([id, label]) => ({ label, bg: src === id ? '#8D1D2C' : '#FFFFFF', fg: src === id ? '#FFFFFF' : '#222222', border: src === id ? '#8D1D2C' : 'rgba(34,34,34,0.18)', pick: () => this.setState({ src: id }) })),
+      srcTabs: (() => { const base = ads.filter(byAct), nM = base.filter(a => a.origin === 'meta').length; return [['all', 'Toutes sources (' + base.length + ')'], ['module', 'Créées ici (' + (base.length - nM) + ')'], ['meta', 'Récupérées de Meta (' + nM + ')']]; })().map(([id, label]) => ({ label, bg: src === id ? '#8D1D2C' : '#FFFFFF', fg: src === id ? '#FFFFFF' : '#1c1a17', border: src === id ? '#8D1D2C' : 'rgba(34,34,34,0.18)', pick: () => this.setState({ src: id }) })),
       fixAd: () => { if (nonCreee(a)) { this.reprendre(a); return; } this.upd(a.id, { status: 'En revue', reason: null }, '« ' + a.name + ' » corrigée et resoumise'); this.toast('Publicité resoumise à Meta.'); },
       showComments: () => { if (!a) return; if (s.com && s.com.ad === a.id && s.com.open) this.setState({ com: Object.assign({}, s.com, { open: false }) }); else this.comments(a, false); },
       syncComments: () => a && this.comments(a, true),

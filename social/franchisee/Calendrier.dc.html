@@ -9,18 +9,19 @@
 <x-dc>
 <helmet>
   <link rel="stylesheet" href="_ds/l-atelier-by-8504a4e3-7796-44da-b087-3fbd9dcb8dcd/global.css">
+  <link rel="stylesheet" href="_ds/marketing.css">
   <script src="_ds/l-atelier-by-8504a4e3-7796-44da-b087-3fbd9dcb8dcd/_ds_bundle.js"></script>
   <script src="config.js"></script>
   <script src="franchise-data.js"></script>
   <script src="graphes.js"></script>
   <style>
-    html,body{margin:0;padding:0;background:#EAE4DC;-webkit-font-smoothing:antialiased;}
+    html,body{margin:0;padding:0;background:#faf7f2;-webkit-font-smoothing:antialiased;}
     /* La règle « section » du design system (48 px, pages vitrines) ne vaut pas pour les cartes des écrans. */
     section{padding-top:0;padding-bottom:0;}
     a{color:#8D1D2C;} a:hover{color:#232220;} button,select{font-family:var(--font-ui);}
   </style>
 </helmet>
-<div class="sf-shell" style="display:flex;min-height:100vh;background:#EAE4DC;font-family:var(--font-ui);color:#222222;">
+<div class="sf-shell" style="display:flex;min-height:100vh;background:#faf7f2;font-family:var(--font-ui);color:#1c1a17;">
   <dc-import name="FNav" active="{{ onglet }}" on-pick="{{ onOnglet }}" hint-size="228px,100vh"></dc-import>
   <main class="sf-main" style="flex:1 1 auto;min-width:0;padding:20px 24px 32px;display:flex;flex-direction:column;gap:14px;">
     <sc-if value="{{ hasError }}" hint-placeholder-val="{{ false }}"><div style="background:#F6DCDF;color:#8D1D2C;border-radius:10px;padding:14px 16px;font-size:14px;">{{ error }}</div></sc-if>
@@ -31,27 +32,27 @@
     <!-- En-tête -->
     <header style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;">
       <div style="display:flex;flex-direction:column;gap:4px;">
-        <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:#666666;">{{ eyebrow }}</span>
-        <h1 style="font-family:var(--font-display);font-weight:400;font-size:30px;line-height:1.1;margin:0;color:#232220;">{{ periodTitle }}</h1>
+        <span style="font-size:11px;font-weight:400;letter-spacing:0.08em;text-transform:uppercase;color:#7a736a;">{{ eyebrow }}</span>
+        <h1 style="font-family:var(--font-ui);font-weight:400;font-size:26px;line-height:1.15;letter-spacing:-0.01em;margin:0;color:#1c1a17;">{{ periodTitle }}</h1>
       </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
         <sc-if value="{{ hasJours }}" hint-placeholder-val="{{ false }}">
-          <span style="font-size:11px;color:#666666;">{{ joursLabel }}</span>
-          <div style="display:inline-flex;background:#FFFFFF;border:0.5px solid rgba(34,34,34,0.10);border-radius:8px;padding:3px;gap:2px;">
-            <sc-for list="{{ svPeriods }}" as="pp" hint-placeholder-count="3"><button onClick="{{ pp.pick }}" style="border:none;border-radius:6px;padding:7px 14px;font-size:13px;font-weight:500;cursor:pointer;background:{{ pp.bg }};color:{{ pp.fg }};">{{ pp.label }}</button></sc-for>
+          <span style="font-size:11px;color:#7a736a;">{{ joursLabel }}</span>
+          <div style="display:inline-flex;background:#FFFFFF;border:1px solid #e6e0d8;border-radius:8px;padding:3px;gap:2px;">
+            <sc-for list="{{ svPeriods }}" as="pp" hint-placeholder-count="3"><button onClick="{{ pp.pick }}" style="border:none;border-radius:6px;padding:7px 14px;font-size:13px;font-weight:400;cursor:pointer;background:{{ pp.bg }};color:{{ pp.fg }};">{{ pp.label }}</button></sc-for>
           </div>
         </sc-if>
         <sc-if value="{{ isCal }}" hint-placeholder-val="{{ true }}">
-        <div style="display:inline-flex;background:#FFFFFF;border:0.5px solid rgba(34,34,34,0.10);border-radius:8px;padding:3px;gap:2px;">
-          <sc-for list="{{ views }}" as="v" hint-placeholder-count="3"><button onClick="{{ v.pick }}" style="border:none;border-radius:6px;padding:7px 14px;font-size:13px;font-weight:500;cursor:pointer;background:{{ v.bg }};color:{{ v.fg }};">{{ v.label }}</button></sc-for>
+        <div style="display:inline-flex;background:#FFFFFF;border:1px solid #e6e0d8;border-radius:8px;padding:3px;gap:2px;">
+          <sc-for list="{{ views }}" as="v" hint-placeholder-count="3"><button onClick="{{ v.pick }}" style="border:none;border-radius:6px;padding:7px 14px;font-size:13px;font-weight:400;cursor:pointer;background:{{ v.bg }};color:{{ v.fg }};">{{ v.label }}</button></sc-for>
         </div>
         <div style="display:inline-flex;align-items:center;gap:4px;">
-          <button onClick="{{ prev }}" aria-label="Précédent" style="width:34px;height:34px;border-radius:8px;border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;cursor:pointer;font-size:15px;">‹</button>
-          <button onClick="{{ goToday }}" style="height:34px;padding:0 12px;border-radius:8px;border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;cursor:pointer;font-size:13px;font-weight:500;">Aujourd’hui</button>
-          <button onClick="{{ next }}" aria-label="Suivant" style="width:34px;height:34px;border-radius:8px;border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;cursor:pointer;font-size:15px;">›</button>
+          <button onClick="{{ prev }}" aria-label="Précédent" style="width:34px;height:34px;border-radius:8px;border:1px solid #e6e0d8;background:#FFFFFF;cursor:pointer;font-size:15px;">‹</button>
+          <button onClick="{{ goToday }}" style="height:34px;padding:0 12px;border-radius:8px;border:1px solid #e6e0d8;background:#FFFFFF;cursor:pointer;font-size:13px;font-weight:400;">Aujourd’hui</button>
+          <button onClick="{{ next }}" aria-label="Suivant" style="width:34px;height:34px;border-radius:8px;border:1px solid #e6e0d8;background:#FFFFFF;cursor:pointer;font-size:15px;">›</button>
         </div>
         </sc-if>
-        <a href="{{ pubHref }}" style="height:36px;padding:0 16px;border-radius:8px;background:#8D1D2C;color:#FFFFFF;font-size:14px;font-weight:500;display:flex;align-items:center;text-decoration:none;">Publier un post</a>
+        <a href="{{ pubHref }}" style="height:36px;padding:0 16px;border-radius:8px;background:#8D1D2C;color:#FFFFFF;font-size:14px;font-weight:400;display:flex;align-items:center;text-decoration:none;">Publier un post</a>
       </div>
     </header>
     <sc-if value="{{ hasMessage }}" hint-placeholder-val="{{ false }}"><div style="background:#FFFFFF;border-left:3px solid #8D1D2C;border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.55;color:#3A3530;">{{ message }}</div></sc-if>
@@ -59,10 +60,10 @@
     <sc-if value="{{ isCal }}" hint-placeholder-val="{{ true }}">
     <!-- Ma semaine : régularité, ce qui attend, avis Google, abonnés ; et mon rang dans le réseau (src/bilan.php). -->
     <sc-if value="{{ msShow }}" hint-placeholder-val="{{ false }}">
-    <section style="background:#232220;color:#FFFFFF;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
+    <section style="background:#1c1a17;color:#FFFFFF;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-        <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:#E8D9C4;">Ma semaine · {{ msPeriode }}</span>
-        <sc-if value="{{ msHasRang }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;font-weight:600;border-radius:999px;padding:3px 10px;background:{{ msRangBg }};color:#FFFFFF;">{{ msRang }}</span></sc-if>
+        <span style="font-size:11px;font-weight:400;letter-spacing:0.08em;text-transform:uppercase;color:#E8D9C4;">Ma semaine · {{ msPeriode }}</span>
+        <sc-if value="{{ msHasRang }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;font-weight:400;border-radius:6px;padding:3px 10px;background:{{ msRangBg }};color:#FFFFFF;">{{ msRang }}</span></sc-if>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;">
         <sc-for list="{{ msTuiles }}" as="t" hint-placeholder-count="4">
@@ -80,28 +81,28 @@
     <sc-if value="{{ rpShow }}" hint-placeholder-val="{{ false }}">
     <section style="background:#FFFFFF;border-radius:12px;border:1px solid #F2C9A0;padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-        <span style="font-size:15px;font-weight:500;">Le réseau vous propose {{ rpN }}</span>
-        <span style="font-size:12px;color:#666666;">Reprendre sur votre Page Facebook ce que « {{ rpMarque }} » vient de publier</span>
+        <span style="font-size:15px;font-weight:400;">Le réseau vous propose {{ rpN }}</span>
+        <span style="font-size:12px;color:#7a736a;">Reprendre sur votre Page Facebook ce que « {{ rpMarque }} » vient de publier</span>
       </div>
       <sc-for list="{{ rpItems }}" as="r" hint-placeholder-count="1">
-        <div style="display:flex;gap:12px;align-items:flex-start;border-top:0.5px solid rgba(34,34,34,0.08);padding-top:10px;flex-wrap:wrap;">
+        <div style="display:flex;gap:12px;align-items:flex-start;border-top:1px solid #e6e0d8;padding-top:10px;flex-wrap:wrap;">
           <sc-if value="{{ r.hasImg }}" hint-placeholder-val="{{ false }}"><img src="{{ r.img }}" alt="" style="width:72px;height:72px;border-radius:8px;object-fit:cover;flex:0 0 auto;background:#F4EFE8;"></sc-if>
           <div style="flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:4px;">
-            <span style="font-size:11.5px;color:#666666;">{{ r.meta }}</span>
-            <span style="font-size:13px;line-height:1.45;color:#222222;white-space:pre-wrap;">{{ r.texte }}</span>
-            <sc-if value="{{ r.hasAjout }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#444444;">Ajouté pour votre boutique : <b style="font-weight:500;">{{ r.ajout }}</b></span></sc-if>
-            <a href="{{ r.permalink }}" target="_blank" rel="noopener" style="font-size:12px;font-weight:500;">Voir la publication de la marque ↗</a>
+            <span style="font-size:11.5px;color:#7a736a;">{{ r.meta }}</span>
+            <span style="font-size:13px;line-height:1.45;color:#1c1a17;white-space:pre-wrap;">{{ r.texte }}</span>
+            <sc-if value="{{ r.hasAjout }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#444444;">Ajouté pour votre boutique : <b style="font-weight:400;">{{ r.ajout }}</b></span></sc-if>
+            <a href="{{ r.permalink }}" target="_blank" rel="noopener" style="font-size:12px;font-weight:400;">Voir la publication de la marque ↗</a>
             <span style="font-size:11.5px;color:#8A4B00;">{{ r.limite }}</span>
             <sc-if value="{{ r.refusOuvert }}" hint-placeholder-val="{{ false }}">
               <span style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;margin-top:4px;">
-                <textarea value="{{ r.motif }}" onChange="{{ r.setMotif }}" rows="2" placeholder="Pourquoi ? (le réseau le lit)" aria-label="Motif du refus" style="flex:1 1 220px;font-size:13px;line-height:1.4;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:6px 8px;resize:vertical;"></textarea>
-                <button onClick="{{ r.confirmerRefus }}" style="background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:8px 12px;font-size:12.5px;font-weight:500;cursor:pointer;">Confirmer le refus</button>
+                <textarea value="{{ r.motif }}" onChange="{{ r.setMotif }}" rows="2" placeholder="Pourquoi ? (le réseau le lit)" aria-label="Motif du refus" style="flex:1 1 220px;font-size:13px;line-height:1.4;border:1px solid #e6e0d8;border-radius:6px;padding:6px 8px;resize:vertical;"></textarea>
+                <button onClick="{{ r.confirmerRefus }}" style="background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:8px 12px;font-size:12.5px;font-weight:400;cursor:pointer;">Confirmer le refus</button>
               </span>
             </sc-if>
           </div>
           <div style="display:flex;flex-direction:column;gap:6px;flex:0 0 auto;">
-            <button onClick="{{ r.publier }}" style="background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:500;cursor:pointer;opacity:{{ r.op }};">Publier sur ma Page</button>
-            <button onClick="{{ r.refuser }}" style="background:#FFFFFF;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;">Refuser</button>
+            <button onClick="{{ r.publier }}" style="background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:400;cursor:pointer;opacity:{{ r.op }};">Publier sur ma Page</button>
+            <button onClick="{{ r.refuser }}" style="background:#FFFFFF;color:#1c1a17;border:1px solid #e6e0d8;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:400;cursor:pointer;">Refuser</button>
           </div>
         </div>
       </sc-for>
@@ -111,29 +112,29 @@
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
       <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="5">
         <div style="background:#FFFFFF;border:0.5px solid {{ k.border }};border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;">
-          <span style="font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;">{{ k.label }}</span>
-          <span style="font-size:24px;font-weight:300;line-height:1.1;color:{{ k.color }};">{{ k.value }}</span>
-          <span style="font-size:11px;color:#666666;">{{ k.sub }}</span>
+          <span style="font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;">{{ k.label }}</span>
+          <span style="font-size:24px;font-weight:700;line-height:1.1;color:{{ k.color }};">{{ k.value }}</span>
+          <span style="font-size:11px;color:#7a736a;">{{ k.sub }}</span>
         </div>
       </sc-for>
     </div>
 
     <!-- Comptes et filtres : une pastille par source, avec la photo de profil des comptes Meta -->
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#FFFFFF;border:0.5px solid rgba(34,34,34,0.10);border-radius:10px;padding:8px 12px;">
-      <span style="font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;margin-right:2px;">Afficher</span>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#FFFFFF;border:1px solid #e6e0d8;border-radius:10px;padding:8px 12px;">
+      <span style="font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;margin-right:2px;">Afficher</span>
       <sc-for list="{{ chips }}" as="a" hint-placeholder-count="4">
-        <button onClick="{{ a.toggle }}" title="{{ a.tip }}" style="display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:3px 10px 3px 3px;border:1px solid {{ a.border }};background:{{ a.bg }};color:#222222;cursor:pointer;font-size:12px;font-weight:500;opacity:{{ a.op }};">
+        <button onClick="{{ a.toggle }}" title="{{ a.tip }}" style="display:inline-flex;align-items:center;gap:7px;border-radius:8px;padding:3px 10px 3px 3px;border:1px solid {{ a.border }};background:{{ a.bg }};color:#1c1a17;cursor:pointer;font-size:12px;font-weight:400;opacity:{{ a.op }};">
           <span style="position:relative;width:26px;height:26px;flex:0 0 auto;">
             <img src="{{ a.pic }}" alt="" style="width:26px;height:26px;border-radius:50%;object-fit:cover;background:#F4EFE8;display:block;">
-            <sc-if value="{{ a.hasNet }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:-3px;bottom:-3px;width:13px;height:13px;border-radius:50%;background:{{ a.netBg }};color:#FFFFFF;font-size:8px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;border:1.5px solid #FFFFFF;">{{ a.net }}</span></sc-if>
+            <sc-if value="{{ a.hasNet }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:-3px;bottom:-3px;width:13px;height:13px;border-radius:50%;background:{{ a.netBg }};color:#FFFFFF;font-size:8px;font-weight:400;line-height:1;display:flex;align-items:center;justify-content:center;border:1.5px solid #FFFFFF;">{{ a.net }}</span></sc-if>
           </span>
           <span style="max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ a.name }}</span>
-          <span style="font-size:11px;font-weight:600;color:#8D1D2C;">{{ a.count }}</span>
+          <span style="font-size:11px;font-weight:400;color:#8D1D2C;">{{ a.count }}</span>
         </button>
       </sc-for>
       <span style="margin-left:auto;display:flex;align-items:center;gap:10px;">
         <span style="font-size:11px;color:{{ mpNoteFg }};max-width:340px;line-height:1.35;text-align:right;">{{ mpNote }}</span>
-        <button onClick="{{ reloadMeta }}" title="Relit chez Meta les publications et la programmation de votre Page (et de l’Instagram) pour la période affichée." style="height:30px;padding:0 12px;border-radius:8px;border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;font-size:12px;font-weight:500;cursor:pointer;">{{ mpLabel }}</button>
+        <button onClick="{{ reloadMeta }}" title="Relit chez Meta les publications et la programmation de votre Page (et de l’Instagram) pour la période affichée." style="height:30px;padding:0 12px;border-radius:8px;border:1px solid #e6e0d8;background:#FFFFFF;font-size:12px;font-weight:400;cursor:pointer;">{{ mpLabel }}</button>
       </span>
     </div>
 
@@ -142,11 +143,11 @@
 
         <!-- MOIS -->
         <sc-if value="{{ showMonth }}" hint-placeholder-val="{{ true }}">
-          <div style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);overflow:hidden;">
-            <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));background:#F4EFE8;"><sc-for list="{{ dows }}" as="d" hint-placeholder-count="7"><span class="sf-dow" style="padding:8px 10px;font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;">{{ d }}</span></sc-for></div>
+          <div style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;overflow:hidden;">
+            <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));background:#F4EFE8;"><sc-for list="{{ dows }}" as="d" hint-placeholder-count="7"><span class="sf-dow" style="padding:8px 10px;font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;">{{ d }}</span></sc-for></div>
             <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));">
               <sc-for list="{{ cells }}" as="c" hint-placeholder-count="35">
-                <div class="sf-mcell" style="min-height:110px;border-top:0.5px solid rgba(34,34,34,0.08);border-left:0.5px solid rgba(34,34,34,0.06);padding:6px;display:flex;flex-direction:column;gap:4px;background:{{ c.bg }};box-sizing:border-box;min-width:0;">
+                <div class="sf-mcell" style="min-height:110px;border-top:1px solid #e6e0d8;border-left:1px solid #e6e0d8;padding:6px;display:flex;flex-direction:column;gap:4px;background:{{ c.bg }};box-sizing:border-box;min-width:0;">
                   <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;">
                     <span style="font-size:12px;font-weight:{{ c.w }};width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:{{ c.numBg }};color:{{ c.fg }};">{{ c.day }}</span>
                     <sc-if value="{{ c.canAdd }}" hint-placeholder-val="{{ false }}"><a class="sf-hide-mob" href="{{ c.addHref }}" title="Créer un post ce jour-là" style="width:20px;height:20px;border-radius:6px;border:0.5px solid rgba(141,29,44,0.35);color:#8D1D2C;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;text-decoration:none;">+</a></sc-if>
@@ -155,8 +156,8 @@
                     <button class="sf-mitem" onClick="{{ p.open }}" title="{{ p.tip }}" style="text-align:left;border:0.5px solid {{ p.border }};border-left:3px solid {{ p.bar }};border-radius:5px;padding:3px 5px;background:{{ p.bg }};cursor:pointer;display:flex;gap:5px;align-items:center;min-width:0;opacity:{{ p.op }};">
                       <img src="{{ p.img }}" alt="" style="width:22px;height:22px;border-radius:3px;object-fit:cover;background:#F5EFE4;flex:0 0 auto;">
                       <span class="sf-hide-mob" style="display:flex;flex-direction:column;gap:1px;min-width:0;">
-                        <span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#666666;white-space:nowrap;overflow:hidden;"><span style="width:6px;height:6px;border-radius:50%;background:{{ p.dot }};flex:0 0 auto;"></span>{{ p.time }} · {{ p.whoShort }}</span>
-                        <span style="font-size:11px;font-weight:500;color:#222222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ p.title }}</span>
+                        <span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#7a736a;white-space:nowrap;overflow:hidden;"><span style="width:6px;height:6px;border-radius:50%;background:{{ p.dot }};flex:0 0 auto;"></span>{{ p.time }} · {{ p.whoShort }}</span>
+                        <span style="font-size:11px;font-weight:400;color:#1c1a17;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ p.title }}</span>
                       </span>
                     </button>
                   </sc-for>
@@ -170,18 +171,18 @@
         <sc-if value="{{ showWeek }}" hint-placeholder-val="{{ false }}">
           <div class="sf-1col" style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;">
             <sc-for list="{{ weekCols }}" as="c" hint-placeholder-count="7">
-              <div class="sf-autoh" style="background:{{ c.bg }};border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:8px;min-height:380px;display:flex;flex-direction:column;gap:8px;min-width:0;">
-                <div style="display:flex;flex-direction:column;gap:2px;padding:2px 2px 6px;border-bottom:0.5px solid rgba(34,34,34,0.08);">
-                  <span style="font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;">{{ c.dow }}</span>
+              <div class="sf-autoh" style="background:{{ c.bg }};border-radius:10px;border:1px solid #e6e0d8;padding:8px;min-height:380px;display:flex;flex-direction:column;gap:8px;min-width:0;">
+                <div style="display:flex;flex-direction:column;gap:2px;padding:2px 2px 6px;border-bottom:1px solid #e6e0d8;">
+                  <span style="font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;">{{ c.dow }}</span>
                   <span style="display:flex;align-items:center;justify-content:space-between;gap:4px;"><span style="font-size:20px;font-weight:300;color:{{ c.fg }};">{{ c.day }}</span><sc-if value="{{ c.canAdd }}" hint-placeholder-val="{{ false }}"><a href="{{ c.addHref }}" title="Créer un post ce jour-là" style="width:22px;height:22px;border-radius:6px;border:0.5px solid rgba(141,29,44,0.35);color:#8D1D2C;font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center;text-decoration:none;">+</a></sc-if></span>
                 </div>
                 <sc-for list="{{ c.items }}" as="p" hint-placeholder-count="0">
                   <button onClick="{{ p.open }}" title="{{ p.tip }}" style="text-align:left;padding:0;border-radius:8px;border:0.5px solid {{ p.border }};border-top:3px solid {{ p.bar }};background:#FFFFFF;overflow:hidden;cursor:pointer;opacity:{{ p.op }};display:flex;flex-direction:column;">
                     <span style="display:block;width:100%;height:76px;background:#F5EFE4;"><img src="{{ p.img }}" alt="" style="width:100%;height:76px;object-fit:cover;display:block;"></span>
                     <span style="padding:6px 7px 7px;display:flex;flex-direction:column;gap:3px;min-width:0;">
-                      <span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#666666;"><span style="width:6px;height:6px;border-radius:50%;background:{{ p.dot }};flex:0 0 auto;"></span>{{ p.time }} · {{ p.who }}</span>
-                      <span style="font-size:12px;font-weight:500;line-height:1.3;color:#222222;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;">{{ p.title }}</span>
-                      <span style="align-self:flex-start;font-size:10px;font-weight:500;border-radius:999px;padding:2px 7px;background:{{ p.stBg }};color:{{ p.stFg }};">{{ p.status }}</span>
+                      <span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#7a736a;"><span style="width:6px;height:6px;border-radius:50%;background:{{ p.dot }};flex:0 0 auto;"></span>{{ p.time }} · {{ p.who }}</span>
+                      <span style="font-size:12px;font-weight:400;line-height:1.3;color:#1c1a17;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;">{{ p.title }}</span>
+                      <span style="align-self:flex-start;font-size:10px;font-weight:400;border-radius:6px;padding:2px 7px;background:{{ p.stBg }};color:{{ p.stFg }};">{{ p.status }}</span>
                     </span>
                   </button>
                 </sc-for>
@@ -192,60 +193,60 @@
 
         <!-- LISTE -->
         <sc-if value="{{ showList }}" hint-placeholder-val="{{ false }}">
-          <div style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);overflow:auto;">
+          <div style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;overflow:auto;">
             <div class="sf-list" style="display:grid;grid-template-columns:92px 50px 40px minmax(180px,2fr) minmax(130px,1fr) 110px 100px 110px;min-width:860px;">
-              <sc-for list="{{ listHead }}" as="h" hint-placeholder-count="8"><span class="sf-th" style="padding:10px;font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;border-bottom:0.5px solid rgba(34,34,34,0.10);">{{ h }}</span></sc-for>
+              <sc-for list="{{ listHead }}" as="h" hint-placeholder-count="8"><span class="sf-th" style="padding:10px;font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;border-bottom:1px solid #e6e0d8;">{{ h }}</span></sc-for>
               <sc-for list="{{ listRows }}" as="p" hint-placeholder-count="0">
                 <div onClick="{{ p.open }}" style="display:contents;cursor:pointer;">
-                  <span style="padding:8px 10px;font-size:12px;border-bottom:0.5px solid rgba(34,34,34,0.06);background:{{ p.rowBg }};">{{ p.dateLabel }}</span>
-                  <span class="sf-hide-mob" style="padding:8px 10px;font-size:12px;color:#666666;border-bottom:0.5px solid rgba(34,34,34,0.06);background:{{ p.rowBg }};">{{ p.time }}</span>
-                  <span style="padding:5px 6px;border-bottom:0.5px solid rgba(34,34,34,0.06);background:{{ p.rowBg }};"><img src="{{ p.img }}" alt="" style="width:28px;height:28px;object-fit:cover;border-radius:4px;background:#F5EFE4;display:block;"></span>
-                  <span style="padding:8px 10px;font-size:13px;font-weight:500;border-bottom:0.5px solid rgba(34,34,34,0.06);background:{{ p.rowBg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ p.title }}</span>
-                  <span class="sf-hide-mob" style="padding:8px 10px;font-size:12px;border-bottom:0.5px solid rgba(34,34,34,0.06);background:{{ p.rowBg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:{{ p.dot }};margin-right:5px;"></span>{{ p.who }}</span>
-                  <span class="sf-hide-mob" style="padding:8px 10px;font-size:12px;color:#666666;border-bottom:0.5px solid rgba(34,34,34,0.06);background:{{ p.rowBg }};">{{ p.kind }}</span>
-                  <span class="sf-hide-mob" style="padding:8px 10px;font-size:12px;color:#444444;border-bottom:0.5px solid rgba(34,34,34,0.06);background:{{ p.rowBg }};">{{ p.react }}</span>
-                  <span style="padding:7px 10px;border-bottom:0.5px solid rgba(34,34,34,0.06);background:{{ p.rowBg }};"><span style="font-size:11px;font-weight:500;border-radius:999px;padding:3px 8px;background:{{ p.stBg }};color:{{ p.stFg }};white-space:nowrap;">{{ p.status }}</span></span>
+                  <span style="padding:8px 10px;font-size:12px;border-bottom:1px solid #e6e0d8;background:{{ p.rowBg }};">{{ p.dateLabel }}</span>
+                  <span class="sf-hide-mob" style="padding:8px 10px;font-size:12px;color:#7a736a;border-bottom:1px solid #e6e0d8;background:{{ p.rowBg }};">{{ p.time }}</span>
+                  <span style="padding:5px 6px;border-bottom:1px solid #e6e0d8;background:{{ p.rowBg }};"><img src="{{ p.img }}" alt="" style="width:28px;height:28px;object-fit:cover;border-radius:4px;background:#F5EFE4;display:block;"></span>
+                  <span style="padding:8px 10px;font-size:13px;font-weight:400;border-bottom:1px solid #e6e0d8;background:{{ p.rowBg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ p.title }}</span>
+                  <span class="sf-hide-mob" style="padding:8px 10px;font-size:12px;border-bottom:1px solid #e6e0d8;background:{{ p.rowBg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:{{ p.dot }};margin-right:5px;"></span>{{ p.who }}</span>
+                  <span class="sf-hide-mob" style="padding:8px 10px;font-size:12px;color:#7a736a;border-bottom:1px solid #e6e0d8;background:{{ p.rowBg }};">{{ p.kind }}</span>
+                  <span class="sf-hide-mob" style="padding:8px 10px;font-size:12px;color:#444444;border-bottom:1px solid #e6e0d8;background:{{ p.rowBg }};">{{ p.react }}</span>
+                  <span style="padding:7px 10px;border-bottom:1px solid #e6e0d8;background:{{ p.rowBg }};"><span style="font-size:11px;font-weight:400;border-radius:6px;padding:3px 8px;background:{{ p.stBg }};color:{{ p.stFg }};white-space:nowrap;">{{ p.status }}</span></span>
                 </div>
               </sc-for>
             </div>
-            <sc-if value="{{ listEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:28px 16px;text-align:center;font-size:13px;color:#666666;">Rien sur cette période avec les filtres choisis.</div></sc-if>
+            <sc-if value="{{ listEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:28px 16px;text-align:center;font-size:13px;color:#7a736a;">Rien sur cette période avec les filtres choisis.</div></sc-if>
           </div>
         </sc-if>
-        <span style="font-size:11px;color:#666666;padding:0 2px;line-height:1.5;">Les publications de votre Page (et de l’Instagram) sont lues en direct chez Meta pour la période affichée, y compris celles faites hors de cet espace (Meta Business Suite, application) et ce qui y est programmé. Rien n’est copié.</span>
+        <span style="font-size:11px;color:#7a736a;padding:0 2px;line-height:1.5;">Les publications de votre Page (et de l’Instagram) sont lues en direct chez Meta pour la période affichée, y compris celles faites hors de cet espace (Meta Business Suite, application) et ce qui y est programmé. Rien n’est copié.</span>
       </section>
 
       <!-- Panneau latéral -->
       <aside class="sf-full" style="flex:0 1 340px;min-width:280px;display:flex;flex-direction:column;gap:12px;">
         <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ false }}">
-          <div class="sf-sheet" style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);overflow:hidden;display:flex;flex-direction:column;">
+          <div class="sf-sheet" style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;overflow:hidden;display:flex;flex-direction:column;">
             <div class="sf-sheet-img" style="position:relative;height:0;padding-bottom:75%;background:#F5EFE4;">
               <sc-if value="{{ sel.hasImg }}" hint-placeholder-val="{{ true }}"><img src="{{ sel.img }}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:{{ sel.fit }};"></sc-if>
               <button onClick="{{ closeSel }}" title="Fermer" style="position:absolute;top:8px;right:8px;width:28px;height:28px;border-radius:50%;border:none;background:#FFFFFF;cursor:pointer;font-size:14px;">×</button>
             </div>
             <div style="padding:14px 16px;display:flex;flex-direction:column;gap:9px;">
               <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
-                <span style="font-size:15px;font-weight:500;line-height:1.3;overflow-wrap:anywhere;">{{ sel.title }}</span>
-                <span style="font-size:11px;font-weight:500;border-radius:999px;padding:3px 8px;background:{{ sel.stBg }};color:{{ sel.stFg }};white-space:nowrap;">{{ sel.status }}</span>
+                <span style="font-size:15px;font-weight:400;line-height:1.3;overflow-wrap:anywhere;">{{ sel.title }}</span>
+                <span style="font-size:11px;font-weight:400;border-radius:6px;padding:3px 8px;background:{{ sel.stBg }};color:{{ sel.stFg }};white-space:nowrap;">{{ sel.status }}</span>
               </div>
               <sc-if value="{{ sel.isMeta }}" hint-placeholder-val="{{ false }}">
                 <div style="display:flex;align-items:center;gap:8px;">
                   <img src="{{ sel.accPic }}" alt="" style="width:26px;height:26px;border-radius:50%;object-fit:cover;background:#F4EFE8;">
-                  <span style="display:flex;flex-direction:column;min-width:0;"><span style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ sel.accName }}</span><span style="font-size:11px;color:#666666;">{{ sel.kind }}</span></span>
+                  <span style="display:flex;flex-direction:column;min-width:0;"><span style="font-size:12px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ sel.accName }}</span><span style="font-size:11px;color:#7a736a;">{{ sel.kind }}</span></span>
                 </div>
               </sc-if>
-              <span style="font-size:12px;color:#666666;">{{ sel.when }} · {{ sel.channels }} · {{ sel.origin }}</span>
-              <sc-if value="{{ sel.hasSerie }}" hint-placeholder-val="{{ false }}"><span style="align-self:flex-start;font-size:11px;font-weight:600;border-radius:999px;padding:3px 9px;background:#F4EFE8;color:#444444;">↻ {{ sel.serieLabel }}</span></sc-if>
-              <sc-if value="{{ sel.hasOp }}" hint-placeholder-val="{{ false }}"><a href="{{ sel.opHref }}" style="align-self:flex-start;font-size:12px;font-weight:500;border-radius:999px;padding:3px 10px;background:#F4EFE8;color:#444444;text-decoration:none;">Opération · {{ sel.opName }} →</a></sc-if>
-              <sc-if value="{{ sel.hasPromo }}" hint-placeholder-val="{{ false }}"><span style="align-self:flex-start;font-size:12px;font-weight:600;border-radius:6px;padding:3px 8px;background:#8D1D2C;color:#FFFFFF;">{{ sel.promo }}</span></sc-if>
-              <sc-if value="{{ sel.hasRefus }}" hint-placeholder-val="{{ false }}"><div style="background:#F6DCDF;color:#8D1D2C;border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.5;"><strong style="font-weight:600;">Refusé par le réseau :</strong> {{ sel.refus }}</div></sc-if>
+              <span style="font-size:12px;color:#7a736a;">{{ sel.when }} · {{ sel.channels }} · {{ sel.origin }}</span>
+              <sc-if value="{{ sel.hasSerie }}" hint-placeholder-val="{{ false }}"><span style="align-self:flex-start;font-size:11px;font-weight:400;border-radius:6px;padding:3px 9px;background:#F4EFE8;color:#444444;">↻ {{ sel.serieLabel }}</span></sc-if>
+              <sc-if value="{{ sel.hasOp }}" hint-placeholder-val="{{ false }}"><a href="{{ sel.opHref }}" style="align-self:flex-start;font-size:12px;font-weight:400;border-radius:8px;padding:3px 10px;background:#F4EFE8;color:#444444;text-decoration:none;">Opération · {{ sel.opName }} →</a></sc-if>
+              <sc-if value="{{ sel.hasPromo }}" hint-placeholder-val="{{ false }}"><span style="align-self:flex-start;font-size:12px;font-weight:400;border-radius:6px;padding:3px 8px;background:#8D1D2C;color:#FFFFFF;">{{ sel.promo }}</span></sc-if>
+              <sc-if value="{{ sel.hasRefus }}" hint-placeholder-val="{{ false }}"><div style="background:#F6DCDF;color:#8D1D2C;border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.5;"><strong style="font-weight:400;">Refusé par le réseau :</strong> {{ sel.refus }}</div></sc-if>
               <sc-if value="{{ sel.hasReason }}" hint-placeholder-val="{{ false }}"><div style="background:#F6DCDF;color:#8D1D2C;border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.5;">{{ sel.reason }}</div></sc-if>
               <sc-if value="{{ sel.pending }}" hint-placeholder-val="{{ false }}"><div style="background:#FCE7C8;color:#7A4100;border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.5;">En attente de validation par le réseau. S’il est validé, il part à l’heure prévue.</div></sc-if>
               <sc-if value="{{ sel.hasTiles }}" hint-placeholder-val="{{ false }}">
                 <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;">
                   <sc-for list="{{ sel.tiles }}" as="t" hint-placeholder-count="3">
                     <div title="{{ t.tip }}" style="background:{{ t.bg }};border-radius:8px;padding:7px 8px;display:flex;flex-direction:column;gap:2px;min-width:0;">
-                      <span style="font-size:16px;font-weight:600;color:{{ t.fg }};line-height:1.1;">{{ t.value }}</span>
-                      <span style="font-size:10px;line-height:1.25;color:#666666;">{{ t.label }}</span>
+                      <span style="font-size:16px;font-weight:400;color:{{ t.fg }};line-height:1.1;">{{ t.value }}</span>
+                      <span style="font-size:10px;line-height:1.25;color:#7a736a;">{{ t.label }}</span>
                     </div>
                   </sc-for>
                 </div>
@@ -253,39 +254,39 @@
               <sc-if value="{{ sel.hasStatsNote }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#8A4B00;line-height:1.4;">{{ sel.statsNote }}</span></sc-if>
               <p style="margin:0;font-size:13px;line-height:1.5;color:#1c1e21;white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto;">{{ sel.text }}</p>
               <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                <sc-if value="{{ sel.hasLink }}" hint-placeholder-val="{{ false }}"><a href="{{ sel.link }}" target="_blank" rel="noopener" style="border-radius:8px;padding:8px 12px;font-size:13px;font-weight:500;background:#232220;color:#FFFFFF;text-decoration:none;">{{ sel.linkLabel }}</a></sc-if>
-                <sc-if value="{{ sel.canCancelSerie }}" hint-placeholder-val="{{ false }}"><button onClick="{{ cancelSerie }}" style="border:0.5px solid rgba(141,29,44,0.45);background:#FFFFFF;color:#8D1D2C;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:500;cursor:pointer;">Annuler toute la série</button></sc-if>
-                <sc-if value="{{ sel.canCancel }}" hint-placeholder-val="{{ false }}"><button onClick="{{ cancel }}" style="border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:500;cursor:pointer;">{{ sel.cancelLabel }}</button></sc-if>
-                <sc-if value="{{ sel.canRedo }}" hint-placeholder-val="{{ false }}"><a href="{{ sel.redoHref }}" style="border-radius:8px;padding:8px 12px;font-size:13px;font-weight:500;background:#8D1D2C;color:#FFFFFF;text-decoration:none;">Refaire avec ce modèle</a></sc-if>
+                <sc-if value="{{ sel.hasLink }}" hint-placeholder-val="{{ false }}"><a href="{{ sel.link }}" target="_blank" rel="noopener" style="border-radius:8px;padding:8px 12px;font-size:13px;font-weight:400;background:#1c1a17;color:#FFFFFF;text-decoration:none;">{{ sel.linkLabel }}</a></sc-if>
+                <sc-if value="{{ sel.canCancelSerie }}" hint-placeholder-val="{{ false }}"><button onClick="{{ cancelSerie }}" style="border:0.5px solid rgba(141,29,44,0.45);background:#FFFFFF;color:#8D1D2C;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:400;cursor:pointer;">Annuler toute la série</button></sc-if>
+                <sc-if value="{{ sel.canCancel }}" hint-placeholder-val="{{ false }}"><button onClick="{{ cancel }}" style="border:1px solid #e6e0d8;background:#FFFFFF;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:400;cursor:pointer;">{{ sel.cancelLabel }}</button></sc-if>
+                <sc-if value="{{ sel.canRedo }}" hint-placeholder-val="{{ false }}"><a href="{{ sel.redoHref }}" style="border-radius:8px;padding:8px 12px;font-size:13px;font-weight:400;background:#8D1D2C;color:#FFFFFF;text-decoration:none;">Refaire avec ce modèle</a></sc-if>
               </div>
               <sc-if value="{{ sel.hasBoostState }}" hint-placeholder-val="{{ false }}"><div style="background:{{ sel.boostBg }};color:{{ sel.boostFg }};border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.5;">{{ sel.boostState }}</div></sc-if>
               <sc-if value="{{ sel.canBoost }}" hint-placeholder-val="{{ false }}">
-                <div style="border-top:0.5px solid rgba(34,34,34,0.08);padding-top:10px;display:flex;flex-direction:column;gap:8px;">
-                  <sc-if value="{{ sel.boostClosed }}" hint-placeholder-val="{{ true }}"><button onClick="{{ boostOpen }}" style="align-self:flex-start;border:0.5px solid rgba(141,29,44,0.45);background:#FFFFFF;color:#8D1D2C;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:500;cursor:pointer;">Proposer au réseau de booster ce post</button></sc-if>
+                <div style="border-top:1px solid #e6e0d8;padding-top:10px;display:flex;flex-direction:column;gap:8px;">
+                  <sc-if value="{{ sel.boostClosed }}" hint-placeholder-val="{{ true }}"><button onClick="{{ boostOpen }}" style="align-self:flex-start;border:0.5px solid rgba(141,29,44,0.45);background:#FFFFFF;color:#8D1D2C;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:400;cursor:pointer;">Proposer au réseau de booster ce post</button></sc-if>
                   <sc-if value="{{ sel.boostOpened }}" hint-placeholder-val="{{ false }}">
                     <span style="font-size:12px;color:#444444;line-height:1.45;">{{ sel.boostHint }}</span>
-                    <textarea value="{{ sel.boostMsg }}" onChange="{{ setBoostMsg }}" rows="2" placeholder="Pourquoi le booster ? (facultatif)" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:8px 10px;outline:none;resize:vertical;line-height:1.45;font-family:inherit;"></textarea>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;"><button onClick="{{ proposeBoost }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:500;cursor:pointer;">{{ sel.boostSendLabel }}</button><button onClick="{{ boostCancel }}" style="border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:500;cursor:pointer;">Annuler</button></div>
+                    <textarea value="{{ sel.boostMsg }}" onChange="{{ setBoostMsg }}" rows="2" placeholder="Pourquoi le booster ? (facultatif)" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:8px;padding:8px 10px;outline:none;resize:vertical;line-height:1.45;font-family:inherit;"></textarea>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;"><button onClick="{{ proposeBoost }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:400;cursor:pointer;">{{ sel.boostSendLabel }}</button><button onClick="{{ boostCancel }}" style="border:1px solid #e6e0d8;background:#FFFFFF;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:400;cursor:pointer;">Annuler</button></div>
                     <sc-if value="{{ sel.hasBoostErr }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#8D1D2C;line-height:1.45;">{{ sel.boostErr }}</span></sc-if>
                   </sc-if>
                 </div>
               </sc-if>
-              <sc-if value="{{ sel.isMeta }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#666666;line-height:1.45;">{{ sel.metaNote }}</span></sc-if>
+              <sc-if value="{{ sel.isMeta }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#7a736a;line-height:1.45;">{{ sel.metaNote }}</span></sc-if>
             </div>
           </div>
         </sc-if>
-        <div style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:14px 16px;display:flex;flex-direction:column;gap:8px;">
-          <span style="font-size:13px;font-weight:500;">À venir</span>
-          <sc-if value="{{ noNext }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#666666;">Rien de prévu. Lancez-vous : « Publier un post ».</span></sc-if>
+        <div style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:14px 16px;display:flex;flex-direction:column;gap:8px;">
+          <span style="font-size:13px;font-weight:400;">À venir</span>
+          <sc-if value="{{ noNext }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#7a736a;">Rien de prévu. Lancez-vous : « Publier un post ».</span></sc-if>
           <sc-for list="{{ upcoming }}" as="u" hint-placeholder-count="0">
-            <button onClick="{{ u.open }}" style="text-align:left;border:none;background:transparent;padding:6px 0;border-top:0.5px solid rgba(34,34,34,0.06);cursor:pointer;display:flex;gap:10px;align-items:center;">
+            <button onClick="{{ u.open }}" style="text-align:left;border:none;background:transparent;padding:6px 0;border-top:1px solid #e6e0d8;cursor:pointer;display:flex;gap:10px;align-items:center;">
               <img src="{{ u.img }}" alt="" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#F5EFE4;flex:0 0 auto;">
-              <span style="display:flex;flex-direction:column;gap:1px;min-width:0;flex:1 1 auto;"><span style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ u.title }}</span><span style="font-size:11px;color:#666666;">{{ u.when }} · {{ u.who }}</span></span>
-              <span style="font-size:10px;font-weight:500;border-radius:999px;padding:2px 7px;background:{{ u.stBg }};color:{{ u.stFg }};white-space:nowrap;">{{ u.status }}</span>
+              <span style="display:flex;flex-direction:column;gap:1px;min-width:0;flex:1 1 auto;"><span style="font-size:12px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ u.title }}</span><span style="font-size:11px;color:#7a736a;">{{ u.when }} · {{ u.who }}</span></span>
+              <span style="font-size:10px;font-weight:400;border-radius:6px;padding:2px 7px;background:{{ u.stBg }};color:{{ u.stFg }};white-space:nowrap;">{{ u.status }}</span>
             </button>
           </sc-for>
         </div>
-        <div style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px 14px;">
+        <div style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px 14px;">
           <sc-for list="{{ legend }}" as="l" hint-placeholder-count="4"><span style="display:flex;align-items:center;gap:6px;font-size:11px;color:#444444;"><span style="width:10px;height:10px;border-radius:2px;background:{{ l.c }};"></span>{{ l.n }}</span></sc-for>
         </div>
       </aside>
@@ -295,28 +296,28 @@
     <!-- SUIVI : abonnés de la Page face au budget publicitaire et aux publications, jour par jour -->
     <sc-if value="{{ isSuivi }}" hint-placeholder-val="{{ false }}">
       <div style="display:flex;flex-direction:column;gap:14px;">
-        <sc-if value="{{ sv.loading }}" hint-placeholder-val="{{ false }}"><div style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:40px 20px;text-align:center;font-size:13px;color:#666666;">Lecture de votre Page chez Meta…</div></sc-if>
-        <sc-if value="{{ sv.hasMessage }}" hint-placeholder-val="{{ false }}"><div style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:28px 20px;text-align:center;font-size:13px;color:#666666;line-height:1.5;">{{ sv.message }}</div></sc-if>
+        <sc-if value="{{ sv.loading }}" hint-placeholder-val="{{ false }}"><div style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:40px 20px;text-align:center;font-size:13px;color:#7a736a;">Lecture de votre Page chez Meta…</div></sc-if>
+        <sc-if value="{{ sv.hasMessage }}" hint-placeholder-val="{{ false }}"><div style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:28px 20px;text-align:center;font-size:13px;color:#7a736a;line-height:1.5;">{{ sv.message }}</div></sc-if>
         <sc-if value="{{ sv.ready }}" hint-placeholder-val="{{ true }}">
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
             <sc-for list="{{ sv.kpis }}" as="k" hint-placeholder-count="5">
-              <div style="background:#FFFFFF;border:0.5px solid rgba(34,34,34,0.10);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;">
-                <span style="font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;">{{ k.label }}</span>
-                <span style="font-size:24px;font-weight:300;line-height:1.1;color:{{ k.color }};">{{ k.value }}</span>
-                <span style="font-size:11px;color:#666666;">{{ k.sub }}</span>
+              <div style="background:#FFFFFF;border:1px solid #e6e0d8;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;">
+                <span style="font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;">{{ k.label }}</span>
+                <span style="font-size:24px;font-weight:700;line-height:1.1;color:{{ k.color }};">{{ k.value }}</span>
+                <span style="font-size:11px;color:#7a736a;">{{ k.sub }}</span>
               </div>
             </sc-for>
           </div>
-          <div style="background:#FFFFFF;border:0.5px solid rgba(34,34,34,0.10);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:10px;">
+          <div style="background:#FFFFFF;border:1px solid #e6e0d8;border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:10px;">
             <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;">
-              <span style="font-size:14px;font-weight:500;">Jour par jour</span>
-              <span style="font-size:11px;color:#666666;">bordeaux = budget publicitaire · bleu = publications de la Page · vert = abonnés gagnés · rouge = perdus</span>
+              <span style="font-size:14px;font-weight:400;">Jour par jour</span>
+              <span style="font-size:11px;color:#7a736a;">bordeaux = budget publicitaire · bleu = publications de la Page · vert = abonnés gagnés · rouge = perdus</span>
             </div>
             <div style="display:flex;flex-direction:column;gap:4px;">
               <div style="display:flex;align-items:flex-end;gap:3px;height:110px;">
                 <sc-for list="{{ sv.days }}" as="d" hint-placeholder-count="0"><span onClick="{{ d.open }}" title="{{ d.tip }}" style="flex:1 1 0;min-width:2px;height:{{ d.spendH }};background:#8D1D2C;border-radius:3px 3px 0 0;opacity:0.85;cursor:pointer;"></span></sc-for>
               </div>
-              <div style="display:flex;align-items:center;gap:3px;height:20px;border-top:1px solid rgba(34,34,34,0.25);border-bottom:1px solid rgba(34,34,34,0.08);">
+              <div style="display:flex;align-items:center;gap:3px;height:20px;border-top:1px solid rgba(34,34,34,0.25);border-bottom:1px solid #e6e0d8;">
                 <sc-for list="{{ sv.days }}" as="d" hint-placeholder-count="0"><span onClick="{{ d.open }}" title="{{ d.tip }}" style="flex:1 1 0;min-width:2px;height:20px;display:flex;align-items:center;justify-content:center;cursor:pointer;"><span style="width:{{ d.pubW }};height:{{ d.pubW }};border-radius:50%;background:#1877F2;"></span></span></sc-for>
               </div>
               <div style="display:flex;align-items:flex-start;gap:3px;height:64px;">
@@ -324,33 +325,33 @@
               </div>
               <div style="display:flex;justify-content:space-between;font-size:10px;color:#8A847C;"><span>{{ sv.from }}</span><span>cliquez un jour pour l’ouvrir au calendrier</span><span>{{ sv.to }}</span></div>
             </div>
-            <sc-for list="{{ sv.insights }}" as="t" hint-placeholder-count="2"><span style="font-size:13px;color:#222222;line-height:1.5;">{{ t }}</span></sc-for>
+            <sc-for list="{{ sv.insights }}" as="t" hint-placeholder-count="2"><span style="font-size:13px;color:#1c1a17;line-height:1.5;">{{ t }}</span></sc-for>
             <sc-if value="{{ sv.hasMotif }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;line-height:1.45;color:#8A4B00;background:#FCE7C8;border-radius:6px;padding:6px 8px;">{{ sv.motif }}</span></sc-if>
           </div>
         </sc-if>
-        <span style="font-size:11px;color:#666666;line-height:1.45;">Chiffres lus en direct chez Meta pour la Page Facebook de votre boutique ; les publications sont celles de votre calendrier (lues chez Meta et publiées depuis cet espace). Le budget est celui des publicités du réseau qui mettent votre boutique en avant.</span>
+        <span style="font-size:11px;color:#7a736a;line-height:1.45;">Chiffres lus en direct chez Meta pour la Page Facebook de votre boutique ; les publications sont celles de votre calendrier (lues chez Meta et publiées depuis cet espace). Le budget est celui des publicités du réseau qui mettent votre boutique en avant.</span>
       </div>
     </sc-if>
 
     <!-- ANALYSE : vues de la Page et de l'Instagram jour par jour, vues par publication, évolution des abonnés -->
     <sc-if value="{{ isAnalyse }}" hint-placeholder-val="{{ false }}">
       <div style="display:flex;flex-direction:column;gap:14px;">
-        <sc-if value="{{ va.loading }}" hint-placeholder-val="{{ false }}"><div style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:40px 20px;text-align:center;font-size:13px;color:#666666;">Lecture de vos vues et de vos abonnés chez Meta…</div></sc-if>
-        <sc-if value="{{ va.hasMessage }}" hint-placeholder-val="{{ false }}"><div style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:28px 20px;text-align:center;font-size:13px;color:#666666;line-height:1.5;">{{ va.message }}</div></sc-if>
+        <sc-if value="{{ va.loading }}" hint-placeholder-val="{{ false }}"><div style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:40px 20px;text-align:center;font-size:13px;color:#7a736a;">Lecture de vos vues et de vos abonnés chez Meta…</div></sc-if>
+        <sc-if value="{{ va.hasMessage }}" hint-placeholder-val="{{ false }}"><div style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:28px 20px;text-align:center;font-size:13px;color:#7a736a;line-height:1.5;">{{ va.message }}</div></sc-if>
         <sc-if value="{{ va.ready }}" hint-placeholder-val="{{ true }}">
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;">
             <sc-for list="{{ va.kpis }}" as="k" hint-placeholder-count="5">
-              <div style="background:#FFFFFF;border:0.5px solid rgba(34,34,34,0.10);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;min-width:0;">
-                <span style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;"><span style="width:8px;height:8px;border-radius:50%;background:{{ k.dot }};flex:0 0 auto;"></span>{{ k.label }}</span>
-                <span style="font-size:24px;font-weight:300;line-height:1.1;color:#222222;">{{ k.value }}</span>
-                <span style="font-size:11px;color:#666666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ k.sub }}">{{ k.sub }}</span>
+              <div style="background:#FFFFFF;border:1px solid #e6e0d8;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;min-width:0;">
+                <span style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;"><span style="width:8px;height:8px;border-radius:50%;background:{{ k.dot }};flex:0 0 auto;"></span>{{ k.label }}</span>
+                <span style="font-size:24px;font-weight:700;line-height:1.1;color:#1c1a17;">{{ k.value }}</span>
+                <span style="font-size:11px;color:#7a736a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ k.sub }}">{{ k.sub }}</span>
               </div>
             </sc-for>
           </div>
           <sc-for list="{{ va.cards }}" as="ch" hint-placeholder-count="0">
-            <div style="background:#FFFFFF;border:0.5px solid rgba(34,34,34,0.10);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:10px;min-width:0;">
+            <div style="background:#FFFFFF;border:1px solid #e6e0d8;border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:10px;min-width:0;">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px 16px;flex-wrap:wrap;">
-                <span style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-size:14px;font-weight:500;color:#222222;">{{ ch.title }}</span><span style="font-size:11px;color:#666666;line-height:1.4;">{{ ch.sub }}</span></span>
+                <span style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-size:14px;font-weight:400;color:#1c1a17;">{{ ch.title }}</span><span style="font-size:11px;color:#7a736a;line-height:1.4;">{{ ch.sub }}</span></span>
                 <span style="display:flex;gap:6px 14px;flex-wrap:wrap;align-items:center;">
                   <sc-for list="{{ ch.legend }}" as="l" hint-placeholder-count="2"><span style="display:flex;align-items:center;gap:6px;font-size:11px;color:#444444;"><span style="width:{{ l.w }};height:{{ l.h }};border-radius:{{ l.r }};background:{{ l.c }};box-shadow:{{ l.ring }};flex:0 0 auto;"></span>{{ l.n }}</span></sc-for>
                 </span>
@@ -372,8 +373,8 @@
                   <sc-for list="{{ ch.xl }}" as="x" hint-placeholder-count="5"><span style="position:absolute;bottom:0;left:{{ x.left }};transform:translateX(-50%);font-size:10px;line-height:12px;color:#8A847C;white-space:nowrap;">{{ x.label }}</span></sc-for>
                   <div onPointerMove="{{ ch.move }}" onPointerLeave="{{ ch.leave }}" onClick="{{ ch.click }}" style="position:absolute;left:44px;right:10px;top:0;bottom:0;cursor:pointer;touch-action:pan-y;"></div>
                   <sc-if value="{{ ch.hasTip }}" hint-placeholder-val="{{ false }}">
-                    <div style="position:absolute;top:2px;left:{{ ch.crossLeft }};transform:{{ ch.tipX }};background:#232220;color:#FFFFFF;border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.45;pointer-events:none;z-index:5;min-width:150px;max-width:260px;box-shadow:0 4px 14px rgba(0,0,0,0.18);">
-                      <div style="font-weight:600;margin-bottom:2px;">{{ ch.tipTitle }}</div>
+                    <div style="position:absolute;top:2px;left:{{ ch.crossLeft }};transform:{{ ch.tipX }};background:#1c1a17;color:#FFFFFF;border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.45;pointer-events:none;z-index:5;min-width:150px;max-width:260px;box-shadow:0 4px 14px rgba(0,0,0,0.18);">
+                      <div style="font-weight:400;margin-bottom:2px;">{{ ch.tipTitle }}</div>
                       <sc-for list="{{ ch.tipLines }}" as="t" hint-placeholder-count="2"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ t }}</div></sc-for>
                     </div>
                   </sc-if>
@@ -398,8 +399,8 @@
                   <sc-for list="{{ ch.xl }}" as="x" hint-placeholder-count="5"><span style="position:absolute;bottom:0;left:{{ x.left }};transform:translateX(-50%);font-size:10px;line-height:12px;color:#8A847C;white-space:nowrap;">{{ x.label }}</span></sc-for>
                   <div onPointerMove="{{ ch.move }}" onPointerLeave="{{ ch.leave }}" onClick="{{ ch.click }}" style="position:absolute;left:44px;right:10px;top:0;bottom:0;cursor:pointer;touch-action:pan-y;"></div>
                   <sc-if value="{{ ch.hasTip }}" hint-placeholder-val="{{ false }}">
-                    <div style="position:absolute;top:2px;left:{{ ch.crossLeft }};transform:{{ ch.tipX }};background:#232220;color:#FFFFFF;border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.45;pointer-events:none;z-index:5;min-width:150px;max-width:260px;box-shadow:0 4px 14px rgba(0,0,0,0.18);">
-                      <div style="font-weight:600;margin-bottom:2px;">{{ ch.tipTitle }}</div>
+                    <div style="position:absolute;top:2px;left:{{ ch.crossLeft }};transform:{{ ch.tipX }};background:#1c1a17;color:#FFFFFF;border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.45;pointer-events:none;z-index:5;min-width:150px;max-width:260px;box-shadow:0 4px 14px rgba(0,0,0,0.18);">
+                      <div style="font-weight:400;margin-bottom:2px;">{{ ch.tipTitle }}</div>
                       <sc-for list="{{ ch.tipLines }}" as="t" hint-placeholder-count="2"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ t }}</div></sc-for>
                     </div>
                   </sc-if>
@@ -410,51 +411,51 @@
               <sc-if value="{{ ch.isTop }}" hint-placeholder-val="{{ false }}">
                 <div style="display:flex;flex-direction:column;gap:2px;">
                   <sc-for list="{{ ch.rows }}" as="r" hint-placeholder-count="0">
-                    <a href="{{ r.link }}" target="_blank" rel="noopener" title="{{ r.tip }}" style="display:grid;grid-template-columns:36px minmax(0,1.3fr) minmax(90px,2fr) 70px;gap:10px;align-items:center;padding:5px 4px;border-radius:8px;text-decoration:none;color:#222222;" style-hover="background:#F7F3EE;">
+                    <a href="{{ r.link }}" target="_blank" rel="noopener" title="{{ r.tip }}" style="display:grid;grid-template-columns:36px minmax(0,1.3fr) minmax(90px,2fr) 70px;gap:10px;align-items:center;padding:5px 4px;border-radius:8px;text-decoration:none;color:#1c1a17;" style-hover="background:#F7F3EE;">
                       <img src="{{ r.img }}" alt="" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#F5EFE4;display:block;">
                       <span style="display:flex;flex-direction:column;gap:1px;min-width:0;">
-                        <span style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ r.title }}</span>
-                        <span style="display:flex;align-items:center;gap:5px;font-size:11px;color:#666666;white-space:nowrap;overflow:hidden;"><span style="width:7px;height:7px;border-radius:50%;background:{{ r.c }};flex:0 0 auto;"></span>{{ r.meta }}</span>
+                        <span style="font-size:12px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ r.title }}</span>
+                        <span style="display:flex;align-items:center;gap:5px;font-size:11px;color:#7a736a;white-space:nowrap;overflow:hidden;"><span style="width:7px;height:7px;border-radius:50%;background:{{ r.c }};flex:0 0 auto;"></span>{{ r.meta }}</span>
                       </span>
                       <span style="height:10px;border-radius:0 4px 4px 0;background:#F1ECE5;overflow:hidden;display:block;"><span style="display:block;height:100%;width:{{ r.w }};background:{{ r.c }};border-radius:0 4px 4px 0;"></span></span>
-                      <span style="font-size:13px;font-weight:500;text-align:right;color:#222222;">{{ r.value }}</span>
+                      <span style="font-size:13px;font-weight:400;text-align:right;color:#1c1a17;">{{ r.value }}</span>
                     </a>
                   </sc-for>
-                  <sc-if value="{{ ch.empty }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#666666;padding:8px 4px;">Aucune publication sur la période.</span></sc-if>
+                  <sc-if value="{{ ch.empty }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#7a736a;padding:8px 4px;">Aucune publication sur la période.</span></sc-if>
                 </div>
               </sc-if>
               <sc-if value="{{ ch.hasNote }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;line-height:1.45;color:#8A4B00;background:#FCE7C8;border-radius:6px;padding:6px 8px;">{{ ch.note }}</span></sc-if>
             </div>
           </sc-for>
-          <div style="background:#FFFFFF;border:0.5px solid rgba(34,34,34,0.10);border-radius:12px;padding:14px 18px;display:flex;flex-direction:column;gap:6px;">
-            <span style="font-size:14px;font-weight:500;">Ce qu’il faut retenir</span>
-            <sc-for list="{{ va.insights }}" as="t" hint-placeholder-count="3"><span style="font-size:13px;color:#222222;line-height:1.5;">{{ t }}</span></sc-for>
+          <div style="background:#FFFFFF;border:1px solid #e6e0d8;border-radius:12px;padding:14px 18px;display:flex;flex-direction:column;gap:6px;">
+            <span style="font-size:14px;font-weight:400;">Ce qu’il faut retenir</span>
+            <sc-for list="{{ va.insights }}" as="t" hint-placeholder-count="3"><span style="font-size:13px;color:#1c1a17;line-height:1.5;">{{ t }}</span></sc-for>
           </div>
-          <details style="background:#FFFFFF;border:0.5px solid rgba(34,34,34,0.10);border-radius:12px;padding:12px 18px;">
-            <summary style="cursor:pointer;font-size:13px;font-weight:500;color:#444444;">Voir les chiffres jour par jour</summary>
+          <details style="background:#FFFFFF;border:1px solid #e6e0d8;border-radius:12px;padding:12px 18px;">
+            <summary style="cursor:pointer;font-size:13px;font-weight:400;color:#444444;">Voir les chiffres jour par jour</summary>
             <div style="overflow:auto;margin-top:10px;">
               <div style="display:grid;grid-template-columns:110px repeat(5,minmax(86px,1fr)) minmax(160px,2fr);min-width:820px;">
-                <sc-for list="{{ va.head }}" as="h" hint-placeholder-count="7"><span style="padding:8px;font-size:11px;font-weight:500;letter-spacing:0.04em;text-transform:uppercase;color:#666666;border-bottom:0.5px solid rgba(34,34,34,0.12);">{{ h }}</span></sc-for>
+                <sc-for list="{{ va.head }}" as="h" hint-placeholder-count="7"><span style="padding:8px;font-size:11px;font-weight:400;letter-spacing:0.04em;text-transform:uppercase;color:#7a736a;border-bottom:1px solid #e6e0d8;">{{ h }}</span></sc-for>
                 <sc-for list="{{ va.rows }}" as="r" hint-placeholder-count="0">
-                  <span style="padding:6px 8px;font-size:12px;border-bottom:0.5px solid rgba(34,34,34,0.06);">{{ r.jour }}</span>
-                  <span style="padding:6px 8px;font-size:12px;text-align:right;border-bottom:0.5px solid rgba(34,34,34,0.06);">{{ r.vf }}</span>
-                  <span style="padding:6px 8px;font-size:12px;text-align:right;border-bottom:0.5px solid rgba(34,34,34,0.06);">{{ r.vi }}</span>
-                  <span style="padding:6px 8px;font-size:12px;text-align:right;border-bottom:0.5px solid rgba(34,34,34,0.06);">{{ r.g }}</span>
-                  <span style="padding:6px 8px;font-size:12px;text-align:right;border-bottom:0.5px solid rgba(34,34,34,0.06);">{{ r.p }}</span>
-                  <span style="padding:6px 8px;font-size:12px;text-align:right;border-bottom:0.5px solid rgba(34,34,34,0.06);">{{ r.gi }}</span>
-                  <span style="padding:6px 8px;font-size:12px;color:#444444;border-bottom:0.5px solid rgba(34,34,34,0.06);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ r.pubs }}">{{ r.pubs }}</span>
+                  <span style="padding:6px 8px;font-size:12px;border-bottom:1px solid #e6e0d8;">{{ r.jour }}</span>
+                  <span style="padding:6px 8px;font-size:12px;text-align:right;border-bottom:1px solid #e6e0d8;">{{ r.vf }}</span>
+                  <span style="padding:6px 8px;font-size:12px;text-align:right;border-bottom:1px solid #e6e0d8;">{{ r.vi }}</span>
+                  <span style="padding:6px 8px;font-size:12px;text-align:right;border-bottom:1px solid #e6e0d8;">{{ r.g }}</span>
+                  <span style="padding:6px 8px;font-size:12px;text-align:right;border-bottom:1px solid #e6e0d8;">{{ r.p }}</span>
+                  <span style="padding:6px 8px;font-size:12px;text-align:right;border-bottom:1px solid #e6e0d8;">{{ r.gi }}</span>
+                  <span style="padding:6px 8px;font-size:12px;color:#444444;border-bottom:1px solid #e6e0d8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ r.pubs }}">{{ r.pubs }}</span>
                 </sc-for>
               </div>
             </div>
           </details>
         </sc-if>
-        <span style="font-size:11px;color:#666666;line-height:1.45;">{{ va.foot }}</span>
+        <span style="font-size:11px;color:#7a736a;line-height:1.45;">{{ va.foot }}</span>
       </div>
     </sc-if>
     </sc-if>
   </main>
   <sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
-    <div style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#232220;color:#FFFFFF;border-radius:8px;padding:11px 16px;font-size:13px;z-index:60;max-width:min(640px,92vw);">{{ toast }}</div>
+    <div style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1c1a17;color:#FFFFFF;border-radius:8px;padding:11px 16px;font-size:13px;z-index:60;max-width:min(640px,92vw);">{{ toast }}</div>
   </sc-if>
 </div>
 </x-dc>
@@ -612,11 +613,11 @@ class Component extends DCLogic {
         + (mP > mN ? ' Publier vous fait gagner ' + fmt(mP - mN, 1) + ' abonné(s) de plus par jour.' : '')] : []);
     const nPubs = Object.values(pubs).reduce((t, l) => t + l.length, 0);
     const kpis = [
-      { label: 'Facebook', value: fmt(fb.followers), sub: fb.net == null ? 'abonnés' : 'abonnés · +' + fmt(fb.gagnes) + ' / −' + fmt(fb.perdus) + ' sur ' + r.jours + ' j', color: '#222222' },
+      { label: 'Facebook', value: fmt(fb.followers), sub: fb.net == null ? 'abonnés' : 'abonnés · +' + fmt(fb.gagnes) + ' / −' + fmt(fb.perdus) + ' sur ' + r.jours + ' j', color: '#1c1a17' },
       { label: 'Gagnés nets · ' + r.jours + ' j', value: signed(x.abonnesNet), sub: ig ? 'Facebook + Instagram' : 'Page Facebook de la boutique', color: col(x.abonnesNet) },
       { label: 'Publications de ma Page', value: fmt(nPubs), sub: Object.keys(pubs).length + ' jour(s) avec publication · ' + r.jours + ' j', color: '#1877F2' },
-      { label: 'Budget publicitaire', value: money(x.depense), sub: Object.keys(dep).length + ' jour(s) de diffusion', color: '#222222' },
-      { label: 'Coût par abonné', value: x.coutParAbonne == null ? '—' : money(x.coutParAbonne, 2), sub: 'budget ÷ abonnés nets', color: '#222222' },
+      { label: 'Budget publicitaire', value: money(x.depense), sub: Object.keys(dep).length + ' jour(s) de diffusion', color: '#1c1a17' },
+      { label: 'Coût par abonné', value: x.coutParAbonne == null ? '—' : money(x.coutParAbonne, 2), sub: 'budget ÷ abonnés nets', color: '#1c1a17' },
     ];
     const motifs = [fb.motif, ig && ig.motif].filter(Boolean);
     return Object.assign(base, { ready: true, kpis, days: ds, insights, from: SF.dShort(r.du), to: SF.dShort(r.au), hasMotif: motifs.length > 0, motif: motifs.join(' · '),
@@ -774,17 +775,17 @@ class Component extends DCLogic {
     const m0 = SF.d2(cursor), cells = [];
     for (let d = du; d <= au; d = SF.addDays(d, 1)) {
       const dd = SF.d2(d), inMonth = dd.getMonth() === m0.getMonth(), today = d === st.today;
-      cells.push(Object.assign({ day: dd.getDate(), bg: inMonth ? '#FFFFFF' : '#FAF8F5', fg: today ? '#FFFFFF' : inMonth ? '#222222' : '#B8B2A8', numBg: today ? '#8D1D2C' : 'transparent', w: today ? 700 : 400, items: byDay(d) }, addOf(d)));
+      cells.push(Object.assign({ day: dd.getDate(), bg: inMonth ? '#FFFFFF' : '#FAF8F5', fg: today ? '#FFFFFF' : inMonth ? '#1c1a17' : '#B8B2A8', numBg: today ? '#8D1D2C' : 'transparent', w: today ? 700 : 400, items: byDay(d) }, addOf(d)));
     }
     const weekCols = s.view === 'week' ? Array.from({ length: 7 }, (_, i) => { const d = SF.addDays(du, i), dd = SF.d2(d);
-      return Object.assign({ dow: SF.DAYS[dd.getDay()], day: dd.getDate(), bg: d === st.today ? '#FBF3F4' : '#FFFFFF', fg: d === st.today ? '#8D1D2C' : '#222222', items: byDay(d) }, addOf(d)); }) : [];
+      return Object.assign({ dow: SF.DAYS[dd.getDay()], day: dd.getDate(), bg: d === st.today ? '#FBF3F4' : '#FFFFFF', fg: d === st.today ? '#8D1D2C' : '#1c1a17', items: byDay(d) }, addOf(d)); }) : [];
     const listRows = shown.filter(p => s.view === 'list' ? p.date.slice(0, 7) === cursor.slice(0, 7) : inP(p)).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))
       .map(p => Object.assign(view(p), { dateLabel: SF.dLabel(p.date), rowBg: p.id === s.selId ? '#FBF3F4' : '#FFFFFF' }));
 
     // Pastilles
     const countIn = (k) => all.filter(p => srcOf(p) === k && (s.view === 'list' ? p.date.slice(0, 7) === cursor.slice(0, 7) : inP(p))).length;
     const chip = (k, name, pic, net, netBg, tip) => { const off = s.hide.includes(k);
-      return { name, pic, hasNet: !!net, net: net || '', netBg: netBg || '#232220', count: countIn(k), tip, op: off ? 0.45 : 1, bg: off ? '#FFFFFF' : '#F4EFE8', border: off ? 'rgba(34,34,34,0.18)' : '#8D1D2C',
+      return { name, pic, hasNet: !!net, net: net || '', netBg: netBg || '#1c1a17', count: countIn(k), tip, op: off ? 0.45 : 1, bg: off ? '#FFFFFF' : '#F4EFE8', border: off ? 'rgba(34,34,34,0.18)' : '#8D1D2C',
         toggle: () => this.setState({ hide: off ? s.hide.filter(x => x !== k) : s.hide.concat([k]) }) }; };
     const chips = [chip('mine', 'Mes posts', ini('MOI', '#8D1D2C'), '', '', 'Vos posts publiés depuis cet espace (tous statuts)')]
       .concat(st.rules.voirReseau ? [chip('net', 'Posts du réseau', ini('AB', '#8A847C'), '', '', 'Ce que le réseau a programmé pour votre boutique')] : [])
@@ -801,7 +802,7 @@ class Component extends DCLogic {
     const refused = own.filter(p => p.status === 'Refusé').length;
     const kpis = [
       { label: 'Publications de ma Page', value: mp ? pageM.length + modPub.length : '…', sub: perLabel + ' · lues chez Meta', color: '#1877F2', border: 'rgba(34,34,34,0.10)' },
-      { label: 'Réactions sur ma Page', value: mp ? fmt(reac) : '…', sub: 'j’aime, commentaires, partages · ' + perLabel, color: '#232220', border: 'rgba(34,34,34,0.10)' },
+      { label: 'Réactions sur ma Page', value: mp ? fmt(reac) : '…', sub: 'j’aime, commentaires, partages · ' + perLabel, color: '#1c1a17', border: 'rgba(34,34,34,0.10)' },
       { label: 'À venir', value: avenir.length, sub: 'programmé ici ou chez Meta', color: '#6b4420', border: 'rgba(34,34,34,0.10)' },
       { label: 'À valider', value: own.filter(p => p.status === 'À valider').length, sub: 'en attente du réseau', color: '#8A4B00', border: 'rgba(34,34,34,0.10)' },
     ].concat(refused ? [{ label: 'Refusés', value: refused, sub: 'voir le motif', color: '#8D1D2C', border: '#8D1D2C' }] : []);
@@ -811,9 +812,9 @@ class Component extends DCLogic {
     let sel = {};
     if (sp && sp.meta) {
       const acc = accOf(sp.account), r = sp.stats || {}, ps = s.ps && s.ps.id === sp.id ? s.ps : null, c = stColor(sp);
-      const tiles = [{ value: fmt(r.reactions), label: sp.channel === 'Instagram' ? 'J’aime' : 'Réactions', tip: '', bg: '#F4EFE8', fg: '#232220' },
-        { value: fmt(r.comments), label: 'Commentaires', tip: '', bg: '#F4EFE8', fg: '#232220' }]
-        .concat(sp.channel === 'Facebook' ? [{ value: fmt(r.shares), label: 'Partages', tip: '', bg: '#F4EFE8', fg: '#232220' }] : [])
+      const tiles = [{ value: fmt(r.reactions), label: sp.channel === 'Instagram' ? 'J’aime' : 'Réactions', tip: '', bg: '#F4EFE8', fg: '#1c1a17' },
+        { value: fmt(r.comments), label: 'Commentaires', tip: '', bg: '#F4EFE8', fg: '#1c1a17' }]
+        .concat(sp.channel === 'Facebook' ? [{ value: fmt(r.shares), label: 'Partages', tip: '', bg: '#F4EFE8', fg: '#1c1a17' }] : [])
         .concat(ps && !ps.loading && !ps.err ? [{ value: fmt(ps.vues), label: 'Vues', tip: 'Lu chez Meta à l’ouverture de la fiche', bg: '#E8F0FD', fg: '#1F4FA8' },
           { value: fmt(ps.personnes), label: 'Personnes touchées', tip: '', bg: '#E8F0FD', fg: '#1F4FA8' }] : []);
       const op = sp.campaign ? (st.campaigns || []).find(x => x.id === sp.campaign) : null;
@@ -833,7 +834,7 @@ class Component extends DCLogic {
             : dem.statut === 'boostee' ? 'Boosté par le réseau' + (dem.traiteLe ? ' le ' + SF.dShort(String(dem.traiteLe).slice(0, 10)) : '') + ' : il est sponsorisé autour de votre boutique.'
             : 'Le réseau n’a pas retenu ce boost' + (dem.reponse ? ' : « ' + dem.reponse + ' »' : '') + '. Vous pouvez le reproposer.';
           return { hasBoostState: !!dem, boostState: etat, boostBg: !dem ? '' : dem.statut === 'boostee' ? '#E2F0E8' : dem.statut === 'attente' ? '#FCE7C8' : '#F4EFE8',
-            boostFg: !dem ? '' : dem.statut === 'boostee' ? '#0F6B4A' : dem.statut === 'attente' ? '#7A4100' : '#555555',
+            boostFg: !dem ? '' : dem.statut === 'boostee' ? '#0F6B4A' : dem.statut === 'attente' ? '#7A4100' : '#5c5852',
             canBoost: can, boostClosed: can && !open, boostOpened: can && open, boostMsg: s.boostMsg, boostSendLabel: s.boostSending ? 'Envoi…' : 'Proposer au réseau',
             hasBoostErr: open && !!s.boostErr, boostErr: s.boostErr,
             boostHint: 'Ce post marche bien ? Le réseau peut le sponsoriser autour de votre boutique : il décide, et sa réponse s’affiche ici.' + (bl && bl.attente ? ' ' + bl.attente + ' demande(s) en attente sur ' + bl.max + ' possibles.' : '') };
@@ -860,7 +861,7 @@ class Component extends DCLogic {
     const upcoming = all.filter(p => SF.at(p.date, p.time) >= nowMs && p.status !== 'Refusé' && !s.hide.includes(srcOf(p))).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)).slice(0, 8)
       .map(p => { const v = view(p); return { title: v.title, img: v.img, when: SF.dShort(p.date) + ' ' + p.time, who: v.who, status: p.status, stBg: v.stBg, stFg: v.stFg, open: v.open }; });
 
-    const label = s.view === 'week' ? 'SEMAINE DU ' + SF.dShort(du) + ' AU ' + SF.dShort(au) : SF.MONTHS[m0.getMonth()].toUpperCase() + ' ' + m0.getFullYear();
+    const label = s.view === 'week' ? 'Semaine du ' + SF.dShort(du) + ' au ' + SF.dShort(au) : (t => t.charAt(0).toUpperCase() + t.slice(1))(SF.MONTHS[m0.getMonth()] + ' ' + m0.getFullYear());
     const shift = (n) => { if (s.view === 'week') { this.setState({ cursor: SF.addDays(cursor, 7 * n) }); return; } const d = new Date(m0.getFullYear(), m0.getMonth() + n, 1); this.setState({ cursor: SF.iso(d) }); };
     const seg = (on) => on ? ['#8D1D2C', '#FFFFFF'] : ['transparent', '#444444'];
     const lu = mp && mp.le ? String(mp.le) : '';
@@ -903,7 +904,7 @@ class Component extends DCLogic {
       mpLabel: s.mpLoading ? 'Lecture…' : 'Relire chez Meta', reloadMeta: () => this.loadMeta(true),
       mpNote: s.mpLoading ? 'Lecture chez Meta…' : s.mpErr ? 'Meta illisible : ' + s.mpErr : mp && mp.message ? mp.message : mp && mp.demo ? 'Démonstration : publications d’exemple.'
         : lu ? 'Lu chez Meta le ' + SF.dShort(lu.slice(0, 10)) + ' à ' + lu.slice(11, 16) + ((mp.erreurs || []).length ? ' · ' + mp.erreurs[0] : '') : '',
-      mpNoteFg: s.mpErr || (mp && ((mp.erreurs || []).length || mp.message)) ? '#8A4B00' : '#666666',
+      mpNoteFg: s.mpErr || (mp && ((mp.erreurs || []).length || mp.message)) ? '#8A4B00' : '#7a736a',
       showMonth: s.view === 'month', showWeek: s.view === 'week', showList: s.view === 'list',
       dows: ['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'], cells, weekCols,
       listHead: ['Date', 'Heure', '', 'Publication', 'Où', 'Type', 'Réactions', 'Statut'], listRows, listEmpty: listRows.length === 0,

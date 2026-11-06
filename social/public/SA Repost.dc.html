@@ -9,10 +9,11 @@
 <x-dc>
 <helmet>
   <link rel="stylesheet" href="_ds/l-atelier-by-8504a4e3-7796-44da-b087-3fbd9dcb8dcd/global.css">
+  <link rel="stylesheet" href="_ds/marketing.css">
   <script src="_ds/l-atelier-by-8504a4e3-7796-44da-b087-3fbd9dcb8dcd/_ds_bundle.js"></script>
   <script src="social-data.js"></script>
   <style>
-    html,body{margin:0;padding:0;background:#EAE4DC;-webkit-font-smoothing:antialiased;}
+    html,body{margin:0;padding:0;background:#faf7f2;-webkit-font-smoothing:antialiased;}
     /* La règle « section » du design system (48 px, pages vitrines) ne vaut pas pour les cartes des écrans. */
     section{padding-top:0;padding-bottom:0;}
     a{color:#8D1D2C;} a:hover{color:#232220;}
@@ -20,36 +21,36 @@
     button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #8D1D2C;outline-offset:2px;}
   </style>
 </helmet>
-<div style="display:flex;min-height:100vh;background:#EAE4DC;font-family:var(--font-ui);color:#222222;">
+<div style="display:flex;min-height:100vh;background:#faf7f2;font-family:var(--font-ui);color:#1c1a17;">
   <dc-import name="SANav" active="repost" hint-size="228px,100vh"></dc-import>
   <main style="flex:1 1 auto;min-width:0;padding:20px 24px 32px;display:flex;flex-direction:column;gap:14px;">
 
     <header style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;">
       <div style="display:flex;flex-direction:column;gap:4px;">
-        <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:#666666;">{{ kicker }}</span>
-        <h1 style="font-family:var(--font-display);font-weight:400;font-size:30px;line-height:1.1;margin:0;color:#232220;">REPOST AUTOMATIQUE</h1>
+        <span style="font-size:11px;font-weight:400;letter-spacing:0.08em;text-transform:uppercase;color:#7a736a;">{{ kicker }}</span>
+        <h1 style="font-family:var(--font-ui);font-weight:400;font-size:26px;line-height:1.15;letter-spacing:-0.01em;margin:0;color:#1c1a17;">Repost automatique</h1>
       </div>
       <sc-if value="{{ ready }}" hint-placeholder-val="{{ true }}">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <button onClick="{{ basculer }}" aria-pressed="{{ actifAria }}" style="display:inline-flex;align-items:center;gap:8px;background:#FFFFFF;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:8px 12px;font-size:13px;font-weight:500;cursor:pointer;color:{{ actifFg }};">
-          <span style="width:30px;height:17px;border-radius:999px;background:{{ swBg }};position:relative;display:inline-block;"><span style="position:absolute;top:2px;left:{{ swLeft }};width:13px;height:13px;border-radius:50%;background:#FFFFFF;box-shadow:0 1px 2px rgba(0,0,0,0.2);"></span></span>{{ actifLabel }}
+        <button onClick="{{ basculer }}" aria-pressed="{{ actifAria }}" style="display:inline-flex;align-items:center;gap:8px;background:#FFFFFF;border:1px solid #e6e0d8;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:400;cursor:pointer;color:{{ actifFg }};">
+          <span style="width:30px;height:17px;border-radius:6px;background:{{ swBg }};position:relative;display:inline-block;"><span style="position:absolute;top:2px;left:{{ swLeft }};width:13px;height:13px;border-radius:50%;background:#FFFFFF;box-shadow:0 1px 2px rgba(0,0,0,0.2);"></span></span>{{ actifLabel }}
         </button>
-        <select value="{{ jours }}" onChange="{{ setJours }}" aria-label="Période" style="height:36px;font-size:13px;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:0 10px;background:#FFFFFF;">
+        <select value="{{ jours }}" onChange="{{ setJours }}" aria-label="Période" style="height:36px;font-size:13px;border:1px solid #e6e0d8;border-radius:8px;padding:0 10px;background:#FFFFFF;">
           <option value="7">7 derniers jours</option><option value="14">14 derniers jours</option><option value="30">30 derniers jours</option><option value="90">90 derniers jours</option>
         </select>
-        <button onClick="{{ relire }}" style="height:36px;padding:0 14px;border-radius:8px;border:none;background:#8D1D2C;color:#FFFFFF;font-size:13px;font-weight:500;cursor:pointer;opacity:{{ busyOp }};">{{ relireLabel }}</button>
+        <button onClick="{{ relire }}" style="height:36px;padding:0 14px;border-radius:8px;border:none;background:#8D1D2C;color:#FFFFFF;font-size:13px;font-weight:400;cursor:pointer;opacity:{{ busyOp }};">{{ relireLabel }}</button>
       </div>
       </sc-if>
     </header>
 
-    <sc-if value="{{ loading }}" hint-placeholder-val="{{ false }}"><div style="background:#FFFFFF;border-radius:10px;padding:18px;font-size:13px;color:#666666;">Lecture du repost automatique…</div></sc-if>
+    <sc-if value="{{ loading }}" hint-placeholder-val="{{ false }}"><div style="background:#FFFFFF;border-radius:10px;padding:18px;font-size:13px;color:#7a736a;">Lecture du repost automatique…</div></sc-if>
     <sc-if value="{{ hasErr }}" hint-placeholder-val="{{ false }}"><div style="background:#F6DCDF;color:#8D1D2C;border-radius:10px;padding:14px 16px;font-size:13px;">{{ err }}</div></sc-if>
 
     <sc-if value="{{ ready }}" hint-placeholder-val="{{ true }}">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:{{ guetFg }};background:{{ guetBg }};border-radius:8px;padding:8px 12px;line-height:1.45;">{{ guet }}</div>
 
     <!-- Onglets -->
-    <div role="tablist" style="display:flex;gap:4px;border-bottom:1px solid rgba(34,34,34,0.12);">
+    <div role="tablist" style="display:flex;gap:4px;border-bottom:1px solid #e6e0d8;">
       <sc-for list="{{ onglets }}" as="o" hint-placeholder-count="3">
         <button role="tab" aria-selected="{{ o.on }}" onClick="{{ o.pick }}" style="border:none;background:none;padding:8px 14px;font-size:13px;cursor:pointer;margin-bottom:-1px;border-bottom:2px solid {{ o.bar }};color:{{ o.fg }};font-weight:{{ o.w }};">{{ o.label }}</button>
       </sc-for>
@@ -59,110 +60,110 @@
     <sc-if value="{{ isSuivi }}" hint-placeholder-val="{{ true }}">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">
       <sc-for list="{{ tuiles }}" as="t" hint-placeholder-count="6">
-        <div style="background:#FFFFFF;border:0.5px solid rgba(34,34,34,0.10);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;">
-          <span style="font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;">{{ t.label }}</span>
-          <span style="font-size:24px;font-weight:300;line-height:1.1;color:{{ t.fg }};">{{ t.value }}</span>
-          <span style="font-size:11px;color:#666666;line-height:1.4;">{{ t.sub }}</span>
+        <div style="background:#FFFFFF;border:1px solid #e6e0d8;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;">
+          <span style="font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;">{{ t.label }}</span>
+          <span style="font-size:24px;font-weight:700;line-height:1.1;color:{{ t.fg }};">{{ t.value }}</span>
+          <span style="font-size:11px;color:#7a736a;line-height:1.4;">{{ t.sub }}</span>
         </div>
       </sc-for>
     </div>
 
     <sc-for list="{{ alertes }}" as="al" hint-placeholder-count="0">
       <div style="display:flex;align-items:center;gap:12px;background:#FDE4E1;color:#6E1A14;border-radius:10px;padding:10px 14px;font-size:13px;flex-wrap:wrap;">
-        <span style="width:26px;height:26px;border-radius:50%;background:#B3261E;color:#FFFFFF;display:inline-flex;align-items:center;justify-content:center;font-weight:600;flex:0 0 auto;">!</span>
-        <span style="flex:1 1 320px;display:flex;flex-direction:column;gap:2px;min-width:0;"><b style="font-weight:500;">{{ al.titre }}</b><span style="font-size:12px;color:#8C3B33;line-height:1.45;">{{ al.detail }}</span></span>
-        <a href="{{ al.conn }}" style="font-size:12px;font-weight:500;background:#FFFFFF;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:6px 11px;text-decoration:none;color:#222222;">Paramètres & connexions</a>
-        <button onClick="{{ al.relancer }}" style="font-size:12px;font-weight:500;background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:7px 12px;cursor:pointer;">{{ al.relancerLabel }}</button>
+        <span style="width:26px;height:26px;border-radius:50%;background:#B3261E;color:#FFFFFF;display:inline-flex;align-items:center;justify-content:center;font-weight:400;flex:0 0 auto;">!</span>
+        <span style="flex:1 1 320px;display:flex;flex-direction:column;gap:2px;min-width:0;"><b style="font-weight:400;">{{ al.titre }}</b><span style="font-size:12px;color:#8C3B33;line-height:1.45;">{{ al.detail }}</span></span>
+        <a href="{{ al.conn }}" style="font-size:12px;font-weight:400;background:#FFFFFF;border:1px solid #e6e0d8;border-radius:8px;padding:6px 11px;text-decoration:none;color:#1c1a17;">Paramètres & connexions</a>
+        <button onClick="{{ al.relancer }}" style="font-size:12px;font-weight:400;background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:7px 12px;cursor:pointer;">{{ al.relancerLabel }}</button>
       </div>
     </sc-for>
 
-    <section style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);overflow:auto;">
+    <section style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;overflow:auto;">
       <div style="display:grid;grid-template-columns:{{ cols }};min-width:{{ minW }};">
         <!-- en-tête : la publication, puis une colonne par boutique -->
-        <span style="padding:10px 14px;font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;background:#FBF9F5;border-bottom:0.5px solid rgba(34,34,34,0.10);">Publication de la marque</span>
+        <span style="padding:10px 14px;font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;background:#FBF9F5;border-bottom:1px solid #e6e0d8;">Publication de la marque</span>
         <sc-for list="{{ entetes }}" as="h" hint-placeholder-count="4">
-          <span style="padding:10px 8px;background:#FBF9F5;border-bottom:0.5px solid rgba(34,34,34,0.10);display:flex;flex-direction:column;gap:5px;">
-            <span style="font-size:12.5px;font-weight:500;">{{ h.name }}<span style="font-weight:400;color:#8A847C;">{{ h.test }}</span></span>
+          <span style="padding:10px 8px;background:#FBF9F5;border-bottom:1px solid #e6e0d8;display:flex;flex-direction:column;gap:5px;">
+            <span style="font-size:12.5px;font-weight:400;">{{ h.name }}<span style="font-weight:400;color:#8A847C;">{{ h.test }}</span></span>
             <button onClick="{{ h.basculer }}" title="{{ h.tip }}" style="display:inline-flex;align-items:center;gap:5px;border:none;background:none;padding:0;cursor:pointer;font-size:10.5px;color:{{ h.fg }};text-align:left;">
-              <span style="width:24px;height:14px;border-radius:999px;background:{{ h.swBg }};position:relative;display:inline-block;flex:0 0 auto;"><span style="position:absolute;top:2px;left:{{ h.swLeft }};width:10px;height:10px;border-radius:50%;background:#FFFFFF;"></span></span>{{ h.mode }}
+              <span style="width:24px;height:14px;border-radius:6px;background:{{ h.swBg }};position:relative;display:inline-block;flex:0 0 auto;"><span style="position:absolute;top:2px;left:{{ h.swLeft }};width:10px;height:10px;border-radius:50%;background:#FFFFFF;"></span></span>{{ h.mode }}
             </button>
             <span style="font-size:10.5px;color:#8A847C;">{{ h.repris }}</span>
           </span>
         </sc-for>
-        <span style="background:#FBF9F5;border-bottom:0.5px solid rgba(34,34,34,0.10);"></span>
+        <span style="background:#FBF9F5;border-bottom:1px solid #e6e0d8;"></span>
 
         <!-- à venir : les posts programmés sur la Page de la marque, et le repost prévu dans chaque boutique -->
-        <div style="grid-column:1 / -1;padding:9px 14px;font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#2F5D8A;background:#F3F6FA;border-bottom:0.5px solid rgba(34,34,34,0.08);">{{ avTitre }}</div>
+        <div style="grid-column:1 / -1;padding:9px 14px;font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#2F5D8A;background:#F3F6FA;border-bottom:1px solid #e6e0d8;">{{ avTitre }}</div>
         <sc-for list="{{ avLignes }}" as="v" hint-placeholder-count="0">
           <div style="display:contents;">
-            <span style="padding:10px 14px;border-bottom:0.5px solid rgba(34,34,34,0.06);display:flex;gap:10px;align-items:center;min-width:0;background:#FFFFFF;">
+            <span style="padding:10px 14px;border-bottom:1px solid #e6e0d8;display:flex;gap:10px;align-items:center;min-width:0;background:#FFFFFF;">
               <span style="width:52px;height:52px;border-radius:8px;flex:0 0 auto;background:#F2C9A0;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;font-size:10px;color:#6b4420;">
                 <sc-if value="{{ v.hasImg }}" hint-placeholder-val="{{ false }}"><img src="{{ v.img }}" alt="" style="width:100%;height:100%;object-fit:cover;opacity:{{ v.op }};"></sc-if>
                 <sc-if value="{{ v.noImg }}" hint-placeholder-val="{{ true }}">{{ v.type }}</sc-if>
               </span>
               <span style="display:flex;flex-direction:column;gap:2px;min-width:0;">
-                <span style="font-size:11px;color:#666666;">{{ v.quand }} · {{ v.type }} · <span style="color:{{ v.modeFg }};">{{ v.mode }}</span></span>
-                <span title="{{ v.texte }}" style="font-size:13px;font-weight:500;color:#222222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px;">{{ v.titre }}</span>
-                <span style="font-size:11.5px;color:#666666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px;">{{ v.extrait }}</span>
+                <span style="font-size:11px;color:#7a736a;">{{ v.quand }} · {{ v.type }} · <span style="color:{{ v.modeFg }};">{{ v.mode }}</span></span>
+                <span title="{{ v.texte }}" style="font-size:13px;font-weight:400;color:#1c1a17;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px;">{{ v.titre }}</span>
+                <span style="font-size:11.5px;color:#7a736a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px;">{{ v.extrait }}</span>
               </span>
             </span>
             <sc-if value="{{ v.bandeau }}" hint-placeholder-val="{{ false }}">
-              <span style="grid-column:{{ v.span }};padding:10px 8px;border-bottom:0.5px solid rgba(34,34,34,0.06);background:#FFFFFF;display:flex;align-items:center;">
-                <span style="font-size:11px;font-weight:500;border-radius:999px;padding:3px 9px;background:#F1ECE5;color:#8A847C;">{{ v.bandeauTxt }}</span>
+              <span style="grid-column:{{ v.span }};padding:10px 8px;border-bottom:1px solid #e6e0d8;background:#FFFFFF;display:flex;align-items:center;">
+                <span style="font-size:11px;font-weight:400;border-radius:6px;padding:3px 9px;background:#F1ECE5;color:#8A847C;">{{ v.bandeauTxt }}</span>
               </span>
             </sc-if>
             <sc-for list="{{ v.cases }}" as="c" hint-placeholder-count="0">
-              <span title="{{ c.tip }}" style="border-bottom:0.5px solid rgba(34,34,34,0.06);background:#FFFFFF;padding:10px 8px;display:flex;flex-direction:column;gap:3px;align-items:flex-start;min-width:0;">
-                <span style="font-size:11px;font-weight:500;border-radius:999px;padding:3px 8px;background:{{ c.bg }};color:{{ c.fg }};white-space:nowrap;">{{ c.label }}</span>
+              <span title="{{ c.tip }}" style="border-bottom:1px solid #e6e0d8;background:#FFFFFF;padding:10px 8px;display:flex;flex-direction:column;gap:3px;align-items:flex-start;min-width:0;">
+                <span style="font-size:11px;font-weight:400;border-radius:6px;padding:3px 8px;background:{{ c.bg }};color:{{ c.fg }};white-space:nowrap;">{{ c.label }}</span>
                 <span style="font-size:10.5px;color:#8A847C;padding-left:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">{{ c.sub }}</span>
               </span>
             </sc-for>
-            <span style="padding:10px 14px 10px 6px;border-bottom:0.5px solid rgba(34,34,34,0.06);background:#FFFFFF;display:flex;align-items:center;justify-content:flex-end;">
-              <sc-if value="{{ v.hasEdit }}" hint-placeholder-val="{{ false }}"><a href="{{ v.edit }}" style="font-size:12px;font-weight:500;background:#FFFFFF;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:5px 10px;text-decoration:none;white-space:nowrap;">Modifier</a></sc-if>
+            <span style="padding:10px 14px 10px 6px;border-bottom:1px solid #e6e0d8;background:#FFFFFF;display:flex;align-items:center;justify-content:flex-end;">
+              <sc-if value="{{ v.hasEdit }}" hint-placeholder-val="{{ false }}"><a href="{{ v.edit }}" style="font-size:12px;font-weight:400;background:#FFFFFF;color:#1c1a17;border:1px solid #e6e0d8;border-radius:8px;padding:5px 10px;text-decoration:none;white-space:nowrap;">Modifier</a></sc-if>
             </span>
           </div>
         </sc-for>
-        <sc-if value="{{ avVide }}" hint-placeholder-val="{{ true }}"><div style="grid-column:1 / -1;padding:14px 16px;font-size:12.5px;color:{{ avVideFg }};line-height:1.5;border-bottom:0.5px solid rgba(34,34,34,0.08);display:flex;align-items:center;gap:12px;flex-wrap:wrap;"><span style="flex:1 1 420px;">{{ avVideTxt }}</span><a href="{{ avNouveau }}" style="font-size:12px;font-weight:500;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:7px 12px;text-decoration:none;white-space:nowrap;">Programmer un post de la marque</a></div></sc-if>
-        <sc-if value="{{ avPlus }}" hint-placeholder-val="{{ false }}"><div style="grid-column:1 / -1;padding:8px 16px;font-size:11.5px;color:#666666;line-height:1.5;border-bottom:0.5px solid rgba(34,34,34,0.08);display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span style="flex:1 1 420px;">{{ avPlusTxt }}</span><a href="{{ avNouveau }}" style="font-size:12px;font-weight:500;color:#8D1D2C;text-decoration:none;white-space:nowrap;">+ Programmer un post de la marque</a></div></sc-if>
+        <sc-if value="{{ avVide }}" hint-placeholder-val="{{ true }}"><div style="grid-column:1 / -1;padding:14px 16px;font-size:12.5px;color:{{ avVideFg }};line-height:1.5;border-bottom:1px solid #e6e0d8;display:flex;align-items:center;gap:12px;flex-wrap:wrap;"><span style="flex:1 1 420px;">{{ avVideTxt }}</span><a href="{{ avNouveau }}" style="font-size:12px;font-weight:400;background:#8D1D2C;color:#FFFFFF;border-radius:8px;padding:7px 12px;text-decoration:none;white-space:nowrap;">Programmer un post de la marque</a></div></sc-if>
+        <sc-if value="{{ avPlus }}" hint-placeholder-val="{{ false }}"><div style="grid-column:1 / -1;padding:8px 16px;font-size:11.5px;color:#7a736a;line-height:1.5;border-bottom:1px solid #e6e0d8;display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span style="flex:1 1 420px;">{{ avPlusTxt }}</span><a href="{{ avNouveau }}" style="font-size:12px;font-weight:400;color:#8D1D2C;text-decoration:none;white-space:nowrap;">+ Programmer un post de la marque</a></div></sc-if>
 
         <!-- publiées : les publications de la marque sur la période, et leur sort dans chaque boutique -->
-        <div style="grid-column:1 / -1;padding:9px 14px;font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;background:#FBF9F5;border-bottom:0.5px solid rgba(34,34,34,0.08);">{{ pubTitre }}</div>
+        <div style="grid-column:1 / -1;padding:9px 14px;font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;background:#FBF9F5;border-bottom:1px solid #e6e0d8;">{{ pubTitre }}</div>
         <sc-for list="{{ lignes }}" as="l" hint-placeholder-count="0">
           <div style="display:contents;">
-            <span style="padding:10px 14px;border-bottom:0.5px solid rgba(34,34,34,0.06);display:flex;gap:10px;align-items:center;min-width:0;background:{{ l.bg }};">
+            <span style="padding:10px 14px;border-bottom:1px solid #e6e0d8;display:flex;gap:10px;align-items:center;min-width:0;background:{{ l.bg }};">
               <span style="width:52px;height:52px;border-radius:8px;flex:0 0 auto;background:#F2C9A0;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;font-size:10px;color:#6b4420;">
                 <sc-if value="{{ l.hasImg }}" hint-placeholder-val="{{ false }}"><img src="{{ l.img }}" alt="" style="width:100%;height:100%;object-fit:cover;opacity:{{ l.op }};"></sc-if>
                 <sc-if value="{{ l.noImg }}" hint-placeholder-val="{{ true }}">{{ l.type }}</sc-if>
               </span>
               <span style="display:flex;flex-direction:column;gap:2px;min-width:0;">
-                <span style="font-size:11px;color:#666666;">{{ l.quand }} · {{ l.type }} · <span style="color:{{ l.modeFg }};">{{ l.mode }}</span></span>
-                <a href="{{ l.permalink }}" target="_blank" rel="noopener" style="font-size:13px;font-weight:500;color:#222222;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px;" title="{{ l.texte }}">{{ l.titre }}</a>
-                <span style="font-size:11.5px;color:#666666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px;">{{ l.extrait }}</span>
+                <span style="font-size:11px;color:#7a736a;">{{ l.quand }} · {{ l.type }} · <span style="color:{{ l.modeFg }};">{{ l.mode }}</span></span>
+                <a href="{{ l.permalink }}" target="_blank" rel="noopener" style="font-size:13px;font-weight:400;color:#1c1a17;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px;" title="{{ l.texte }}">{{ l.titre }}</a>
+                <span style="font-size:11.5px;color:#7a736a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px;">{{ l.extrait }}</span>
               </span>
             </span>
             <sc-if value="{{ l.exclu }}" hint-placeholder-val="{{ false }}">
-              <span style="grid-column:{{ l.span }};padding:10px 8px;border-bottom:0.5px solid rgba(34,34,34,0.06);background:{{ l.bg }};display:flex;align-items:center;">
-                <span style="font-size:11px;font-weight:500;border-radius:999px;padding:3px 9px;background:#F1ECE5;color:#8A847C;">{{ l.excluTxt }}</span>
+              <span style="grid-column:{{ l.span }};padding:10px 8px;border-bottom:1px solid #e6e0d8;background:{{ l.bg }};display:flex;align-items:center;">
+                <span style="font-size:11px;font-weight:400;border-radius:6px;padding:3px 9px;background:#F1ECE5;color:#8A847C;">{{ l.excluTxt }}</span>
               </span>
             </sc-if>
             <sc-for list="{{ l.cases }}" as="c" hint-placeholder-count="0">
-              <button onClick="{{ c.ouvrir }}" title="{{ c.tip }}" style="text-align:left;border:none;border-bottom:0.5px solid rgba(34,34,34,0.06);background:{{ c.fond }};padding:10px 8px;cursor:pointer;display:flex;flex-direction:column;gap:3px;align-items:flex-start;box-shadow:{{ c.ring }};min-width:0;">
-                <span style="font-size:11px;font-weight:500;border-radius:999px;padding:3px 8px;background:{{ c.bg }};color:{{ c.fg }};white-space:nowrap;">{{ c.label }}</span>
+              <button onClick="{{ c.ouvrir }}" title="{{ c.tip }}" style="text-align:left;border:none;border-bottom:1px solid #e6e0d8;background:{{ c.fond }};padding:10px 8px;cursor:pointer;display:flex;flex-direction:column;gap:3px;align-items:flex-start;box-shadow:{{ c.ring }};min-width:0;">
+                <span style="font-size:11px;font-weight:400;border-radius:6px;padding:3px 8px;background:{{ c.bg }};color:{{ c.fg }};white-space:nowrap;">{{ c.label }}</span>
                 <span style="font-size:10.5px;color:#8A847C;padding-left:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">{{ c.sub }}</span>
               </button>
             </sc-for>
-            <span style="padding:10px 14px 10px 6px;border-bottom:0.5px solid rgba(34,34,34,0.06);background:{{ l.bg }};display:flex;align-items:center;justify-content:flex-end;">
+            <span style="padding:10px 14px 10px 6px;border-bottom:1px solid #e6e0d8;background:{{ l.bg }};display:flex;align-items:center;justify-content:flex-end;">
               <sc-if value="{{ l.hasAction }}" hint-placeholder-val="{{ false }}">
-                <button onClick="{{ l.action }}" style="font-size:12px;font-weight:500;background:{{ l.actBg }};color:{{ l.actFg }};border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:5px 10px;cursor:pointer;white-space:nowrap;">{{ l.actionLabel }}</button>
+                <button onClick="{{ l.action }}" style="font-size:12px;font-weight:400;background:{{ l.actBg }};color:{{ l.actFg }};border:1px solid #e6e0d8;border-radius:8px;padding:5px 10px;cursor:pointer;white-space:nowrap;">{{ l.actionLabel }}</button>
               </sc-if>
             </span>
           </div>
         </sc-for>
-        <sc-if value="{{ vide }}" hint-placeholder-val="{{ false }}"><div style="grid-column:1 / -1;padding:28px 16px;text-align:center;font-size:13px;color:#666666;line-height:1.5;">{{ videTxt }}</div></sc-if>
+        <sc-if value="{{ vide }}" hint-placeholder-val="{{ false }}"><div style="grid-column:1 / -1;padding:28px 16px;text-align:center;font-size:13px;color:#7a736a;line-height:1.5;">{{ videTxt }}</div></sc-if>
       </div>
     </section>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:11px;color:#666666;line-height:1.5;">
-      <sc-for list="{{ legende }}" as="g" hint-placeholder-count="6"><span style="font-weight:500;border-radius:999px;padding:3px 8px;background:{{ g.bg }};color:{{ g.fg }};">{{ g.label }}</span></sc-for>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:11px;color:#7a736a;line-height:1.5;">
+      <sc-for list="{{ legende }}" as="g" hint-placeholder-count="6"><span style="font-weight:400;border-radius:6px;padding:3px 8px;background:{{ g.bg }};color:{{ g.fg }};">{{ g.label }}</span></sc-for>
       <span>{{ legendeTxt }}</span>
     </div>
     </sc-if>
@@ -170,79 +171,79 @@
     <!-- ===== Réglage ===== -->
     <sc-if value="{{ isReglage }}" hint-placeholder-val="{{ false }}">
     <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;">
-      <section style="flex:1 1 480px;max-width:680px;min-width:0;background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:18px;display:flex;flex-direction:column;gap:16px;">
-        <span style="font-size:15px;font-weight:500;line-height:1.35;">Chaque nouveau post de la Page « {{ marque }} » est repris sur les Pages des boutiques cochées.</span>
+      <section style="flex:1 1 480px;max-width:680px;min-width:0;background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:18px;display:flex;flex-direction:column;gap:16px;">
+        <span style="font-size:15px;font-weight:400;line-height:1.35;">Chaque nouveau post de la Page « {{ marque }} » est repris sur les Pages des boutiques cochées.</span>
 
         <div style="display:flex;flex-direction:column;gap:8px;">
-          <span style="font-size:12px;color:#666666;">Sur Facebook</span>
+          <span style="font-size:12px;color:#7a736a;">Sur Facebook</span>
           <div style="display:inline-flex;align-self:flex-start;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;">
-            <sc-for list="{{ modes }}" as="m" hint-placeholder-count="2"><button onClick="{{ m.pick }}" style="border:none;border-radius:6px;padding:7px 14px;font-size:13px;font-weight:500;cursor:pointer;background:{{ m.bg }};color:{{ m.fg }};box-shadow:{{ m.shadow }};">{{ m.label }}</button></sc-for>
+            <sc-for list="{{ modes }}" as="m" hint-placeholder-count="2"><button onClick="{{ m.pick }}" style="border:none;border-radius:6px;padding:7px 14px;font-size:13px;font-weight:400;cursor:pointer;background:{{ m.bg }};color:{{ m.fg }};box-shadow:{{ m.shadow }};">{{ m.label }}</button></sc-for>
           </div>
-          <span style="font-size:12px;color:#666666;line-height:1.45;">{{ modeAide }}</span>
+          <span style="font-size:12px;color:#7a736a;line-height:1.45;">{{ modeAide }}</span>
         </div>
 
         <label style="display:flex;align-items:flex-start;gap:10px;font-size:13.5px;cursor:{{ igCursor }};opacity:{{ igOp }};">
           <input type="checkbox" checked="{{ instagram }}" disabled="{{ igOff }}" onChange="{{ toggleIg }}" style="accent-color:#8D1D2C;margin:2px 0 0;width:16px;height:16px;flex:0 0 auto;">
-          <span style="display:flex;flex-direction:column;gap:2px;"><span>Aussi une copie sur l’Instagram de chaque boutique</span><span style="font-size:12px;color:#666666;">{{ igAide }}</span></span>
+          <span style="display:flex;flex-direction:column;gap:2px;"><span>Aussi une copie sur l’Instagram de chaque boutique</span><span style="font-size:12px;color:#7a736a;">{{ igAide }}</span></span>
         </label>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
-          <label style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:#666666;">Quand
-            <select value="{{ delaiMin }}" onChange="{{ setDelai }}" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:7px 8px;background:#FFFFFF;">
+          <label style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:#7a736a;">Quand
+            <select value="{{ delaiMin }}" onChange="{{ setDelai }}" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:7px 8px;background:#FFFFFF;">
               <option value="0">dès que la marque publie</option><option value="15">15 min après</option><option value="30">30 min après</option><option value="60">1 h après</option><option value="120">2 h après</option><option value="240">4 h après</option>
             </select>
           </label>
-          <div style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:#666666;">Entre
-            <span style="display:flex;align-items:center;gap:6px;color:#222222;font-size:13px;">
-              <input type="time" value="{{ de }}" onChange="{{ setDe }}" aria-label="Début de la plage" style="font-size:13px;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:6px 8px;">et
-              <input type="time" value="{{ a }}" onChange="{{ setA }}" aria-label="Fin de la plage" style="font-size:13px;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:6px 8px;">
+          <div style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:#7a736a;">Entre
+            <span style="display:flex;align-items:center;gap:6px;color:#1c1a17;font-size:13px;">
+              <input type="time" value="{{ de }}" onChange="{{ setDe }}" aria-label="Début de la plage" style="font-size:13px;border:1px solid #e6e0d8;border-radius:6px;padding:6px 8px;">et
+              <input type="time" value="{{ a }}" onChange="{{ setA }}" aria-label="Fin de la plage" style="font-size:13px;border:1px solid #e6e0d8;border-radius:6px;padding:6px 8px;">
             </span>
           </div>
         </div>
-        <span style="font-size:12px;color:#666666;line-height:1.45;margin-top:-8px;">Hors de la plage, le repost attend son ouverture suivante. Une même publication ne part jamais deux fois sur une Page.</span>
+        <span style="font-size:12px;color:#7a736a;line-height:1.45;margin-top:-8px;">Hors de la plage, le repost attend son ouverture suivante. Une même publication ne part jamais deux fois sur une Page.</span>
 
-        <label style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:#666666;">{{ texteLabel }}
-          <textarea value="{{ texte }}" onChange="{{ setTexte }}" rows="2" placeholder="ex. Chez nous à {ville}, {adresse} — ouvert {horaires}" style="font-size:13px;line-height:1.45;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:7px 9px;resize:vertical;"></textarea>
-          <span style="display:flex;gap:6px;flex-wrap:wrap;"><sc-for list="{{ vars }}" as="v" hint-placeholder-count="4"><button onClick="{{ v.add }}" title="{{ v.tip }}" style="font-size:11px;font-weight:500;border-radius:999px;padding:3px 9px;border:0.5px solid rgba(141,29,44,0.3);background:#FBF7F2;color:#8D1D2C;cursor:pointer;">{{ v.code }}</button></sc-for></span>
+        <label style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:#7a736a;">{{ texteLabel }}
+          <textarea value="{{ texte }}" onChange="{{ setTexte }}" rows="2" placeholder="ex. Chez nous à {ville}, {adresse} — ouvert {horaires}" style="font-size:13px;line-height:1.45;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:7px 9px;resize:vertical;"></textarea>
+          <span style="display:flex;gap:6px;flex-wrap:wrap;"><sc-for list="{{ vars }}" as="v" hint-placeholder-count="4"><button onClick="{{ v.add }}" title="{{ v.tip }}" style="font-size:11px;font-weight:400;border-radius:8px;padding:3px 9px;border:0.5px solid rgba(141,29,44,0.3);background:#FBF7F2;color:#8D1D2C;cursor:pointer;">{{ v.code }}</button></sc-for></span>
         </label>
 
-        <label style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:#666666;">Jamais les posts qui contiennent (séparés par des virgules)
-          <input type="text" value="{{ exclure }}" onChange="{{ setExclure }}" placeholder="recrute, franchise, concours" style="font-size:13px;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:7px 9px;">
+        <label style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:#7a736a;">Jamais les posts qui contiennent (séparés par des virgules)
+          <input type="text" value="{{ exclure }}" onChange="{{ setExclure }}" placeholder="recrute, franchise, concours" style="font-size:13px;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:7px 9px;">
         </label>
 
-        <div style="display:flex;flex-direction:column;gap:8px;border-top:0.5px solid rgba(34,34,34,0.10);padding-top:14px;">
-          <span style="font-size:13.5px;font-weight:500;">Quand le franchisé valide</span>
+        <div style="display:flex;flex-direction:column;gap:8px;border-top:1px solid #e6e0d8;padding-top:14px;">
+          <span style="font-size:13.5px;font-weight:400;">Quand le franchisé valide</span>
           <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;">Sans réponse sous
-            <select value="{{ delaiV }}" onChange="{{ setDelaiV }}" style="font-size:13px;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:5px 8px;background:#FFFFFF;"><option value="1">1 heure</option><option value="2">2 heures</option><option value="4">4 heures</option><option value="8">8 heures</option><option value="12">12 heures</option><option value="24">24 heures</option></select>
-            <span style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;"><sc-for list="{{ sansRep }}" as="s" hint-placeholder-count="2"><button onClick="{{ s.pick }}" style="border:none;border-radius:6px;padding:6px 11px;font-size:12.5px;font-weight:500;cursor:pointer;background:{{ s.bg }};color:{{ s.fg }};box-shadow:{{ s.shadow }};">{{ s.label }}</button></sc-for></span>
+            <select value="{{ delaiV }}" onChange="{{ setDelaiV }}" style="font-size:13px;border:1px solid #e6e0d8;border-radius:6px;padding:5px 8px;background:#FFFFFF;"><option value="1">1 heure</option><option value="2">2 heures</option><option value="4">4 heures</option><option value="8">8 heures</option><option value="12">12 heures</option><option value="24">24 heures</option></select>
+            <span style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;"><sc-for list="{{ sansRep }}" as="s" hint-placeholder-count="2"><button onClick="{{ s.pick }}" style="border:none;border-radius:6px;padding:6px 11px;font-size:12.5px;font-weight:400;cursor:pointer;background:{{ s.bg }};color:{{ s.fg }};box-shadow:{{ s.shadow }};">{{ s.label }}</button></sc-for></span>
           </span>
         </div>
 
-        <div style="display:flex;flex-direction:column;border-top:0.5px solid rgba(34,34,34,0.10);padding-top:10px;">
-          <span style="font-size:13.5px;font-weight:500;padding-bottom:6px;">Les Pages des boutiques</span>
+        <div style="display:flex;flex-direction:column;border-top:1px solid #e6e0d8;padding-top:10px;">
+          <span style="font-size:13.5px;font-weight:400;padding-bottom:6px;">Les Pages des boutiques</span>
           <sc-for list="{{ cibles }}" as="c" hint-placeholder-count="4">
-            <div style="display:flex;align-items:center;gap:10px;padding:8px 2px;border-top:0.5px solid rgba(34,34,34,0.08);flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 2px;border-top:1px solid #e6e0d8;flex-wrap:wrap;">
               <input type="checkbox" checked="{{ c.on }}" onChange="{{ c.toggle }}" aria-label="{{ c.aria }}" style="accent-color:#8D1D2C;margin:0;width:16px;height:16px;flex:0 0 auto;">
-              <span style="display:flex;flex-direction:column;gap:1px;min-width:0;flex:1 1 160px;"><span style="font-size:13.5px;font-weight:500;">{{ c.name }}</span><span style="font-size:11.5px;color:#666666;">{{ c.page }}</span></span>
-              <sc-if value="{{ c.hasTag }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;font-weight:500;border-radius:999px;padding:2px 8px;background:{{ c.tagBg }};color:{{ c.tagFg }};">{{ c.tag }}</span></sc-if>
-              <span style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:2px;gap:2px;opacity:{{ c.op }};"><sc-for list="{{ c.vals }}" as="v" hint-placeholder-count="2"><button onClick="{{ v.pick }}" style="border:none;border-radius:6px;padding:5px 9px;font-size:12px;font-weight:500;cursor:pointer;background:{{ v.bg }};color:{{ v.fg }};box-shadow:{{ v.shadow }};">{{ v.label }}</button></sc-for></span>
+              <span style="display:flex;flex-direction:column;gap:1px;min-width:0;flex:1 1 160px;"><span style="font-size:13.5px;font-weight:400;">{{ c.name }}</span><span style="font-size:11.5px;color:#7a736a;">{{ c.page }}</span></span>
+              <sc-if value="{{ c.hasTag }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;font-weight:400;border-radius:6px;padding:2px 8px;background:{{ c.tagBg }};color:{{ c.tagFg }};">{{ c.tag }}</span></sc-if>
+              <span style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:2px;gap:2px;opacity:{{ c.op }};"><sc-for list="{{ c.vals }}" as="v" hint-placeholder-count="2"><button onClick="{{ v.pick }}" style="border:none;border-radius:6px;padding:5px 9px;font-size:12px;font-weight:400;cursor:pointer;background:{{ v.bg }};color:{{ v.fg }};box-shadow:{{ v.shadow }};">{{ v.label }}</button></sc-for></span>
             </div>
           </sc-for>
         </div>
 
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;border-top:0.5px solid rgba(34,34,34,0.10);padding-top:14px;">
-          <span style="font-size:12px;color:#666666;">{{ draftTxt }}</span>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;border-top:1px solid #e6e0d8;padding-top:14px;">
+          <span style="font-size:12px;color:#7a736a;">{{ draftTxt }}</span>
           <span style="display:flex;gap:8px;">
-            <sc-if value="{{ modifie }}" hint-placeholder-val="{{ false }}"><button onClick="{{ annuler }}" style="background:#FFFFFF;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:9px 14px;font-size:13px;font-weight:500;cursor:pointer;">Annuler</button></sc-if>
-            <button onClick="{{ enregistrer }}" style="background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:500;cursor:pointer;opacity:{{ saveOp }};">Enregistrer</button>
+            <sc-if value="{{ modifie }}" hint-placeholder-val="{{ false }}"><button onClick="{{ annuler }}" style="background:#FFFFFF;color:#1c1a17;border:1px solid #e6e0d8;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:400;cursor:pointer;">Annuler</button></sc-if>
+            <button onClick="{{ enregistrer }}" style="background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:400;cursor:pointer;opacity:{{ saveOp }};">Enregistrer</button>
           </span>
         </div>
       </section>
-      <aside style="flex:0 1 340px;min-width:260px;background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:16px;display:flex;flex-direction:column;gap:8px;font-size:12.5px;line-height:1.55;color:#444444;">
-        <span style="font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;">Ce que fait Meta</span>
-        <span><b style="font-weight:500;color:#222222;">Partager</b> publie sur la Page de la boutique un lien vers le post de la marque : les réactions restent sur le post de la marque. Rendu à vérifier une fois sur la Page test.</span>
-        <span><b style="font-weight:500;color:#222222;">Copier</b> publie le même visuel et le même texte comme post de la boutique. Une vidéo ou un lien ne se copient pas : ils sont partagés.</span>
-        <span><b style="font-weight:500;color:#222222;">Instagram</b> n’a pas de repost par l’API : c’est toujours une copie, et seulement si la boutique a son propre compte.</span>
+      <aside style="flex:0 1 340px;min-width:260px;background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:16px;display:flex;flex-direction:column;gap:8px;font-size:12.5px;line-height:1.55;color:#444444;">
+        <span style="font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;">Ce que fait Meta</span>
+        <span><b style="font-weight:400;color:#1c1a17;">Partager</b> publie sur la Page de la boutique un lien vers le post de la marque : les réactions restent sur le post de la marque. Rendu à vérifier une fois sur la Page test.</span>
+        <span><b style="font-weight:400;color:#1c1a17;">Copier</b> publie le même visuel et le même texte comme post de la boutique. Une vidéo ou un lien ne se copient pas : ils sont partagés.</span>
+        <span><b style="font-weight:400;color:#1c1a17;">Instagram</b> n’a pas de repost par l’API : c’est toujours une copie, et seulement si la boutique a son propre compte.</span>
         <span>La Page de la marque est relue toutes les 5 minutes. Seules les publications faites après l’activation sont reprises, jamais l’historique.</span>
       </aside>
     </div>
@@ -251,20 +252,20 @@
     <!-- ===== Côté franchisé ===== -->
     <sc-if value="{{ isFranchise }}" hint-placeholder-val="{{ false }}">
     <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;">
-      <section style="flex:1 1 480px;min-width:0;background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:16px;display:flex;flex-direction:column;gap:4px;">
-        <span style="font-size:15px;font-weight:500;padding-bottom:6px;">En attente des franchisés</span>
+      <section style="flex:1 1 480px;min-width:0;background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:16px;display:flex;flex-direction:column;gap:4px;">
+        <span style="font-size:15px;font-weight:400;padding-bottom:6px;">En attente des franchisés</span>
         <sc-for list="{{ attente }}" as="w" hint-placeholder-count="0">
-          <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:0.5px solid rgba(34,34,34,0.08);flex-wrap:wrap;">
-            <span style="display:flex;flex-direction:column;gap:2px;flex:1 1 240px;min-width:0;"><span style="font-size:13px;"><b style="font-weight:500;">{{ w.name }}</b> — {{ w.titre }}</span><span style="font-size:11.5px;color:#666666;">{{ w.limite }}</span></span>
-            <a href="{{ w.espace }}" target="_blank" rel="noopener" style="font-size:12px;font-weight:500;">Voir son espace ↗</a>
-            <button onClick="{{ w.publier }}" style="font-size:12px;font-weight:500;background:#FFFFFF;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:5px 10px;cursor:pointer;">Publier sans attendre</button>
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #e6e0d8;flex-wrap:wrap;">
+            <span style="display:flex;flex-direction:column;gap:2px;flex:1 1 240px;min-width:0;"><span style="font-size:13px;"><b style="font-weight:400;">{{ w.name }}</b> — {{ w.titre }}</span><span style="font-size:11.5px;color:#7a736a;">{{ w.limite }}</span></span>
+            <a href="{{ w.espace }}" target="_blank" rel="noopener" style="font-size:12px;font-weight:400;">Voir son espace ↗</a>
+            <button onClick="{{ w.publier }}" style="font-size:12px;font-weight:400;background:#FFFFFF;border:1px solid #e6e0d8;border-radius:8px;padding:5px 10px;cursor:pointer;">Publier sans attendre</button>
           </div>
         </sc-for>
-        <sc-if value="{{ noAttente }}" hint-placeholder-val="{{ true }}"><span style="font-size:13px;color:#666666;padding:6px 0;">Aucun repost n’attend la réponse d’un franchisé.</span></sc-if>
+        <sc-if value="{{ noAttente }}" hint-placeholder-val="{{ true }}"><span style="font-size:13px;color:#7a736a;padding:6px 0;">Aucun repost n’attend la réponse d’un franchisé.</span></sc-if>
       </section>
-      <aside style="flex:0 1 380px;min-width:260px;background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:16px;display:flex;flex-direction:column;gap:8px;font-size:12.5px;line-height:1.55;color:#444444;">
-        <span style="font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;">Ce que voit le franchisé</span>
-        <span>En haut de son Calendrier, la carte « Le réseau vous propose » : la publication de la marque, le texte ajouté pour sa boutique, et deux boutons, <b style="font-weight:500;color:#222222;">Publier sur ma Page</b> et <b style="font-weight:500;color:#222222;">Refuser</b> (avec un motif, que vous lisez ici dans la case de sa boutique).</span>
+      <aside style="flex:0 1 380px;min-width:260px;background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:16px;display:flex;flex-direction:column;gap:8px;font-size:12.5px;line-height:1.55;color:#444444;">
+        <span style="font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;">Ce que voit le franchisé</span>
+        <span>En haut de son Calendrier, la carte « Le réseau vous propose » : la publication de la marque, le texte ajouté pour sa boutique, et deux boutons, <b style="font-weight:400;color:#1c1a17;">Publier sur ma Page</b> et <b style="font-weight:400;color:#1c1a17;">Refuser</b> (avec un motif, que vous lisez ici dans la case de sa boutique).</span>
         <span>{{ sansRepTxt }}</span>
         <span>Une boutique en « automatique » ne voit rien à valider : le repost arrive sur sa Page et dans son calendrier.</span>
       </aside>
@@ -275,21 +276,21 @@
 
   <!-- La case ouverte : ce que la boutique a fait de la publication, et ce que le réseau peut y faire. -->
   <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ false }}">
-    <div role="dialog" aria-label="{{ sel.titre }}" style="position:fixed;right:24px;bottom:24px;width:340px;max-width:calc(100vw - 48px);background:#FFFFFF;border-radius:12px;box-shadow:0 14px 34px rgba(35,34,32,0.22);border:0.5px solid rgba(34,34,34,0.12);padding:14px 16px;display:flex;flex-direction:column;gap:8px;z-index:50;">
+    <div role="dialog" aria-label="{{ sel.titre }}" style="position:fixed;right:24px;bottom:24px;width:340px;max-width:calc(100vw - 48px);background:#FFFFFF;border-radius:12px;box-shadow:0 14px 34px rgba(35,34,32,0.22);border:1px solid #e6e0d8;padding:14px 16px;display:flex;flex-direction:column;gap:8px;z-index:50;">
       <div style="display:flex;align-items:flex-start;gap:8px;">
-        <span style="flex:1;display:flex;flex-direction:column;gap:2px;"><b style="font-size:13.5px;font-weight:500;">{{ sel.titre }}</b><span style="font-size:11.5px;color:#666666;">{{ sel.post }}</span></span>
-        <button onClick="{{ fermer }}" aria-label="Fermer" style="border:none;background:none;font-size:16px;line-height:1;cursor:pointer;color:#666666;padding:2px;">×</button>
+        <span style="flex:1;display:flex;flex-direction:column;gap:2px;"><b style="font-size:13.5px;font-weight:400;">{{ sel.titre }}</b><span style="font-size:11.5px;color:#7a736a;">{{ sel.post }}</span></span>
+        <button onClick="{{ fermer }}" aria-label="Fermer" style="border:none;background:none;font-size:16px;line-height:1;cursor:pointer;color:#7a736a;padding:2px;">×</button>
       </div>
-      <span style="font-size:11px;font-weight:500;border-radius:999px;padding:3px 9px;align-self:flex-start;background:{{ sel.bg }};color:{{ sel.fg }};">{{ sel.label }}</span>
+      <span style="font-size:11px;font-weight:400;border-radius:6px;padding:3px 9px;align-self:flex-start;background:{{ sel.bg }};color:{{ sel.fg }};">{{ sel.label }}</span>
       <sc-if value="{{ sel.hasQuote }}" hint-placeholder-val="{{ false }}"><div style="font-size:13px;line-height:1.45;background:#F6E3E5;color:#6B1520;border-radius:8px;padding:7px 10px;">« {{ sel.quote }} »</div></sc-if>
       <sc-for list="{{ sel.lignes }}" as="x" hint-placeholder-count="0"><span style="font-size:12px;color:#444444;line-height:1.45;">{{ x }}</span></sc-for>
-      <sc-if value="{{ sel.hasLien }}" hint-placeholder-val="{{ false }}"><a href="{{ sel.lien }}" target="_blank" rel="noopener" style="font-size:12px;font-weight:500;">Voir sur la Page de la boutique ↗</a></sc-if>
-      <sc-if value="{{ sel.hasAction }}" hint-placeholder-val="{{ false }}"><button onClick="{{ sel.action }}" style="align-self:flex-start;font-size:12px;font-weight:500;background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:7px 12px;cursor:pointer;">{{ sel.actionLabel }}</button></sc-if>
+      <sc-if value="{{ sel.hasLien }}" hint-placeholder-val="{{ false }}"><a href="{{ sel.lien }}" target="_blank" rel="noopener" style="font-size:12px;font-weight:400;">Voir sur la Page de la boutique ↗</a></sc-if>
+      <sc-if value="{{ sel.hasAction }}" hint-placeholder-val="{{ false }}"><button onClick="{{ sel.action }}" style="align-self:flex-start;font-size:12px;font-weight:400;background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:7px 12px;cursor:pointer;">{{ sel.actionLabel }}</button></sc-if>
     </div>
   </sc-if>
 
   <sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
-    <div role="status" style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#232220;color:#FFFFFF;border-radius:8px;padding:11px 16px;font-size:13px;z-index:60;box-shadow:0 12px 30px rgba(35,34,32,0.3);">{{ toast }}</div>
+    <div role="status" style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1c1a17;color:#FFFFFF;border-radius:8px;padding:11px 16px;font-size:13px;z-index:60;box-shadow:0 12px 30px rgba(35,34,32,0.3);">{{ toast }}</div>
   </sc-if>
 </div>
 </x-dc>
@@ -334,7 +335,7 @@ class Component extends DCLogic {
     const r = d ? d.reglage : null, shops = d ? d.shops : [], c = d ? d.chiffres : {};
     const draft = s.draft || (r ? JSON.parse(JSON.stringify(r)) : null);
     const setD = (f) => this.setState(st => { const x = JSON.parse(JSON.stringify(st.draft || r)); f(x); return { draft: x }; });
-    const seg = (on) => ({ bg: on ? '#FFFFFF' : 'transparent', fg: on ? '#8D1D2C' : '#666666', shadow: on ? '0 1px 3px rgba(35,34,32,0.15)' : 'none' });
+    const seg = (on) => ({ bg: on ? '#FFFFFF' : 'transparent', fg: on ? '#8D1D2C' : '#7a736a', shadow: on ? '0 1px 3px rgba(35,34,32,0.15)' : 'none' });
     const conn = SA.href('set', 'tab=conn');
     const espace = (sid) => (((d && d.franchiseUrl) || '../social_franchisee/').replace(/\/?$/, '/')) + 'calendrier?shop=' + encodeURIComponent(sid);
 
@@ -382,7 +383,7 @@ class Component extends DCLogic {
         modeFg: retire || exclu ? '#8A847C' : '#8D1D2C', titre: l.titre, texte: l.texte, extrait: String(l.texte || '').replace(/\s+/g, ' ').slice(0, 140),
         permalink: l.permalink || '#', img: l.img || '', hasImg: !!l.img, noImg: !l.img, op: exclu || retire ? 0.55 : 1, bg: exclu || retire ? '#FBF9F5' : '#FFFFFF',
         exclu, excluTxt: '— Exclue : ' + (l.motif || 'réglage'), span: '2 / span ' + Math.max(1, n), cases,
-        hasAction: !!act, actionLabel: act ? act[0] : '', action: act ? act[1] : () => {}, actBg: confirmer ? '#8D1D2C' : '#FFFFFF', actFg: confirmer ? '#FFFFFF' : '#222222' };
+        hasAction: !!act, actionLabel: act ? act[0] : '', action: act ? act[1] : () => {}, actBg: confirmer ? '#8D1D2C' : '#FFFFFF', actFg: confirmer ? '#FFFFFF' : '#1c1a17' };
     });
 
     // --- à venir : les posts programmés de la marque, et leur repost prévu avec le réglage d'aujourd'hui ---
@@ -457,7 +458,7 @@ class Component extends DCLogic {
     return {
       kicker: d ? 'Page « ' + d.marque.name + ' » → Pages des boutiques' : 'Page de la marque → Pages des boutiques',
       loading: s.loading && !d, hasErr: !!s.err, err: s.err, ready: !!d,
-      actifLabel: r && r.actif ? 'Activé' : 'En pause', actifAria: r && r.actif ? 'true' : 'false', actifFg: r && r.actif ? '#0F6B4A' : '#666666',
+      actifLabel: r && r.actif ? 'Activé' : 'En pause', actifAria: r && r.actif ? 'true' : 'false', actifFg: r && r.actif ? '#0F6B4A' : '#7a736a',
       swBg: r && r.actif ? '#0F6B4A' : '#CFC8BE', swLeft: r && r.actif ? '15px' : '2px',
       basculer: () => r && this.reglage({ actif: !r.actif }, r.actif ? 'Repost en pause' : 'Repost activé : les prochaines publications de la marque seront reprises'),
       jours: String(s.jours), setJours: (e) => { const j = +e.target.value || 14; this.setState({ jours: j, sel: null }); this.load(j); },
@@ -465,20 +466,20 @@ class Component extends DCLogic {
       relireLabel: s.busy ? 'Un instant…' : 'Relire la Page de la marque', busyOp: s.busy ? 0.6 : 1,
       guet, guetBg, guetFg,
       onglets: [['suivi', 'Suivi'], ['reglage', 'Réglage'], ['franchise', 'Côté franchisé' + (nAtt ? ' · ' + nAtt : '')]].map(([k, label]) => ({ label, on: s.onglet === k ? 'true' : 'false',
-        bar: s.onglet === k ? '#8D1D2C' : 'transparent', fg: s.onglet === k ? '#8D1D2C' : '#666666', w: s.onglet === k ? 500 : 400, pick: () => this.setState({ onglet: k, sel: null }) })),
+        bar: s.onglet === k ? '#8D1D2C' : 'transparent', fg: s.onglet === k ? '#8D1D2C' : '#7a736a', w: s.onglet === k ? 500 : 400, pick: () => this.setState({ onglet: k, sel: null }) })),
       isSuivi: s.onglet === 'suivi', isReglage: s.onglet === 'reglage', isFranchise: s.onglet === 'franchise',
       tuiles: [['Posts à venir', fI(nAv), nAv ? 'prochain le ' + dt(av.posts[0].prevuLe) + (nAvRepris < nAv ? ' · ' + (nAv - nAvRepris) + ' exclu' + (nAv - nAvRepris > 1 ? 's' : '') : '') : 'rien de programmé', '#2F5D8A'],
-        ['Publications de la marque', fI(c.posts), c.exclus ? c.exclus + ' exclue' + (c.exclus > 1 ? 's' : '') + ' par le réglage' : 'sur ' + s.jours + ' jours', '#222222'],
+        ['Publications de la marque', fI(c.posts), c.exclus ? c.exclus + ' exclue' + (c.exclus > 1 ? 's' : '') + ' par le réglage' : 'sur ' + s.jours + ' jours', '#1c1a17'],
         ['Reposts publiés', fI(c.publies) + (c.attendus ? ' / ' + fI(c.attendus) : ''), c.attendus ? Math.round(100 * c.publies / c.attendus) + ' % des reposts attendus' : 'rien d’attendu', '#0F6B4A'],
         ['Programmés', fI(c.programmes), 'partent à leur heure', '#2F5D8A'],
-        ['À valider', fI(c.aValider), 'en attente du franchisé', c.aValider ? '#8A4B00' : '#222222'],
-        ['Refusés', fI(c.refuses), c.sansReponse ? c.sansReponse + ' sans réponse, rien publié' : 'par le franchisé', c.refuses ? '#8D1D2C' : '#222222'],
-        ['Échecs', fI(c.echecs), c.echecs ? 'refusés par Meta : à relancer' : 'aucun', c.echecs ? '#B3261E' : '#222222']].map(([label, value, sub, fg]) => ({ label, value, sub, fg })),
+        ['À valider', fI(c.aValider), 'en attente du franchisé', c.aValider ? '#8A4B00' : '#1c1a17'],
+        ['Refusés', fI(c.refuses), c.sansReponse ? c.sansReponse + ' sans réponse, rien publié' : 'par le franchisé', c.refuses ? '#8D1D2C' : '#1c1a17'],
+        ['Échecs', fI(c.echecs), c.echecs ? 'refusés par Meta : à relancer' : 'aucun', c.echecs ? '#B3261E' : '#1c1a17']].map(([label, value, sub, fg]) => ({ label, value, sub, fg })),
       alertes,
       cols: 'minmax(320px,2.6fr) repeat(' + Math.max(1, n) + ', minmax(112px,1fr)) 150px', minW: (320 + 112 * Math.max(1, n) + 150) + 'px',
       entetes, lignes, vide: !!d && !lignes.length,
       avTitre: 'À venir · ' + (nAv ? nAv + ' post' + (nAv > 1 ? 's' : '') + ' programmé' + (nAv > 1 ? 's' : '') : 'posts programmés') + ' sur la Page de la marque',
-      avLignes, avVide: !!d && !nAv, avVideTxt, avVideFg: av.erreur ? '#8D1D2C' : '#666666', avNouveau: SA.href('post', 'marque=1'),
+      avLignes, avVide: !!d && !nAv, avVideTxt, avVideFg: av.erreur ? '#8D1D2C' : '#7a736a', avNouveau: SA.href('post', 'marque=1'),
       avPlus: !!d && nAv > 0, avPlusTxt: (av.erreur ? 'Posts programmés par l’API illisibles chez Meta (' + av.erreur + '). ' : '') + bs,
       pubTitre: 'Publiées · ' + s.jours + ' derniers jours',
       videTxt: !d ? '' : r.actif ? 'Aucune publication de la Page de la marque sur les ' + s.jours + ' derniers jours depuis l’activation.' : 'Le repost est en pause. Activez-le (en haut à droite) : les prochaines publications de la Page de la marque seront reprises.',

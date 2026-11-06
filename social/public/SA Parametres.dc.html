@@ -9,30 +9,31 @@
 <x-dc>
 <helmet>
   <link rel="stylesheet" href="_ds/l-atelier-by-8504a4e3-7796-44da-b087-3fbd9dcb8dcd/global.css">
+  <link rel="stylesheet" href="_ds/marketing.css">
   <script src="_ds/l-atelier-by-8504a4e3-7796-44da-b087-3fbd9dcb8dcd/_ds_bundle.js"></script>
   <script src="social-data.js"></script>
   <style>
-    html,body{margin:0;padding:0;background:#EAE4DC;-webkit-font-smoothing:antialiased;}
+    html,body{margin:0;padding:0;background:#faf7f2;-webkit-font-smoothing:antialiased;}
     /* La règle « section » du design system (48 px, pages vitrines) ne vaut pas pour les cartes des écrans. */
     section{padding-top:0;padding-bottom:0;}
     a{color:#8D1D2C;} a:hover{color:#232220;}
     select,input,button,textarea{font-family:var(--font-ui);}
   </style>
 </helmet>
-<div style="display:flex;min-height:100vh;background:#EAE4DC;font-family:var(--font-ui);color:#222222;">
+<div style="display:flex;min-height:100vh;background:#faf7f2;font-family:var(--font-ui);color:#1c1a17;">
   <dc-import name="SANav" active="set" hint-size="228px,100vh"></dc-import>
   <main style="flex:1 1 auto;min-width:0;padding:20px 24px 32px;display:flex;flex-direction:column;gap:14px;">
 
     <header style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;">
       <div style="display:flex;flex-direction:column;gap:4px;">
-        <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:#666666;">Business Manager · tokens d'utilisateur système</span>
-        <h1 style="font-family:var(--font-display);font-weight:400;font-size:30px;line-height:1.1;margin:0;color:#232220;">PARAMETRES ET CONNEXIONS</h1>
+        <span style="font-size:11px;font-weight:400;letter-spacing:0.08em;text-transform:uppercase;color:#7a736a;">Business Manager · tokens d'utilisateur système</span>
+        <h1 style="font-family:var(--font-ui);font-weight:400;font-size:26px;line-height:1.15;letter-spacing:-0.01em;margin:0;color:#1c1a17;">Paramètres et connexions</h1>
       </div>
     </header>
 
     <div style="display:flex;gap:2px;border-bottom:0.5px solid rgba(34,34,34,0.15);flex-wrap:wrap;">
       <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5">
-        <button onClick="{{ t.pick }}" style="border:none;background:transparent;padding:10px 14px;font-size:13px;font-weight:500;cursor:pointer;color:{{ t.fg }};box-shadow:inset 0 -2px 0 {{ t.line }};display:flex;align-items:center;gap:6px;">{{ t.label }}<sc-if value="{{ t.hasBadge }}" hint-placeholder-val="{{ false }}"><span style="min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#8D1D2C;color:#FFFFFF;font-size:10px;display:flex;align-items:center;justify-content:center;box-sizing:border-box;">{{ t.badge }}</span></sc-if></button>
+        <button onClick="{{ t.pick }}" style="border:none;background:transparent;padding:10px 14px;font-size:13px;font-weight:400;cursor:pointer;color:{{ t.fg }};box-shadow:inset 0 -2px 0 {{ t.line }};display:flex;align-items:center;gap:6px;">{{ t.label }}<sc-if value="{{ t.hasBadge }}" hint-placeholder-val="{{ false }}"><span style="min-width:18px;height:18px;padding:0 5px;border-radius:6px;background:#8D1D2C;color:#FFFFFF;font-size:10px;display:flex;align-items:center;justify-content:center;box-sizing:border-box;">{{ t.badge }}</span></sc-if></button>
       </sc-for>
     </div>
 
@@ -42,83 +43,83 @@
         <div style="background:#FCE7C8;border-radius:8px;padding:10px 14px;font-size:13px;color:#6b3d0a;">{{ alertText }}</div>
       </sc-if>
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-        <span style="font-size:12px;color:#666666;">{{ connSummary }}</span>
-        <button onClick="{{ testAll }}" style="height:34px;padding:0 14px;border-radius:8px;border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;font-size:13px;font-weight:500;cursor:pointer;">{{ testLabel }}</button>
+        <span style="font-size:12px;color:#7a736a;">{{ connSummary }}</span>
+        <button onClick="{{ testAll }}" style="height:34px;padding:0 14px;border-radius:8px;border:1px solid #e6e0d8;background:#FFFFFF;font-size:13px;font-weight:400;cursor:pointer;">{{ testLabel }}</button>
       </div>
       <sc-if value="{{ hasNet }}" hint-placeholder-val="{{ true }}">
-        <section style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:12px 14px;display:flex;flex-direction:column;gap:10px;">
-          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:500;">Réseau · un seul compte pour toutes les boutiques</span><span style="font-size:11px;color:#666666;">{{ netNote }}</span></div>
+        <section style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:12px 14px;display:flex;flex-direction:column;gap:10px;">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:400;">Réseau · un seul compte pour toutes les boutiques</span><span style="font-size:11px;color:#7a736a;">{{ netNote }}</span></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px;">
             <sc-for list="{{ netCells }}" as="c" hint-placeholder-count="2">
-              <div style="border:0.5px solid rgba(34,34,34,0.10);border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;background:{{ c.bg }};">
+              <div style="border:1px solid #e6e0d8;border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;background:{{ c.bg }};">
                 <span style="display:flex;flex-direction:column;gap:3px;min-width:0;">
-                  <span style="font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;">{{ c.title }}</span>
-                  <span style="align-self:flex-start;font-size:11px;font-weight:500;border-radius:999px;padding:3px 8px;background:{{ c.stBg }};color:{{ c.stFg }};">{{ c.label }}</span>
-                  <span style="font-size:11px;color:#666666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ c.detail }}</span>
+                  <span style="font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;">{{ c.title }}</span>
+                  <span style="align-self:flex-start;font-size:11px;font-weight:400;border-radius:6px;padding:3px 8px;background:{{ c.stBg }};color:{{ c.stFg }};">{{ c.label }}</span>
+                  <span style="font-size:11px;color:#7a736a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ c.detail }}</span>
                 </span>
-                <sc-if value="{{ c.needsAction }}" hint-placeholder-val="{{ false }}"><button onClick="{{ c.fix }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">{{ c.action }}</button></sc-if>
-                <sc-if value="{{ c.busy }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#666666;">Vérification…</span></sc-if>
+                <sc-if value="{{ c.needsAction }}" hint-placeholder-val="{{ false }}"><button onClick="{{ c.fix }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:400;cursor:pointer;white-space:nowrap;">{{ c.action }}</button></sc-if>
+                <sc-if value="{{ c.busy }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#7a736a;">Vérification…</span></sc-if>
               </div>
             </sc-for>
           </div>
         </section>
       </sc-if>
-      <section style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);overflow:auto;">
+      <section style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;overflow:auto;">
         <div style="display:grid;grid-template-columns:{{ connCols }};min-width:{{ connMin }};">
-          <sc-for list="{{ connHead }}" as="h" hint-placeholder-count="2"><span style="padding:10px 14px;font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;background:#F4EFE8;">{{ h }}</span></sc-for>
+          <sc-for list="{{ connHead }}" as="h" hint-placeholder-count="2"><span style="padding:10px 14px;font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;background:#F4EFE8;">{{ h }}</span></sc-for>
           <sc-for list="{{ connRows }}" as="r" hint-placeholder-count="6">
-            <span style="padding:12px 14px;border-top:0.5px solid rgba(34,34,34,0.08);display:flex;flex-direction:column;gap:2px;"><span style="font-size:14px;font-weight:500;">{{ r.name }}</span><span style="font-size:11px;color:#666666;">{{ r.address }}</span></span>
+            <span style="padding:12px 14px;border-top:1px solid #e6e0d8;display:flex;flex-direction:column;gap:2px;"><span style="font-size:14px;font-weight:400;">{{ r.name }}</span><span style="font-size:11px;color:#7a736a;">{{ r.address }}</span></span>
             <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="3">
-              <span style="padding:10px 14px;border-top:0.5px solid rgba(34,34,34,0.08);display:flex;align-items:center;justify-content:space-between;gap:8px;background:{{ c.bg }};">
+              <span style="padding:10px 14px;border-top:1px solid #e6e0d8;display:flex;align-items:center;justify-content:space-between;gap:8px;background:{{ c.bg }};">
                 <span style="display:flex;flex-direction:column;gap:3px;min-width:0;">
-                  <span style="align-self:flex-start;font-size:11px;font-weight:500;border-radius:999px;padding:3px 8px;background:{{ c.stBg }};color:{{ c.stFg }};">{{ c.label }}</span>
-                  <span style="font-size:11px;color:#666666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ c.detail }}</span>
+                  <span style="align-self:flex-start;font-size:11px;font-weight:400;border-radius:6px;padding:3px 8px;background:{{ c.stBg }};color:{{ c.stFg }};">{{ c.label }}</span>
+                  <span style="font-size:11px;color:#7a736a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ c.detail }}</span>
                 </span>
-                <sc-if value="{{ c.needsAction }}" hint-placeholder-val="{{ false }}"><button onClick="{{ c.fix }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">{{ c.action }}</button></sc-if>
-                <sc-if value="{{ c.busy }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#666666;">Connexion…</span></sc-if>
+                <sc-if value="{{ c.needsAction }}" hint-placeholder-val="{{ false }}"><button onClick="{{ c.fix }}" style="border:none;background:#8D1D2C;color:#FFFFFF;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:400;cursor:pointer;white-space:nowrap;">{{ c.action }}</button></sc-if>
+                <sc-if value="{{ c.busy }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:#7a736a;">Connexion…</span></sc-if>
               </span>
             </sc-for>
           </sc-for>
         </div>
       </section>
-      <span style="font-size:11px;color:#666666;line-height:1.5;">Publication via Graph API (Pages API, permission pages_manage_posts) avec un Page access token par boutique. Publicités via Marketing API. Les tokens sont stockés côté serveur ; le navigateur n'y a jamais accès.</span>
+      <span style="font-size:11px;color:#7a736a;line-height:1.5;">Publication via Graph API (Pages API, permission pages_manage_posts) avec un Page access token par boutique. Publicités via Marketing API. Les tokens sont stockés côté serveur ; le navigateur n'y a jamais accès.</span>
     </sc-if>
 
     <!-- API META -->
     <sc-if value="{{ isApi }}" hint-placeholder-val="{{ false }}">
       <sc-if value="{{ live }}" hint-placeholder-val="{{ false }}">
-        <section id="sec-cles" style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:14px 16px;display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
-          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:500;">Clés d'accès Meta</span><span style="font-size:11px;color:#666666;">Chiffrées en base (mar_keys) · jamais réaffichées · un champ vide ne change rien</span></div>
+        <section id="sec-cles" style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:14px 16px;display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:400;">Clés d'accès Meta</span><span style="font-size:11px;color:#7a736a;">Chiffrées en base (mar_keys) · jamais réaffichées · un champ vide ne change rien</span></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;">
             <sc-for list="{{ keyFields }}" as="k" hint-placeholder-count="3">
               <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">
                 <span>{{ k.label }} <span style="font-size:11px;color:{{ k.stFg }};">· {{ k.state }}</span></span>
-                <input type="{{ k.type }}" autocomplete="off" value="{{ k.value }}" onChange="{{ k.set }}" placeholder="{{ k.ph }}" style="font-family:ui-monospace,monospace;font-size:12px;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:8px 10px;">
+                <input type="{{ k.type }}" autocomplete="off" value="{{ k.value }}" onChange="{{ k.set }}" placeholder="{{ k.ph }}" style="font-family:ui-monospace,monospace;font-size:12px;border:1px solid #e6e0d8;border-radius:8px;padding:8px 10px;">
               </label>
             </sc-for>
           </div>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><button onClick="{{ saveKeys }}" style="background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;">Enregistrer les clés</button>
-            <sc-if value="{{ crmReprise }}" hint-placeholder-val="{{ false }}"><button onClick="{{ reprendreCrm }}" title="{{ crmRepriseTitre }}" style="background:#FFFFFF;color:#8D1D2C;border:0.5px solid rgba(141,29,44,0.45);border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;">↺ Reprendre la connexion du CRM</button></sc-if>
-            <label style="font-size:12px;color:#444444;display:flex;gap:6px;align-items:center;">URL publique du module (Meta y télécharge les visuels) <input value="{{ publicUrl }}" onChange="{{ setPublicUrl }}" style="font-family:ui-monospace,monospace;font-size:12px;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:6px 8px;width:260px;"></label>
-            <label style="font-size:12px;color:#444444;display:flex;gap:6px;align-items:center;">API Marketing du BO (les opérations) <input value="{{ marketingApi }}" onChange="{{ setMarketingApi }}" title="Adresse appelée par le serveur pour lire les campagnes commerciales (GET …/campaigns)" style="font-family:ui-monospace,monospace;font-size:12px;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:6px 8px;width:260px;"></label></div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><button onClick="{{ saveKeys }}" style="background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:400;cursor:pointer;">Enregistrer les clés</button>
+            <sc-if value="{{ crmReprise }}" hint-placeholder-val="{{ false }}"><button onClick="{{ reprendreCrm }}" title="{{ crmRepriseTitre }}" style="background:#FFFFFF;color:#8D1D2C;border:0.5px solid rgba(141,29,44,0.45);border-radius:8px;padding:8px 14px;font-size:13px;font-weight:400;cursor:pointer;">↺ Reprendre la connexion du CRM</button></sc-if>
+            <label style="font-size:12px;color:#444444;display:flex;gap:6px;align-items:center;">URL publique du module (Meta y télécharge les visuels) <input value="{{ publicUrl }}" onChange="{{ setPublicUrl }}" style="font-family:ui-monospace,monospace;font-size:12px;border:1px solid #e6e0d8;border-radius:8px;padding:6px 8px;width:260px;"></label>
+            <label style="font-size:12px;color:#444444;display:flex;gap:6px;align-items:center;">API Marketing du BO (les opérations) <input value="{{ marketingApi }}" onChange="{{ setMarketingApi }}" title="Adresse appelée par le serveur pour lire les campagnes commerciales (GET …/campaigns)" style="font-family:ui-monospace,monospace;font-size:12px;border:1px solid #e6e0d8;border-radius:8px;padding:6px 8px;width:260px;"></label></div>
         </section>
-        <section id="sec-pf" style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:14px 16px;display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
+        <section id="sec-pf" style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:14px 16px;display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
           <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
-            <span style="display:flex;flex-direction:column;gap:2px;"><span style="font-size:13px;font-weight:500;">Portefeuille Business Manager</span><span style="font-size:11px;color:#666666;">{{ pfSummary }}</span></span>
+            <span style="display:flex;flex-direction:column;gap:2px;"><span style="font-size:13px;font-weight:400;">Portefeuille Business Manager</span><span style="font-size:11px;color:#7a736a;">{{ pfSummary }}</span></span>
             <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-              <input value="{{ pfBiz }}" onChange="{{ setPfBiz }}" placeholder="Business ID (facultatif)" style="font-family:ui-monospace,monospace;font-size:12px;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:7px 10px;width:190px;">
-              <button onClick="{{ pfRefresh }}" style="background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;">{{ pfRefreshLabel }}</button>
+              <input value="{{ pfBiz }}" onChange="{{ setPfBiz }}" placeholder="Business ID (facultatif)" style="font-family:ui-monospace,monospace;font-size:12px;border:1px solid #e6e0d8;border-radius:8px;padding:7px 10px;width:190px;">
+              <button onClick="{{ pfRefresh }}" style="background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:400;cursor:pointer;">{{ pfRefreshLabel }}</button>
             </span>
           </div>
           <sc-if value="{{ pfHasErr }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;line-height:1.5;background:#FCE7C8;color:#6b3d0a;border-radius:8px;padding:8px 10px;">{{ pfErr }}</div></sc-if>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;">
             <sc-for list="{{ pfGroups }}" as="g" hint-placeholder-count="4">
-              <div style="border:0.5px solid rgba(34,34,34,0.10);border-radius:8px;overflow:hidden;">
-                <div style="padding:8px 10px;background:#FBF8F4;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#666666;">{{ g.title }}</div>
+              <div style="border:1px solid #e6e0d8;border-radius:8px;overflow:hidden;">
+                <div style="padding:8px 10px;background:#FBF8F4;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;">{{ g.title }}</div>
                 <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="3">
-                  <div style="padding:7px 10px;border-top:0.5px solid rgba(34,34,34,0.06);display:flex;justify-content:space-between;gap:8px;font-size:12px;">
-                    <span style="display:flex;flex-direction:column;min-width:0;"><span style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ r.name }}</span><span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;">{{ r.id }} {{ r.note }}</span></span>
-                    <span style="align-self:center;font-size:10px;border-radius:999px;padding:2px 7px;white-space:nowrap;background:{{ r.bg }};color:{{ r.fg }};">{{ r.shop }}</span>
+                  <div style="padding:7px 10px;border-top:1px solid #e6e0d8;display:flex;justify-content:space-between;gap:8px;font-size:12px;">
+                    <span style="display:flex;flex-direction:column;min-width:0;"><span style="font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ r.name }}</span><span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;">{{ r.id }} {{ r.note }}</span></span>
+                    <span style="align-self:center;font-size:10px;border-radius:6px;padding:2px 7px;white-space:nowrap;background:{{ r.bg }};color:{{ r.fg }};">{{ r.shop }}</span>
                   </div>
                 </sc-for>
                 <sc-if value="{{ g.empty }}" hint-placeholder-val="{{ false }}"><div style="padding:10px;font-size:12px;color:#8A847C;">Rien de visible</div></sc-if>
@@ -126,60 +127,60 @@
             </sc-for>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-            <button onClick="{{ pfApply }}" style="background:#FFFFFF;border:0.5px solid #8D1D2C;color:#8D1D2C;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:500;cursor:pointer;">Remplir les identifiants vides</button>
-            <button onClick="{{ pfApplyAll }}" style="background:#FFFFFF;border:0.5px solid rgba(34,34,34,0.18);color:#444444;border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;">Tout remplacer par le portefeuille</button>
-            <span style="font-size:11px;color:#666666;">Rapprochement par le nom de la ville dans le nom de la Page / du compte ; « L'Atelier By » seul → la marque. Vérifiez puis corrigez au besoin dans le tableau des identifiants.</span>
+            <button onClick="{{ pfApply }}" style="background:#FFFFFF;border:0.5px solid #8D1D2C;color:#8D1D2C;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:400;cursor:pointer;">Remplir les identifiants vides</button>
+            <button onClick="{{ pfApplyAll }}" style="background:#FFFFFF;border:1px solid #e6e0d8;color:#444444;border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;">Tout remplacer par le portefeuille</button>
+            <span style="font-size:11px;color:#7a736a;">Rapprochement par le nom de la ville dans le nom de la Page / du compte ; « L'Atelier By » seul → la marque. Vérifiez puis corrigez au besoin dans le tableau des identifiants.</span>
           </div>
         </section>
       </sc-if>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;">
-        <section id="sec-version" style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
-          <span style="font-size:13px;font-weight:500;">Version de l'API <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;">{VERSION}</span></span>
-          <div style="display:flex;gap:6px;"><sc-for list="{{ versions }}" as="v" hint-placeholder-count="2"><button onClick="{{ v.pick }}" style="border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;border:0.5px solid {{ v.border }};background:{{ v.bg }};color:{{ v.fg }};font-family:ui-monospace,monospace;">{{ v.id }}</button></sc-for></div>
+        <section id="sec-version" style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
+          <span style="font-size:13px;font-weight:400;">Version de l'API <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;">{VERSION}</span></span>
+          <div style="display:flex;gap:6px;"><sc-for list="{{ versions }}" as="v" hint-placeholder-count="2"><button onClick="{{ v.pick }}" style="border-radius:8px;padding:8px 14px;font-size:13px;font-weight:400;cursor:pointer;border:0.5px solid {{ v.border }};background:{{ v.bg }};color:{{ v.fg }};font-family:ui-monospace,monospace;">{{ v.id }}</button></sc-for></div>
           <span style="font-family:ui-monospace,monospace;font-size:12px;background:#F4EFE8;border-radius:6px;padding:8px 10px;">{{ baseUrl }}</span>
           <span style="font-size:11px;color:#8A4B00;background:#FCE7C8;border-radius:6px;padding:7px 9px;line-height:1.45;">La doc Meta affiche v25.0 ; une v26.0 est signalée depuis le 29/07/2026. Vérifiez le changelog Marketing API avant de figer la version.</span>
-          <span style="font-size:11px;color:#666666;line-height:1.5;">Backend Franchise Buddy : <span style="font-family:ui-monospace,monospace;">{API_BASE_URL}/api/v1/social/{domaine}/{ressource}</span> · session du cockpit (même connexion que le BO consultant). Le navigateur n'appelle jamais Meta directement.</span>
+          <span style="font-size:11px;color:#7a736a;line-height:1.5;">Backend Franchise Buddy : <span style="font-family:ui-monospace,monospace;">{API_BASE_URL}/api/v1/social/{domaine}/{ressource}</span> · session du cockpit (même connexion que le BO consultant). Le navigateur n'appelle jamais Meta directement.</span>
         </section>
-        <section id="sec-perms" style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:14px 16px;display:flex;flex-direction:column;gap:8px;">
-          <span style="font-size:13px;font-weight:500;">Permissions et niveaux d'accès</span>
+        <section id="sec-perms" style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:14px 16px;display:flex;flex-direction:column;gap:8px;">
+          <span style="font-size:13px;font-weight:400;">Permissions et niveaux d'accès</span>
           <sc-for list="{{ perms }}" as="p" hint-placeholder-count="6">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0;border-top:0.5px solid rgba(34,34,34,0.06);">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 0;border-top:1px solid #e6e0d8;">
               <span style="font-family:ui-monospace,monospace;font-size:12px;">{{ p.id }}</span>
-              <span style="font-size:11px;font-weight:500;border-radius:999px;padding:3px 8px;background:{{ p.bg }};color:{{ p.fg }};">{{ p.level }}</span>
+              <span style="font-size:11px;font-weight:400;border-radius:6px;padding:3px 8px;background:{{ p.bg }};color:{{ p.fg }};">{{ p.level }}</span>
             </div>
           </sc-for>
-          <span style="font-size:11px;color:#666666;line-height:1.45;">Depuis mai 2026, « Standard » s'appelle « Limited access » et « Advanced » s'appelle « Full access » dans le dashboard Meta. leads_retrieval doit passer en Full access pour lire les leads de toutes les Pages.</span>
+          <span style="font-size:11px;color:#7a736a;line-height:1.45;">Depuis mai 2026, « Standard » s'appelle « Limited access » et « Advanced » s'appelle « Full access » dans le dashboard Meta. leads_retrieval doit passer en Full access pour lire les leads de toutes les Pages.</span>
         </section>
-        <section id="sec-dsa" style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
-          <span style="font-size:13px;font-weight:500;">Transparence UE (DSA) · obligatoire pour cibler la Belgique</span>
-          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Bénéficiaire <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;">dsa_beneficiary</span><input type="text" value="{{ dsaB }}" onChange="{{ setDsaB }}" style="font-size:13px;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;"></label>
-          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Payeur <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;">dsa_payor</span><input type="text" value="{{ dsaP }}" onChange="{{ setDsaP }}" style="font-size:13px;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:8px 10px;"></label>
-          <span style="font-size:11px;color:#666666;">Pré-rempli dans chaque ad set créé par l'assistant Publicités.</span>
+        <section id="sec-dsa" style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
+          <span style="font-size:13px;font-weight:400;">Transparence UE (DSA) · obligatoire pour cibler la Belgique</span>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Bénéficiaire <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;">dsa_beneficiary</span><input type="text" value="{{ dsaB }}" onChange="{{ setDsaB }}" style="font-size:13px;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;"></label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Payeur <span style="font-family:ui-monospace,monospace;font-size:10px;color:#8A847C;font-weight:400;">dsa_payor</span><input type="text" value="{{ dsaP }}" onChange="{{ setDsaP }}" style="font-size:13px;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;"></label>
+          <span style="font-size:11px;color:#7a736a;">Pré-rempli dans chaque ad set créé par l'assistant Publicités.</span>
         </section>
-        <section style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:14px 16px;display:flex;flex-direction:column;gap:8px;">
-          <span style="font-size:13px;font-weight:500;">Conventions</span>
-          <span style="font-size:12px;line-height:1.5;">Montants en <strong style="font-weight:500;">centimes</strong> : 20 € → <span style="font-family:ui-monospace,monospace;">2000</span>.</span>
+        <section style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:14px 16px;display:flex;flex-direction:column;gap:8px;">
+          <span style="font-size:13px;font-weight:400;">Conventions</span>
+          <span style="font-size:12px;line-height:1.5;">Montants en <strong style="font-weight:400;">centimes</strong> : 20 € → <span style="font-family:ui-monospace,monospace;">2000</span>.</span>
           <span style="font-size:12px;line-height:1.5;">Dates en ISO 8601 (<span style="font-family:ui-monospace,monospace;">2026-10-18T08:00:00+0200</span>) ou timestamp Unix.</span>
           <span style="font-size:12px;line-height:1.5;">Posts programmés : <span style="font-family:ui-monospace,monospace;">published=false</span> + <span style="font-family:ui-monospace,monospace;">scheduled_publish_time</span>, entre 10 minutes et 30 jours.</span>
           <span style="font-size:12px;line-height:1.5;">Tokens : System User (Business Manager) pour les pubs, Page token par boutique pour les posts.</span>
         </section>
       </div>
-      <section id="sec-ids" style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);overflow:auto;">
-        <div style="padding:12px 16px;border-bottom:0.5px solid rgba(34,34,34,0.10);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:500;">Identifiants Meta par boutique</span><span style="font-size:11px;color:#666666;">Compte réseau : <sc-if value="{{ live }}" hint-placeholder-val="{{ false }}"><input value="{{ networkAccount }}" onChange="{{ setNetworkAccount }}" placeholder="act_…" style="font-family:ui-monospace,monospace;font-size:11px;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:3px 6px;width:150px;"></sc-if><sc-if value="{{ !live }}" hint-placeholder-val="{{ true }}"><span style="font-family:ui-monospace,monospace;">{{ networkAccount }}</span></sc-if></span></div>
+      <section id="sec-ids" style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;overflow:auto;">
+        <div style="padding:12px 16px;border-bottom:1px solid #e6e0d8;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:400;">Identifiants Meta par boutique</span><span style="font-size:11px;color:#7a736a;">Compte réseau : <sc-if value="{{ live }}" hint-placeholder-val="{{ false }}"><input value="{{ networkAccount }}" onChange="{{ setNetworkAccount }}" placeholder="act_…" style="font-family:ui-monospace,monospace;font-size:11px;border:1px solid #e6e0d8;border-radius:6px;padding:3px 6px;width:150px;"></sc-if><sc-if value="{{ !live }}" hint-placeholder-val="{{ true }}"><span style="font-family:ui-monospace,monospace;">{{ networkAccount }}</span></sc-if></span></div>
         <sc-if value="{{ live }}" hint-placeholder-val="{{ false }}">
-          <div style="padding:10px 16px;border-bottom:0.5px solid rgba(34,34,34,0.10);background:#FBF8F4;display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:12px;color:#444444;">
-            <label style="display:flex;align-items:center;gap:6px;font-weight:500;color:#222222;cursor:pointer;"><input type="checkbox" checked="{{ idsAuto.actif }}" onChange="{{ idsToggle }}" style="accent-color:#8D1D2C;margin:0;">Mise à jour automatique depuis le portefeuille Meta</label>
-            <span style="display:flex;align-items:center;gap:6px;">toutes les <select value="{{ idsFreq }}" onChange="{{ idsSetFreq }}" disabled="{{ idsOff }}" style="font-size:12px;background:#FFFFFF;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:4px 6px;"><option value="1">heures</option><option value="6">6 heures</option><option value="24">24 heures</option></select></span>
+          <div style="padding:10px 16px;border-bottom:1px solid #e6e0d8;background:#FBF8F4;display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:12px;color:#444444;">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;color:#1c1a17;cursor:pointer;"><input type="checkbox" checked="{{ idsAuto.actif }}" onChange="{{ idsToggle }}" style="accent-color:#8D1D2C;margin:0;">Mise à jour automatique depuis le portefeuille Meta</label>
+            <span style="display:flex;align-items:center;gap:6px;">toutes les <select value="{{ idsFreq }}" onChange="{{ idsSetFreq }}" disabled="{{ idsOff }}" style="font-size:12px;background:#FFFFFF;border:1px solid #e6e0d8;border-radius:6px;padding:4px 6px;"><option value="1">heures</option><option value="6">6 heures</option><option value="24">24 heures</option></select></span>
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" checked="{{ idsAuto.ecraser }}" onChange="{{ idsToggleEcraser }}" disabled="{{ idsOff }}" style="accent-color:#8D1D2C;margin:0;">Remplacer aussi les identifiants saisis à la main</label>
             <span style="color:{{ idsLastFg }};flex:1 1 220px;">{{ idsLast }}</span>
-            <button onClick="{{ idsRun }}" style="background:#FFFFFF;border:0.5px solid #8D1D2C;color:#8D1D2C;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:500;cursor:pointer;">{{ idsRunLabel }}</button>
+            <button onClick="{{ idsRun }}" style="background:#FFFFFF;border:0.5px solid #8D1D2C;color:#8D1D2C;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:400;cursor:pointer;">{{ idsRunLabel }}</button>
           </div>
         </sc-if>
         <div style="display:grid;grid-template-columns:120px repeat(4,minmax(150px,1fr));gap:0;min-width:760px;">
-          <sc-for list="{{ idHead }}" as="h" hint-placeholder-count="5"><span style="padding:9px 12px;font-size:11px;font-weight:500;color:#666666;background:#F4EFE8;font-family:{{ h.f }};">{{ h.l }}</span></sc-for>
+          <sc-for list="{{ idHead }}" as="h" hint-placeholder-count="5"><span style="padding:9px 12px;font-size:11px;font-weight:400;color:#7a736a;background:#F4EFE8;font-family:{{ h.f }};">{{ h.l }}</span></sc-for>
           <sc-for list="{{ idRows }}" as="r" hint-placeholder-count="6">
-            <span style="padding:8px 12px;border-top:0.5px solid rgba(34,34,34,0.08);font-size:13px;font-weight:500;display:flex;align-items:center;">{{ r.name }}</span>
-            <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="4"><span style="padding:6px 10px;border-top:0.5px solid rgba(34,34,34,0.08);background:{{ c.bg }};"><input type="text" value="{{ c.v }}" onChange="{{ c.set }}" placeholder="{{ c.ph }}" style="font-size:12px;font-family:ui-monospace,monospace;color:#222222;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:6px 8px;width:100%;box-sizing:border-box;"></span></sc-for>
+            <span style="padding:8px 12px;border-top:1px solid #e6e0d8;font-size:13px;font-weight:400;display:flex;align-items:center;">{{ r.name }}</span>
+            <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="4"><span style="padding:6px 10px;border-top:1px solid #e6e0d8;background:{{ c.bg }};"><input type="text" value="{{ c.v }}" onChange="{{ c.set }}" placeholder="{{ c.ph }}" style="font-size:12px;font-family:ui-monospace,monospace;color:#1c1a17;border:1px solid #e6e0d8;border-radius:6px;padding:6px 8px;width:100%;box-sizing:border-box;"></span></sc-for>
           </sc-for>
         </div>
       </section>
@@ -187,21 +188,21 @@
 
     <!-- MODÈLES -->
     <sc-if value="{{ isTpl }}" hint-placeholder-val="{{ false }}">
-      <div style="display:flex;justify-content:flex-end;"><button onClick="{{ addTpl }}" style="height:34px;padding:0 14px;border-radius:8px;border:none;background:#8D1D2C;color:#FFFFFF;font-size:13px;font-weight:500;cursor:pointer;">Nouveau modèle</button></div>
+      <div style="display:flex;justify-content:flex-end;"><button onClick="{{ addTpl }}" style="height:34px;padding:0 14px;border-radius:8px;border:none;background:#8D1D2C;color:#FFFFFF;font-size:13px;font-weight:400;cursor:pointer;">Nouveau modèle</button></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;">
         <sc-for list="{{ templates }}" as="t" hint-placeholder-count="4">
-          <div style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:14px;display:flex;flex-direction:column;gap:8px;">
+          <div style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:14px;display:flex;flex-direction:column;gap:8px;">
             <div style="display:flex;gap:8px;">
-              <input type="text" value="{{ t.name }}" onChange="{{ t.setName }}" style="flex:1;min-width:0;font-size:14px;font-weight:500;border:0.5px solid rgba(34,34,34,0.12);border-radius:6px;padding:7px 10px;">
-              <select value="{{ t.type }}" onChange="{{ t.setType }}" style="font-size:12px;background:#F4EFE8;border:0.5px solid rgba(34,34,34,0.10);border-radius:6px;padding:6px 8px;"><sc-for list="{{ postTypes }}" as="o" hint-placeholder-count="0"><option value="{{ o }}">{{ o }}</option></sc-for></select>
+              <input type="text" value="{{ t.name }}" onChange="{{ t.setName }}" style="flex:1;min-width:0;font-size:14px;font-weight:400;border:1px solid #e6e0d8;border-radius:6px;padding:7px 10px;">
+              <select value="{{ t.type }}" onChange="{{ t.setType }}" style="font-size:12px;background:#F4EFE8;border:1px solid #e6e0d8;border-radius:6px;padding:6px 8px;"><sc-for list="{{ postTypes }}" as="o" hint-placeholder-count="0"><option value="{{ o }}">{{ o }}</option></sc-for></select>
             </div>
-            <span style="font-size:11px;font-weight:500;color:#666666;">FR</span>
-            <textarea value="{{ t.text }}" onChange="{{ t.setText }}" rows="3" style="font-size:13px;line-height:1.5;border:0.5px solid rgba(34,34,34,0.12);border-radius:6px;padding:8px 10px;resize:vertical;"></textarea>
-            <span style="font-size:11px;font-weight:500;color:#666666;">NL</span>
-            <textarea value="{{ t.textNl }}" onChange="{{ t.setTextNl }}" rows="3" placeholder="Nederlandse versie" style="font-size:13px;line-height:1.5;border:0.5px solid rgba(34,34,34,0.12);border-radius:6px;padding:8px 10px;resize:vertical;"></textarea>
-            <span style="font-size:11px;color:#666666;line-height:1.45;">Aperçu Wavre : {{ t.preview }}</span>
-            <span style="font-size:11px;color:#666666;line-height:1.45;">Aperçu Halle : {{ t.previewNl }}</span>
-            <div style="display:flex;justify-content:space-between;align-items:center;"><a href="{{ t.useHref }}" style="font-size:12px;font-weight:500;">Créer un post avec ce modèle →</a><button onClick="{{ t.remove }}" style="border:none;background:transparent;color:#8D1D2C;font-size:12px;cursor:pointer;">Supprimer</button></div>
+            <span style="font-size:11px;font-weight:400;color:#7a736a;">FR</span>
+            <textarea value="{{ t.text }}" onChange="{{ t.setText }}" rows="3" style="font-size:13px;line-height:1.5;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;resize:vertical;"></textarea>
+            <span style="font-size:11px;font-weight:400;color:#7a736a;">NL</span>
+            <textarea value="{{ t.textNl }}" onChange="{{ t.setTextNl }}" rows="3" placeholder="Nederlandse versie" style="font-size:13px;line-height:1.5;border:1px solid #e6e0d8;border-radius:6px;padding:8px 10px;resize:vertical;"></textarea>
+            <span style="font-size:11px;color:#7a736a;line-height:1.45;">Aperçu Wavre : {{ t.preview }}</span>
+            <span style="font-size:11px;color:#7a736a;line-height:1.45;">Aperçu Halle : {{ t.previewNl }}</span>
+            <div style="display:flex;justify-content:space-between;align-items:center;"><a href="{{ t.useHref }}" style="font-size:12px;font-weight:400;">Créer un post avec ce modèle →</a><button onClick="{{ t.remove }}" style="border:none;background:transparent;color:#8D1D2C;font-size:12px;cursor:pointer;">Supprimer</button></div>
           </div>
         </sc-for>
       </div>
@@ -209,53 +210,53 @@
 
     <!-- GROUPES -->
     <sc-if value="{{ isGrp }}" hint-placeholder-val="{{ false }}">
-      <section style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
-        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:500;">Langue de publication par boutique</span><span style="font-size:11px;color:#666666;">Bilingue : la légende contient les deux langues, le visuel suit la première.</span></div>
+      <section style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:400;">Langue de publication par boutique</span><span style="font-size:11px;color:#7a736a;">Bilingue : la légende contient les deux langues, le visuel suit la première.</span></div>
         <sc-for list="{{ langRows }}" as="lr" hint-placeholder-count="6">
-          <div style="display:grid;grid-template-columns:120px auto minmax(0,1fr);gap:12px;align-items:center;padding:6px 0;border-top:0.5px solid rgba(34,34,34,0.06);">
-            <span style="font-size:13px;font-weight:500;">{{ lr.name }}</span>
-            <div style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;"><sc-for list="{{ lr.opts }}" as="o" hint-placeholder-count="4"><button onClick="{{ o.pick }}" style="border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:500;cursor:pointer;background:{{ o.bg }};color:{{ o.fg }};">{{ o.label }}</button></sc-for></div>
-            <span style="font-size:11px;color:#666666;">{{ lr.note }}</span>
+          <div style="display:grid;grid-template-columns:120px auto minmax(0,1fr);gap:12px;align-items:center;padding:6px 0;border-top:1px solid #e6e0d8;">
+            <span style="font-size:13px;font-weight:400;">{{ lr.name }}</span>
+            <div style="display:inline-flex;background:#F4EFE8;border-radius:8px;padding:3px;gap:2px;"><sc-for list="{{ lr.opts }}" as="o" hint-placeholder-count="4"><button onClick="{{ o.pick }}" style="border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:400;cursor:pointer;background:{{ o.bg }};color:{{ o.fg }};">{{ o.label }}</button></sc-for></div>
+            <span style="font-size:11px;color:#7a736a;">{{ lr.note }}</span>
           </div>
         </sc-for>
       </section>
-      <div style="display:flex;justify-content:flex-end;"><button onClick="{{ addGroup }}" style="height:34px;padding:0 14px;border-radius:8px;border:none;background:#8D1D2C;color:#FFFFFF;font-size:13px;font-weight:500;cursor:pointer;">Nouveau groupe</button></div>
+      <div style="display:flex;justify-content:flex-end;"><button onClick="{{ addGroup }}" style="height:34px;padding:0 14px;border-radius:8px;border:none;background:#8D1D2C;color:#FFFFFF;font-size:13px;font-weight:400;cursor:pointer;">Nouveau groupe</button></div>
       <div style="display:flex;flex-direction:column;gap:10px;">
         <sc-for list="{{ groups }}" as="g" hint-placeholder-count="4">
-          <div style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:12px 14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-            <input type="text" value="{{ g.name }}" onChange="{{ g.setName }}" style="flex:0 1 220px;font-size:14px;font-weight:500;border:0.5px solid rgba(34,34,34,0.12);border-radius:6px;padding:7px 10px;">
+          <div style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:12px 14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+            <input type="text" value="{{ g.name }}" onChange="{{ g.setName }}" style="flex:0 1 220px;font-size:14px;font-weight:400;border:1px solid #e6e0d8;border-radius:6px;padding:7px 10px;">
             <div style="display:flex;gap:6px;flex-wrap:wrap;flex:1;">
-              <sc-for list="{{ g.shops }}" as="s" hint-placeholder-count="6"><button onClick="{{ s.toggle }}" style="border-radius:999px;padding:6px 11px;font-size:12px;font-weight:500;cursor:pointer;border:0.5px solid {{ s.border }};background:{{ s.bg }};color:{{ s.fg }};">{{ s.name }}</button></sc-for>
+              <sc-for list="{{ g.shops }}" as="s" hint-placeholder-count="6"><button onClick="{{ s.toggle }}" style="border-radius:8px;padding:6px 11px;font-size:12px;font-weight:400;cursor:pointer;border:0.5px solid {{ s.border }};background:{{ s.bg }};color:{{ s.fg }};">{{ s.name }}</button></sc-for>
             </div>
-            <select value="{{ g.lang }}" onChange="{{ g.setLang }}" title="Langue du groupe" style="font-size:12px;background:#F4EFE8;border:0.5px solid rgba(34,34,34,0.10);border-radius:6px;padding:6px 8px;"><option value="">Langue : par boutique</option><option value="fr">Groupe en FR</option><option value="nl">Groupe en NL</option><option value="nl,fr">Groupe NL + FR</option><option value="fr,nl">Groupe FR + NL</option></select>
-            <span style="font-size:12px;color:#666666;">{{ g.count }}</span>
+            <select value="{{ g.lang }}" onChange="{{ g.setLang }}" title="Langue du groupe" style="font-size:12px;background:#F4EFE8;border:1px solid #e6e0d8;border-radius:6px;padding:6px 8px;"><option value="">Langue : par boutique</option><option value="fr">Groupe en FR</option><option value="nl">Groupe en NL</option><option value="nl,fr">Groupe NL + FR</option><option value="fr,nl">Groupe FR + NL</option></select>
+            <span style="font-size:12px;color:#7a736a;">{{ g.count }}</span>
             <button onClick="{{ g.remove }}" style="border:none;background:transparent;color:#8D1D2C;font-size:12px;cursor:pointer;">Supprimer</button>
           </div>
         </sc-for>
       </div>
-      <span style="font-size:11px;color:#666666;">Les groupes servent au ciblage d'un post ou d'une publicité. Prévu pour 30 boutiques et plus : une boutique peut appartenir à plusieurs groupes.</span>
+      <span style="font-size:11px;color:#7a736a;">Les groupes servent au ciblage d'un post ou d'une publicité. Prévu pour 30 boutiques et plus : une boutique peut appartenir à plusieurs groupes.</span>
     </sc-if>
 
     <!-- DROITS -->
     <sc-if value="{{ isRights }}" hint-placeholder-val="{{ false }}">
-      <section style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);overflow:auto;">
+      <section style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;overflow:auto;">
         <div style="display:grid;grid-template-columns:minmax(200px,1.4fr) repeat(3,minmax(170px,1fr));min-width:760px;">
-          <span style="padding:10px 14px;font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;background:#F4EFE8;">Droit</span>
-          <sc-for list="{{ roles }}" as="r" hint-placeholder-count="3"><span style="padding:10px 14px;font-size:12px;font-weight:500;background:#F4EFE8;">{{ r }}</span></sc-for>
+          <span style="padding:10px 14px;font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;background:#F4EFE8;">Droit</span>
+          <sc-for list="{{ roles }}" as="r" hint-placeholder-count="3"><span style="padding:10px 14px;font-size:12px;font-weight:400;background:#F4EFE8;">{{ r }}</span></sc-for>
           <sc-for list="{{ rights }}" as="rw" hint-placeholder-count="6">
-            <span style="padding:10px 14px;border-top:0.5px solid rgba(34,34,34,0.08);font-size:13px;">{{ rw.label }}</span>
-            <sc-for list="{{ rw.vals }}" as="v" hint-placeholder-count="3"><span style="padding:10px 14px;border-top:0.5px solid rgba(34,34,34,0.08);font-size:12px;color:{{ v.fg }};font-weight:{{ v.w }};">{{ v.t }}</span></sc-for>
+            <span style="padding:10px 14px;border-top:1px solid #e6e0d8;font-size:13px;">{{ rw.label }}</span>
+            <sc-for list="{{ rw.vals }}" as="v" hint-placeholder-count="3"><span style="padding:10px 14px;border-top:1px solid #e6e0d8;font-size:12px;color:{{ v.fg }};font-weight:{{ v.w }};">{{ v.t }}</span></sc-for>
           </sc-for>
         </div>
       </section>
-      <section style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:14px 16px;display:flex;flex-direction:column;gap:8px;">
-        <span style="font-size:13px;font-weight:500;">Utilisateurs</span>
+      <section style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:14px 16px;display:flex;flex-direction:column;gap:8px;">
+        <span style="font-size:13px;font-weight:400;">Utilisateurs</span>
         <sc-for list="{{ users }}" as="u" hint-placeholder-count="8">
-          <div style="display:grid;grid-template-columns:30px minmax(160px,1fr) minmax(200px,1.2fr) minmax(120px,1fr);gap:10px;align-items:center;padding:6px 0;border-top:0.5px solid rgba(34,34,34,0.06);">
-            <span style="width:28px;height:28px;border-radius:50%;background:{{ u.c }};color:#FFFFFF;font-size:11px;font-weight:500;display:flex;align-items:center;justify-content:center;">{{ u.ini }}</span>
-            <span style="font-size:13px;font-weight:500;">{{ u.name }}</span>
+          <div style="display:grid;grid-template-columns:30px minmax(160px,1fr) minmax(200px,1.2fr) minmax(120px,1fr);gap:10px;align-items:center;padding:6px 0;border-top:1px solid #e6e0d8;">
+            <span style="width:28px;height:28px;border-radius:50%;background:{{ u.c }};color:#FFFFFF;font-size:11px;font-weight:400;display:flex;align-items:center;justify-content:center;">{{ u.ini }}</span>
+            <span style="font-size:13px;font-weight:400;">{{ u.name }}</span>
             <span style="font-size:12px;color:#444444;">{{ u.role }}</span>
-            <span style="font-size:12px;color:#666666;">{{ u.scope }}</span>
+            <span style="font-size:12px;color:#7a736a;">{{ u.scope }}</span>
           </div>
         </sc-for>
       </section>
@@ -264,55 +265,55 @@
     <!-- JOURNAL -->
     <sc-if value="{{ isLog }}" hint-placeholder-val="{{ false }}">
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <sc-for list="{{ logFilters }}" as="f" hint-placeholder-count="6"><button onClick="{{ f.pick }}" style="border-radius:999px;padding:6px 11px;font-size:12px;font-weight:500;cursor:pointer;border:0.5px solid {{ f.border }};background:{{ f.bg }};color:{{ f.fg }};">{{ f.label }}</button></sc-for>
+        <sc-for list="{{ logFilters }}" as="f" hint-placeholder-count="6"><button onClick="{{ f.pick }}" style="border-radius:8px;padding:6px 11px;font-size:12px;font-weight:400;cursor:pointer;border:0.5px solid {{ f.border }};background:{{ f.bg }};color:{{ f.fg }};">{{ f.label }}</button></sc-for>
       </div>
-      <section style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);overflow:hidden;">
+      <section style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;overflow:hidden;">
         <sc-for list="{{ logRows }}" as="l" hint-placeholder-count="8">
-          <div style="display:grid;grid-template-columns:130px 200px 120px minmax(0,1fr);gap:12px;padding:10px 14px;border-bottom:0.5px solid rgba(34,34,34,0.06);align-items:center;">
-            <span style="font-size:12px;color:#666666;">{{ l.at }}</span>
-            <span style="font-size:12px;font-weight:500;">{{ l.who }}</span>
-            <span style="justify-self:start;font-size:11px;font-weight:500;border-radius:999px;padding:3px 8px;background:{{ l.bg }};color:{{ l.fg }};">{{ l.what }}</span>
+          <div style="display:grid;grid-template-columns:130px 200px 120px minmax(0,1fr);gap:12px;padding:10px 14px;border-bottom:1px solid #e6e0d8;align-items:center;">
+            <span style="font-size:12px;color:#7a736a;">{{ l.at }}</span>
+            <span style="font-size:12px;font-weight:400;">{{ l.who }}</span>
+            <span style="justify-self:start;font-size:11px;font-weight:400;border-radius:6px;padding:3px 8px;background:{{ l.bg }};color:{{ l.fg }};">{{ l.what }}</span>
             <span style="font-size:12px;color:#444444;line-height:1.45;">{{ l.detail }}</span>
           </div>
         </sc-for>
-        <sc-if value="{{ logEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:28px;text-align:center;font-size:13px;color:#666666;">Aucune entrée pour ce filtre.</div></sc-if>
+        <sc-if value="{{ logEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:28px;text-align:center;font-size:13px;color:#7a736a;">Aucune entrée pour ce filtre.</div></sc-if>
       </section>
     </sc-if>
 
     <!-- RÉDACTION IA & CHARTE -->
     <sc-if value="{{ isIa }}" hint-placeholder-val="{{ false }}">
-      <section id="sec-ia" style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:14px 16px;display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
-        <span style="font-size:13px;font-weight:500;">Clé API Anthropic (rédaction assistée par Claude)</span>
-        <span style="font-size:12px;color:#666666;line-height:1.5;">La clé reste sur le serveur (jamais dans l’écran). Elle sert à « Proposer 3 textes », aux réécritures et aux titres du visuel dans Créer un post. Modèle : le plus récent de la famille Opus accessible à la clé, sauf réglage ci-dessous. {{ iaEtat }}</span>
+      <section id="sec-ia" style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:14px 16px;display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
+        <span style="font-size:13px;font-weight:400;">Clé API Anthropic (rédaction assistée par Claude)</span>
+        <span style="font-size:12px;color:#7a736a;line-height:1.5;">La clé reste sur le serveur (jamais dans l’écran). Elle sert à « Proposer 3 textes », aux réécritures et aux titres du visuel dans Créer un post. Modèle : le plus récent de la famille Opus accessible à la clé, sauf réglage ci-dessous. {{ iaEtat }}</span>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <input type="password" autocomplete="off" value="{{ iaKey }}" onChange="{{ setIaKey }}" placeholder="{{ iaKeyPh }}" style="flex:1 1 280px;font-family:ui-monospace,monospace;font-size:12px;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:8px 10px;">
-          <button onClick="{{ saveIaKey }}" style="background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;">Enregistrer la clé</button>
-          <button onClick="{{ testIa }}" disabled="{{ iaTestDis }}" style="border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;">{{ iaTestLabel }}</button>
+          <input type="password" autocomplete="off" value="{{ iaKey }}" onChange="{{ setIaKey }}" placeholder="{{ iaKeyPh }}" style="flex:1 1 280px;font-family:ui-monospace,monospace;font-size:12px;border:1px solid #e6e0d8;border-radius:8px;padding:8px 10px;">
+          <button onClick="{{ saveIaKey }}" style="background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:400;cursor:pointer;">Enregistrer la clé</button>
+          <button onClick="{{ testIa }}" disabled="{{ iaTestDis }}" style="border:1px solid #e6e0d8;background:#FFFFFF;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:400;cursor:pointer;">{{ iaTestLabel }}</button>
         </div>
-        <label style="font-size:12px;color:#444444;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">Modèle imposé (facultatif) <input value="{{ iaModele }}" onChange="{{ setIaModele }}" placeholder="vide : le plus récent de la famille Opus" style="font-family:ui-monospace,monospace;font-size:12px;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:6px 8px;width:300px;"></label>
+        <label style="font-size:12px;color:#444444;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">Modèle imposé (facultatif) <input value="{{ iaModele }}" onChange="{{ setIaModele }}" placeholder="vide : le plus récent de la famille Opus" style="font-family:ui-monospace,monospace;font-size:12px;border:1px solid #e6e0d8;border-radius:8px;padding:6px 8px;width:300px;"></label>
       </section>
-      <section id="sec-detourage" style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:14px 16px;display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
-        <span style="font-size:13px;font-weight:500;">Détourage des photos (remove.bg)</span>
-        <span style="font-size:12px;color:#666666;line-height:1.5;">Le bouton ✂ des photos de Créer un post retire le fond (PNG transparent, idéal pour les styles « détourés »). La clé reste sur le serveur ; chaque détourage consomme un crédit remove.bg. {{ rbEtat }}</span>
+      <section id="sec-detourage" style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:14px 16px;display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
+        <span style="font-size:13px;font-weight:400;">Détourage des photos (remove.bg)</span>
+        <span style="font-size:12px;color:#7a736a;line-height:1.5;">Le bouton ✂ des photos de Créer un post retire le fond (PNG transparent, idéal pour les styles « détourés »). La clé reste sur le serveur ; chaque détourage consomme un crédit remove.bg. {{ rbEtat }}</span>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <input type="password" autocomplete="off" value="{{ rbKey }}" onChange="{{ setRbKey }}" placeholder="{{ rbKeyPh }}" style="flex:1 1 280px;font-family:ui-monospace,monospace;font-size:12px;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:8px 10px;">
-          <button onClick="{{ saveRbKey }}" style="background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;">Enregistrer la clé</button>
+          <input type="password" autocomplete="off" value="{{ rbKey }}" onChange="{{ setRbKey }}" placeholder="{{ rbKeyPh }}" style="flex:1 1 280px;font-family:ui-monospace,monospace;font-size:12px;border:1px solid #e6e0d8;border-radius:8px;padding:8px 10px;">
+          <button onClick="{{ saveRbKey }}" style="background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:400;cursor:pointer;">Enregistrer la clé</button>
         </div>
       </section>
-      <section id="sec-charte" style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
-        <span style="font-size:13px;font-weight:500;">Charte éditoriale de la marque</span>
-        <span style="font-size:12px;color:#666666;line-height:1.5;">Suivie par l’assistant de rédaction et vérifiée par la relecture de Créer un post (emojis, mots à éviter, vouvoiement, longueur de l’accroche, prix du texte face au prix de vente).</span>
-        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Ton de la marque<textarea rows="3" value="{{ chTon }}" onChange="{{ setChTon }}" style="font-size:13px;line-height:1.45;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:8px 10px;resize:vertical;font-family:inherit;"></textarea></label>
+      <section id="sec-charte" style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
+        <span style="font-size:13px;font-weight:400;">Charte éditoriale de la marque</span>
+        <span style="font-size:12px;color:#7a736a;line-height:1.5;">Suivie par l’assistant de rédaction et vérifiée par la relecture de Créer un post (emojis, mots à éviter, vouvoiement, longueur de l’accroche, prix du texte face au prix de vente).</span>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Ton de la marque<textarea rows="3" value="{{ chTon }}" onChange="{{ setChTon }}" style="font-size:13px;line-height:1.45;border:1px solid #e6e0d8;border-radius:8px;padding:8px 10px;resize:vertical;font-family:inherit;"></textarea></label>
         <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;color:#444444;">
           <label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" checked="{{ chVous }}" onChange="{{ setChVous }}" style="accent-color:#8D1D2C;">Vouvoiement</label>
-          <label style="display:flex;gap:6px;align-items:center;">Emojis au plus <input type="number" min="0" max="10" value="{{ chEmojis }}" onChange="{{ setChEmojis }}" style="width:56px;font-size:12px;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:5px 6px;"></label>
-          <label style="display:flex;gap:6px;align-items:center;">Accroche (caractères) <input type="number" min="60" max="400" value="{{ chLong }}" onChange="{{ setChLong }}" style="width:64px;font-size:12px;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:5px 6px;"></label>
+          <label style="display:flex;gap:6px;align-items:center;">Emojis au plus <input type="number" min="0" max="10" value="{{ chEmojis }}" onChange="{{ setChEmojis }}" style="width:56px;font-size:12px;border:1px solid #e6e0d8;border-radius:6px;padding:5px 6px;"></label>
+          <label style="display:flex;gap:6px;align-items:center;">Accroche (caractères) <input type="number" min="60" max="400" value="{{ chLong }}" onChange="{{ setChLong }}" style="width:64px;font-size:12px;border:1px solid #e6e0d8;border-radius:6px;padding:5px 6px;"></label>
           <label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" checked="{{ chTagVille }}" onChange="{{ setChTagVille }}" style="accent-color:#8D1D2C;">Hashtag de la boutique (#Halle…)</label>
         </div>
-        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Mots et expressions à éviter (séparés par des virgules)<input value="{{ chMots }}" onChange="{{ setChMots }}" placeholder="ex. pas cher, discount, meilleur de Belgique" style="font-size:13px;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:7px 10px;"></label>
-        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Hashtags de la marque<input value="{{ chTags }}" onChange="{{ setChTags }}" placeholder="#latelierby" style="font-size:13px;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:7px 10px;"></label>
-        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Signature (facultatif, en fin de texte)<input value="{{ chSign }}" onChange="{{ setChSign }}" style="font-size:13px;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:7px 10px;"></label>
-        <div><button onClick="{{ saveCharte }}" style="background:#232220;color:#FFFFFF;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;">Enregistrer la charte</button></div>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Mots et expressions à éviter (séparés par des virgules)<input value="{{ chMots }}" onChange="{{ setChMots }}" placeholder="ex. pas cher, discount, meilleur de Belgique" style="font-size:13px;border:1px solid #e6e0d8;border-radius:8px;padding:7px 10px;"></label>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Hashtags de la marque<input value="{{ chTags }}" onChange="{{ setChTags }}" placeholder="#latelierby" style="font-size:13px;border:1px solid #e6e0d8;border-radius:8px;padding:7px 10px;"></label>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Signature (facultatif, en fin de texte)<input value="{{ chSign }}" onChange="{{ setChSign }}" style="font-size:13px;border:1px solid #e6e0d8;border-radius:8px;padding:7px 10px;"></label>
+        <div><button onClick="{{ saveCharte }}" style="background:#1c1a17;color:#FFFFFF;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:400;cursor:pointer;">Enregistrer la charte</button></div>
       </section>
     </sc-if>
 
@@ -320,24 +321,24 @@
     <sc-if value="{{ isGoogle }}" hint-placeholder-val="{{ false }}">
       <sc-if value="{{ gDemo }}" hint-placeholder-val="{{ false }}"><div style="background:#FCE7C8;border-radius:8px;padding:10px 14px;font-size:13px;color:#6b3d0a;margin-bottom:12px;">En démonstration : la connexion Google se règle sur le serveur réel.</div></sc-if>
       <sc-if value="{{ gLive }}" hint-placeholder-val="{{ true }}">
-      <section id="sec-gconn" style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:14px 16px;display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
-        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline;"><span style="font-size:13px;font-weight:500;">Connexion Google</span><span style="font-size:12px;color:{{ gEtatFg }};font-weight:500;">{{ gEtat }}</span></div>
-        <span style="font-size:12px;color:#666666;line-height:1.5;">Un seul compte Google pour les fiches des boutiques, Google Ads et Google Analytics. Les clés restent sur le serveur, jamais dans l’écran.</span>
+      <section id="sec-gconn" style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:14px 16px;display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline;"><span style="font-size:13px;font-weight:400;">Connexion Google</span><span style="font-size:12px;color:{{ gEtatFg }};font-weight:400;">{{ gEtat }}</span></div>
+        <span style="font-size:12px;color:#7a736a;line-height:1.5;">Un seul compte Google pour les fiches des boutiques, Google Ads et Google Analytics. Les clés restent sur le serveur, jamais dans l’écran.</span>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <sc-for list="{{ gApis }}" as="a" hint-placeholder-count="3"><span title="{{ a.tip }}" style="font-size:12px;font-weight:500;border-radius:999px;padding:4px 10px;background:{{ a.bg }};color:{{ a.fg }};">{{ a.label }}</span></sc-for>
+          <sc-for list="{{ gApis }}" as="a" hint-placeholder-count="3"><span title="{{ a.tip }}" style="font-size:12px;font-weight:400;border-radius:6px;padding:4px 10px;background:{{ a.bg }};color:{{ a.fg }};">{{ a.label }}</span></sc-for>
         </div>
         <sc-for list="{{ gErreurs }}" as="e" hint-placeholder-count="0"><span style="font-size:12px;color:#8A4B00;background:#FBEDE4;border-radius:6px;padding:6px 9px;line-height:1.45;">{{ e.t }}</span></sc-for>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px;">
-          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">ID du client OAuth<input value="{{ gClientId }}" onChange="{{ setGClientId }}" placeholder="{{ gClientIdPh }}" style="font-size:13px;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:8px 10px;font-family:ui-monospace,monospace;font-size:12px;"></label>
-          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Clé secrète du client<input type="password" autocomplete="off" value="{{ gSecret }}" onChange="{{ setGSecret }}" placeholder="{{ gSecretPh }}" style="font-size:13px;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:8px 10px;font-family:ui-monospace,monospace;font-size:12px;"></label>
-          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Jeton de rafraîchissement<input type="password" autocomplete="off" value="{{ gRefresh }}" onChange="{{ setGRefresh }}" placeholder="{{ gRefreshPh }}" style="font-size:13px;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:8px 10px;font-family:ui-monospace,monospace;font-size:12px;"></label>
-          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Compte administrateur Google Ads (facultatif)<input value="{{ gMcc }}" onChange="{{ setGMcc }}" placeholder="123-456-7890" style="font-size:13px;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:8px 10px;"></label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">ID du client OAuth<input value="{{ gClientId }}" onChange="{{ setGClientId }}" placeholder="{{ gClientIdPh }}" style="font-size:13px;border:1px solid #e6e0d8;border-radius:8px;padding:8px 10px;font-family:ui-monospace,monospace;font-size:12px;"></label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Clé secrète du client<input type="password" autocomplete="off" value="{{ gSecret }}" onChange="{{ setGSecret }}" placeholder="{{ gSecretPh }}" style="font-size:13px;border:1px solid #e6e0d8;border-radius:8px;padding:8px 10px;font-family:ui-monospace,monospace;font-size:12px;"></label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Jeton de rafraîchissement<input type="password" autocomplete="off" value="{{ gRefresh }}" onChange="{{ setGRefresh }}" placeholder="{{ gRefreshPh }}" style="font-size:13px;border:1px solid #e6e0d8;border-radius:8px;padding:8px 10px;font-family:ui-monospace,monospace;font-size:12px;"></label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Compte administrateur Google Ads (facultatif)<input value="{{ gMcc }}" onChange="{{ setGMcc }}" placeholder="123-456-7890" style="font-size:13px;border:1px solid #e6e0d8;border-radius:8px;padding:8px 10px;"></label>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button onClick="{{ gSave }}" style="background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;">{{ gSaveLabel }}</button>
-          <sc-if value="{{ gConfigure }}" hint-placeholder-val="{{ false }}"><button onClick="{{ gVerifier }}" style="border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;">Vérifier</button><button onClick="{{ gDeconnecter }}" style="border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;color:#8D1D2C;">Déconnecter</button></sc-if>
+          <button onClick="{{ gSave }}" style="background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:400;cursor:pointer;">{{ gSaveLabel }}</button>
+          <sc-if value="{{ gConfigure }}" hint-placeholder-val="{{ false }}"><button onClick="{{ gVerifier }}" style="border:1px solid #e6e0d8;background:#FFFFFF;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:400;cursor:pointer;">Vérifier</button><button onClick="{{ gDeconnecter }}" style="border:1px solid #e6e0d8;background:#FFFFFF;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:400;cursor:pointer;color:#8D1D2C;">Déconnecter</button></sc-if>
         </div>
-        <details style="font-size:12px;color:#444444;line-height:1.55;"><summary style="cursor:pointer;font-weight:500;">Où trouver ces clés ?</summary>
+        <details style="font-size:12px;color:#444444;line-height:1.55;"><summary style="cursor:pointer;font-weight:400;">Où trouver ces clés ?</summary>
           <ol style="margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:3px;">
             <li>Console Google Cloud : un projet, avec les API « My Business Account Management », « My Business Business Information », « Google Ads API », « Google Analytics Admin » et « Google Analytics Data » activées.</li>
             <li>Écran de consentement OAuth : publié « En production » (en « Test », le jeton expire au bout de 7 jours).</li>
@@ -348,94 +349,94 @@
         </details>
       </section>
 
-      <section id="sec-gcomptes" style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:14px 16px;display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
+      <section id="sec-gcomptes" style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:14px 16px;display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
         <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
-          <span style="display:flex;flex-direction:column;gap:2px;"><span style="font-size:13px;font-weight:500;">Vos comptes Google</span><span style="font-size:12px;color:#666666;">{{ gDecouverteLe }}</span></span>
-          <button onClick="{{ gDecouvrir }}" disabled="{{ gDecouvrirDis }}" style="border:0.5px solid rgba(34,34,34,0.18);background:#FFFFFF;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;">{{ gDecouvrirLabel }}</button>
+          <span style="display:flex;flex-direction:column;gap:2px;"><span style="font-size:13px;font-weight:400;">Vos comptes Google</span><span style="font-size:12px;color:#7a736a;">{{ gDecouverteLe }}</span></span>
+          <button onClick="{{ gDecouvrir }}" disabled="{{ gDecouvrirDis }}" style="border:1px solid #e6e0d8;background:#FFFFFF;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:400;cursor:pointer;">{{ gDecouvrirLabel }}</button>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <sc-for list="{{ gTrouves }}" as="t" hint-placeholder-count="3"><span style="font-size:12px;border-radius:8px;padding:6px 10px;background:#F4EFE8;color:#222222;"><strong style="font-weight:600;">{{ t.n }}</strong> {{ t.label }}</span></sc-for>
+          <sc-for list="{{ gTrouves }}" as="t" hint-placeholder-count="3"><span style="font-size:12px;border-radius:8px;padding:6px 10px;background:#F4EFE8;color:#1c1a17;"><strong style="font-weight:400;">{{ t.n }}</strong> {{ t.label }}</span></sc-for>
         </div>
         <sc-for list="{{ gDecErreurs }}" as="e" hint-placeholder-count="0"><span style="font-size:12px;color:#8A4B00;background:#FBEDE4;border-radius:6px;padding:6px 9px;line-height:1.45;">{{ e.t }}</span></sc-for>
       </section>
 
-      <section id="sec-gids" style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:14px 16px;display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
-        <span style="font-size:13px;font-weight:500;">Rattachement par boutique</span>
-        <span style="font-size:12px;color:#666666;line-height:1.5;">La fiche Google de chaque boutique (avis, réponses, statistiques) et son compte Google Ads s’il en a un. « proposée » : la fiche dont l’identifiant Google est celui de la Réputation digitale du BO, ou dont le nom cite la boutique — à vérifier puis enregistrer.</span>
-        <div style="border:0.5px solid rgba(34,34,34,0.10);border-radius:8px;overflow:auto;">
+      <section id="sec-gids" style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:14px 16px;display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
+        <span style="font-size:13px;font-weight:400;">Rattachement par boutique</span>
+        <span style="font-size:12px;color:#7a736a;line-height:1.5;">La fiche Google de chaque boutique (avis, réponses, statistiques) et son compte Google Ads s’il en a un. « proposée » : la fiche dont l’identifiant Google est celui de la Réputation digitale du BO, ou dont le nom cite la boutique — à vérifier puis enregistrer.</span>
+        <div style="border:1px solid #e6e0d8;border-radius:8px;overflow:auto;">
           <div style="display:grid;grid-template-columns:minmax(120px,0.8fr) minmax(220px,1.6fr) minmax(200px,1.2fr);min-width:560px;">
-            <span style="padding:8px 10px;font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;border-bottom:0.5px solid rgba(34,34,34,0.10);">Boutique</span>
-            <span style="padding:8px 10px;font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;border-bottom:0.5px solid rgba(34,34,34,0.10);">Fiche Google</span>
-            <span style="padding:8px 10px;font-size:11px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:#666666;border-bottom:0.5px solid rgba(34,34,34,0.10);">Compte Google Ads</span>
+            <span style="padding:8px 10px;font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;border-bottom:1px solid #e6e0d8;">Boutique</span>
+            <span style="padding:8px 10px;font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;border-bottom:1px solid #e6e0d8;">Fiche Google</span>
+            <span style="padding:8px 10px;font-size:11px;font-weight:400;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;border-bottom:1px solid #e6e0d8;">Compte Google Ads</span>
             <sc-for list="{{ gRows }}" as="r" hint-placeholder-count="0">
-              <span style="padding:8px 10px;border-bottom:0.5px solid rgba(34,34,34,0.06);display:flex;flex-direction:column;justify-content:center;gap:2px;"><span style="font-size:13px;font-weight:500;">{{ r.name }}</span><span style="font-size:11px;color:{{ r.noteFg }};">{{ r.note }}</span></span>
-              <span style="padding:8px 10px;border-bottom:0.5px solid rgba(34,34,34,0.06);"><select value="{{ r.fiche }}" onChange="{{ r.setFiche }}" style="width:100%;font-size:12px;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:6px 8px;background:#FFFFFF;"><sc-for list="{{ gFicheOpts }}" as="o" hint-placeholder-count="0"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select></span>
-              <span style="padding:8px 10px;border-bottom:0.5px solid rgba(34,34,34,0.06);"><select value="{{ r.ads }}" onChange="{{ r.setAds }}" style="width:100%;font-size:12px;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:6px 8px;background:#FFFFFF;"><sc-for list="{{ gAdsOpts }}" as="o" hint-placeholder-count="0"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select></span>
+              <span style="padding:8px 10px;border-bottom:1px solid #e6e0d8;display:flex;flex-direction:column;justify-content:center;gap:2px;"><span style="font-size:13px;font-weight:400;">{{ r.name }}</span><span style="font-size:11px;color:{{ r.noteFg }};">{{ r.note }}</span></span>
+              <span style="padding:8px 10px;border-bottom:1px solid #e6e0d8;"><select value="{{ r.fiche }}" onChange="{{ r.setFiche }}" style="width:100%;font-size:12px;border:1px solid #e6e0d8;border-radius:6px;padding:6px 8px;background:#FFFFFF;"><sc-for list="{{ gFicheOpts }}" as="o" hint-placeholder-count="0"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select></span>
+              <span style="padding:8px 10px;border-bottom:1px solid #e6e0d8;"><select value="{{ r.ads }}" onChange="{{ r.setAds }}" style="width:100%;font-size:12px;border:1px solid #e6e0d8;border-radius:6px;padding:6px 8px;background:#FFFFFF;"><sc-for list="{{ gAdsOpts }}" as="o" hint-placeholder-count="0"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select></span>
             </sc-for>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px;">
-          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Compte Google Ads du réseau<select value="{{ gResAds }}" onChange="{{ setGResAds }}" style="font-size:12px;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:7px 8px;background:#FFFFFF;"><sc-for list="{{ gAdsOpts }}" as="o" hint-placeholder-count="0"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select></label>
-          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Propriété Google Analytics 4 du webshop<select value="{{ gGa4 }}" onChange="{{ setGGa4 }}" style="font-size:12px;border:0.5px solid rgba(34,34,34,0.18);border-radius:6px;padding:7px 8px;background:#FFFFFF;"><sc-for list="{{ gGa4Opts }}" as="o" hint-placeholder-count="0"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select></label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Compte Google Ads du réseau<select value="{{ gResAds }}" onChange="{{ setGResAds }}" style="font-size:12px;border:1px solid #e6e0d8;border-radius:6px;padding:7px 8px;background:#FFFFFF;"><sc-for list="{{ gAdsOpts }}" as="o" hint-placeholder-count="0"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select></label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;">Propriété Google Analytics 4 du webshop<select value="{{ gGa4 }}" onChange="{{ setGGa4 }}" style="font-size:12px;border:1px solid #e6e0d8;border-radius:6px;padding:7px 8px;background:#FFFFFF;"><sc-for list="{{ gGa4Opts }}" as="o" hint-placeholder-count="0"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select></label>
         </div>
-        <div><button onClick="{{ gSaveIds }}" style="background:#232220;color:#FFFFFF;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;">Enregistrer les rattachements</button></div>
+        <div><button onClick="{{ gSaveIds }}" style="background:#1c1a17;color:#FFFFFF;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:400;cursor:pointer;">Enregistrer les rattachements</button></div>
       </section>
       </sc-if>
     </sc-if>
 
     <sc-if value="{{ isTfb }}" hint-placeholder-val="{{ false }}">
-      <section style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
-        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:500;">Compte de l'API TFBuddy</span><span style="font-size:11px;color:#666666;">Source principale des données du module · stocké en base (mar_variable / mar_keys) · swagger : <span style="font-family:ui-monospace,monospace;">{{ tfbSwagger }}</span></span></div>
+      <section style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;"><span style="font-size:13px;font-weight:400;">Compte de l'API TFBuddy</span><span style="font-size:11px;color:#7a736a;">Source principale des données du module · stocké en base (mar_variable / mar_keys) · swagger : <span style="font-family:ui-monospace,monospace;">{{ tfbSwagger }}</span></span></div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;">
           <sc-for list="{{ tfbFields }}" as="k" hint-placeholder-count="5">
             <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#444444;"><span>{{ k.label }} <span style="font-size:11px;color:{{ k.stFg }};">{{ k.state }}</span></span>
-              <input type="{{ k.type }}" autocomplete="off" value="{{ k.value }}" onChange="{{ k.set }}" placeholder="{{ k.ph }}" style="font-family:ui-monospace,monospace;font-size:12px;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:8px 10px;"></label>
+              <input type="{{ k.type }}" autocomplete="off" value="{{ k.value }}" onChange="{{ k.set }}" placeholder="{{ k.ph }}" style="font-family:ui-monospace,monospace;font-size:12px;border:1px solid #e6e0d8;border-radius:8px;padding:8px 10px;"></label>
           </sc-for>
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-          <button onClick="{{ saveTfb }}" style="background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;">Enregistrer et tester le compte</button>
+          <button onClick="{{ saveTfb }}" style="background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:400;cursor:pointer;">Enregistrer et tester le compte</button>
           <span style="font-size:12px;color:#444444;">{{ tfbTest }}</span>
         </div>
       </section>
 
-      <section style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);overflow:hidden;">
-        <div style="padding:12px 16px;border-bottom:0.5px solid rgba(34,34,34,0.10);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
-          <span style="font-size:13px;font-weight:500;">Boutiques de l'API (shop) · {{ apiShopsCount }}</span>
-          <button onClick="{{ reloadShops }}" style="background:#FFFFFF;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;">Relire l'API</button>
+      <section style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;overflow:hidden;">
+        <div style="padding:12px 16px;border-bottom:1px solid #e6e0d8;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
+          <span style="font-size:13px;font-weight:400;">Boutiques de l'API (shop) · {{ apiShopsCount }}</span>
+          <button onClick="{{ reloadShops }}" style="background:#FFFFFF;border:1px solid #e6e0d8;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;">Relire l'API</button>
         </div>
-        <div style="display:grid;grid-template-columns:50px 1.2fr 1.6fr 110px 1.2fr 110px 1.3fr;gap:10px;padding:8px 16px;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#666666;background:#FBF8F4;"><span>id</span><span>Boutique</span><span>Adresse</span><span>Horaires</span><span>Contact</span><span>TVA</span><span>Sources</span></div>
+        <div style="display:grid;grid-template-columns:50px 1.2fr 1.6fr 110px 1.2fr 110px 1.3fr;gap:10px;padding:8px 16px;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#7a736a;background:#FBF8F4;"><span>id</span><span>Boutique</span><span>Adresse</span><span>Horaires</span><span>Contact</span><span>TVA</span><span>Sources</span></div>
         <sc-for list="{{ apiShops }}" as="b" hint-placeholder-count="5">
-          <div style="display:grid;grid-template-columns:50px 1.2fr 1.6fr 110px 1.2fr 110px 1.3fr;gap:10px;padding:9px 16px;border-top:0.5px solid rgba(34,34,34,0.06);font-size:12px;align-items:center;">
-            <span style="font-family:ui-monospace,monospace;">{{ b.id }}</span><span><b style="font-weight:500;">{{ b.name }}</b><br><span style="color:#666666;font-size:11px;">{{ b.fullName }}</span></span>
-            <span>{{ b.address }}</span><span>{{ b.hours }}</span><span style="font-size:11px;">{{ b.email }}<br>{{ b.phone }}</span><span style="font-size:11px;">{{ b.vat }}</span><span style="font-size:11px;color:#666666;">{{ b.sources }}</span>
+          <div style="display:grid;grid-template-columns:50px 1.2fr 1.6fr 110px 1.2fr 110px 1.3fr;gap:10px;padding:9px 16px;border-top:1px solid #e6e0d8;font-size:12px;align-items:center;">
+            <span style="font-family:ui-monospace,monospace;">{{ b.id }}</span><span><b style="font-weight:400;">{{ b.name }}</b><br><span style="color:#7a736a;font-size:11px;">{{ b.fullName }}</span></span>
+            <span>{{ b.address }}</span><span>{{ b.hours }}</span><span style="font-size:11px;">{{ b.email }}<br>{{ b.phone }}</span><span style="font-size:11px;">{{ b.vat }}</span><span style="font-size:11px;color:#7a736a;">{{ b.sources }}</span>
           </div>
         </sc-for>
       </section>
 
-      <section style="background:#FFFFFF;border-radius:10px;border:0.5px solid rgba(34,34,34,0.10);overflow:hidden;">
-        <div style="padding:12px 16px;border-bottom:0.5px solid rgba(34,34,34,0.10);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
-          <span style="display:flex;flex-direction:column;gap:2px;"><span style="font-size:13px;font-weight:500;">Routes de l'API sur {{ tfbHost }} · fonctionnent / ne fonctionnent pas</span><span style="font-size:11px;color:#666666;">{{ auditSummary }}</span></span>
-          <button onClick="{{ runAudit }}" style="background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;">{{ auditLabel }}</button>
+      <section style="background:#FFFFFF;border-radius:10px;border:1px solid #e6e0d8;overflow:hidden;">
+        <div style="padding:12px 16px;border-bottom:1px solid #e6e0d8;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
+          <span style="display:flex;flex-direction:column;gap:2px;"><span style="font-size:13px;font-weight:400;">Routes de l'API sur {{ tfbHost }} · fonctionnent / ne fonctionnent pas</span><span style="font-size:11px;color:#7a736a;">{{ auditSummary }}</span></span>
+          <button onClick="{{ runAudit }}" style="background:#8D1D2C;color:#FFFFFF;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:400;cursor:pointer;">{{ auditLabel }}</button>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;align-items:center;">
-          <sc-for list="{{ auditFilters }}" as="f" hint-placeholder-count="5"><button onClick="{{ f.pick }}" style="border-radius:999px;padding:6px 11px;font-size:12px;font-weight:500;cursor:pointer;border:0.5px solid {{ f.border }};background:{{ f.bg }};color:{{ f.fg }};">{{ f.label }}</button></sc-for>
-          <input value="{{ auditQ }}" onChange="{{ setAuditQ }}" placeholder="Filtrer (chemin, tag)…" style="margin-left:auto;font-size:12px;border:0.5px solid rgba(34,34,34,0.18);border-radius:8px;padding:6px 10px;width:220px;">
+          <sc-for list="{{ auditFilters }}" as="f" hint-placeholder-count="5"><button onClick="{{ f.pick }}" style="border-radius:8px;padding:6px 11px;font-size:12px;font-weight:400;cursor:pointer;border:0.5px solid {{ f.border }};background:{{ f.bg }};color:{{ f.fg }};">{{ f.label }}</button></sc-for>
+          <input value="{{ auditQ }}" onChange="{{ setAuditQ }}" placeholder="Filtrer (chemin, tag)…" style="margin-left:auto;font-size:12px;border:1px solid #e6e0d8;border-radius:8px;padding:6px 10px;width:220px;">
         </div>
         <sc-for list="{{ auditRows }}" as="r" hint-placeholder-count="10">
-          <div style="display:grid;grid-template-columns:96px minmax(0,2.2fr) 120px 70px 64px minmax(0,2fr);gap:10px;padding:8px 16px;border-top:0.5px solid rgba(34,34,34,0.06);font-size:12px;align-items:center;">
-            <span style="justify-self:start;font-size:11px;font-weight:500;border-radius:999px;padding:3px 8px;background:{{ r.bg }};color:{{ r.fg }};">{{ r.label }}</span>
-            <span style="font-family:ui-monospace,monospace;font-size:11px;word-break:break-all;">GET {{ r.chemin }}<sc-if value="{{ r.used }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--font-ui);margin-left:6px;font-size:10px;border-radius:999px;padding:2px 6px;background:#EDE9F5;color:#3B3468;">utilisée · {{ r.utilise }}</span></sc-if></span>
-            <span style="font-size:11px;color:#666666;">{{ r.tag }}</span><span style="font-size:11px;">{{ r.http }}</span><span style="font-size:11px;color:#666666;">{{ r.ms }}</span>
+          <div style="display:grid;grid-template-columns:96px minmax(0,2.2fr) 120px 70px 64px minmax(0,2fr);gap:10px;padding:8px 16px;border-top:1px solid #e6e0d8;font-size:12px;align-items:center;">
+            <span style="justify-self:start;font-size:11px;font-weight:400;border-radius:6px;padding:3px 8px;background:{{ r.bg }};color:{{ r.fg }};">{{ r.label }}</span>
+            <span style="font-family:ui-monospace,monospace;font-size:11px;word-break:break-all;">GET {{ r.chemin }}<sc-if value="{{ r.used }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--font-ui);margin-left:6px;font-size:10px;border-radius:6px;padding:2px 6px;background:#EDE9F5;color:#3B3468;">utilisée · {{ r.utilise }}</span></sc-if></span>
+            <span style="font-size:11px;color:#7a736a;">{{ r.tag }}</span><span style="font-size:11px;">{{ r.http }}</span><span style="font-size:11px;color:#7a736a;">{{ r.ms }}</span>
             <span style="font-size:11px;color:#444444;">{{ r.detail }}</span>
           </div>
         </sc-for>
-        <sc-if value="{{ auditEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:28px;text-align:center;font-size:13px;color:#666666;">{{ auditEmptyText }}</div></sc-if>
+        <sc-if value="{{ auditEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:28px;text-align:center;font-size:13px;color:#7a736a;">{{ auditEmptyText }}</div></sc-if>
       </section>
     </sc-if>
   </main>
 
   <sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
-    <div style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#232220;color:#FFFFFF;border-radius:8px;padding:11px 16px;font-size:13px;z-index:60;">{{ toast }}</div>
+    <div style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1c1a17;color:#FFFFFF;border-radius:8px;padding:11px 16px;font-size:13px;z-index:60;">{{ toast }}</div>
   </sc-if>
 </div>
 </x-dc>
@@ -454,7 +455,7 @@ class Component extends DCLogic {
     if (!SA) return { tabs: [] };
     const st = SA.state(), alerts = SA.alerts();
     const groups = st.groups || SA.GROUPS, templates = st.templates || SA.TEMPLATES;
-    const chip = (on) => ({ bg: on ? '#8D1D2C' : '#FFFFFF', fg: on ? '#FFFFFF' : '#222222', border: on ? '#8D1D2C' : 'rgba(34,34,34,0.18)' });
+    const chip = (on) => ({ bg: on ? '#8D1D2C' : '#FFFFFF', fg: on ? '#FFFFFF' : '#1c1a17', border: on ? '#8D1D2C' : 'rgba(34,34,34,0.18)' });
     const tabsDef = [['conn', 'Connexions', alerts.length], ['api', 'API Meta', 0], ['google', 'Google', 0], ['ia', 'Rédaction IA & charte', 0], ['tpl', 'Modèles de posts', 0], ['grp', 'Groupes de boutiques', 0], ['rights', 'Droits', 0], ['log', "Journal d'activité", 0]].concat(SA.live ? [['tfb', 'API TFBuddy', (() => { const r = (st.tfbAudit || {}).resume || {}; return (r.refuse || 0) + (r.erreur || 0) + (r.injoignable || 0); })()]] : []);
     const fixConn = (shopId, key, label) => {
       const k = shopId + key; this.setState({ busy: Object.assign({}, this.state.busy, { [k]: true }) });
@@ -490,7 +491,7 @@ class Component extends DCLogic {
     const nTot = st.shops.length * cols.length + netKeys.length;
     const upTpl = (id, patch) => SA.save({ templates: templates.map(t => t.id === id ? Object.assign({}, t, patch) : t) });
     const upGrp = (id, patch) => SA.save({ groups: groups.map(g => g.id === id ? Object.assign({}, g, patch) : g) });
-    const yes = { t: 'Oui', fg: '#0F6B4A', w: 500 }, no = { t: 'Non', fg: '#8A847C', w: 400 }, val = (t) => ({ t, fg: '#222222', w: 400 });
+    const yes = { t: 'Oui', fg: '#0F6B4A', w: 500 }, no = { t: 'Non', fg: '#8A847C', w: 400 }, val = (t) => ({ t, fg: '#1c1a17', w: 400 });
     const rights = [
       ['Créer et planifier des posts', SA.ROLES.map(r => val(r.rights.create))],
       ['Valider les propositions des boutiques', SA.ROLES.map(r => r.rights.validate ? yes : no)],
@@ -548,9 +549,9 @@ class Component extends DCLogic {
         const fiches = (D && D.fiches) || [], ads = (D && D.ads) || [], ga4 = (D && D.ga4) || [];
         return { isGoogle: true, gDemo: false, gLive: true,
           gEtat: G && G.erreur ? 'Illisible : ' + G.erreur : !St.configure ? 'Pas encore connecté' : V && V.valide ? 'Connecté' + (V.email ? ' · ' + V.email : '') + ' · vérifié le ' + V.le : V && V.erreur ? 'Connexion refusée' : 'À vérifier',
-          gEtatFg: St.configure && V && V.valide ? '#0F6B4A' : St.configure ? '#8D1D2C' : '#666666',
+          gEtatFg: St.configure && V && V.valide ? '#0F6B4A' : St.configure ? '#8D1D2C' : '#7a736a',
           gApis: API.map(([k, label]) => { const a = V && V.apis ? V.apis[k] : null, ok = !!(a && a.ok);
-            return { label: (ok ? '✓ ' : a ? '⏳ ' : '') + label, tip: a && a.erreur ? a.erreur : '', bg: ok ? '#E2F0E8' : a ? '#FCE7C8' : '#F4EFE8', fg: ok ? '#0F6B4A' : a ? '#7A4100' : '#666666' }; }),
+            return { label: (ok ? '✓ ' : a ? '⏳ ' : '') + label, tip: a && a.erreur ? a.erreur : '', bg: ok ? '#E2F0E8' : a ? '#FCE7C8' : '#F4EFE8', fg: ok ? '#0F6B4A' : a ? '#7A4100' : '#7a736a' }; }),
           gErreurs: [V && V.erreur ? V.erreur : ''].concat(API.map(([k, label]) => V && V.apis && V.apis[k] && V.apis[k].erreur ? label + ' : ' + V.apis[k].erreur : '')).filter(Boolean).map(t => ({ t })),
           gConfigure: !!St.configure, gScopes: '(business.manage, adwords, analytics.readonly)',
           gClientId: K.clientId, setGClientId: (e) => this.setState({ gKeys: Object.assign({}, K, { clientId: e.target.value }) }), gClientIdPh: St.clientId || '…apps.googleusercontent.com',
@@ -586,7 +587,7 @@ class Component extends DCLogic {
         const T = st.tfb || {}, A = s.audit || st.tfbAudit || { routes: [], resume: null }, R = A.resume || null;
         if (s.tab === 'tfb' && !s.audit && !this._auditLoading) { this._auditLoading = true; SA.api('GET', '/audit/api').then(a => this.setState({ audit: a })).catch(() => {}); }
         const host = String(T.base || 'https://atelierby.tfbuddy.com/api/v1').replace(/^https?:\/\//, '').split('/')[0];
-        const ST = { ok: ['Fonctionne', '#E2F0E8', '#0F6B4A'], parametre: ['Paramètre', '#FCE7C8', '#8A4B00'], refuse: ['Refusée', '#F6DCDF', '#8D1D2C'], erreur: ['Erreur', '#8D1D2C', '#FFFFFF'], injoignable: ['Injoignable', '#8D1D2C', '#FFFFFF'], absent: ['Absente (404)', '#EAE4DC', '#555555'], non_teste: ['Non testée', '#F4EFE8', '#666666'] };
+        const ST = { ok: ['Fonctionne', '#E2F0E8', '#0F6B4A'], parametre: ['Paramètre', '#FCE7C8', '#8A4B00'], refuse: ['Refusée', '#F6DCDF', '#8D1D2C'], erreur: ['Erreur', '#8D1D2C', '#FFFFFF'], injoignable: ['Injoignable', '#8D1D2C', '#FFFFFF'], absent: ['Absente (404)', '#EAE4DC', '#5c5852'], non_teste: ['Non testée', '#F4EFE8', '#7a736a'] };
         const KO = ['refuse', 'erreur', 'injoignable', 'absent', 'parametre'];
         const q = s.auditQ.toLowerCase();
         const rows = (A.routes || []).filter(r => (s.auditF === 'all' || (s.auditF === 'ok' ? r.statut === 'ok' : s.auditF === 'ko' ? KO.includes(r.statut) : s.auditF === 'used' ? !!r.utilise : r.statut === 'non_teste')) && (!q || (r.chemin + ' ' + (r.tag || '')).toLowerCase().includes(q)));
@@ -689,7 +690,7 @@ class Component extends DCLogic {
       ...(() => { const M = SA.META, meta = st.meta || { version: M.version, dsa: M.dsa, ids: M.ids }, setMeta = (p) => SA.save({ meta: Object.assign({}, meta, p) });
         return { versions: M.versions.map(v => Object.assign(chip(meta.version === v), { id: v, pick: () => { setMeta({ version: v }); SA.log('Sarah Lambert (Franchiseur)', 'Connexion', 'Version API Meta : ' + v); } })), baseUrl: M.base + meta.version + '/',
           // En réel : les permissions que le token a VRAIMENT (debug_token), pas la liste attendue.
-          perms: M.permissions.map(([id, level]) => { const J = (SA.metaStatus || {}).jeton; if (SA.live) { const ok = J && (J.scopes || []).includes(id); level = !J ? 'Non vérifiée' : ok ? 'Accordée' : 'Manquante'; return { id, level, bg: ok ? '#E2F0E8' : J ? '#F6DCDF' : '#F4EFE8', fg: ok ? '#0F6B4A' : J ? '#8D1D2C' : '#666666' }; } return { id, level, bg: level === 'Full access' ? '#E2F0E8' : '#FCE7C8', fg: level === 'Full access' ? '#0F6B4A' : '#6b3d0a' }; }),
+          perms: M.permissions.map(([id, level]) => { const J = (SA.metaStatus || {}).jeton; if (SA.live) { const ok = J && (J.scopes || []).includes(id); level = !J ? 'Non vérifiée' : ok ? 'Accordée' : 'Manquante'; return { id, level, bg: ok ? '#E2F0E8' : J ? '#F6DCDF' : '#F4EFE8', fg: ok ? '#0F6B4A' : J ? '#8D1D2C' : '#7a736a' }; } return { id, level, bg: level === 'Full access' ? '#E2F0E8' : '#FCE7C8', fg: level === 'Full access' ? '#0F6B4A' : '#6b3d0a' }; }),
           dsaB: meta.dsa.beneficiary, dsaP: meta.dsa.payor, setDsaB: (e) => setMeta({ dsa: Object.assign({}, meta.dsa, { beneficiary: e.target.value }) }), setDsaP: (e) => setMeta({ dsa: Object.assign({}, meta.dsa, { payor: e.target.value }) }),
           networkAccount: meta.networkAccount || M.networkAccount || 'non renseigné', setNetworkAccount: (e) => setMeta({ networkAccount: e.target.value.trim() }), live: !!SA.live,
           idHead: [['Boutique', 'inherit'], ['page_id', 'ui-monospace,monospace'], ['ad_account_id', 'ui-monospace,monospace'], ['instagram_user_id', 'ui-monospace,monospace'], ['pixel_id', 'ui-monospace,monospace']].map(([l, f]) => ({ l, f })),
