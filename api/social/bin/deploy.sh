@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 #
-# Déploiement du module Social & Ads sur le serveur du BO consultant.
-# À exécuter EN ROOT SUR LE SERVEUR, depuis un checkout du dépôt :
+# Déploiement de l'API Social du Marketing (api/social du dépôt marketing) sur le serveur.
+# À exécuter EN ROOT SUR LE SERVEUR, depuis une copie de api/social :
 #
 #   sudo bin/deploy.sh
 #
-# Le module est installé à côté du BO, dans son propre dossier
-# (/var/www/social) et à sa propre adresse (/social). Il n'a aucun secret à
-# lui : il lit la base dans le config du BO (/var/www/consulant_bo/config/
-# config.php), et TOUT le reste — données et clés Meta — est en base, tables
-# mar_sa_* (réglages dans mar_variable, secrets chiffrés dans mar_keys).
+# Le code est installé dans son dossier (/var/www/social : les visuels déposés y restent) et
+# servi sous /marketing/social. Plus aucun écran ici : ils sont dans le Marketing. Les anciennes
+# adresses (/social, /marketing/franchise, /social_franchisee) restent servies — Meta y envoie
+# ses notifications, les QR codes imprimés et les liens de l'ERP y mènent — et renvoient les
+# écrans au Marketing. Aucun secret : la base vient du config du BO, tout le reste est en base
+# (tables mar_sa_*, réglages dans mar_variable, secrets chiffrés dans mar_keys).
 set -euo pipefail
 
 TARGET_DIR="${TARGET_DIR:-/var/www/social}"            # dépôt complet, hors webroot
@@ -18,13 +19,9 @@ BO_DIR="${BO_DIR:-/var/www/consulant_bo}"              # installation du BO cons
 BO_URL="${BO_URL:-/consulant_bo/}"
 PUBLIC_URL="${PUBLIC_URL:-https://185.180.206.46${ALIAS_PATH}/}"
 LOCAL_BASE="http://127.0.0.1${ALIAS_PATH}"
-# Espace franchisé : pages statiques dans leur propre dossier, servies à leur propre
-# adresse ; elles appellent l'API du module (même hôte, donc même session).
-FR_DIR="${FR_DIR:-/var/www/social_franchisee}"
+# Ancien espace franchisé : ses adresses renvoient aux pages du Marketing (espace/.htaccess).
 FR_ALIAS="${FR_ALIAS:-/social_franchisee}"
-# Le module fait partie du Marketing : ses écrans sont aussi servis sous /marketing (le module
-# Marketing les ouvre là). Les anciennes adresses restent servies : Meta y envoie ses
-# notifications (webhook), les QR codes imprimés et les liens de l'ERP y mènent.
+OLD_FR_DIR="/var/www/social_franchisee"
 MKT_ALIAS="${MKT_ALIAS:-/marketing/social}"
 MKT_FR_ALIAS="${MKT_FR_ALIAS:-/marketing/franchise}"
 
@@ -49,11 +46,6 @@ a2enmod headers >/dev/null 2>&1 || true
 for f in "$REPO_SRC"/src/*.php "$REPO_SRC"/public/api/*.php "$REPO_SRC"/bin/*.php; do
   php -l "$f" >/dev/null || { warn "SYNTAXE PHP : $f"; exit 1; }
 done
-if command -v node >/dev/null 2>&1; then
-  for f in "$REPO_SRC/public/social-data.js" "$REPO_SRC/public/montage.js" "$REPO_SRC/public/franchise-visuel.js" "$REPO_SRC/franchisee/franchise-data.js"; do
-    node --check "$f" || { warn "SYNTAXE JS : $f"; exit 1; }
-  done
-fi
 
 # --- 3. Fichiers -----------------------------------------------------------------
 log "Copie vers $TARGET_DIR (les visuels déposés, public/uploads, sont conservés)…"
@@ -64,8 +56,8 @@ mkdir -p "$TARGET_DIR/public/uploads"
 chown -R www-data:www-data "$TARGET_DIR/public/uploads"
 chmod -R u+rwX,g+rX "$TARGET_DIR/public/uploads"
 
-log "Espace franchisé → $FR_DIR ($FR_ALIAS)…"
-bash "$REPO_SRC/bin/franchisee-build.sh" "$FR_DIR" "${ALIAS_PATH}/api/v1/social" "${ALIAS_PATH}/"
+# Les pages de l'ancien espace franchisé ne sont plus servies (renvois seulement).
+[[ -d "$OLD_FR_DIR" ]] && { log "Ancien espace franchisé retiré ($OLD_FR_DIR)"; rm -rf "$OLD_FR_DIR"; }
 
 # --- 4. config/config.php : où trouver le BO (aucun secret) ------------------------
 CFG="$TARGET_DIR/config/config.php"
@@ -77,19 +69,19 @@ BO_DIR="$BO_DIR" BO_URL="$BO_URL" PUBLIC_URL="$PUBLIC_URL" php -r '
 chmod 640 "$CFG"; chown www-data:www-data "$CFG"
 
 # --- 5. Apache : alias /social (et /marketing/social) -------------------------------
-log "Apache : alias $MKT_ALIAS et $ALIAS_PATH → $TARGET_DIR/public ; $MKT_FR_ALIAS et $FR_ALIAS → $FR_DIR"
+log "Apache : alias $MKT_ALIAS et $ALIAS_PATH → $TARGET_DIR/public ; $MKT_FR_ALIAS et $FR_ALIAS → renvois"
 cat > /etc/apache2/conf-available/social.conf <<APACHE
-# Sous le module Marketing (/marketing), avant le dossier de son application : ces chemins-là sont au module Social.
+# API Social du Marketing. Sous /marketing, avant le dossier de son application : ces chemins-là sont à l'API.
 Alias ${MKT_ALIAS} ${TARGET_DIR}/public
-Alias ${MKT_FR_ALIAS} ${FR_DIR}
 Alias ${ALIAS_PATH} ${TARGET_DIR}/public
 <Directory ${TARGET_DIR}/public>
     AllowOverride All
     Require all granted
 </Directory>
-# Espace franchisé
-Alias ${FR_ALIAS} ${FR_DIR}
-<Directory ${FR_DIR}>
+# Ancien espace franchisé : renvois vers les pages du Marketing.
+Alias ${MKT_FR_ALIAS} ${TARGET_DIR}/espace
+Alias ${FR_ALIAS} ${TARGET_DIR}/espace
+<Directory ${TARGET_DIR}/espace>
     AllowOverride All
     Require all granted
 </Directory>
@@ -121,25 +113,22 @@ fail=0
 st=$(curl -fsS --max-time 20 "$LOCAL_BASE/api/v1/social/status" || echo '{}')
 echo "status : $st"
 grep -q '"db":true' <<<"$st" && log "OK  base joignable (identifiants du BO)" || { warn "base injoignable"; fail=1; }
-code=$(curl -s -o /dev/null -w '%{http_code}' "$LOCAL_BASE/")
-[[ "$code" == "200" ]] && log "OK  $ALIAS_PATH/ → 200" || { warn "$ALIAS_PATH/ → HTTP $code"; fail=1; }
-code=$(curl -s -o /dev/null -w '%{http_code}' "$LOCAL_BASE/SA%20Calendrier.dc.html")
-[[ "$code" == "200" ]] && log "OK  calendrier servi" || { warn "calendrier → HTTP $code"; fail=1; }
-# Sous /marketing : les écrans, leur API (adresse relative), l'espace franchisé et ses adresses propres.
-code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1${MKT_ALIAS}/SA%20Calendrier.dc.html")
-[[ "$code" == "200" ]] && log "OK  ${MKT_ALIAS}/ servi" || { warn "${MKT_ALIAS}/ → HTTP $code"; fail=1; }
 st2=$(curl -fsS --max-time 20 "http://127.0.0.1${MKT_ALIAS}/api/v1/social/status" || echo '{}')
 grep -q '"db":true' <<<"$st2" && log "OK  API sous ${MKT_ALIAS}" || { warn "API sous ${MKT_ALIAS} injoignable"; fail=1; }
-code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1${MKT_FR_ALIAS}/publier")
-[[ "$code" == "200" ]] && log "OK  espace franchisé sous ${MKT_FR_ALIAS}" || { warn "${MKT_FR_ALIAS}/publier → HTTP $code"; fail=1; }
+# Les anciennes adresses renvoient au Marketing.
+loc() { curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "$1"; }
+r=$(loc "http://127.0.0.1${MKT_ALIAS}/SA%20Calendrier.dc.html?op=3")
+[[ "$r" == 302*"/marketing/?ecran=social-cal&op=3" ]] && log "OK  ancien écran → Marketing" || { warn "SA Calendrier → $r"; fail=1; }
+r=$(loc "http://127.0.0.1${MKT_ALIAS}/SA%20Parametres.dc.html?tab=api&section=dsa")
+[[ "$r" == 302*"ecran=social-set-dsa" ]] && log "OK  Paramètres → onglet" || { warn "SA Parametres → $r"; fail=1; }
+r=$(loc "http://127.0.0.1${FR_ALIAS}/publier?shop=4")
+[[ "$r" == 302*"ecran=sf-pub&shop=4" ]] && log "OK  ancien espace franchisé → Marketing" || { warn "${FR_ALIAS}/publier → $r"; fail=1; }
+r=$(loc "http://127.0.0.1${MKT_FR_ALIAS}/calendrier")
+[[ "$r" == 302*"ecran=sf-cal" ]] && log "OK  ${MKT_FR_ALIAS} → Marketing" || { warn "${MKT_FR_ALIAS}/calendrier → $r"; fail=1; }
 code=$(curl -s -o /dev/null -w '%{http_code}' "$LOCAL_BASE/uploads/__absent__.png")
 [[ "$code" == "404" ]] && log "OK  un visuel absent rend 404" || warn "uploads absent → HTTP $code (404 attendu)"
-code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1${FR_ALIAS}/Calendrier.dc.html")
-[[ "$code" == "200" ]] && log "OK  espace franchisé servi ($FR_ALIAS)" || { warn "$FR_ALIAS → HTTP $code"; fail=1; }
-# Les adresses propres (sans « .dc.html ») : réécrites par franchisee/.htaccess (mod_rewrite).
-code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1${FR_ALIAS}/publier")
-[[ "$code" == "200" ]] && log "OK  adresses propres ($FR_ALIAS/publier)" || { warn "$FR_ALIAS/publier → HTTP $code (réécriture absente ?)"; fail=1; }
-# Pas de connexion propre à l'espace : sans session de l'ERP, 401 — ou 200 si l'accès ouvert (en attendant l'ERP) est réglé.
+code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1${MKT_ALIAS}/Affiche%20avis.html")
+[[ "$code" == "200" ]] && log "OK  affiche avis servie" || { warn "Affiche avis → HTTP $code"; fail=1; }
 code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "$LOCAL_BASE/api/v1/social/franchise/etat")
 [[ "$code" == "401" || "$code" == "200" ]] && log "OK  API de l'espace franchisé (sans session ERP : HTTP $code)" || { warn "franchise/etat sans session → HTTP $code (401 ou 200 attendu)"; fail=1; }
-[[ "$fail" == "0" ]] && log "Module en ligne : http://185.180.206.46${ALIAS_PATH}/" || { warn "Recette en échec."; exit 1; }
+[[ "$fail" == "0" ]] && log "API Social en ligne : http://185.180.206.46${MKT_ALIAS}/api/v1/social/status" || { warn "Recette en échec."; exit 1; }
