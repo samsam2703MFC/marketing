@@ -1,0 +1,57 @@
+/* Publicités et opérations de l'espace franchisé (social/franchisee/Campagnes.dc.html) — design system du Marketing. */
+.fop__bloc { margin: 0; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+.fop__titre { margin: 0; }
+.fop__petit { font-size: 12px; line-height: 1.45; }
+.fop__info { margin: 0; font-size: 13px; color: var(--muted); }
+.fop__kicker { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.fop__vide { font-size: 12px; line-height: 1.45; color: var(--muted); background: var(--table-head, #FBF9F5); border-radius: 8px; padding: 10px 12px; }
+.fop__colonnes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.fop__colonne { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+.fop__vignette { display: block; flex: 0 0 auto; border-radius: 8px; object-fit: cover; background: var(--chip); }
+.fop__piece { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border-radius: 12px; background: var(--table-head, #FBF9F5); }
+.fop__piece--ligne { align-items: center; flex-wrap: wrap; }
+.fop__piece-corps { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 220px; }
+.fop__piece-tete { display: flex; align-items: flex-start; gap: 8px; justify-content: space-between; }
+.fop__piece-nom { font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.fop__piece-meta { font-size: 11px; line-height: 1.4; }
+.fop__piece-chiffres { font-size: 12px; color: var(--muted-2); }
+.fop__lien { font-size: 12px; white-space: nowrap; }
+
+.fop__statut { flex: 0 0 auto; font-size: 10.5px; border-radius: 6px; padding: 3px 9px; white-space: nowrap; background: var(--chip); color: var(--muted-2); }
+.fop__statut.is-ok { background: rgba(63, 122, 82, 0.12); color: var(--green, #3f7a52); }
+.fop__statut.is-avenir { background: var(--prize-soft, #F6E7CE); color: var(--prize-ink, #7A5207); }
+.fop__statut.is-attente { background: var(--prize-soft, #F6E7CE); color: var(--prize-ink, #7A5207); }
+.fop__statut.is-meta { background: #E7EEF9; color: #1E4F91; }
+
+.fop__op-tete { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.fop__op-nom { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.fop__op-titre { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 18px; }
+.fop__op-titre .muted { font-size: 12px; }
+.fop__desc { font-size: 13px; line-height: 1.5; color: var(--muted-2); }
+.fop__tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.fop__tag { font-size: 12px; border-radius: 6px; padding: 4px 10px; background: var(--chip); color: var(--muted-2); }
+.fop__tag.is-produit { background: #F6EDEE; color: #8D1D2C; }
+.fop__budget { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted-2); }
+.fop__fort { color: var(--ink); }
+
+.fop__resultats { display: flex; flex-direction: column; gap: 8px; }
+.fop__kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.fop__kpi { background: var(--table-head, #FBF9F5); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fop__kpi-nom { font-size: 11px; }
+.fop__kpi-val { font-size: 22px; font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; color: var(--ink); }
+.fop__kpi-sous { font-size: 11px; }
+
+.fop__rattache { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+.fop__item { display: flex; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 8px; background: var(--table-head, #FBF9F5); }
+.fop__item-corps { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.fop__item-titre { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Téléphone (social/franchisee/mobile.css, .sf-wrap) : l'étiquette et le lien passent sous le texte. */
+@media (max-width: 760px) {
+  .fop__bloc { padding: 14px; }
+  .fop__colonnes { grid-template-columns: minmax(0, 1fr); }
+  .fop__item, .fop__piece--ligne { flex-wrap: wrap; row-gap: 4px; }
+  .fop__item .fop__item-corps { flex: 1 1 calc(100% - 52px); }
+  .fop__item .fop__statut { margin-left: 50px; }
+}

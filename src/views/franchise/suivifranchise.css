@@ -1,0 +1,46 @@
+/* Suivi de ma boutique (espace franchisé, social/franchisee/Calendrier.dc.html ?vue=suivi) — design system du Marketing. */
+.fsv__du { font-size: 11px; }
+.fsv__info { margin: 0; padding: 28px 20px; text-align: center; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.fsv__message { background: #fff; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; padding: 12px 14px; font-size: 13px; line-height: 1.55; color: var(--muted-2); }
+
+.fsv__kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.fsv__kpi { margin: 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.fsv__kpi-nom { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.fsv__kpi-val { font-size: 24px; font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; color: var(--ink); }
+.fsv__kpi-val.is-fb { color: #1877F2; }
+.fsv__kpi-sous { font-size: 11px; }
+
+.fsv__graphe { margin: 0; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.fsv__graphe-tete { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.fsv__graphe-titre { font-size: 14px; }
+.fsv__legende { display: flex; gap: 6px 14px; flex-wrap: wrap; font-size: 11px; color: var(--muted-2); }
+.fsv__legende > span { display: inline-flex; align-items: center; gap: 6px; }
+.fsv__carre { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+.fsv__carre.is-budget { background: #8D1D2C; }
+.fsv__carre.is-pub { background: #1877F2; border-radius: 50%; }
+.fsv__carre.is-gagne { background: #1F8A60; }
+.fsv__carre.is-perdu { background: #C9474F; }
+
+.fsv__trace { display: flex; flex-direction: column; gap: 4px; }
+.fsv__rang { display: flex; gap: 3px; }
+.fsv__col { flex: 1 1 0; min-width: 2px; margin: 0; padding: 0; border: 0; background: transparent; cursor: pointer; display: flex; }
+.fsv__col:hover { background: rgba(34, 34, 34, 0.04); }
+.fsv__col:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.fsv__rang--budget { align-items: stretch; height: 110px; }
+.fsv__rang--budget .fsv__col { align-items: flex-end; }
+.fsv__budget { display: block; width: 100%; background: #8D1D2C; border-radius: 3px 3px 0 0; opacity: 0.85; }
+.fsv__rang--pubs { height: 20px; border-top: 1px solid rgba(34, 34, 34, 0.25); border-bottom: 1px solid var(--line); }
+.fsv__rang--pubs .fsv__col { align-items: center; justify-content: center; }
+.fsv__pub { display: block; border-radius: 50%; background: #1877F2; }
+.fsv__rang--flux { height: 64px; }
+.fsv__rang--flux .fsv__col { flex-direction: column; }
+.fsv__gagne { display: block; width: 100%; background: #1F8A60; border-radius: 0 0 3px 3px; }
+.fsv__perdu { display: block; width: 100%; background: #C9474F; border-radius: 0 0 3px 3px; margin-top: 1px; }
+.fsv__axe { display: flex; justify-content: space-between; font-size: 10px; }
+.fsv__constat { font-size: 13px; line-height: 1.5; color: var(--ink); }
+.fsv__motif { font-size: 11px; line-height: 1.45; color: var(--prize-ink, #7A5207); background: var(--prize-soft, #F6E7CE); border-radius: 6px; padding: 6px 8px; }
+
+@media (max-width: 760px) {
+  .fsv__rang { gap: 1px; }
+  .fsv__kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
