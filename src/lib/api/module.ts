@@ -2756,3 +2756,56 @@ export async function createErpVoucher(campaignId: number, input: ErpVoucherInpu
 export async function setErpVoucherStatus(campaignId: number, id: number, status: 'ACTIVE' | 'INACTIVE'): Promise<ErpVoucher> {
   return (await request<Envelope<ErpVoucher>>(`${BASE}/campaigns/${campaignId}/erp-vouchers/${id}`, { method: 'PATCH', body: { status } })).data
 }
+
+// ---------------------------------------------------------------------------
+// Social & Ads — écrans réécrits dans le Marketing (docs/PORTAILS.md, étape 2f)
+// ---------------------------------------------------------------------------
+
+export type BilanPeriode = 'semaine' | 'mois' | 'trimestre' | 'annee'
+
+/** Une boutique du bilan (social/src/bilan.php). */
+export interface BilanLigne {
+  id: string
+  nom: string
+  rang: number
+  rangs?: { regularite?: number | null; reactivite?: number | null; avis?: number | null }
+  posts: number
+  postsSource?: 'meta' | string
+  postsBoutique: number
+  postsReseau: number
+  quota: number
+  aTraiter: number
+  enRetard: number
+  dansDelaiPct: number | null
+  delaiMedianH: number | null
+  note: number | null
+  avisGagnes: number | null
+  avis5Requis: number | null
+  abonnes: number | null
+  abonnesNet: number | null
+  depense: number | null
+}
+
+/** Le bilan des boutiques sur la période : régularité, réactivité, avis Google, Meta, classement. */
+export interface SocialBilan {
+  periode?: BilanPeriode
+  du: string
+  au: string
+  le: string
+  jours: number
+  semaines?: number
+  devise?: string
+  cible?: number | null
+  avisDepuis?: string | null
+  reactJours?: number
+  delaiReponseHeures?: number
+  instagramPartiel?: boolean
+  erreurs?: string[]
+  reseau: { posts?: number; boutiques?: number; aTraiter?: number; enRetard?: number; avisGagnes?: number; abonnesNet?: number; depense?: number }
+  lignes: BilanLigne[]
+}
+
+/** Le bilan des boutiques (`forcer` relit Meta tout de suite pour la période). */
+export function getSocialBilan(periode: BilanPeriode, forcer = false): Promise<SocialBilan> {
+  return request<SocialBilan>(`${SOCIAL_ROOT}/api/v1/social/bilan?periode=${periode}${forcer ? '&forcer=1' : ''}`)
+}

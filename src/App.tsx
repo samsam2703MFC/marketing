@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import * as api from './lib/api/module'
 import { useAsync } from './lib/useAsync'
-import { SOCIAL_PAGES, socialPageFor, socialRoute, tabsFor, titleFor } from './lib/navigation'
+import { SOCIAL_NATIVES, SOCIAL_PAGES, socialPageFor, socialRoute, tabsFor, titleFor } from './lib/navigation'
 import type { Role, Route } from './lib/navigation'
 import Sidebar from './components/Sidebar'
 import DashboardView from './views/DashboardView'
@@ -24,6 +24,7 @@ import MediaLibraryView from './views/media/MediaLibraryView'
 import SettingsView from './views/SettingsView'
 import CampaignBuilder from './views/builder/CampaignBuilder'
 import SocialView from './views/SocialView'
+import BilanView from './views/social/BilanView'
 import InStoreView from './views/InStoreView'
 import { ReferencesProvider } from './state/references'
 
@@ -150,7 +151,7 @@ function campaignFromUrl(): { route: Route; campaignId: number | null } | null {
  */
 function screenFromUrl(): Route | null {
   const ecran = new URLSearchParams(window.location.search).get('ecran') ?? ''
-  return Object.prototype.hasOwnProperty.call(SOCIAL_PAGES, ecran) ? (ecran as Route) : null
+  return Object.prototype.hasOwnProperty.call(SOCIAL_PAGES, ecran) || SOCIAL_NATIVES.has(ecran as Route) ? (ecran as Route) : null
 }
 
 /** La campagne à présélectionner dans « Créer un post » quand Social renvoie ici (`&op=19`). */
@@ -435,6 +436,8 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
           {social ? (
             <SocialView key={frameKey} file={social.file} query={social.query} space={social.space} campaignId={postFor} onPage={followSocial} />
           ) : null}
+
+          {route === 'social-bilan' && role !== 'FRANCHISEE' ? <BilanView /> : null}
 
           {route === 'builder' ? (
             <CampaignBuilder

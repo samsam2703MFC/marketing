@@ -173,7 +173,6 @@ export const SOCIAL_PAGES: Partial<Record<Route, SocialPage>> = {
   'social-ads': { key: 'ads', file: 'SA Publicites.dc.html' },
   'social-camp': { key: 'camp', file: 'SA Campagnes.dc.html' },
   'social-roi': { key: 'roi', file: 'SA Retour.dc.html' },
-  'social-bilan': { key: 'bilan', file: 'SA Bilan.dc.html' },
   'social-suivi': { key: 'suivi', file: 'SA Suivi.dc.html' },
   'social-fr': { key: 'fr', file: 'SA Franchise.dc.html' },
   'social-leads': { key: 'leads', file: 'SA Leads.dc.html' },
@@ -198,6 +197,12 @@ export const SOCIAL_PAGES: Partial<Record<Route, SocialPage>> = {
   'sf-camp': { key: 'f:camp', file: 'operations', space: 'franchise' },
   'sf-ig': { key: 'f:ig', file: 'instagram', space: 'franchise' },
 }
+
+/**
+ * Écrans du module Social RÉÉCRITS dans le Marketing (docs/PORTAILS.md, étape 2f) : ils ne passent plus par le
+ * cadre. Social ouvert seul y renvoie aussi (`?ecran=`). Un écran rejoint cette liste quand il quitte SOCIAL_PAGES.
+ */
+export const SOCIAL_NATIVES: ReadonlySet<Route> = new Set<Route>(['social-bilan'])
 
 /** La page Social d'une route, si ce périmètre peut l'ouvrir : le réseau ses écrans, la boutique son espace. */
 export function socialPageFor(role: Role, route: Route): SocialPage | null {
