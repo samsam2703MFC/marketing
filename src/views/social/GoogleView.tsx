@@ -21,7 +21,7 @@ import type { AvisGoogle, Couleur, MagasinReputation, Repartition, VueGoogle } f
  * Avis Google — l'écran « Google » du module Social (SA Google.dc.html), réécrit dans le Marketing
  * (docs/PORTAILS.md, étape 2f). Ce que Google dit de chaque boutique : la Réputation digitale du BO (note, cible,
  * avis 5★ à obtenir, répartition des avis lus) et les avis, classés vert / orange / rouge comme les commentaires
- * (social/src/google.php). « Synchroniser chez Google » demande au BO de relire les fiches (appel facturé par Google).
+ * (api/social/src/google.php). « Synchroniser chez Google » demande au BO de relire les fiches (appel facturé par Google).
  */
 
 type Jours = 30 | 90 | 365 | 3650

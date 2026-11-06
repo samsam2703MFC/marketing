@@ -2,7 +2,7 @@ import { ROOTS } from '../api/module'
 import { request as httpRequest, TfBuddyError } from '../api/http'
 
 /**
- * Espace franchisé — les appels à l'API du module Social & Ads (`/franchise/*`, social/src/franchise.php),
+ * Espace franchisé — les appels à l'API du module Social & Ads (`/franchise/*`, api/social/src/franchise.php),
  * repris de social/franchisee/franchise-data.js. Le serveur décide de la boutique : `GET /franchise/etat`
  * rend celle de la session (l'ERP l'a ouverte) ; les appels suivants portent l'identifiant qu'il a rendu
  * (`poserBoutique`, appelé par le store), jamais une boutique choisie par le navigateur.

@@ -23,7 +23,7 @@ const jourCourt = (iso: string) => (iso ? `${Number(iso.slice(8, 10))}/${Number(
 
 /**
  * Bilan des boutiques — l'écran « Bilan » du module Social, réécrit dans le Marketing
- * (docs/PORTAILS.md, étape 2f). Mêmes données (API de Social, social/src/bilan.php) :
+ * (docs/PORTAILS.md, étape 2f). Mêmes données (API de Social, api/social/src/bilan.php) :
  * régularité, réactivité, avis Google, Meta et le classement, sur la semaine, le mois,
  * le trimestre ou l'année. Calculé par le cron ; « Recalculer » relit Meta tout de suite.
  */

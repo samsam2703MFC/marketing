@@ -16,9 +16,13 @@ Vite 7 + React 19 + TypeScript strict côté écran. Interface en français.
 - Les migrations vivent dans `db/migrations/`, rejouées deux fois en CI. Les
   fichiers dont le nom contient `_vues` sont **rejoués à chaque passage** : une
   vue n'a donc qu'une seule définition, et elle est dans un fichier `_vues`.
-- Le module **Social & Ads** vit dans `social/` (repris du dépôt `social` le 06/11/2026) : pages
-  `.dc.html` et API PHP à lui, recette `social/bin/tests.php`, déploiement
-  `.github/workflows/social.yml` (adresses `/marketing/social/` et `/marketing/franchise/`).
+- **Social & Ads est fusionné dans le Marketing** (06/11/2026, le dossier `social/` et le dépôt `social` n'existent
+  plus) : ses écrans sont des vues React (`src/views/social/`, routes `social-*`), l'espace boutique des
+  franchisés est une seconde application (`franchise/index.html`, `src/views/franchise/`, servie sous
+  `/marketing/franchise/`), son API PHP vit dans `api/social/` (recette `api/social/bin/tests.php`, jobs
+  « Recette API Social » et « Déploiement API Social » de `ci.yml`, servie sous `/marketing/social/api/v1/social`).
+  Les anciennes adresses (`/social`, `/social_franchisee`, `SA ….dc.html`) restent servies en renvois : Meta,
+  les QR codes et l'ERP les appellent encore.
   La réorganisation en quatre portails et le registre des tables : `docs/PORTAILS.md`.
 - La suite `api/tests/smoke.php` doit passer deux fois de suite sur la même
   base : un test qui laisse une trace n'est vrai qu'une fois.

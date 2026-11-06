@@ -1,7 +1,7 @@
 import { socialApi } from './store'
 
 /**
- * Les avis Google des boutiques (social/src/google.php) : la Réputation digitale du BO (note, cible, avis 5★ à obtenir,
+ * Les avis Google des boutiques (api/social/src/google.php) : la Réputation digitale du BO (note, cible, avis 5★ à obtenir,
  * répartition des avis lus) et les avis eux-mêmes, classés vert / orange / rouge comme les commentaires. Le module
  * lit les tables du BO ; « Synchroniser chez Google » demande au BO de relire les fiches (appel facturé par Google).
  * Mêmes routes que social/public/social-data.js.

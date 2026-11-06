@@ -9,7 +9,7 @@ import type { CaseRepost, GesteRepost, ReglageRepost, StatutCase, VueRepost } fr
 
 /**
  * Repost automatique — l'écran « Repost » du module Social (SA Repost.dc.html), réécrit dans le Marketing
- * (docs/PORTAILS.md, étape 2f). Le repost (social/src/repost.php) : chaque nouveau post de la Page de la marque
+ * (docs/PORTAILS.md, étape 2f). Le repost (api/social/src/repost.php) : chaque nouveau post de la Page de la marque
  * repris sur les Pages des boutiques. Suivi : en tête, les posts programmés de la marque (à venir) et leur repost
  * prévu ; puis une ligne par publication de la marque, une colonne par boutique ; Réglage ; Côté franchisé.
  */

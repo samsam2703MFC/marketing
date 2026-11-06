@@ -8,7 +8,7 @@ import type { Commentaire, Couleur, Totaux, VueCommentaires } from './_donnees'
 /**
  * Commentaires — la page « Commentaires » de l'espace franchisé (social/franchisee/Commentaires.dc.html), réécrite
  * dans le Marketing. Les commentaires de la Page de la boutique (et de ses publicités), classés vert / orange / rouge
- * par le réseau dans le contexte de la publication (social/src/commentaires.php), relus toutes les heures. La boutique
+ * par le réseau dans le contexte de la publication (api/social/src/commentaires.php), relus toutes les heures. La boutique
  * y répond (si le réseau le permet) et les marque traités.
  *
  * Adresse : `?jours=1|7|14|30` (période, 14 par défaut) et `?couleur=rouge|orange|vert` (filtre de départ).

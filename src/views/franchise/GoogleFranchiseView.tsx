@@ -11,7 +11,7 @@ import type { Commentaire, Couleur, MagasinGoogle, Totaux, VueGoogleFranchise } 
  * Avis Google — la page « Avis Google » de l'espace franchisé (social/franchisee/Google.dc.html), réécrite dans le
  * Marketing. La note Google de la boutique, la cible du réseau, les avis 5★ à obtenir, la répartition des avis lus et
  * la moyenne du réseau (la Réputation digitale du BO) ; le QR code et les affiches pour faire venir des avis ; ses
- * avis classés vert / orange / rouge, à traiter (social/src/google.php). La lecture chez Google et le classement
+ * avis classés vert / orange / rouge, à traiter (api/social/src/google.php). La lecture chez Google et le classement
  * restent au réseau (toutes les heures).
  *
  * Adresse : `?jours=30|90|365|3650` (période, 365 par défaut) et `?couleur=rouge|orange|vert` (filtre de départ).

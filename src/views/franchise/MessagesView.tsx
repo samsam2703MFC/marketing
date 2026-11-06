@@ -6,7 +6,7 @@ import type { Boite, FilConversation } from './_donnees'
 
 /**
  * Messages privés — la page « Messages » de l'espace franchisé (social/franchisee/Messages.dc.html), réécrite dans le
- * Marketing. Les conversations Instagram que le réseau confie à la boutique (social/src/messages.php) : quand un client
+ * Marketing. Les conversations Instagram que le réseau confie à la boutique (api/social/src/messages.php) : quand un client
  * cite la boutique, la conversation lui est confiée automatiquement. Elle y répond (depuis l'Instagram du réseau, dans
  * les 24 h que Meta autorise) ou la marque traitée.
  *

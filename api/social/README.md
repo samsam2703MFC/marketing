@@ -1,16 +1,17 @@
-> **Ce module fait partie du portail Marketing** : son code vit dans le dépôt `marketing`, dossier
-> `social/`, depuis le 06/11/2026 (`docs/PORTAILS.md`). Le dépôt `social` est archivé.
+# API Social du Marketing — L'Atelier By
 
-# Social & Ads — L'Atelier By
+L'API PHP de la partie **Social & Ads** du Marketing (publication et publicité Meta du réseau, espace
+boutique des franchisés). Les écrans sont dans le Marketing : `src/views/social/` (réseau, routes `social-*`)
+et `src/views/franchise/` (espace boutique, `/marketing/franchise/`). Jusqu'au 06/11/2026 c'était un module
+à part (dépôt `social`, puis dossier `social/`), avec ses propres écrans `.dc.html` ; ils ont été réécrits.
 
-Module **indépendant** de publication et de publicité Meta du réseau : calendrier
-éditorial, création de posts (studio visuel), campagnes, publicités, formulaires de
-leads, retour sur campagne, paramètres et connexions. Implémentation de la maquette
-Claude Design « Présentation produit Facebook » (écrans `SA *.dc.html`).
-
-- **Adresse** : `/social` (ex. `http://185.180.206.46/social/`)
-- **Dossier serveur** : `/var/www/social` (à côté du BO, `/var/www/consulant_bo`)
-- **API** : `/social/api/v1/social/{domaine}/{ressource}`
+- **API** : `/marketing/social/api/v1/social/{domaine}/{ressource}` (aussi `/social/api/v1/social/…`, que Meta appelle)
+- **Dossier serveur** : `/var/www/social` (les visuels déposés, `public/uploads`, y restent)
+- **Installation** : `bin/deploy.sh`, lancé par le job « Déploiement API Social » de `ci.yml` (Apache, cron, tables)
+- **Recette** : `php bin/tests.php` (MySQL, Graph Meta simulé), job « Recette API Social »
+- **Anciennes adresses** : `public/.htaccess` renvoie chaque ancien écran (`SA ….dc.html`) à son écran du
+  Marketing, `espace/.htaccess` chaque page de `/social_franchisee` à l'espace boutique.
+- **Documentation** : `docs/social/`.
 
 ## Relié au BO consultant
 

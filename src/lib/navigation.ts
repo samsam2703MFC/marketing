@@ -40,7 +40,7 @@ export type Route =
   | 'analysis'
   | 'crm'
   | 'funds'
-  /** Écrans du module Social & Ads, affichés dans un cadre — réseau seul (voir SOCIAL_PAGES). */
+  /** Écrans du module Social & Ads, réécrits dans le Marketing — réseau seul (voir SOCIAL_NATIVES). */
   | 'social-cal'
   | 'social-grid'
   | 'social-post'
@@ -69,6 +69,8 @@ export type Route =
   | 'social-set-rights'
   | 'social-set-log'
   | 'social-set-tfb'
+  /** Rédaction IA et charte : ouvert par « Créer un post » quand la clé manque (pas dans le menu). */
+  | 'social-set-ia'
   /**
    * Espace franchisé du module Social (/social_franchisee), affiché dans un cadre —
    * version franchisé seule. La boutique et les droits viennent de la session de
@@ -149,61 +151,21 @@ const ICONS: Record<string, string> = {
 }
 
 /**
- * Écran du module Social & Ads affiché par chaque route `social-*` : la clé de
- * page de ce module (`SA.href`) et son fichier. Le module renvoie la clé de
- * l'écran ouvert dans le cadre, ce qui permet au menu de suivre.
- */
-export interface SocialPage {
-  key: string
-  file: string
-  query?: string
-  /** `franchise` : une page de l'espace franchisé (/social_franchisee), sinon un écran du réseau (/social). */
-  space?: 'franchise'
-}
-
-export const SOCIAL_PAGES: Partial<Record<Route, SocialPage>> = {
-  // Le calendrier éditorial : Facebook et Instagram ensemble, sans préfiltre (il s'ouvrait
-  // filtré sur Facebook sous l'entrée « Facebook », et le filtre se remettait à zéro).
-  'social-post': { key: 'post', file: 'SA Post.dc.html' },
-  // Espace franchisé : ses pages sous leur adresse propre ; ses clés sont préfixées « f: » (le module les annonce ainsi).
-  'sf-cal': { key: 'f:cal', file: 'calendrier', space: 'franchise' },
-  'sf-pub': { key: 'f:pub', file: 'publier', space: 'franchise' },
-  'sf-com': { key: 'f:com', file: 'commentaires', space: 'franchise' },
-  'sf-msg': { key: 'f:msg', file: 'messages', space: 'franchise' },
-  'sf-google': { key: 'f:google', file: 'avis-google', space: 'franchise' },
-  'sf-camp': { key: 'f:camp', file: 'operations', space: 'franchise' },
-  'sf-ig': { key: 'f:ig', file: 'instagram', space: 'franchise' },
-}
-
-/**
- * Écrans du module Social RÉÉCRITS dans le Marketing (docs/PORTAILS.md, étape 2f) : ils ne passent plus par le
- * cadre. Social ouvert seul y renvoie aussi (`?ecran=`). Un écran rejoint cette liste quand il quitte SOCIAL_PAGES.
+ * Écrans du module Social & Ads, réécrits dans le Marketing (docs/PORTAILS.md, étape 2f) : plus aucun ne passe
+ * par un cadre. Une adresse `?ecran=social-…` (et les anciennes adresses de Social, qui y renvoient) les ouvre.
  */
 export const SOCIAL_NATIVES: ReadonlySet<Route> = new Set<Route>(['social-bilan', 'social-suivi', 'social-roi', 'social-ctrl', 'social-repost', 'social-google',
-  'social-cal', 'social-ads', 'social-leads', 'social-grid', 'social-fr', 'social-camp',
+  'social-cal', 'social-ads', 'social-leads', 'social-grid', 'social-fr', 'social-camp', 'social-post',
   'social-set-conn', 'social-set-google', 'social-set-cles', 'social-set-ids', 'social-set-pf', 'social-set-version',
-  'social-set-dsa', 'social-set-tpl', 'social-set-grp', 'social-set-rights', 'social-set-log', 'social-set-tfb'])
-
-/** La page Social d'une route, si ce périmètre peut l'ouvrir : le réseau ses écrans, la boutique son espace. */
-export function socialPageFor(role: Role, route: Route): SocialPage | null {
-  const page = SOCIAL_PAGES[route]
-  if (!page) return null
-  return (page.space === 'franchise') === (role === 'FRANCHISEE') ? page : null
-}
+  'social-set-dsa', 'social-set-tpl', 'social-set-grp', 'social-set-rights', 'social-set-log', 'social-set-tfb', 'social-set-ia'])
 
 /**
- * La route qui affiche l'écran `key` du module Social, s'il en a une. Plusieurs
- * routes ouvrent le même écran (les Paramètres, sur un onglet ou une section) :
- * la route courante est gardée si elle l'affiche déjà.
+ * L'espace boutique d'un franchisé (/marketing/franchise/<page>) : une application à part ; ses entrées du menu
+ * franchisé y mènent.
  */
-export function socialRoute(key: string, current?: Route): Route | null {
-  if (current !== undefined && SOCIAL_PAGES[current]?.key === key) return current
-  for (const [route, page] of Object.entries(SOCIAL_PAGES)) {
-    if (page?.key === key) return route as Route
-  }
-  // Un écran réécrit (le cadre restant y renvoie encore par sa clé : « set », « camp », « leads »…).
-  const natif = (key === 'set' ? 'social-set-conn' : 'social-' + key) as Route
-  return SOCIAL_NATIVES.has(natif) ? natif : null
+export const ESPACE_BOUTIQUE: Partial<Record<Route, string>> = {
+  'sf-cal': 'calendrier', 'sf-pub': 'publier', 'sf-com': 'commentaires', 'sf-msg': 'messages',
+  'sf-google': 'avis-google', 'sf-camp': 'operations', 'sf-ig': 'instagram',
 }
 
 function item(route: Route, label: string): NavItem {

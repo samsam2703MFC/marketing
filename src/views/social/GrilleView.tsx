@@ -4,7 +4,6 @@ import './social.css'
 import './grille.css'
 import { addDays, dLabel, dShort } from '../../lib/social/format'
 import { CONN, imageSocial } from '../../lib/social/refs'
-import { ROOTS } from '../../lib/api/module'
 import { lireAbonnes, lireGrille, relireGrille } from '../../lib/social/api-grille'
 import type { AbonnesInstagram, GrilleInstagram, MediaInstagram } from '../../lib/social/api-grille'
 import { boutiquesReseau, effacerAvis, enregistrer, journaliser, parId, useSocial } from '../../lib/social/store'
@@ -292,7 +291,7 @@ export default function GrilleView() {
           : 'Glissez la case sur une autre case programmée, ou « Échanger avec… » puis cliquez l’autre case.',
         canSwap: !sel.armed && sched.length > 1,
         // « Créer un post » n'est pas encore réécrit dans le Marketing : l'écran du module, seul, sur ce post.
-        href: `${ROOTS.social}${encodeURIComponent('SA Post.dc.html')}?id=${encodeURIComponent(p.id)}&seul=1`,
+        href: `${window.location.pathname}?ecran=social-post&id=${encodeURIComponent(p.id)}`,
         target: '_blank',
         openLabel: 'Ouvrir le post',
       }
