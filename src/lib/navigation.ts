@@ -164,9 +164,7 @@ export interface SocialPage {
 export const SOCIAL_PAGES: Partial<Record<Route, SocialPage>> = {
   // Le calendrier éditorial : Facebook et Instagram ensemble, sans préfiltre (il s'ouvrait
   // filtré sur Facebook sous l'entrée « Facebook », et le filtre se remettait à zéro).
-  'social-cal': { key: 'cal', file: 'SA Calendrier.dc.html' },
   'social-post': { key: 'post', file: 'SA Post.dc.html' },
-  'social-ads': { key: 'ads', file: 'SA Publicites.dc.html' },
   // Espace franchisé : ses pages sous leur adresse propre ; ses clés sont préfixées « f: » (le module les annonce ainsi).
   'sf-cal': { key: 'f:cal', file: 'calendrier', space: 'franchise' },
   'sf-pub': { key: 'f:pub', file: 'publier', space: 'franchise' },
@@ -182,7 +180,7 @@ export const SOCIAL_PAGES: Partial<Record<Route, SocialPage>> = {
  * cadre. Social ouvert seul y renvoie aussi (`?ecran=`). Un écran rejoint cette liste quand il quitte SOCIAL_PAGES.
  */
 export const SOCIAL_NATIVES: ReadonlySet<Route> = new Set<Route>(['social-bilan', 'social-suivi', 'social-roi', 'social-ctrl', 'social-repost', 'social-google',
-  'social-leads', 'social-grid', 'social-fr', 'social-camp',
+  'social-cal', 'social-ads', 'social-leads', 'social-grid', 'social-fr', 'social-camp',
   'social-set-conn', 'social-set-google', 'social-set-cles', 'social-set-ids', 'social-set-pf', 'social-set-version',
   'social-set-dsa', 'social-set-tpl', 'social-set-grp', 'social-set-rights', 'social-set-log', 'social-set-tfb'])
 

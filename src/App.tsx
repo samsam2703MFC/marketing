@@ -24,6 +24,8 @@ import MediaLibraryView from './views/media/MediaLibraryView'
 import SettingsView from './views/SettingsView'
 import CampaignBuilder from './views/builder/CampaignBuilder'
 import SocialView from './views/SocialView'
+import CalendrierView from './views/social/CalendrierView'
+import PublicitesView from './views/social/PublicitesView'
 import LeadsView from './views/social/LeadsView'
 import GrilleView from './views/social/GrilleView'
 import FranchiseView from './views/social/FranchiseView'
@@ -244,6 +246,11 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
   function openCampaign(id: number) {
     setCampaignId(id)
     setRoute('campaign')
+  }
+
+  /** Un écran Social avec ses paramètres (« id= » d'un post, « new=1&post= » d'une pub) : lus dans l'adresse. */
+  function allerSocial(ecran: Route, query = '') {
+    window.location.assign('?ecran=' + ecran + (query ? '&' + query : ''))
   }
 
   function navigate(next: Route) {
@@ -475,6 +482,16 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
           {route === 'social-ctrl' && role !== 'FRANCHISEE' ? <ControleView /> : null}
           {route === 'social-repost' && role !== 'FRANCHISEE' ? <RepostView /> : null}
           {route === 'social-google' && role !== 'FRANCHISEE' ? <GoogleView /> : null}
+          {route === 'social-cal' && role !== 'FRANCHISEE' ? (
+            <CalendrierView
+              onCreerPost={() => allerSocial('social-post')}
+              onOuvrirPost={(id) => allerSocial('social-post', 'id=' + encodeURIComponent(id))}
+              onControler={() => navigate('social-ctrl')}
+              onCreerPub={(id) => allerSocial('social-ads', 'new=1&post=' + encodeURIComponent(id))}
+              onParametres={() => navigate('social-set-conn')}
+            />
+          ) : null}
+          {route === 'social-ads' && role !== 'FRANCHISEE' ? <PublicitesView onGererFormulaires={() => navigate('social-leads')} /> : null}
           {route === 'social-leads' && role !== 'FRANCHISEE' ? <LeadsView /> : null}
           {route === 'social-grid' && role !== 'FRANCHISEE' ? <GrilleView /> : null}
           {route === 'social-fr' && role !== 'FRANCHISEE' ? <FranchiseView /> : null}
