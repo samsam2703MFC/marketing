@@ -1,0 +1,132 @@
+/* Espace franchisé (module Social, réécrit dans le Marketing) — design system du Marketing. */
+.franchise code { font-family: ui-monospace, monospace; font-size: 10.5px; color: var(--faint); letter-spacing: 0; text-transform: none; }
+.franchise .franchise__vars { color: var(--accent); font-size: 11px; }
+.franchise__intro { max-width: 760px; line-height: 1.5; }
+.franchise__espace { flex: 1 1 auto; }
+.franchise__avis { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.franchise__petit { font-size: 12px; line-height: 1.45; }
+.franchise__aide { font-size: 11.5px; line-height: 1.45; }
+.franchise__encre { color: var(--ink); }
+
+.franchise input[type='text'], .franchise input[type='number'], .franchise input[type='date'], .franchise input[type='time'], .franchise select, .franchise textarea {
+  font: inherit; font-size: 13px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink);
+}
+.franchise textarea { line-height: 1.5; resize: vertical; }
+.franchise select:focus-visible, .franchise textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.franchise input[type='number'] { width: 76px; }
+.franchise__select { min-height: 36px; }
+
+.franchise__kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.franchise__kpi { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; margin: 0; text-decoration: none; color: var(--ink); }
+.franchise__kpi:hover { border-color: var(--muted-2); }
+.franchise__kpi.is-attente { border-color: var(--prize); }
+.franchise__kpi .kpi__label { margin-top: 0; }
+.franchise__kpi-val { font-size: 22px; font-weight: 700; line-height: 1.15; }
+
+.franchise__section { display: flex; flex-direction: column; gap: 12px; padding: 16px; margin: 0; }
+.franchise__tete { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.franchise__tete-txt { display: flex; flex-direction: column; gap: 3px; max-width: 760px; }
+.franchise__etiquette { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.franchise__titre { font-size: 16px; }
+.franchise__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Modèles */
+.franchise__modeles { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.franchise__liste { flex: 1 1 300px; min-width: 260px; display: flex; flex-direction: column; gap: 8px; }
+.franchise__modele {
+  text-align: left; margin: 0; border-radius: 12px; border: 1px solid var(--line); background: #fff; padding: 10px 12px; cursor: pointer;
+  display: flex; flex-direction: column; gap: 4px; font: inherit; color: var(--ink);
+}
+.franchise__modele:hover { border-color: var(--muted-2); }
+.franchise__modele.is-on { border: 2px solid var(--accent); background: rgba(141, 29, 44, 0.05); padding: 9px 11px; }
+.franchise__modele-tete { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; }
+.franchise__resume { font-size: 11px; line-height: 1.4; }
+.franchise__tags { display: flex; gap: 4px; flex: 0 0 auto; }
+.franchise__tag { font-size: 10.5px; border-radius: 6px; padding: 2px 7px; background: var(--chip); color: var(--muted-2); }
+.franchise__tag.is-ouvert { background: rgba(63, 122, 82, 0.12); color: var(--green); }
+.franchise__tag.is-valider { background: var(--prize-soft); color: var(--prize-ink); }
+
+.franchise__editeur { flex: 2 1 560px; min-width: 300px; display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+.franchise__form { flex: 1 1 320px; min-width: 280px; display: flex; flex-direction: column; gap: 10px; }
+.franchise__ligne { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+.franchise__champ { flex: 1 1 150px; display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--muted); }
+.franchise__champ--2 { flex: 2 1 200px; }
+.franchise__bloc { display: flex; flex-direction: column; gap: 8px; }
+.franchise__bloc--filet { border-top: 1px solid var(--line); padding-top: 10px; }
+.franchise__libelle { font-size: 12px; color: var(--muted-2); }
+.franchise__puces { display: flex; gap: 6px; flex-wrap: wrap; }
+.franchise__puces .filter { cursor: pointer; }
+.franchise__cases { display: flex; flex-direction: column; gap: 8px; }
+.franchise__cases--ligne { flex-direction: row; flex-wrap: wrap; gap: 8px 14px; }
+.franchise__case { display: flex; align-items: flex-start; gap: 7px; font-size: 13px; line-height: 1.4; cursor: pointer; color: var(--ink); }
+.franchise__case input { accent-color: var(--accent); margin: 2px 0 0; flex: 0 0 auto; }
+.franchise__heures { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12.5px; color: var(--muted-2); }
+.franchise__encart { font-size: 12px; line-height: 1.5; color: var(--muted-2); background: var(--table-head); border-radius: 8px; padding: 8px 10px; }
+.franchise__erreur { font-size: 12px; line-height: 1.5; color: var(--danger); background: rgba(179, 38, 30, 0.07); border-radius: 8px; padding: 8px 10px; }
+.franchise__pied { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; border-top: 1px solid var(--line); padding-top: 10px; }
+.franchise__suppr { margin-right: auto; }
+
+/* Aperçu */
+.franchise__apercu { flex: 0 1 340px; min-width: 280px; display: flex; flex-direction: column; gap: 8px; position: sticky; top: 16px; }
+.franchise__apercu-tete { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.franchise__post { background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.franchise__post-texte { margin: 0; padding: 10px 12px; font-size: 13px; line-height: 1.45; white-space: pre-wrap; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #1c1e21; }
+.franchise__fixe { display: grid; gap: 2px; background: var(--table-head); }
+.franchise__fixe img { width: 100%; display: block; object-fit: cover; }
+
+/* Le visuel figé (maquette des réglages, couleurs de la charte de la marque) */
+.franchise__visuel { position: relative; aspect-ratio: 1 / 1; display: flex; flex-direction: column; background: #FCFBF8; color: #232220; overflow: hidden; }
+.franchise__visuel-photo { display: block; width: 100%; height: 56%; object-fit: cover; flex: 0 0 auto; }
+.franchise__visuel-sans { background: var(--chip); }
+.franchise__visuel-textes { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 10px 14px 18px; }
+.franchise__visuel-logo { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.75; }
+.franchise__visuel-mention { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #8D1D2C; }
+.franchise__visuel-titre { font-size: 18px; line-height: 1.15; }
+.franchise__visuel-phrase { font-size: 12px; font-style: italic; }
+.franchise__visuel-prix { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font-size: 15px; }
+.franchise__visuel-promo { background: #8D1D2C; color: #fff; border-radius: 6px; padding: 2px 7px; }
+.franchise__visuel-unite { font-size: 10px; opacity: 0.8; }
+.franchise__visuel-site { font-size: 9px; opacity: 0.7; }
+.franchise__visuel-note { position: absolute; right: 6px; bottom: 4px; font-size: 9px; color: var(--muted); }
+.franchise__visuel.is-abricot { background: #F2C9A0; color: #232220; }
+.franchise__visuel.is-ruby { background: #8D1D2C; color: #fff; }
+.franchise__visuel.is-ruby .franchise__visuel-mention { color: #F2C9A0; }
+.franchise__visuel.is-ruby .franchise__visuel-promo { background: #fff; color: #8D1D2C; }
+.franchise__visuel.is-ruby .franchise__visuel-note, .franchise__visuel.is-noir .franchise__visuel-note { color: rgba(255, 255, 255, 0.7); }
+.franchise__visuel.is-noir { background: #232220; color: #F2C9A0; }
+.franchise__visuel.is-noir .franchise__visuel-mention { color: #fff; }
+.franchise__visuel.is-plein .franchise__visuel-photo { position: absolute; inset: 0; height: 100%; }
+.franchise__visuel.is-plein .franchise__visuel-textes { position: relative; margin-top: auto; flex: 0 0 auto; background: linear-gradient(transparent, rgba(0, 0, 0, 0.55)); color: #fff; }
+.franchise__visuel.is-plein .franchise__visuel-mention { color: #F2C9A0; }
+.franchise__visuel.is-plein .franchise__visuel-note { color: rgba(255, 255, 255, 0.7); }
+.franchise__visuel.is-duo { flex-direction: row; }
+.franchise__visuel.is-duo .franchise__visuel-photo { width: 50%; height: 100%; }
+
+/* Kit du mois */
+.franchise__vide { font-size: 12.5px; background: var(--table-head); border-radius: 8px; padding: 10px 12px; }
+.franchise__kit {
+  display: grid; grid-template-columns: 150px minmax(180px, 1fr) minmax(200px, 1.4fr) minmax(170px, 1fr) 28px; gap: 10px; align-items: center;
+  padding: 8px 10px; border-radius: 8px; background: var(--table-head);
+}
+.franchise__fait { font-size: 12px; line-height: 1.4; color: var(--muted-2); }
+.franchise__fait.is-bon { color: var(--green); }
+@media (max-width: 900px) { .franchise__kit { grid-template-columns: 1fr 1fr; } }
+
+/* Règles et accès */
+.franchise__deux { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.franchise__deux > .franchise__section { flex: 1 1 420px; min-width: 300px; }
+.franchise__nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.franchise__nums input[type='number'] { width: auto; }
+.franchise__fin { display: flex; justify-content: flex-end; }
+.franchise__prose { font-size: 12.5px; line-height: 1.55; color: var(--muted-2); }
+.franchise__libre { display: flex; flex-direction: column; gap: 6px; background: var(--table-head); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; }
+.franchise__acces { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.franchise__acces-ligne { padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.franchise__acces-ligne + .franchise__acces-ligne { border-top: 1px solid var(--line); }
+.franchise__acces-nom { display: flex; flex-direction: column; min-width: 0; font-size: 13px; }
+.franchise__acces-nom code { font-size: 11px; color: var(--muted); word-break: break-all; }
+
+.franchise__toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 60; max-width: min(640px, 92vw);
+  background: var(--ink); color: #fff; border-radius: 8px; padding: 11px 16px; font-size: 13px;
+}

@@ -1,0 +1,115 @@
+/* Formulaires de leads (module Social, réécrit dans le Marketing) — design system du Marketing. */
+.leads code { font-family: ui-monospace, monospace; font-size: 10px; color: var(--faint); letter-spacing: 0; text-transform: none; }
+.leads__espace { flex: 1 1 auto; }
+.leads__avis { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.leads__petit { font-size: 12px; }
+.leads__encre { color: var(--ink); }
+
+.leads__info { display: flex; gap: 12px; align-items: flex-start; padding: 11px 14px; font-size: 12px; line-height: 1.55; color: var(--muted-2); }
+.leads__info-v {
+  width: 22px; height: 22px; border-radius: 50%; flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+  background: var(--prize-soft); color: var(--prize-ink); font-size: 12px;
+}
+
+.leads__corps { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+
+/* Liste des familles et de leurs versions */
+.leads__liste { flex: 0 1 270px; min-width: 240px; display: flex; flex-direction: column; gap: 10px; }
+.leads__famille { background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.leads__famille-nom { padding: 10px 12px 6px; font-size: 13px; }
+.leads__version {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin: 0;
+  border: 0; border-top: 1px solid var(--line); background: #fff; padding: 9px 12px; cursor: pointer; text-align: left; font: inherit; color: var(--ink);
+}
+.leads__version.is-on { background: rgba(141, 29, 44, 0.05); color: var(--accent); }
+.leads__version-txt { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.leads__version-txt .muted { font-size: 11px; }
+.leads__etat { flex: 0 0 auto; font-size: 10.5px; border-radius: 6px; padding: 3px 8px; background: var(--chip); color: var(--muted-2); white-space: nowrap; }
+.leads__etat.is-actif { background: rgba(63, 122, 82, 0.12); color: var(--green); }
+.leads__etat.is-brouillon { background: var(--prize-soft); color: var(--prize-ink); }
+
+/* Éditeur */
+.leads__editeur { flex: 1 1 440px; min-width: 0; display: flex; flex-direction: column; gap: 14px; margin: 0; }
+.leads__tete { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.leads__titre { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.leads__actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.leads__erreur { font-size: 12px; line-height: 1.5; color: var(--danger); background: rgba(179, 38, 30, 0.07); border-radius: 6px; padding: 7px 10px; }
+.leads__relecture {
+  background: var(--table-head); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; display: flex; flex-direction: column; gap: 6px;
+}
+.leads__relecture-titre { font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.leads__correction { font-size: 12px; line-height: 1.45; }
+.leads__avant { color: var(--danger); }
+.leads__apres { color: var(--green); }
+.leads__remarque { font-size: 11px; color: var(--prize-ink); }
+
+.leads__ligne { display: flex; gap: 10px; flex-wrap: wrap; }
+.leads__ligne > input, .leads__ligne > select { flex: 1 1 150px; }
+.leads__ligne > .leads__grand { flex: 2 1 220px; }
+.leads__ligne > .leads__cle { flex: 1 1 120px; font-family: ui-monospace, monospace; font-size: 12px; }
+.leads__champ { flex: 1 1 160px; display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--muted); }
+.leads__champ--2 { flex: 2 1 240px; }
+.leads input[type='text'], .leads input[type='url'], .leads select, .leads textarea {
+  font: inherit; font-size: 13px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink);
+}
+.leads textarea { line-height: 1.5; resize: vertical; }
+.leads select:focus-visible, .leads textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.leads textarea:disabled { background: transparent; color: var(--faint); }
+
+.leads__bloc { display: flex; flex-direction: column; gap: 8px; }
+.leads__bloc--filet { border-top: 1px solid var(--line); padding-top: 12px; }
+.leads__libelle { font-size: 12px; color: var(--muted-2); }
+.leads__sous-titre { font-size: 13px; }
+.leads__puces { display: flex; gap: 6px; flex-wrap: wrap; }
+.leads__puces .filter { cursor: pointer; }
+.leads__puces .filter:disabled { cursor: default; }
+.leads__puces .filter code { font-size: 9px; color: inherit; opacity: 0.75; }
+.leads__question { background: var(--table-head); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.leads__options { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.leads__option { display: inline-flex; align-items: center; gap: 6px; background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px 4px 10px; font-size: 12px; }
+.leads__option-x {
+  width: 16px; height: 16px; border-radius: 50%; border: 0; margin: 0; padding: 0; background: var(--ink); color: #fff; font-size: 9px; line-height: 16px; cursor: pointer;
+}
+.leads input.leads__nouvelle { width: 150px; font-size: 12px; padding: 4px 10px; border-style: dashed; }
+.leads__ajout { align-self: flex-start; }
+.leads__case { display: flex; align-items: center; gap: 7px; font-size: 13px; cursor: pointer; flex-wrap: wrap; }
+.leads__case input { accent-color: var(--accent); margin: 0; }
+
+/* Aperçu mobile (le rendu de Meta : sa police et son bleu, c'est voulu) */
+.leads__apercu { flex: 0 1 300px; min-width: 270px; position: sticky; top: 16px; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.leads__telephone { width: 270px; height: 540px; border-radius: 32px; background: var(--ink); padding: 10px; box-sizing: border-box; }
+.leads__ecran {
+  width: 100%; height: 100%; border-radius: 24px; background: #fff; overflow: auto; display: flex; flex-direction: column;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #1c1e21;
+}
+.leads__page { display: flex; align-items: center; gap: 8px; padding: 14px 14px 10px; border-bottom: 1px solid #eee; font-size: 12px; }
+.leads__page-logo { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 10px; }
+.leads__pv-corps { padding: 16px 14px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.leads__pv-titre { font-size: 17px; line-height: 1.25; }
+.leads__pv-ligne { font-size: 13px; color: #444; line-height: 1.45; display: flex; gap: 6px; }
+.leads__puce { color: var(--accent); }
+.leads__pv-section { font-size: 13px; }
+.leads__pv-champ { display: flex; flex-direction: column; gap: 3px; }
+.leads__pv-champ > span:first-child { font-size: 11px; color: #65676b; }
+.leads__pv-champ > span:last-child { border: 1px solid #dddfe2; border-radius: 6px; padding: 7px 9px; font-size: 12px; color: #8e8e8e; min-height: 14px; }
+.leads__pv-mention { font-size: 10px; color: #65676b; line-height: 1.4; }
+.leads__pv-lien { color: #1877f2; }
+.leads__pv-pied { padding: 12px 14px 16px; }
+.leads__pv-bouton { display: block; text-align: center; background: #1877f2; color: #fff; border-radius: 6px; padding: 10px; font-size: 13px; min-height: 16px; }
+.leads__pv-merci { align-items: center; justify-content: center; text-align: center; padding: 28px 16px; }
+.leads__pv-merci .leads__pv-titre { font-size: 16px; }
+.leads__pv-coche { width: 44px; height: 44px; border-radius: 50%; background: rgba(63, 122, 82, 0.12); color: var(--green); display: flex; align-items: center; justify-content: center; font-size: 20px; }
+
+/* Leads reçus */
+.leads__recus { padding: 0; overflow: hidden; margin: 0; }
+.leads__recus-tete { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.leads__recus-titre { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.leads__grille { display: grid; min-width: 860px; }
+.leads__th { padding: 10px 12px; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); background: var(--table-head); }
+.leads__td { padding: 9px 12px; font-size: 12px; border-top: 1px solid var(--row-line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.leads__vide { padding: 24px; text-align: center; font-size: 13px; }
+
+.leads__toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 60; max-width: min(640px, 92vw);
+  background: var(--ink); color: #fff; border-radius: 8px; padding: 11px 16px; font-size: 13px;
+}

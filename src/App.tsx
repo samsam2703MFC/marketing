@@ -24,9 +24,19 @@ import MediaLibraryView from './views/media/MediaLibraryView'
 import SettingsView from './views/SettingsView'
 import CampaignBuilder from './views/builder/CampaignBuilder'
 import SocialView from './views/SocialView'
+import CalendrierView from './views/social/CalendrierView'
+import PublicitesView from './views/social/PublicitesView'
+import LeadsView from './views/social/LeadsView'
+import GrilleView from './views/social/GrilleView'
+import FranchiseView from './views/social/FranchiseView'
+import CampagnesView from './views/social/CampagnesView'
+import ParametresView from './views/social/ParametresView'
 import BilanView from './views/social/BilanView'
 import SuiviView from './views/social/SuiviView'
 import RetourView from './views/social/RetourView'
+import ControleView from './views/social/ControleView'
+import RepostView from './views/social/RepostView'
+import GoogleView from './views/social/GoogleView'
 import InStoreView from './views/InStoreView'
 import { ReferencesProvider } from './state/references'
 
@@ -151,9 +161,29 @@ function campaignFromUrl(): { route: Route; campaignId: number | null } | null {
  * de Social (/marketing/social/…) renvoie ici, sur le même écran dans le rail du Marketing : le
  * module Social n'existe plus que comme écrans du Marketing (docs/PORTAILS.md). Un nom inconnu est ignoré.
  */
+const REGLAGES_SOCIAL: Record<string, { tab: string; section?: string }> = {
+  conn: { tab: 'conn' }, google: { tab: 'google' }, tpl: { tab: 'tpl' }, grp: { tab: 'grp' },
+  rights: { tab: 'rights' }, log: { tab: 'log' }, tfb: { tab: 'tfb' },
+  cles: { tab: 'api', section: 'cles' }, ids: { tab: 'api', section: 'ids' }, pf: { tab: 'api', section: 'pf' },
+  version: { tab: 'api', section: 'version' }, dsa: { tab: 'api', section: 'dsa' },
+}
+
 function screenFromUrl(): Route | null {
   const ecran = new URLSearchParams(window.location.search).get('ecran') ?? ''
   return Object.prototype.hasOwnProperty.call(SOCIAL_PAGES, ecran) || SOCIAL_NATIVES.has(ecran as Route) ? (ecran as Route) : null
+}
+
+/**
+ * Ce que l'adresse transmet à l'écran « Créer un post » encore servi par le module Social : le post à
+ * modifier (`&id=`) et le post de la marque (`&marque=1`), posés par les écrans réécrits (Repost…).
+ */
+function postQueryFromUrl(): string {
+  if (screenFromUrl() !== 'social-post') return ''
+  const params = new URLSearchParams(window.location.search)
+  const id = params.get('id') ?? ''
+  return [/^[\w-]{1,64}$/.test(id) ? `id=${encodeURIComponent(id)}` : '', params.get('marque') === '1' ? 'marque=1' : '']
+    .filter(Boolean)
+    .join('&')
 }
 
 /** La campagne à présélectionner dans « Créer un post » quand Social renvoie ici (`&op=19`). */
@@ -216,6 +246,11 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
   function openCampaign(id: number) {
     setCampaignId(id)
     setRoute('campaign')
+  }
+
+  /** Un écran Social avec ses paramètres (« id= » d'un post, « new=1&post= » d'une pub) : lus dans l'adresse. */
+  function allerSocial(ecran: Route, query = '') {
+    window.location.assign('?ecran=' + ecran + (query ? '&' + query : ''))
   }
 
   function navigate(next: Route) {
@@ -299,6 +334,8 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
 
   const refs = references.data
   const social = socialPageFor(role, route)
+  // Paramètres Social réécrits : la route dit l'onglet et la section (« social-set-cles » → api / cles).
+  const reglages = route.startsWith('social-set-') ? REGLAGES_SOCIAL[route.slice(11)] ?? null : null
   // Un écran d'une autre application, dans un cadre : il porte son propre titre et prend toute la surface.
   const framed = social !== null || route === 'instore'
   const tabs = tabsFor(role, route)
@@ -436,12 +473,30 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
           ) : null}
 
           {social ? (
-            <SocialView key={frameKey} file={social.file} query={social.query} space={social.space} campaignId={postFor} onPage={followSocial} />
+            <SocialView key={frameKey} file={social.file} query={[social.query, frameKey === 0 && route === 'social-post' ? postQueryFromUrl() : ''].filter(Boolean).join('&') || undefined} space={social.space} campaignId={postFor} onPage={followSocial} />
           ) : null}
 
           {route === 'social-bilan' && role !== 'FRANCHISEE' ? <BilanView /> : null}
           {route === 'social-suivi' && role !== 'FRANCHISEE' ? <SuiviView /> : null}
           {route === 'social-roi' && role !== 'FRANCHISEE' ? <RetourView /> : null}
+          {route === 'social-ctrl' && role !== 'FRANCHISEE' ? <ControleView /> : null}
+          {route === 'social-repost' && role !== 'FRANCHISEE' ? <RepostView /> : null}
+          {route === 'social-google' && role !== 'FRANCHISEE' ? <GoogleView /> : null}
+          {route === 'social-cal' && role !== 'FRANCHISEE' ? (
+            <CalendrierView
+              onCreerPost={() => allerSocial('social-post')}
+              onOuvrirPost={(id) => allerSocial('social-post', 'id=' + encodeURIComponent(id))}
+              onControler={() => navigate('social-ctrl')}
+              onCreerPub={(id) => allerSocial('social-ads', 'new=1&post=' + encodeURIComponent(id))}
+              onParametres={() => navigate('social-set-conn')}
+            />
+          ) : null}
+          {route === 'social-ads' && role !== 'FRANCHISEE' ? <PublicitesView onGererFormulaires={() => navigate('social-leads')} /> : null}
+          {route === 'social-leads' && role !== 'FRANCHISEE' ? <LeadsView /> : null}
+          {route === 'social-grid' && role !== 'FRANCHISEE' ? <GrilleView /> : null}
+          {route === 'social-fr' && role !== 'FRANCHISEE' ? <FranchiseView /> : null}
+          {route === 'social-camp' && role !== 'FRANCHISEE' ? <CampagnesView operation={postFor} /> : null}
+          {reglages && role !== 'FRANCHISEE' ? <ParametresView key={route} tab={reglages.tab} section={reglages.section} /> : null}
 
           {route === 'builder' ? (
             <CampaignBuilder

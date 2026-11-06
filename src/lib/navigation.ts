@@ -164,28 +164,7 @@ export interface SocialPage {
 export const SOCIAL_PAGES: Partial<Record<Route, SocialPage>> = {
   // Le calendrier éditorial : Facebook et Instagram ensemble, sans préfiltre (il s'ouvrait
   // filtré sur Facebook sous l'entrée « Facebook », et le filtre se remettait à zéro).
-  'social-cal': { key: 'cal', file: 'SA Calendrier.dc.html' },
-  'social-grid': { key: 'grid', file: 'SA Grille.dc.html' },
   'social-post': { key: 'post', file: 'SA Post.dc.html' },
-  'social-repost': { key: 'repost', file: 'SA Repost.dc.html' },
-  'social-ctrl': { key: 'ctrl', file: 'SA Controle.dc.html' },
-  'social-google': { key: 'google', file: 'SA Google.dc.html' },
-  'social-ads': { key: 'ads', file: 'SA Publicites.dc.html' },
-  'social-camp': { key: 'camp', file: 'SA Campagnes.dc.html' },
-  'social-fr': { key: 'fr', file: 'SA Franchise.dc.html' },
-  'social-leads': { key: 'leads', file: 'SA Leads.dc.html' },
-  'social-set-conn': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=conn' },
-  'social-set-google': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=google' },
-  'social-set-cles': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=api&section=cles' },
-  'social-set-ids': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=api&section=ids' },
-  'social-set-pf': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=api&section=pf' },
-  'social-set-version': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=api&section=version' },
-  'social-set-dsa': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=api&section=dsa' },
-  'social-set-tpl': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=tpl' },
-  'social-set-grp': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=grp' },
-  'social-set-rights': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=rights' },
-  'social-set-log': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=log' },
-  'social-set-tfb': { key: 'set', file: 'SA Parametres.dc.html', query: 'tab=tfb' },
   // Espace franchisé : ses pages sous leur adresse propre ; ses clés sont préfixées « f: » (le module les annonce ainsi).
   'sf-cal': { key: 'f:cal', file: 'calendrier', space: 'franchise' },
   'sf-pub': { key: 'f:pub', file: 'publier', space: 'franchise' },
@@ -200,7 +179,10 @@ export const SOCIAL_PAGES: Partial<Record<Route, SocialPage>> = {
  * Écrans du module Social RÉÉCRITS dans le Marketing (docs/PORTAILS.md, étape 2f) : ils ne passent plus par le
  * cadre. Social ouvert seul y renvoie aussi (`?ecran=`). Un écran rejoint cette liste quand il quitte SOCIAL_PAGES.
  */
-export const SOCIAL_NATIVES: ReadonlySet<Route> = new Set<Route>(['social-bilan', 'social-suivi', 'social-roi'])
+export const SOCIAL_NATIVES: ReadonlySet<Route> = new Set<Route>(['social-bilan', 'social-suivi', 'social-roi', 'social-ctrl', 'social-repost', 'social-google',
+  'social-cal', 'social-ads', 'social-leads', 'social-grid', 'social-fr', 'social-camp',
+  'social-set-conn', 'social-set-google', 'social-set-cles', 'social-set-ids', 'social-set-pf', 'social-set-version',
+  'social-set-dsa', 'social-set-tpl', 'social-set-grp', 'social-set-rights', 'social-set-log', 'social-set-tfb'])
 
 /** La page Social d'une route, si ce périmètre peut l'ouvrir : le réseau ses écrans, la boutique son espace. */
 export function socialPageFor(role: Role, route: Route): SocialPage | null {
@@ -219,7 +201,9 @@ export function socialRoute(key: string, current?: Route): Route | null {
   for (const [route, page] of Object.entries(SOCIAL_PAGES)) {
     if (page?.key === key) return route as Route
   }
-  return null
+  // Un écran réécrit (le cadre restant y renvoie encore par sa clé : « set », « camp », « leads »…).
+  const natif = (key === 'set' ? 'social-set-conn' : 'social-' + key) as Route
+  return SOCIAL_NATIVES.has(natif) ? natif : null
 }
 
 function item(route: Route, label: string): NavItem {
