@@ -104,6 +104,14 @@ function socRoute(string $method, string $path): array
         // Les identifiants des boutiques suivront au prochain passage horaire (cron « ids »).
         return [200, ['ok' => true, 'metaStatus' => Meta::statut()]];
     }
+    if ($method === 'POST' && $path === '/parametres/cles/partager') {
+        // Une seule application Meta pour l'ERP : la nôtre devient la connexion commune (erp_cles).
+        $r = socMetaPartager(socUser());
+        if (!$r['ok']) { throw new HttpError(409, $r['fait'] === 'incomplet' ? 'identifiant, clé secrète et jeton de l’application à renseigner ici d’abord' : 'Meta refuse : ' . ($r['erreur'] ?? $r['fait'])); }
+        if ($r['fait'] === 'publiee') { socLog(socUser(), 'Connexion', 'Application Meta du module publiée comme connexion commune de l’ERP'); }
+        Meta::reset();
+        return [200, $r + ['metaStatus' => Meta::statut()]];
+    }
     if ($method === 'POST' && $path === '/parametres/cles') {
         // Les clés Meta, écrites en base (mar_sa_parametre). Un champ vide n'efface rien.
         $map = ['systemToken' => 'meta_system_token', 'appSecret' => 'meta_app_secret', 'verifyToken' => 'meta_verify_token', 'anthropicKey' => 'anthropic_api_key', 'removebgKey' => 'removebg_api_key'];
@@ -116,6 +124,9 @@ function socRoute(string $method, string $path): array
         Meta::reset();
         Meta::verifierJeton();
         if ($faits) { socLog(socUser(), 'Connexion', 'Clés Meta mises à jour : ' . implode(', ', $faits)); }
+        // Une seule application Meta pour l'ERP : si la connexion commune est la nôtre, elle suit (nouveau jeton, nouvelle clé).
+        $appLocale = trim((string) (socSetting('meta_app_id') ?? ''));
+        if ($faits && $appLocale !== '' && socMetaConnexion('meta_app_id') === $appLocale) { socMetaPartager(socUser()); }
         // Nouveau token : les identifiants des boutiques sont relus tout de suite dans le portefeuille.
         $ids = in_array('meta_system_token', $faits, true) ? socIdsAuto(true) : null;
         return [200, ['ok' => true, 'maj' => $faits, 'metaStatus' => Meta::statut(), 'ids' => $ids]];

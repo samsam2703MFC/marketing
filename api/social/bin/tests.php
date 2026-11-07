@@ -451,6 +451,49 @@ Meta::reset();
 try { socRoute('POST', '/parametres/cles/crm'); $refus = 0; } catch (HttpError $e) { $refus = $e->status; }
 check('sans connexion partagée : la reprise est refusée, rien n’est vidé', $refus === 409 && Meta::config()['systemToken'] === 'TOK-DB');
 
+echo "Une seule application Meta : la nôtre publiée dans la connexion commune\n";
+$metaAvantP = Meta::$transport; $dbg = ['valid' => true, 'app' => '7777'];
+Meta::$transport = static function (string $m, string $url, array $p) use ($metaAvantP, &$dbg): array {
+    if (str_contains($url, '/debug_token')) {
+        return [200, ['data' => ['is_valid' => $dbg['valid'], 'app_id' => $dbg['app'], 'type' => 'SYSTEM_USER', 'expires_at' => 0]]];
+    }
+    return ($metaAvantP)($m, $url, $p);
+};
+$svPart = ['id' => socSetting('meta_app_id'), 'secret' => socSetting('meta_app_secret'), 'tok' => socSetting('meta_system_token')];
+socSettingPut('meta_app_id', '7777', false); socSettingPut('meta_app_secret', 'SEC-SOC', true); socSettingPut('meta_system_token', 'TOK-SOC', true);
+// La connexion commune d'avant : une AUTRE application (celle du CRM).
+$pdo->exec("INSERT INTO erp_cles (cle, valeur, secret, portail, integration, maj_le) VALUES ('meta_app_id', '4242', 0, 'commun', 'Meta', NOW()),
+    ('meta_app_secret', 'SEC-CRM', 1, 'commun', 'Meta', NOW()), ('meta_system_token', 'TOK-CRM', 1, 'commun', 'Meta', NOW()),
+    ('meta_page_token', 'PAGE-CRM', 1, 'commun', 'Meta', NOW()), ('meta_page_id', '555', 0, 'commun', 'Meta', NOW())");
+Meta::reset();
+$dbg['app'] = '9999';
+$r = socMetaPartager('test');
+check('jeton d’une autre application (selon Meta) : rien n’est publié', $r['fait'] === 'invalide' && socMetaConnexion('meta_app_id') === '4242', json_encode($r));
+$dbg['app'] = '7777';
+$r = socMetaPartager('test');
+$avantJ = json_decode((string) Db::row("SELECT valeur FROM erp_cles WHERE cle = 'meta_avant_social'")['valeur'], true);
+check('publiée : application, clé secrète et jeton du module dans les lignes communes', $r['fait'] === 'publiee' && $r['avant'] === '4242'
+    && socMetaConnexion('meta_app_id') === '7777' && socMetaConnexion('meta_app_secret') === 'SEC-SOC' && socMetaConnexion('meta_system_token') === 'TOK-SOC'
+    && Db::row("SELECT maj_par, secret FROM erp_cles WHERE cle = 'meta_system_token'") == ['maj_par' => 'test', 'secret' => 1], json_encode($r));
+check('l’ancienne connexion est gardée (Revenir à l’application précédente du CRM), le jeton de Page de l’ancienne retiré, la Page gardée',
+    ($avantJ['appId'] ?? '') === '4242' && ($avantJ['appSecret'] ?? '') === 'SEC-CRM' && ($avantJ['pageToken'] ?? '') === 'PAGE-CRM'
+        && ($avantJ['systemToken'] ?? '') === 'TOK-CRM' && ($avantJ['vers'] ?? '') === '7777'
+        && socMetaConnexion('meta_page_token') === '' && socMetaConnexion('meta_page_id') === '555');
+$r = socMetaPartager('test');
+check('publiée deux fois : rien ne bouge, l’ancienne connexion gardée n’est pas écrasée', $r['fait'] === 'deja'
+    && (json_decode((string) Db::row("SELECT valeur FROM erp_cles WHERE cle = 'meta_avant_social'")['valeur'], true)['appId'] ?? '') === '4242');
+[$code, $b] = socRoute('POST', '/parametres/cles/partager');
+check('route « Partager avec l’ERP » : déjà la connexion commune, aucun secret au navigateur', $code === 200 && $b['fait'] === 'deja'
+    && !str_contains(json_encode($b), 'TOK-SOC') && !str_contains(json_encode($b), 'SEC-SOC'));
+socSettingPut('meta_partage_2026_11', null, false);
+Db::exec("DELETE FROM mar_sa_parametre WHERE cle IN ('meta_partage_2026_11', 'meta_partage_essai')");
+socMetaPartagerUneFois();
+check('une fois : drapeau posé (déjà la nôtre), un second passage ne rappelle pas Meta', is_array(socSetting('meta_partage_2026_11')));
+$pdo->exec("DELETE FROM erp_cles WHERE portail = 'commun'");
+socSettingPut('meta_app_id', $svPart['id'] ?? '', false); socSettingPut('meta_app_secret', $svPart['secret'] ?? '', true); socSettingPut('meta_system_token', $svPart['tok'] ?? '', true);
+if ($svPart['id'] === null) { Db::exec("DELETE FROM mar_sa_parametre WHERE cle = 'meta_app_id'"); }
+Meta::$transport = $metaAvantP; Meta::reset();
+
 echo "Boutiques (API TFBuddy + BO)\n";
 $shops = socShops();
 check('boutiques = celles de l’API, identifiant de caisse', array_column($shops, 'id') === ['4', '5'], json_encode(array_column($shops, 'id')));

@@ -288,6 +288,8 @@ function socInstall(): void
     socParamsInit();
     // L'API franchise du CRM (seule adresse de rappel de l'application Meta partagée) relaie ici nos leads.
     socMetaRelaisInscrire();
+    // Une seule application Meta pour l'ERP : la nôtre (une fois).
+    socMetaPartagerUneFois();
     socTfbInit();
 }
 

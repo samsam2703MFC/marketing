@@ -229,6 +229,82 @@ function socMetaConnexion(?string $cle): string
 }
 
 /**
+ * Une seule application Meta pour tout l'ERP : celle de ce module (client, 7 nov. 2026 : « garde une seule
+ * application Meta, celle de Social »). Publie l'application du module (identifiant, clé secrète, jeton de
+ * l'utilisateur système — déchiffrés ici, jamais ailleurs) dans la connexion commune d'erp_cles. L'ancienne
+ * connexion commune (une AUTRE application) est d'abord gardée dans `meta_avant_social` (JSON, secret) :
+ * « ↩ Revenir à l'application précédente » du CRM la remet. Le CRM termine ensuite par « Connecter et
+ * tester » (jeton de sa Page, abonnement de l'application à l'adresse de l'API franchise, qui relaie ici).
+ * Rend ce qui a été fait : ['ok', 'fait' => publiee|deja|incomplet, 'avant' => ancienne application].
+ */
+function socMetaPartager(string $par): array
+{
+    $loc = static fn (string $k) => trim((string) (socSetting($k) ?? ''));
+    $info = (array) (socSetting('meta_jeton_info') ?? []);
+    // L'identifiant de l'application : le nôtre, sinon celui que Meta a donné pour notre jeton (debug_token).
+    $app = $loc('meta_app_id') ?: trim((string) ($info['appId'] ?? ''));
+    $secret = $loc('meta_app_secret'); $tok = $loc('meta_system_token');
+    if ($app === '' || $secret === '' || $tok === '') { return ['ok' => false, 'fait' => 'incomplet']; }
+    if (!Db::hasTable('erp_cles')) { return ['ok' => false, 'fait' => 'sans_table']; }
+    // Rien n'est publié sans la preuve de Meta : le jeton est valide et appartient à CETTE application (la clé
+    // secrète va avec : le jeton d'application app|secret est refusé sinon).
+    try {
+        $d = (array) (Meta::call('GET', 'debug_token', ['input_token' => $tok], $app . '|' . $secret)['data'] ?? []);
+    } catch (MetaError $e) { return ['ok' => false, 'fait' => 'invalide', 'erreur' => $e->getMessage()]; }
+    if (empty($d['is_valid']) || (string) ($d['app_id'] ?? '') !== $app) {
+        return ['ok' => false, 'fait' => 'invalide', 'erreur' => empty($d['is_valid']) ? 'jeton invalide' : 'le jeton appartient à une autre application (' . (string) ($d['app_id'] ?? '?') . ')'];
+    }
+    $info = ['type' => (string) ($d['type'] ?? ''), 'expire' => !empty($d['expires_at']) ? date('Y-m-d', (int) $d['expires_at']) : ''];
+    socMetaConnexion(null);
+    $avant = ['appId' => socMetaConnexion('meta_app_id'), 'appSecret' => socMetaConnexion('meta_app_secret'),
+        'pageToken' => socMetaConnexion('meta_page_token'), 'systemToken' => socMetaConnexion('meta_system_token')];
+    if ($avant['appId'] === $app && $avant['appSecret'] === $secret && $avant['systemToken'] === $tok) { return ['ok' => true, 'fait' => 'deja', 'avant' => null]; }
+    $maintenant = date('Y-m-d H:i:s');
+    $ecrire = static function (string $cle, string $valeur, bool $sec) use ($maintenant, $par): void {
+        if ($valeur === '') { Db::exec('DELETE FROM erp_cles WHERE cle = ?', [$cle]); return; }
+        Db::exec("INSERT INTO erp_cles (cle, valeur, secret, indice, portail, integration, maj_le, maj_par) VALUES (?, ?, ?, ?, 'commun', 'Meta', ?, ?)
+                  ON DUPLICATE KEY UPDATE maj_le = IF(valeur <=> VALUES(valeur), maj_le, VALUES(maj_le)), valeur = VALUES(valeur),
+                      secret = VALUES(secret), indice = VALUES(indice), portail = 'commun', maj_par = VALUES(maj_par)",
+            [$cle, $valeur, $sec ? 1 : 0, $sec ? (strlen($valeur) >= 8 ? '…' . substr($valeur, -4) : '…') : null, $maintenant, $par]);
+    };
+    // Une AUTRE application était la connexion commune : gardée pour pouvoir y revenir (jamais écrasée par une
+    // seconde publication de la nôtre).
+    $garde = null;
+    if ($avant['appId'] !== '' && $avant['appId'] !== $app) {
+        $garde = $avant + ['at' => $maintenant, 'par' => $par, 'vers' => $app];
+        $ecrire('meta_avant_social', (string) json_encode($garde, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), true);
+    }
+    $ecrire('meta_app_id', $app, false);
+    $ecrire('meta_app_secret', $secret, true);
+    $ecrire('meta_system_token', $tok, true);
+    $ecrire('meta_system_token_type', strtoupper((string) ($info['type'] ?? '')) ?: 'SYSTEM_USER', false);
+    $exp = (string) ($info['expire'] ?? '');
+    $ecrire('meta_system_token_expire', preg_match('/^\d{4}-\d{2}-\d{2}$/', $exp) ? $exp . ' 00:00:00' : '', false);
+    // Le jeton de Page gardé appartient à l'ancienne application : le CRM le refait (« Connecter et tester »).
+    if ($garde !== null) { $ecrire('meta_page_token', '', true); }
+    socMetaConnexion(null);
+    return ['ok' => true, 'fait' => 'publiee', 'avant' => $garde !== null ? $avant['appId'] : null];
+}
+
+/**
+ * Une fois (drapeau du module) : l'application du module devient la connexion commune. Sans clés ici, le drapeau
+ * est posé quand même (rien à publier ; « Partager avec l'ERP » le fera) ; Meta muet ou jeton refusé : nouvel
+ * essai une heure plus tard au plus.
+ */
+function socMetaPartagerUneFois(): void
+{
+    if (socSetting('meta_partage_2026_11') !== null) { return; }
+    $essai = (string) (socSetting('meta_partage_essai') ?? '');
+    if ($essai !== '' && strtotime($essai) > time() - 3600) { return; }
+    try {
+        $r = socMetaPartager('Social');
+        if (($r['fait'] ?? '') === 'invalide') { socSettingPut('meta_partage_essai', date('Y-m-d H:i:s'), false); error_log('social meta partage : ' . ($r['erreur'] ?? '')); return; }
+        socSettingPut('meta_partage_2026_11', ['le' => date('Y-m-d H:i:s')] + $r, false);
+        if (($r['fait'] ?? '') === 'publiee') { socLog('Social', 'Connexion', 'Application Meta du module publiée comme connexion commune de l’ERP' . (!empty($r['avant']) ? ' (remplace ' . $r['avant'] . ')' : '')); }
+    } catch (Throwable $e) { error_log('social meta partage : ' . $e->getMessage()); }
+}
+
+/**
  * Inscrit l'adresse du webhook du module dans la connexion commune (erp_cles,
  * meta_relais_social), pour que l'API franchise du CRM lui relaie ce qui le
  * concerne. Écrit seulement si elle change. Rend l'adresse inscrite.

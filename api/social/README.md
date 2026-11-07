@@ -54,11 +54,20 @@ candidature du CRM ; 7 nov. 2026 : toutes les clés de l'ERP dans **une table co
   `GET /integration/formulaires` (jeton de service `erp_jeton_service`, en-tête
   `X-Service-Token`) lui donne la liste pour son rattrapage horaire. Le module y inscrit l'adresse de son webhook
   (`meta_relais_social` d'`erp_cles` = `url_publique` + `api/v1/social/webhook`,
-  `socMetaRelaisInscrire`, à chaque démarrage du module — `socInstall`) — c'est la seule
-  écriture du module sur une ligne commune d'`erp_cles`. Son webhook
+  `socMetaRelaisInscrire`, à chaque démarrage du module — `socInstall`). Son webhook
   ignore un lead d'un formulaire qui n'est pas le sien (une candidature du
   CRM peut voisiner avec les nôtres dans le même envoi). Le cron continue de
   relire nos formulaires (`socLeadsSync`).
+- **Une seule application Meta pour l'ERP : la nôtre** (client, 7 nov. 2026 : « garde une seule application
+  Meta, celle de Social »). `socMetaPartager` publie l'application du module (identifiant — le nôtre, sinon
+  celui que Meta donne pour notre jeton —, clé secrète, jeton de l'utilisateur système) dans les lignes
+  communes `meta_*` d'`erp_cles`, APRÈS la preuve de Meta (`debug_token` : jeton valide et de cette
+  application). L'ancienne connexion commune, si c'était une autre application, est gardée dans
+  `meta_avant_social` (« Revenir à l'application précédente » du CRM) et son jeton de Page retiré. Une fois
+  (`socMetaPartagerUneFois` dans `socInstall`, drapeau `meta_partage_2026_11`, nouvel essai une heure plus tard
+  si Meta refuse), de nouveau quand un jeton est enregistré ici alors que la connexion commune est la nôtre,
+  et à la demande (`POST /parametres/cles/partager`). Le CRM termine par « Connecter et tester » (jeton de sa
+  Page, abonnement de l'application à l'adresse de l'API franchise, nos autres champs gardés).
 
 ## Tout est en base : tables `mar_sa_*`
 
