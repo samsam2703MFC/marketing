@@ -74,10 +74,11 @@ jobs:
 
       - name: Vérifier le préfixe mar_
         run: |
-          # Une table sans préfixe est une régression : la convention est absolue.
+          # Une table sans préfixe est une régression : la convention est absolue. Seule
+          # exception : les tables communes de l'ERP (erp_, la table des clés erp_cles).
           stray=$(mysql -h 127.0.0.1 -uroot -proot -N -e \
             "SELECT COUNT(*) FROM information_schema.tables
-             WHERE table_schema='marketing_test' AND table_name NOT LIKE 'mar\\_%';")
+             WHERE table_schema='marketing_test' AND table_name NOT LIKE 'mar\\_%' AND table_name NOT LIKE 'erp\\_%';")
           echo "Objets hors préfixe : $stray"
           test "$stray" -eq 0
 

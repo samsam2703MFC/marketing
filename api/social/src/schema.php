@@ -100,10 +100,10 @@ function socMigrerPrefixe(): array
 function socMigrerParametres(): array
 {
     $faits = ['variables' => 0, 'cles' => 0, 'gardees' => 0];
-    if (!Db::hasTable('mar_sa_parametre') || !Db::hasTable('mar_variable') || !Db::hasTable('mar_keys')) { return $faits; }
+    if (!Db::hasTable('mar_sa_parametre') || !Db::hasTable('mar_variable') || !Db::hasTable('erp_cles')) { return $faits; }
     $max = socVariableMax();
     $vars = array_flip(array_column(Db::rows("SELECT name FROM mar_variable WHERE module = 'social'"), 'name'));
-    $keys = array_flip(array_column(Db::rows("SELECT name FROM mar_keys WHERE module = 'social'"), 'name'));
+    $keys = array_flip(array_keys(socParamsLus()['keys']));
     foreach (Db::rows('SELECT cle, valeur, secret FROM mar_sa_parametre') as $r) {
         $cle = (string) $r['cle']; $valeur = (string) $r['valeur'];
         if ((int) $r['secret'] === 1) {
@@ -112,7 +112,7 @@ function socMigrerParametres(): array
             if ($c === null || SocCles::dechiffrer($c, $cle) !== $valeur) { $faits['gardees']++; continue; }
             $clair = json_decode($valeur, true);
             $indice = is_string($clair) && strlen($clair) >= 12 ? '••••' . substr($clair, -4) : null;
-            Db::exec("INSERT INTO mar_keys (module, name, ciphertext, hint) VALUES ('social', ?, ?, ?)", [$cle, $c, $indice]);
+            socCleEcrire($cle, $c, $indice);
             Db::exec('DELETE FROM mar_sa_parametre WHERE cle = ?', [$cle]);
             $faits['cles']++;
         } else {
@@ -146,11 +146,18 @@ function socInstall(): void
     Db::exec("CREATE TABLE IF NOT EXISTS mar_variable (module VARCHAR(20) NOT NULL DEFAULT 'marketing', name VARCHAR(80) NOT NULL,"
         . " value LONGTEXT NULL, description VARCHAR(300) NULL, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,"
         . ' updated_by BIGINT UNSIGNED NULL, PRIMARY KEY (module, name)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
-    Db::exec("CREATE TABLE IF NOT EXISTS mar_keys (module VARCHAR(20) NOT NULL DEFAULT 'marketing', name VARCHAR(80) NOT NULL,"
-        . ' ciphertext TEXT NOT NULL, hint VARCHAR(12) NULL, description VARCHAR(300) NULL,'
-        . ' updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, updated_by BIGINT UNSIGNED NULL,'
-        . ' PRIMARY KEY (module, name)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
-    Db::hasTable('mar_variable', true); Db::hasTable('mar_keys', true);
+    // Les secrets : erp_cles, la table des clés commune à l'ERP (même définition dans les quatre portails ;
+    // migration 046 du Marketing). Les lignes « social » de l'ancienne mar_keys y sont versées une fois.
+    Db::exec("CREATE TABLE IF NOT EXISTS erp_cles (cle VARCHAR(80) NOT NULL PRIMARY KEY, valeur MEDIUMTEXT NULL,"
+        . " secret TINYINT(1) NOT NULL DEFAULT 1, indice VARCHAR(12) NULL, portail VARCHAR(20) NOT NULL DEFAULT 'commun',"
+        . ' integration VARCHAR(60) NULL, maj_le DATETIME NOT NULL, maj_par VARCHAR(160) NULL, INDEX idx_erp_cles_portail (portail))'
+        . ' ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+    Db::hasTable('mar_variable', true); Db::hasTable('erp_cles', true); Db::hasTable('mar_keys', true);
+    if (Db::hasTable('mar_keys') && Db::row("SELECT 1 FROM erp_cles WHERE cle LIKE 'mar.social.%' LIMIT 1") === null) {
+        Db::exec("INSERT IGNORE INTO erp_cles (cle, valeur, secret, indice, portail, integration, maj_le, maj_par)
+                  SELECT CONCAT('mar.social.', name), ciphertext, 1, hint, 'mar', 'Social', updated_at, 'Social' FROM mar_keys WHERE module = 'social'");
+        socParamsLus(true);
+    }
     $t = ' ENGINE=InnoDB DEFAULT CHARSET=utf8mb4';
     $maj = 'maj_le DATETIME NOT NULL';
 

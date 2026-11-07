@@ -39,14 +39,15 @@ final class Meta
     public static $sleep = null;
     private static ?array $pageTokens = null;
 
-    /** Clé de l'écran → [clé de mar_sa_parametre, clé de la connexion partagée du CRM]. */
-    private const CLES = ['systemToken' => ['meta_system_token', 'system_token'], 'appSecret' => ['meta_app_secret', 'app_secret'],
-        'verifyToken' => ['meta_verify_token', 'verify_token'], 'appId' => ['meta_app_id', 'app_id']];
+    /** Clé de l'écran → [réglage du module, clé commune d'erp_cles] (mêmes noms des deux côtés). */
+    private const CLES = ['systemToken' => ['meta_system_token', 'meta_system_token'], 'appSecret' => ['meta_app_secret', 'meta_app_secret'],
+        'verifyToken' => ['meta_verify_token', 'meta_verify_token'], 'appId' => ['meta_app_id', 'meta_app_id']];
 
     /**
-     * Les réglages Meta : mar_sa_parametre d'abord ; un champ vide reprend la
-     * connexion partagée du CRM (`meta_connexion`, client oct. 2026 : « copier
-     * les connexions Meta du CRM — ou une table spécifique dans la base »).
+     * Les réglages Meta : ceux du module d'abord ; un champ vide reprend la
+     * connexion Meta commune de l'ERP (table erp_cles, lignes `meta_*` tenues par
+     * le Recrutement — client oct. 2026 puis 7 nov. 2026 : une table des clés
+     * commune à tout l'ERP).
      */
     public static function config(): array
     {
@@ -56,7 +57,7 @@ final class Meta
         return $c;
     }
 
-    /** D'où vient chaque clé : 'social' (mar_sa_parametre), 'crm' (connexion partagée) ou '' (absente). */
+    /** D'où vient chaque clé : 'social' (le module), 'crm' (connexion commune d'erp_cles) ou '' (absente). */
     public static function sources(): array
     {
         $out = [];
@@ -76,7 +77,7 @@ final class Meta
             'secretDefini' => $c['appSecret'] !== '', 'verifyDefini' => $c['verifyToken'] !== '', 'configure' => self::configured(),
             'appId' => $c['appId'], 'jeton' => socSetting('meta_jeton_info'), 'sources' => self::sources(),
             // La connexion partagée du CRM : disponible ou non, et son application — jamais un secret.
-            'crm' => ['dispo' => socMetaConnexion('system_token') !== '', 'appId' => socMetaConnexion('app_id')]];
+            'crm' => ['dispo' => socMetaConnexion('meta_system_token') !== '', 'appId' => socMetaConnexion('meta_app_id')]];
     }
 
     /**
@@ -201,21 +202,19 @@ final class Meta
     public static function reset(): void { self::$pageTokens = null; socMetaConnexion(null); }
 }
 
-/* --- Connexion Meta partagée avec le CRM candidat --------------------------------------
+/* --- Connexion Meta commune de l'ERP (table erp_cles) ----------------------------------
  *
- * Le CRM candidat, sa page franchise, le BO et ce module partagent la base
- * (atelierby_db). Le CRM y tient la table `meta_connexion` (une ligne par
- * clé : app_id, app_secret, system_token, verify_token, page_id, page_token,
- * graph_version…) et la met à jour à chaque « Connecter et tester ». Choix du
- * client (oct. 2026) : la MÊME application Meta pour les deux. Or une
- * application n'a qu'UNE adresse de rappel pour les Pages : celle de l'API de
- * la page franchise, qui relaie ici (corps et signature de Meta tels quels)
- * les leads de NOS formulaires — d'où l'adresse que ce module y inscrit
- * (`relais_social`). Le module lit cette table ; il n'y écrit que cette
- * adresse, et ne la crée pas (c'est le CRM qui la tient).
+ * Le Recrutement (CRM candidat), sa page franchise, le Pilotage et ce module partagent la base.
+ * La connexion Meta commune vit dans erp_cles, la table des clés de tout l'ERP : une ligne par clé,
+ * en clair, portail `commun` — meta_app_id, meta_app_secret, meta_system_token, meta_verify_token,
+ * meta_page_id, meta_page_token, meta_graph_version… — tenue par le CRM (« Connecter et tester »).
+ * Choix du client (oct. 2026) : la MÊME application Meta. Or une application n'a qu'UNE adresse de
+ * rappel pour les Pages : celle de l'API de la page franchise, qui relaie ici les leads des
+ * formulaires qu'elle n'a pas validés — d'où l'adresse que ce module y inscrit (meta_relais_social),
+ * et sa réponse (`formulaires` : lesquels sont les nôtres). Le module ne lit aucune table du CRM.
  */
 
-/** Une valeur de la connexion partagée ('' si absente) ; `null` vide le cache du processus. */
+/** Une valeur de la connexion commune ('' si absente) ; `null` vide le cache du processus. */
 function socMetaConnexion(?string $cle): string
 {
     static $cache = null;
@@ -223,16 +222,16 @@ function socMetaConnexion(?string $cle): string
     if ($cache === null) {
         $cache = [];
         try {
-            foreach (Db::rows('SELECT cle, valeur FROM meta_connexion') as $r) { $cache[(string) $r['cle']] = trim((string) $r['valeur']); }
-        } catch (Throwable $e) { /* table absente : le CRM ne l'a pas encore créée */ }
+            foreach (Db::rows("SELECT cle, valeur FROM erp_cles WHERE portail = 'commun' AND cle LIKE 'meta\\_%'") as $r) { $cache[(string) $r['cle']] = trim((string) $r['valeur']); }
+        } catch (Throwable $e) { /* table absente */ }
     }
     return $cache[$cle] ?? '';
 }
 
 /**
- * Inscrit l'adresse du webhook du module dans la connexion partagée, pour que
- * l'API franchise du CRM lui relaie ce qui le concerne. Écrit seulement si
- * elle change ; rien si la table n'existe pas. Rend l'adresse inscrite.
+ * Inscrit l'adresse du webhook du module dans la connexion commune (erp_cles,
+ * meta_relais_social), pour que l'API franchise du CRM lui relaie ce qui le
+ * concerne. Écrit seulement si elle change. Rend l'adresse inscrite.
  */
 function socMetaRelaisInscrire(): ?string
 {
@@ -240,10 +239,10 @@ function socMetaRelaisInscrire(): ?string
     if (!preg_match('#^https?://#i', $base)) { return null; }
     $url = $base . '/api/v1/social/webhook';
     try {
-        $r = Db::row("SELECT valeur FROM meta_connexion WHERE cle = 'relais_social'");
+        $r = Db::row("SELECT valeur FROM erp_cles WHERE cle = 'meta_relais_social'");
         if ($r !== null && (string) $r['valeur'] === $url) { return $url; }
-        Db::exec("INSERT INTO meta_connexion (cle, valeur, secret, source, maj_le) VALUES ('relais_social', ?, 0, 'social', ?)
-                  ON DUPLICATE KEY UPDATE valeur = VALUES(valeur), source = VALUES(source), maj_le = VALUES(maj_le)", [$url, date('Y-m-d H:i:s')]);
+        Db::exec("INSERT INTO erp_cles (cle, valeur, secret, indice, portail, integration, maj_le, maj_par) VALUES ('meta_relais_social', ?, 0, NULL, 'commun', 'Meta', ?, 'Social')
+                  ON DUPLICATE KEY UPDATE valeur = VALUES(valeur), maj_le = VALUES(maj_le), maj_par = VALUES(maj_par)", [$url, date('Y-m-d H:i:s')]);
         socMetaConnexion(null);
         return $url;
     } catch (Throwable $e) { return null; }

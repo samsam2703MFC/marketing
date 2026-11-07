@@ -4477,7 +4477,7 @@ $vide = call($router, 'PUT', '/api/v1/marketing/shop-supports/' . $boutiqueB, []
 check('une liste vide retire les supports de la boutique', $vide['status'] === 200 && ($vide['body']['data'] ?? [1]) === []);
 $pdo->exec('DELETE FROM mar_shop_support');
 
-// --- Variables et clés du module (mar_variable, mar_keys) -------------------
+// --- Variables et clés du module (mar_variable, erp_cles) -------------------
 // Le module se déplace avec ses réglages : ils vivent en base, les secrets chiffrés
 // par une clé maîtresse gardée hors de la base. Le test ne touche qu'aux noms qu'il
 // pose, et les retire en partant.
@@ -4486,7 +4486,8 @@ $nomsTest = ['MAR_ERP_API_TIMEOUT', 'MAR_WEBSHOP_API_BASE', 'MAR_WEBSHOP_API_TOK
 $purgerReglages = static function () use ($pdo, &$nomsTest): void {
     $liste = implode(',', array_map([$pdo, 'quote'], $nomsTest));
     $pdo->exec("DELETE FROM mar_variable WHERE module = 'marketing' AND name IN ($liste)");
-    $pdo->exec("DELETE FROM mar_keys WHERE module = 'marketing' AND name IN ($liste)");
+    $cles = implode(',', array_map(static fn ($n) => $pdo->quote('mar.marketing.' . $n), $nomsTest));
+    $pdo->exec("DELETE FROM erp_cles WHERE cle IN ($cles)");
     \Marketing\Support\Config::forget();
     \Marketing\Support\Keys::forget();
 };
@@ -4499,7 +4500,7 @@ $dossierCles = sys_get_temp_dir() . '/mar_keys_' . getmypid();
 \Marketing\Support\Keys::forget();
 
 \Marketing\Support\Keys::put('MAR_WEBSHOP_API_TOKEN', 'jeton-webshop-secret-123456');
-$brut = (string) $pdo->query("SELECT ciphertext FROM mar_keys WHERE module = 'marketing' AND name = 'MAR_WEBSHOP_API_TOKEN'")->fetchColumn();
+$brut = (string) $pdo->query("SELECT valeur FROM erp_cles WHERE cle = 'mar.marketing.MAR_WEBSHOP_API_TOKEN' AND portail = 'mar'")->fetchColumn();
 \Marketing\Support\Keys::forget();
 check('une clé est chiffrée en base (rien du clair), la clé maîtresse créée hors de la base en 0640, et elle se relit',
     $brut !== '' && !str_contains($brut, 'jeton-webshop') && preg_match('/^(x1|g1):/', $brut) === 1
@@ -4589,14 +4590,14 @@ check('import du .env : variables et clés absentes versées, la valeur déjà e
         && !in_array('MAR_ERP_API_TIMEOUT', $premier['variables'], true) && \Marketing\Support\Config::get('MAR_ERP_API_TIMEOUT') === '7'
         && $second['variables'] === [] && $second['keys'] === []
         && \Marketing\Support\Keys::get('MAR_ERP_API_PASSWORD') === 'mot-de-passe-du-fichier'
-        && !str_contains((string) $pdo->query("SELECT ciphertext FROM mar_keys WHERE name = 'MAR_ERP_API_PASSWORD'")->fetchColumn(), 'mot-de-passe'),
+        && !str_contains((string) $pdo->query("SELECT valeur FROM erp_cles WHERE cle = 'mar.marketing.MAR_ERP_API_PASSWORD'")->fetchColumn(), 'mot-de-passe'),
     json_encode([$premier, $second]));
 
 // Le secret de session lu en base : la session s'ouvre, et un cookie signé d'un autre secret, non.
 \Marketing\Support\Keys::put('MAR_SESSION_SECRET', str_repeat('k', 40));
 \Marketing\Support\Env::set('MAR_SESSION_SECRET', str_repeat('f', 40));
 $cookie = \Marketing\Support\Session::seal(['user_id' => 5, 'role' => 'BRAND_ADMIN', 'shop_ids' => [], 'label' => 'test']);
-$pdo->exec("DELETE FROM mar_keys WHERE name = 'MAR_SESSION_SECRET'");
+$pdo->exec("DELETE FROM erp_cles WHERE cle = 'mar.marketing.MAR_SESSION_SECRET'");
 \Marketing\Support\Keys::forget();
 check('le secret de session se lit en base, avant le fichier : un cookie signé du secret en base ne s\'ouvre plus quand le fichier reprend',
     \Marketing\Support\Session::open($cookie) === null);

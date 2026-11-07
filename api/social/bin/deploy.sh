@@ -10,7 +10,7 @@
 # adresses (/social, /marketing/franchise, /social_franchisee) restent servies — Meta y envoie
 # ses notifications, les QR codes imprimés et les liens de l'ERP y mènent — et renvoient les
 # écrans au Marketing. Aucun secret : la base vient du config du BO, tout le reste est en base
-# (tables mar_sa_*, réglages dans mar_variable, secrets chiffrés dans mar_keys).
+# (tables mar_sa_*, réglages dans mar_variable, secrets chiffrés dans erp_cles).
 set -euo pipefail
 
 TARGET_DIR="${TARGET_DIR:-/var/www/social}"            # dépôt complet, hors webroot
@@ -64,7 +64,7 @@ CFG="$TARGET_DIR/config/config.php"
 BO_DIR="$BO_DIR" BO_URL="$BO_URL" PUBLIC_URL="$PUBLIC_URL" php -r '
   $cfg = ["boDir" => getenv("BO_DIR"), "boUrl" => getenv("BO_URL"), "publicUrl" => getenv("PUBLIC_URL"),
           "db" => null, "auth" => null, "userName" => "Franchiseur"];
-  echo "<?php\n// Écrit par bin/deploy.sh — les données et les clés sont en base (mar_variable / mar_keys).\nreturn " . var_export($cfg, true) . ";\n";
+  echo "<?php\n// Écrit par bin/deploy.sh — les données et les clés sont en base (mar_variable / erp_cles).\nreturn " . var_export($cfg, true) . ";\n";
 ' > "$CFG"
 chmod 640 "$CFG"; chown www-data:www-data "$CFG"
 

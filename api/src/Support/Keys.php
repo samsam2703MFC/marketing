@@ -8,7 +8,13 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Les secrets du module (`mar_keys`), chiffrés en base.
+ * Les secrets du module, chiffrés en base — dans `erp_cles`, la table des clés commune à tout l'ERP
+ * (décision du 7 nov. 2026 : « les clés dans une table commune pour tout l'ERP ; à part les clés, les
+ * portails sont indépendants »). Les lignes du Marketing y portent `portail = mar` et le nom
+ * `mar.{module}.{nom}` (`mar.marketing.MAR_SESSION_SECRET`, `mar.social.meta_system_token`) ; leur
+ * valeur reste CHIFFRÉE (les clés `commun` des autres portails — Meta, SMS, IA… — sont en clair,
+ * lues par leur nom). L'ancienne table `mar_keys` a été versée une fois (migration 046) et n'est
+ * plus lue qu'en repli tant qu'elle existe.
  *
  * Jetons des API, mots de passe de service, secret de session : une copie de la
  * base ne doit en livrer aucun. Chaque valeur est chiffrée avec une clé maîtresse
@@ -68,29 +74,36 @@ final class Keys
         }
 
         $statement = Database::connection()->prepare(
-            'INSERT INTO mar_keys (module, name, ciphertext, hint, description, updated_by)
-             VALUES (:module, :name, :ciphertext, :hint, :description, :user)
-             ON DUPLICATE KEY UPDATE ciphertext = VALUES(ciphertext), hint = VALUES(hint),
-                                     description = COALESCE(VALUES(description), description), updated_by = VALUES(updated_by)'
+            "INSERT INTO erp_cles (cle, valeur, secret, indice, portail, integration, maj_le, maj_par)
+             VALUES (:cle, :valeur, 1, :indice, 'mar', :integration, NOW(), :par)
+             ON DUPLICATE KEY UPDATE valeur = VALUES(valeur), indice = VALUES(indice),
+                                     integration = COALESCE(VALUES(integration), integration), maj_le = NOW(), maj_par = VALUES(maj_par)"
         );
         $statement->execute([
-            'module'      => $module,
-            'name'        => $name,
-            'ciphertext'  => self::encrypt($value, $module, $name),
-            'hint'        => self::hint($value),
-            'description' => $description,
-            'user'        => $userId,
+            'cle'         => self::cle($module, $name),
+            'valeur'      => self::encrypt($value, $module, $name),
+            'indice'      => self::hint($value),
+            'integration' => $description !== null ? mb_substr($description, 0, 60) : null,
+            'par'         => $userId !== null ? (string) $userId : null,
         ]);
         self::forget();
     }
 
     public static function delete(string $name, string $module = 'marketing'): bool
     {
-        $statement = Database::connection()->prepare('DELETE FROM mar_keys WHERE module = :module AND name = :name');
-        $statement->execute(['module' => $module, 'name' => $name]);
+        $statement = Database::connection()->prepare('DELETE FROM erp_cles WHERE cle = :cle');
+        $statement->execute(['cle' => self::cle($module, $name)]);
+        $n = $statement->rowCount();
+        try {
+            $old = Database::connection()->prepare('DELETE FROM mar_keys WHERE module = :module AND name = :name');
+            $old->execute(['module' => $module, 'name' => $name]);
+            $n += $old->rowCount();
+        } catch (Throwable) {
+            // l'ancienne table n'existe plus
+        }
         self::forget();
 
-        return $statement->rowCount() > 0;
+        return $n > 0;
     }
 
     /**
@@ -254,6 +267,7 @@ final class Keys
             return self::$rows[$module];
         }
         $rows = [];
+        // Repli : l'ancienne table, tant qu'elle existe (une ligne d'erp_cles l'emporte).
         try {
             $statement = Database::connection()->prepare(
                 'SELECT name, ciphertext, hint, description, updated_at FROM mar_keys WHERE module = :module ORDER BY name'
@@ -268,10 +282,34 @@ final class Keys
                 ];
             }
         } catch (Throwable) {
-            // Table absente (avant la migration 040) ou base injoignable : l'environnement prend le relais.
+            // Table absente : normal après la migration 046.
         }
+        try {
+            $prefixe = self::cle($module, '');
+            $statement = Database::connection()->prepare(
+                "SELECT cle, valeur, indice, integration, maj_le FROM erp_cles WHERE portail = 'mar' AND cle LIKE :p ORDER BY cle"
+            );
+            $statement->execute(['p' => str_replace(['_', '%'], ['\\_', '\\%'], $prefixe) . '%']);
+            foreach ($statement->fetchAll() as $row) {
+                $rows[substr((string) $row['cle'], strlen($prefixe))] = [
+                    'ciphertext'  => (string) $row['valeur'],
+                    'hint'        => $row['indice'] !== null ? (string) $row['indice'] : null,
+                    'description' => $row['integration'] !== null ? (string) $row['integration'] : null,
+                    'updated_at'  => (string) $row['maj_le'],
+                ];
+            }
+        } catch (Throwable) {
+            // Table absente (avant la migration 046) ou base injoignable : l'environnement prend le relais.
+        }
+        ksort($rows);
 
         return self::$rows[$module] = $rows;
+    }
+
+    /** Le nom de la ligne dans erp_cles : `mar.{module}.{nom}`. */
+    public static function cle(string $module, string $name): string
+    {
+        return 'mar.' . $module . '.' . $name;
     }
 
     private static function hint(string $value): ?string

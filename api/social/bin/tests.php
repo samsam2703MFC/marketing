@@ -343,7 +343,7 @@ Tfb::$transport = static function (string $m, string $url, array $h, ?string $bo
 
 $appelsVers = static function (string $re) use (&$appels): array { return array_values(array_filter($appels, static fn ($a) => preg_match($re, $a[1]))); };
 
-// La clé maîtresse de mar_keys : un fichier propre au test (en production, celui du module Marketing).
+// La clé maîtresse des clés chiffrées (erp_cles, mar.social.*) : un fichier propre au test (en production, celui du module Marketing).
 $cleMaitresse = $tmp . '/master.key';
 @mkdir($tmp, 0700, true);
 file_put_contents($cleMaitresse, base64_encode(random_bytes(32)));
@@ -377,16 +377,16 @@ foreach (['mar_sa_parametre', 'mar_sa_content', 'mar_sa_campagne', 'mar_sa_publi
 }
 check('aucune table hors préfixe mar_sa_ créée par le module', !array_filter($pdo->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN), static fn ($t) => str_starts_with($t, 'soc_')));
 check('token Meta repris du BO, stocké en base', socSetting('meta_system_token') === 'TOK-BO');
-$chiffre = (string) (Db::row("SELECT ciphertext FROM mar_keys WHERE module = 'social' AND name = 'meta_system_token'")['ciphertext'] ?? '');
-check('token chiffré dans mar_keys (module social), rien du clair, plus dans l\'ancienne table',
+$chiffre = (string) (Db::row("SELECT valeur FROM erp_cles WHERE cle = 'mar.social.meta_system_token' AND portail = 'mar'")['valeur'] ?? '');
+check('token chiffré dans erp_cles (mar.social.*), rien du clair, plus dans l\'ancienne table',
     preg_match('/^(x1|g1):/', $chiffre) === 1 && !str_contains($chiffre, 'TOK-BO')
         && Db::row("SELECT 1 FROM mar_sa_parametre WHERE cle = 'meta_system_token'") === null);
-check('Meta lit le token dans mar_keys', Meta::config()['systemToken'] === 'TOK-BO');
+check('Meta lit le token dans erp_cles', Meta::config()['systemToken'] === 'TOK-BO');
 socSettingPut('meta_system_token', 'TOK-DB', true);
 check('changer la clé en base change la clé utilisée', Meta::config()['systemToken'] === 'TOK-DB');
 check('les clés secrètes ne partent pas au navigateur', !str_contains(json_encode(socParams()), 'TOK-DB'));
 
-echo "Réglages et clés (mar_variable, mar_keys)\n";
+echo "Réglages et clés (mar_variable, erp_cles)\n";
 // Sans clé maîtresse lisible : une clé reste dans l'ancienne table (jamais en clair dans mar_variable), et se lit encore.
 putenv('SOCIAL_KEYS_FILE=' . $tmp . '/absente.key'); SocCles::oublier();
 socSettingPut('anthropic_api_key', 'sk-sans-maitresse-123456', true);
@@ -398,13 +398,13 @@ check('sans clé maîtresse : la clé reste dans l\'ancienne table, lisible, jam
 // La clé maîtresse revient : le démarrage suivant verse la clé, chiffrée, et vide l'ancienne ligne.
 putenv('SOCIAL_KEYS_FILE=' . $cleMaitresse); SocCles::oublier();
 $verse = socMigrerParametres();
-check('clé maîtresse revenue : la clé est versée chiffrée dans mar_keys, l\'ancienne ligne disparaît, la valeur se relit',
+check('clé maîtresse revenue : la clé est versée chiffrée dans erp_cles, l\'ancienne ligne disparaît, la valeur se relit',
     $verse['cles'] >= 1 && socSetting('anthropic_api_key') === 'sk-sans-maitresse-123456'
         && Db::row("SELECT 1 FROM mar_sa_parametre WHERE cle = 'anthropic_api_key'") === null
-        && (string) (Db::row("SELECT hint FROM mar_keys WHERE module = 'social' AND name = 'anthropic_api_key'")['hint'] ?? '') === '••••3456',
+        && (string) (Db::row("SELECT indice FROM erp_cles WHERE cle = 'mar.social.anthropic_api_key'")['indice'] ?? '') === '••••3456',
     json_encode($verse));
 // Une clé déplacée sous un autre nom ne se déchiffre pas ; une autre clé maîtresse non plus.
-$c = (string) Db::row("SELECT ciphertext FROM mar_keys WHERE module = 'social' AND name = 'anthropic_api_key'")['ciphertext'];
+$c = (string) Db::row("SELECT valeur FROM erp_cles WHERE cle = 'mar.social.anthropic_api_key'")['valeur'];
 check('une valeur chiffrée ne se déchiffre ni sous un autre nom ni sous le module Marketing',
     SocCles::dechiffrer($c, 'meta_app_secret') === null && SocCles::dechiffrer($c, 'anthropic_api_key') !== null);
 // Un réglage ordinaire va dans mar_variable ; un cache trop grand pour la colonne reste dans l'ancienne table.
@@ -418,13 +418,11 @@ check('retirer un réglage le retire partout', socSetting('cache_test_gros', 'ab
 $migre = socMigrerParametres();
 check('la migration rejouée ne verse plus rien', $migre['variables'] === 0 && $migre['cles'] === 0, json_encode($migre));
 
-echo "Connexion Meta partagée avec le CRM (meta_connexion)\n";
-check('table du CRM absente : rien ne casse, rien d’inscrit', socMetaConnexion('system_token') === '' && socMetaRelaisInscrire() === null);
-// La table telle que le CRM la crée (meta_connexion_schema) : c'est lui qui la tient.
-$pdo->exec("CREATE TABLE meta_connexion (cle VARCHAR(48) NOT NULL PRIMARY KEY, valeur TEXT NOT NULL, secret TINYINT(1) NOT NULL DEFAULT 0,
-    source VARCHAR(32) NOT NULL DEFAULT '', maj_le DATETIME NOT NULL, par VARCHAR(120) NULL)");
-$pdo->exec("INSERT INTO meta_connexion (cle, valeur, secret, source, maj_le) VALUES ('system_token', 'TOK-CRM', 1, 'crm', NOW()),
-    ('app_secret', 'SEC-CRM', 1, 'crm', NOW()), ('app_id', '4242', 0, 'crm', NOW())");
+echo "Connexion Meta commune (erp_cles, lignes meta_*)\n";
+check('connexion commune vide : rien ne casse, rien n’est repris', socMetaConnexion('meta_system_token') === '' && Meta::sources()['systemToken'] !== 'crm');
+// Les lignes communes telles que le CRM les écrit (portail commun, en clair).
+$pdo->exec("INSERT INTO erp_cles (cle, valeur, secret, portail, integration, maj_le) VALUES ('meta_system_token', 'TOK-CRM', 1, 'commun', 'Meta', NOW()),
+    ('meta_app_secret', 'SEC-CRM', 1, 'commun', 'Meta', NOW()), ('meta_app_id', '4242', 0, 'commun', 'Meta', NOW())");
 Meta::reset();
 check('un champ rempli ici l’emporte sur le CRM', Meta::config()['systemToken'] === 'TOK-DB' && Meta::sources()['systemToken'] === 'social');
 $avant = ['id' => socSetting('meta_app_id'), 'url' => socSetting('url_publique'), 'secret' => socSetting('meta_app_secret'), 'verify' => socSetting('meta_verify_token')];
@@ -436,7 +434,7 @@ check('App ID repris du CRM, source dite à l’écran', Meta::config()['appId']
 check('le token du CRM ne part pas au navigateur', !str_contains(json_encode(socParams()) . json_encode(Meta::statut()), 'TOK-CRM'));
 socSettingPut('url_publique', 'https://social.test/social/', false);
 check('adresse du webhook inscrite pour le relais de l’API franchise', socMetaRelaisInscrire() === 'https://social.test/social/api/v1/social/webhook'
-    && Db::row("SELECT valeur, source FROM meta_connexion WHERE cle = 'relais_social'") == ['valeur' => 'https://social.test/social/api/v1/social/webhook', 'source' => 'social']);
+    && Db::row("SELECT valeur, maj_par FROM erp_cles WHERE cle = 'meta_relais_social'") == ['valeur' => 'https://social.test/social/api/v1/social/webhook', 'maj_par' => 'Social']);
 socSettingPut('meta_system_token', 'TOK-ICI', true);
 Meta::reset();
 [$code, $b] = socRoute('POST', '/parametres/cles/crm');
@@ -448,7 +446,7 @@ socSettingPut('meta_app_secret', $avant['secret'] ?? '', true);
 socSettingPut('meta_verify_token', $avant['verify'] ?? '', true);
 if ($avant['id'] !== null) { socSettingPut('meta_app_id', $avant['id'], false); }
 socSettingPut('url_publique', $avant['url'] ?? '', false);
-$pdo->exec('DROP TABLE meta_connexion');
+$pdo->exec("DELETE FROM erp_cles WHERE portail = 'commun'");
 Meta::reset();
 try { socRoute('POST', '/parametres/cles/crm'); $refus = 0; } catch (HttpError $e) { $refus = $e->status; }
 check('sans connexion partagée : la reprise est refusée, rien n’est vidé', $refus === 409 && Meta::config()['systemToken'] === 'TOK-DB');
@@ -456,8 +454,8 @@ check('sans connexion partagée : la reprise est refusée, rien n’est vidé', 
 echo "Boutiques (API TFBuddy + BO)\n";
 $shops = socShops();
 check('boutiques = celles de l’API, identifiant de caisse', array_column($shops, 'id') === ['4', '5'], json_encode(array_column($shops, 'id')));
-check('comptes API repris du BO, mot de passe secret (chiffré dans mar_keys), téléphone dans mar_variable',
-    socSetting('tfb_admin_phone') === '0470' && Db::row("SELECT 1 FROM mar_keys WHERE module = 'social' AND name = 'tfb_admin_password'") !== null
+check('comptes API repris du BO, mot de passe secret (chiffré dans erp_cles), téléphone dans mar_variable',
+    socSetting('tfb_admin_phone') === '0470' && Db::row("SELECT 1 FROM erp_cles WHERE cle = 'mar.social.tfb_admin_password'") !== null
         && Db::row("SELECT 1 FROM mar_variable WHERE module = 'social' AND name = 'tfb_admin_phone'") !== null);
 check('franchisé et zone du BO rattachés par pwa_shop_id', socShop('4')['franchisee'] === 'Nathan Charlot');
 check('horaires lus dans l’API', socShop('4')['hours'] === '7h00–18h30' && socShop('4')['hoursNl'] === '7u00–18u30');
@@ -994,6 +992,23 @@ $appels = [];
 $r = socWebhook($corps, 'sha256=' . hash_hmac('sha256', $corps, Meta::config()['appSecret']));
 check('webhook : lead d’un formulaire qui n’est pas le nôtre ignoré, Meta pas appelé', $r['leads'] === 0
     && !array_filter($appels, static fn ($a) => $a[1] === 'CRM-L1') && count(socLeads()) === 1);
+check('webhook : la réponse ne dit nôtre aucun formulaire étranger (l’API franchise le traitera)', ($r['formulaires'] ?? null) === []);
+$nosForms = array_column(Db::rows("SELECT form_id FROM mar_sa_meta_objet WHERE kind = 'leadform' AND form_id <> ''"), 'form_id');
+if ($nosForms) {
+    $corps2 = (string) json_encode(['object' => 'page', 'entry' => [['id' => '999', 'changes' => [['field' => 'leadgen', 'value' => ['leadgen_id' => 'X-L9', 'form_id' => (string) $nosForms[0]]]]]]]);
+    $r2 = socWebhook($corps2, 'sha256=' . hash_hmac('sha256', $corps2, Meta::config()['appSecret']));
+    check('webhook : la réponse nomme nos formulaires (l’API franchise ne les traite pas)', ($r2['formulaires'] ?? []) === [(string) $nosForms[0]], json_encode($r2));
+}
+// Entre portails : la liste de nos formulaires, au jeton de service d'erp_cles.
+$pdo->exec("INSERT INTO erp_cles (cle, valeur, secret, portail, integration, maj_le) VALUES ('erp_jeton_service', 'JETON-SERVICE-TEST', 1, 'commun', 'Interne', NOW())
+    ON DUPLICATE KEY UPDATE valeur = VALUES(valeur)");
+$_SERVER['HTTP_X_SERVICE_TOKEN'] = 'faux';
+try { socRoute('GET', '/integration/formulaires'); $refus = 0; } catch (HttpError $e) { $refus = $e->status; }
+check('intégration : sans le bon jeton de service, 401', $refus === 401);
+$_SERVER['HTTP_X_SERVICE_TOKEN'] = 'JETON-SERVICE-TEST';
+[$code, $b] = socRoute('GET', '/integration/formulaires');
+check('intégration : nos formulaires de prospects, au bon jeton', $code === 200 && ($b['formulaires'] ?? null) === array_values(array_unique(array_map('strval', $nosForms))), json_encode($b));
+unset($_SERVER['HTTP_X_SERVICE_TOKEN']);
 $appels = [];
 $lf['status'] = 'Archivé';
 socStateSave(['changes' => ['leadforms' => ['upsert' => [$lf]]]]);

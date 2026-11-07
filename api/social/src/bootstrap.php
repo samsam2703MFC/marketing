@@ -175,8 +175,9 @@ function boSetting(string $key, mixed $default = null): mixed
 
 /* --- réglages et clés : mar_variable, mar_keys (module « social ») --------------
  *
- * Le module se déplace avec l'ensemble Marketing : ses réglages vivent dans les tables communes
- * `mar_variable` (en clair) et ses secrets dans `mar_keys` (chiffrés), ligne `module = social`.
+ * Le module se déplace avec l'ensemble Marketing : ses réglages vivent dans `mar_variable` (en clair,
+ * ligne `module = social`) et ses secrets dans `erp_cles`, la table des clés commune à l'ERP (7 nov. 2026),
+ * chiffrés, sous le nom `mar.social.{nom}` (portail `mar`). L'ancienne `mar_keys` est lue en repli.
  * Même format que le module Marketing (Marketing\Support\Keys) : `x1:` XChaCha20-Poly1305 ou `g1:`
  * AES-256-GCM, données associées `mar_keys:social:{nom}`, même clé maîtresse — un fichier hors de la
  * base (`SOCIAL_KEYS_FILE`, sinon `MAR_KEYS_FILE`, sinon celui du module Marketing sur ce serveur).
@@ -243,6 +244,20 @@ final class SocCles
     }
 }
 
+/** Écrit une clé chiffrée du module dans erp_cles (`mar.social.{nom}`). */
+function socCleEcrire(string $nom, string $chiffre, ?string $indice): void
+{
+    Db::exec("INSERT INTO erp_cles (cle, valeur, secret, indice, portail, integration, maj_le, maj_par) VALUES (?, ?, 1, ?, 'mar', 'Social', ?, 'Social')
+              ON DUPLICATE KEY UPDATE valeur = VALUES(valeur), indice = VALUES(indice), maj_le = VALUES(maj_le)", ['mar.social.' . $nom, $chiffre, $indice, date('Y-m-d H:i:s')]);
+}
+
+/** Retire une clé du module (erp_cles et, tant qu'elle existe, l'ancienne mar_keys). */
+function socCleRetirer(string $nom): void
+{
+    if (Db::hasTable('erp_cles')) { Db::exec('DELETE FROM erp_cles WHERE cle = ?', ['mar.social.' . $nom]); }
+    if (Db::hasTable('mar_keys')) { Db::exec("DELETE FROM mar_keys WHERE module = 'social' AND name = ?", [$nom]); }
+}
+
 /** Les réglages du module, lus une fois par requête (et relus après chaque écriture). */
 function socParamsLus(bool $oublier = false): array
 {
@@ -255,6 +270,9 @@ function socParamsLus(bool $oublier = false): array
     }
     if (Db::hasTable('mar_keys')) {
         foreach (Db::rows("SELECT name, ciphertext FROM mar_keys WHERE module = 'social'") as $r) { $cache['keys'][(string) $r['name']] = (string) $r['ciphertext']; }
+    }
+    if (Db::hasTable('erp_cles')) {
+        foreach (Db::rows("SELECT cle, valeur FROM erp_cles WHERE portail = 'mar' AND cle LIKE 'mar.social.%'") as $r) { $cache['keys'][substr((string) $r['cle'], 11)] = (string) $r['valeur']; }
     }
     if (Db::hasTable('mar_sa_parametre')) {
         foreach (Db::rows('SELECT cle, valeur, secret FROM mar_sa_parametre') as $r) { $cache['ancien'][(string) $r['cle']] = ['valeur' => (string) $r['valeur'], 'secret' => (int) $r['secret'] === 1]; }
@@ -294,7 +312,7 @@ function socSettingPut(string $key, mixed $value, ?bool $secret = null): void
 {
     $secret ??= socSettingSecret($key);
     $json = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    $nouvelles = Db::hasTable('mar_variable') && Db::hasTable('mar_keys')
+    $nouvelles = Db::hasTable('mar_variable') && Db::hasTable('erp_cles')
         // Une valeur trop grande pour la colonne (un cache) reste dans l'ancienne table.
         && ($secret || !function_exists('socVariableMax') || strlen((string) $json) <= socVariableMax());
     $chiffre = $secret && $nouvelles ? SocCles::chiffrer($json, $key) : null;
@@ -302,13 +320,12 @@ function socSettingPut(string $key, mixed $value, ?bool $secret = null): void
     if ($nouvelles && (!$secret || $chiffre !== null)) {
         if ($secret) {
             $indice = is_string($value) && strlen($value) >= 12 ? '••••' . substr($value, -4) : null;
-            Db::exec("INSERT INTO mar_keys (module, name, ciphertext, hint) VALUES ('social', ?, ?, ?)
-                      ON DUPLICATE KEY UPDATE ciphertext = VALUES(ciphertext), hint = VALUES(hint)", [$key, $chiffre, $indice]);
+            socCleEcrire($key, $chiffre, $indice);
             Db::exec("DELETE FROM mar_variable WHERE module = 'social' AND name = ?", [$key]);
         } else {
             Db::exec("INSERT INTO mar_variable (module, name, value) VALUES ('social', ?, ?)
                       ON DUPLICATE KEY UPDATE value = VALUES(value)", [$key, $json]);
-            Db::exec("DELETE FROM mar_keys WHERE module = 'social' AND name = ?", [$key]);
+            socCleRetirer($key);
         }
         // Versé : l'ancienne ligne ne doit plus faire repli (ni garder une clé en clair).
         if (Db::hasTable('mar_sa_parametre')) { Db::exec('DELETE FROM mar_sa_parametre WHERE cle = ?', [$key]); }
@@ -316,7 +333,7 @@ function socSettingPut(string $key, mixed $value, ?bool $secret = null): void
         Db::exec('INSERT INTO mar_sa_parametre (cle, valeur, secret, maj_le) VALUES (?, ?, ?, ?)
                   ON DUPLICATE KEY UPDATE valeur = VALUES(valeur), secret = VALUES(secret), maj_le = VALUES(maj_le)',
             [$key, $json, $secret ? 1 : 0, date('Y-m-d H:i:s')]);
-        if ($secret && $nouvelles) { error_log('[social] clé « ' . $key . ' » gardée hors de mar_keys : clé maîtresse illisible (' . SocCles::fichier() . ')'); }
+        if ($secret && $nouvelles) { error_log('[social] clé « ' . $key . ' » gardée hors de erp_cles : clé maîtresse illisible (' . SocCles::fichier() . ')'); }
     }
     socParamsLus(true);
 }
@@ -325,7 +342,7 @@ function socSettingPut(string $key, mixed $value, ?bool $secret = null): void
 function socSettingDelete(string $key): void
 {
     if (Db::hasTable('mar_variable')) { Db::exec("DELETE FROM mar_variable WHERE module = 'social' AND name = ?", [$key]); }
-    if (Db::hasTable('mar_keys')) { Db::exec("DELETE FROM mar_keys WHERE module = 'social' AND name = ?", [$key]); }
+    socCleRetirer($key);
     if (Db::hasTable('mar_sa_parametre')) { Db::exec('DELETE FROM mar_sa_parametre WHERE cle = ?', [$key]); }
     socParamsLus(true);
 }

@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Les réglages et les secrets du module, en base (`mar_variable`, `mar_keys`).
+ * Les réglages et les secrets du module, en base (`mar_variable`, `erp_cles`).
  *
  *   php db/variables.php import   verse en base ce que le .env porte encore, sans
  *                                 rien écraser (une valeur en base l'emporte) ;

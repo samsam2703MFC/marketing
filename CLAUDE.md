@@ -10,7 +10,10 @@ Vite 7 + React 19 + TypeScript strict côté écran. Interface en français.
   fixture façonnée pour faire passer un écran. Quand une donnée manque pour
   vérifier quelque chose, on la demande.
 - Le module se déplace avec ses réglages : un réglage va dans `mar_variable`, un
-  secret dans `mar_keys` (chiffré), lus par `Config::get` et `Keys::get`. Seuls
+  secret dans **`erp_cles`**, la table des clés commune à tout l'ERP (7 nov. 2026 ; ligne
+  `mar.{module}.{nom}`, portail `mar`, valeur chiffrée), lus par `Config::get` et
+  `Keys::get`. Les clés `commun` (Meta, jeton de service `erp_jeton_service`…) s'y lisent
+  par leur nom. Aucune table d'un autre portail n'est lue : on passe par son API. Seuls
   l'accès à la base, la clé maîtresse et l'identité de développement restent dans
   l'environnement. Pas de nouvelle variable d'environnement pour le reste.
 - Les migrations vivent dans `db/migrations/`, rejouées deux fois en CI. Les

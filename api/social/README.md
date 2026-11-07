@@ -27,32 +27,35 @@ partage **tous les accès** du BO consultant :
 | Adresse, position GPS | caisse du panel (`shops`, via `ceo_shop.pwa_shop_id`) |
 | Ventes (retour sur campagne) | caisse du panel (`transaction`, `transaction_product`, `product`) |
 | Opérations | les campagnes commerciales du **Marketing du BO**, lues par son API (`GET /api/v1/marketing/campaigns`, `/campaigns/{id}`, `/shops`) — jamais créées ni modifiées ici |
-| Clés Meta | celles de Brand Guard, **recopiées une fois** dans `mar_variable` / `mar_keys` (module `social`) au premier lancement ; un champ resté **vide** reprend la **connexion partagée du CRM candidat** (table `meta_connexion`, voir plus bas) |
+| Clés Meta | celles de Brand Guard, **recopiées une fois** dans `mar_variable` / `mar_keys` (module `social`) au premier lancement ; un champ resté **vide** reprend la **connexion partagée du CRM candidat** (lignes `meta_*` communes d'`erp_cles`, voir plus bas) |
 | Journal | chaque geste s'écrit aussi dans `ceo_journal_entry` (écran Journal du cockpit, type « Social & Ads ») |
 
 Le module n'écrit **jamais** dans les tables `ceo_*`, `brand_guard_*` ni dans
 celles du panel (à part la ligne de journal).
 
-## Connexion Meta partagée avec le CRM candidat (`meta_connexion`)
+## Connexion Meta commune de l'ERP (`erp_cles`)
 
 Choix du client (oct. 2026) : **la même application Meta** que les formulaires de
-candidature du CRM, ses clés dans **une table commune** de la base partagée.
+candidature du CRM ; 7 nov. 2026 : toutes les clés de l'ERP dans **une table commune**,
+`erp_cles` — à part les clés, les portails sont indépendants.
 
-- La table `meta_connexion` (une ligne par clé : `app_id`, `app_secret`,
-  `system_token`, `verify_token`, `page_id`, `page_token`, `graph_version`…) est
-  **créée et tenue par le CRM** (à chaque « Connecter et tester » de ses
-  Paramètres → Intégrations). Le module la **lit** : `Meta::config()` prend la
-  clé de `mar_variable` / `mar_keys` (module `social`), et seulement si elle est vide celle du CRM
+- Les lignes `meta_*` de portail `commun` (`meta_app_id`, `meta_app_secret`,
+  `meta_system_token`, `meta_verify_token`, `meta_page_id`, `meta_page_token`,
+  `meta_graph_version`…) sont **tenues par le CRM** (à chaque « Connecter et tester » de ses
+  Paramètres → Connexions → Meta). Le module les **lit** : `Meta::config()` prend la
+  clé du module (`erp_cles`, `mar.social.*`, chiffrée), et seulement si elle est vide la clé commune
   (`socMetaConnexion`). L'écran l'indique (« · repris du CRM ») et
   **« ↺ Reprendre la connexion du CRM »** (`POST /parametres/cles/crm`) vide les
   clés saisies ici. Les secrets ne partent jamais au navigateur.
 - **Webhook** : une application Meta n'a qu'UNE adresse de rappel pour les
   Pages — celle de l'API de la page franchise. Elle relaie ici, corps et
-  signature de Meta tels quels, les leads de **nos** formulaires
-  (`mar_sa_meta_objet`). Le module y inscrit l'adresse de son webhook
-  (`relais_social` = `url_publique` + `api/v1/social/webhook`,
+  signature de Meta tels quels, les leads des formulaires qu'elle n'a pas validés — elle
+  ne lit plus nos tables : le webhook répond `formulaires` (les nôtres, `mar_sa_meta_objet`), et
+  `GET /integration/formulaires` (jeton de service `erp_jeton_service`, en-tête
+  `X-Service-Token`) lui donne la liste pour son rattrapage horaire. Le module y inscrit l'adresse de son webhook
+  (`meta_relais_social` d'`erp_cles` = `url_publique` + `api/v1/social/webhook`,
   `socMetaRelaisInscrire`, à chaque démarrage du module — `socInstall`) — c'est la seule
-  écriture du module hors des tables du module marketing (`mar_*`). Son webhook
+  écriture du module sur une ligne commune d'`erp_cles`. Son webhook
   ignore un lead d'un formulaire qui n'est pas le sien (une candidature du
   CRM peut voisiner avec les nôtres dans le même envoi). Le cron continue de
   relire nos formulaires (`socLeadsSync`).
@@ -64,7 +67,7 @@ Toutes les données **et toutes les clés** sont stockées et lues dans la base
 
 | Table | Contenu |
 |---|---|
-| `mar_variable` / `mar_keys` (module `social`) | tables communes du module marketing : les réglages en clair dans `mar_variable` (`meta_version`, `meta_dsa`, `meta_compte_reseau`, `url_publique`, `url_bo`, `utilisateur`, `marge`, `catalogue`…), les secrets **chiffrés** dans `mar_keys` (`meta_system_token`, `meta_app_secret`, `meta_verify_token`, comptes TFBuddy — jamais renvoyés au navigateur), avec la clé maîtresse du module Marketing (`master.key`, hors de la base). L’ancienne `social_parametre` est vidée dans ces deux tables au premier démarrage |
+| `mar_variable` / `mar_keys` (module `social`) | tables communes du module marketing : les réglages en clair dans `mar_variable` (`meta_version`, `meta_dsa`, `meta_compte_reseau`, `url_publique`, `url_bo`, `utilisateur`, `marge`, `catalogue`…), les secrets **chiffrés** dans `erp_cles`, lignes `mar.social.*` (`meta_system_token`, `meta_app_secret`, `meta_verify_token`, comptes TFBuddy — jamais renvoyés au navigateur), avec la clé maîtresse du module Marketing (`master.key`, hors de la base). L’ancienne `social_parametre` est vidée dans ces deux tables au premier démarrage |
 | `mar_sa_content` | les posts (titre, statut, date, heure, boutiques, canaux, textes FR/NL, image, erreur…) |
 | `mar_sa_campagne` | ancienne table des opérations locales — plus utilisée (les opérations viennent du Marketing du BO) |
 | `mar_sa_publicite` | les publicités (objectif, statut Meta, budget, plafond, dépense, motif de refus) |
@@ -795,7 +798,7 @@ config/            config.example.php (premier lancement), hote.example.php (poi
   api/index.php    contrôleur frontal de l'API
   vendor/          React, ReactDOM, Babel, html-to-image (embarqués, aucun CDN)
 src/
-  bootstrap.php    lien BO : config, base, session, réglages (mar_variable / mar_keys), journal
+  bootstrap.php    lien BO : config, base, session, réglages (mar_variable / erp_cles), journal
   schema.php       tables mar_sa_*
   store.php        état des écrans (lecture, enregistrement par différences)
   shops.php        boutiques du BO + test des connexions Meta

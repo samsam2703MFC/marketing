@@ -62,6 +62,10 @@ function socRoute(string $method, string $path): array
         socInstall();
         return [302, socGoogleAvisRedirige($m[1], (string) ($_GET['s'] ?? 'lien'))];
     }
+    if ($method === 'GET' && $path === '/integration/formulaires') {
+        socInstall();
+        return [200, socIntegrationFormulaires()];
+    }
     if ($path === '/webhook') {
         socInstall();
         if ($method === 'GET') { return [200, socWebhookVerif()]; }
@@ -91,8 +95,8 @@ function socRoute(string $method, string $path): array
     }
     if ($method === 'POST' && $path === '/parametres/cles/crm') {
         // « Reprendre la connexion du CRM » : les clés Meta saisies ici sont
-        // vidées — un champ vide reprend la connexion partagée (meta_connexion).
-        if (socMetaConnexion('system_token') === '') { throw new HttpError(409, 'le CRM ne partage pas encore de connexion Meta (jeton de l’utilisateur système absent)'); }
+        // vidées — un champ vide reprend la connexion Meta commune (erp_cles).
+        if (socMetaConnexion('meta_system_token') === '') { throw new HttpError(409, 'le CRM ne partage pas encore de connexion Meta (jeton de l’utilisateur système absent)'); }
         foreach (['meta_system_token' => true, 'meta_app_secret' => true, 'meta_verify_token' => true, 'meta_app_id' => false] as $cle => $secret) { socSettingPut($cle, '', $secret); }
         Meta::reset();
         Meta::verifierJeton();

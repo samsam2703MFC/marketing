@@ -598,9 +598,16 @@ appartient vit sous `mar_`, ses réglages compris (migration 040).
   adresses de l'ERP et du webshop, délais, dossier des envois, adresse publique.
   La valeur est un `LONGTEXT` (migration 042) : Social y range aussi ses caches
   (pages et comptes Meta, relevé des fiches Google), qui dépassent 64 Ko.
-- **`mar_keys`** `(module, name)` — les secrets, **chiffrés** : jetons de l'ERP et
+- **`erp_cles`** (depuis le 7 nov. 2026, migration 046 ; c'était `mar_keys`) — la table des
+  clés **commune à tout l'ERP** : une ligne par clé (`cle`, `valeur`, `secret`, `indice`,
+  `portail`, `integration`, `maj_le`, `maj_par`). Les lignes du Marketing portent
+  `portail = mar` et le nom `mar.{module}.{nom}` (`mar.marketing.MAR_SESSION_SECRET`,
+  `mar.social.meta_system_token`) ; leur valeur reste **chiffrée** : jetons de l'ERP et
   du webshop, mot de passe du compte de service, secret de session, jeton de
-  service. Format `x1:` XChaCha20-Poly1305 (libsodium) ou `g1:` AES-256-GCM
+  service. Les clés `commun` des intégrations partagées (Meta : `meta_app_id`,
+  `meta_app_secret`, `meta_system_token`…, jeton de service entre portails
+  `erp_jeton_service`) sont en clair, tenues par le portail qui les saisit et lues par leur
+  nom. `mar_keys` reste lue en repli jusqu'à sa suppression. Format `x1:` XChaCha20-Poly1305 (libsodium) ou `g1:` AES-256-GCM
   (OpenSSL), données associées `mar_keys:{module}:{nom}` (une valeur recopiée sous
   un autre nom ne se déchiffre pas). Clé maîtresse de 32 octets **hors de la
   base** : `MAR_KEYS_FILE`, à défaut `master.key` à côté du `.env` — tirée une

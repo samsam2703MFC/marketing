@@ -182,6 +182,7 @@ function socWebhook(string $corps, ?string $signature): array
     }
     $p = json_decode($corps, true);
     $n = 0;
+    $nos = [];   // nos formulaires vus dans cet envoi : l'API franchise du CRM ne les traite pas
     foreach ((array) ($p['entry'] ?? []) as $e) {
         foreach ((array) ($e['changes'] ?? []) as $c) {
             if (($c['field'] ?? '') !== 'leadgen') { continue; }
@@ -191,6 +192,7 @@ function socWebhook(string $corps, ?string $signature): array
             // envoi relayé par l'API franchise — application Meta partagée) : ce
             // lead ne nous regarde pas. Comme socLeadsSync, qui ne lit que les nôtres.
             if ($o === null) { continue; }
+            $nos[] = (string) $o['form_id'];
             $tok = socPageTokenDuForm((string) $o['local_id'], (string) $o['form_id']);
             try {
                 $l = Meta::call('GET', (string) $v['leadgen_id'], ['fields' => 'id,created_time,field_data,ad_id,ad_name,form_id'], $tok);
@@ -198,5 +200,21 @@ function socWebhook(string $corps, ?string $signature): array
             } catch (MetaError $e2) { /* le cron rattrapera */ }
         }
     }
-    return ['ok' => true, 'leads' => $n];
+    return ['ok' => true, 'leads' => $n, 'formulaires' => array_values(array_unique($nos))];
+}
+
+/**
+ * GET /integration/formulaires — nos formulaires de prospects, pour l'API franchise du CRM (même
+ * application Meta) : elle ne traite pas leurs leads. Entre portails : jeton de service d'erp_cles
+ * (en-tête X-Service-Token), jamais une table de l'autre portail.
+ */
+function socIntegrationFormulaires(): array
+{
+    $h = (string) ($_SERVER['HTTP_X_SERVICE_TOKEN'] ?? '');
+    $r = Db::hasTable('erp_cles') ? Db::row("SELECT valeur FROM erp_cles WHERE cle = 'erp_jeton_service'") : null;
+    $v = $r !== null ? (string) $r['valeur'] : '';
+    if ($h === '' || $v === '' || !hash_equals($v, $h)) { throw new HttpError(401, 'jeton de service'); }
+    $ids = array_values(array_unique(array_filter(array_map(static fn ($x) => (string) $x['form_id'],
+        Db::rows("SELECT form_id FROM mar_sa_meta_objet WHERE kind = 'leadform' AND form_id IS NOT NULL AND form_id <> ''")))));
+    return ['formulaires' => $ids];
 }

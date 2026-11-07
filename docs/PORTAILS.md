@@ -19,9 +19,16 @@ pour vivre avec l'ERP), le site public `landing` (`lp_`, **à décider**), et le
 1. **Une base** : celle de l'ERP. Un portail ne crée, ne modifie et ne supprime **que** ses tables
    `préfixe_`. Les tables de l'ERP sont en lecture ; celles d'un **autre portail ne sont jamais lues** :
    on passe par son API.
-2. **Réglages et secrets** : `préfixe_variable` (réglages) et `préfixe_keys` (secrets chiffrés), lus par
-   `Config::get` / `Keys::get`. Dans l'environnement : l'accès à la base, la clé maîtresse et
-   l'identité de développement, rien d'autre.
+2. **Réglages et secrets** : `préfixe_variable` (réglages) ; **toutes les clés dans `erp_cles`**, la
+   table des clés commune à l'ERP (décision du 7 nov. 2026 : « les clés sont dans une table commune
+   pour tout l'ERP ; à part les clés, tous les portails doivent être indépendants » — elle remplace
+   les `préfixe_keys` et le projet `master_variable_keys`). Une ligne par clé : `cle`, `valeur`,
+   `secret`, `indice`, `portail` (`commun` = intégration partagée — Meta, e-mail, SMS, IA, Google,
+   TF Buddy, jeton de service `erp_jeton_service`, adresses `rec_api_url` / `pil_api_url` ; sinon le
+   portail propriétaire `rec` / `mar` / `pil` / `frm`), `integration`, `maj_le`, `maj_par`. Un
+   portail chiffre au besoin SES lignes (Marketing : `mar.{module}.{nom}`, chiffrées) ; les lignes
+   `commun` sont en clair, lues par leur nom. Seules tables hors préfixe : `erp_` (communes). Dans
+   l'environnement : l'accès à la base, la clé maîtresse et l'identité de développement, rien d'autre.
 3. **Migrations** : `db/migrations/`, rejouables deux fois ; une vue n'a qu'une définition, dans un
    fichier `_vues`. Pendant une bascule de nom, une vue `ancien_nom` → `nouveau_nom` garde l'ancien
    code en vie ; elle est supprimée quand plus rien ne la lit.
@@ -37,7 +44,11 @@ pour vivre avec l'ERP), le site public `landing` (`lp_`, **à décider**), et le
 - **Écrans** : `/api/v1/{app}/{portail}/{ressource}` — `app` ∈ `admin | consultant | franchise | public
   | pwa`, portail ∈ `recrutement | marketing | pilotage | formations`. Exemple :
   `/api/v1/public/recrutement/candidatures`, `/api/v1/consultant/pilotage/visites`.
-- **Entre portails** : `/api/v1/integration/{portail}/{ressource}`, jeton de service. Exemples :
+- **Entre portails** : `/api/v1/integration/{portail}/{ressource}`, jeton de service (`erp_jeton_service`
+  d'`erp_cles`, en-tête `X-Service-Token`). En place (7 nov. 2026) : Social →
+  `GET …/social/integration/formulaires` (ses formulaires de prospects, pour l'API franchise) ;
+  Recrutement → `GET /crm/api/v1/integration/recrutement/scouting-reseau` (positions et données
+  d'étude des magasins, pour le Cockpit). Exemples :
   Pilotage lit les campagnes de Marketing ; Recrutement pousse un franchisé signé vers Pilotage ;
   Recrutement lit les chiffres des magasins chez Pilotage (déjà le cas, `GET /stores`) ; Social lit
   les avis et la réputation des boutiques chez Pilotage au lieu de `ceo_shop_review`.
