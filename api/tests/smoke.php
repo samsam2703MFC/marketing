@@ -991,6 +991,9 @@ check(
 // Le périmètre s'applique aussi en lecture des boutiques.
 $response = call($router, 'GET', '/api/v1/marketing/shops');
 check('la liste des boutiques est cloisonnée', count($response['body']) === 1, count($response['body']) . ' reçue(s)');
+// L'identifiant ERP de la boutique est servi (NULL tant qu'elle n'est pas reliée) : la régie d'affichage
+// rattache par lui une boutique à son magasin, sans passer par le nom.
+check('les boutiques portent leur identifiant ERP', array_key_exists('erp_shop_id', $response['body'][0] ?? []));
 
 // L'identifiant ERP de l'enseigne est servi : c'est par lui que le module
 // traduit « ?brand=1 » en périmètre, le sélecteur de marque ayant disparu.

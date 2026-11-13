@@ -2180,7 +2180,7 @@ final class CampaignRepository
     private function shops(int $campaignId): array
     {
         $statement = Database::connection()->prepare(
-            'SELECT cs.shop_id, s.name AS shop_name, s.city, cs.opt_in_at, cs.local_budget_amount
+            'SELECT cs.shop_id, s.name AS shop_name, s.city, s.erp_shop_id, cs.opt_in_at, cs.local_budget_amount
                FROM mar_campaign_shop cs
                JOIN mar_shop s ON s.id = cs.shop_id
               WHERE cs.campaign_id = :id

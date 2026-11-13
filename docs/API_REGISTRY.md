@@ -61,7 +61,7 @@ entière, pour attraper une colonne ajoutée plus tard.
 | POST | `…/session` **@public** | — | `{ phone, password }` → connexion par les identifiants de l'ERP ; pose le cookie de session signé |
 | DELETE | `…/session` **@public** | — | ferme la session (efface le cookie) ; sans session, ne fait rien |
 | GET | `…/references` | — | objet de listes (référentiels du module) |
-| GET | `…/shops` | tenant | tableau |
+| GET | `…/shops` | tenant | tableau — chaque boutique porte `erp_shop_id` (identifiant TFBuddy, `null` si non relié) |
 | GET | `…/brands` | — | tableau |
 | GET | `…/campaign-types` | — | objet `{types, icons}` |
 | POST | `…/campaign-types` | marque | `{status, message, inserted_id}` |
@@ -76,7 +76,7 @@ entière, pour attraper une colonne ajoutée plus tard.
 | GET | `…/campaigns` | tenant | tableau |
 | POST | `…/campaigns` | tenant | `{status, message, inserted_id}` |
 | GET | `…/campaigns/calendar` | tenant | tableau |
-| GET | `…/campaigns/{id}` | tenant | objet |
+| GET | `…/campaigns/{id}` | tenant | objet — `shops[]` porte `erp_shop_id` |
 | PATCH | `…/campaigns/{id}` | tenant | `{status, message}` |
 | DELETE | `…/campaigns/{id}` | tenant | `{status, message}` |
 | GET | `…/campaigns/{id}/draft` | tenant | objet (brouillon complet de l'assistant) |

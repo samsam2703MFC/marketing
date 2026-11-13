@@ -284,7 +284,7 @@ final class ReferenceRepository
         [$scopeSql, $bindings] = Scope::shopFilter($auth, 's.id');
 
         $statement = Database::connection()->prepare(sprintf(
-            'SELECT s.id, s.code, s.name, s.city, s.brand_id, b.name AS brand_name
+            'SELECT s.id, s.code, s.name, s.city, s.brand_id, s.erp_shop_id, b.name AS brand_name
                FROM mar_shop s
                LEFT JOIN mar_brand b ON b.id = s.brand_id
               WHERE %s
@@ -297,6 +297,9 @@ final class ReferenceRepository
         foreach ($shops as &$shop) {
             $shop['id']       = (int) $shop['id'];
             $shop['brand_id'] = $shop['brand_id'] === null ? null : (int) $shop['brand_id'];
+            // L'identifiant de la boutique dans l'ERP (TFBuddy) : la régie d'affichage s'en sert pour
+            // rattacher la boutique à son magasin sans passer par le nom. NULL = pas encore relié.
+            $shop['erp_shop_id'] = $shop['erp_shop_id'] === null ? null : (int) $shop['erp_shop_id'];
         }
 
         return $shops;
