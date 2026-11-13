@@ -272,6 +272,10 @@ class Film extends Component {
         h('div', { style: { fontFamily: FUI, fontWeight: 400, fontSize: 80, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)' } }, 'playlists suspendues par la régie'));
     } else {
       const { m, lt } = this.current();
+      // Écran plus haut que large, en « remplir » : il ne voit que la dalle du milieu →
+      // composition portrait (titre, étiquette, illustration et liste empilés).
+      const bx = this.box();
+      const portrait = st.fmt.fit !== 'contain' && bx.bw < bx.bh;
       const idleMsg = this.state.snap.schedule && !this.filmOnAir()
         ? `hors créneau de diffusion — ${this.schedLabel(this.state.snap.schedule)}`
         : (this.playlistMods().length === 0 && (this.state.snap.playlist || []).length > 0
@@ -281,7 +285,7 @@ class Film extends Component {
       // logo seul, sans texte, quelle que soit la langue du magasin. Le lien
       // de partage garde l'explication, pour la régie.
       content = m
-        ? renderModule(h, m, lt, { secPerLine: st.snap.secPerLine })
+        ? renderModule(h, m, lt, { secPerLine: st.snap.secPerLine, portrait })
         : h('div', { style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', gap: 90, alignItems: 'center', justifyContent: 'center' } },
           h('img', { src: 'assets/logo.png', style: { height: 420 } }),
           this.isScreenMode() ? null : h('div', { style: { fontFamily: FUI, fontSize: 90, color: '#8A847C', letterSpacing: '0.14em', textTransform: 'uppercase', textAlign: 'center', padding: '0 200px' } }, idleMsg));
