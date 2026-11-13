@@ -26,7 +26,7 @@ export const marketingSsoEnabled = () => process.env.SIG_MARKETING_SSO !== '0';
 
 // Cookies du navigateur transmis au module, sans la session de la régie (elle
 // ne regarde que lui).
-function forwardedCookies(req) {
+export function forwardedCookies(req) {
   return String(req.headers.cookie || '')
     .split(/;\s*/)
     .filter((c) => c && !/^sig_session=/.test(c))

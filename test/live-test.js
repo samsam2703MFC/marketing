@@ -6,7 +6,6 @@
 //   node test/live-test.js --local --mutate         → démarre un serveur jetable (BDD temporaire) puis teste
 // Code retour ≠ 0 si un test échoue → utilisable en CI/CD après déploiement.
 import { spawn } from 'node:child_process';
-import { createServer } from 'node:http';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -14,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { snapshotAssets } from '../public/js/assets.js';
 import { scheduledNow, tfbPromoLabel, tfbDiscountedPrice } from '../public/js/renderer.js';
 import { startTfbMock, MOCK_ACCOUNTS } from './tfbuddy-mock.js';
+import { startMarketingMock } from './marketing-mock.js';
 import { startAnthropicMock, MOCK_KEY } from './anthropic-mock.js';
 import { startS3Mock, MOCK_S3 } from './s3-mock.js';
 
@@ -1869,6 +1869,117 @@ async function main() {
     });
   }
 
+  // --- Assistant vidéo de campagne : lecture du Marketing (simulé) --------
+  if (MUTATE && LOCAL && mkMock) {
+    // Les routes de la régie avec la session de la régie ET les cookies du
+    // navigateur (le module Marketing reconnaît son cookie).
+    const mcall = async (method, path, body, cookie = 'PHPSESSID=erp-abc; sig_session=ne-doit-pas-partir') => {
+      const res = await fetch(BASE + path, { method, headers: { authorization: `Bearer ${authToken}`, cookie, ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
+      return { status: res.status, json: await res.json().catch(() => ({})) };
+    };
+    mkMock.reply = { status: 200, body: { authenticated: true, user_id: 7, role: 'BRAND_ADMIN', dev_auth: true } };
+    await step('Vidéo de campagne — campagnes du Marketing : en cours et à venir', async () => {
+      mkMock.down = false;
+      const r = await mcall('GET', '/api/v1/campaign-video/campaigns');
+      if (r.status !== 200 || !r.json.ok) throw new Error(`HTTP ${r.status} : ${JSON.stringify(r.json).slice(0, 200)}`);
+      if (r.json.current.map((c) => c.id).join() !== '12') throw new Error(`en cours : ${JSON.stringify(r.json.current)}`);
+      if (r.json.upcoming.map((c) => c.id).join() !== '13') throw new Error(`à venir : ${JSON.stringify(r.json.upcoming)}`);
+      if (!mkMock.lastCookie.includes('PHPSESSID=erp-abc') || mkMock.lastCookie.includes('sig_session')) throw new Error(`cookies transmis : ${mkMock.lastCookie}`);
+      const anon = await mcall('GET', '/api/v1/campaign-video/campaigns', null, '');
+      if (anon.json.ok !== false || !/session/.test(anon.json.error || '')) throw new Error(`sans session du module : ${JSON.stringify(anon.json)}`);
+      return 'en cours « Matins viennoiseries » · à venir « Saint-Nicolas » · terminée écartée · cookies du navigateur sans celui de la régie · sans session : dit';
+    });
+    await step('Vidéo de campagne — Marketing muet : dit, sans casser', async () => {
+      mkMock.down = true;
+      try {
+        const r = await mcall('GET', '/api/v1/campaign-video/campaigns');
+        if (r.status !== 200 || r.json.ok !== false || !/HTTP 500/.test(r.json.error || '')) throw new Error(`liste : HTTP ${r.status} ${JSON.stringify(r.json)}`);
+        const d = await mcall('GET', '/api/v1/campaign-video/campaigns/12');
+        if (d.status !== 502 || !d.json.error) throw new Error(`détail : HTTP ${d.status} ${JSON.stringify(d.json)}`);
+        return `liste : « ${r.json.error} » · détail : 502`;
+      } finally { mkMock.down = false; }
+    });
+    const st0 = await call('GET', '/api/v1/state');
+    const cat0 = await call('GET', '/api/v1/catalog');
+    const fleet0 = await call('GET', '/api/v1/fleet');
+    const before = Object.fromEntries(fleet0.stores.flatMap((s) => s.players).map((p) => [p.id, p.assignedVer]));
+    try {
+      // Catalogue : Croissant et Café (ids ERP 901, 902), vendus à la Gare seulement.
+      const cat = JSON.parse(JSON.stringify(cat0));
+      const cid = (cat.categories[0] || { id: 'pw5' }).id;
+      if (!cat.categories.length) cat.categories.push({ id: cid, name: 'Viennoiseries', active: true, img: '', aliases: {} });
+      for (const [id, name, price] of [['pwp901', 'Croissant', '1,50'], ['pwp902', 'Café', '2,60']]) {
+        cat.products = cat.products.filter((p) => p.id !== id);
+        cat.products.push({ id, categoryId: cid, name, price, img: 'assets/cake.png', src: 'illus', active: true, unavailable: false, prices: { st2: price }, aliases: {} });
+      }
+      await call('PUT', '/api/v1/catalog', cat);
+      await step('Vidéo de campagne — détail : produits par l’id ERP, boutiques par le nom, le reste nommé', async () => {
+        const r = await mcall('GET', '/api/v1/campaign-video/campaigns/12');
+        if (r.status !== 200 || !r.json.ok) throw new Error(`HTTP ${r.status} : ${JSON.stringify(r.json).slice(0, 200)}`);
+        const d = r.json;
+        if (d.products.map((p) => `${p.productId}/${p.by}`).join() !== 'pwp901/erp,pwp902/erp') throw new Error(`produits : ${JSON.stringify(d.products)}`);
+        if (d.productsUnmatched.length !== 1 || d.productsUnmatched[0].label !== 'Produit fantôme' || !/999/.test(d.productsUnmatched[0].reason)) throw new Error(`produit non rattaché : ${JSON.stringify(d.productsUnmatched)}`);
+        if (d.stores.map((s) => s.storeId).sort().join() !== 'st1,st2') throw new Error(`boutiques : ${JSON.stringify(d.stores)}`);
+        if (d.storesUnmatched.map((s) => s.name).join() !== 'Boulangerie Fantôme') throw new Error(`boutique non rattachée : ${JSON.stringify(d.storesUnmatched)}`);
+        if (d.campaign.objective !== 'Trafic' || d.campaign.offer.title !== '2e croissant -50 %') throw new Error(`offre : ${JSON.stringify(d.campaign)}`);
+        if (!d.production.screens || d.production.screens.status !== 'todo') throw new Error(`section écrans : ${JSON.stringify(d.production)}`);
+        if (d.offerLinks.promotions.map((p) => p.name).join() !== 'Croissants 2 + 1,Promo absente de la caisse') throw new Error(`promotions de la campagne : ${JSON.stringify(d.offerLinks)}`);
+        const nf = await mcall('GET', '/api/v1/campaign-video/campaigns/404');
+        if (nf.status !== 404) throw new Error(`campagne inconnue : HTTP ${nf.status}`);
+        return 'Croissant + Café (erp-901/902) · « Produit fantôme » nommé (ERP 999 absent) · Gare + Centre-Ville par le nom · « Boulangerie Fantôme » nommée · section écrans lue';
+      });
+      await step('Vidéo de campagne — diffusion sur les écrans cochés, prix et produits de chaque magasin, fin automatique', async () => {
+        const st = await call('GET', '/api/v1/state');
+        const mod = { id: 'lt_cw_main', type: 'category', name: 'Matins viennoiseries', sub: '', layout: 'illo-right', motion: 'm1', productRefs: ['pwp901', 'pwp902'], dur: 20, items: [], tag: { enabled: true, label: '2e croissant -50 %', img: '' }, schedule: { days: [true, true, true, true, true, true, true], from: '00:00', to: '23:59' }, pos: {}, orient: 'paysage', moments: [] };
+        const film = { id: 'lt_cw_film', name: 'Matins viennoiseries', items: ['lt_cw_main'], mode: 'playlist', origin: 'assistant', campaignId: '12', cat: 'campagne', tags: ['viennoiseries', 'promo'], stores: ['st1', 'st2'], wizard: { moduleIds: ['lt_cw_main'] } };
+        await call('PUT', '/api/v1/draft', { modules: [...st.modules, mod], playlists: [...st.playlists, film], activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+        const back = (await call('GET', '/api/v1/state')).playlists.find((p) => p.id === 'lt_cw_film');
+        if (!back || back.campaignId !== '12' || back.origin !== 'assistant' || back.mode !== 'playlist' || back.cat !== 'campagne') throw new Error(`film relu : ${JSON.stringify(back)}`);
+        const m = (await call('GET', '/api/v1/state')).modules.find((x) => x.id === 'lt_cw_main');
+        if (JSON.stringify(m.productRefs) !== '["pwp901","pwp902"]' || m.items.length !== 2 || m.items[0].productId !== 'pwp901') throw new Error(`liste de produits relue : ${JSON.stringify(m)}`);
+        const end = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
+        const out = await call('POST', '/api/v1/campaign-video/diffuse', { filmId: 'lt_cw_film', players: ['p2', 'p3'], endsOn: end, week: 'E', cells: [{ day: 0, moment: 'matin' }, { day: 2, moment: 'aprem' }], campaignId: '12' });
+        if (!out.version || out.playerCount < 2 || !out.endsAt || out.planCells !== 4) throw new Error(`diffusion : ${JSON.stringify(out).slice(0, 300)}`);
+        const fleet = await call('GET', '/api/v1/fleet');
+        const ver = Object.fromEntries(fleet.stores.flatMap((s) => s.players).map((p) => [p.id, p.assignedVer]));
+        if (ver.p2 !== out.version || ver.p3 !== out.version) throw new Error(`écrans cochés : ${JSON.stringify(ver)}`);
+        if (ver.p1 !== before.p1) throw new Error(`p1 (non coché, même magasin) a changé : ${before.p1} → ${ver.p1}`);
+        const tok = Object.fromEntries(fleet.stores.flatMap((s) => s.players).map((p) => [p.id, p.token]));
+        const asg = async (id) => (await call('GET', `/api/v1/players/${id}/assignment?token=${tok[id]}`)).snapshot.modules.find((x) => x.id === 'lt_cw_main');
+        const gare = await asg('p3');
+        if ((gare.items || []).map((i) => `${i.name} ${i.price}`).join() !== 'Croissant 1,50,Café 2,60') throw new Error(`Gare : ${JSON.stringify(gare.items)}`);
+        const centre = await asg('p2');
+        if ((centre.items || []).length) throw new Error(`Centre-Ville ne vend ni l’un ni l’autre : ${JSON.stringify(centre.items)}`);
+        const plan = await call('GET', '/api/v1/plan');
+        if (!(((plan.byStore.st2 || {}).E || {})[0] || {}).matin?.includes('lt_cw_film')) throw new Error('semaine type E : film absent du lundi matin');
+        const runs = (await call('GET', '/api/v1/campaign-video/films/lt_cw_film/runs')).runs;
+        if (runs.length !== 2 || runs.some((r) => r.doneAt)) throw new Error(`fin programmée : ${JSON.stringify(runs)}`);
+        // Fin automatique : passé la date, chaque écran reprend sa version d'avant.
+        const sw = await call('POST', '/api/v1/campaign-video/sweep', { now: new Date(Date.now() + 7 * 86400000).toISOString() });
+        if (sw.done !== 2) throw new Error(`passe de fin : ${JSON.stringify(sw)}`);
+        const after = Object.fromEntries((await call('GET', '/api/v1/fleet')).stores.flatMap((s) => s.players).map((p) => [p.id, p.assignedVer]));
+        if (after.p2 !== before.p2 || after.p3 !== before.p3) throw new Error(`retour au film d’avant : ${JSON.stringify(after)}`);
+        const plan2 = await call('GET', '/api/v1/plan');
+        if ((((plan2.byStore.st2 || {}).E || {})[0] || {}).matin?.includes('lt_cw_film')) throw new Error('le film reste dans la semaine type après la fin');
+        const past = await call('POST', '/api/v1/campaign-video/diffuse', { filmId: 'lt_cw_film', players: ['p3'], endsOn: '2020-01-01' }).then(() => null, (e) => e.message);
+        if (!past || !/terminée/.test(past)) throw new Error('période terminée acceptée');
+        return `v${out.version} sur p2 + p3 · p1 inchangé · Gare : Croissant 1,50 + Café 2,60 · Centre-Ville : retirés (pas vendus) · semaine E 4 cases · fin → versions d’avant, semaine nettoyée`;
+      });
+      await step('Vidéo de campagne — fil de production : section « écrans » prête, sinon dit', async () => {
+        const r = await mcall('POST', '/api/v1/campaign-video/campaigns/12/screens-ready', {});
+        if (r.status !== 200 || !r.json.ok) throw new Error(`HTTP ${r.status} : ${JSON.stringify(r.json)}`);
+        const put = mkMock.puts[mkMock.puts.length - 1];
+        if (!put || put.section !== 'ecrans' || put.body.status !== 'ready') throw new Error(`PUT reçu : ${JSON.stringify(put)}`);
+        const none = await mcall('POST', '/api/v1/campaign-video/campaigns/13/screens-ready', {});
+        if (none.status !== 409 || !/Écrans des magasins/.test(none.json.error || '')) throw new Error(`campagne sans section écrans : HTTP ${none.status} ${JSON.stringify(none.json)}`);
+        return '12 → PUT production-sections/ecrans {status: ready} · 13 sans section écrans → 409, rien d’inventé';
+      });
+    } finally {
+      await call('PUT', '/api/v1/catalog', cat0).catch(() => {});
+      await call('PUT', '/api/v1/draft', { modules: st0.modules, playlists: st0.playlists, activePlaylistId: st0.activePlaylistId, secPerLine: st0.secPerLine, loop: st0.loop }).catch(() => {});
+    }
+  }
+
   if (MUTATE && aiMock) {
     const texts = (f) => JSON.stringify(f.modules.map((m) => [m.name, m.sub, (m.items || []).map((i) => i.name)]));
     const filmOf = (store) => call('GET', `/api/v1/film?store=${encodeURIComponent(store)}`);
@@ -1990,25 +2101,6 @@ async function main() {
   if (aiMock) aiMock.close();
   if (mkMock) mkMock.close();
   process.exit(ko === 0 ? 0 : 1);
-}
-
-// Module Marketing simulé : sa route de session répond `reply` et garde les
-// cookies reçus (la régie doit transmettre ceux du navigateur, pas le sien).
-function startMarketingMock() {
-  return new Promise((resolve) => {
-    const mock = { reply: { status: 200, body: { authenticated: false } }, lastCookie: '' };
-    const srv = createServer((req, res) => {
-      mock.lastCookie = String(req.headers.cookie || '');
-      const { status, body } = mock.reply;
-      res.writeHead(status, { 'content-type': 'application/json' });
-      res.end(body == null ? 'erreur' : JSON.stringify(body));
-    });
-    srv.listen(0, '127.0.0.1', () => {
-      mock.url = `http://127.0.0.1:${srv.address().port}/marketing/api/v1/marketing/session`;
-      mock.close = () => srv.close();
-      resolve(mock);
-    });
-  });
 }
 
 async function firstToken() {
