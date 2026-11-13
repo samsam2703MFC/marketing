@@ -40,7 +40,9 @@ export default function InStoreView({ role }: { role: Role }) {
           <iframe className="social-frame__page" title="Marketing en magasin — régie d’affichage" src={src} />
         </div>
       ) : (
-        <ShopSupportsView />
+        <div className="instore-page">
+          <ShopSupportsView />
+        </div>
       )}
     </>
   )
