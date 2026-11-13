@@ -1965,6 +1965,98 @@ async function main() {
         if (!past || !/terminée/.test(past)) throw new Error('période terminée acceptée');
         return `v${out.version} sur p2 + p3 · p1 inchangé · Gare : Croissant 1,50 + Café 2,60 · Centre-Ville : retirés (pas vendus) · semaine E 4 cases · fin → versions d’avant, semaine nettoyée`;
       });
+      await step('Éditeur du film — scènes et calques enregistrés, relus, joués par magasin ; un film sans scènes garde son rendu', async () => {
+        const st = await call('GET', '/api/v1/state');
+        const scenes = [
+          { id: 's1', dur: 6, bg: '#F5EFE4', layers: [
+            { id: 'p1', kind: 'photo', src: 'assets/cake.png', fit: 'contain', scale: 118, x: 62, y: 58, motion: 'kenburns', anim: { in: 'none', start: 0 } },
+            { id: 't1', kind: 'text', text: 'Faite ce matin, avec amour', font: 'hand', size: 52, color: '#FFFFFF', box: { x: 5, y: 9, w: 47, h: 38 }, anim: { in: 'hand', start: 1, inDur: 3, out: 'fade', outAt: 5 } },
+            { id: 'r1', kind: 'price', productId: 'pwp901', promo: '2e à -50 %', box: { x: 6, y: 80, w: 40, h: 10 }, anim: { in: 'slideUp', start: 2, inDur: 0.7 } },
+            { id: 'x1', kind: 'photo', src: 'https://ailleurs.example/x.jpg' },
+          ] },
+          { id: 's2', dur: 4, layers: [{ id: 't2', kind: 'text', text: 'Brioche croustillante', font: 'title', size: 72, anim: { in: 'type', start: 0, inDur: 1.5 } }] },
+        ];
+        const mod = { id: 'lt_fe_main', type: 'scenes', name: 'Film en scènes', layout: 'scenes', scenes, productRefs: ['ignoré'], items: [], schedule: { days: [true, true, true, true, true, true, true], from: '00:00', to: '23:59' }, pos: {}, tag: { enabled: false } };
+        const film = { id: 'lt_fe_film', name: 'Film en scènes', items: ['lt_fe_main', 'lt_cw_main'], mode: 'playlist', origin: 'assistant', campaignId: '12', wizard: { moduleIds: ['lt_fe_main'], choices: { scenes, nl: { t1: { text: 'Vanmorgen gebakken' } } } } };
+        await call('PUT', '/api/v1/draft', { modules: [...st.modules.filter((x) => x.id !== 'lt_fe_main'), mod], playlists: [...st.playlists.filter((x) => x.id !== 'lt_fe_film'), film], activePlaylistId: st.activePlaylistId, secPerLine: st.secPerLine, loop: st.loop });
+        const st2 = await call('GET', '/api/v1/state');
+        const back = st2.modules.find((x) => x.id === 'lt_fe_main');
+        if (!back || back.type !== 'scenes' || back.scenes.length !== 2) throw new Error(`scènes relues : ${JSON.stringify(back).slice(0, 300)}`);
+        const L = back.scenes[0].layers;
+        if (L.length !== 3 || L.some((l) => l.id === 'x1')) throw new Error(`une photo hors de la régie est passée : ${JSON.stringify(L.map((l) => l.src || l.kind))}`);
+        if (L[0].fit !== 'contain' || L[0].scale !== 118 || L[0].x !== 62 || L[0].motion !== 'kenburns') throw new Error(`cadrage relu : ${JSON.stringify(L[0])}`);
+        if (L[1].anim.in !== 'hand' || L[1].anim.start !== 1 || L[1].anim.inDur !== 3 || L[1].anim.out !== 'fade' || L[1].font !== 'hand' || L[1].box.w !== 47) throw new Error(`texte relu : ${JSON.stringify(L[1])}`);
+        if (JSON.stringify(back.productRefs) !== '["pwp901"]' || back.items.length !== 1 || back.items[0].productId !== 'pwp901') throw new Error(`prix des calques : ${JSON.stringify(back.productRefs)} / ${JSON.stringify(back.items)}`);
+        const relu = st2.playlists.find((x) => x.id === 'lt_fe_film');
+        if (!relu.wizard.choices || relu.wizard.choices.scenes.length !== 2 || relu.wizard.choices.nl.t1.text !== 'Vanmorgen gebakken') throw new Error('choix de l’assistant perdus');
+        // Un film sans scènes garde son rendu : l'élément « liste » reste une liste.
+        const old = st2.modules.find((x) => x.id === 'lt_cw_main');
+        if (!old || old.type !== 'category' || old.scenes !== undefined || old.items.length !== 2) throw new Error(`élément sans scènes modifié : ${JSON.stringify(old).slice(0, 200)}`);
+        // Néerlandais : par le circuit des Traductions (validé à la saisie).
+        const tr = await call('GET', '/api/v1/translations?lang=nl');
+        const keys = tr.items.filter((x) => x.kind === 'scene').map((x) => x.key).sort();
+        if (keys.join() !== 'scene:lt_fe_main.r1:promo,scene:lt_fe_main.t1:text,scene:lt_fe_main.t2:text') throw new Error(`textes à traduire : ${keys.join()}`);
+        await call('PUT', '/api/v1/translations', { lang: 'nl', key: 'scene:lt_fe_main.t1:text', text: 'Vanmorgen gebakken, met liefde' });
+        const out = await call('POST', '/api/v1/campaign-video/diffuse', { filmId: 'lt_fe_film', players: ['p2', 'p3'], endsOn: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10) });
+        const fleet = await call('GET', '/api/v1/fleet');
+        const tok = Object.fromEntries(fleet.stores.flatMap((x) => x.players).map((p) => [p.id, p.token]));
+        const lang0 = (fleet.stores.find((x) => x.id === 'st2') || {}).lang || 'fr';
+        await call('POST', '/api/v1/stores/st2', { lang: 'nl' });
+        try {
+          const snapGare = (await call('GET', `/api/v1/players/p3/assignment?token=${tok.p3}`)).snapshot;
+          const gare = snapGare.modules.find((x) => x.id === 'lt_fe_main');
+          if (!gare || gare.items.map((i) => `${i.productId} ${i.price}`).join() !== 'pwp901 1,50') throw new Error(`prix de la Gare : ${JSON.stringify(gare && gare.items)}`);
+          if (gare.scenes[0].layers[1].text !== 'Vanmorgen gebakken, met liefde') throw new Error(`texte néerlandais à l’écran : ${gare.scenes[0].layers[1].text}`);
+          if (!snapGare.media.includes('assets/cake.png')) throw new Error('la photo du calque manque au cache hors ligne de l’écran');
+          const centre = (await call('GET', `/api/v1/players/p2/assignment?token=${tok.p2}`)).snapshot.modules.find((x) => x.id === 'lt_fe_main');
+          if (centre.items.length) throw new Error('Centre-Ville : le prix d’un produit non vendu est passé');
+          if (centre.scenes[0].layers[1].text !== 'Faite ce matin, avec amour') throw new Error('magasin francophone : texte traduit à tort');
+          const runs = (await call('GET', '/api/v1/campaign-video/films/lt_fe_film/runs')).runs;
+          await call('POST', '/api/v1/campaign-video/sweep', { now: new Date(Date.now() + 5 * 86400000).toISOString() });
+          return `v${out.version} · 2 scènes, 3 calques relus (photo hors régie écartée) · prix : Gare 1,50 / Centre-Ville retiré · NL validé sur l’écran flamand · média en cache · ${runs.length} fin(s) programmée(s) · liste sans scènes inchangée`;
+        } finally { await call('POST', '/api/v1/stores/st2', { lang: lang0 }).catch(() => {}); }
+      });
+      await step('Éditeur du film — médiathèque du Marketing : liste, vignettes relayées, copie dans la régie (une seule fois)', async () => {
+        const r = await mcall('GET', '/api/v1/film-media/marketing');
+        if (r.status !== 200 || !r.json.ok || r.json.items.length !== 4) throw new Error(`liste : HTTP ${r.status} ${JSON.stringify(r.json).slice(0, 200)}`);
+        const croissant = r.json.items.find((x) => x.id === '31');
+        if (!croissant.thumb.startsWith('api/v1/film-media/file?u=') || croissant.offerItem.id !== '101' || r.json.categories.length !== 2) throw new Error(`fiche : ${JSON.stringify(croissant)}`);
+        const th = await fetch(`${BASE}/${croissant.thumb}`, { headers: { authorization: `Bearer ${authToken}`, cookie: 'PHPSESSID=erp-abc' } });
+        const thBuf = Buffer.from(await th.arrayBuffer());
+        if (th.status !== 200 || !/^image\//.test(th.headers.get('content-type') || '') || thBuf.subarray(1, 4).toString() !== 'PNG') throw new Error(`vignette relayée : HTTP ${th.status}`);
+        const evil = await fetch(`${BASE}/api/v1/film-media/file?u=${encodeURIComponent('http://169.254.169.254/latest/meta-data')}`, { headers: { authorization: `Bearer ${authToken}` } });
+        if (evil.status !== 400) throw new Error(`adresse hors du Marketing relayée : HTTP ${evil.status}`);
+        const gets0 = mkMock.fileGets;
+        const imp = await mcall('POST', '/api/v1/film-media/import', { source: 'marketing', id: '31' });
+        if (imp.status !== 200 || !imp.json.media || imp.json.media.kind !== 'photo' || !/\.png$/.test(imp.json.media.filename)) throw new Error(`copie : HTTP ${imp.status} ${JSON.stringify(imp.json).slice(0, 200)}`);
+        if (mkMock.fileGets !== gets0 + 1) throw new Error('le fichier n’a pas été lu au Marketing');
+        const copy = await fetch(`${BASE}/media/${encodeURIComponent(imp.json.media.filename)}`);
+        const cBuf = Buffer.from(await copy.arrayBuffer());
+        if (copy.status !== 200 || !cBuf.equals(thBuf)) throw new Error(`copie servie par la régie : HTTP ${copy.status}, ${cBuf.length} o au lieu de ${thBuf.length}`);
+        const again = await mcall('POST', '/api/v1/film-media/import', { source: 'marketing', id: '31' });
+        if (!again.json.reused || again.json.media.id !== imp.json.media.id || mkMock.fileGets !== gets0 + 1) throw new Error('seconde copie du même fichier');
+        const nf = await mcall('POST', '/api/v1/film-media/import', { source: 'marketing', id: '999' });
+        if (nf.status !== 404) throw new Error(`média inconnu : HTTP ${nf.status}`);
+        const anon = await mcall('GET', '/api/v1/film-media/marketing', null, '');
+        if (anon.json.ok !== false || !/session/.test(anon.json.error || '')) throw new Error(`sans session : ${JSON.stringify(anon.json)}`);
+        // Photos du webshop (module Social du Marketing) : produit rattaché.
+        const ws = await mcall('GET', '/api/v1/film-media/webshop');
+        if (!ws.json.ok || ws.json.items.length !== 2 || ws.json.items[0].productId !== 'pwp901') throw new Error(`webshop : ${JSON.stringify(ws.json).slice(0, 200)}`);
+        const wimp = await mcall('POST', '/api/v1/film-media/import', { source: 'webshop', url: ws.json.items[0].image, name: 'Croissant', productId: 'pwp901' });
+        if (wimp.status !== 200 || wimp.json.media.productId !== 'pwp901') throw new Error(`copie webshop : ${JSON.stringify(wimp.json).slice(0, 200)}`);
+        const bad = await mcall('POST', '/api/v1/film-media/import', { source: 'webshop', url: 'https://ailleurs.example/x.png' });
+        if (bad.status !== 502 || !/webshop/.test(bad.json.error || '')) throw new Error(`photo hors webshop : HTTP ${bad.status} ${JSON.stringify(bad.json)}`);
+        // Détourage : par le module Social ; sans clé chez lui, c'est dit.
+        const cut = await mcall('POST', '/api/v1/film-media/cutout', { mediaId: imp.json.media.id });
+        if (cut.status !== 200 || !/-detoure\.png$/.test(cut.json.media.filename) || mkMock.cutouts !== 1) throw new Error(`détourage : HTTP ${cut.status} ${JSON.stringify(cut.json).slice(0, 200)}`);
+        mkMock.removebg = false;
+        try {
+          const nokey = await mcall('POST', '/api/v1/film-media/cutout', { mediaId: wimp.json.media.id });
+          if (nokey.status !== 409 || !/remove\.bg/.test(nokey.json.error || '')) throw new Error(`détourage sans clé : HTTP ${nokey.status} ${JSON.stringify(nokey.json)}`);
+        } finally { mkMock.removebg = true; }
+        for (const id of [imp.json.media.id, wimp.json.media.id, cut.json.media.id]) await call('DELETE', `/api/v1/media/${id}`).catch(() => {});
+        return `4 médias · vignette relayée (chemin du module relu) · adresse étrangère refusée · copie ${imp.json.media.filename} servie par la régie, reprise sans relire · webshop pwp901 · détourage → ${cut.json.media.filename} · sans clé : 409`;
+      });
       await step('Vidéo de campagne — fil de production : section « écrans » prête, sinon dit', async () => {
         const r = await mcall('POST', '/api/v1/campaign-video/campaigns/12/screens-ready', {});
         if (r.status !== 200 || !r.json.ok) throw new Error(`HTTP ${r.status} : ${JSON.stringify(r.json)}`);

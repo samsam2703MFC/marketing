@@ -31,7 +31,7 @@ export function marketingApiBase() {
 // Appel au module : { ok, status, data } ou { ok: false, status, error }.
 // L'enveloppe du standard ({ success, data }) est déballée ; une erreur du
 // module ({ status: 'error', description } ou { error: { message } }) est dite.
-async function mk(req, method, path, body) {
+export async function mk(req, method, path, body) {
   const url = marketingApiBase() + path;
   const headers = { accept: 'application/json' };
   const cookie = forwardedCookies(req);
@@ -52,8 +52,8 @@ async function mk(req, method, path, body) {
         : `le module Marketing répond HTTP ${res.status}${why ? ` : ${String(why).slice(0, 160)}` : ''}`;
     return { ok: false, status: res.status || 502, error };
   }
-  const data = (json && typeof json === 'object' && !Array.isArray(json) && 'success' in json && 'data' in json) ? json.data : json;
-  return { ok: true, status: res.status, data };
+  const wrapped = json && typeof json === 'object' && !Array.isArray(json) && 'success' in json && 'data' in json;
+  return { ok: true, status: res.status, data: wrapped ? json.data : json, meta: wrapped ? (json.meta || {}) : {} };
 }
 
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Brussels', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());

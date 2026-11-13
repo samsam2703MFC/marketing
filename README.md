@@ -301,9 +301,43 @@ Code : `public/js/campaign-wizard.js` (écran), `server/campaign-video.js` (serv
    une boutique non rattachée est nommée.
 5. **Catégorie et tags** — proposés d'après la campagne, les produits et la période, modifiables
    (`sig_playlists.cat`, `sig_playlists.tags`).
-6. **Film** — modèle (offre + produits, plein écran photo, liste des prix), titre et accroche FR / NL
-   (circuit des Traductions : saisi = validé, ou proposé par Claude puis validé), durée 10/20/30 s, vidéo
-   de la médiathèque proposée en ouverture (mêmes produit, saison ou moment).
+6. **Film** — l'**éditeur du film** (maquette validée « editeur.html ») : un film est fait de
+   **scènes** (durée, fond) et chaque scène de **calques**, sur une frise de calques (bloc du début à la
+   fin, partie hachurée = l'entrée, glisser = changer le début). Calques : **photo** (Remplir · Ajuster ·
+   Étirer · Taille réelle, échelle en %, position X / Y en % — aussi en glissant dans l'aperçu —, zoom lent
+   Ken Burns, détourage), **texte** (FR ; NL par le circuit des Traductions — saisi = validé —, police
+   Manuscrite *Playwrite DEVA* · Titre *GC Vank* · Gotham, taille en px d'une image 1080p, couleurs de la
+   marque, cadre glissé / redimensionné) et **prix / promo** (le prix du produit dans CHAQUE magasin,
+   résolu à la diffusion, et un texte de promo traduisible). Entrées : écriture à la main, machine à
+   écrire, fondu, glissé du bas / de la gauche (début, durée) ; sortie : aucune ou fondu. Paysage et
+   portrait se règlent séparément (un cadre portrait est déduit du paysage tant qu'il n'est pas touché).
+   Une première composition est tirée de la campagne (une scène par produit retenu, la photo du produit
+   si la médiathèque de la régie en a une). Un film d'avant l'éditeur garde son modèle.
+   - **Tiroir « Médiathèque »** : médiathèque **commune du Marketing** (`GET …/media-library`,
+     `…/media-assets`, avec les cookies du navigateur), **médiathèque de la régie**, **photos du webshop**
+     (module Social du Marketing, `GET /catalogue/nav`), **import** ; recherche, filtres « Produits de la
+     campagne », catégories, saison, moment, photos / vidéos / illustrations (= fiches détourées du
+     Marketing, PNG de la régie). Un fichier pris au Marketing ou au webshop est **copié** dans le
+     stockage de la régie (`server/film-media.js` → `media-store.js`, disque ou OVH) au moment de l'ajout,
+     une seule fois (`sig_media_sources`) : les écrans ne joignent jamais le Marketing. Vignettes
+     relayées par la régie (seuls les fichiers du module passent : même origine que son API, ou son chemin
+     `/marketing/…`, ou `SIG_MARKETING_MEDIA_ORIGINS`).
+   - **Détourage** : par le module Social du Marketing (`POST /media/detourer`, remove.bg, clé gardée chez
+     lui) ; le PNG détouré rejoint la médiathèque de la régie. Sans clé : c'est dit.
+   - **Un seul moteur de rendu** : `public/js/scenes.js` (`drawScene`, canvas 2D) dessine l'aperçu de
+     l'éditeur, les écrans des magasins (`renderer.js`, élément `scenes` : canvas posé sur la partie
+     VISIBLE du canevas, bande 16:9 en paysage, dalle 9:16 en portrait, à la résolution de l'écran) et
+     l'**export vidéo** (« Exporter la vidéo » : canvas à 3840 × 2160 / 2160 × 3840 ou Full HD,
+     `captureStream` + `MediaRecorder`, **WebM VP9** (VP8 à défaut), joué une fois en temps réel, rangé
+     dans la médiathèque de la régie, téléchargeable). L'écriture à la main : le texte est tracé hors
+     écran puis un masque ne garde que ce que la plume a parcouru, à vitesse constante (chaque lettre le
+     temps de sa largeur), bord d'encre fondu et plume visible au bout du trait.
+   - Données : élément de type `scenes` (`sig_modules.scenes`, JSON normalisé par `normScenes`, photos
+     de la régie seulement), ses lignes de produits = les produits des calques prix (`product_refs`) ; les
+     choix de l'éditeur (scènes, NL saisis) dans `sig_playlists.wizard`. Traductions : clés
+     `scene:<élément>.<calque>:text|promo`.
+   - Nom du film, « Proposer avec Claude » (textes des scènes compris) et vidéo d'ouverture proposée sous
+     l'éditeur.
 7. **Diffuser** — vérifications (prix, néerlandais pour les magasins NL, produit retiré là où il n'est
    pas vendu, écran hors ligne, fin automatique), planning de la journée type, « Enregistrer en
    brouillon », « Voir le film », « Diffuser sur N écrans ».
@@ -781,7 +815,7 @@ qui la portent restent visibles ; la liste ne peut pas être vidée.
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + TFBuddy, Claude et Marketing simulés + cycle complet — 99 tests
+npm test              # serveur jetable (BDD temporaire) + TFBuddy, Claude et Marketing simulés + cycle complet — 101 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
 node test/live-test.js http://185.180.206.46/signage --password=… --mutate
@@ -810,6 +844,8 @@ session admin  : POST /api/v1/login · /logout · GET /me
                  GET /campaign-video/campaigns · GET /campaign-video/campaigns/{id}
                  POST /campaign-video/campaigns/{id}/screens-ready · POST /campaign-video/diffuse
                  GET /campaign-video/films/{id}/runs · POST /campaign-video/sweep (vidéo de campagne)
+                 GET /film-media/marketing · GET /film-media/webshop · GET /film-media/file?u=|w=
+                 POST /film-media/import {source, id|url} · POST /film-media/cutout {mediaId} (éditeur du film)
                  PATCH /tfb-promos/{id} (autres promotions TFBuddy : X + Y, quantité, remises, bons)
                  PUT /tfb-badges (style des badges : famille TFBuddy → sous-type)
                  GET /translations?lang= · POST /translations/propose|validate|reject

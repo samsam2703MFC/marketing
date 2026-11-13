@@ -12,6 +12,7 @@ import { continuousDefaults, normContinuous } from '../public/js/continuous.js';
 import { wrapHtmlVarPos, applyHtmlVarPositions } from '../public/js/html-templates.js';
 // Fichiers d'un snapshot (liste partagée avec le cache des écrans).
 import { snapshotAssets } from '../public/js/assets.js';
+import { normScenes, scenePriceProducts } from '../public/js/scenes.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const DB_PATH = process.env.SIG_DB || join(ROOT, 'data', 'signage.db');
@@ -369,6 +370,9 @@ function migrate(db) {
   // Liste de produits choisis un à un (assistant vidéo de campagne) : les
   // lignes viennent du catalogue, donc du prix de CHAQUE magasin.
   if (!modCols2.includes('product_refs')) db.exec(`ALTER TABLE sig_modules ADD COLUMN product_refs TEXT NOT NULL DEFAULT '[]'`);
+  // Film en scènes (éditeur du film de l'assistant vidéo) : scènes et calques
+  // en JSON, normalisés par public/js/scenes.js. Vide = l'élément n'en a pas.
+  if (!modCols2.includes('scenes')) db.exec(`ALTER TABLE sig_modules ADD COLUMN scenes TEXT NOT NULL DEFAULT '[]'`);
   // Reprise unique de l'ancien état « auto » (tous formats) : un écran est
   // portrait OU paysage. Un gabarit HTML retombe sur la forme de sa maquette,
   // le reste sur paysage (16:9, le format d'écran courant).
@@ -846,8 +850,17 @@ function ensureElementTypes(db) {
       .run('Animation — texte animé ou fichier',
         'Titre + accroche animés (avec un visuel de fond au besoin), ou un fichier d\'animation importé : GIF, vidéo, SVG animé, Lottie.');
   };
+  // Type « film en scènes » : écrit par l'éditeur du film (assistant vidéo de
+  // campagne) — scènes, photos de la médiathèque, textes animés, prix.
+  const ensureScenes = () => {
+    if (!db.prepare('SELECT 1 FROM sig_element_types WHERE id = ?').get('scenes')) {
+      insType.run('scenes', 'Film en scènes — éditeur du film', '🎞',
+        'Scènes composées dans l\'assistant vidéo de campagne : photos de la médiathèque cadrées, textes (écriture à la main, machine à écrire, fondu, glissé), prix du magasin.',
+        JSON.stringify([{ id: 'scenes', icon: '🎞', label: 'Scènes de l\'éditeur du film' }]), 0, 10);
+    }
+  };
   const n = db.prepare('SELECT COUNT(*) AS n FROM sig_element_types').get().n;
-  if (n > 0) { ensureMedia(); ensurePromotion(); ensureCampaign(); ensureHtml(); ensureAnimFile(); ensureBundle(); return; }
+  if (n > 0) { ensureMedia(); ensurePromotion(); ensureCampaign(); ensureHtml(); ensureAnimFile(); ensureBundle(); ensureScenes(); return; }
   const catLayouts = [
     { id: 'illo-right', icon: '▤', label: 'Texte à gauche · illustration à droite' },
     { id: 'illo-left', icon: '▤', label: 'Texte à droite · illustration à gauche' },
@@ -881,6 +894,7 @@ function ensureElementTypes(db) {
   ensureCampaign();
   ensureHtml();
   ensureBundle();
+  ensureScenes();
 }
 
 // ---------------------------------------------------------------------------
@@ -2368,6 +2382,7 @@ const TR_LABELS = {
   'campaign/name': 'nom de campagne', 'campaign/message': 'message de campagne', 'campaign/theme': 'thème de campagne',
   'promo_type/name': 'libellé de promotion', 'bundle/name': 'nom de bundle', 'bundle/descr': 'description de bundle',
   'item/name': 'ligne de liste',
+  'scene/text': 'texte d\'une scène', 'scene/promo': 'promotion d\'une scène',
 };
 // Ligne propre à un élément (sans produit du catalogue) : sa clé est son
 // texte — la même ligne dans deux listes partage sa traduction.
@@ -2417,7 +2432,20 @@ export function translationSources(lang) {
     add('product', p.id, 'name', p.name, { context: cats.get(p.category_id) ? `catégorie « ${cats.get(p.category_id)} »` : '' });
   }
   const ownItems = db.prepare('SELECT name FROM sig_module_items WHERE module_id = ? ORDER BY position');
-  for (const m of db.prepare('SELECT id, type, name, sub, cat_ref, product_ref, product_refs, tag_enabled, tag_label FROM sig_modules ORDER BY sort_order').all()) {
+  for (const m of db.prepare('SELECT id, type, name, sub, cat_ref, product_ref, product_refs, tag_enabled, tag_label, scenes FROM sig_modules ORDER BY sort_order').all()) {
+    // Film en scènes : chaque texte et chaque promotion de ses calques.
+    if (m.type === 'scenes') {
+      let scenes = [];
+      try { scenes = normScenes(JSON.parse(m.scenes || '[]')); } catch { scenes = []; }
+      scenes.forEach((sc, i) => {
+        for (const l of sc.layers) {
+          const where = { where: `film « ${m.name || 'scènes'} » · scène ${i + 1}` };
+          if (l.kind === 'text') add('scene', `${m.id}.${l.id}`, 'text', l.text, where);
+          if (l.kind === 'price') add('scene', `${m.id}.${l.id}`, 'promo', l.promo, where);
+        }
+      });
+      continue;
+    }
     const fields = TR_MODULE_TYPES[m.type];
     if (!fields) continue;
     for (const f of fields) {
@@ -2580,6 +2608,12 @@ export function applyTranslations(modules, storeId) {
       const c = { ...m.campaign };
       for (const f of ['name', 'message', 'theme']) { const t = pick('campaign', c.id, f, c[f]); if (t) c[f] = t; }
       m.campaign = c;
+    }
+    for (const sc of (m.type === 'scenes' && Array.isArray(m.scenes) ? m.scenes : [])) {
+      for (const l of sc.layers || []) {
+        if (l.kind === 'text') { const t = pick('scene', `${m.id}.${l.id}`, 'text', l.text); if (t) l.text = t; }
+        if (l.kind === 'price' && l.promo) { const t = pick('scene', `${m.id}.${l.id}`, 'promo', l.promo); if (t) l.promo = t; }
+      }
     }
     if (m.promo && m.promo.type) { const t = pick('promo_type', m.promo.type, 'name', m.promo.name); if (t) m.promo = { ...m.promo, name: t }; }
     if (m.bundle && m.bundle.id) {
@@ -2816,6 +2850,7 @@ export function loadModules() {
       animFile: m.anim_file || '',
       animFit: m.anim_fit === 'contain' ? 'contain' : 'cover',
       bgColor: m.bg_color || '',
+      scenes: m.type === 'scenes' ? (() => { try { return normScenes(JSON.parse(m.scenes || '[]')); } catch { return []; } })() : undefined,
       // Campagne résolue pour l'affichage (nom · portée · visuel · thème · dates).
       campaign: m.type === 'campagne'
         ? (campaign || { id: m.campaign_ref || '', name: 'Campagne', scope: 'produit', productRef: '', theme: '', image: '', message: '', dateFrom: '', dateTo: '', color: '#8D1D2C', active: true })
@@ -2892,14 +2927,18 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
        tag_enabled, tag_label, tag_img, sched_days, sched_from, sched_to, pos, sort_order, lib_tag,
        cat_ref, product_ref, video, surprise, watermark, dur, promo_type, campaign_ref, bundle_ref, tfb_ref,
        orient, moments, html, html_vars, html_w, html_h,
-       anim_mode, anim_bg, anim_dim, anim_file, anim_fit, bg_color, product_refs, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
+       anim_mode, anim_bg, anim_dim, anim_file, anim_fit, bg_color, product_refs, scenes, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
     const insItem = db.prepare(`INSERT INTO sig_module_items
       (module_id, position, name, price, img, src, active) VALUES (?, ?, ?, ?, ?, ?, ?)`);
     // Les types valides viennent de la table sig_element_types (rien en dur).
     const validTypes = new Set(db.prepare('SELECT id FROM sig_element_types').all().map((r) => r.id));
     modules.forEach((m, i) => {
       const tag = m.tag || {};
+      // Film en scènes : ses lignes de produits = les produits des calques
+      // « Prix / promo » (prix de CHAQUE magasin, comme une liste de prix).
+      const scenes = m.type === 'scenes' ? normScenes(m.scenes) : [];
+      if (m.type === 'scenes') m = { ...m, productRefs: scenePriceProducts(scenes) };
       const sched = m.schedule || {};
       insMod.run(
         m.id, validTypes.has(m.type) ? m.type : 'category', String(m.name || ''), String(m.sub || ''),
@@ -2927,10 +2966,11 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
         String(m.animFile || ''),
         m.animFit === 'contain' ? 'contain' : 'cover',
         /^#[0-9a-fA-F]{3,8}$/.test(String(m.bgColor || '')) ? m.bgColor : '',
-        JSON.stringify(cleanProductRefs(m.productRefs))
+        JSON.stringify(cleanProductRefs(m.productRefs)),
+        JSON.stringify(scenes)
       );
       // Un élément lié au catalogue (ou une campagne, un bundle) ne stocke pas d'items propres.
-      if (!m.catRef && !m.productRef && !cleanProductRefs(m.productRefs).length && m.type !== 'campagne' && m.type !== 'bundle') {
+      if (!m.catRef && !m.productRef && !cleanProductRefs(m.productRefs).length && m.type !== 'campagne' && m.type !== 'bundle' && m.type !== 'scenes') {
         (m.items || []).forEach((it, j) => insItem.run(
           m.id, j, String(it.name || ''), String(it.price || ''), String(it.img || ''),
           it.src === 'photo' ? 'photo' : 'illus', it.active ? 1 : 0

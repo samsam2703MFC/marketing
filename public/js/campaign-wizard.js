@@ -18,6 +18,8 @@
 import { html, h } from './vendor/preact-htm.js';
 import { W, H, SCREEN, renderModule, newTag, newPos, tfbPromoLabel } from './renderer.js';
 import { continuousDefaults, normContinuous } from './continuous.js';
+import { filmEditorCard, filmEditorPanel, seedScenes, scenesOf, previewItems } from './film-editor.js';
+import { normScenes, scenesDuration } from './scenes.js';
 
 const apiUrl = (p) => new URL('api/v1' + p, location.href).toString();
 async function api(method, path, body) {
@@ -35,8 +37,10 @@ let UIDC = 0;
 const uid = (p = 'm') => p + Date.now().toString(36) + (UIDC++).toString(36);
 
 export const CW_STEPS = ['cw.step.campaign', 'cw.step.products', 'cw.step.when', 'cw.step.where', 'cw.step.tags', 'cw.step.film', 'cw.step.broadcast'];
-// Écran → ses étapes (1-indexées) : 1-2 · 3-4 · 5-6 · 7.
-const SCREENS = [[1, 2], [3, 4], [5, 6], [7]];
+// Écran → ses étapes (1-indexées) : 1-2 · 3-4 · 5 · 6 (l'éditeur du film) · 7.
+const SCREENS = [[1, 2], [3, 4], [5], [6], [7]];
+const FILM = 3;
+const LAST = SCREENS.length - 1;
 const MOMENTS = ['matin', 'midi', 'aprem'];
 const DAYS = [0, 1, 2, 3, 4, 5, 6];
 const RATIOS = [3, 6, 10];
@@ -111,6 +115,8 @@ function blank() {
     opening: '', openingOff: false, previewStore: '', addOpen: false, addQ: '',
     filmId: '', moduleIds: [], seqId: '', tr: null, trBusy: false,
     busy: '', done: null, ready: null, error: '', resumeOf: null,
+    // Éditeur du film : scènes et calques, textes NL saisis par calque.
+    scenes: [], sceneIdx: 0, layerId: '', orient: 'paysage', nl: {}, playT: 0, playing: false, drawer: null, legacyFilm: false,
   };
 }
 
@@ -194,7 +200,10 @@ function resumeFilm(app, filmId) {
   const f = (app.state.playlists || []).find((p) => p.id === filmId);
   if (!f) return;
   const w = f.wizard || {};
-  setCw(app, (cw) => ({ ...cw, ...(w.choices || {}), filmId: f.id, moduleIds: w.moduleIds || [], seqId: w.seqId || '', resumeOf: null, screen: 0 }));
+  const c = w.choices || {};
+  // Un film d'avant l'éditeur (sans scènes) garde son modèle tant qu'on ne le
+  // recompose pas en scènes.
+  setCw(app, (cw) => ({ ...cw, ...c, scenes: normScenes(c.scenes), nl: c.nl || {}, legacyFilm: !(Array.isArray(c.scenes) && c.scenes.length), filmId: f.id, moduleIds: w.moduleIds || [], seqId: w.seqId || '', resumeOf: null, screen: 0 }));
 }
 
 // ---------------------------------------------------------------------------
@@ -285,7 +294,7 @@ function model(app) {
 }
 
 // Rôle d'un élément du film dans l'assistant (le reprendre, pas le dupliquer).
-const roleOf = (m) => (m.type === 'film' ? 'open' : (m.type === 'category' || m.type === 'campagne') ? 'main'
+const roleOf = (m) => (m.type === 'film' ? 'open' : (m.type === 'category' || m.type === 'campagne' || m.type === 'scenes') ? 'main'
   : m.type === 'bundle' ? 'promo:b:' + m.bundleRef : m.type === 'promotion' ? 'promo:p:' + m.tfbRef : '');
 const orientOf = (p) => (/portrait/i.test(String(p.orient || '')) ? 'portrait' : 'paysage');
 function bundleLabel(b, prodById, T) {
@@ -319,7 +328,13 @@ function buildFilm(app, M) {
   const title = cw.titleFr || (camp && camp.name) || M.T('cw.untitled');
   const tag = cw.hookFr ? { enabled: true, label: cw.hookFr, img: '' } : newTag();
   let campaignMirror = null;
-  if (cw.template === 'photo') {
+  const scenes = scenesOf(cw);
+  if (scenes.length) {
+    // Film composé dans l'éditeur : un élément « scènes » (photos, textes animés,
+    // prix du magasin). Ses lignes de produits = les produits des calques prix.
+    const mm = base('main', { type: 'scenes', name: title, layout: 'scenes', scenes, motion: 'none', dur: 0 });
+    ids.main = mm.id; mods.push(mm);
+  } else if (cw.template === 'photo') {
     const cid = `mkt-${cw.campaignId === 'libre' ? (cw.filmId || 'libre') : cw.campaignId}`;
     campaignMirror = {
       id: cid, name: title, scope: 'gamme', productRef: '', theme: '', message: cw.hookFr || '',
@@ -354,6 +369,7 @@ function buildFilm(app, M) {
     ratio: cw.ratio, grid: M.gridOn, gridTouched: true, players: M.playerIds, playersTouched: true, cat: cw.cat, tags: M.tags, tagsTouched: true,
     template: cw.template, titleFr: cw.titleFr, titleNl: cw.titleNl, hookFr: cw.hookFr, hookNl: cw.hookNl, dur: cw.dur,
     opening: M.opening ? M.opening.id : '', openingOff: cw.openingOff, detail: cw.detail,
+    scenes, nl: cw.nl || {}, orient: cw.orient,
   };
   const film = app.normFilm({
     id: filmId, name: title, items: cw.mode === 'playlist' ? order : [], cat: cw.cat, tags: M.tags,
@@ -399,6 +415,16 @@ async function saveFilm(app, M) {
     if (M.cw.hookNl.trim() && M.cw.hookFr.trim()) writes.push(['tag', M.cw.hookNl]);
   }
   for (const [f, text] of writes) await api('PUT', '/translations', { lang: 'nl', key: key(f), text }).catch(() => {});
+  // Film en scènes : le néerlandais saisi pour chaque texte (et chaque promo).
+  if (built.film && scenesOf(M.cw).length) {
+    for (const sc of scenesOf(M.cw)) {
+      for (const l of sc.layers) {
+        const nl = (M.cw.nl || {})[l.id] || {};
+        if (l.kind === 'text' && l.text.trim() && String(nl.text || '').trim()) await api('PUT', '/translations', { lang: 'nl', key: `scene:${built.ids.main}.${l.id}:text`, text: nl.text }).catch(() => {});
+        if (l.kind === 'price' && l.promo.trim() && String(nl.promo || '').trim()) await api('PUT', '/translations', { lang: 'nl', key: `scene:${built.ids.main}.${l.id}:promo`, text: nl.promo }).catch(() => {});
+      }
+    }
+  }
   await loadTr(app, built.ids.main);
   return built;
 }
@@ -408,7 +434,9 @@ async function loadTr(app, mainId) {
   try {
     const r = await api('GET', '/translations?lang=nl');
     const by = (f) => (r.items || []).find((x) => x.key === `module:${mainId}:${f}`) || null;
-    setCw(app, { tr: { name: by('name'), tag: by('tag'), claude: r.claude || null, job: r.job || null } });
+    const scene = {};
+    for (const x of r.items || []) if (x.kind === 'scene' && x.refId.startsWith(`${mainId}.`)) scene[`${x.refId.slice(mainId.length + 1)}:${x.field}`] = x;
+    setCw(app, { tr: { name: by('name'), tag: by('tag'), scene, claude: r.claude || null, job: r.job || null } });
   } catch { setCw(app, { tr: null }); }
 }
 
@@ -416,7 +444,7 @@ async function proposeNl(app, M) {
   setCw(app, { trBusy: true });
   try {
     const built = await saveFilm(app, M);
-    await api('POST', '/translations/propose', { lang: 'nl', kinds: ['module'] });
+    await api('POST', '/translations/propose', { lang: 'nl', kinds: ['module', 'scene'] });
     for (let i = 0; i < 30; i++) {
       await new Promise((r) => setTimeout(r, 1500));
       const r = await api('GET', '/translations?lang=nl');
@@ -424,19 +452,38 @@ async function proposeNl(app, M) {
     }
     await loadTr(app, built.ids.main);
     const t = cwOf(app).tr || {};
-    setCw(app, (cw) => ({
-      trBusy: false,
-      titleNl: cw.titleNl || (t.name && t.name.translation ? t.name.translation.text : ''),
-      hookNl: cw.hookNl || (t.tag && t.tag.translation ? t.tag.translation.text : ''),
-    }));
+    setCw(app, (cw) => {
+      // Propositions de Claude reprises dans les champs NL encore vides.
+      const nl = { ...(cw.nl || {}) };
+      for (const [k, x] of Object.entries(t.scene || {})) {
+        const [lid, f] = k.split(':');
+        if (x.translation && !(nl[lid] || {})[f]) nl[lid] = { ...(nl[lid] || {}), [f]: x.translation.text };
+      }
+      return {
+        trBusy: false, nl,
+        titleNl: cw.titleNl || (t.name && t.name.translation ? t.name.translation.text : ''),
+        hookNl: cw.hookNl || (t.tag && t.tag.translation ? t.tag.translation.text : ''),
+      };
+    });
   } catch (e) { setCw(app, { trBusy: false }); app.showToast(`${M.T('cw.err')} : ${(e.body && e.body.error) || e.message}`); }
 }
 
 async function validateNl(app, M) {
   const ids = buildFilm(app, M).ids;
   const keys = ['name', 'tag'].map((f) => `module:${ids.main}:${f}`);
+  const edits = Object.fromEntries([[keys[0], M.cw.titleNl], [keys[1], M.cw.hookNl]].filter(([, v]) => String(v || '').trim()));
+  for (const sc of scenesOf(M.cw)) {
+    for (const l of sc.layers) {
+      const nl = (M.cw.nl || {})[l.id] || {};
+      for (const f of l.kind === 'text' ? ['text'] : l.kind === 'price' ? ['promo'] : []) {
+        const k = `scene:${ids.main}.${l.id}:${f}`;
+        keys.push(k);
+        if (String(nl[f] || '').trim()) edits[k] = nl[f];
+      }
+    }
+  }
   try {
-    await api('POST', '/translations/validate', { lang: 'nl', keys, edits: Object.fromEntries([[keys[0], M.cw.titleNl], [keys[1], M.cw.hookNl]].filter(([, v]) => String(v || '').trim())) });
+    await api('POST', '/translations/validate', { lang: 'nl', keys, edits });
     await loadTr(app, ids.main);
   } catch (e) { app.showToast(`${M.T('cw.err')} : ${e.message}`); }
 }
@@ -494,7 +541,9 @@ function previewModule(app, M) {
   if (!main) return null;
   let m = main;
   const sid = cw.previewStore || (M.storesChosen[0] && M.storesChosen[0].id) || '';
-  if (main.type === 'category') {
+  if (main.type === 'scenes') {
+    m = { ...main, items: previewItems(M, main.scenes) };
+  } else if (main.type === 'category') {
     const items = M.selProds.filter((p) => !sid || M.soldIn(p, sid)).map((p) => ({ name: p.name, price: (sid && M.priceIn(p, sid)) || p.price, img: p.img, src: p.src, active: true, productId: p.id }));
     m = { ...main, items };
   } else if (main.type === 'campagne') {
@@ -518,12 +567,20 @@ function stage(m, w, portrait) {
 export function renderCampaignWizard(app) {
   const M = model(app);
   const { cw, T } = M;
-  const scr = cw.done ? 3 : cw.screen;
+  const scr = cw.done ? LAST : cw.screen;
   const active = SCREENS[scr];
-  const go = (n) => { setCw(app, { screen: Math.max(0, Math.min(3, n)) }); const el = document.querySelector('.app__body'); if (el) el.scrollTop = 0; };
+  const go = (n) => {
+    const to = Math.max(0, Math.min(LAST, n));
+    // L'éditeur du film s'ouvre sur une première composition tirée de la
+    // campagne (sauf un film d'avant l'éditeur, repris tel quel).
+    const seed = to === FILM && !scenesOf(cwOf(app)).length && !cwOf(app).legacyFilm ? { scenes: seedScenes(M), sceneIdx: 0, layerId: '' } : {};
+    setCw(app, { screen: to, playing: false, ...seed });
+    const el = document.querySelector('.app__body'); if (el) el.scrollTop = 0;
+  };
+  const filmOk = !!(cw.titleFr || (M.camp && M.camp.name)) && (scenesOf(cw).length > 0 || cw.legacyFilm);
   const canNext = scr === 0 ? !!cw.campaignId && !cw.detailBusy && (cw.products.length > 0 || cw.template === 'photo')
     : scr === 1 ? M.playerIds.length > 0 && M.daysOn.some(Boolean)
-      : scr === 2 ? !!(cw.titleFr || (M.camp && M.camp.name)) : true;
+      : scr === FILM ? filmOk : true;
   const stepper = html`
     <ol class="cw-steps">
       ${CW_STEPS.map((k, i) => {
@@ -531,38 +588,95 @@ export function renderCampaignWizard(app) {
         const on = active.includes(n);
         const ok = !on && n < active[0];
         return html`<li key=${k} class=${'cw-step' + (on ? ' is-on' : '') + (ok ? ' is-ok' : '')}>
-          <button type="button" disabled=${!ok || !!cw.done} onClick=${() => go(SCREENS.findIndex((s) => s.includes(n)))}>
+          <button type="button" disabled=${!ok || !!cw.done} onClick=${() => go(SCREENS.findIndex((x) => x.includes(n)))}>
             <span class="cw-step__n">${ok ? '✓' : n}</span><span>${T(k)}</span>
           </button></li>`;
       })}
     </ol>`;
+  const nextLabel = [T('cw.next.whenWhere'), T('cw.next.tags'), T('cw.next.film'), T('cw.next.broadcast')][scr];
+  const backLabel = [T('cw.cancel'), T('cw.back.campaign'), T('cw.back.whenWhere'), T('cw.back.tags'), T('cw.back.film')][scr];
   let body;
   if (cw.done) body = doneScreen(app, M);
   else if (scr === 0) body = html`${campaignCard(app, M)}${productsCard(app, M)}`;
   else if (scr === 1) body = html`${whenCard(app, M)}${whereCard(app, M)}`;
-  else if (scr === 2) body = html`${tagsCard(app, M)}${filmCard(app, M)}`;
-  else body = html`${checksCard(app, M)}${planningCard(app, M)}`;
-  const nextLabel = [T('cw.next.whenWhere'), T('cw.next.tagsFilm'), T('cw.next.broadcast')][scr];
-  const backLabel = [T('cw.cancel'), T('cw.back.campaign'), T('cw.back.whenWhere'), T('cw.back.tagsFilm')][scr];
+  else if (scr === 2) body = tagsCard(app, M);
+  else if (scr === FILM) {
+    body = cw.legacyFilm && !scenesOf(cw).length
+      ? html`${legacyNote(app, M)}${filmCard(app, M)}`
+      : html`${filmEditorCard(app, M, setCw, { back: () => go(scr - 1), backLabel, next: () => go(scr + 1), nextLabel, canNext })}${filmMetaCard(app, M)}`;
+  } else body = html`${checksCard(app, M)}${planningCard(app, M)}`;
   const nScreens = M.chosen.length;
-  const foot = cw.done ? null : html`
+  const editorFoot = scr === FILM && !(cw.legacyFilm && !scenesOf(cw).length);
+  const foot = cw.done || editorFoot ? null : html`
     <div class="cw-foot">
       <button type="button" class="btn" onClick=${() => (scr === 0 ? closeWizard(app) : go(scr - 1))}>${scr === 0 ? backLabel : `← ${backLabel}`}</button>
-      ${scr < 3 ? html`<button type="button" class="btn btn--primary" disabled=${!canNext} title=${canNext ? '' : T('cw.nextBlocked')} onClick=${() => go(scr + 1)}>${nextLabel} →</button>`
+      ${scr < LAST ? html`<button type="button" class="btn btn--primary" disabled=${!canNext} title=${canNext ? '' : T('cw.nextBlocked')} onClick=${() => go(scr + 1)}>${nextLabel} →</button>`
         : html`<span class="cw-foot__group">
             <button type="button" class="btn" disabled=${!!cw.busy} onClick=${() => saveDraftOnly(app, M)}>${cw.busy === 'save' ? T('cw.saving') : T('cw.saveDraft')}</button>
             <button type="button" class="btn" disabled=${!!cw.busy} onClick=${() => viewFilm(app, M)}>${T('cw.viewFilm')} ↗</button>
             <button type="button" class="btn btn--primary" disabled=${!!cw.busy || !nScreens} onClick=${() => diffuse(app, M)}>${cw.busy === 'diffuse' ? T('cw.diffusing') : T('cw.diffuseN', { n: nScreens })}</button>
           </span>`}
     </div>`;
+  const aside = scr === FILM && !cw.done && !(cw.legacyFilm && !scenesOf(cw).length) ? filmEditorPanel(app, M, setCw, (l, f) => nlChip(M, l, f)) : sidePanel(app, M, scr);
   return html`
-    <div class="cw">
+    <div class=${'cw' + (scr === FILM ? ' cw--film' : '')}>
       <div class="cw-head">${stepper}</div>
       <div class="cw-body">
         <div class="cw-main">${body}${cw.error ? html`<div class="cw-note cw-note--err">${cw.error}</div>` : ''}${foot}</div>
-        <aside class="cw-side">${sidePanel(app, M, scr)}</aside>
+        <aside class="cw-side">${aside}</aside>
       </div>
     </div>`;
+}
+
+// État du néerlandais d'un texte de scène (circuit des Traductions).
+function nlChip(M, l, f) {
+  const { cw, T } = M;
+  const typed = String(((cw.nl || {})[l.id] || {})[f] || '').trim();
+  const x = ((cw.tr || {}).scene || {})[`${l.id}:${f}`];
+  if (x && x.translation && x.translation.status === 'valide' && (!typed || typed === x.translation.text)) return chip(T('cw.nl.valid'), 'ok');
+  if (typed) return chip(T('cw.nl.typed'), 'ok');
+  if (x && x.translation) return chip(T('cw.nl.proposed'), 'gold');
+  return chip(T('cw.nl.todo'), 'gold');
+}
+
+// Sous l'éditeur : le nom du film, la vidéo d'ouverture, le néerlandais.
+function filmMetaCard(app, M) {
+  const { cw, T } = M;
+  const tr = cw.tr || {};
+  const pending = Object.values(tr.scene || {}).some((x) => x.translation && x.translation.status === 'propose');
+  return card('', T('fe.meta.title'), '', html`
+    <div class="cw-row2">
+      <label class="cw-field"><span>${T('fe.meta.name')}</span><input class="cw-input" value=${cw.titleFr} onInput=${(e) => setCw(app, { titleFr: e.target.value })} /></label>
+      <div class="cw-field"><span>${T('cw.film.nl')}</span>
+        <span class="cw-inline">
+          <button type="button" class="btn btn--sm" disabled=${cw.trBusy} title=${tr.claude && tr.claude.configured === false ? T('cw.nl.noKey') : T('cw.nl.proposeTip')} onClick=${() => proposeNl(app, M)}>${cw.trBusy ? T('cw.nl.proposing') : T('cw.nl.propose')}</button>
+          ${pending ? html`<button type="button" class="btn btn--sm" onClick=${() => validateNl(app, M)}>${T('cw.nl.validate')}</button>` : ''}
+        </span></div>
+    </div>
+    ${openingNote(app, M)}`);
+}
+
+function openingNote(app, M) {
+  const { cw, T } = M;
+  if (M.opening) {
+    return html`<div class="cw-note">
+      <span>${T('cw.film.mediaFound', { f: M.opening.filename })}</span>
+      <span class="cw-foot__group">
+        ${M.media.length > 1 ? html`<select class="cw-input cw-input--sm" value=${M.opening.id} onChange=${(e) => setCw(app, { opening: e.target.value, openingOff: false })}>${M.media.map((x) => html`<option value=${x.m.id}>${x.m.filename}</option>`)}</select>` : ''}
+        <button type="button" class="btn btn--sm btn--ghost" onClick=${() => setCw(app, { openingOff: true })}>${T('cw.film.noOpening')}</button>
+      </span></div>`;
+  }
+  return cw.openingOff && M.media.length ? html`<div class="cw-note"><button type="button" class="btn btn--sm" onClick=${() => setCw(app, { openingOff: false })}>${T('cw.film.addOpening')}</button></div>` : '';
+}
+
+// Film repris d'avant l'éditeur : il garde son modèle ; « Composer en scènes »
+// passe à l'éditeur.
+function legacyNote(app, M) {
+  const { T } = M;
+  return html`<div class="cw-note cw-note--acc">
+    <span>${T('fe.legacy')}</span>
+    <button type="button" class="btn btn--sm" onClick=${() => setCw(app, { legacyFilm: false, scenes: seedScenes(M), sceneIdx: 0, layerId: '' })}>${T('fe.legacyGo')}</button>
+  </div>`;
 }
 
 function closeWizard(app) { app.setState({ cw: null }); app.goView('home'); }
@@ -832,7 +946,22 @@ function checks(app, M) {
   out.push(noPrice.length
     ? { ok: false, text: T('cw.chk.noPrice', { n: noPrice.length }), sub: noPrice.map((p) => p.name).join(', ') }
     : { ok: true, text: T('cw.chk.prices', { n: stores.length }), sub: ci && ci.at ? T('cw.chk.readAt', { d: String(ci.at).slice(0, 16).replace('T', ' ') }) : '' });
-  if (M.nlStores.length && cw.template !== 'photo') {
+  if (M.nlStores.length && scenesOf(cw).length) {
+    // Film en scènes : chaque texte (et chaque promo) a son néerlandais saisi ou validé.
+    const tr = (cw.tr || {}).scene || {};
+    const missing = [];
+    for (const sc of scenesOf(cw)) {
+      for (const l of sc.layers) {
+        const f = l.kind === 'text' ? 'text' : l.kind === 'price' && l.promo ? 'promo' : '';
+        if (!f || !String(l[f] || '').trim()) continue;
+        const typed = String(((cw.nl || {})[l.id] || {})[f] || '').trim();
+        const x = tr[`${l.id}:${f}`];
+        if (!typed && !(x && x.translation && x.translation.status === 'valide')) missing.push(l[f].split('\n')[0]);
+      }
+    }
+    const s = M.nlStores.map((x) => x.store).join(', ');
+    out.push(missing.length ? { ok: false, text: T('cw.chk.nlKo', { s }), sub: missing.join(' · ') } : { ok: true, text: T('cw.chk.nlOk', { s }) });
+  } else if (M.nlStores.length && cw.template !== 'photo') {
     const tr = cw.tr || {};
     const ok = (x, typed) => !!typed || (x && (x.fromErp || (x.translation && x.translation.status === 'valide')));
     const good = ok(tr.name, cw.titleNl) && (!cw.hookFr || ok(tr.tag, cw.hookNl));
@@ -902,7 +1031,7 @@ function sidePanel(app, M, scr) {
   const { cw, T, lang } = M;
   const m = cw.campaignId ? previewModule(app, M) : null;
   const w = Math.max(220, Math.min(330, (typeof window !== 'undefined' ? window.innerWidth : 1440) - 96));
-  const both = scr === 2;
+  const both = scr === 2 || scr === FILM;
   const sumRows = [
     [T('cw.sum.campaign'), M.camp ? M.camp.name : (cw.campaignId === 'libre' ? T('cw.free') : '—')],
     [T('cw.sum.products'), M.selProds.length ? T('cw.sum.productsV', { n: M.selProds.length }) : '—'],
@@ -910,12 +1039,12 @@ function sidePanel(app, M, scr) {
     [T('cw.sum.moments'), M.momentsOn.map((mo) => T('moment.' + mo)).join(' · ') || '—'],
     [T('cw.sum.stores'), T('cw.sum.storesV', { s: M.storesChosen.length, n: M.chosen.length })],
     [T('cw.sum.tags'), M.tags.slice(0, 4).join(', ') || '—'],
-    [T('cw.sum.duration'), `${cw.dur} s${cw.mode === 'continu' ? ` · ${T('cw.sum.loop', { r: cw.ratio })}` : ` · ${T('cw.mode.playlist')}`}`],
+    [T('cw.sum.duration'), `${scenesOf(cw).length ? Math.round(scenesDuration(scenesOf(cw))) : cw.dur} s${cw.mode === 'continu' ? ` · ${T('cw.sum.loop', { r: cw.ratio })}` : ` · ${T('cw.mode.playlist')}`}`],
   ];
   const stores = M.storesChosen;
   return html`
     <section class="cw-card cw-card--side">
-      <div class="cw-card__head"><span class="cw-card__title">${scr === 3 ? T('cw.side.summary') : (both ? T('cw.side.both') : T('cw.side.live'))}</span></div>
+      <div class="cw-card__head"><span class="cw-card__title">${scr === LAST ? T('cw.side.summary') : (both ? T('cw.side.both') : T('cw.side.live'))}</span></div>
       ${stores.length > 1 ? html`<select class="cw-input cw-input--sm cw-side__store" value=${cw.previewStore || stores[0].id} onChange=${(e) => setCw(app, { previewStore: e.target.value })} title=${T('cw.side.storeTip')}>${stores.map((s) => html`<option value=${s.id}>${s.store}</option>`)}</select>` : ''}
       ${stage(m, w, false)}
       ${both ? html`<div class="cw-side__p">${stage(m, 120, true)}<p class="cw-muted cw-small">${T('cw.side.portraitNote')}</p></div>` : ''}
