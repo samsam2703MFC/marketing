@@ -297,8 +297,11 @@ function renderModuleInner(h, m, lt, opts) {
   opts = opts || {};
   const secPerLine = opts.secPerLine || 4;
   const kids = [];
-  kids.push(h('div', { key: 's1', style: { position: 'absolute', left: SCREEN, top: 0, width: 2, height: H, background: 'rgba(35,34,32,0.07)' } }));
-  kids.push(h('div', { key: 's2', style: { position: 'absolute', left: SCREEN * 2, top: 0, width: 2, height: H, background: 'rgba(35,34,32,0.07)' } }));
+  // Joints des trois dalles du mur : pas sur un écran portrait seul (ni une affiche).
+  if (!opts.portrait) {
+    kids.push(h('div', { key: 's1', style: { position: 'absolute', left: SCREEN, top: 0, width: 2, height: H, background: 'rgba(35,34,32,0.07)' } }));
+    kids.push(h('div', { key: 's2', style: { position: 'absolute', left: SCREEN * 2, top: 0, width: 2, height: H, background: 'rgba(35,34,32,0.07)' } }));
+  }
   const tag = m.tag && m.tag.enabled ? m.tag : null;
   const tagEl = () => {
     if (!tag) return null;
@@ -732,6 +735,7 @@ function renderModuleInner(h, m, lt, opts) {
   const moTitle = MO[m.motionTitle || m.motion || 'm1'] || MO.m1;
   const osc = moTitle.osc ? (0.5 + 0.5 * Math.sin(lt * Math.PI * 1.2)) : 0;
   const tPulse = moTitle.pulse ? (1 + 0.02 * (0.5 + 0.5 * Math.sin(lt * Math.PI * 4))) : 1;
+  if (opts.portrait) return listePortrait(h, m, lt, { act, n, cfg, P, moList, moIllo, tPulse, tag, secPerLine, kids });
   kids.push(h('img', { key: 'b1', src: 'assets/sweet-tart-big.png', style: { position: 'absolute', left: -360, top: 300, width: 1700, opacity: 0.05 } }));
   kids.push(h('img', { key: 'b2', src: 'assets/rhubarb.png', style: { position: 'absolute', right: -260, bottom: -320, width: 1300, opacity: 0.05 } }));
 
@@ -845,6 +849,80 @@ function renderModuleInner(h, m, lt, opts) {
   });
   if (cfg.illoShown && !cfg.illoBehind && n) { if (idx !== fromI) kids.push(illo(fromI, 1 - cross, 3)); kids.push(illo(idx, cross, 3)); }
   const te = tagEl(); if (te) kids.push(te);
+  return kids;
+}
+
+// ---- Écran portrait (9:16) : la composition tient dans la dalle visible ----
+// Un écran portrait seul ne montre que la tranche centrale du canevas (x de
+// SCREEN à 2 × SCREEN) : titre, étiquette, illustration et liste y sont empilés,
+// au lieu d'être répartis sur les trois dalles du mur.
+const PX0 = SCREEN, PW = SCREEN;
+function listePortrait(h, m, lt, c) {
+  const { act, n, cfg, moList, moIllo, tPulse, tag, secPerLine, kids } = c;
+  const cx = PX0 + PW / 2;
+  // Titre : une ligne si elle tient assez grande, sinon deux.
+  const titre = (m.name || '').toUpperCase();
+  const larg = PW - 260;
+  let lignes = 1;
+  let fs = Math.floor(larg / (Math.max(1, titre.length) * 0.42));
+  if (fs < 230 && titre.includes(' ')) { lignes = 2; fs = Math.floor(larg / ((titre.length / 2 + 2) * 0.42)); }
+  fs = Math.max(150, Math.min(320, fs));
+  const tTop = 300;
+  kids.push(h('div', { key: 'pti', style: { position: 'absolute', left: PX0 + 130, top: tTop, width: larg, textAlign: 'center', fontFamily: FVANK, fontWeight: 400, fontSize: fs, lineHeight: 1, letterSpacing: '0.02em', textTransform: 'uppercase', color: INK, transform: `scale(${tPulse})`, transformOrigin: 'top center' } }, titre));
+  let y = tTop + lignes * fs + 70;
+  kids.push(h('div', { key: 'pru', style: { position: 'absolute', left: cx - 450, top: y, width: 900, height: 14, background: RUBY, borderRadius: 7, opacity: 0.9 } }));
+  y += 14 + 90;
+  if (tag) {
+    kids.push(h('div', { key: 'ptag', style: { position: 'absolute', left: PX0, top: y, width: PW, display: 'flex', justifyContent: 'center', zIndex: 6 } },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 30, background: RUBY, color: '#fff', borderRadius: 999, padding: '30px 56px 30px 44px', boxShadow: '0 24px 60px rgba(141,29,44,0.30)', transform: `rotate(-3deg) scale(${1 + 0.02 * Math.sin(lt * Math.PI * 2)})` } },
+        tag.img ? h('img', { src: tag.img, alt: '', style: { width: 120, height: 120, objectFit: 'contain', filter: 'brightness(0) invert(1)' } }) : null,
+        h('span', { style: { fontFamily: FVANK, fontWeight: 400, fontSize: Math.min(120, Math.floor((PW - 400) / (Math.max(1, String(tag.label || '').length) * 0.5))), letterSpacing: '0.02em', textTransform: 'uppercase', lineHeight: 1, whiteSpace: 'nowrap' } }, tag.label || ''))));
+    y += 230;
+  }
+  // La liste en bas, l'illustration dans la place qui reste au-dessus.
+  const BW = PW - 200;
+  const bas = H - 220;
+  // Hauteur d'une ligne : 300 au plus ; une longue liste se resserre pour tenir.
+  const pas = Math.min(300, (bas - y - (cfg.illoShown && !cfg.illoBehind ? 560 : 60)) / Math.max(1, n));
+  const BH = Math.max(110, Math.min(250, pas - 24));
+  const listeH = n ? pas * (n - 1) + BH : 0;
+  // Illustration puis liste, l'ensemble centré dans la place sous le titre.
+  const derriere = cfg.illoBehind;
+  const taille0 = Math.min(1500, derriere ? 1600 : bas - y - listeH - 120);
+  const avecIllo = cfg.illoShown && n && taille0 >= 500;
+  const bloc = derriere || !avecIllo ? listeH : taille0 + 120 + listeH;
+  const debut = y + Math.max(0, (bas - y - bloc) / 2);
+  const lTop = derriere || !avecIllo ? debut : debut + taille0 + 120;
+  const raw = lt / secPerLine;
+  const idx = n ? ((Math.floor(raw) % n) + n) % n : 0;
+  const tin = raw - Math.floor(raw);
+  const slideT = moList.slide ? easeIO(clx(tin / 0.34, 0, 1)) : 1;
+  const cross = moList.slide ? easeIO(clx(tin / 0.40, 0, 1)) : 1;
+  const fromI = (idx - 1 + n) % n;
+  const ligneY = (i) => lTop + BH / 2 + i * pas;
+  const taille = taille0;
+  const montrer = avecIllo;
+  const iTop = derriere ? lTop + listeH / 2 - taille / 2 : debut;
+  const wobY = moIllo.w * Math.sin(lt * Math.PI * (moIllo.fspd || 1));
+  const wobR = moIllo.r * Math.sin(lt * Math.PI * ((moIllo.fspd || 1) * 0.8));
+  const illo = (i, op, z) => h('div', { key: 'pil' + i + z, style: { position: 'absolute', left: cx - taille / 2, top: iTop, width: taille, height: taille, opacity: op * (derriere ? 0.12 : 1), zIndex: z, transform: `translateY(${wobY}px) rotate(${wobR}deg)`, transformOrigin: 'center' } },
+    h('img', { src: m.catImg || act[i].img, alt: '', draggable: false, style: { width: taille, height: taille, objectFit: 'contain', display: 'block' } }));
+  if (montrer && derriere) { if (idx !== fromI) kids.push(illo(fromI, 1 - cross, 0)); kids.push(illo(idx, cross, 0)); }
+  if (n) {
+    const bandY = idx === 0 && Math.floor(raw) === 0 ? ligneY(0) : mix(ligneY(fromI), ligneY(idx), slideT);
+    kids.push(h('div', { key: 'pba', style: { position: 'absolute', left: cx - BW / 2, top: bandY - BH / 2, width: BW, height: BH, background: RUBY, borderRadius: 18, zIndex: 1, boxShadow: '0 30px 70px rgba(141,29,44,0.28)' } }));
+  }
+  const nameFs = Math.round(Math.max(60, Math.min(104, BH * 0.42)));
+  act.forEach((t, i) => {
+    let wht = 0;
+    if (i === idx) wht = slideT;
+    else if (i === fromI && idx !== 0) wht = 1 - slideT;
+    kids.push(h('div', { key: 'pr' + i, style: { position: 'absolute', left: cx - BW / 2, top: ligneY(i) - BH / 2, width: BW, height: BH, display: 'flex', alignItems: 'center', gap: 60, padding: '0 90px', boxSizing: 'border-box', zIndex: 2 } },
+      h('span', { style: { flex: '1 1 auto', minWidth: 0, fontFamily: FVANK, fontWeight: 400, fontSize: nameFs, letterSpacing: '0.01em', textTransform: 'uppercase', lineHeight: 1, color: mixHex(INK, '#FFFFFF', wht), whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, t.name),
+      h('span', { style: { flex: '0 0 auto', textAlign: 'right', fontFamily: FUI, fontWeight: 300, fontSize: nameFs, letterSpacing: '-0.012em', lineHeight: 1, color: mixHex(RUBY, '#FFFFFF', wht) } }, t.price,
+        h('span', { style: { fontSize: '0.46em', fontWeight: 400, verticalAlign: '0.72em', marginLeft: 8 } }, '€'))));
+  });
+  if (montrer && !derriere) { if (idx !== fromI) kids.push(illo(fromI, 1 - cross, 3)); kids.push(illo(idx, cross, 3)); }
   return kids;
 }
 

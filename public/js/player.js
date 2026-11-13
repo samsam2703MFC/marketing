@@ -294,6 +294,7 @@ class Player extends Component {
     }
 
     let content;
+    let portrait = false;
     if (st.override) {
       content = h('div', { style: { position: 'absolute', inset: 0, background: RUBY, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 120 } },
         h('img', { src: 'assets/logo-white.png', style: { height: 500, width: 'auto' } }),
@@ -301,10 +302,14 @@ class Player extends Component {
         h('div', { style: { fontFamily: FUI, fontWeight: 400, fontSize: 80, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)' } }, 'playlists suspendues par la régie'));
     } else {
       const { m, lt } = this.current();
+      // Écran plus haut que large (sans « adapter ») : composition portrait dans la dalle du milieu.
+      // Sans format dans l'adresse, c'est la fenêtre qui dit l'orientation.
+      const ww = st.winW || window.innerWidth, wh = st.winH || window.innerHeight;
+      portrait = FMT_W > 0 && FMT_H > 0 ? (FMT_W < FMT_H && FMT_FIT !== 'contain') : ww < wh;
       // Rien de programmé à cette heure : le logo seul, sans texte — les
       // clients le voient, quelle que soit la langue du magasin.
       content = m
-        ? renderModule(h, m, lt, { secPerLine: st.snapshot.secPerLine })
+        ? renderModule(h, m, lt, { secPerLine: st.snapshot.secPerLine, portrait })
         : h('div', { style: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' } },
           h('img', { src: 'assets/logo.png', style: { height: 420 } }));
     }
@@ -317,7 +322,8 @@ class Player extends Component {
       const ratio = FMT_W / FMT_H;
       if (bw / bh > ratio) bw = Math.round(bh * ratio); else bh = Math.round(bw / ratio);
     } else {
-      fit = 'contain';
+      // Écran portrait sans format : la dalle du milieu, en plein écran (composition portrait).
+      fit = portrait ? 'cover' : 'contain';
     }
     const scale = fit === 'contain' ? Math.min(bw / W, bh / H) : Math.max(bw / W, bh / H);
     const stage = h('div', {

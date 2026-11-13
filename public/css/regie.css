@@ -311,6 +311,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .cw-screen--empty { background: var(--table-head); }
 .cw-side__p { display: flex; gap: 12px; align-items: flex-end; margin-top: 12px; }
 .cw-side__p p { margin: 0; }
+.cw-side__p .cw-screen { flex: 0 0 auto; }   /* sinon la colonne écrase la dalle (72 px au lieu de 120) */
 .cw-sum { margin: 14px 0 0; font-size: 13px; }
 .cw-sum > div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--row-line); }
 .cw-sum > div:last-child { border-bottom: none; }

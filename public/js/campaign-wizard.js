@@ -560,7 +560,7 @@ function previewModule(app, M) {
 }
 function stage(m, w, portrait) {
   if (!m) return html`<div class="cw-screen cw-screen--empty" style=${`width:${w}px;height:${Math.round(portrait ? w * 16 / 9 : w * H / W)}px;`}></div>`;
-  const kids = renderModule(h, m, 2, { secPerLine: 4 });
+  const kids = renderModule(h, m, 2, { secPerLine: 4, portrait: !!portrait });
   if (!portrait) {
     const s = w / W;
     return html`<div class="cw-screen" style=${`width:${w}px;height:${Math.round(H * s)}px;`}><div style=${`position:absolute;left:0;top:0;width:${W}px;height:${H}px;background:#F5EFE4;transform:scale(${s});transform-origin:top left;`}>${kids}</div></div>`;
