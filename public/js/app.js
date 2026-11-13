@@ -10,7 +10,8 @@ import {
 // Config du mode « continu » : source unique partagée avec le serveur.
 import { continuousDefaults, normContinuous } from './continuous.js';
 // Internationalisation de l'interface (FR / EN / IT), choix par navigateur.
-import { UI_LANGS, UI_LANG_IDS, tr, WIZ_STEP_KEYS } from './i18n.js';
+import { UI_LANGS, UI_LANG_IDS, tr } from './i18n.js';
+import { openCampaignWizard, renderCampaignWizard } from './campaign-wizard.js';
 // Gabarits HTML : formats source (16:9, 9:16, A1…), variables et exemple.
 import { HTML_PRESETS, HTML_TOKENS, HTML_VAR_SOURCES, HTML_BRAND_VARS, HTML_ASSETS, htmlVarNames, wrapHtmlVarPos, applyHtmlVarPositions } from './html-templates.js';
 // Générateur de QR code autonome (pour brancher un écran en scannant).
@@ -72,6 +73,7 @@ const icon = (d, size = 16) => html`<svg width=${size} height=${size} viewBox="0
 const SHELL_GROUPS = [
   { label: 'shell.grpBroadcast', items: [
     { view: 'home', label: 'nav.home', icon: ICON.home },
+    { view: 'campaignVideo', label: 'nav.campaignVideo', icon: ICON.play },
     { view: 'composer', label: 'nav.composer', icon: ICON.composer },
     { view: 'planning', label: 'nav.planning', icon: ICON.calendar },
     { view: 'fleet', label: 'nav.fleet', icon: ICON.screens },
@@ -156,8 +158,6 @@ const MAX_PLAN_FILMS = 5;
 // Ratio de passage proposé quand on active un élément dans la boucle.
 const LOOP_RATIO_DEF = 6;
 
-// Assistant de diffusion (fil d'Ariane) : étapes de bout en bout.
-
 const POSF = [
   { k: 'titleY', label: 'Titre · vertical', min: -400, max: 400, step: 10, unit: 'px' },
   { k: 'listX', label: 'Liste · horizontal', min: -800, max: 800, step: 10, unit: 'px' },
@@ -223,7 +223,8 @@ class App extends Component {
     view: 'home', composerTab: 'lib', publishing: false, deploying: false, version: 1, dataVer: 1, hbTick: 0, toast: '',
     pubTargets: {}, pubSlot: 'Toute la journée', pubWhen: 'now', activateAt: '', pubMode: 'full',
     pubDays: [true, true, true, true, true, true, true], pubDone: null, pubFilm: null,
-    wizard: false, wizStep: 0, wizDone: null, wizPublishing: false, wizNonce: 1,
+    // Assistant vidéo de campagne (public/js/campaign-wizard.js) : son état.
+    cw: null,
     override: false,
     srvUrl: '', srvIp: '', srvToken: '',
     // Stockage de la médiathèque (OVHcloud Object Storage, ou ce serveur).
@@ -1199,7 +1200,9 @@ class App extends Component {
       },
       planDays: (Array.isArray(p.planDays) && p.planDays.length === 7) ? p.planDays.map(Boolean) : [true, true, true, true, true, true, true],
       stores: Array.isArray(p.stores) ? p.stores : [],
-      mode: 'continu',   // la régie ne fait plus que du continu
+      // La régie ne fait plus que du continu — sauf un film « fixe » monté par
+      // l'assistant vidéo de campagne (séquence choisie à l'assistant).
+      mode: p.origin === 'assistant' && p.mode === 'playlist' ? 'playlist' : 'continu',
       continuous: normContinuous(p.continuous),
     };
   }
@@ -1989,64 +1992,10 @@ class App extends Component {
   openHome() { this.setState({ view: 'home' }); this.loadProdMoments(); this.refreshFleet(); }
   startFirstFilm() { this.newExampleFilm(); this.setState({ view: 'composer' }); }
 
-  // ---- assistant de diffusion (fil d'Ariane) ------------------------------
-  // Crée un film neuf et guide de bout en bout : Type → Contenu → Écrans →
-  // Aperçu → Diffusion (publication réelle + rapport).
-  openWizard() {
-    const id = 'pl' + uid();
-    const playlists = [...this.state.playlists, this.normFilm({ id, name: 'Nouveau film', items: [], mode: 'continu', stores: [] })];
-    this.dirty({ playlists, activePl: id, playlist: [], t: 0, scope: 'playlist' });
-    this.setState({ wizard: true, wizStep: 0, wizDone: null, wizNonce: 1 });
-    this.refreshFleet();
-    this.loadMediaLib();   // médias agence dispo (pour l'indicateur des ratios)
-    this.loadSurprise();   // vidéos surprise dispo
-  }
-  closeWizard() {
-    // Filet : on force l'enregistrement du brouillon (tous les paramètres du
-    // film) avant de fermer, au cas où l'auto-save (1,2 s) n'aurait pas eu lieu.
-    if (this.state.dirty) this.save({ auto: true });
-    this.setState({ wizard: false, wizDone: null });
-  }
-  wizGo(n) {
-    const step = Math.max(0, Math.min(WIZ_STEP_KEYS.length - 1, n));
-    // En entrant dans l'aperçu, on enregistre le brouillon pour que /film?film= soit à jour.
-    if (step === 3) { api('PUT', '/draft', this.draftBody()).catch(() => {}); this.setState({ wizStep: 3, wizNonce: this.state.wizNonce + 1 }); return; }
-    this.setState({ wizStep: step });
-  }
-  wizName(name) {
-    const n = String(name || '').trim() || 'Nouveau film';
-    const playlists = this.state.playlists.map((p) => (p.id === this.state.activePl ? { ...p, name: n } : p));
-    this.dirty({ playlists });
-  }
-  wizExample() {
-    this.updateContinuous({ source: 'saison', perMoment: true, order: 'catalogue', maxItems: 12,
-      ratios: { liaison: 5, produitSeul: 6, media: 3, animation: 4, surprise: 8 }, fallback: 'tout' });
-    this.showToast('Réglages d’exemple appliqués ✓');
-  }
-  wizToggleItem(mid) {
-    const f = this.activeFilm();
-    const items = (f.items || []).includes(mid) ? f.items.filter((x) => x !== mid) : [...(f.items || []), mid];
-    const playlists = this.state.playlists.map((p) => (p.id === f.id ? { ...p, items } : p));
-    this.dirty({ playlists, playlist: items });
-  }
-  async wizPublish() {
-    if (this.state.wizPublishing) return;
-    const film = this.activeFilm();
-    this.setState({ wizPublishing: true });
-    try {
-      await api('PUT', '/draft', this.draftBody());
-      const out = await api('POST', '/publish', { mode: 'full', playlistId: film.id, targets: film.stores || [], when: 'now', schedule: film.schedule });
-      const okN = out.tests.filter((t) => t.ok).length;
-      this.setState({
-        version: out.version, dirty: false, saved: true, wizPublishing: false,
-        wizDone: { version: out.version, name: out.film ? out.film.name : film.name, playerCount: out.playerCount, testsOk: okN, testsTotal: out.tests.length, url: this.filmUrl({ film: film.id, w: 3840, h: 2160 }) },
-      });
-      this.refreshFleet();
-    } catch (e) {
-      this.setState({ wizPublishing: false });
-      this.showToast(e.status === 401 ? 'Session expirée — recharge la page (F5) et réessaie' : `Échec de la diffusion : ${e.message}`);
-    }
-  }
+  // ---- assistant vidéo de campagne ---------------------------------------
+  // Il remplace l'assistant de diffusion : campagne du Marketing → produits →
+  // quand → où → tags → film → diffusion (public/js/campaign-wizard.js).
+  openWizard() { openCampaignWizard(this); }
   // État de préparation : ce qui est prêt / ce qu'il reste à faire.
   homeReadiness() {
     const st = this.state;
@@ -2550,6 +2499,7 @@ class App extends Component {
   // Ouvre un écran du menu avec son chargement (produits, périodes, campagnes…).
   goView(v) {
     if (v === 'home') this.openHome();
+    else if (v === 'campaignVideo') this.openWizard();
     else if (v === 'products') this.openProducts();
     else if (v === 'promotions') this.openPromotions();
     else if (v === 'campaigns') this.openCampaigns();
@@ -4108,10 +4058,11 @@ class App extends Component {
         })),
       })),
       shellTabs: SHELL_VIEWS.map((it) => ({ key: it.view, view: it.view, label: this.t(it.label), active: st.view === it.view, go: () => this.goView(it.view) })),
-      shellTitle: this.t((SHELL_VIEWS.find((it) => it.view === st.view) || { label: 'nav.composer' }).label),
+      shellTitle: st.view === 'campaignVideo' ? this.t(st.cw && st.cw.filmId ? 'cw.titleEdit' : 'cw.title')
+        : this.t((SHELL_VIEWS.find((it) => it.view === st.view) || { label: 'nav.composer' }).label),
       // Fil sous le titre, sans le répéter : compositeur → film › élément ;
       // ailleurs → l'état de l'écran (compte, « non enregistré »).
-      trail: st.view === 'composer' ? crumbs.slice(1) : crumbs.slice(-1).filter((c) => crumbs.length > 1),
+      trail: st.view === 'campaignVideo' ? [] : (st.view === 'composer' ? crumbs.slice(1) : crumbs.slice(-1).filter((c) => crumbs.length > 1)),
       undoStyle: `display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;font-size:15px;background:transparent;border:1px solid ${st.past.length ? 'rgba(35,34,32,0.16)' : 'rgba(35,34,32,0.06)'};color:${st.past.length ? '#5B564E' : '#C9C3B8'};cursor:${st.past.length ? 'pointer' : 'not-allowed'};`,
       redoStyle: `display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;font-size:15px;background:transparent;border:1px solid ${st.future.length ? 'rgba(35,34,32,0.16)' : 'rgba(35,34,32,0.06)'};color:${st.future.length ? '#5B564E' : '#C9C3B8'};cursor:${st.future.length ? 'pointer' : 'not-allowed'};`,
       isComposerView: st.view === 'composer', isFleetView: st.view === 'fleet', isSettingsView: st.view === 'settings',
@@ -4923,7 +4874,6 @@ class App extends Component {
       ${v.shellGroups.map((g, gi) => html`
         <div class="sidebar__group" key=${g.label}>
           <div class="sidebar__group-label">${g.label}</div>
-          ${gi === 0 && html`<button class="sidebar__action" onClick=${() => this.openWizard()} title=${v.t('hdr.broadcastTip')}>${icon(ICON.play)}${v.t('shell.broadcast')}</button>`}
           ${g.items.map((it) => html`
             <button key=${it.key} class=${'sidebar__item' + (it.active ? ' is-active' : '')} aria-current=${it.active ? 'page' : undefined} data-view=${it.view || undefined} data-nav-translations=${it.view === 'translations' ? '' : undefined} onClick=${it.go}>${icon(it.icon)}${it.label}</button>
           `)}
@@ -4954,7 +4904,7 @@ class App extends Component {
       <span class="topbar__sep"></span>
       <a class="btn" href="film" target="_blank" title="Ouvrir la visionneuse publique du film (dernière playlist publiée)">${v.t('shell.seeFilm')} ${icon(ICON.external, 14)}</a>
       ${EMBEDDED && html`<button class="btn hdr-btn" onClick=${() => this.openWizard()}>${icon(ICON.play, 14)}${v.t('shell.broadcast')}<span class="hdr-tip hdr-tip-right">${v.t('hdr.broadcastTip')}</span></button>`}
-      <button class="btn btn--primary hdr-btn" onClick=${v.openPublish}>${icon(ICON.send, 14)}${v.t('shell.publish')}<span class="hdr-tip hdr-tip-right">${v.t('hdr.publish')}</span></button>
+      <button class=${'btn hdr-btn' + (st.view === 'campaignVideo' ? '' : ' btn--primary')} onClick=${v.openPublish}>${icon(ICON.send, 14)}${v.t('shell.publish')}<span class="hdr-tip hdr-tip-right">${v.t('hdr.publish')}</span></button>
       <div class="role-switch" title=${v.t('nav.uiLang')}>
         ${v.uiLangs.map((l) => html`<button key=${l.id} onClick=${l.pick} title=${l.label} class=${l.active ? 'is-on' : ''}>${l.short}</button>`)}
       </div>
@@ -6279,6 +6229,10 @@ class App extends Component {
   </div>
   `}
 
+  ${st.view === 'campaignVideo' && html`
+  <div class="app__body app__body--wide">${renderCampaignWizard(this)}</div>
+  `}
+
   ${v.isHomeView && html`
   <div class="app__body">
     <div style="display:flex;flex-direction:column;gap:18px;">
@@ -6316,12 +6270,12 @@ class App extends Component {
         </div>
       </div>
 
-      <!-- Assistant de diffusion : le parcours guidé de bout en bout -->
-      <button onClick=${() => this.openWizard()} style="width:100%;box-sizing:border-box;text-align:left;display:flex;align-items:center;gap:16px;padding:18px 22px;border-radius:12px;background:var(--accent);border:none;cursor:pointer;">
-        <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:10px;background:rgba(255,255,255,0.14);color:#fff;">${icon(ICON.play, 20)}</div>
+      <!-- Assistant vidéo de campagne : de la campagne du Marketing à la diffusion -->
+      <button data-cw-open onClick=${() => this.openWizard()} title=${v.t('hdr.broadcastTip')} style="width:100%;box-sizing:border-box;text-align:left;display:flex;align-items:center;gap:16px;padding:18px 22px;border-radius:12px;background:var(--accent);border:none;cursor:pointer;">
+        <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:8px;background:rgba(255,255,255,0.14);color:#fff;">${icon(ICON.play, 20)}</div>
         <div style="flex:1 1 auto;min-width:0;">
-          <div style="font-size:16px;font-weight:500;color:#fff;">Assistant de diffusion</div>
-          <div style="font-size:12.5px;color:rgba(255,255,255,0.82);margin-top:3px;line-height:1.45;">Créer un film (continu ou playlist) → contenu → écrans → aperçu → diffuser, avec le rapport. De bout en bout, guidé.</div>
+          <div style="font-size:16px;font-weight:400;color:#fff;">${v.t('home.cwTitle')}</div>
+          <div style="font-size:12.5px;color:rgba(255,255,255,0.82);margin-top:3px;line-height:1.45;">${v.t('home.cwSub')}</div>
         </div>
         <div style="font-size:22px;color:rgba(255,255,255,0.85);flex:0 0 auto;">→</div>
       </button>
@@ -7393,196 +7347,6 @@ class App extends Component {
       </div>
     </div>
   `}
-
-  ${st.wizard && (() => {
-    const wf = this.activeFilm();
-    const wc = wf.continuous || {};
-    // Éléments réellement disponibles pour chaque type de ratio (bibliothèque /
-    // catalogue / médiathèque agence / vidéos surprise). Liaison & animation sont
-    // GÉNÉRÉS (toujours dispo) ; produit, média et surprise dépendent du contenu.
-    const availProd = ((st.catalog && st.catalog.products) || []).filter((p) => p.active !== false && !p.unavailable).length;
-    const availMedia = (st.mediaLib || []).length;
-    const availSurprise = (st.surpriseVideos || []).length;
-    const ratioRows = [
-      { key: 'liaison', label: 'Liaison (logo)', gen: true },
-      { key: 'produitSeul', label: 'Produit seul', avail: availProd, unit: 'produit(s)' },
-      { key: 'media', label: 'Vidéo/photo ciblée', avail: availMedia, unit: 'média(s) agence' },
-      { key: 'animation', label: 'Animation promo', gen: true },
-      { key: 'surprise', label: 'Vidéo surprise', avail: availSurprise, unit: 'vidéo(s)' },
-    ];
-    const stores = st.fleet || [];
-    const targeted = wf.stores || [];
-    const inTarget = (id) => !targeted.length || targeted.includes(id);
-    const nScreens = stores.filter((s) => inTarget(s.id)).reduce((n, s) => n + (s.players || []).length, 0);
-    const done = st.wizDone;
-    const purl = this.filmUrl({ film: wf.id });
-    const previewSrc = purl + (purl.includes('?') ? '&' : '?') + '_=' + st.wizNonce;
-    const h2 = 'margin:0 0 6px;font-size:20px;font-weight:500;color:var(--ink);';
-    const sub = 'margin:0 0 20px;font-size:13.5px;color:var(--muted);';
-    const card = (on) => `flex:1 1 240px;text-align:left;padding:18px 20px;border-radius:12px;cursor:pointer;background:${on ? 'rgba(141,29,44,0.06)' : '#fff'};border:1.5px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};`;
-    const pill = (on) => `padding:9px 15px;font-size:13px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.16)'};background:${on ? '#8D1D2C' : '#fff'};color:${on ? '#fff' : '#232220'};`;
-    let body;
-    if (st.wizStep === 0) {
-      body = html`
-        <h2 style=${h2}>Quel type de film ?</h2>
-        <p style=${sub}>Le <strong>Continu</strong> se compose et se met à jour tout seul — recommandé. La <strong>Playlist</strong> est une séquence figée d'éléments que tu choisis.</p>
-        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:24px;">
-          <button onClick=${() => this.setFilmMode('continu')} style=${card(wf.mode === 'continu')}>
-            <div style="font-size:16px;font-weight:500;color:var(--ink);">Continu ${wf.mode === 'continu' ? html`<span style="color:var(--green);">✓</span>` : ''}</div>
-            <div style="margin-top:5px;font-size:12.5px;color:var(--muted);line-height:1.5;">Boucle générée automatiquement depuis le catalogue, les saisons et les moments. S'adapte seule.</div>
-          </button>
-          <button onClick=${() => this.setFilmMode('playlist')} style=${card(wf.mode === 'playlist')}>
-            <div style="font-size:16px;font-weight:500;color:var(--ink);">▤ Playlist ${wf.mode === 'playlist' ? html`<span style="color:var(--green);">✓</span>` : ''}</div>
-            <div style="margin-top:5px;font-size:12.5px;color:var(--muted);line-height:1.5;">Séquence figée : tu choisis les éléments et leur ordre.</div>
-          </button>
-        </div>
-        <label style="display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:6px;">Nom du film</label>
-        <input key=${'wn-' + wf.id} defaultValue=${wf.name} onChange=${(e) => this.wizName(e.target.value)} placeholder="ex. Boucle boutique" style="width:100%;max-width:420px;box-sizing:border-box;padding:11px 13px;font-size:15px;font-weight:500;border:1px solid var(--line);border-radius:10px;background:#fff;" />`;
-    } else if (st.wizStep === 1 && wf.mode === 'continu') {
-      body = html`
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-          <h2 style=${h2}>Contenu de la boucle</h2>
-          <button onClick=${() => this.wizExample()} style="padding:8px 14px;font-size:12.5px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">Réglages d'exemple</button>
-        </div>
-        <p style=${sub}>Les essentiels ci-dessous suffisent. Réglages fins (ratios, exceptions, durées) dans le Compositeur.</p>
-        <div style="display:flex;flex-direction:column;gap:18px;max-width:640px;">
-          <div>
-            <div style="font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:7px;">D'où viennent les fiches</div>
-            <div style="display:flex;gap:7px;flex-wrap:wrap;">
-              ${[['saison', 'Produits de saison'], ['tout', 'Tout le catalogue'], ['categories', 'Tout sauf catégories']].map(([id, lab]) => html`<button onClick=${() => this.updateContinuous({ source: id })} style=${pill(wc.source === id)}>${lab}</button>`)}
-            </div>
-          </div>
-          <div>
-            <div style="font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:7px;">Adapter au moment de la journée</div>
-            <div style="display:flex;gap:7px;">
-              <button onClick=${() => this.updateContinuous({ perMoment: true })} style=${pill(wc.perMoment !== false)}>Oui (matin/midi/aprem)</button>
-              <button onClick=${() => this.updateContinuous({ perMoment: false })} style=${pill(wc.perMoment === false)}>Non</button>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;">
-            <div style="font-size:12.5px;font-weight:500;color:var(--muted);">Nombre max de fiches</div>
-            <input type="number" min="4" max="40" defaultValue=${wc.maxItems || 12} key=${'wm-' + wf.id} onChange=${(e) => this.updateContinuous({ maxItems: parseInt(e.target.value, 10) || 12 })} style="width:80px;padding:8px 10px;font-size:14px;font-weight:500;text-align:right;border:1px solid var(--line);border-radius:8px;background:#fff;" />
-          </div>
-          <div>
-            <div style="display:flex;align-items:center;gap:7px;margin-bottom:7px;">
-              <span style="font-size:12.5px;font-weight:500;color:var(--muted);">Vitesse d'affichage</span>
-              ${infoTip('Durée d’affichage de chaque fiche produit (et, proportionnellement, des vidéos). Choix rapide : Lent laisse le temps de lire, Rapide enchaîne. Réglable finement dans le Compositeur.')}
-            </div>
-            <div style="display:flex;gap:7px;flex-wrap:wrap;">
-              ${[['Lent', 9, 16], ['Normal', 6, 12], ['Dynamique', 4, 8], ['Rapide', 3, 6]].map(([lab, pd, cd]) => html`<button onClick=${() => this.updateContinuous({ prodDur: pd, clipDur: cd })} style=${pill((wc.prodDur || 6) === pd)}>${lab} <span style="opacity:0.72;font-weight:400;">· ${pd}s</span></button>`)}
-            </div>
-          </div>
-          <div>
-            <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px;">
-              <span style="font-size:12.5px;font-weight:500;color:var(--muted);">Ratios par type d'élément · 1 : N (0 = jamais)</span>
-              ${infoTip('Dose le mélange de la boucle. « 1 : N » = un élément de ce type tous les N slots. Ex. Liaison 1:5 = un logo de transition toutes les 5 fiches ; Produit seul 1:6 = une fiche plein écran toutes les 6. 0 = ce type n’apparaît jamais. Le nombre d’éléments DISPONIBLES est indiqué à droite : un type sans élément (0) n’aura aucun effet même avec un ratio.')}
-            </div>
-            <div style="display:flex;flex-direction:column;gap:8px;">
-              ${ratioRows.map((r) => html`
-                <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;flex-wrap:wrap;">
-                  <span style="width:170px;color:var(--ink);font-weight:500;">${r.label}</span>
-                  <span style="color:var(--muted);">1 :</span>
-                  <input type="number" min="0" max="99" value=${(wc.ratios || {})[r.key] != null ? wc.ratios[r.key] : 0} onInput=${(e) => this.updateContRatio(r.key, e.target.value)} style="width:66px;padding:7px 9px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
-                  ${r.gen
-                    ? html`<span style="font-size:11.5px;color:var(--muted);">généré · toujours dispo</span>`
-                    : (r.avail > 0
-                      ? html`<span style="font-size:11.5px;font-weight:500;color:var(--green);">${r.avail} ${r.unit} dispo</span>`
-                      : html`<span style="font-size:11.5px;font-weight:500;color:var(--warn);">aucun ${r.unit} — sans effet</span>`)}
-                </label>`)}
-            </div>
-          </div>
-          <button onClick=${() => { this.setState({ wizard: false }); this.setView('composer'); }} style="align-self:flex-start;padding:8px 14px;font-size:12.5px;font-weight:500;color:var(--accent);background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:8px;cursor:pointer;">Réglages avancés dans le Compositeur ↗</button>
-        </div>`;
-    } else if (st.wizStep === 1) {
-      body = html`
-        <h2 style=${h2}>Éléments de la playlist</h2>
-        <p style=${sub}>Coche les éléments de la bibliothèque à inclure dans le film.</p>
-        ${(st.library || []).length ? html`
-          <div style="display:flex;flex-direction:column;gap:8px;max-width:640px;">
-            ${(st.library || []).map((mm) => { const on = (wf.items || []).includes(mm.id); return html`
-              <button onClick=${() => this.wizToggleItem(mm.id)} style="display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:10px;text-align:left;cursor:pointer;background:${on ? 'rgba(63,122,82,0.06)' : '#fff'};border:1px solid ${on ? 'rgba(63,122,82,0.4)' : 'rgba(35,34,32,0.12)'};">
-                <span style="width:22px;height:22px;flex:0 0 auto;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;background:${on ? '#2E6E4E' : 'rgba(35,34,32,0.08)'};color:${on ? '#fff' : '#8A847C'};">${on ? '✓' : ''}</span>
-                <span style="font-size:14px;font-weight:500;color:var(--ink);">${mm.name || 'Élément'}</span>
-                <span style="font-size:11.5px;color:var(--muted);">${mm.type || ''}</span>
-              </button>`; })}
-          </div>
-        ` : html`<div style="padding:16px;border-radius:12px;background:rgba(201,123,74,0.1);border:1px solid rgba(201,123,74,0.35);font-size:13px;color:var(--warn);">Aucun élément dans la bibliothèque. Crée-en dans le <button onClick=${() => { this.setState({ wizard: false }); this.setView('composer'); }} style="border:none;background:none;color:var(--accent);font-weight:500;cursor:pointer;text-decoration:underline;padding:0;">Compositeur</button>, puis reviens.</div>`}`;
-    } else if (st.wizStep === 2) {
-      body = html`
-        <h2 style=${h2}>Sur quels écrans ?</h2>
-        <p style=${sub}>Coche les magasins ciblés (<strong>aucun coché = tous les magasins</strong>). Une <strong>zone (groupe d'écrans)</strong> avec un filtre de catégories garde SON contenu propre ; les autres écrans du magasin reçoivent ce film.</p>
-        <div style="display:flex;flex-direction:column;gap:8px;max-width:660px;">
-          ${stores.map((s) => { const on = targeted.includes(s.id); return html`
-            <div>
-              <button onClick=${() => this.toggleFilmStore(s.id)} style="width:100%;box-sizing:border-box;display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:10px;text-align:left;cursor:pointer;background:${on ? 'rgba(141,29,44,0.06)' : '#fff'};border:1px solid ${on ? '#8D1D2C' : 'rgba(35,34,32,0.12)'};">
-                <span style="width:22px;height:22px;flex:0 0 auto;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;background:${on ? '#8D1D2C' : 'rgba(35,34,32,0.08)'};color:${on ? '#fff' : '#8A847C'};">${on ? '✓' : ''}</span>
-                <span style="flex:1 1 auto;font-size:14px;font-weight:500;color:var(--ink);">${s.store}</span>
-                <span style="font-size:11.5px;color:var(--muted);">${(s.players || []).length} écran(s)${s.format ? ` · ${s.format.label}` : ''}</span>
-              </button>
-              ${(s.groups || []).length ? html`
-                <div style="padding:5px 0 2px 34px;display:flex;flex-direction:column;gap:2px;">
-                  ${s.groups.map((g) => { const filt = (g.cats || []).length; return html`<div style="font-size:11.5px;color:var(--muted);">▦ <strong style="color:var(--muted-2);">${g.name}</strong> · ${filt ? html`<span style="color:var(--muted-2);">${filt} catégorie(s) — garde son contenu</span>` : 'suit ce film'}${g.format ? ` · ${g.format.label}` : ''}</div>`; })}
-                </div>
-              ` : ''}
-            </div>`; })}
-          ${!stores.length ? html`<div style="font-size:13px;color:var(--muted);">Aucun magasin. Branche un écran d'abord.</div>` : ''}
-        </div>
-        <div style="margin-top:14px;font-size:13px;font-weight:500;color:var(--accent);">${targeted.length ? `${targeted.length} magasin(s)` : 'Tous les magasins'} · ${nScreens} écran(s) ciblé(s)</div>`;
-    } else if (st.wizStep === 3) {
-      body = html`
-        <h2 style=${h2}>Aperçu du film</h2>
-        <p style=${sub}>Aperçu réel de « ${wf.name} » tel qu'il passera à l'écran (boucle générée par le serveur). Enregistré automatiquement en arrivant ici.</p>
-        <div style="border-radius:12px;overflow:hidden;border:1px solid var(--line);background:var(--ink);">
-          <iframe key=${'wprev-' + st.wizNonce} src=${previewSrc} title="Aperçu du film" style="display:block;width:100%;height:58vh;border:none;background:var(--ink);"></iframe>
-        </div>
-        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
-          <a href=${previewSrc} target="_blank" style="font-size:12.5px;font-weight:500;color:var(--accent);">↗ Ouvrir en plein écran</a>
-          <button onClick=${() => this.wizGo(3)} style="padding:4px 11px;font-size:12px;font-weight:500;color:var(--muted-2);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">⟳ Rafraîchir</button>
-        </div>`;
-    } else {
-      body = done ? html`
-        <div style="text-align:center;max-width:560px;margin:10px auto;">
-          <div style="font-size:44px;">🎉</div>
-          <h2 style="margin:8px 0 6px;font-size:22px;font-weight:500;color:var(--green);">Film diffusé sur le réseau</h2>
-          <p style=${sub}>« ${done.name} » · version v${done.version} · <strong>${done.playerCount} écran(s)</strong> · tests live <strong>${done.testsOk}/${done.testsTotal}</strong> OK.</p>
-          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:8px;">
-            <button onClick=${() => this.openReport()} style="padding:12px 20px;font-size:14px;font-weight:500;color:#fff;background:var(--accent);border:none;border-radius:12px;cursor:pointer;">📊 Ouvrir le rapport de diffusion</button>
-            <a href=${done.url} target="_blank" style="display:inline-flex;align-items:center;padding:12px 18px;font-size:13.5px;font-weight:500;color:var(--accent);background:#fff;border:1px solid rgba(141,29,44,0.3);border-radius:12px;">▶ Voir le film</a>
-            <button onClick=${() => this.closeWizard()} style="padding:12px 18px;font-size:13.5px;font-weight:500;color:var(--muted-2);background:#fff;border:1px solid var(--line);border-radius:12px;cursor:pointer;">Terminer</button>
-          </div>
-        </div>`
-        : html`
-        <h2 style=${h2}>Prêt à diffuser</h2>
-        <p style=${sub}>Vérifie le récapitulatif, puis lance la diffusion réelle sur les écrans ciblés.</p>
-        <div style="max-width:560px;display:flex;flex-direction:column;gap:10px;">
-          <div style="display:flex;justify-content:space-between;padding:12px 15px;border-radius:10px;background:#fff;border:1px solid var(--line);"><span style="color:var(--muted);">Film</span><strong>${wf.name} · ${wf.mode === 'continu' ? 'Continu' : 'Playlist'}</strong></div>
-          <div style="display:flex;justify-content:space-between;padding:12px 15px;border-radius:10px;background:#fff;border:1px solid var(--line);"><span style="color:var(--muted);">Écrans</span><strong>${targeted.length ? `${targeted.length} magasin(s)` : 'Tous les magasins'} · ${nScreens} écran(s)</strong></div>
-          <button onClick=${() => this.wizPublish()} disabled=${st.wizPublishing} style="margin-top:6px;padding:15px 22px;font-size:16px;font-weight:500;color:#fff;background:${st.wizPublishing ? '#B8B2A8' : '#8D1D2C'};border:none;border-radius:12px;cursor:${st.wizPublishing ? 'wait' : 'pointer'};">${st.wizPublishing ? 'Diffusion + tests live…' : 'Diffuser sur le réseau'}</button>
-          <p style="margin:2px 0 0;font-size:11.5px;color:var(--muted);">La publication est versionnée et testée automatiquement ; le rapport s'ouvre juste après.</p>
-        </div>`;
-    }
-    return html`
-      <div style="position:fixed;inset:0;background:var(--paper);z-index:40;display:flex;flex-direction:column;">
-        <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:15px 26px;background:#fff;border-bottom:1px solid var(--line);">
-          <div style="font-size:15px;font-weight:500;color:var(--ink);">${v.t('wiz.title')}</div>
-          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
-            ${WIZ_STEP_KEYS.map((key, i) => html`
-              ${i ? html`<span style="color:var(--faint);">→</span>` : ''}
-              <button onClick=${() => (i < st.wizStep || done ? this.wizGo(i) : null)} style="display:flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;border:1px solid ${i === st.wizStep ? '#8D1D2C' : 'rgba(35,34,32,0.14)'};background:${i === st.wizStep ? '#8D1D2C' : (i < st.wizStep ? 'rgba(63,122,82,0.1)' : '#fff')};color:${i === st.wizStep ? '#fff' : (i < st.wizStep ? '#2E6E4E' : '#8A847C')};cursor:${i < st.wizStep ? 'pointer' : 'default'};font-size:12px;font-weight:500;">
-                <span>${i < st.wizStep ? '✓' : (i + 1)}</span>${v.t(key)}
-              </button>`)}
-          </div>
-          <button onClick=${() => this.closeWizard()} style="padding:7px 13px;font-size:12.5px;font-weight:500;color:var(--muted);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${v.t('wiz.close')}</button>
-        </div>
-        <div style="flex:1 1 auto;overflow:auto;padding:28px 26px;">
-          <div style="max-width:940px;margin:0 auto;">${body}</div>
-        </div>
-        <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 26px;background:#fff;border-top:1px solid var(--line);">
-          <button onClick=${() => this.wizGo(st.wizStep - 1)} disabled=${st.wizStep === 0 || !!done} style="padding:11px 18px;font-size:13.5px;font-weight:500;border-radius:10px;cursor:${st.wizStep === 0 || done ? 'not-allowed' : 'pointer'};border:1px solid var(--line);background:#fff;color:${st.wizStep === 0 || done ? '#C9C3B8' : '#4A4640'};">← Retour</button>
-          ${st.wizStep < 4 ? html`<button onClick=${() => this.wizGo(st.wizStep + 1)} style="padding:11px 22px;font-size:13.5px;font-weight:500;border-radius:10px;cursor:pointer;border:none;background:var(--accent);color:#fff;">${st.wizStep === 3 ? 'Diffusion →' : 'Suivant →'}</button>` : html`<span></span>`}
-        </div>
-      </div>`;
-  })()}
 
   ${v.publishing && html`
     <div onClick=${v.closePublish} style="position:fixed;inset:0;background:rgba(35,34,32,0.55);z-index:20;display:flex;align-items:center;justify-content:center;padding:30px;">

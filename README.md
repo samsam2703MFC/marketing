@@ -167,8 +167,8 @@ elle en reprend les jetons de couleur, la coquille et le système de boutons
 (`public/css/regie.css`, source : dépôt `marketing`, `src/styles/global.css`).
 
 - **Seule** (`/signage/`, ouverte depuis le rail du cockpit) : barre latérale de 246 px — logo,
-  « Marketing en magasin », retour au module (`../marketing/`), bouton **Diffuser** (assistant),
-  puis les groupes *Diffusion* (Accueil, Compositeur, Planning, Réseau & supervision),
+  « Marketing en magasin », retour au module (`../marketing/`),
+  puis les groupes *Diffusion* (Accueil, Assistant vidéo de campagne, Compositeur, Planning, Réseau & supervision),
   *Contenus* (Produits, Périodes, Traductions, Médiathèque), *Campagnes* (Promotions, Campagnes) et
   *Réglages* (Paramètres, Mise en route, Rapport de diffusion).
 - **Dans le cadre du module** (`/marketing` → Marketing en magasin) : le menu du module est
@@ -273,6 +273,55 @@ positions fines (curseurs **et** glisser-déposer directement sur l'aperçu), pr
 durée par ligne, scope module / playlist). Annuler / rétablir (⌘Z / ⌘⇧Z), espace = lecture/pause.
 
 **Enregistrer** pousse le brouillon dans la base (`PUT /api/v1/draft`).
+
+### Assistant vidéo de campagne
+Il remplace l'ancien « Assistant de diffusion » (Accueil, menu *Diffusion*, bouton **Diffuser** du
+cadre Marketing) et en reprend tout : type de film (**continu** ou **film fixe**), contenu, écrans,
+aperçu, diffusion réelle et rapport. Sept étapes sur quatre écrans (maquette validée), l'aperçu du
+film à droite, rendu par le moteur des écrans (`renderer.js`) — en portrait, la dalle centrale.
+Code : `public/js/campaign-wizard.js` (écran), `server/campaign-video.js` (serveur).
+
+1. **Campagne** — lue dans le module Marketing (`/marketing`, même serveur) avec les cookies du
+   navigateur, comme l'ouverture sans mot de passe : la campagne **en cours** est prise d'office, celles
+   **à venir** sont proposées, et « Sans campagne — vidéo libre ». Marketing muet ou sans session :
+   c'est dit, la vidéo libre reste possible. Un film déjà créé pour la campagne est proposé à la reprise.
+2. **Produits** — ceux de l'offre, cochés d'office : rattachés par l'identifiant de l'ERP (référence
+   `erp-<id>` du catalogue du module → produit `pwp<id>` de la régie), à défaut par le nom. Prix de
+   **chaque** magasin (`sig_product_prices`), moments de vente (`sig_product_moments`), « pas vendu »
+   signalé, produits de la même catégorie suggérés, « + Ajouter un produit ». **Promotions et
+   bundles** de la caisse (`sig_bundles`, `sig_tfb_promos`) actifs pendant la période et portant sur ces
+   produits ; ceux de l'offre (même nom qu'une promotion du Marketing rattachée à la campagne, même
+   code de bon) cochés d'office ; ceux que le Marketing connaît mais pas la caisse sont nommés.
+3. **Quand** — période de la campagne, semaine type A–E, type (continu : la campagne une fois toutes
+   les 1/3, 1/6, 1/10 fiches de la boucle — une *suite* ; film fixe : la séquence seule), grille jours ×
+   moments (un moment où aucun produit retenu ne se vend est grisé, avec la raison).
+4. **Où** — chaque écran des magasins (`sig_players`, zones `sig_screen_groups`) : taille,
+   orientation, zone, en ligne ou non ; hors campagne décochés. Les boutiques du Marketing se
+   rattachent par leur identifiant ERP s'il est fourni (correspondance de l'import), sinon par le nom ;
+   une boutique non rattachée est nommée.
+5. **Catégorie et tags** — proposés d'après la campagne, les produits et la période, modifiables
+   (`sig_playlists.cat`, `sig_playlists.tags`).
+6. **Film** — modèle (offre + produits, plein écran photo, liste des prix), titre et accroche FR / NL
+   (circuit des Traductions : saisi = validé, ou proposé par Claude puis validé), durée 10/20/30 s, vidéo
+   de la médiathèque proposée en ouverture (mêmes produit, saison ou moment).
+7. **Diffuser** — vérifications (prix, néerlandais pour les magasins NL, produit retiré là où il n'est
+   pas vendu, écran hors ligne, fin automatique), planning de la journée type, « Enregistrer en
+   brouillon », « Voir le film », « Diffuser sur N écrans ».
+
+Ce qui est écrit : des éléments de la bibliothèque (liste de produits choisis un à un :
+`sig_modules.product_refs`, prix et vente de chaque magasin à la diffusion), le film
+(`sig_playlists.campaign_id`, `origin = 'assistant'`, choix de l'assistant dans `wizard`), la suite de
+la boucle. La diffusion passe par le **même** chemin que « Publier » (snapshot, tests live,
+`sig_publications`, rapport), restreint aux **écrans cochés** (les autres écrans d'un magasin gardent
+leur version), départ programmé si la campagne commence plus tard, cases de la semaine type, puis
+**fin automatique** à la date de fin (`sig_campaign_runs`, passe chaque minute) : chaque écran reprend
+sa version d'avant, le film quitte la semaine type. Après la diffusion, la section « Écrans des
+magasins » du fil de production de la campagne passe à « prête » — s'il n'y en a pas, c'est dit.
+
+Réglage : `SIG_MARKETING_API_URL` (base des routes du module ; défaut : `SIG_MARKETING_SSO_URL` sans
+`/session`). Routes du module lues : `GET /campaigns`, `/campaigns/{id}`, `/offer-items`,
+`/promotions`, `/bundles`, `/vouchers`, `/campaigns/{id}/production-sections` ; écrite :
+`PUT /campaigns/{id}/production-sections/ecrans`.
 
 ### Publication (versionnée, atomique) + tests live
 « Publier sur le réseau » crée un **snapshot** en base :
@@ -732,7 +781,7 @@ qui la portent restent visibles ; la liste ne peut pas être vidée.
 ## Tests
 
 ```bash
-npm test              # serveur jetable (BDD temporaire) + TFBuddy et Claude simulés + cycle complet — 85 tests
+npm test              # serveur jetable (BDD temporaire) + TFBuddy, Claude et Marketing simulés + cycle complet — 99 tests
 npm run test:live     # lecture seule contre http://localhost:8080 (ou BASE_URL / 1er argument)
 npm run test:live:full            # cycle complet contre l'instance courante (publie réellement)
 node test/live-test.js http://185.180.206.46/signage --password=… --mutate
@@ -758,6 +807,9 @@ session admin  : POST /api/v1/login · /logout · GET /me
                  GET /promo-types · PUT /promo-types (sous-types de promotion)
                  GET /campaigns · PUT /campaigns (campagnes marketing)
                  GET /bundles · POST /bundles/sync · PATCH /bundles/{id} (bundles TFBuddy)
+                 GET /campaign-video/campaigns · GET /campaign-video/campaigns/{id}
+                 POST /campaign-video/campaigns/{id}/screens-ready · POST /campaign-video/diffuse
+                 GET /campaign-video/films/{id}/runs · POST /campaign-video/sweep (vidéo de campagne)
                  PATCH /tfb-promos/{id} (autres promotions TFBuddy : X + Y, quantité, remises, bons)
                  PUT /tfb-badges (style des badges : famille TFBuddy → sous-type)
                  GET /translations?lang= · POST /translations/propose|validate|reject

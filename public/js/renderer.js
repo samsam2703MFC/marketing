@@ -191,6 +191,8 @@ export const moduleDur = (m, secPerLine) => {
   if (m.type === 'campagne') return m.dur > 0 ? m.dur : 8;
   if (m.type === 'html') return m.dur > 0 ? m.dur : 10;
   if (m.type === 'bundle') return m.dur > 0 ? m.dur : 9;
+  // Liste de produits d'une vidéo de campagne : sa durée est choisie (10/20/30 s).
+  if (m.type === 'category' && m.dur > 0 && Array.isArray(m.productRefs) && m.productRefs.length) return m.dur;
   return Math.max(1, activeItems(m).length) * secPerLine;
 };
 

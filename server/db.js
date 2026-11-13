@@ -239,6 +239,12 @@ function migrate(db) {
   // composée en direct depuis le catalogue + saisons + moments + tags).
   if (!plCols.includes('mode')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN mode TEXT NOT NULL DEFAULT 'playlist'`);
   if (!plCols.includes('continuous')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN continuous TEXT NOT NULL DEFAULT '{}'`);
+  // Assistant vidéo de campagne : le film garde le lien de sa campagne du
+  // module Marketing (son id), son origine et les choix de l'assistant (pour
+  // le reprendre plutôt que d'en créer un second).
+  if (!plCols.includes('campaign_id')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN campaign_id TEXT NOT NULL DEFAULT ''`);
+  if (!plCols.includes('origin')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN origin TEXT NOT NULL DEFAULT ''`);
+  if (!plCols.includes('wizard')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN wizard TEXT NOT NULL DEFAULT '{}'`);
   // Vocabulaire des moments unifié (matin/midi/aprem) : on réaligne les médias
   // historiquement tagués « soir » sur « aprem » (même créneau). No-op ensuite.
   try { db.exec(`UPDATE sig_media SET moment = 'aprem' WHERE moment = 'soir'`); } catch { /* table absente */ }
@@ -360,6 +366,9 @@ function migrate(db) {
   // Couleur de fond d'un élément (vidéo, fichier d'animation) : ce qu'on voit
   // autour du média quand il ne remplit pas l'écran. Vide = noir.
   if (!modCols2.includes('bg_color')) db.exec(`ALTER TABLE sig_modules ADD COLUMN bg_color TEXT NOT NULL DEFAULT ''`);
+  // Liste de produits choisis un à un (assistant vidéo de campagne) : les
+  // lignes viennent du catalogue, donc du prix de CHAQUE magasin.
+  if (!modCols2.includes('product_refs')) db.exec(`ALTER TABLE sig_modules ADD COLUMN product_refs TEXT NOT NULL DEFAULT '[]'`);
   // Reprise unique de l'ancien état « auto » (tous formats) : un écran est
   // portrait OU paysage. Un gabarit HTML retombe sur la forme de sa maquette,
   // le reste sur paysage (16:9, le format d'écran courant).
@@ -1602,6 +1611,24 @@ export function updateMediaTags(id, tags) {
   return true;
 }
 
+// Vidéo de campagne : une liste de produits choisis un à un ne montre, dans un
+// magasin, que ceux qu'il vend — un produit qui a des prix ailleurs mais pas
+// ici n'est pas vendu dans ce magasin, il est retiré de SES écrans.
+export function applyNotSoldHere(modules, storeId) {
+  if (!storeId) return;
+  const rows = getDb().prepare('SELECT product_id, store_id FROM sig_product_prices').all();
+  if (!rows.length) return;
+  const priced = new Map();
+  for (const r of rows) {
+    if (!priced.has(r.product_id)) priced.set(r.product_id, new Set());
+    priced.get(r.product_id).add(r.store_id);
+  }
+  for (const m of modules || []) {
+    if (!Array.isArray(m.productRefs) || !m.productRefs.length || !Array.isArray(m.items)) continue;
+    m.items = m.items.filter((it) => !(it && it.productId && priced.has(it.productId) && !priced.get(it.productId).has(storeId)));
+  }
+}
+
 // Prix par magasin : remplace le prix par défaut des items liés au catalogue.
 export function applyStorePrices(modules, storeId) {
   if (!storeId) return;
@@ -2337,7 +2364,7 @@ export function setTfbPromoImg(id, img) {
 // qu'elle a traduit (source) — d'où une ligne par version du texte.
 const TR_LABELS = {
   'product/name': 'nom de produit', 'category/name': 'nom de catégorie',
-  'module/name': 'titre à l\'écran', 'module/sub': 'accroche à l\'écran',
+  'module/name': 'titre à l\'écran', 'module/sub': 'accroche à l\'écran', 'module/tag': 'pastille à l\'écran',
   'campaign/name': 'nom de campagne', 'campaign/message': 'message de campagne', 'campaign/theme': 'thème de campagne',
   'promo_type/name': 'libellé de promotion', 'bundle/name': 'nom de bundle', 'bundle/descr': 'description de bundle',
   'item/name': 'ligne de liste',
@@ -2346,7 +2373,8 @@ const TR_LABELS = {
 // texte — la même ligne dans deux listes partage sa traduction.
 const itemRef = (text) => createHash('sha1').update(String(text || '').trim()).digest('hex').slice(0, 12);
 // Éléments dont le titre (et l'accroche) passent à l'écran.
-const TR_MODULE_TYPES = { category: ['name'], liaison: ['name', 'sub'], produit: ['name', 'sub'], animation: ['name', 'sub'], promotion: ['name', 'sub'] };
+// « tag » = le libellé de la pastille (ex. l'offre d'une vidéo de campagne).
+const TR_MODULE_TYPES = { category: ['name', 'tag'], liaison: ['name', 'sub'], produit: ['name', 'sub'], animation: ['name', 'sub'], promotion: ['name', 'sub'] };
 
 export function translationSources(lang) {
   const db = getDb();
@@ -2389,16 +2417,16 @@ export function translationSources(lang) {
     add('product', p.id, 'name', p.name, { context: cats.get(p.category_id) ? `catégorie « ${cats.get(p.category_id)} »` : '' });
   }
   const ownItems = db.prepare('SELECT name FROM sig_module_items WHERE module_id = ? ORDER BY position');
-  for (const m of db.prepare('SELECT id, type, name, sub, cat_ref, product_ref FROM sig_modules ORDER BY sort_order').all()) {
+  for (const m of db.prepare('SELECT id, type, name, sub, cat_ref, product_ref, product_refs, tag_enabled, tag_label FROM sig_modules ORDER BY sort_order').all()) {
     const fields = TR_MODULE_TYPES[m.type];
     if (!fields) continue;
     for (const f of fields) {
       // Le titre d'une liste liée à sa catégorie : c'est la traduction de la catégorie qui s'applique.
       if (f === 'name' && m.cat_ref && m.name === cats.get(m.cat_ref)) continue;
-      add('module', m.id, f, m[f], { where: `élément « ${m.name || m.type} »` });
+      add('module', m.id, f, f === 'tag' ? (m.tag_enabled ? m.tag_label : '') : m[f], { where: `élément « ${m.name || m.type} »` });
     }
     // Lignes propres à l'élément (liste non liée au catalogue).
-    if (!m.cat_ref && !m.product_ref) {
+    if (!m.cat_ref && !m.product_ref && (m.product_refs || '[]') === '[]') {
       for (const it of ownItems.all(m.id)) add('item', itemRef(it.name), 'name', it.name, { where: `liste « ${m.name || m.type} »` });
     }
   }
@@ -2544,6 +2572,10 @@ export function applyTranslations(modules, storeId) {
     }
     const sub = pick('module', m.id, 'sub', m.sub);
     if (sub) m.sub = sub;
+    if (m.tag && m.tag.enabled && m.tag.label) {
+      const tg = pick('module', m.id, 'tag', m.tag.label);
+      if (tg) m.tag = { ...m.tag, label: tg };
+    }
     if (m.campaign && m.campaign.id) {
       const c = { ...m.campaign };
       for (const f of ['name', 'message', 'theme']) { const t = pick('campaign', c.id, f, c[f]); if (t) c[f] = t; }
@@ -2717,6 +2749,7 @@ export function loadModules() {
   const promoTypes = new Map(db.prepare('SELECT * FROM sig_promo_types').all().map((t) => [t.id, t]));
   // Campagnes marketing résolues une fois (contenu déposé comme item).
   const campaigns = new Map(db.prepare('SELECT * FROM sig_campaigns').all().map((c) => [c.id, campaignRow(c)]));
+  const refsOf = (m) => { try { return cleanProductRefs(JSON.parse(m.product_refs || '[]')); } catch { return []; } };
   return mods.map((m) => {
     // Campagne : contenu porté par la campagne référencée (produit lié éventuel).
     const campaign = m.type === 'campagne' ? (campaigns.get(m.campaign_ref) || null) : null;
@@ -2727,6 +2760,9 @@ export function loadModules() {
       // Une campagne « produit » tire la photo/le prix du produit lié.
       const p = campaign.productRef ? oneProd.get(campaign.productRef) : null;
       items = p ? [prodItem(p)] : [];
+    } else if (refsOf(m).length) {
+      // Produits choisis un à un : dans leur ordre, depuis le catalogue.
+      items = refsOf(m).map((id) => oneProd.get(id)).filter(Boolean).map(prodItem);
     } else if (m.cat_ref) items = catProds.all(m.cat_ref).map(prodItem);
     else if (m.product_ref) {
       const p = oneProd.get(m.product_ref);
@@ -2750,6 +2786,7 @@ export function loadModules() {
       catRef: m.cat_ref || '',
       catImg: m.cat_ref ? ((db.prepare('SELECT img FROM sig_product_categories WHERE id = ?').get(m.cat_ref) || {}).img || '') : '',
       productRef: m.product_ref || '',
+      productRefs: refsOf(m),
       video: m.video || '',
       surprise: !!m.surprise,
       watermark: m.watermark || 'none',
@@ -2810,6 +2847,9 @@ export function loadPlaylists() {
     stores: JSON.parse(p.stores || '[]'),
     mode: p.mode === 'continu' ? 'continu' : 'playlist',
     continuous: (() => { try { return { ...continuousDefaults(), ...(JSON.parse(p.continuous || '{}') || {}) }; } catch { return continuousDefaults(); } })(),
+    campaignId: p.campaign_id || '',
+    origin: p.origin || '',
+    wizard: (() => { try { const w = JSON.parse(p.wizard || '{}'); return w && typeof w === 'object' && !Array.isArray(w) ? w : {}; } catch { return {}; } })(),
   }));
 }
 
@@ -2826,6 +2866,11 @@ export function loadPlaylist() {
   const act = activePlaylistId();
   const p = pls.find((x) => x.id === act) || pls[0];
   return p ? p.items : [];
+}
+
+// Liste de produits d'un élément (assistant vidéo de campagne) : ids uniques.
+function cleanProductRefs(v) {
+  return Array.isArray(v) ? [...new Set(v.map((x) => String(x || '').trim()).filter(Boolean))].slice(0, 40) : [];
 }
 
 export function saveDraft({ modules, playlist, playlists, activePlaylistId: activeId, secPerLine, loop }) {
@@ -2847,8 +2892,8 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
        tag_enabled, tag_label, tag_img, sched_days, sched_from, sched_to, pos, sort_order, lib_tag,
        cat_ref, product_ref, video, surprise, watermark, dur, promo_type, campaign_ref, bundle_ref, tfb_ref,
        orient, moments, html, html_vars, html_w, html_h,
-       anim_mode, anim_bg, anim_dim, anim_file, anim_fit, bg_color, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
+       anim_mode, anim_bg, anim_dim, anim_file, anim_fit, bg_color, product_refs, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
     const insItem = db.prepare(`INSERT INTO sig_module_items
       (module_id, position, name, price, img, src, active) VALUES (?, ?, ?, ?, ?, ?, ?)`);
     // Les types valides viennent de la table sig_element_types (rien en dur).
@@ -2881,10 +2926,11 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
         Math.max(0, Math.min(90, parseInt(m.animDim, 10) || 0)),
         String(m.animFile || ''),
         m.animFit === 'contain' ? 'contain' : 'cover',
-        /^#[0-9a-fA-F]{3,8}$/.test(String(m.bgColor || '')) ? m.bgColor : ''
+        /^#[0-9a-fA-F]{3,8}$/.test(String(m.bgColor || '')) ? m.bgColor : '',
+        JSON.stringify(cleanProductRefs(m.productRefs))
       );
       // Un élément lié au catalogue (ou une campagne, un bundle) ne stocke pas d'items propres.
-      if (!m.catRef && !m.productRef && m.type !== 'campagne' && m.type !== 'bundle') {
+      if (!m.catRef && !m.productRef && !cleanProductRefs(m.productRefs).length && m.type !== 'campagne' && m.type !== 'bundle') {
         (m.items || []).forEach((it, j) => insItem.run(
           m.id, j, String(it.name || ''), String(it.price || ''), String(it.img || ''),
           it.src === 'photo' ? 'photo' : 'illus', it.active ? 1 : 0
@@ -2892,7 +2938,7 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
       }
     });
     const validIds = new Set(modules.map((m) => m.id));
-    const insPls = db.prepare('INSERT INTO sig_playlists(id, name, sort_order, sched_days, sched_from, sched_to, stores, cat, tags, plan_days, mode, continuous) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    const insPls = db.prepare('INSERT INTO sig_playlists(id, name, sort_order, sched_days, sched_from, sched_to, stores, cat, tags, plan_days, mode, continuous, campaign_id, origin, wizard) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     const insIt = db.prepare('INSERT INTO sig_playlist_items(playlist_id, position, module_id) VALUES (?, ?, ?)');
     playlists.forEach((pl, i) => {
       const sched = pl.schedule || {};
@@ -2905,7 +2951,10 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
         JSON.stringify(Array.isArray(pl.tags) ? pl.tags.map(String).filter(Boolean) : []),
         JSON.stringify((Array.isArray(pl.planDays) && pl.planDays.length === 7 ? pl.planDays : [1, 1, 1, 1, 1, 1, 1]).map((d) => (d ? 1 : 0))),
         pl.mode === 'continu' ? 'continu' : 'playlist',
-        JSON.stringify(normContinuous(pl.continuous))
+        JSON.stringify(normContinuous(pl.continuous)),
+        String(pl.campaignId || '').slice(0, 40),
+        pl.origin === 'assistant' ? 'assistant' : '',
+        JSON.stringify(pl.wizard && typeof pl.wizard === 'object' && !Array.isArray(pl.wizard) ? pl.wizard : {}).slice(0, 200000)
       );
       (pl.items || []).filter((id) => validIds.has(id)).forEach((id, j) => insIt.run(String(pl.id), j, id));
     });

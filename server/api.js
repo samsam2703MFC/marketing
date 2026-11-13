@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import {
   getDb, getSetting, setSetting, getIntSetting,
   loadModules, loadPlaylist, loadPlaylists, activePlaylistId, saveDraft, storeFormat, DB_PATH,
-  loadElementTypes, loadCatalog, saveCatalog, applyStorePrices, applyStoreLang, applyStoreTokens, loadLangs,
+  loadElementTypes, loadCatalog, saveCatalog, applyStorePrices, applyNotSoldHere, applyStoreLang, applyStoreTokens, loadLangs,
   loadPromoTypes, savePromoTypes, loadCampaigns, saveCampaigns, applyHtmlVars,
   loadLibCategories, saveLibCategories, LIB_SOURCES, loadIngredients, saveIngredients,
   loadSequences, saveSequences, SEQ_PLACEMENTS,
@@ -26,6 +26,7 @@ import {
 import { tfbConfigured, tfbPublicConfig, fetchBundles, fetchPromotions, fetchShops, tfbAuthBackoff } from './tfbuddy.js';
 import { TRANSLATE_MODEL, translateConfigured, translationJob, startTranslationJob } from './translate.js';
 import { marketingSession } from './marketing-sso.js';
+import { marketingCampaigns, marketingCampaign, markScreensReady, diffuseFilm, sweepCampaignRuns, campaignRunsOf, ensureCampaignRuns } from './campaign-video.js';
 import { randomBytes } from 'node:crypto';
 import { httpsStatus } from './https-status.js';
 import { loginAllowed, loginFailed, loginSucceeded } from './auth.js';
@@ -393,6 +394,9 @@ export function startBundleSync() {
   startCatalogSync(() => scheduleMirror());
   // Médiathèque sur OVH : le bucket répond-il avec ces clés ? (dit dans la régie)
   if (s3Configured()) checkMediaStorage().then((r) => console.log(`  médiathèque OVH : ${r.ok ? 'bucket joignable ✓' : r.error}`)).catch(() => {});
+  // Vidéos de campagne : fin automatique à la date de fin (retour au film d'avant).
+  try { ensureCampaignRuns(); sweepCampaignRuns(); } catch (e) { console.error('[campagne] fin automatique :', e.message); }
+  setInterval(() => { try { sweepCampaignRuns(); } catch (e) { console.error('[campagne] fin automatique :', e.message); } }, 60000);
   if (!tfbConfigured()) return;
   setTimeout(() => { syncBundles().catch(() => {}); }, 15000);
   setInterval(() => { syncBundles().catch(() => {}); }, 30 * 60000);
@@ -455,6 +459,7 @@ function finishSnapshot(snap, storeId, date = new Date()) {
   applyBundles(snap, storeId, date);
   applyTfbPromos(snap, storeId, date);
   applyStoreUnavailable(snap, storeId, date);
+  applyNotSoldHere(snap.modules, storeId);
   applyStorePrices(snap.modules, storeId);
   // Traductions validées en régie, puis les noms de l'ERP (qui gardent la main).
   applyTranslations(snap.modules, storeId);
@@ -1698,6 +1703,37 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       });
       scheduleMirror();
       return send(200, out);
+    }
+
+    // ---- assistant vidéo de campagne ----------------------------------------
+    // Lecture du module Marketing (campagnes, offre, boutiques, promotions) avec
+    // les cookies du navigateur, puis diffusion par le même chemin que la régie.
+    if (req.method === 'GET' && path === '/campaign-video/campaigns') return send(200, await marketingCampaigns(req));
+    if (req.method === 'GET' && (mm = m(/^\/campaign-video\/campaigns\/([\w-]{1,40})$/))) {
+      const out = await marketingCampaign(req, mm[1]);
+      return send(out.ok ? 200 : (out.httpStatus === 404 ? 404 : 502), out);
+    }
+    if (req.method === 'POST' && (mm = m(/^\/campaign-video\/campaigns\/([\w-]{1,40})\/screens-ready$/))) {
+      const out = await markScreensReady(req, mm[1]);
+      return send(out.ok ? 200 : (out.missing ? 409 : 502), out);
+    }
+    if (req.method === 'GET' && (mm = m(/^\/campaign-video\/films\/([\w-]{1,80})\/runs$/))) return send(200, { runs: campaignRunsOf(mm[1]) });
+    // Passe de fin automatique à la demande (elle tourne aussi chaque minute).
+    // Une date « now » n'est acceptée qu'en démonstration / tests (SIG_DEMO=1).
+    if (req.method === 'POST' && path === '/campaign-video/sweep') {
+      const body = await readBody();
+      const at = process.env.SIG_DEMO === '1' && body.now && !Number.isNaN(Date.parse(body.now)) ? new Date(body.now) : new Date();
+      return send(200, { ok: true, done: sweepCampaignRuns(at) });
+    }
+    if (req.method === 'POST' && path === '/campaign-video/diffuse') {
+      const body = await readBody();
+      const out = await diffuseFilm({
+        filmId: String(body.filmId || ''), players: body.players, startsOn: body.startsOn, endsOn: body.endsOn,
+        week: body.week, cells: body.cells, campaignId: body.campaignId,
+        publish: (o) => publish({ ...o, baseUrl: `${ctx.selfBase(req)}/api/v1`, publicDir: ctx.publicDir }),
+      });
+      if (out.status === 200) scheduleMirror();
+      return send(out.status, out.json);
     }
 
     if (req.method === 'POST' && path === '/push-prices') {
