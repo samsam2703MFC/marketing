@@ -578,9 +578,23 @@ export function renderCampaignWizard(app) {
     const el = document.querySelector('.app__body'); if (el) el.scrollTop = 0;
   };
   const filmOk = !!(cw.titleFr || (M.camp && M.camp.name)) && (scenesOf(cw).length > 0 || cw.legacyFilm);
-  const canNext = scr === 0 ? !!cw.campaignId && !cw.detailBusy && (cw.products.length > 0 || cw.template === 'photo')
-    : scr === 1 ? M.playerIds.length > 0 && M.daysOn.some(Boolean)
-      : scr === FILM ? filmOk : true;
+  // Ce qui manque pour passer à l'étape suivante : dit en clair sous le bouton, jamais un bouton grisé muet.
+  const blockers = [];
+  if (scr === 0) {
+    if (!cw.campaignId) blockers.push(T('cw.blk.campaign'));
+    else if (cw.detailBusy) blockers.push(T('cw.blk.reading'));
+    else if (!(cw.products.length > 0 || cw.template === 'photo')) blockers.push(T('cw.blk.products'));
+  } else if (scr === 1) {
+    if (!M.daysOn.some(Boolean)) blockers.push(T('cw.blk.days'));
+    if (!M.playerIds.length) blockers.push(T(M.fleet.some((s) => (s.players || []).length) ? 'cw.blk.screens' : 'cw.blk.noFleet'));
+  } else if (scr === FILM) {
+    if (!(cw.titleFr || (M.camp && M.camp.name))) blockers.push(T('cw.blk.title'));
+    if (!(scenesOf(cw).length > 0 || cw.legacyFilm)) blockers.push(T('cw.blk.scenes'));
+  }
+  const canNext = !blockers.length && (scr !== FILM || filmOk);
+  const blockedTip = blockers.join(' · ');
+  const blockedNote = !canNext && blockers.length && !cw.done
+    ? html`<div class="cw-note cw-note--warn cw-blocked" role="status"><span>${T('cw.blk.title0')}</span><ul>${blockers.map((b) => html`<li>${b}</li>`)}</ul></div>` : '';
   const stepper = html`
     <ol class="cw-steps">
       ${CW_STEPS.map((k, i) => {
@@ -603,14 +617,14 @@ export function renderCampaignWizard(app) {
   else if (scr === FILM) {
     body = cw.legacyFilm && !scenesOf(cw).length
       ? html`${legacyNote(app, M)}${filmCard(app, M)}`
-      : html`${filmEditorCard(app, M, setCw, { back: () => go(scr - 1), backLabel, next: () => go(scr + 1), nextLabel, canNext })}${filmMetaCard(app, M)}`;
+      : html`${filmEditorCard(app, M, setCw, { back: () => go(scr - 1), backLabel, next: () => go(scr + 1), nextLabel, canNext, blockedTip })}${filmMetaCard(app, M)}`;
   } else body = html`${checksCard(app, M)}${planningCard(app, M)}`;
   const nScreens = M.chosen.length;
   const editorFoot = scr === FILM && !(cw.legacyFilm && !scenesOf(cw).length);
   const foot = cw.done || editorFoot ? null : html`
     <div class="cw-foot">
       <button type="button" class="btn" onClick=${() => (scr === 0 ? closeWizard(app) : go(scr - 1))}>${scr === 0 ? backLabel : `← ${backLabel}`}</button>
-      ${scr < LAST ? html`<button type="button" class="btn btn--primary" disabled=${!canNext} title=${canNext ? '' : T('cw.nextBlocked')} onClick=${() => go(scr + 1)}>${nextLabel} →</button>`
+      ${scr < LAST ? html`<button type="button" class="btn btn--primary" disabled=${!canNext} title=${canNext ? '' : blockedTip} onClick=${() => go(scr + 1)}>${nextLabel} →</button>`
         : html`<span class="cw-foot__group">
             <button type="button" class="btn" disabled=${!!cw.busy} onClick=${() => saveDraftOnly(app, M)}>${cw.busy === 'save' ? T('cw.saving') : T('cw.saveDraft')}</button>
             <button type="button" class="btn" disabled=${!!cw.busy} onClick=${() => viewFilm(app, M)}>${T('cw.viewFilm')} ↗</button>
@@ -622,7 +636,7 @@ export function renderCampaignWizard(app) {
     <div class=${'cw' + (scr === FILM ? ' cw--film' : '')}>
       <div class="cw-head">${stepper}</div>
       <div class="cw-body">
-        <div class="cw-main">${body}${cw.error ? html`<div class="cw-note cw-note--err">${cw.error}</div>` : ''}${foot}</div>
+        <div class="cw-main">${body}${cw.error ? html`<div class="cw-note cw-note--err">${cw.error}</div>` : ''}${blockedNote}${foot}</div>
         <aside class="cw-side">${aside}</aside>
       </div>
     </div>`;
@@ -841,6 +855,7 @@ function whereCard(app, M) {
   const stores = [...M.fleet].sort((a, b) => Number(M.campStores.has(b.id)) - Number(M.campStores.has(a.id)));
   const ago = (p) => { const s = p.syncAgo; if (s == null || s >= 999999) return T('cw.where.never'); const dd = Math.floor(s / 86400); return dd >= 1 ? T('cw.where.offDays', { n: dd }) : T('cw.where.offHours', { n: Math.max(1, Math.floor(s / 3600)) }); };
   return card(4, T('cw.step.where'), M.camp ? T('cw.where.aside') : '', html`
+    ${!stores.length ? html`<div class="cw-note cw-note--warn">${T('cw.blk.noFleet')}</div>` : ''}
     <div class="cw-stores">
       ${stores.map((s) => {
         const ps = s.players || [];
@@ -850,12 +865,13 @@ function whereCard(app, M) {
         const groupOf = (gid) => (s.groups || []).find((g) => g.id === gid);
         return html`<div class=${'cw-store' + (some ? ' is-on' : '')} key=${s.id}>
           <div class="cw-store__h">
-            <button type="button" class="cw-tick" onClick=${() => toggleStore(s)} disabled=${!ps.length}>${box(on)}</button>
-            <span class="cw-store__name">${s.store}</span>
+            <button type="button" class="cw-tick" onClick=${() => toggleStore(s)} disabled=${!ps.length} title=${ps.length ? '' : T('cw.where.noScreenTip')}>${box(on)}</button>
+            <span class="cw-store__name" role=${ps.length ? 'button' : null} style=${ps.length ? 'cursor:pointer' : ''} onClick=${() => ps.length && toggleStore(s)}>${s.store}</span>
             ${M.d && !M.campStores.has(s.id) ? chip(T('cw.where.outside')) : ''}
             ${s.lang === 'nl' ? chip('NL') : ''}
-            ${ps.length ? chip(T('cw.where.online', { a: onlineN, b: ps.length }), onlineN === ps.length ? 'ok' : 'gold') : chip(T('cw.where.noScreen'))}
+            ${ps.length ? chip(T('cw.where.online', { a: onlineN, b: ps.length }), onlineN === ps.length ? 'ok' : 'gold') : chip(T('cw.where.noScreen'), 'warn')}
           </div>
+          ${!ps.length ? html`<div class="cw-store__vide">${T('cw.where.noScreenTip')}</div>` : ''}
           ${ps.map((p) => {
             const g = groupOf(p.groupId);
             const fmt = g ? g.format : s.format;

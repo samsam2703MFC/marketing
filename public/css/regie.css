@@ -210,6 +210,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .cw-dot--grey { background: var(--faint); }
 .cw-note { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--table-head); border-radius: 8px; padding: 10px 12px; color: var(--muted-2); font-size: 12.5px; margin-top: 12px; }
 .cw-note--warn { background: #FBF3E4; color: #7A5207; }
+.cw-blocked { display: block; }
+.cw-blocked ul { margin: 4px 0 0; padding-left: 18px; }
+.cw-store__vide { font-size: 12px; color: #7A5207; padding: 2px 0 4px 34px; }
 .cw-note--err { background: rgba(179, 38, 30, 0.08); color: var(--danger); }
 .cw-note--acc { background: #F6EDEE; color: var(--accent); }
 .cw-muted { color: var(--muted); }

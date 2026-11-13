@@ -311,7 +311,7 @@ export function filmEditorCard(app, M, setCw, nav) {
       <span class="cw-foot__group">
         <button type="button" class="btn" disabled=${!scene} onClick=${dupScene}>${T('fe.dupScene')}</button>
         <button type="button" class="btn" disabled=${!scenes.length || !!(cw.exportJob && cw.exportJob.running)} onClick=${() => setCw(app, { exportOpen: !cw.exportOpen })}>${T('fe.export')}</button>
-        <button type="button" class="btn btn--primary" disabled=${!nav.canNext} title=${nav.canNext ? '' : T('cw.nextBlocked')} onClick=${nav.next}>${nav.nextLabel} →</button>
+        <button type="button" class="btn btn--primary" disabled=${!nav.canNext} title=${nav.canNext ? '' : (nav.blockedTip || T('cw.nextBlocked'))} onClick=${nav.next}>${nav.nextLabel} →</button>
       </span>
     </div>`;
 }
