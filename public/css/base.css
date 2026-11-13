@@ -27,6 +27,13 @@
   font-weight: 400; font-style: normal; font-display: swap;
   unicode-range: U+0020-007E;
 }
+/* Manuscrite des scènes de film (éditeur du film) : Playwrite DEVA (Google
+   Fonts, licence OFL), reprise des polices du module Marketing. */
+@font-face {
+  font-family: 'Playwrite DEVA';
+  src: url('../fonts/PlaywriteDEVA-Regular.ttf') format('truetype');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
 
 html, body {
   margin: 0; padding: 0;

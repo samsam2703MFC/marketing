@@ -26,6 +26,7 @@ import {
 import { tfbConfigured, tfbPublicConfig, fetchBundles, fetchPromotions, fetchShops, tfbAuthBackoff } from './tfbuddy.js';
 import { TRANSLATE_MODEL, translateConfigured, translationJob, startTranslationJob } from './translate.js';
 import { marketingSession } from './marketing-sso.js';
+import { marketingLibrary, webshopPhotos, relayFile, importFilmMedia, cutoutMedia } from './film-media.js';
 import { marketingCampaigns, marketingCampaign, markScreensReady, diffuseFilm, sweepCampaignRuns, campaignRunsOf, ensureCampaignRuns } from './campaign-video.js';
 import { randomBytes } from 'node:crypto';
 import { httpsStatus } from './https-status.js';
@@ -1734,6 +1735,28 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       });
       if (out.status === 200) scheduleMirror();
       return send(out.status, out.json);
+    }
+
+    // ---- éditeur du film : médias pris au Marketing / au webshop -------------
+    // Lus avec les cookies du navigateur (module Marketing et son Social) ;
+    // copiés dans la médiathèque de la régie au moment de l'ajout.
+    if (req.method === 'GET' && path === '/film-media/marketing') return send(200, await marketingLibrary(req, url.searchParams));
+    if (req.method === 'GET' && path === '/film-media/webshop') return send(200, await webshopPhotos(req));
+    if (req.method === 'GET' && path === '/film-media/file') { await relayFile(req, res, url.searchParams); return undefined; }
+    if (req.method === 'POST' && path === '/film-media/import') {
+      try {
+        const out = await importFilmMedia(req, MEDIA_DIR, await readBody());
+        if (out.status === 200) scheduleMirror();
+        return send(out.status, { ...out.json, ...(out.status === 200 ? { mediaLib: mediaList() } : {}) });
+      } catch (e) { return send(e.status || 502, { error: String(e.message || e) }); }
+    }
+    if (req.method === 'POST' && path === '/film-media/cutout') {
+      try {
+        const body = await readBody();
+        const out = await cutoutMedia(req, MEDIA_DIR, body.mediaId);
+        if (out.status === 200) scheduleMirror();
+        return send(out.status, { ...out.json, ...(out.status === 200 ? { mediaLib: mediaList() } : {}) });
+      } catch (e) { return send(e.status || 502, { error: String(e.message || e) }); }
     }
 
     if (req.method === 'POST' && path === '/push-prices') {

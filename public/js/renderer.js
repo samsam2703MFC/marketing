@@ -1,27 +1,11 @@
 // Rendu signage partagé — utilisé par l'aperçu du back office ET par le player.
 // Port fidèle du moteur de la maquette (écran virtuel 6480 × 3840, 3 dalles).
 import { mountLottie } from './lottie-host.js';
-export const RUBY = '#8D1D2C';
-export const INK = '#232220';
-
-// Palette de la marque — SOURCE UNIQUE des couleurs proposées en régie (fonds
-// d'écran, listes de choix…). Les valeurs sont celles déjà utilisées partout
-// dans le rendu et dans le back office : ajouter une teinte ici la rend
-// disponible d'un coup dans toutes les listes de couleurs.
-export const BRAND_COLORS = [
-  { id: 'noir', name: 'Noir', hex: '#000000' },
-  { id: 'encre', name: 'Encre', hex: '#232220' },
-  { id: 'rubis', name: 'Rubis', hex: '#8D1D2C' },
-  { id: 'terre', name: 'Terre', hex: '#6E4A2B' },
-  { id: 'caramel', name: 'Caramel', hex: '#C97B4A' },
-  { id: 'or', name: 'Or', hex: '#B8860B' },
-  { id: 'vert', name: 'Vert', hex: '#2E6E4E' },
-  { id: 'gris', name: 'Gris', hex: '#8A847C' },
-  { id: 'lin', name: 'Lin', hex: '#E7E1D8' },
-  { id: 'sable', name: 'Sable', hex: '#EFE9E0' },
-  { id: 'creme', name: 'Crème', hex: '#FBF8F2' },
-  { id: 'blanc', name: 'Blanc', hex: '#FFFFFF' },
-];
+// Couleurs de la marque : source unique dans palette.js (lue aussi par le
+// moteur des scènes, scenes.js, et côté serveur).
+import { RUBY, INK, BRAND_COLORS, STAGE_BG } from './palette.js';
+import { paintScenes, scenesDuration } from './scenes.js';
+export { RUBY, INK, BRAND_COLORS, STAGE_BG };
 export const brandColorName = (hex) => (BRAND_COLORS.find((c) => c.hex.toLowerCase() === String(hex || '').toLowerCase()) || {}).name || '';
 export const FVANK = "'Vank','Gotham'";
 export const FUI = "'Gotham'";
@@ -180,6 +164,7 @@ export const playable = (m) => {
   if (!m) return false;
   if (m.type === 'category') return activeItems(m).length > 0;
   if (m.type === 'bundle') return !!m.bundle && (m.items || []).length > 0;
+  if (m.type === 'scenes') return Array.isArray(m.scenes) && m.scenes.length > 0;
   return true;
 };
 export const moduleDur = (m, secPerLine) => {
@@ -191,6 +176,8 @@ export const moduleDur = (m, secPerLine) => {
   if (m.type === 'campagne') return m.dur > 0 ? m.dur : 8;
   if (m.type === 'html') return m.dur > 0 ? m.dur : 10;
   if (m.type === 'bundle') return m.dur > 0 ? m.dur : 9;
+  // Film en scènes (éditeur du film) : la somme des durées de ses scènes.
+  if (m.type === 'scenes') return Math.max(1, scenesDuration(m.scenes) || 8);
   // Liste de produits d'une vidéo de campagne : sa durée est choisie (10/20/30 s).
   if (m.type === 'category' && m.dur > 0 && Array.isArray(m.productRefs) && m.productRefs.length) return m.dur;
   return Math.max(1, activeItems(m).length) * secPerLine;
@@ -325,6 +312,17 @@ function renderModuleInner(h, m, lt, opts) {
     tag.img ? h('img', { src: tag.img, alt: '', style: { width: 150, height: 150, objectFit: 'contain', filter: 'brightness(0) invert(1)' } }) : null,
     h('span', { style: { fontFamily: FVANK, fontWeight: 400, fontSize: 130, letterSpacing: '0.02em', textTransform: 'uppercase', lineHeight: 1 } }, tag.label || ''));
   };
+
+  // ---- Film en scènes : dessiné par le moteur des scènes (scenes.js), le même
+  // que l'éditeur du film et que l'export vidéo. Le canvas se pose sur la
+  // partie visible du canevas (bande 16:9 en paysage, dalle 9:16 en portrait).
+  if (m.type === 'scenes') {
+    return [h('div', {
+      key: 'scenes-' + m.id,
+      ref: (el) => { if (el) paintScenes(el, m, lt, W, H); },
+      style: { position: 'absolute', inset: 0, background: ((m.scenes || [])[0] || {}).bg || STAGE_BG, overflow: 'hidden' },
+    }, h('canvas', { style: { position: 'absolute', display: 'block' } }))];
+  }
 
   if (m.type === 'liaison') {
     const dur = moduleDur(m, secPerLine);
