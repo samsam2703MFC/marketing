@@ -2698,6 +2698,7 @@ class App extends Component {
     return [
       { label: '55″ TV · 16:9 (standard)', sub: '3840 × 2160 · remplir', url: this.filmUrl({ w: 3840, h: 2160 }) },
       { label: '55″ portrait · 9:16', sub: '2160 × 3840 · dalle centrale du mur', url: this.filmUrl({ w: 2160, h: 3840 }) },
+      { label: 'Affiche A1 · portrait', sub: '594 × 841 mm (2970 × 4205) · mise en page portrait', url: this.filmUrl({ w: 2970, h: 4205 }) },
       { label: 'Full HD · 16:9', sub: '1920 × 1080 · remplir', url: this.filmUrl({ w: 1920, h: 1080 }) },
       { label: 'Mur 3 dalles · natif', sub: '6480 × 3840', url: this.filmUrl({ w: 6480, h: 3840 }) },
       { label: 'Auto (fenêtre)', sub: 's’adapte au navigateur · letterbox', url: this.filmUrl() },

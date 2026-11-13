@@ -34,6 +34,7 @@ const filmApi = () => {
 const PRESETS = [
   { id: 'tv55', label: '55″ TV · 16:9', w: 3840, h: 2160 },
   { id: 'tv55p', label: '55″ portrait · 9:16', w: 2160, h: 3840 },
+  { id: 'a1', label: 'Affiche A1 · 594 × 841 mm', w: 2970, h: 4205 },
   { id: 'fhd', label: 'Full HD · 16:9', w: 1920, h: 1080 },
   { id: 'wall', label: 'Mur 3 dalles · natif', w: 6480, h: 3840 },
 ];

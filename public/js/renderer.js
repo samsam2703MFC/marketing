@@ -297,8 +297,11 @@ function renderModuleInner(h, m, lt, opts) {
   opts = opts || {};
   const secPerLine = opts.secPerLine || 4;
   const kids = [];
-  kids.push(h('div', { key: 's1', style: { position: 'absolute', left: SCREEN, top: 0, width: 2, height: H, background: 'rgba(35,34,32,0.07)' } }));
-  kids.push(h('div', { key: 's2', style: { position: 'absolute', left: SCREEN * 2, top: 0, width: 2, height: H, background: 'rgba(35,34,32,0.07)' } }));
+  // Joints des trois dalles du mur : pas sur un écran portrait seul (ni une affiche).
+  if (!opts.portrait) {
+    kids.push(h('div', { key: 's1', style: { position: 'absolute', left: SCREEN, top: 0, width: 2, height: H, background: 'rgba(35,34,32,0.07)' } }));
+    kids.push(h('div', { key: 's2', style: { position: 'absolute', left: SCREEN * 2, top: 0, width: 2, height: H, background: 'rgba(35,34,32,0.07)' } }));
+  }
   const tag = m.tag && m.tag.enabled ? m.tag : null;
   const tagEl = () => {
     if (!tag) return null;
