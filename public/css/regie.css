@@ -212,7 +212,24 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .cw-note--warn { background: #FBF3E4; color: #7A5207; }
 .cw-blocked { display: block; }
 .cw-blocked ul { margin: 4px 0 0; padding-left: 18px; }
-.cw-store__vide { font-size: 12px; color: #7A5207; padding: 2px 0 4px 34px; }
+.cw-store__vide { font-size: 12px; color: var(--muted-2); padding: 4px 0 4px 34px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: space-between; }
+.cw-blocked__go { all: unset; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.cw-blocked__go:hover { color: var(--accent, #8D1D2C); }
+@keyframes cw-flash { 0% { box-shadow: 0 0 0 3px rgba(141, 29, 44, .45); } 100% { box-shadow: 0 0 0 3px rgba(141, 29, 44, 0); } }
+.cw-flash > .cw-card { animation: cw-flash 1.6s ease-out; border-radius: 12px; }
+.cw-modal { position: fixed; inset: 0; z-index: 70; background: rgba(28, 26, 23, .35); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.cw-modal__box { background: #fff; border: 1px solid var(--line); border-radius: 12px; width: min(620px, 100%); max-height: 90vh; overflow: auto; padding: 18px 20px; display: grid; gap: 14px; }
+.cw-modal__h { display: flex; justify-content: space-between; align-items: center; font-size: 16px; }
+.cw-modal__f { display: flex; justify-content: flex-end; gap: 8px; }
+.cw-br { margin: 0; padding-left: 20px; display: grid; gap: 14px; font-size: 13px; }
+.cw-br b { font-weight: 500; }
+.cw-br__lien { display: flex; gap: 14px; margin-top: 8px; align-items: flex-start; }
+.cw-br__lien img { width: 128px; height: 128px; border: 1px solid var(--line); border-radius: 8px; flex: 0 0 auto; }
+.cw-br__url { display: grid; gap: 8px; min-width: 0; flex: 1; }
+.cw-br__url input { font-family: ui-monospace, monospace; font-size: 11.5px; width: 100%; }
+.cw-br__url span { display: flex; gap: 6px; flex-wrap: wrap; }
+.cw-br__test { display: flex; gap: 10px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+.cw-ok { color: var(--green, #3f7a52); }
 .cw-note--err { background: rgba(179, 38, 30, 0.08); color: var(--danger); }
 .cw-note--acc { background: #F6EDEE; color: var(--accent); }
 .cw-muted { color: var(--muted); }

@@ -1729,7 +1729,7 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
     if (req.method === 'POST' && path === '/campaign-video/diffuse') {
       const body = await readBody();
       const out = await diffuseFilm({
-        filmId: String(body.filmId || ''), players: body.players, startsOn: body.startsOn, endsOn: body.endsOn,
+        filmId: String(body.filmId || ''), players: body.players, stores: body.stores, startsOn: body.startsOn, endsOn: body.endsOn,
         week: body.week, cells: body.cells, campaignId: body.campaignId,
         publish: (o) => publish({ ...o, baseUrl: `${ctx.selfBase(req)}/api/v1`, publicDir: ctx.publicDir }),
       });

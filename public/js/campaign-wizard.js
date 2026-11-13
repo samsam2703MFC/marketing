@@ -20,6 +20,7 @@ import { W, H, SCREEN, renderModule, newTag, newPos, tfbPromoLabel } from './ren
 import { continuousDefaults, normContinuous } from './continuous.js';
 import { filmEditorCard, filmEditorPanel, seedScenes, scenesOf, previewItems } from './film-editor.js';
 import { normScenes, scenesDuration } from './scenes.js';
+import { qrSvg } from './vendor/qr.js';
 
 const apiUrl = (p) => new URL('api/v1' + p, location.href).toString();
 async function api(method, path, body) {
@@ -228,7 +229,13 @@ function model(app) {
   const playerIds = cw.playersTouched ? cw.players
     : fleet.filter((s) => campStores.has(s.id)).flatMap((s) => (s.players || []).map((p) => p.id));
   const chosenPlayers = new Set(playerIds);
-  const storesChosen = fleet.filter((s) => (s.players || []).some((p) => chosenPlayers.has(p.id)));
+  // Magasins sans écran jumelé : ils diffusent par le lien de leur écran (film?store=…).
+  // Cochés d'office quand ils sont dans la campagne, jusqu'au premier changement à la main.
+  const sansEcran = (s) => !(s.players || []).length;
+  const linkStores = (cw.linkTouched ? (cw.linkStores || []) : fleet.filter((s) => campStores.has(s.id) && sansEcran(s)).map((s) => s.id))
+    .filter((id) => fleet.some((s) => s.id === id && sansEcran(s)));
+  const linkSet = new Set(linkStores);
+  const storesChosen = fleet.filter((s) => (s.players || []).some((p) => chosenPlayers.has(p.id)) || linkSet.has(s.id));
   const selProds = cw.products.map((id) => prodById.get(id)).filter(Boolean);
   // Prix d'un produit dans un magasin : celui de la caisse (TFBuddy), sinon rien.
   const priced = (p) => Object.keys(p.prices || {}).length > 0;
@@ -287,7 +294,7 @@ function model(app) {
   if (camp && camp.objective) suggestions.push(slug(camp.objective));
   const sugg = [...new Set(suggestions)].filter((s) => s && !tags.includes(s));
   return {
-    st, cw, T, lang, playerIds, prods, cats, prodById, catName, soldAt, d, camp, fleet, campStores, storesChosen, selProds,
+    st, cw, T, lang, playerIds, linkStores, linkSet, prods, cats, prodById, catName, soldAt, d, camp, fleet, campStores, storesChosen, selProds,
     priceIn, soldIn, priced, priceStores, momentOk, gridOn, daysOn, momentsOn, promoList, offerKeys,
     players, chosen, portraitN, offline, nlStores, media, opening, seasons, tags, sugg,
   };
@@ -366,7 +373,7 @@ function buildFilm(app, M) {
   const seqId = cw.mode === 'continu' ? (cw.seqId || ('sq' + filmId)) : '';
   const choices = {
     campaignId: cw.campaignId, products: cw.products, promos: cw.promos, from: cw.from, to: cw.to, week: cw.week, mode: cw.mode,
-    ratio: cw.ratio, grid: M.gridOn, gridTouched: true, players: M.playerIds, playersTouched: true, cat: cw.cat, tags: M.tags, tagsTouched: true,
+    ratio: cw.ratio, grid: M.gridOn, gridTouched: true, players: M.playerIds, playersTouched: true, linkStores: M.linkStores, linkTouched: true, cat: cw.cat, tags: M.tags, tagsTouched: true,
     template: cw.template, titleFr: cw.titleFr, titleNl: cw.titleNl, hookFr: cw.hookFr, hookNl: cw.hookNl, dur: cw.dur,
     opening: M.opening ? M.opening.id : '', openingOff: cw.openingOff, detail: cw.detail,
     scenes, nl: cw.nl || {}, orient: cw.orient,
@@ -513,7 +520,7 @@ async function diffuse(app, M) {
     const cells = [];
     M.gridOn.forEach((row, d) => row.forEach((on, i) => { if (on) cells.push({ day: d, moment: MOMENTS[i] }); }));
     const out = await api('POST', '/campaign-video/diffuse', {
-      filmId: built.film.id, players: M.playerIds, startsOn: M.cw.from, endsOn: M.cw.to, week: M.cw.week, cells,
+      filmId: built.film.id, players: M.playerIds, stores: M.linkStores, startsOn: M.cw.from, endsOn: M.cw.to, week: M.cw.week, cells,
       campaignId: M.cw.campaignId === 'libre' ? '' : M.cw.campaignId,
     });
     let ready = null;
@@ -581,20 +588,23 @@ export function renderCampaignWizard(app) {
   // Ce qui manque pour passer à l'étape suivante : dit en clair sous le bouton, jamais un bouton grisé muet.
   const blockers = [];
   if (scr === 0) {
-    if (!cw.campaignId) blockers.push(T('cw.blk.campaign'));
-    else if (cw.detailBusy) blockers.push(T('cw.blk.reading'));
-    else if (!(cw.products.length > 0 || cw.template === 'photo')) blockers.push(T('cw.blk.products'));
+    if (!cw.campaignId) blockers.push({ t: T('cw.blk.campaign'), go: 'campaign' });
+    else if (cw.detailBusy) blockers.push({ t: T('cw.blk.reading') });
+    else if (!(cw.products.length > 0 || cw.template === 'photo')) blockers.push({ t: T('cw.blk.products'), go: 'products' });
   } else if (scr === 1) {
-    if (!M.daysOn.some(Boolean)) blockers.push(T('cw.blk.days'));
-    if (!M.playerIds.length) blockers.push(T(M.fleet.some((s) => (s.players || []).length) ? 'cw.blk.screens' : 'cw.blk.noFleet'));
+    if (!M.daysOn.some(Boolean)) blockers.push({ t: T('cw.blk.days'), go: 'when' });
+    if (!M.playerIds.length && !M.linkStores.length) blockers.push({ t: T('cw.blk.screens'), go: 'where' });
   } else if (scr === FILM) {
-    if (!(cw.titleFr || (M.camp && M.camp.name))) blockers.push(T('cw.blk.title'));
-    if (!(scenesOf(cw).length > 0 || cw.legacyFilm)) blockers.push(T('cw.blk.scenes'));
+    if (!(cw.titleFr || (M.camp && M.camp.name))) blockers.push({ t: T('cw.blk.title'), go: 'filmmeta' });
+    if (!(scenesOf(cw).length > 0 || cw.legacyFilm)) blockers.push({ t: T('cw.blk.scenes') });
   }
   const canNext = !blockers.length && (scr !== FILM || filmOk);
-  const blockedTip = blockers.join(' · ');
+  const blockedTip = blockers.map((b) => b.t).join(' · ');
+  // Un clic sur un problème mène là où il se règle (la carte, mise en évidence).
+  const allerA = (id) => { const el = document.getElementById('cw-' + id); if (!el) return; el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.classList.remove('cw-flash'); void el.offsetWidth; el.classList.add('cw-flash'); };
   const blockedNote = !canNext && blockers.length && !cw.done
-    ? html`<div class="cw-note cw-note--warn cw-blocked" role="status"><span>${T('cw.blk.title0')}</span><ul>${blockers.map((b) => html`<li>${b}</li>`)}</ul></div>` : '';
+    ? html`<div class="cw-note cw-note--warn cw-blocked" role="status"><span>${T('cw.blk.title0')}</span><ul>${blockers.map((b) => html`<li>${b.go
+      ? html`<button type="button" class="cw-blocked__go" onClick=${() => allerA(b.go)}>${b.t} →</button>` : b.t}</li>`)}</ul></div>` : '';
   const stepper = html`
     <ol class="cw-steps">
       ${CW_STEPS.map((k, i) => {
@@ -611,15 +621,15 @@ export function renderCampaignWizard(app) {
   const backLabel = [T('cw.cancel'), T('cw.back.campaign'), T('cw.back.whenWhere'), T('cw.back.tags'), T('cw.back.film')][scr];
   let body;
   if (cw.done) body = doneScreen(app, M);
-  else if (scr === 0) body = html`${campaignCard(app, M)}${productsCard(app, M)}`;
-  else if (scr === 1) body = html`${whenCard(app, M)}${whereCard(app, M)}`;
+  else if (scr === 0) body = html`<div id="cw-campaign">${campaignCard(app, M)}</div><div id="cw-products">${productsCard(app, M)}</div>`;
+  else if (scr === 1) body = html`<div id="cw-when">${whenCard(app, M)}</div><div id="cw-where">${whereCard(app, M)}</div>`;
   else if (scr === 2) body = tagsCard(app, M);
   else if (scr === FILM) {
     body = cw.legacyFilm && !scenesOf(cw).length
       ? html`${legacyNote(app, M)}${filmCard(app, M)}`
-      : html`${filmEditorCard(app, M, setCw, { back: () => go(scr - 1), backLabel, next: () => go(scr + 1), nextLabel, canNext, blockedTip })}${filmMetaCard(app, M)}`;
+      : html`${filmEditorCard(app, M, setCw, { back: () => go(scr - 1), backLabel, next: () => go(scr + 1), nextLabel, canNext, blockedTip })}<div id="cw-filmmeta">${filmMetaCard(app, M)}</div>`;
   } else body = html`${checksCard(app, M)}${planningCard(app, M)}`;
-  const nScreens = M.chosen.length;
+  const nScreens = M.chosen.length + M.linkStores.length;
   const editorFoot = scr === FILM && !(cw.legacyFilm && !scenesOf(cw).length);
   const foot = cw.done || editorFoot ? null : html`
     <div class="cw-foot">
@@ -639,6 +649,7 @@ export function renderCampaignWizard(app) {
         <div class="cw-main">${body}${cw.error ? html`<div class="cw-note cw-note--err">${cw.error}</div>` : ''}${blockedNote}${foot}</div>
         <aside class="cw-side">${aside}</aside>
       </div>
+      ${cw.branche ? brancheModal(app, M) : ''}
     </div>`;
 }
 
@@ -842,6 +853,46 @@ function whenCard(app, M) {
 }
 
 // --- 4 · Où ------------------------------------------------------------------
+// Brancher l'écran d'un magasin : son lien (et son QR) à ouvrir en plein écran sur la TV ou
+// la box du magasin, puis un test du lien. Fini : le magasin est coché.
+function brancheModal(app, M) {
+  const { cw, T } = M;
+  const s = M.fleet.find((x) => x.id === cw.branche);
+  if (!s) return '';
+  const link = app.filmUrl({ store: s.id });
+  const t = (app.state.onbTest || {})[s.id] || null;
+  const fermer = () => setCw(app, { branche: '' });
+  const fini = () => setCw(app, { branche: '', linkStores: [...new Set([...M.linkStores, s.id])], linkTouched: true });
+  return html`<div class="cw-modal" onClick=${(e) => { if (e.target === e.currentTarget) fermer(); }}>
+    <div class="cw-modal__box" role="dialog" aria-label=${T('cw.br.title', { s: s.store })}>
+      <div class="cw-modal__h"><span>${T('cw.br.title', { s: s.store })}</span><button type="button" class="btn btn--sm" onClick=${fermer}>✕</button></div>
+      <ol class="cw-br">
+        <li><b>${T('cw.br.s1')}</b>
+          <div class="cw-br__lien">
+            <img src=${'data:image/svg+xml;utf8,' + encodeURIComponent(qrSvg(link, { scale: 5, margin: 2 }))} alt="QR" />
+            <div class="cw-br__url">
+              <input class="cw-input" readonly value=${link} onClick=${(e) => e.target.select()} />
+              <span><button type="button" class="btn btn--sm" onClick=${() => app.copyLink(link)}>${T('cw.br.copy')}</button>
+              <a class="btn btn--sm" href=${link} target="_blank" rel="noopener">${T('cw.br.openLink')} ↗</a></span>
+              <span class="cw-muted cw-small">${T('cw.br.s1Tip')}</span>
+            </div>
+          </div></li>
+        <li><b>${T('cw.br.s2')}</b>
+          <div class="cw-br__test">
+            <button type="button" class="btn btn--sm" onClick=${() => app.onbTestStore(s.id)}>${t && t.state === 'testing' ? T('cw.br.testing') : T('cw.br.test')}</button>
+            ${t && t.state === 'ok' ? html`<span class="cw-ok">✓ ${T('cw.br.ok', { f: t.name, n: t.modules })}</span>` : ''}
+            ${t && t.state === 'err' ? html`<span class="cw-warn">✗ ${t.error}</span>` : ''}
+          </div></li>
+        <li><b>${T('cw.br.s3')}</b></li>
+      </ol>
+      <div class="cw-modal__f">
+        <button type="button" class="btn" onClick=${fermer}>${T('cw.br.later')}</button>
+        <button type="button" class="btn btn--primary" onClick=${fini}>${T('cw.br.done')}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function whereCard(app, M) {
   const { cw, T } = M;
   const chosen = new Set(M.playerIds);
@@ -852,6 +903,7 @@ function whereCard(app, M) {
     const all = ids.length && ids.every((id) => cur.includes(id));
     setCw(app, { players: all ? cur.filter((x) => !ids.includes(x)) : [...new Set([...cur, ...ids])], playersTouched: true });
   };
+  const toggleLink = (id) => { const l = M.linkStores; setCw(app, { linkStores: l.includes(id) ? l.filter((x) => x !== id) : [...l, id], linkTouched: true }); };
   const stores = [...M.fleet].sort((a, b) => Number(M.campStores.has(b.id)) - Number(M.campStores.has(a.id)));
   const ago = (p) => { const s = p.syncAgo; if (s == null || s >= 999999) return T('cw.where.never'); const dd = Math.floor(s / 86400); return dd >= 1 ? T('cw.where.offDays', { n: dd }) : T('cw.where.offHours', { n: Math.max(1, Math.floor(s / 3600)) }); };
   return card(4, T('cw.step.where'), M.camp ? T('cw.where.aside') : '', html`
@@ -859,19 +911,22 @@ function whereCard(app, M) {
     <div class="cw-stores">
       ${stores.map((s) => {
         const ps = s.players || [];
-        const on = ps.length && ps.every((p) => chosen.has(p.id));
-        const some = ps.some((p) => chosen.has(p.id));
+        const lien = !ps.length;
+        const on = lien ? M.linkSet.has(s.id) : ps.every((p) => chosen.has(p.id));
+        const some = lien ? on : ps.some((p) => chosen.has(p.id));
+        const basculer = () => (lien ? toggleLink(s.id) : toggleStore(s));
         const onlineN = ps.filter((p) => p.state !== 'offline').length;
         const groupOf = (gid) => (s.groups || []).find((g) => g.id === gid);
         return html`<div class=${'cw-store' + (some ? ' is-on' : '')} key=${s.id}>
           <div class="cw-store__h">
-            <button type="button" class="cw-tick" onClick=${() => toggleStore(s)} disabled=${!ps.length} title=${ps.length ? '' : T('cw.where.noScreenTip')}>${box(on)}</button>
-            <span class="cw-store__name" role=${ps.length ? 'button' : null} style=${ps.length ? 'cursor:pointer' : ''} onClick=${() => ps.length && toggleStore(s)}>${s.store}</span>
+            <button type="button" class="cw-tick" onClick=${basculer}>${box(on)}</button>
+            <span class="cw-store__name" role="button" style="cursor:pointer" onClick=${basculer}>${s.store}</span>
             ${M.d && !M.campStores.has(s.id) ? chip(T('cw.where.outside')) : ''}
             ${s.lang === 'nl' ? chip('NL') : ''}
-            ${ps.length ? chip(T('cw.where.online', { a: onlineN, b: ps.length }), onlineN === ps.length ? 'ok' : 'gold') : chip(T('cw.where.noScreen'), 'warn')}
+            ${ps.length ? chip(T('cw.where.online', { a: onlineN, b: ps.length }), onlineN === ps.length ? 'ok' : 'gold') : chip(T('cw.where.byLink'))}
           </div>
-          ${!ps.length ? html`<div class="cw-store__vide">${T('cw.where.noScreenTip')}</div>` : ''}
+          ${lien ? html`<div class="cw-store__vide"><span>${T('cw.where.byLinkTip')}</span>
+            <button type="button" class="btn btn--sm" onClick=${() => { setCw(app, { branche: s.id }); app.onbTestStore(s.id); }}>${T('cw.br.open')} →</button></div>` : ''}
           ${ps.map((p) => {
             const g = groupOf(p.groupId);
             const fmt = g ? g.format : s.format;
@@ -888,7 +943,7 @@ function whereCard(app, M) {
       })}
     </div>
     ${(M.d && M.d.storesUnmatched || []).length ? html`<div class="cw-note cw-note--warn">${T('cw.where.unmatched')} ${M.d.storesUnmatched.map((s) => chip(s.name, 'warn'))}</div>` : ''}
-    <div class="cw-note">${T('cw.where.sum', { n: M.chosen.length, p: M.portraitN })}</div>`);
+    <div class="cw-note">${T('cw.where.sum', { n: M.chosen.length + M.linkStores.length, p: M.portraitN })}</div>`);
 }
 
 // --- 5 · Catégorie et tags ---------------------------------------------------
