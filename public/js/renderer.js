@@ -183,6 +183,8 @@ export const moduleDur = (m, secPerLine) => {
   return Math.max(1, activeItems(m).length) * secPerLine;
 };
 
+const TITRE_BAS = 700;   // sous le filet du titre (top 640 + 16), avec un peu d'air
+
 export function layoutCfg(L, n) {
   const c = { mode: 'list', listL: 200, illoCX: 4950, illoCY: null, illoSize: ILLO, illoOp: 1, illoBehind: false, illoShown: true, rowTop: ROW_TOP, cols: 1 };
   if (L === 'illo-left') { c.listL = 2360; c.illoCX = 1150; }
@@ -755,11 +757,17 @@ function renderModuleInner(h, m, lt, opts) {
     return kids;
   }
 
-  // titre + filet (toutes les mises en page « liste »)
+  // titre + filet (toutes les mises en page « liste »). Le titre ne touche ni
+  // l'étiquette promo (en haut à droite) ni l'illustration : sa taille se réduit
+  // pour tenir dans la largeur laissée libre (largeur d'une lettre ≈ 0,42 em).
+  const titre = (m.name || '').toUpperCase();
+  const tagW = tag ? Math.round(String(tag.label || '').length * 130 * 0.5 + 104 + (tag.img ? 186 : 0)) : 0;
+  const reserve = Math.max(200, tag ? 180 + tagW + 120 : 0);
+  const titreFs = Math.max(220, Math.min(440, Math.floor((W - 2 * reserve) / (Math.max(1, titre.length) * 0.42))));
   kids.push(h('div', {
     key: 'ti',
-    style: { position: 'absolute', left: 0, top: 210 + P.titleY, width: W, textAlign: 'center', fontFamily: FVANK, fontWeight: 400, fontSize: 440, lineHeight: 1, letterSpacing: `${0.02 + 0.02 * osc}em`, textTransform: 'uppercase', color: INK, transform: `scale(${tPulse})`, transformOrigin: 'top center' },
-  }, (m.name || '').toUpperCase()));
+    style: { position: 'absolute', left: 0, top: 210 + P.titleY + Math.round((440 - titreFs) * 0.5), width: W, textAlign: 'center', fontFamily: FVANK, fontWeight: 400, fontSize: titreFs, lineHeight: 1, letterSpacing: `${0.02 + 0.02 * osc}em`, textTransform: 'uppercase', color: INK, transform: `scale(${tPulse})`, transformOrigin: 'top center' },
+  }, titre));
   const ruleW = 1500 + 140 * osc;
   kids.push(h('div', { key: 'ru', style: { position: 'absolute', left: (W - ruleW) / 2, top: 640, width: ruleW, height: 16, background: RUBY, borderRadius: 8, opacity: 0.9 } }));
 
@@ -810,7 +818,10 @@ function renderModuleInner(h, m, lt, opts) {
   const cross = moList.slide ? easeIO(clx(tin / 0.40, 0, 1)) : 1;
   const fromI = (idx - 1 + n) % n;
   const bandY = n ? (idx === 0 && Math.floor(raw) === 0 ? lineYc(0) : mix(lineYc(fromI), lineYc(idx), slideT)) : 0;
-  const illoCY = cfg.illoCY != null ? cfg.illoCY : (n ? ((lineYc(0) + lineYc(n - 1)) / 2 - (cfg.illoBehind ? 0 : 170)) : H / 2);
+  const illoCY0 = cfg.illoCY != null ? cfg.illoCY : (n ? ((lineYc(0) + lineYc(n - 1)) / 2 - (cfg.illoBehind ? 0 : 170)) : H / 2);
+  // Avec une liste courte, l'illustration centrée sur elle montait jusqu'au titre :
+  // elle reste sous le filet (sauf en fond, derrière la liste).
+  const illoCY = cfg.illoBehind ? illoCY0 : Math.min(H - cfg.illoSize / 2, Math.max(illoCY0, TITRE_BAS + cfg.illoSize / 2));
   const wobY = moIllo.w * Math.sin(lt * Math.PI * (moIllo.fspd || 1));
   const wobR = moIllo.r * Math.sin(lt * Math.PI * ((moIllo.fspd || 1) * 0.8));
   const drag = opts.interactive;
