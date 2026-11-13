@@ -1963,6 +1963,9 @@ async function main() {
         if ((((plan2.byStore.st2 || {}).E || {})[0] || {}).matin?.includes('lt_cw_film')) throw new Error('le film reste dans la semaine type après la fin');
         const past = await call('POST', '/api/v1/campaign-video/diffuse', { filmId: 'lt_cw_film', players: ['p3'], endsOn: '2020-01-01' }).then(() => null, (e) => e.message);
         if (!past || !/terminée/.test(past)) throw new Error('période terminée acceptée');
+        // Un magasin qui a des écrans n'est pas un « magasin par lien » : sans écran coché, rien ne part.
+        const vide = await call('POST', '/api/v1/campaign-video/diffuse', { filmId: 'lt_cw_film', players: [], stores: ['st1'] }).then(() => null, (e) => e.message);
+        if (!vide || !/aucun écran ni magasin/.test(vide)) throw new Error(`magasin avec écrans pris comme magasin par lien : ${vide}`);
         return `v${out.version} sur p2 + p3 · p1 inchangé · Gare : Croissant 1,50 + Café 2,60 · Centre-Ville : retirés (pas vendus) · semaine E 4 cases · fin → versions d’avant, semaine nettoyée`;
       });
       await step('Éditeur du film — scènes et calques enregistrés, relus, joués par magasin ; un film sans scènes garde son rendu', async () => {

@@ -229,15 +229,18 @@ export function ensureCampaignRuns() {
 const brusselsStart = (d) => endOfDayBrussels(new Date(Date.parse(`${d}T12:00:00Z`) - 86400000));
 
 // players : écrans cochés ; cells : [{ day: 0..6, moment }] de la semaine type.
-export async function diffuseFilm({ filmId, players, startsOn, endsOn, week, cells, campaignId, publish }) {
+export async function diffuseFilm({ filmId, players, stores: linkStores, startsOn, endsOn, week, cells, campaignId, publish }) {
   ensureCampaignRuns();
   const db = getDb();
   const film = loadPlaylists().find((p) => p.id === filmId);
   if (!film) return { status: 404, json: { error: `film inconnu : ${filmId} — enregistre le brouillon d'abord` } };
   const rows = (Array.isArray(players) ? players : []).map(String)
     .map((id) => db.prepare('SELECT id, store_id, assigned_ver FROM sig_players WHERE id = ?').get(id)).filter(Boolean);
-  if (!rows.length) return { status: 400, json: { error: 'aucun écran coché' } };
-  const stores = [...new Set(rows.map((p) => p.store_id))];
+  // Magasins sans écran jumelé : ils diffusent par le lien de leur écran (film?store=…).
+  const sansEcran = db.prepare("SELECT s.id FROM sig_stores s WHERE s.id = ? AND s.id != 'st-new' AND NOT EXISTS (SELECT 1 FROM sig_players p WHERE p.store_id = s.id)");
+  const links = [...new Set((Array.isArray(linkStores) ? linkStores : []).map(String))].filter((id) => sansEcran.get(id));
+  if (!rows.length && !links.length) return { status: 400, json: { error: 'aucun écran ni magasin coché' } };
+  const stores = [...new Set([...rows.map((p) => p.store_id), ...links])];
   const chosen = new Set(rows.map((p) => p.id));
   const prev = new Map(db.prepare(`SELECT id, assigned_ver FROM sig_players WHERE store_id IN (${stores.map(() => '?').join(',')})`).all(...stores).map((p) => [p.id, p.assigned_ver]));
   const now = today();
@@ -276,7 +279,9 @@ export async function diffuseFilm({ filmId, players, startsOn, endsOn, week, cel
   const insRun = db.prepare('INSERT INTO sig_campaign_runs(film_id, campaign_id, player_id, version, prev_ver, ends_at, plan) VALUES (?, ?, ?, ?, ?, ?, ?)');
   const planJson = JSON.stringify(added);
   rows.forEach((p, i) => insRun.run(filmId, String(campaignId || ''), p.id, out.version, prev.get(p.id) || 0, endsAt, i === 0 ? planJson : '[]'));
-  return { status: 200, json: { ...out, players: rows.map((p) => p.id), scheduled, activateAt: scheduled ? brusselsStart(from) : null, endsAt, planCells: added.length } };
+  // Sans écran jumelé, une ligne par magasin (sans écran) porte la fin de la semaine type.
+  if (!rows.length) insRun.run(filmId, String(campaignId || ''), '', out.version, 0, endsAt, planJson);
+  return { status: 200, json: { ...out, players: rows.map((p) => p.id), stores: links, scheduled, activateAt: scheduled ? brusselsStart(from) : null, endsAt, planCells: added.length } };
 }
 
 // Passe régulière : les diffusions arrivées à leur fin rendent la main.
