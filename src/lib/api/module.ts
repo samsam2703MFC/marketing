@@ -2860,11 +2860,18 @@ export type CatalogueOwner = 'marque' | 'boutique'
 export type CatalogueSourceKind = 'gamme' | 'campagne' | 'choix'
 export type CatalogueStatus = 'brouillon' | 'pret' | 'imprime'
 export type CatalogueFormat = 'A5' | 'A4'
-export type CatalogueLayout = 'vedette' | 'grille' | 'liste'
+export type CatalogueLayout = 'vedette' | 'grille' | 'liste' | 'presentation' | 'presentation_liste'
+/** Les deux mises en page d'une page de présentation de gamme. */
+export const CATALOGUE_PRESENTATIONS: CatalogueLayout[] = ['presentation', 'presentation_liste']
+/** Variantes de gabarit d'une page intérieure ; une page sans gabarit = A. */
+export type CatalogueTemplate = 'A' | 'B' | 'C'
+/** Ce qui occupe la place libre d'une page de produits pas pleine. */
+export type CatalogueFiller = 'photo' | 'illustration'
 export type CatalogueLang = 'fr' | 'nl'
 /** Pages d'un catalogue, dont 4 de la marque (1, 2, avant-dernière, dernière). */
-export type CataloguePageCount = 8 | 12 | 16
-export const CATALOGUE_PAGE_COUNTS: CataloguePageCount[] = [8, 12, 16]
+export type CataloguePageCount = 8 | 10 | 12 | 14 | 16
+/** Toujours par 2 (« rajouter une page, c'est toujours par 2 »). */
+export const CATALOGUE_PAGE_COUNTS: CataloguePageCount[] = [8, 10, 12, 14, 16]
 /** Les pages de la charte : couverture, page 2, avant-dernière, dernière. */
 export const CATALOGUE_BRAND_PAGES = 4
 
@@ -2876,8 +2883,18 @@ export interface CatalogueProductRow {
 
 export interface CataloguePageRow {
   layout: CatalogueLayout
-  /** Catégorie du webshop ; null : « Notre sélection ». */
+  /** Catégorie du webshop ; null : « Notre sélection ». Toujours null pour une présentation. */
   category: number | null
+  /** Variante de gabarit ; absent = A. */
+  template?: CatalogueTemplate
+  /** La gamme : obligatoire pour une présentation ; sur une page de produits, seulement ses produits. */
+  gamme?: number | null
+  /** Texte d'une présentation, 400 caractères au plus ; absent = rien. */
+  text?: string
+  textNl?: string
+  /** La place libre d'une page de produits pas pleine : photo (`fillerMediaId`) ou illustration ; absent = rien. */
+  filler?: CatalogueFiller | null
+  fillerMediaId?: number | null
 }
 
 export interface Catalogue {
@@ -2896,7 +2913,7 @@ export interface Catalogue {
   /** Exactement `pageCount − 4` pages intérieures. */
   pages: CataloguePageRow[]
   productCount: number
-  /** 8, 12 ou 16, les 4 pages de la marque comprises. */
+  /** 8, 10, 12, 14 ou 16, les 4 pages de la marque comprises. */
   pageCount: CataloguePageCount
   innerPageCount: number
   createdAt: string
@@ -2973,8 +2990,48 @@ export interface CatalogueDocProduct {
 export type CatalogueDocPage =
   | { kind: 'cover'; locked: true; title: string; subtitle: string; eyebrow: string | null; imageUrl: string | null }
   | { kind: 'brand'; locked: true; slot: 'page2' | 'penultimate'; title: string; text: string; imageUrl: string | null }
-  | { kind: 'products'; locked: false; layout: CatalogueLayout; category: number | null; title: string; products: CatalogueDocProduct[] }
+  | {
+      kind: 'products'
+      locked: false
+      layout: CatalogueLayout
+      template?: CatalogueTemplate
+      category: number | null
+      gamme?: number | null
+      title: string
+      /** Le dessin de la gamme de la page (`img/print/…`), rappelé dans l'en-tête ; son adresse absolue. */
+      drawing?: string | null
+      drawingUrl?: string | null
+      /** Places libres sur la page (capacité du gabarit − produits). */
+      room?: number
+      /** Une rangée entière au moins est libre : la place peut recevoir une photo ou une illustration. */
+      fillable?: boolean
+      filler?: CatalogueDocFiller | null
+      products: CatalogueDocProduct[]
+    }
+  | {
+      kind: 'presentation'
+      locked: false
+      layout: 'presentation' | 'presentation_liste'
+      template: CatalogueTemplate
+      gamme: number
+      title: string
+      text: string
+      /** Photo de la gamme (charte, sinon webshop) ; à défaut le dessin de saison ; sans rien, un cadre sobre. */
+      imageUrl: string | null
+      drawing: string | null
+      drawingUrl: string | null
+      products: CatalogueDocProduct[]
+    }
   | { kind: 'back'; locked: true; title: string; text: string; qrUrl: string | null; host: string | null; shop: CatalogueShopInfo | null }
+
+export interface CatalogueDocFiller {
+  kind: CatalogueFiller
+  /** Photo de la médiathèque (ou de la gamme quand elle n'a pas de dessin). */
+  imageUrl: string | null
+  /** Dessin livré avec le module (`img/print/…`, `img/…`), et son adresse absolue. */
+  drawing: string | null
+  drawingUrl: string | null
+}
 
 export interface CatalogueColors {
   primary: string

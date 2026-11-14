@@ -153,6 +153,7 @@ return static function (Router $router): void {
     // des routes « publiques » pour le routeur. `shopId` = identifiant de caisse ERP de la boutique.
     $shopBase = '/api/v1/integration/marketing/shops/{shopId}';
     $router->get($shopBase . '/catalogue-products',                [$shopCatalogues, 'products'], true);
+    $router->get($shopBase . '/catalogue-media',                   [$shopCatalogues, 'media'], true);
     $router->get($shopBase . '/catalogues',                        [$shopCatalogues, 'index'], true);
     $router->post($shopBase . '/catalogues',                       [$shopCatalogues, 'store'], true);
     $router->get($shopBase . '/catalogues/{id}',                   [$shopCatalogues, 'show'], true);

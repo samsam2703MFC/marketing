@@ -1,5 +1,14 @@
 import type { CSSProperties } from 'react'
-import type { CatalogueDocPage, CatalogueDocProduct, CatalogueDocument, CatalogueFormat, CatalogueLang } from '../../lib/api/module'
+import type {
+  CatalogueDocFiller,
+  CatalogueDocPage,
+  CatalogueDocProduct,
+  CatalogueDocument,
+  CatalogueFormat,
+  CatalogueLang,
+  CatalogueLayout,
+  CatalogueTemplate,
+} from '../../lib/api/module'
 import { qrPath } from '../../lib/qr'
 import { fontFaces } from '../brochure/Pages'
 import { familyImage, seasonImage } from '../builder/illustrations'
@@ -10,7 +19,7 @@ import CATALOGUE_CSS from './catalogue-pages.css?inline'
  * l'impression (même balisage, même feuille de style), comme les brochures — et par le même
  * moteur (`lib/print.ts`), avec les mêmes polices de la marque (`fontFaces`).
  *
- * Le document est composé par l'API (`…/catalogues/{id}/document`) : 8, 12 ou 16 pages ; la
+ * Le document est composé par l'API (`…/catalogues/{id}/document`) : 8 à 16 pages, par 2 ; la
  * couverture, la page 2, l'avant-dernière et la dernière page viennent de la Charte des catalogues
  * (`cover`, `brand`, `back`), les pages intérieures portent leurs produits et leurs prix. Ici, rien
  * n'est recalculé : on met en page.
@@ -29,11 +38,34 @@ export const FORMAT_MM: Record<CatalogueFormat, { w: number; h: number }> = {
 const BLEED = 3
 const MARKS = 7
 
-export const LAYOUT_LABELS: Record<'vedette' | 'grille' | 'liste', { label: string; capacity: number }> = {
+export const LAYOUT_LABELS: Record<CatalogueLayout, { label: string; capacity: number }> = {
   vedette: { label: '1 vedette + 4', capacity: 5 },
   grille: { label: 'Grille 2 × 3', capacity: 6 },
   liste: { label: 'Liste avec prix', capacity: 12 },
+  presentation: { label: 'Présentation seule', capacity: 0 },
+  presentation_liste: { label: 'Présentation + liste', capacity: 8 },
 }
+
+/**
+ * Les variantes de gabarit (2-3 possibilités pour chaque mise en page). Pages de produits : A
+ * Classique (fond papier, titre centré) · B Bandeau (bandeau de la couleur principale, titre à
+ * gauche) · C Épuré (fond blanc, titre à gauche souligné). Présentations : A Illustration · B Pleine
+ * couleur · C Photo pleine.
+ */
+export const TEMPLATE_LABELS: Record<'products' | 'presentation', Record<CatalogueTemplate, { label: string; hint: string }>> = {
+  products: {
+    A: { label: 'Classique', hint: 'fond papier, titre centré' },
+    B: { label: 'Bandeau', hint: 'bandeau de couleur, titre à gauche' },
+    C: { label: 'Épuré', hint: 'fond blanc, titre à gauche' },
+  },
+  presentation: {
+    A: { label: 'Illustration', hint: 'dessin au centre, fond papier' },
+    B: { label: 'Pleine couleur', hint: 'fond de couleur, dessin en blanc' },
+    C: { label: 'Photo pleine', hint: 'grande image en haut' },
+  },
+}
+
+export const isPresentation = (layout: CatalogueLayout): boolean => layout === 'presentation' || layout === 'presentation_liste'
 
 const mm = (value: number): string => `${value}mm`
 
@@ -156,25 +188,54 @@ function ProductCard({ product, lang, family, big = false }: { product: Catalogu
   )
 }
 
+/** Un dessin livré avec le module (`img/print/…`), par son chemin. */
+const drawingAsset = (path: string | null | undefined): string | null => (path ? asset(path) : null)
+
+/** La place libre d'une page de produits : la photo de la médiathèque, ou l'illustration. */
+function Filler({ filler, style }: { filler: CatalogueDocFiller; style?: CSSProperties }) {
+  const drawing = drawingAsset(filler.drawing)
+  return (
+    <div className={`cat-filler cat-filler--${filler.kind}${drawing ? ' cat-filler--drawing' : ''}`} style={style}>
+      {drawing ? <img src={drawing} alt="" /> : filler.imageUrl ? <img src={filler.imageUrl} alt="" /> : null}
+    </div>
+  )
+}
+
+/** Le titre d'une page intérieure, avec le petit dessin de sa gamme. */
+function Heading({ title, drawing }: { title: string; drawing?: string | null }) {
+  const src = drawingAsset(drawing)
+  return (
+    <div className="cat-h">
+      {src ? <img className="cat-h__mark" src={src} alt="" /> : null}
+      <span className="cat-h__text">{title}</span>
+    </div>
+  )
+}
+
+/** Rangées de la grille restées libres : la place libre les prend toutes, en pleine largeur. */
+export function freeRows(layout: CatalogueLayout, count: number): number {
+  if (layout === 'grille') return 3 - Math.ceil(count / 2)
+  if (layout === 'vedette') return 2 - Math.ceil(Math.max(0, count - 1) / 2)
+  return 0
+}
+
 function Products({ page, lang }: { page: Extract<CatalogueDocPage, { kind: 'products' }>; lang: CatalogueLang }) {
   const [first, ...rest] = page.products
+  const template = page.template ?? 'A'
+  const filler = page.filler ?? null
+  const rows = filler ? freeRows(page.layout, page.products.length) : 0
+  const span: CSSProperties = { gridColumn: '1 / -1', gridRow: `span ${rows}` }
   return (
-    <div className={`cat-inner cat-inner--${page.layout}`}>
-      <div className="cat-h">{page.title}</div>
+    <div className={`cat-inner cat-inner--${page.layout} cat-t-${template}`}>
+      <Heading title={page.title} drawing={page.drawing} />
       <div className="cat-body" data-fit={page.title}>
         {page.products.length === 0 ? (
-          <div className="cat-empty">{lang === 'nl' ? 'Lege pagina' : 'Page vide'}</div>
+          filler ? <Filler filler={filler} style={{ flex: '1 1 0' }} /> : <div className="cat-empty">{lang === 'nl' ? 'Lege pagina' : 'Page vide'}</div>
         ) : page.layout === 'liste' ? (
-          <div className="cat-list">
-            {page.products.map((product) => (
-              <div className="cat-row" key={product.id}>
-                <Photo product={product} family={page.title} />
-                <span className="cat-name">{product.name}</span>
-                <i />
-                <Price product={product} lang={lang} />
-              </div>
-            ))}
-          </div>
+          <>
+            <ProductList products={page.products} lang={lang} family={page.title} />
+            {filler ? <Filler filler={filler} style={{ flex: '1 1 0' }} /> : null}
+          </>
         ) : page.layout === 'vedette' && first ? (
           <>
             <ProductCard product={first} lang={lang} family={page.title} big />
@@ -182,6 +243,7 @@ function Products({ page, lang }: { page: Extract<CatalogueDocPage, { kind: 'pro
               {rest.map((product) => (
                 <ProductCard key={product.id} product={product} lang={lang} family={page.title} />
               ))}
+              {filler && rows > 0 ? <Filler filler={filler} style={span} /> : null}
             </div>
           </>
         ) : (
@@ -189,9 +251,59 @@ function Products({ page, lang }: { page: Extract<CatalogueDocPage, { kind: 'pro
             {page.products.map((product) => (
               <ProductCard key={product.id} product={product} lang={lang} family={page.title} />
             ))}
+            {filler && rows > 0 ? <Filler filler={filler} style={span} /> : null}
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function ProductList({ products, lang, family }: { products: CatalogueDocProduct[]; lang: CatalogueLang; family: string }) {
+  return (
+    <div className="cat-list">
+      {products.map((product) => (
+        <div className="cat-row" key={product.id}>
+          <Photo product={product} family={family} />
+          <span className="cat-name">{product.name}</span>
+          <i />
+          <Price product={product} lang={lang} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * La page de présentation d'une gamme : son illustration (la photo de sa couverture ou du webshop,
+ * sinon son dessin de saison, sinon un cadre sobre — jamais une image inventée), son nom, un texte,
+ * et au choix la liste de ses produits avec leurs prix.
+ */
+function Presentation({ page, lang }: { page: Extract<CatalogueDocPage, { kind: 'presentation' }>; lang: CatalogueLang }) {
+  const drawing = drawingAsset(page.drawing)
+  const withList = page.layout === 'presentation_liste'
+  // « Photo pleine » préfère la photo ; les deux autres, le dessin au trait.
+  const photoFirst = page.template === 'C'
+  const visual = photoFirst ? (page.imageUrl ? { src: page.imageUrl, photo: true } : drawing ? { src: drawing, photo: false } : null)
+    : drawing ? { src: drawing, photo: false } : page.imageUrl ? { src: page.imageUrl, photo: true } : null
+  return (
+    <div className={`cat-pres cat-pres--${withList ? 'liste' : 'seule'} cat-t-${page.template}`}>
+      <div className={`cat-pres__visual${visual ? (visual.photo ? ' is-photo' : ' is-drawing') : ' is-none'}`}>
+        {visual ? <img src={visual.src} alt="" /> : null}
+      </div>
+      <div className="cat-pres__head">
+        <div className="cat-pres__eyebrow">{lang === 'nl' ? 'Het gamma' : 'La gamme'}</div>
+        <div className="cat-pres__title" data-fit="Titre de la présentation">
+          {page.title}
+        </div>
+        <div className="cat-pres__rule" />
+        {page.text ? <div className="cat-pres__text">{page.text}</div> : null}
+      </div>
+      {withList && page.products.length ? (
+        <div className="cat-pres__list" data-fit={page.title}>
+          <ProductList products={page.products} lang={lang} family={page.title} />
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -250,11 +362,12 @@ export function CataloguePage({ doc, index }: { doc: CatalogueDocument; index: n
     '--i': doc.charter.colors.ink,
   } as CSSProperties
   return (
-    <div className={`cat-face cat-face--${page.kind}`} style={style} lang={doc.version.lang}>
+    <div className={`cat-face cat-face--${page.kind}${page.kind === 'products' || page.kind === 'presentation' ? ` cat-face--t${page.template ?? 'A'}` : ''}`} style={style} lang={doc.version.lang}>
       <div className="cat-trim">
         {page.kind === 'cover' ? <Cover page={page} doc={doc} /> : null}
         {page.kind === 'brand' ? <Brand page={page} doc={doc} /> : null}
         {page.kind === 'products' ? <Products page={page} lang={doc.version.lang} /> : null}
+        {page.kind === 'presentation' ? <Presentation page={page} lang={doc.version.lang} /> : null}
         {page.kind === 'back' ? <Back page={page} doc={doc} /> : null}
       </div>
     </div>

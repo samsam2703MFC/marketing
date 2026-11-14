@@ -1,19 +1,33 @@
 openapi: 3.1.0
 info:
   title: Marketing — catalogues produits
-  version: 1.1.0
+  version: 1.2.0
   description: |
     Les catalogues produits du Marketing (prix du webshop, gammes) : un imprimé A5 (A4 en option)
-    de **8, 12 ou 16 pages** (`pageCount`). Quatre pages viennent de la Charte des catalogues de la
+    de **8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16). Quatre pages viennent de la Charte des catalogues de la
     marque et sont verrouillées : la couverture (page 1), la page 2, l'avant-dernière et la dernière
     (« commandez en ligne », QR et boutique). Les pages intérieures — 4, 8 ou 12, en nombre fixé par
-    le format — sont remplies par catégorie du webshop, dans l'une de trois mises en page
+    le format, de 4 à 12 — sont remplies par catégorie du webshop, dans l'une de trois mises en page
     (`vedette` = 1 + 4, `grille` = 2 × 3, `liste` avec prix).
 
     v1.1 (novembre 2026, demande du client : « 8, 12 ou 16 pages, dont les pages 1-2 et la dernière et
     l'avant-dernière sont du template du catalogue fait par le franchiseur ») : `pageCount` en
     écriture, `pages` = exactement `pageCount − 4` pages intérieures, pages `brand` au document,
     `page2` et `penultimate` dans la charte, erreur `CATALOGUE_PAGES_NOT_EMPTY`.
+
+    v1.2 (14 novembre 2026, demandes du client : « une page de présentation, seule ou avec liste de
+    produits ; chaque gamme a son illustration ; 2-3 possibilités à chaque fois » puis « s'il y a de
+    la place, une photo de la médiathèque ou une illustration ») : mises en page `presentation` et
+    `presentation_liste` (rattachées à une `gamme`, texte `text` / `textNl` de 400 caractères au
+    plus), `template` A · B · C sur toute page intérieure (absent = A), `gamme` sur une page de
+    produits (seulement les produits de la gamme), place libre `filler` (`photo` + `fillerMediaId`,
+    ou `illustration`) ; répartition automatique d'un catalogue de plusieurs gammes : chaque gamme
+    commence par sa page de présentation ; pages `presentation` au document, `template`, `gamme`,
+    `drawing`, `room`, `fillable`, `filler` sur les pages de produits ; route
+    `…/shops/{shopId}/catalogue-media` (images que la boutique peut prendre) ; `pageCount` = tout nombre
+    pair de 8 à 16 (« rajouter une page, c'est toujours par 2 » : + 2 = deux pages intérieures vides en
+    fin, − 2 = même règle qu'avant, `CATALOGUE_PAGES_NOT_EMPTY`). Rien n'est rompu : une page
+    `{layout, category}` et un catalogue de 8, 12 ou 16 pages restent valables et se lisent comme avant.
 
     Premier contrat OpenAPI du module (docs/API_REGISTRY.md, §3, écart 16) : il ne couvre que ces
     routes, écrites au standard (enveloppe `{success, data, meta}`, camelCase, montants en centimes,
@@ -57,7 +71,7 @@ paths:
       description: |
         `source.kind` : `gamme` (les produits du webshop de la ou des gammes `ref` sont cochés),
         `campagne` (les produits ERP de l'offre de la campagne `ref`, ses boutiques comme versions)
-        ou `choix` (`products`). `pageCount` : 8 (défaut), 12 ou 16. Sans `pages` (ou `pages: []`), les
+        ou `choix` (`products`). `pageCount` : 8 (défaut), 10, 12, 14 ou 16. Sans `pages` (ou `pages: []`), les
         `pageCount − 4` pages intérieures sont réparties automatiquement par catégorie ; une liste plus
         courte est complétée de pages vides, une plus longue refusée (422 `VALIDATION_FAILED`, champ `pages`).
       security: [{ session: [] }]
@@ -179,6 +193,42 @@ paths:
         '200': { $ref: '#/components/responses/ShopProducts' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/integration/marketing/shops/{shopId}/catalogue-media:
+    parameters: [{ $ref: '#/components/parameters/shopId' }]
+    get:
+      tags: [Catalogues (boutique, entre portails)]
+      summary: Les images de la médiathèque que la boutique peut mettre dans la place libre d'une page
+      description: |
+        Celles du réseau (sans boutique) et les siennes ; ni archivées, ni vidéos ; les plus récentes
+        d'abord. Le même périmètre est vérifié à l'écriture de `fillerMediaId` (422 sinon).
+      security: [{ serviceToken: [] }]
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - { name: perPage, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 24 } }
+        - { name: 'filter[name][like]', in: query, schema: { type: string, maxLength: 80 }, description: Mots du nom, de la catégorie ou du produit. }
+      responses:
+        '200':
+          description: Les images, paginées.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/EnvelopeOk'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id: { type: integer, description: 'À envoyer en `fillerMediaId`.' }
+                            name: { type: string }
+                            url: { type: string, description: Adresse absolue (version web). }
+                            thumbnailUrl: { type: [string, 'null'] }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
 
   /api/v1/integration/marketing/shops/{shopId}/catalogues:
     parameters: [{ $ref: '#/components/parameters/shopId' }]
@@ -404,6 +454,8 @@ components:
                       gammes: { type: array, items: { $ref: '#/components/schemas/Gamme' } }
                       shops: { type: array, items: { $ref: '#/components/schemas/ShopRead' } }
                       layouts: { type: array, items: { $ref: '#/components/schemas/Layout' } }
+                      templates: { type: array, items: { $ref: '#/components/schemas/Template' } }
+                      fillers: { type: array, items: { type: string, enum: [photo, illustration] } }
                       pageCounts: { type: array, items: { $ref: '#/components/schemas/PageCount' } }
     Charter:
       description: La Charte des catalogues.
@@ -443,8 +495,17 @@ components:
             details: { type: array, items: { type: object, properties: { field: { type: string }, message: { type: string } } } }
         meta: { type: object, properties: { requestId: { type: string } } }
     Status: { type: string, enum: [brouillon, pret, imprime] }
-    PageCount: { type: integer, enum: [8, 12, 16], description: 'Pages du catalogue, dont 4 de la marque (1, 2, avant-dernière, dernière).' }
-    Layout: { type: string, enum: [vedette, grille, liste], description: 'vedette : 1 + 4 produits ; grille : 2 × 3 ; liste : 12 avec prix.' }
+    PageCount: { type: integer, enum: [8, 10, 12, 14, 16], description: 'Pages du catalogue, toujours un nombre pair de 8 à 16 (« rajouter une page, c''est toujours par 2 »), dont 4 de la marque (1, 2, avant-dernière, dernière). Autre valeur : 422.' }
+    Layout: { type: string, enum: [vedette, grille, liste, presentation, presentation_liste], description: 'vedette : 1 + 4 produits ; grille : 2 × 3 ; liste : 12 avec prix ; presentation : la page d''une gamme (illustration, nom, texte), sans produit ; presentation_liste : la même avec les 8 premiers produits de la gamme et leurs prix.' }
+    Template: { type: string, enum: [A, B, C], description: 'Variante de gabarit. Pages de produits : A classique (fond papier, titre centré), B bandeau (bandeau de la couleur principale), C épuré (fond blanc, titre à gauche). Présentations : A illustration, B pleine couleur, C photo pleine.' }
+    DocFiller:
+      type: [object, 'null']
+      description: La place libre d'une page de produits, remplie (null sinon, ou quand la page est pleine).
+      properties:
+        kind: { type: string, enum: [photo, illustration] }
+        imageUrl: { type: [string, 'null'], description: Photo de la médiathèque (ou de la gamme quand elle n'a pas de dessin). }
+        drawing: { type: [string, 'null'], description: 'Dessin livré avec le module, chemin relatif (img/print/noel.png, img/croissant.png).' }
+        drawingUrl: { type: [string, 'null'], description: Le même, en adresse absolue. }
     ProductRow:
       type: object
       additionalProperties: false
@@ -458,7 +519,13 @@ components:
       required: [layout]
       properties:
         layout: { $ref: '#/components/schemas/Layout' }
-        category: { type: [integer, 'null'], description: 'Catégorie du webshop ; null : « Notre sélection » (les suivants, toutes catégories).' }
+        category: { type: [integer, 'null'], description: 'Catégorie du webshop ; null : « Notre sélection » (les suivants, toutes catégories). Ignorée (rangée null) pour une présentation.' }
+        template: { $ref: '#/components/schemas/Template' }
+        gamme: { type: [integer, 'null'], description: 'Gamme du webshop (active) : obligatoire pour une présentation ; sur une page de produits, seulement les produits de cette gamme.' }
+        text: { type: string, maxLength: 400, description: 'Texte d''une présentation (ignoré ailleurs) ; vide = rien.' }
+        textNl: { type: string, maxLength: 400, description: 'Le même en néerlandais ; vide = le français, dit (NL_TEXT_MISSING).' }
+        filler: { type: [string, 'null'], enum: [photo, illustration, null], description: 'Place libre d''une page de produits pas pleine (ignorée sur une présentation).' }
+        fillerMediaId: { type: [integer, 'null'], description: 'Avec `filler: photo` : une image de la médiathèque, pas archivée ; pour une boutique, du réseau ou d''elle-même.' }
     CatalogueCreate:
       type: object
       additionalProperties: false
@@ -597,7 +664,34 @@ components:
                 properties: { kind: { const: brand }, locked: { const: true }, slot: { type: string, enum: [page2, penultimate] }, title: { type: string }, text: { type: string, description: Paragraphes séparés par une ligne vide ; lignes par un saut de ligne. }, imageUrl: { type: [string, 'null'] } }
               - type: object
                 description: Page intérieure (une page sans produit a `products` vide).
-                properties: { kind: { const: products }, locked: { const: false }, layout: { $ref: '#/components/schemas/Layout' }, category: { type: [integer, 'null'] }, title: { type: string }, products: { type: array, items: { $ref: '#/components/schemas/DocProduct' } } }
+                properties:
+                  kind: { const: products }
+                  locked: { const: false }
+                  layout: { $ref: '#/components/schemas/Layout' }
+                  template: { $ref: '#/components/schemas/Template' }
+                  category: { type: [integer, 'null'] }
+                  gamme: { type: [integer, 'null'] }
+                  title: { type: string, description: 'La catégorie, sinon le nom de la gamme, sinon « Notre sélection ».' }
+                  drawing: { type: [string, 'null'], description: Dessin de la gamme de la page, rappelé dans l'en-tête. }
+                  drawingUrl: { type: [string, 'null'] }
+                  room: { type: integer, description: Places libres (capacité − produits). }
+                  fillable: { type: boolean, description: 'Une rangée entière au moins est libre : la place libre peut être remplie.' }
+                  filler: { $ref: '#/components/schemas/DocFiller' }
+                  products: { type: array, items: { $ref: '#/components/schemas/DocProduct' } }
+              - type: object
+                description: Page de présentation d'une gamme (illustration — photo de sa couverture dans la charte, sinon du webshop, sinon son dessin de saison, sinon un cadre sobre —, nom, texte, et au choix ses premiers produits).
+                properties:
+                  kind: { const: presentation }
+                  locked: { const: false }
+                  layout: { type: string, enum: [presentation, presentation_liste] }
+                  template: { $ref: '#/components/schemas/Template' }
+                  gamme: { type: integer }
+                  title: { type: string }
+                  text: { type: string }
+                  imageUrl: { type: [string, 'null'] }
+                  drawing: { type: [string, 'null'] }
+                  drawingUrl: { type: [string, 'null'] }
+                  products: { type: array, items: { $ref: '#/components/schemas/DocProduct' } }
               - type: object
                 description: Dernière page (charte, verrouillée).
                 properties: { kind: { const: back }, locked: { const: true }, title: { type: string }, text: { type: string }, qrUrl: { type: [string, 'null'] }, host: { type: [string, 'null'] }, shop: { $ref: '#/components/schemas/DocShop' } }
@@ -606,7 +700,7 @@ components:
           items:
             type: object
             properties:
-              code: { type: string, enum: [WEBSHOP_UNREADABLE, PRICE_DIFFERS, PRODUCT_NO_PRICE, PRODUCT_NOT_SOLD, PRODUCTS_OVERFLOW, PAGES_EMPTY, PAGES_OVER_FORMAT, NL_TEXT_MISSING, SHOP_ADDRESS_MISSING, WEBSHOP_URL_UNKNOWN] }
+              code: { type: string, enum: [WEBSHOP_UNREADABLE, PRICE_DIFFERS, PRODUCT_NO_PRICE, PRODUCT_NOT_SOLD, PRODUCTS_OVERFLOW, PAGES_EMPTY, PAGES_OVER_FORMAT, NL_TEXT_MISSING, SHOP_ADDRESS_MISSING, WEBSHOP_URL_UNKNOWN, GAMME_UNKNOWN, GAMME_NO_ILLUSTRATION, FILLER_MEDIA_MISSING, FILLER_NO_ILLUSTRATION] }
               message: { type: string }
     DocShop:
       type: [object, 'null']

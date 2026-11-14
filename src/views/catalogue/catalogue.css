@@ -178,3 +178,11 @@
 .catv-scope { display: flex; gap: 4px; margin-bottom: 10px; }
 .catv-scope select { border: 0; background: transparent; font: inherit; padding: 4px 8px; border-radius: 7px; cursor: pointer; }
 .catv-scope select.is-on { background: #fff; color: var(--ink, #1c1a17); }
+.catv-subt { margin: 4px 0 6px; font-size: 11px; letter-spacing: 0.04em; color: var(--muted); }
+.catv-layouts--5 { grid-template-columns: repeat(3, 1fr); }
+.catv-layouts > .catv-layout { margin-top: 0; }
+.catv-tpl span { font-size: 11px; }
+.catv-filler { display: flex; align-items: center; gap: 8px; }
+.catv-filler img { width: 56px; height: 40px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); }
+.catv-pagecount__n { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 7px; background: #fff; color: var(--ink, #1c1a17); font-size: 12.5px; white-space: nowrap; }
+.catv-pagecount button { white-space: nowrap; }

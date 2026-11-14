@@ -12,11 +12,14 @@ use Marketing\Support\Keys;
 /**
  * Les catalogues produits : règles, contraintes et composition.
  *
- * Un catalogue a 8, 12 ou 16 pages (`pageCount`, choisi à la création, modifiable). Quatre viennent
+ * Un catalogue a de 8 à 16 pages, toujours un nombre pair (`pageCount` : 8, 10, 12, 14 ou 16, choisi à la
+ * création, modifiable par 2). Quatre viennent
  * de la Charte des catalogues de la marque et sont verrouillées : la couverture (page 1), la page 2,
  * l'avant-dernière et la dernière (« commandez en ligne », QR et boutique). Les autres — 4, 8 ou 12
  * pages intérieures, en nombre FIXÉ par le format — sont remplies par catégorie du webshop, chacune
- * dans l'une des trois mises en page (`vedette` 1 + 4, `grille` 2 × 3, `liste` avec prix). Les produits,
+ * dans l'une des trois mises en page (`vedette` 1 + 4, `grille` 2 × 3, `liste` avec prix) — ou sont la
+ * page de présentation d'une gamme (`presentation`, `presentation_liste`), chacune en gabarit A, B ou C,
+ * la place libre d'une page pas pleine prise par une photo de la médiathèque ou une illustration. Les produits,
  * leurs photos et leurs prix viennent du webshop (TFBuddy), relus à chaque composition : rien
  * n'est saisi à la main, aucun prix n'est inventé.
  *
@@ -35,11 +38,31 @@ final class CatalogueService
     public const STATUSES = ['brouillon', 'pret', 'imprime'];
     public const LANGS    = ['fr', 'nl'];
 
-    /** Mise en page → nombre de produits qu'une page porte. */
-    public const LAYOUTS = ['vedette' => 5, 'grille' => 6, 'liste' => 12];
+    /**
+     * Mise en page → nombre de produits qu'une page porte. `presentation` : la page d'une gamme (son
+     * illustration, son nom, un texte), sans produit ; `presentation_liste` : la même, avec une courte
+     * liste des produits de la gamme et leurs prix (8 au plus).
+     */
+    public const LAYOUTS = ['vedette' => 5, 'grille' => 6, 'liste' => 12, 'presentation' => 0, 'presentation_liste' => 8];
+
+    /** Les mises en page d'une page de présentation (rattachées à une gamme). */
+    public const PRESENTATIONS = ['presentation', 'presentation_liste'];
+
+    /** Variantes de gabarit d'une page intérieure ; une page sans gabarit = A. */
+    public const TEMPLATES = ['A', 'B', 'C'];
+
+    /** Ce qui occupe la place libre d'une page de produits pas pleine : une photo de la médiathèque, ou l'illustration. */
+    public const FILLERS = ['photo', 'illustration'];
+
+    /** Le texte d'une page de présentation, par langue. */
+    public const PRESENTATION_TEXT_MAX = 400;
+
+    /** Les champs d'une page intérieure. */
+    private const PAGE_KEYS = ['layout', 'category', 'template', 'gamme', 'text', 'textNl', 'filler', 'fillerMediaId'];
 
     /** Nombre de pages d'un catalogue (couverture et dernière page comprises). */
-    public const PAGE_COUNTS = [8, 12, 16];
+    /** Tout nombre PAIR de 8 à 16 (client, 14/11/2026 : « rajouter une page, c'est toujours par 2 »). */
+    public const PAGE_COUNTS = [8, 10, 12, 14, 16];
 
     /** Pages de la charte : couverture, page 2, avant-dernière, dernière. */
     public const BRAND_PAGES = 4;
@@ -307,7 +330,7 @@ final class CatalogueService
     private static function pageCountInput(mixed $value, array &$errors): int
     {
         if (!is_int($value) || !in_array($value, self::PAGE_COUNTS, true)) {
-            $errors[] = ['field' => 'pageCount', 'message' => 'Nombre de pages : 8, 12 ou 16 (dont 4 pages de la marque).'];
+            $errors[] = ['field' => 'pageCount', 'message' => 'Nombre de pages : un nombre pair de 8 à 16 — 8, 10, 12, 14 ou 16 (dont 4 pages de la marque).'];
 
             return self::PAGE_COUNTS[0];
         }
@@ -431,10 +454,10 @@ final class CatalogueService
             $row['settings']['products'] = array_map(static fn (int $id): array => ['id' => $id, 'on' => true], array_values(array_unique($products)));
         }
         $row['settings']['pages'] = array_key_exists('pages', $input)
-            ? $this->pageRows($input['pages'], $pageCount)
+            ? $this->pageRows($input['pages'], $pageCount, $row)
             : [];
         $row['settings']['pages'] = $row['settings']['pages'] === []
-            ? self::autoPages($row['settings']['products'], $known, $pageCount - self::BRAND_PAGES)
+            ? self::autoPages($row['settings']['products'], $known, $pageCount - self::BRAND_PAGES, $gammeIds)
             : self::pad($row['settings']['pages'], $pageCount);
 
         $id = $this->catalogues->insert($row, $userId);
@@ -504,9 +527,9 @@ final class CatalogueService
             }
             $row['settings'] = $settings;
             if (array_key_exists('pages', $input)) {
-                $settings['pages'] = $this->pageRows($input['pages'], $pageCount);
+                $settings['pages'] = $this->pageRows($input['pages'], $pageCount, $row);
                 $settings['pages'] = $settings['pages'] === []
-                    ? self::autoPages($settings['products'], $known, $pageCount - self::BRAND_PAGES)
+                    ? self::autoPages($settings['products'], $known, $pageCount - self::BRAND_PAGES, self::gammeIdsOf($row))
                     : self::pad($settings['pages'], $pageCount);
             } elseif ($resize) {
                 $settings['pages'] = self::resize($settings['pages'], $pageCount, $settings['products'], $known);
@@ -565,13 +588,19 @@ final class CatalogueService
     }
 
     /**
-     * Les pages intérieures : `{layout, category}` (catégorie du webshop, ou null : « Notre
-     * sélection »). Trois mises en page, pas une de plus ; `pageCount − 4` pages au plus — les pages
-     * de la marque (1, 2, avant-dernière, dernière) ne s'envoient pas : elles viennent de la charte.
+     * Les pages intérieures. Une page de produits : `{layout, category}` (catégorie du webshop, ou null :
+     * « Notre sélection »), et au choix `gamme` (seulement les produits de cette gamme), `template` (A, B
+     * ou C ; absent = A), `filler` (`photo` + `fillerMediaId`, ou `illustration` : ce qui occupe la place
+     * libre quand la page n'est pas pleine). Une page de présentation (`presentation`,
+     * `presentation_liste`) : sa `gamme` (obligatoire), son `template`, un `text` / `textNl` (400
+     * caractères au plus, vide = rien). `pageCount − 4` pages au plus — les pages de la marque ne
+     * s'envoient pas. Rangée au plus court : seuls les champs qui ne valent pas leur défaut sont gardés.
      *
-     * @return list<array{layout:string, category:?int}>
+     * @param array<string,mixed> $row Le catalogue (propriétaire et boutique : la photo d'une boutique
+     *                                 vient de la médiathèque du réseau ou de la sienne).
+     * @return list<array<string,mixed>>
      */
-    private function pageRows(mixed $raw, int $pageCount): array
+    private function pageRows(mixed $raw, int $pageCount, array $row): array
     {
         $inner = $pageCount - self::BRAND_PAGES;
         if (!is_array($raw) || !array_is_list($raw)) {
@@ -579,23 +608,92 @@ final class CatalogueService
         }
         if (count($raw) > $inner) {
             throw new CatalogueError('VALIDATION_FAILED', 'Trop de pages intérieures.', 422, [['field' => 'pages', 'message' => sprintf(
-                'Un catalogue de %d pages a %d pages intérieures (les 4 autres sont celles de la marque) : %d envoyées. Choisissez 12 ou 16 pages, ou retirez des pages.',
+                'Un catalogue de %d pages a %d pages intérieures (les 4 autres sont celles de la marque) : %d envoyées. Ajoutez des pages (par 2, 16 au plus), ou retirez des pages intérieures.',
                 $pageCount, $inner, count($raw))]]);
         }
+        $gammes = null;
         $out = [];
         $errors = [];
         foreach ($raw as $index => $page) {
-            $layout = is_array($page) ? ($page['layout'] ?? null) : null;
-            $category = is_array($page) && array_key_exists('category', $page) ? $page['category'] : null;
-            if (!is_array($page) || array_diff(array_keys($page), ['layout', 'category']) !== []) {
-                $errors[] = ['field' => 'pages[' . $index . ']', 'message' => 'Forme attendue : {layout, category}.'];
-            } elseif (!is_string($layout) || !isset(self::LAYOUTS[$layout])) {
-                $errors[] = ['field' => 'pages[' . $index . '].layout', 'message' => 'Mise en page : ' . implode(', ', array_keys(self::LAYOUTS)) . '.'];
-            } elseif ($category !== null && (!is_int($category) || $category <= 0)) {
-                $errors[] = ['field' => 'pages[' . $index . '].category', 'message' => 'Identifiant de catégorie du webshop, ou null.'];
-            } else {
-                $out[] = ['layout' => $layout, 'category' => $category];
+            $field = 'pages[' . $index . ']';
+            if (!is_array($page) || array_is_list($page) && $page !== []) {
+                $errors[] = ['field' => $field, 'message' => 'Forme attendue : {layout, category, template, gamme, text, textNl, filler, fillerMediaId}.'];
+                continue;
             }
+            $unknown = array_diff(array_keys($page), self::PAGE_KEYS);
+            if ($unknown !== []) {
+                $errors[] = ['field' => $field . '.' . reset($unknown), 'message' => 'Champ inconnu.'];
+                continue;
+            }
+            $layout = $page['layout'] ?? null;
+            if (!is_string($layout) || !isset(self::LAYOUTS[$layout])) {
+                $errors[] = ['field' => $field . '.layout', 'message' => 'Mise en page : ' . implode(', ', array_keys(self::LAYOUTS)) . '.'];
+                continue;
+            }
+            $presentation = in_array($layout, self::PRESENTATIONS, true);
+            $category = $page['category'] ?? null;
+            if ($category !== null && (!is_int($category) || $category <= 0)) {
+                $errors[] = ['field' => $field . '.category', 'message' => 'Identifiant de catégorie du webshop, ou null.'];
+            }
+            $template = $page['template'] ?? null;
+            if ($template !== null && (!is_string($template) || !in_array($template, self::TEMPLATES, true))) {
+                $errors[] = ['field' => $field . '.template', 'message' => 'Gabarit : ' . implode(', ', self::TEMPLATES) . '.'];
+            }
+            $gamme = $page['gamme'] ?? null;
+            if ($gamme !== null && (!is_int($gamme) || $gamme <= 0)) {
+                $errors[] = ['field' => $field . '.gamme', 'message' => 'Identifiant de gamme du webshop, ou null.'];
+                $gamme = null;
+            } elseif ($gamme === null && $presentation) {
+                $errors[] = ['field' => $field . '.gamme', 'message' => 'Une page de présentation présente une gamme : identifiant de la gamme attendu.'];
+            } elseif ($gamme !== null) {
+                $gammes ??= array_map(static fn (array $g): int => (int) $g['id'], $this->webshop->gammes()['gammes']);
+                if ($gammes !== [] && !in_array($gamme, $gammes, true)) {
+                    $errors[] = ['field' => $field . '.gamme', 'message' => sprintf('Gamme %d inconnue ou inactive au webshop.', $gamme)];
+                }
+            }
+            $texts = [];
+            foreach (['text', 'textNl'] as $key) {
+                $value = $page[$key] ?? '';
+                if (!is_string($value) || mb_strlen(trim($value)) > self::PRESENTATION_TEXT_MAX) {
+                    $errors[] = ['field' => $field . '.' . $key, 'message' => sprintf('Texte de %d caractères au plus.', self::PRESENTATION_TEXT_MAX)];
+                    continue;
+                }
+                $texts[$key] = trim($value);
+            }
+            $filler = $page['filler'] ?? null;
+            $mediaId = $page['fillerMediaId'] ?? null;
+            if ($filler !== null && (!is_string($filler) || !in_array($filler, self::FILLERS, true))) {
+                $errors[] = ['field' => $field . '.filler', 'message' => 'Place libre : ' . implode(', ', self::FILLERS) . ', ou null.'];
+                $filler = null;
+            }
+            if ($filler === 'photo') {
+                if (!is_int($mediaId) || !$this->catalogueImage($mediaId, $row)) {
+                    $errors[] = ['field' => $field . '.fillerMediaId', 'message' => 'Image inconnue de la médiathèque (ou hors de celles que ce catalogue peut prendre).'];
+                }
+            } elseif ($mediaId !== null) {
+                $errors[] = ['field' => $field . '.fillerMediaId', 'message' => 'Seulement avec filler « photo ».'];
+            }
+
+            $clean = ['layout' => $layout, 'category' => $presentation ? null : $category];
+            if ($template !== null && $template !== self::TEMPLATES[0]) {
+                $clean['template'] = $template;
+            }
+            if ($gamme !== null) {
+                $clean['gamme'] = $gamme;
+            }
+            if ($presentation) {
+                foreach ($texts as $key => $value) {
+                    if ($value !== '') {
+                        $clean[$key] = $value;
+                    }
+                }
+            } elseif ($filler !== null) {
+                $clean['filler'] = $filler;
+                if ($filler === 'photo') {
+                    $clean['fillerMediaId'] = $mediaId;
+                }
+            }
+            $out[] = $clean;
         }
         if ($errors !== []) {
             throw new CatalogueError('VALIDATION_FAILED', 'Pages invalides.', 422, $errors);
@@ -605,21 +703,76 @@ final class CatalogueService
     }
 
     /**
+     * Les images de la médiathèque qu'une boutique peut mettre dans la place libre d'une page : celles
+     * du réseau et les siennes, pas archivées, les plus récentes d'abord.
+     *
+     * @return array{items: list<array{id:int, name:string, url:string, thumbnailUrl:?string}>, total:int}
+     */
+    public function catalogueMedia(int $shopId, string $name, int $page, int $perPage): array
+    {
+        $filters = ['kind' => 'image', 'shopOrNetwork' => $shopId];
+        if ($name !== '') {
+            $filters['name'] = $name;
+        }
+        $result = $this->media->page($filters, 'createdAt', true, $page, $perPage);
+
+        return [
+            'items' => array_map(static fn (array $m): array => ['id' => (int) $m['id'], 'name' => $m['name'], 'url' => $m['webUrl'], 'thumbnailUrl' => $m['thumbnailUrl']], $result['items']),
+            'total' => $result['total'],
+        ];
+    }
+
+    /**
+     * Une image que ce catalogue peut mettre dans une page : de la médiathèque du Marketing, pas
+     * archivée ; pour le catalogue d'une boutique, une image du réseau (sans boutique) ou de la sienne.
+     */
+    private function catalogueImage(int $mediaId, array $row): bool
+    {
+        $media = $this->media->find($mediaId);
+        if ($media === null || (string) $media['kind'] !== 'image' || $media['archived_at'] !== null) {
+            return false;
+        }
+
+        return ($row['owner'] ?? 'marque') !== 'boutique' || $media['shop_id'] === null || (int) $media['shop_id'] === (int) $row['shop_id'];
+    }
+
+    /** Les gammes d'un catalogue parti de gammes (`source_ref`), dans leur ordre. @return list<int> */
+    private static function gammeIdsOf(array $row): array
+    {
+        return ($row['source_kind'] ?? '') === 'gamme' && ($row['source_ref'] ?? null) !== null
+            ? array_values(array_filter(array_map('intval', explode(',', (string) $row['source_ref']))))
+            : [];
+    }
+
+    /**
      * La répartition automatique, sur exactement `$inner` pages : une catégorie après l'autre (dans
      * l'ordre des produits), en grilles de six, la première page en vedette ; si ça ne tient pas, en
-     * listes de douze. Trop peu de produits : les pages restantes sont vides. Trop : le document le
-     * dit (`PRODUCTS_OVERFLOW`).
+     * listes de douze. Plusieurs gammes : chaque gamme COMMENCE par sa page de présentation, suivie de
+     * ses produits par catégorie ; si la place manque, la présentation porte la liste de ses premiers
+     * produits (`presentation_liste`), puis les pages passent en listes. Trop peu de produits : les
+     * pages restantes sont vides. Trop : le document le dit (`PRODUCTS_OVERFLOW`).
      *
      * @param list<array{id:int, on:bool}> $products
-     * @return list<array{layout:string, category:?int}>
+     * @param list<int> $gammeIds Les gammes du catalogue (source), dans leur ordre.
+     * @return list<array<string,mixed>>
      */
-    public static function autoPages(array $products, array $known, int $inner): array
+    public static function autoPages(array $products, array $known, int $inner, array $gammeIds = []): array
     {
-        $pages = self::autoPagesWith($products, $known, false);
-        if (count($pages) > $inner) {
-            $dense = self::autoPagesWith($products, $known, true);
-            if (count($dense) < count($pages)) {
-                $pages = $dense;
+        if (count($gammeIds) > 1) {
+            $pages = [];
+            foreach ([['presentation', false], ['presentation_liste', false], ['presentation_liste', true]] as [$head, $dense]) {
+                $pages = self::autoPagesByGamme($products, $known, $gammeIds, $head, $dense);
+                if (count($pages) <= $inner) {
+                    break;
+                }
+            }
+        } else {
+            $pages = self::autoPagesWith($products, $known, false);
+            if (count($pages) > $inner) {
+                $dense = self::autoPagesWith($products, $known, true);
+                if (count($dense) < count($pages)) {
+                    $pages = $dense;
+                }
             }
         }
         $pages = array_slice($pages, 0, $inner);
@@ -641,22 +794,85 @@ final class CatalogueService
             $category = $known[$product['id']]['categoryId'] ?? 0;
             $byCategory[(int) $category] = ($byCategory[(int) $category] ?? 0) + 1;
         }
+
+        return self::categoryPages($byCategory, $dense, true, null);
+    }
+
+    /**
+     * Les pages d'une suite de catégories (catégorie → nombre de produits) : la première en vedette
+     * (si `$featured`), puis des grilles ; en listes si `$dense`.
+     *
+     * @param array<int,int> $byCategory
+     * @return list<array<string,mixed>>
+     */
+    private static function categoryPages(array $byCategory, bool $dense, bool $featured, ?int $gamme): array
+    {
         $pages = [];
         foreach ($byCategory as $category => $count) {
-            $first = $pages === [];
             $left = $count;
             while ($left > 0) {
-                $layout = $dense ? 'liste' : ($first ? 'vedette' : 'grille');
-                $pages[] = ['layout' => $layout, 'category' => $category > 0 ? $category : null];
+                $layout = $dense ? 'liste' : ($featured && $pages === [] ? 'vedette' : 'grille');
+                $page = ['layout' => $layout, 'category' => $category > 0 ? $category : null];
+                if ($gamme !== null) {
+                    $page['gamme'] = $gamme;
+                }
+                $pages[] = $page;
                 $left -= self::LAYOUTS[$layout];
-                $first = false;
             }
         }
 
         return $pages;
     }
 
-    /** @param list<array{layout:string, category:?int}> $pages @return list<array{layout:string, category:?int}> */
+    /**
+     * Plusieurs gammes : pour chacune, sa présentation (`$head`) puis ses produits par catégorie. Un
+     * produit de deux gammes est rangé dans la première ; ceux d'aucune gamme finissent en « Notre
+     * sélection ».
+     *
+     * @param list<int> $gammeIds
+     * @return list<array<string,mixed>>
+     */
+    private static function autoPagesByGamme(array $products, array $known, array $gammeIds, string $head, bool $dense): array
+    {
+        $byGamme = array_fill_keys($gammeIds, []);
+        $others = [];
+        foreach ($products as $product) {
+            if (!$product['on'] || !isset($known[$product['id']])) {
+                continue;
+            }
+            $own = array_map('intval', $known[$product['id']]['gammes'] ?? []);
+            $category = (int) ($known[$product['id']]['categoryId'] ?? 0);
+            $placed = false;
+            foreach ($gammeIds as $gid) {
+                if (in_array($gid, $own, true)) {
+                    $byGamme[$gid][] = $category;
+                    $placed = true;
+                    break;
+                }
+            }
+            if (!$placed) {
+                $others[$category] = ($others[$category] ?? 0) + 1;
+            }
+        }
+        $pages = [];
+        foreach ($byGamme as $gid => $categories) {
+            $pages[] = ['layout' => $head, 'category' => null, 'gamme' => $gid];
+            // La présentation avec liste porte les premiers produits de la gamme.
+            $rest = array_slice($categories, self::LAYOUTS[$head]);
+            $counts = [];
+            foreach ($rest as $category) {
+                $counts[$category] = ($counts[$category] ?? 0) + 1;
+            }
+            $pages = array_merge($pages, self::categoryPages($counts, $dense, false, $gid));
+        }
+        if ($others !== []) {
+            $pages = array_merge($pages, self::categoryPages($others, $dense, false, null));
+        }
+
+        return $pages;
+    }
+
+    /** @param list<array<string,mixed>> $pages @return list<array<string,mixed>> */
     private static function pad(array $pages, int $pageCount): array
     {
         while (count($pages) < $pageCount - self::BRAND_PAGES) {
@@ -668,13 +884,13 @@ final class CatalogueService
 
     /**
      * Change le nombre de pages sans liste de pages : des pages vides s'ajoutent à la fin ; en
-     * réduisant, seules des pages de la fin SANS produit sont retirées. Une page qui en porte n'est
-     * jamais retirée en silence : 422 `CATALOGUE_PAGES_NOT_EMPTY`, page par page — on renvoie alors
-     * `pages` (la liste voulue), ou « Répartir automatiquement » (`pages: []`).
+     * réduisant, seules des pages de la fin SANS produit ni présentation sont retirées. Une page qui en
+     * porte n'est jamais retirée en silence : 422 `CATALOGUE_PAGES_NOT_EMPTY`, page par page — on
+     * renvoie alors `pages` (la liste voulue), ou « Répartir automatiquement » (`pages: []`).
      *
-     * @param list<array{layout:string, category:?int}> $pages
+     * @param list<array<string,mixed>> $pages
      * @param list<array{id:int, on:bool}> $products
-     * @return list<array{layout:string, category:?int}>
+     * @return list<array<string,mixed>>
      */
     private static function resize(array $pages, int $pageCount, array $products, array $known): array
     {
@@ -685,7 +901,7 @@ final class CatalogueService
         $chosen = [];
         foreach ($products as $item) {
             if (($item['on'] ?? false) && isset($known[$item['id']])) {
-                $chosen[] = ['id' => $item['id'], 'categoryId' => $known[$item['id']]['categoryId'] ?? null];
+                $chosen[] = ['id' => $item['id'], 'categoryId' => $known[$item['id']]['categoryId'] ?? null, 'gammes' => $known[$item['id']]['gammes'] ?? []];
             }
         }
         $filled = self::fill($pages, $chosen)['items'];
@@ -693,6 +909,8 @@ final class CatalogueService
         for ($i = $inner; $i < count($pages); $i++) {
             if ($filled[$i] !== []) {
                 $details[] = ['field' => 'pages[' . $i . ']', 'message' => sprintf('La page %d porte %d produit(s).', $i + 3, count($filled[$i]))];
+            } elseif (in_array($pages[$i]['layout'], self::PRESENTATIONS, true)) {
+                $details[] = ['field' => 'pages[' . $i . ']', 'message' => sprintf('La page %d présente une gamme.', $i + 3)];
             }
         }
         if ($details !== []) {
@@ -704,38 +922,53 @@ final class CatalogueService
     }
 
     /**
-     * Range les produits choisis dans les pages, dans l'ordre : chaque page prend ceux de sa
-     * catégorie ; « Notre sélection » (catégorie nulle) prend ceux qui restent, toutes catégories.
+     * Range les produits choisis dans les pages, dans l'ordre : chaque page prend ceux de sa catégorie
+     * et de sa gamme (quand elle en a) ; « Notre sélection » (ni catégorie ni gamme) prend ceux qui
+     * restent, toutes catégories ; une présentation avec liste prend les premiers de sa gamme, une
+     * présentation seule aucun.
      *
-     * @param list<array{layout:string, category:?int}> $pages
-     * @param list<array<string,mixed>> $chosen Produits avec leur `categoryId`.
+     * @param list<array<string,mixed>> $pages
+     * @param list<array<string,mixed>> $chosen Produits avec leur `categoryId` (et leurs `gammes`).
      * @return array{items: list<list<array<string,mixed>>>, left:int}
      */
     public static function fill(array $pages, array $chosen): array
     {
-        $queues = [];
+        // L'ordre de rangement : par catégorie (dans l'ordre où elles apparaissent), puis l'ordre des produits.
+        $rank = [];
         foreach ($chosen as $product) {
-            $queues[(int) ($product['categoryId'] ?? 0)][] = $product;
+            $rank[(int) ($product['categoryId'] ?? 0)] ??= count($rank);
         }
+        $order = array_keys($chosen);
+        usort($order, static fn (int $a, int $b): int => [$rank[(int) ($chosen[$a]['categoryId'] ?? 0)], $a] <=> [$rank[(int) ($chosen[$b]['categoryId'] ?? 0)], $b]);
+        $placed = [];
         $out = [];
         foreach ($pages as $page) {
             $capacity = self::LAYOUTS[$page['layout']] ?? 6;
+            $category = $page['category'] ?? null;
+            $gamme = $page['gamme'] ?? null;
             $items = [];
-            if ($page['category'] !== null) {
-                $queues[$page['category']] ??= [];
-                $items = array_splice($queues[$page['category']], 0, $capacity);
-            } else {
-                foreach ($queues as $key => $queue) {
-                    if (count($items) >= $capacity) {
-                        break;
-                    }
-                    $items = array_merge($items, array_splice($queues[$key], 0, $capacity - count($items)));
+            // Une présentation avec liste : les premiers produits de sa gamme, dans l'ordre du catalogue.
+            foreach (in_array($page['layout'], self::PRESENTATIONS, true) ? array_keys($chosen) : $order as $key) {
+                if (count($items) >= $capacity) {
+                    break;
                 }
+                if (isset($placed[$key])) {
+                    continue;
+                }
+                $product = $chosen[$key];
+                if ($category !== null && (int) ($product['categoryId'] ?? 0) !== $category) {
+                    continue;
+                }
+                if ($gamme !== null && !in_array($gamme, array_map('intval', $product['gammes'] ?? []), true)) {
+                    continue;
+                }
+                $placed[$key] = true;
+                $items[] = $product;
             }
             $out[] = $items;
         }
 
-        return ['items' => $out, 'left' => array_sum(array_map('count', $queues))];
+        return ['items' => $out, 'left' => count($chosen) - count($placed)];
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -1103,6 +1336,7 @@ final class CatalogueService
                 'name'       => $lang === 'nl' ? $product['nameNl'] : $product['name'],
                 'imageUrl'   => $product['imageUrl'],
                 'categoryId' => $product['categoryId'],
+                'gammes'     => $product['gammes'],
                 'priceCents' => $price,
                 'currency'   => 'EUR',
             ];
@@ -1112,31 +1346,100 @@ final class CatalogueService
                 count($absent), $version !== null ? ' de ' . $version['name'] : '')];
         }
 
-        // Les pages intérieures : chaque page prend les produits de sa catégorie, dans l'ordre.
+        // Les pages intérieures : chaque page prend les produits de sa catégorie (et de sa gamme), dans
+        // l'ordre ; une page de présentation montre sa gamme, son illustration et, au choix, sa liste.
+        $charter = $this->charter();
+        $gammesById = array_column($data['gammes'], null, 'id');
+        $catalogueGammes = self::gammeIdsOf($row);
         $innerRows = self::innerPages($row['settings']);
         $filled = self::fill($innerRows, $chosen);
         $inner = [];
         $empty = 0;
+        $strip = static fn (array $p): array => array_diff_key($p, ['categoryId' => true, 'gammes' => true]);
         foreach ($innerRows as $index => $page) {
             $items = $filled['items'][$index];
+            $no = $index + 3;
+            $template = in_array($page['template'] ?? null, self::TEMPLATES, true) ? $page['template'] : self::TEMPLATES[0];
+            $gid = isset($page['gamme']) ? (int) $page['gamme'] : null;
+            $visual = $gid !== null ? $this->gammeVisual($gid, $gammesById, $charter, $lang) : null;
+            if ($visual !== null && !$visual['known']) {
+                $warnings[] = ['code' => 'GAMME_UNKNOWN', 'message' => sprintf('Page %d : la gamme %d n’est plus active au webshop.', $no, $gid)];
+            }
+            if (in_array($page['layout'], self::PRESENTATIONS, true)) {
+                $text = (string) ($page['text'] ?? '');
+                $textNl = (string) ($page['textNl'] ?? '');
+                if ($lang === 'nl' && $textNl === '' && $text !== '') {
+                    $warnings[] = ['code' => 'NL_TEXT_MISSING', 'message' => sprintf('Page %d : texte néerlandais de la présentation à écrire — le français est imprimé.', $no)];
+                }
+                if ($visual !== null && $visual['imageUrl'] === null && $visual['drawing'] === null) {
+                    $warnings[] = ['code' => 'GAMME_NO_ILLUSTRATION', 'message' => sprintf('Page %d : pas d’illustration pour la gamme « %s » (ni visuel dans la Charte des catalogues, ni photo au webshop, ni dessin de saison) : un cadre sobre est imprimé.', $no, $visual['title'])];
+                }
+                $inner[] = [
+                    'kind'       => 'presentation',
+                    'locked'     => false,
+                    'layout'     => $page['layout'],
+                    'template'   => $template,
+                    'gamme'      => $gid,
+                    'title'      => $visual['title'] ?? '',
+                    'text'       => $lang === 'nl' ? ($textNl !== '' ? $textNl : $text) : $text,
+                    'imageUrl'   => $visual['imageUrl'] ?? null,
+                    'drawing'    => $visual['drawing'] ?? null,
+                    'drawingUrl' => $visual['drawingUrl'] ?? null,
+                    'products'   => $page['layout'] === 'presentation_liste' ? array_map($strip, $items) : [],
+                ];
+                continue;
+            }
             if ($items === []) {
                 $empty++;
             }
             $category = $page['category'] !== null ? ($categories[$page['category']] ?? null) : null;
+            $title = $category !== null ? ($lang === 'nl' ? $category['nameNl'] : $category['name']) : ($visual !== null ? $visual['title'] : ($lang === 'nl' ? 'Onze selectie' : 'Notre sélection'));
+            $capacity = self::LAYOUTS[$page['layout']];
+            $room = max(0, $capacity - count($items));
+            $fillable = self::fillable($page['layout'], count($items));
+            // La place libre : une photo de la médiathèque, ou l'illustration de la gamme (celle de la page,
+            // sinon la première du catalogue), à défaut celle de la famille de la catégorie.
+            $filler = null;
+            if ($fillable && ($page['filler'] ?? null) === 'photo') {
+                $media = isset($page['fillerMediaId']) ? $this->media->find((int) $page['fillerMediaId']) : null;
+                if ($media === null || $media['archived_at'] !== null) {
+                    $warnings[] = ['code' => 'FILLER_MEDIA_MISSING', 'message' => sprintf('Page %d : la photo choisie pour la place libre n’est plus dans la médiathèque.', $no)];
+                } else {
+                    $filler = ['kind' => 'photo', 'imageUrl' => (string) $this->media->serialize($media)['webUrl'], 'drawing' => null, 'drawingUrl' => null];
+                }
+            } elseif ($fillable && ($page['filler'] ?? null) === 'illustration') {
+                $source = $visual ?? (isset($catalogueGammes[0]) ? $this->gammeVisual($catalogueGammes[0], $gammesById, $charter, $lang) : null);
+                $family = $category !== null ? self::familyDrawing((string) $category['name']) : null;
+                $drawing = $source['drawing'] ?? $family;
+                $imageUrl = $source['imageUrl'] ?? null;
+                if ($drawing === null && $imageUrl === null) {
+                    $warnings[] = ['code' => 'FILLER_NO_ILLUSTRATION', 'message' => sprintf('Page %d : pas d’illustration pour cette gamme ni pour cette catégorie : la place reste libre.', $no)];
+                } else {
+                    $filler = ['kind' => 'illustration', 'imageUrl' => $drawing === null ? $imageUrl : null, 'drawing' => $drawing, 'drawingUrl' => $drawing === null ? null : MediaService::publicUrl($drawing)];
+                }
+            }
             $inner[] = [
-                'kind'     => 'products',
-                'locked'   => false,
-                'layout'   => $page['layout'],
-                'category' => $page['category'],
-                'title'    => $category !== null ? ($lang === 'nl' ? $category['nameNl'] : $category['name']) : ($lang === 'nl' ? 'Onze selectie' : 'Notre sélection'),
-                'products' => array_map(static fn (array $p): array => array_diff_key($p, ['categoryId' => true]), $items),
+                'kind'       => 'products',
+                'locked'     => false,
+                'layout'     => $page['layout'],
+                'template'   => $template,
+                'category'   => $page['category'],
+                'gamme'      => $gid,
+                'title'      => $title,
+                // Le rappel de la gamme dans l'en-tête : son dessin, au trait.
+                'drawing'    => $visual['drawing'] ?? null,
+                'drawingUrl' => $visual['drawingUrl'] ?? null,
+                'room'       => $room,
+                'fillable'   => $fillable,
+                'filler'     => $filler,
+                'products'   => array_map($strip, $items),
             ];
         }
         $left = $filled['left'];
         $pageCount = self::pageCountOf($row['settings']);
         if ($left > 0) {
             $warnings[] = ['code' => 'PRODUCTS_OVERFLOW', 'message' => sprintf('%d produit(s) sans place : %schoisissez une mise en page plus dense (liste) ou retirez des produits.',
-                $left, $pageCount < 16 ? 'passez à ' . ($pageCount + 4) . ' pages, ' : '')];
+                $left, $pageCount < 16 ? 'ajoutez 2 pages (' . ($pageCount + 2) . ' pages), ' : '')];
         }
         if ($empty > 0) {
             $warnings[] = ['code' => 'PAGES_EMPTY', 'message' => sprintf('%d page(s) intérieure(s) sans produit : ajoutez des produits, changez la catégorie de la page ou passez à un catalogue plus court.', $empty)];
@@ -1146,7 +1449,6 @@ final class CatalogueService
         }
 
         // Couverture et dernière page : la charte, verrouillées.
-        $charter = $this->charter();
         // Plusieurs gammes : la couverture de la première qui en a une dans la charte, sinon la générique.
         $gammeIds = $row['source_kind'] === 'gamme' ? array_map('intval', explode(',', (string) $row['source_ref'])) : [];
         $gammeId = $gammeIds[0] ?? null;
@@ -1262,6 +1564,106 @@ final class CatalogueService
             'pages'     => $pages,
             'warnings'  => array_values(array_unique($warnings, SORT_REGULAR)),
         ];
+    }
+
+    /**
+     * Une page de produits a-t-elle une place libre qu'une photo ou une illustration peut prendre ?
+     * Une rangée entière au moins (grille 2 × 3 : 4 produits au plus ; vedette : la vedette et 2 au
+     * plus), ou trois lignes de liste ; une page sans produit, toujours.
+     */
+    public static function fillable(string $layout, int $count): bool
+    {
+        return match ($layout) {
+            'grille'  => $count <= 4,
+            'vedette' => $count <= 3,
+            'liste'   => $count <= 9,
+            default   => false,
+        };
+    }
+
+    /**
+     * Une gamme telle qu'une page la montre : son nom (celui de sa couverture dans la charte, sinon
+     * le webshop, sans emoji ni « Gamme »), sa photo (visuel de sa couverture dans la charte, sinon
+     * la photo du webshop) et son dessin de saison (les illustrations livrées avec le module,
+     * `img/print/`). Rien n'est inventé : sans aucun des trois, la page imprime un cadre sobre.
+     *
+     * @return array{title:string, imageUrl:?string, drawing:?string, drawingUrl:?string, known:bool}
+     */
+    private function gammeVisual(int $gid, array $gammesById, array $charter, string $lang): array
+    {
+        $gamme = $gammesById[$gid] ?? null;
+        $cover = null;
+        foreach ($charter['covers'] ?? [] as $candidate) {
+            if ($candidate['gamme'] === $gid) {
+                $cover = $candidate;
+            }
+        }
+        $name = $gamme !== null ? (string) $gamme['name'] : '';
+        $title = $cover !== null ? ($lang === 'nl' ? ($cover['titleNl'] ?: $cover['titleFr']) : $cover['titleFr']) : self::gammeLabel($name);
+        if ($title === '') {
+            $title = ($lang === 'nl' ? 'Gamma ' : 'Gamme ') . $gid;
+        }
+        $slug = self::seasonSlug($name) ?? ($cover !== null ? self::seasonSlug((string) $cover['titleFr']) : null);
+        $drawing = $slug !== null ? 'img/print/' . $slug . '.png' : null;
+
+        return [
+            'title'      => $title,
+            'imageUrl'   => ($cover['imageUrl'] ?? null) ?? ($gamme['image'] ?? null),
+            'drawing'    => $drawing,
+            'drawingUrl' => $drawing !== null ? MediaService::publicUrl($drawing) : null,
+            'known'      => $gamme !== null,
+        ];
+    }
+
+    /** Le nom court d'une gamme : sans emoji de tête, préfixe « Gamme », parenthèses (comme `seasonLabel` de l'écran). */
+    private static function gammeLabel(string $name): string
+    {
+        $clean = (string) preg_replace('/^[^\p{L}\p{N}]+/u', '', $name);
+        $clean = (string) preg_replace('/^Icône\s*[-–]\s*/iu', '', $clean);
+        $clean = (string) preg_replace('/^Gamme\s+/iu', '', $clean);
+        $clean = (string) preg_replace('/\s*\(.*\)\s*$/u', '', $clean);
+        $clean = trim((string) preg_split('/\s+[–—]\s+/u', $clean)[0]);
+
+        return $clean !== '' ? $clean : trim($name);
+    }
+
+    /** Forme comparable d'un libellé : minuscules, sans accent ni ponctuation. */
+    private static function compact(string $value): string
+    {
+        $flat = mb_strtolower($value);
+        $flat = strtr($flat, ['à' => 'a', 'â' => 'a', 'ä' => 'a', 'é' => 'e', 'è' => 'e', 'ê' => 'e', 'ë' => 'e', 'î' => 'i', 'ï' => 'i', 'ô' => 'o', 'ö' => 'o', 'ù' => 'u', 'û' => 'u', 'ü' => 'u', 'ç' => 'c', 'œ' => 'oe']);
+
+        return (string) preg_replace('/[^a-z0-9]/', '', $flat);
+    }
+
+    /** Le dessin de saison d'une gamme (`img/print/<saison>.png`), reconnu au mot-clé de son nom — la règle de `seasonImage`. */
+    private static function seasonSlug(string $name): ?string
+    {
+        $flat = self::compact($name);
+        foreach ([['printan', 'printemps'], ['estival', 'ete'], ['automn', 'automne'], ['hivern', 'hiver'], ['noel', 'noel'], ['nicolas', 'saint-nicolas'],
+            ['epiphanie', 'epiphanie'], ['mere', 'fete-des-meres'], ['pascal', 'paques'], ['paque', 'paques'], ['valentin', 'saint-valentin'],
+            ['chandeleur', 'chandeleur'], ['glace', 'glace'], ['b2b', 'b2b']] as [$key, $slug]) {
+            if ($flat !== '' && str_contains($flat, $key)) {
+                return $slug;
+            }
+        }
+
+        return null;
+    }
+
+    /** Le dessin d'une famille de produits (`img/<dessin>.png`), d'après le nom de la catégorie — la règle de `familyImage`. */
+    private static function familyDrawing(string $category): ?string
+    {
+        $flat = self::compact($category);
+        foreach ([['tarte', 'sweet-tart-small'], ['patisserie', 'cake-slice'], ['viennoiserie', 'croissant'], ['pain', 'bread-1'], ['boulangerie', 'rolls'],
+            ['salade', 'salads'], ['plat', 'salads'], ['traiteur', 'salads'], ['biscuit', 'cookies'], ['cookie', 'cookies'], ['quiche', 'savoury-tart'],
+            ['snack', 'savoury-tart']] as [$key, $file]) {
+            if ($flat !== '' && str_contains($flat, $key)) {
+                return 'img/' . $file . '.png';
+            }
+        }
+
+        return null;
     }
 
     private static function money(?int $cents): string
