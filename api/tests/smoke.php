@@ -5093,7 +5093,7 @@ $pb = array_column($parBoutique['products'], null, 'id');
 $sb = array_column($sansBoutique['products'], null, 'id');
 check('catalogues : webshop illisible ou aucune boutique — le catalogue du Marketing, ses gammes et son prix',
     isset($pb[990001], $sb[990001]) && !isset($pb[990002]) && ($sb[990001]['gammes'] ?? []) === [990009]
-        && ($sb[990001]['priceCents'] ?? null) === 3050 && array_key_exists('error', $parBoutique['shops'][0] ?? []) && $parBoutique['shops'][0]['error'] === null
+        && ($sb[990001]['priceCents'] ?? null) === 3050 && str_contains((string) ($parBoutique['shops'][0]['error'] ?? ''), 'catalogue du Marketing')
         && in_array('Gamme test', array_column($sansBoutique['gammes'], 'name'), true),
     json_encode([$sb[990001] ?? null, $parBoutique['shops'][0] ?? null, $sansBoutique['gammes']]));
 $pdo->exec("DELETE FROM mar_offer_item WHERE sku_ref IN ('erp-990001', 'erp-990002', 'erp-saison-990009')");

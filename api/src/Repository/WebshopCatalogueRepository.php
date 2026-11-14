@@ -21,7 +21,8 @@ use Throwable;
  *        &include=webshop,portions,availability_periods,webshop_availability` (FR, puis NL pour
  *    les noms) — `webshop.price_gross` = prix du webshop de la boutique, `portion_price` = son
  *    prix de vente au comptoir, `availability_periods` = ses gammes ;
- *  - `GET /api/v1/product-availability-periods` — les gammes actives ;
+ *  - `GET /api/v1/product-availability-periods?alias_type=webshop` — les gammes actives sur le webshop
+ *    (swagger de l'ERP : avec `webshop`, seules les périodes dont `webshop_active` est vrai) ;
  *  - `GET /api/v1/public/shops`, à défaut `GET /api/v1/shops` — adresse, horaires, téléphone.
  *
  * Gardé quelques minutes dans `mar_catalogue_cache` (un cache, pas une copie). TFBuddy muet :
@@ -114,7 +115,8 @@ final class WebshopCatalogueRepository
         // complète seulement les gammes qu'il ne rend pas.
         $local = $this->localProducts();
         if ($read['data'] === [] && $local !== []) {
-            return ['products' => $local, 'error' => null, 'readAt' => $read['readAt'], 'source' => 'catalogue'];
+            // L'erreur de l'ERP reste dite (l'écran montre pourquoi le webshop n'a pas répondu).
+            return ['products' => $local, 'error' => $read['error'] !== null ? $read['error'] . ' — produits repris du catalogue du Marketing.' : null, 'readAt' => $read['readAt'], 'source' => 'catalogue'];
         }
         if ($local !== []) {
             $gammesById = [];
@@ -195,7 +197,7 @@ final class WebshopCatalogueRepository
     {
         $read = $this->cached('gammes', self::TTL_REFERENCES, function (): array {
             $out = [];
-            foreach (ErpClient::rows($this->erp->get('/api/v1/product-availability-periods', ['lang_code' => 'fr'])) as $row) {
+            foreach (ErpClient::rows($this->erp->get('/api/v1/product-availability-periods', ['lang_code' => 'fr', 'alias_type' => 'webshop'])) as $row) {
                 if (empty($row['id']) || empty($row['is_active'])) {
                     continue;
                 }
