@@ -163,7 +163,7 @@ function Products({ page, lang }: { page: Extract<CatalogueDocPage, { kind: 'pro
       <div className="cat-h">{page.title}</div>
       <div className="cat-body" data-fit={page.title}>
         {page.products.length === 0 ? (
-          <div className="cat-empty">Page vide</div>
+          <div className="cat-empty">{lang === 'nl' ? 'Lege pagina' : 'Page vide'}</div>
         ) : page.layout === 'liste' ? (
           <div className="cat-list">
             {page.products.map((product) => (
