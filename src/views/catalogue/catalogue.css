@@ -144,3 +144,12 @@
 
 .catv-field .bro-seg { justify-self: start; }
 .catv-inline .muted { font-size: 12px; }
+
+/* Gammes du webshop : une ou plusieurs, cochées comme des cases (rectangles, pas de pilules). */
+.catv-gammes { display: flex; flex-wrap: wrap; gap: 8px; }
+.catv-gamme { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 7px 11px; font: inherit; font-size: 12.5px; color: var(--ink); cursor: pointer; }
+.catv-gamme:hover { border-color: var(--muted-2); }
+.catv-gamme.is-on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.catv-gamme__box { width: 16px; height: 16px; border: 1.5px solid var(--line); border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; flex: 0 0 auto; }
+.catv-gamme.is-on .catv-gamme__box { background: var(--accent); border-color: var(--accent); }
+.catv-gamme__n { color: var(--muted); font-size: 11.5px; }

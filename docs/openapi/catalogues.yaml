@@ -48,7 +48,7 @@ paths:
       tags: [Catalogues (marque)]
       summary: Crée un catalogue de la marque
       description: |
-        `source.kind` : `gamme` (les produits du webshop de la gamme `ref` sont cochés),
+        `source.kind` : `gamme` (les produits du webshop de la ou des gammes `ref` sont cochés),
         `campagne` (les produits ERP de l'offre de la campagne `ref`, ses boutiques comme versions)
         ou `choix` (`products`). Sans `pages`, elles sont réparties automatiquement par catégorie.
       security: [{ session: [] }]
@@ -453,7 +453,9 @@ components:
           required: [kind]
           properties:
             kind: { type: string, enum: [gamme, campagne, choix] }
-            ref: { type: integer, description: Gamme (TFBuddy) ou campagne (Marketing). }
+            ref:
+              description: Campagne (Marketing) ; gamme(s) TFBuddy — un identifiant, ou une liste de 1 à 8 gammes dont les produits se cumulent.
+              oneOf: [{ type: integer }, { type: array, minItems: 1, maxItems: 8, items: { type: integer } }]
         format: { type: string, enum: [A5, A4], default: A5 }
         langs: { type: array, items: { type: string, enum: [fr, nl] }, default: [fr] }
         shopIds: { type: array, items: { type: integer }, description: 'Une version par boutique (mar_shop.id).' }
@@ -483,7 +485,9 @@ components:
           required: [kind]
           properties:
             kind: { type: string, enum: [gamme, choix] }
-            ref: { type: integer }
+            ref:
+              description: Gamme(s) — un identifiant, ou une liste de 1 à 8 gammes.
+              oneOf: [{ type: integer }, { type: array, minItems: 1, maxItems: 8, items: { type: integer } }]
         format: { type: string, enum: [A5, A4] }
         langs: { type: array, items: { type: string, enum: [fr, nl] } }
         products: { type: array, items: { $ref: '#/components/schemas/ProductRow' } }
@@ -506,7 +510,7 @@ components:
         title: { type: string }
         owner: { type: string, enum: [marque, boutique] }
         shop: { type: [object, 'null'], properties: { id: { type: integer }, erpShopId: { type: [integer, 'null'] }, name: { type: string } } }
-        source: { type: object, properties: { kind: { type: string }, ref: { type: [string, 'null'] }, label: { type: [string, 'null'] } } }
+        source: { type: object, properties: { kind: { type: string }, ref: { type: [string, 'null'], description: Première gamme (compatibilité) }, refs: { type: array, items: { type: string }, description: Toutes les gammes du catalogue }, label: { type: [string, 'null'] } } }
         format: { type: string, enum: [A5, A4] }
         status: { $ref: '#/components/schemas/Status' }
         printQty: { type: [integer, 'null'] }

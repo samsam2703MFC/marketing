@@ -4809,11 +4809,11 @@ $tfbCat = static function (string $url, array $entetes = [], int $delai = 5, str
         return [200, (string) json_encode(['data' => [
             $produit(11, 'Bûche praliné', 'Pralinéstronk', $buches, '32.90', '32.90'),
             $produit(13, 'Cougnou 500 g', 'Kerstbrood 500 g', $fete, '7.00', '7.00'),
-            $produit(14, 'Pain d’épices', 'Peperkoek', $fete, '5.50', '5.50'),
+            array_replace($produit(14, 'Pain d’épices', 'Peperkoek', $fete, '5.50', '5.50'), ['availability_periods' => [['id' => 14, 'name' => 'Gamme Noël'], ['id' => 16, 'name' => 'Saint-Nicolas']]]),
         ]])];
     }
     if ($p === '/api/v1/product-availability-periods') {
-        return [200, (string) json_encode([['id' => 14, 'name' => '🎄 Gamme Noël', 'is_active' => 1, 'photo' => $img('g14')], ['id' => 15, 'name' => 'Vieille', 'is_active' => 0]])];
+        return [200, (string) json_encode([['id' => 14, 'name' => '🎄 Gamme Noël', 'is_active' => 1, 'photo' => $img('g14')], ['id' => 15, 'name' => 'Vieille', 'is_active' => 0], ['id' => 16, 'name' => 'Gamme Saint-Nicolas', 'is_active' => 1]])];
     }
     if ($p === '/api/v1/public/shops') {
         return [200, (string) json_encode([
@@ -4866,7 +4866,7 @@ $prods = array_column($lecture['body']['data']['products'] ?? [], null, 'id');
 check('catalogues : le webshop des boutiques — actifs, sans les cartons B2B, nom NL, photo, gamme',
     $lecture['status'] === 200 && array_keys($prods) === [12, 11, 13, 14] && ($prods[11]['nameNl'] ?? '') === 'Pralinéstronk'
         && ($prods[11]['imageUrl'] ?? '') === 'https://cdn.r2.dev/webshop/p11.webp' && ($prods[11]['gammes'] ?? []) === [14]
-        && array_column($lecture['body']['data']['gammes'] ?? [], 'name') === ['Gamme Noël'],
+        && array_column($lecture['body']['data']['gammes'] ?? [], 'name') === ['Gamme Noël', 'Gamme Saint-Nicolas'],
     json_encode(array_keys($prods)));
 check('catalogues : un prix par boutique, en centimes ; le prix général et les boutiques qui en ont un autre',
     ($prods[13]['priceCents'] ?? null) !== null && count($prods[13]['prices']) === 2 && count($prods[13]['priceDiffers']) === 1
@@ -4878,7 +4878,7 @@ check('catalogues : paramètre illisible (422)', call($catRouter, 'GET', '/api/v
 $cree = call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Noël 2026 — catalogue du réseau', 'source' => ['kind' => 'gamme', 'ref' => 14], 'shopIds' => [$catA, $catB], 'langs' => ['fr', 'nl']]);
 $cat = $cree['body']['data'] ?? [];
 check('catalogues : créé depuis une gamme — ses produits du webshop cochés, pages réparties par catégorie',
-    $cree['status'] === 201 && ($cat['owner'] ?? '') === 'marque' && ($cat['source'] ?? []) === ['kind' => 'gamme', 'ref' => '14', 'label' => 'Gamme Noël']
+    $cree['status'] === 201 && ($cat['owner'] ?? '') === 'marque' && ($cat['source'] ?? []) === ['kind' => 'gamme', 'ref' => '14', 'refs' => ['14'], 'label' => 'Gamme Noël']
         && array_column($cat['products'] ?? [], 'id') === [12, 11, 13, 14] && ($cat['pages'][0] ?? null) === ['layout' => 'vedette', 'category' => 500]
         && ($cat['pageCount'] ?? 0) === 2 + count($cat['pages'] ?? []) && ($cat['status'] ?? '') === 'brouillon' && ($cat['langs'] ?? []) === ['fr', 'nl'],
     json_encode([$cree['status'], $cree['body']['error'] ?? null, $cat]));
@@ -4894,6 +4894,22 @@ $refus = [
 ];
 check('catalogues : refusés (422) — champ inconnu, titre vide, source inconnue, gamme ou campagne inconnue, format, boutique inconnue',
     array_unique($refus) === [422], json_encode($refus));
+// Plusieurs gammes : leurs produits se cumulent ; une gamme inconnue dans la liste, ou plus de 8, est refusée.
+$deux = call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Noël et Saint-Nicolas', 'source' => ['kind' => 'gamme', 'ref' => [14, 16, 14]], 'shopIds' => [$catA, $catB]]);
+$deuxIds = array_column($deux['body']['data']['products'] ?? [], 'id');
+sort($deuxIds);
+$refusListe = [
+    call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'x', 'source' => ['kind' => 'gamme', 'ref' => [14, 99]]])['status'],
+    call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'x', 'source' => ['kind' => 'gamme', 'ref' => range(1, 9)]])['status'],
+    call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'x', 'source' => ['kind' => 'gamme', 'ref' => []]])['status'],
+];
+check('catalogues : plusieurs gammes — produits cumulés, gammes sans doublon, nom des deux ; liste invalide refusée (422)',
+    $deux['status'] === 201 && $deuxIds === [11, 12, 13, 14] && ($deux['body']['data']['source']['refs'] ?? []) === ['14', '16']
+        && ($deux['body']['data']['source']['label'] ?? '') === 'Gamme Noël + Gamme Saint-Nicolas' && array_unique($refusListe) === [422],
+    json_encode([$deux['status'], $deux['body']['error'] ?? null, $deuxIds, $deux['body']['data']['source'] ?? null, $refusListe]));
+if (isset($deux['body']['data']['id'])) {
+    call($catRouter, 'DELETE', '/api/v1/marketing/catalogues/' . $deux['body']['data']['id']);
+}
 $choix = call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Au choix', 'source' => ['kind' => 'choix'], 'shopIds' => [$catA], 'products' => [['id' => 13, 'on' => true]]]);
 check('catalogues : au choix — seulement les produits envoyés', $choix['status'] === 201 && array_column($choix['body']['data']['products'] ?? [], 'id') === [13]
     && ($choix['body']['data']['pages'] ?? []) === [['layout' => 'vedette', 'category' => 600]], json_encode($choix['body']));

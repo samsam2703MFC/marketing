@@ -2880,7 +2880,7 @@ export interface Catalogue {
   title: string
   owner: CatalogueOwner
   shop: { id: number; erpShopId: number | null; name: string } | null
-  source: { kind: CatalogueSourceKind; ref: string | null; label: string | null }
+  source: { kind: CatalogueSourceKind; ref: string | null; refs?: string[]; label: string | null }
   format: CatalogueFormat
   status: CatalogueStatus
   printQty: number | null
@@ -2898,7 +2898,8 @@ export interface Catalogue {
 
 export interface CatalogueCreate {
   title: string
-  source: { kind: CatalogueSourceKind; ref?: number }
+  /** `ref` : une gamme, ou plusieurs (liste d'identifiants, 8 au plus). */
+  source: { kind: CatalogueSourceKind; ref?: number | number[] }
   format?: CatalogueFormat
   langs?: CatalogueLang[]
   shopIds?: number[]
