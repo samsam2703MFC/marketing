@@ -107,7 +107,7 @@ function Price({ product, lang }: { product: CatalogueDocProduct; lang: Catalogu
 function Photo({ product, family, className = '' }: { product: CatalogueDocProduct; family: string; className?: string }) {
   const drawing = product.imageUrl ? null : absolute(familyImage(family))
   return (
-    <span className={`cat-photo${drawing ? ' cat-photo--drawing' : ''} ${className}`}>
+    <span className={`cat-photo${drawing ? ' cat-photo--drawing' : ''}${product.imageUrl ? ' cat-photo--img' : ''} ${className}`}>
       {product.imageUrl ? <img src={product.imageUrl} alt="" /> : drawing ? <img src={drawing} alt="" /> : <span className="cat-photo__none" />}
     </span>
   )
