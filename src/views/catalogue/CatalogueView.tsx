@@ -19,7 +19,7 @@ import type {
 import { TfBuddyError } from '../../lib/api/http'
 import { useAsync } from '../../lib/useAsync'
 import { openPrintWindow } from '../../lib/print'
-import { CatalogueSheet, FORMAT_MM, LAYOUT_LABELS, TEMPLATE_LABELS, catalogueCss, formatCents, isPresentation, sheetSize } from './CataloguePages'
+import { CatalogueSheet, FORMAT_MM, HEADER_LABELS, LAYOUT_LABELS, TEMPLATE_LABELS, catalogueCss, formatCents, isPresentation, sheetSize } from './CataloguePages'
 import type { CatalogueSheetMode } from './CataloguePages'
 import './catalogue.css'
 
@@ -432,6 +432,11 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
     groups.set(key, [...(groups.get(key) ?? []), entry])
   }
   const checked = cat.products.filter((row) => row.on).length
+  // Les catégories du webshop qui ont des produits hors du catalogue : on peut les ajouter d'un coup.
+  const addable = [...categories.values()]
+    .map((c) => ({ c, ids: products.filter((product) => product.categoryId === c.id && !inCatalogue.has(product.id)).map((product) => product.id) }))
+    .filter(({ ids }) => ids.length > 0)
+    .sort((a, b) => a.c.name.localeCompare(b.c.name, 'fr'))
 
   function toggleProduct(productId: number, on: boolean) {
     toggleProducts([productId], on)
@@ -442,6 +447,30 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
     const next = cat.products.map((row) => (wanted.has(row.id) ? { ...row, on } : row))
     for (const id of ids) if (!cat.products.some((row) => row.id === id)) next.push({ id, on })
     change({ products: next })
+  }
+
+  /**
+   * Ajoute une catégorie du webshop : ses produits cochés. Le serveur lui donne SA page (une page vide,
+   * sinon +2 pages, 16 au plus) ; on dit ce qui s'est passé.
+   */
+  function addCategory(categoryId: number, name: string, ids: number[]) {
+    const before = cat.pageCount
+    const next = [...cat.products, ...ids.filter((id) => !cat.products.some((row) => row.id === id)).map((id) => ({ id, on: true }))]
+    setSave({ status: 'saving' })
+    queue.current = queue.current
+      .then(() => api.updateCatalogue(cat.id, { products: next }))
+      .then((saved) => {
+        setCat(saved)
+        const own = saved.pages.some((page) => !isPresentation(page.layout) && page.category === categoryId)
+        setSave({
+          status: 'saved',
+          text: !own ? `« ${name} » : plus de place (${saved.pageCount} pages) — ses produits vont en « Notre sélection ».`
+            : saved.pageCount > before ? `« ${name} » a sa page : 2 pages ajoutées (${saved.pageCount} pages).`
+            : `« ${name} » a sa page.`,
+        })
+        setRevision((value) => value + 1)
+      })
+      .catch((cause: unknown) => setSave({ status: 'error', text: message(cause) }))
   }
 
   // Les catégories en accordéons : dépliées à l'ouverture celles qui ont un produit coché ; la
@@ -478,6 +507,14 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
   }
   function setAllLayouts(layout: CatalogueLayout) {
     change({ pages: innerPages.map((page) => (isPresentation(page.layout) ? page : { ...page, layout })) })
+  }
+  /** L'en-tête de toutes les pages de produits (les présentations ont le leur). */
+  function setAllHeaders(header: api.CatalogueHeader) {
+    change({ pages: innerPages.map((page) => (isPresentation(page.layout) ? page : { ...page, header })) })
+  }
+  /** La catégorie en lettres manuscrites, sur toutes les pages de produits. */
+  function setAllScript(script: boolean) {
+    change({ pages: innerPages.map((page) => (isPresentation(page.layout) ? page : { ...page, script })) })
   }
   /** Le gabarit de toutes les pages intérieures (chacune garde sa mise en page). */
   function setAllTemplates(template: CatalogueTemplate) {
@@ -589,6 +626,11 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
   const productsShown = docPages.reduce((sum, page) => sum + (page.kind === 'products' || page.kind === 'presentation' ? page.products.filter((item) => item.kind !== 'offer').length : 0), 0)
   const selectedDoc = selected !== null ? docPages[selected + 2] : undefined
   const family: 'products' | 'presentation' = selectedPage && isPresentation(selectedPage.layout) ? 'presentation' : 'products'
+  const productPages = innerPages.filter((p) => !isPresentation(p.layout))
+  const currentHeader: api.CatalogueHeader | null = selectedPage ? (isPresentation(selectedPage.layout) ? null : (selectedPage.header ?? 'titre'))
+    : productPages.length && productPages.every((p) => (p.header ?? 'titre') === (productPages[0].header ?? 'titre')) ? (productPages[0].header ?? 'titre') : null
+  const currentScript: boolean | null = selectedPage ? !!selectedPage.script
+    : productPages.length && productPages.every((p) => !!p.script === !!productPages[0].script) ? !!productPages[0].script : null
   const currentTemplate: CatalogueTemplate | null = selectedPage ? (selectedPage.template ?? 'A')
     : innerPages.length && innerPages.every((p) => (p.template ?? 'A') === (innerPages[0].template ?? 'A')) ? (innerPages[0].template ?? 'A') : null
 
@@ -654,6 +696,27 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
             <input type="checkbox" checked={allWebshop} onChange={(event) => setAllWebshop(event.target.checked)} />
             Montrer tout le webshop {cat.owner === 'boutique' ? 'de la boutique' : ''}
           </label>
+          {addable.length ? (
+            <label className="catv-field catv-addcat">
+              <span>Ajouter une catégorie du webshop</span>
+              <select
+                value=""
+                onChange={(event) => {
+                  const pick = addable.find(({ c }) => String(c.id) === event.target.value)
+                  if (!pick) return
+                  addCategory(pick.c.id, pick.c.name, pick.ids)
+                  setOpened((prev) => new Set([...(prev ?? []), pick.c.name]))
+                }}
+              >
+                <option value="">＋ Choisir une catégorie…</option>
+                {addable.map(({ c, ids }) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({ids.length} produit{ids.length > 1 ? 's' : ''})
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           {webshop.loading ? <p className="muted">Lecture du webshop…</p> : null}
           {webshop.error ? <p className="error">{webshop.error}</p> : null}
           {(webshop.data?.shops ?? []).filter((s) => s.error).map((s) => (
@@ -741,7 +804,7 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
               </select>
             ) : null}
             <span className="catv-save">
-              {save.status === 'saving' ? 'Enregistrement…' : save.status === 'saved' ? 'Enregistré' : save.status === 'error' ? <span className="error">{save.text}</span> : null}
+              {save.status === 'saving' ? 'Enregistrement…' : save.status === 'saved' ? (save.text ?? 'Enregistré') : save.status === 'error' ? <span className="error">{save.text}</span> : null}
             </span>
           </div>
           {doc.error ? <p className="error">{doc.error}</p> : null}
@@ -841,6 +904,44 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
                 )
               })}
             </div>
+            {selectedPage && isPresentation(selectedPage.layout) ? null : (
+              <>
+                <div className="catv-subt">Titre et illustration de la catégorie{selectedPage ? '' : ' · toutes les pages'}</div>
+                <div className="catv-layouts">
+                  {api.CATALOGUE_HEADERS.map((header) => (
+                    <button
+                      key={header}
+                      type="button"
+                      className={`catv-layout catv-tpl${currentHeader === header ? ' is-on' : ''}`}
+                      disabled={!productPages.length}
+                      title={`${HEADER_LABELS[header].label} — ${HEADER_LABELS[header].hint} (le dessin de la famille de la catégorie, sinon celui de la gamme)`}
+                      onClick={() => (selected !== null ? setPage(selected, { header }) : setAllHeaders(header))}
+                    >
+                      <HeaderIcon header={header} />
+                      <span>{HEADER_LABELS[header].label}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="catv-field catv-script">
+                  <span title="Le nom de la catégorie, sous celui de la gamme, en lettres manuscrites (Playwrite, la police manuscrite de la marque)">
+                    Catégorie en lettres manuscrites{selectedPage ? '' : ' · toutes les pages'}
+                  </span>
+                  <span className="bro-seg">
+                    {([[false, 'Non'], [true, 'Oui']] as const).map(([value, label]) => (
+                      <button
+                        key={label}
+                        type="button"
+                        disabled={!productPages.length}
+                        className={currentScript === value ? 'is-on' : ''}
+                        onClick={() => (selected !== null ? setPage(selected, { script: value }) : setAllScript(value))}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </span>
+                </div>
+              </>
+            )}
             <div className="catv-subt">Gabarit{selectedPage ? '' : ' de toutes les pages'}</div>
             <div className="catv-layouts">
               {(['A', 'B', 'C'] as CatalogueTemplate[]).map((template) => (
@@ -942,6 +1043,9 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
             checkedCategories={new Set(cat.products.filter((row) => row.on).map((row) => byId.get(row.id)?.categoryId ?? null).filter((c): c is number => c !== null))}
             categoryName={(id) => (id !== null ? (categories.get(id)?.name ?? null) : null)}
             showAvailability={cat.showAvailability ?? true}
+            offerImages={Object.fromEntries(
+              docPages.flatMap((page) => (page.kind === 'products' ? page.products : [])).filter(api.isDocOffer).filter((o) => !!o.imageUrl).map((o) => [o.id, o.imageUrl as string]),
+            )}
             onOffers={(offers) => change({ offers })}
             onAvailability={(showAvailability) => change({ showAvailability })}
           />
@@ -1063,7 +1167,7 @@ function offerIsOn(offer: api.WebshopOffer, choices: api.CatalogueOfferRow[], ch
  * « Promotions et bundles » : les offres de TFBuddy qui valent pour ce catalogue (réseau ou ses boutiques), un
  * interrupteur chacune — cochées d'office quand elles touchent un produit coché. Une vignette occupe une case de la
  * page de sa catégorie ; une remise programmée barre le prix des produits qu'elle vise. Et l'interrupteur de la
- * disponibilité (période, délai de commande) imprimée sous le prix.
+ * disponibilité (période, délai de commande) imprimée en pied de page, une ligne par page de catégorie.
  */
 function OffersCard({
   offers,
@@ -1074,6 +1178,7 @@ function OffersCard({
   checkedCategories,
   categoryName,
   showAvailability,
+  offerImages,
   onOffers,
   onAvailability,
 }: {
@@ -1085,12 +1190,24 @@ function OffersCard({
   checkedCategories: Set<number>
   categoryName: (id: number | null) => string | null
   showAvailability: boolean
+  /** L'image de chaque vignette telle que le document l'imprime (id de l'offre → adresse). */
+  offerImages: Record<string, string>
   onOffers: (offers: api.CatalogueOfferRow[]) => void
   onAvailability: (on: boolean) => void
 }) {
-  function toggle(offer: api.WebshopOffer, on: boolean) {
+  // L'image d'une vignette (client, 14/11/2026 : « insert picture from médiathèque ») : choisie dans la médiathèque.
+  const [picking, setPicking] = useState<api.WebshopOffer | null>(null)
+  const [thumbs, setThumbs] = useState<Record<number, string>>({})
+  const choiceOf = (offer: api.WebshopOffer) => choices.find((c) => c.type === offer.type && c.id === offer.erpId)
+  function save(offer: api.WebshopOffer, patch: Partial<api.CatalogueOfferRow>) {
+    const current = choiceOf(offer)
     const next = choices.filter((c) => !(c.type === offer.type && c.id === offer.erpId))
-    onOffers([...next, { type: offer.type, id: offer.erpId, on }])
+    const on = patch.on ?? current?.on ?? offerIsOn(offer, choices, checkedIds, checkedCategories)
+    const mediaId = patch.mediaId !== undefined ? patch.mediaId : (current?.mediaId ?? null)
+    onOffers([...next, { type: offer.type, id: offer.erpId, on, mediaId }])
+  }
+  function toggle(offer: api.WebshopOffer, on: boolean) {
+    save(offer, { on })
   }
   return (
     <section className="card">
@@ -1113,6 +1230,25 @@ function OffersCard({
                     .join(' · ')}
                 </small>
                 <small className="catv-sub">→ {where}</small>
+                {offer.type !== 'scheduledDiscount' ? (
+                  <span className="catv-offer__img">
+                    {choiceOf(offer)?.mediaId ? (
+                      <>
+                        {(thumbs[choiceOf(offer)?.mediaId as number] ?? offerImages[offer.id]) ? <img src={thumbs[choiceOf(offer)?.mediaId as number] ?? offerImages[offer.id]} alt="" /> : <span className="catv-sub">image n° {choiceOf(offer)?.mediaId}</span>}
+                        <button type="button" className="linklike" onClick={() => setPicking(offer)}>
+                          Changer
+                        </button>
+                        <button type="button" className="linklike" onClick={() => save(offer, { mediaId: null })} title="Revenir aux photos des produits">
+                          Retirer
+                        </button>
+                      </>
+                    ) : (
+                      <button type="button" className="btn btn--sm" onClick={() => setPicking(offer)} title="Une image de la médiathèque à la place des photos des produits, dans la vignette">
+                        Image
+                      </button>
+                    )}
+                  </span>
+                ) : null}
               </span>
               <button
                 type="button"
@@ -1131,12 +1267,23 @@ function OffersCard({
       <div className="catv-offer catv-offer--avail">
         <span className="catv-offer__body">
           <span className="catv-offer__name">Afficher la disponibilité</span>
-          <small className="catv-sub">période et délai de commande lus dans TFBuddy, sous le prix</small>
+          <small className="catv-sub">période et délai de commande lus dans TFBuddy, en pied de chaque page</small>
         </span>
         <button type="button" className={`catv-sw${showAvailability ? ' is-on' : ''}`} role="switch" aria-checked={showAvailability} aria-label="Afficher la disponibilité" onClick={() => onAvailability(!showAvailability)}>
           <span className="catv-sw__track" aria-hidden="true" />
         </button>
       </div>
+      {picking ? (
+        <MediaPicker
+          onClose={() => setPicking(null)}
+          onPick={(asset) => {
+            const offer = picking
+            setPicking(null)
+            setThumbs((t) => ({ ...t, [Number(asset.id)]: asset.thumbnailUrl ?? asset.webUrl }))
+            save(offer, { mediaId: Number(asset.id) })
+          }}
+        />
+      ) : null}
     </section>
   )
 }
@@ -1189,6 +1336,45 @@ function TemplateIcon({ family, template }: { family: 'products' | 'presentation
   )
 }
 
+/** Vignette d'un en-tête de page : titre seul · bandeau · grande illustration. */
+function HeaderIcon({ header }: { header: api.CatalogueHeader }) {
+  const ink = 'currentColor'
+  const drawing = (cx: number, cy: number, r: number, color: string) => (
+    <g fill="none" stroke={color} strokeWidth="1.1">
+      <path d={`M${cx - r} ${cy + r * 0.5} Q${cx} ${cy - r * 1.1} ${cx + r} ${cy + r * 0.5} Z`} />
+      <path d={`M${cx - r * 0.4} ${cy - r * 0.1} L${cx - r * 0.1} ${cy + r * 0.4} M${cx + r * 0.2} ${cy - r * 0.2} L${cx + r * 0.5} ${cy + r * 0.3}`} />
+    </g>
+  )
+  return (
+    <svg width="40" height="52" viewBox="0 0 40 52" aria-hidden="true">
+      <rect x="0.6" y="0.6" width="38.8" height="50.8" rx="2" fill="none" stroke={ink} strokeWidth="1.2" />
+      {header === 'bandeau' ? <rect x="0.6" y="0.6" width="38.8" height="13" fill={ink} fillOpacity="0.85" /> : null}
+      {header === 'titre' ? (
+        <>
+          {drawing(10, 6.5, 3, ink)}
+          <rect x="15" y="5" width="16" height="3" rx="1" fill={ink} />
+        </>
+      ) : header === 'bandeau' ? (
+        <>
+          {drawing(8.5, 7, 4.5, '#fff')}
+          <rect x="16" y="5.5" width="18" height="3" rx="1" fill="#fff" />
+        </>
+      ) : (
+        <>
+          {drawing(20, 10, 7, ink)}
+          <rect x="11" y="18" width="18" height="3" rx="1" fill={ink} />
+        </>
+      )}
+      {(header === 'grande' ? [25, 37] : [17, 29, 41]).map((y) => (
+        <g key={y}>
+          <rect x="4" y={y} width="15" height={header === 'grande' ? 10 : 9} rx="1.5" fill="none" stroke={ink} strokeWidth="1" />
+          <rect x="21" y={y} width="15" height={header === 'grande' ? 10 : 9} rx="1.5" fill="none" stroke={ink} strokeWidth="1" />
+        </g>
+      ))}
+    </svg>
+  )
+}
+
 function LayoutIcon({ layout }: { layout: CatalogueLayout }) {
   if (isPresentation(layout)) {
     const list = layout === 'presentation_liste'
@@ -1205,6 +1391,8 @@ function LayoutIcon({ layout }: { layout: CatalogueLayout }) {
       ? [[2, 2, 36, 18], [2, 22, 17, 13], [21, 22, 17, 13], [2, 37, 17, 13], [21, 37, 17, 13]]
       : layout === 'grille'
         ? [[2, 2, 17, 15], [21, 2, 17, 15], [2, 19, 17, 15], [21, 19, 17, 15], [2, 36, 17, 14], [21, 36, 17, 14]]
+        : layout === 'mosaique'
+          ? [[2, 2, 17, 23], [21, 2, 17, 23], [2, 27, 17, 23], [21, 27, 17, 23]]
         : [[2, 3, 36, 7], [2, 13, 36, 7], [2, 23, 36, 7], [2, 33, 36, 7], [2, 43, 36, 6]]
   return (
     <svg width="40" height="52" viewBox="0 0 40 52" aria-hidden="true">

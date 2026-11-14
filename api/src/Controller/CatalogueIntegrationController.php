@@ -55,7 +55,7 @@ final class CatalogueIntegrationController
             }
             unset($product);
 
-            return Envelope::ok($data + ['layouts' => array_keys(CatalogueService::LAYOUTS), 'templates' => CatalogueService::TEMPLATES,
+            return Envelope::ok($data + ['layouts' => array_keys(CatalogueService::LAYOUTS), 'templates' => CatalogueService::TEMPLATES, 'headers' => CatalogueService::HEADERS,
                 'fillers' => CatalogueService::FILLERS, 'pageCounts' => CatalogueService::PAGE_COUNTS]);
         });
     }

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Marketing — catalogues produits
-  version: 1.3.0
+  version: 1.4.0
   description: |
     Les catalogues produits du Marketing (prix du webshop, gammes) : un imprimé A5 (A4 en option)
     de **8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16). Quatre pages viennent de la Charte des catalogues de la
@@ -28,6 +28,29 @@ info:
     pair de 8 à 16 (« rajouter une page, c'est toujours par 2 » : + 2 = deux pages intérieures vides en
     fin, − 2 = même règle qu'avant, `CATALOGUE_PAGES_NOT_EMPTY`). Rien n'est rompu : une page
     `{layout, category}` et un catalogue de 8, 12 ou 16 pages restent valables et se lisent comme avant.
+
+    v1.4 (14 novembre 2026, demande du client : « quand je rajoute une catégorie, la catégorie est sur une
+    page avec son illustration (2 ou 3 possibilités de montrer le titre et l'illustration) et 3-4
+    possibilités de montrer les produits ») : une catégorie = sa page — la répartition automatique donne
+    sa page à chaque catégorie (sans la place, même en listes, la dernière page devient « Notre
+    sélection » en liste) ; un `PUT` qui change `products` SANS `pages` donne sa page à une catégorie
+    ajoutée (ou qui ne tient plus dans les siennes) : une page vide reprise (placée après les siennes),
+    sinon `pageCount` + 2 (16 au plus), sinon rien ne bouge et le document le dit
+    (`CATEGORY_NO_PAGE`, « plus de place : 16 pages ») ; une catégorie retirée laisse sa page vide.
+    `header` d'une page de produits (`titre` défaut · `bandeau` · `grande` ; autre valeur : 422), mise en
+    page `mosaique` (grandes vignettes 2 × 2, 4 produits) ; au document, `header` et l'illustration
+    (`drawing` / `drawingUrl`) = le dessin de la famille de la catégorie, sinon de la gamme de la page ou
+    du catalogue, sinon null ; `headers` dans `catalogue-products` de la boutique. Puis (« la disponibilité
+    en dessous de page en footer, par catégorie ») : `availabilityFooter` sur les pages de produits et de
+    présentation avec liste — une ligne qui résume la disponibilité de la page ; `availability` reste sur
+    chaque produit, mais ne s'imprime plus sous le prix. Puis (« insert picture from médiathèque ») :
+    `offers[].mediaId` (image de la médiathèque de la vignette, validée comme la place libre ; 422 sinon),
+    `imageUrl` de la vignette au document, alerte `OFFER_MEDIA_MISSING`. Puis (« commencer avec le nom de la gamme et son
+    illustration, ensuite catégorie produit (possibilité ou pas en lettres manuscrites), ensuite les
+    produits ») : l'en-tête d'une page de produits = la gamme de la page (sinon celle du catalogue que
+    portent le plus de ses produits) et son illustration (`gammeTitle`, `drawing`, `gammeImageUrl`), puis la
+    catégorie (`title`) en sous-titre ; sans gamme, la catégorie seule et le dessin de sa famille ; `script`
+    (booléen, page) met la catégorie en lettres manuscrites ; `familyDrawingUrl`.
 
     v1.3 (14 novembre 2026, demandes du client : « rajouter les bundles et promotions (via API) et les
     appliquer dans une vignette dans la catégorie », puis « rajouter aussi les données de disponibilité ») :
@@ -472,6 +495,7 @@ components:
                       shops: { type: array, items: { $ref: '#/components/schemas/ShopRead' } }
                       layouts: { type: array, items: { $ref: '#/components/schemas/Layout' } }
                       templates: { type: array, items: { $ref: '#/components/schemas/Template' } }
+                      headers: { type: array, items: { $ref: '#/components/schemas/Header' } }
                       fillers: { type: array, items: { type: string, enum: [photo, illustration] } }
                       pageCounts: { type: array, items: { $ref: '#/components/schemas/PageCount' } }
     Charter:
@@ -513,7 +537,8 @@ components:
         meta: { type: object, properties: { requestId: { type: string } } }
     Status: { type: string, enum: [brouillon, pret, imprime] }
     PageCount: { type: integer, enum: [8, 10, 12, 14, 16], description: 'Pages du catalogue, toujours un nombre pair de 8 à 16 (« rajouter une page, c''est toujours par 2 »), dont 4 de la marque (1, 2, avant-dernière, dernière). Autre valeur : 422.' }
-    Layout: { type: string, enum: [vedette, grille, liste, presentation, presentation_liste], description: 'vedette : 1 + 4 produits ; grille : 2 × 3 ; liste : 12 avec prix ; presentation : la page d''une gamme (illustration, nom, texte), sans produit ; presentation_liste : la même avec les 8 premiers produits de la gamme et leurs prix.' }
+    Layout: { type: string, enum: [vedette, grille, liste, mosaique, presentation, presentation_liste], description: 'vedette : 1 + 4 produits ; grille : 2 × 3 ; liste : 12 avec prix ; mosaique : grandes vignettes 2 × 2 (4 produits) ; presentation : la page d''une gamme (illustration, nom, texte), sans produit ; presentation_liste : la même avec les 8 premiers produits de la gamme et leurs prix.' }
+    Header: { type: string, enum: [titre, bandeau, grande], description: 'En-tête d''une page de produits et illustration de sa catégorie : titre (titre et petit pictogramme, le défaut) · bandeau (bandeau de la couleur principale, illustration en blanc) · grande (grande illustration en haut de page, puis le titre). Indépendant du gabarit.' }
     Template: { type: string, enum: [A, B, C], description: 'Variante de gabarit. Pages de produits : A classique (fond papier, titre centré), B bandeau (bandeau de la couleur principale), C épuré (fond blanc, titre à gauche). Présentations : A illustration, B pleine couleur, C photo pleine.' }
     DocFiller:
       type: [object, 'null']
@@ -543,6 +568,8 @@ components:
         textNl: { type: string, maxLength: 400, description: 'Le même en néerlandais ; vide = le français, dit (NL_TEXT_MISSING).' }
         filler: { type: [string, 'null'], enum: [photo, illustration, null], description: 'Place libre d''une page de produits pas pleine (ignorée sur une présentation).' }
         fillerMediaId: { type: [integer, 'null'], description: 'Avec `filler: photo` : une image de la médiathèque, pas archivée ; pour une boutique, du réseau ou d''elle-même.' }
+        header: { $ref: '#/components/schemas/Header' }
+        script: { type: boolean, default: false, description: 'La catégorie en lettres manuscrites (police de la marque) ; autre valeur que booléen : 422. Rangé seulement quand vrai.' }
     CatalogueCreate:
       type: object
       additionalProperties: false
@@ -565,7 +592,7 @@ components:
         products: { type: array, maxItems: 400, items: { $ref: '#/components/schemas/ProductRow' } }
         pages: { type: array, maxItems: 12, items: { $ref: '#/components/schemas/PageRow' }, description: 'Pages intérieures, pageCount − 4 au plus.' }
         offers: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/OfferRow' } }
-        showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) sous le prix ; vrai par défaut.' }
+        showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) en pied de page (`availabilityFooter`) ; vrai par défaut.' }
     CatalogueUpdate:
       type: object
       additionalProperties: false
@@ -580,7 +607,7 @@ components:
         status: { $ref: '#/components/schemas/Status' }
         printQty: { type: [integer, 'null'], minimum: 1 }
         offers: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/OfferRow' } }
-        showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) sous le prix ; vrai par défaut.' }
+        showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) en pied de page (`availabilityFooter`) ; vrai par défaut.' }
     ShopCatalogueCreate:
       type: object
       additionalProperties: false
@@ -602,7 +629,7 @@ components:
         products: { type: array, items: { $ref: '#/components/schemas/ProductRow' } }
         pages: { type: array, items: { $ref: '#/components/schemas/PageRow' } }
         offers: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/OfferRow' } }
-        showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) sous le prix ; vrai par défaut.' }
+        showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) en pied de page (`availabilityFooter`) ; vrai par défaut.' }
     ShopCatalogueUpdate:
       type: object
       additionalProperties: false
@@ -616,7 +643,7 @@ components:
         status: { $ref: '#/components/schemas/Status' }
         printQty: { type: [integer, 'null'] }
         offers: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/OfferRow' } }
-        showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) sous le prix ; vrai par défaut.' }
+        showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) en pied de page (`availabilityFooter`) ; vrai par défaut.' }
     Catalogue:
       type: object
       properties:
@@ -673,6 +700,7 @@ components:
         type: { type: string, enum: [bundle, buyXGetY, quantity, scheduledDiscount] }
         id: { type: integer, minimum: 1, description: Identifiant de la promotion dans TFBuddy (inconnu pour ce catalogue = 422). }
         on: { type: boolean }
+        mediaId: { type: [integer, 'null'], description: 'Une image de la médiathèque (pas archivée ; pour une boutique, du réseau ou d''elle-même ; sinon 422 `offers[i].mediaId`) à la place des photos des produits dans la vignette ; null : les photos. Toujours rendu, dans l''ordre type, id, on, mediaId.' }
     Availability:
       type: object
       description: Ce que TFBuddy dit de la disponibilité d'un produit ; rien d'inventé.
@@ -715,7 +743,9 @@ components:
         currency: { type: string, const: EUR }
     DocOffer:
       description: La vignette d'une promotion, une case d'une page de produits.
-      allOf: [{ $ref: '#/components/schemas/Offer' }]
+      allOf:
+        - { $ref: '#/components/schemas/Offer' }
+        - { type: object, properties: { imageUrl: { type: [string, 'null'], description: 'L''image choisie dans la médiathèque (`mediaId`) ; null : les photos des produits (sans photo : le dessin de la famille). Disparue : alerte OFFER_MEDIA_MISSING.' } } }
     Document:
       type: object
       properties:
@@ -747,15 +777,21 @@ components:
                   locked: { const: false }
                   layout: { $ref: '#/components/schemas/Layout' }
                   template: { $ref: '#/components/schemas/Template' }
+                  header: { $ref: '#/components/schemas/Header' }
+                  script: { type: boolean, description: 'La catégorie (sous-titre) en lettres manuscrites.' }
+                  gammeTitle: { type: [string, 'null'], description: 'La gamme de la page (sinon celle du catalogue que portent le plus de ses produits) : son nom, en tête de page ; null sans gamme (la catégorie seule).' }
+                  gammeImageUrl: { type: [string, 'null'], description: 'La photo de cette gamme (charte, sinon webshop), quand elle n''a pas de dessin.' }
+                  familyDrawingUrl: { type: [string, 'null'], description: 'Le dessin de la famille du titre (vignettes sans photo).' }
                   category: { type: [integer, 'null'] }
                   gamme: { type: [integer, 'null'] }
                   title: { type: string, description: 'La catégorie, sinon le nom de la gamme, sinon « Notre sélection ».' }
-                  drawing: { type: [string, 'null'], description: Dessin de la gamme de la page, rappelé dans l'en-tête. }
+                  drawing: { type: [string, 'null'], description: "Illustration de l'en-tête : le dessin de la famille de la catégorie (img/…), sinon celui de la gamme de la page ou du catalogue (img/print/…), sinon null." }
                   drawingUrl: { type: [string, 'null'] }
                   room: { type: integer, description: Places libres (capacité − produits). }
                   fillable: { type: boolean, description: 'Une rangée entière au moins est libre : la place libre peut être remplie.' }
                   filler: { $ref: '#/components/schemas/DocFiller' }
                   products: { type: array, items: { oneOf: [{ $ref: '#/components/schemas/DocProduct' }, { $ref: '#/components/schemas/DocOffer' }] }, description: 'Produits et vignettes de promotions (une vignette compte dans la capacité du gabarit).' }
+                  availabilityFooter: { type: [string, 'null'], description: 'La disponibilité des produits de la page en une ligne de pied de page (« Disponible du 1/12 au 31/12 · sur commande 48 h », puis les produits qui diffèrent, ou « certains produits : voir en boutique ») ; null sans donnée ou `showAvailability` faux. Les vignettes de promotions gardent leur période.' }
               - type: object
                 description: Page de présentation d'une gamme (illustration — photo de sa couverture dans la charte, sinon du webshop, sinon son dessin de saison, sinon un cadre sobre —, nom, texte, et au choix ses premiers produits).
                 properties:
@@ -770,6 +806,7 @@ components:
                   drawing: { type: [string, 'null'] }
                   drawingUrl: { type: [string, 'null'] }
                   products: { type: array, items: { $ref: '#/components/schemas/DocProduct' } }
+                  availabilityFooter: { type: [string, 'null'], description: 'La disponibilité des produits de la page en une ligne de pied de page (« Disponible du 1/12 au 31/12 · sur commande 48 h », puis les produits qui diffèrent, ou « certains produits : voir en boutique ») ; null sans donnée ou `showAvailability` faux. Les vignettes de promotions gardent leur période.' }
               - type: object
                 description: Dernière page (charte, verrouillée).
                 properties: { kind: { const: back }, locked: { const: true }, title: { type: string }, text: { type: string }, qrUrl: { type: [string, 'null'] }, host: { type: [string, 'null'] }, shop: { $ref: '#/components/schemas/DocShop' } }

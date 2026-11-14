@@ -60,7 +60,8 @@
 .catv-col { min-width: 0; }
 .catv-search { display: flex; align-items: center; gap: 8px; }
 .catv-search input { flex: 1 1 auto; font: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
-.catv-products { max-height: calc(100vh - 290px); overflow: auto; margin-top: 6px; }
+/* Pas de barre de défilement interne (client, 14/11/2026 : « pas de scroll bar latérale ») : la page entière défile. */
+.catv-products { margin-top: 6px; }
 .catv-group { margin: 14px 0 4px; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
 .catv-product {
   display: grid; grid-template-columns: 44px minmax(0, 1fr) auto 46px; gap: 10px; align-items: center;
@@ -74,11 +75,11 @@
 .catv-product__price { white-space: nowrap; }
 .catv-flag { font-size: 11px; color: #7A5207; }
 
-.catv-stage { position: sticky; top: 0; min-width: 0; padding: 14px 16px 16px; border-radius: 12px; background: #EDE7DE; }
+.catv-stage { min-width: 0; padding: 14px 16px 16px; border-radius: 12px; background: #EDE7DE; }
 .catv-stagebar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .catv-stagebar h2 { margin: 0; }
 .catv-stagebar select { font: inherit; font-size: 12px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
-.catv-pages { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; max-height: calc(100vh - 290px); overflow: auto; padding: 2px; }
+.catv-pages { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; padding: 2px; }
 .catv-page { position: relative; flex: 0 0 auto; overflow: hidden; background: #fff; box-shadow: 0 1px 3px rgba(34, 34, 34, 0.18); cursor: pointer; }
 .catv-page > span { display: block; pointer-events: none; }
 .catv-page.is-selected { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -100,7 +101,7 @@
 .catv-dl { display: grid; grid-template-columns: 100px 1fr; gap: 6px 10px; margin: 0 0 12px; font-size: 13px; }
 .catv-dl dt { color: var(--muted); }
 .catv-dl dd { margin: 0; }
-.catv-shops { display: grid; gap: 2px; max-height: 220px; overflow: auto; }
+.catv-shops { display: grid; gap: 2px; }
 .catv-shops .bro-check { margin-top: 4px; }
 .catv-side .btn--danger { margin-top: 14px; }
 
@@ -199,3 +200,14 @@
 .catv-offer.is-off .catv-offer__badge { background: var(--chip); color: var(--muted-2); }
 .catv-offer__body { display: grid; gap: 2px; min-width: 0; }
 .catv-offer__name { font-size: 13px; color: var(--ink); overflow-wrap: anywhere; }
+.catv-addcat { margin: 4px 0 10px; }
+.catv-addcat select { width: 100%; }
+
+/* En-tête des pages (titre · bandeau · grande illustration) : vignettes comme les gabarits. */
+.catv-layouts--4 { grid-template-columns: repeat(2, 1fr); }
+.catv-head-note { margin: -6px 0 12px; font-size: 11px; line-height: 1.4; color: var(--muted); }
+/* L'image d'une vignette d'offre, choisie dans la médiathèque. */
+.catv-offer__img { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.catv-offer__img img { width: 44px; height: 32px; object-fit: contain; border-radius: 6px; border: 1px solid var(--line); background: #fff; }
+.catv-offer__img .btn { margin-top: 0; }
+.catv-script { margin-bottom: 12px; }

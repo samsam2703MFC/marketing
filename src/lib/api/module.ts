@@ -2860,11 +2860,15 @@ export type CatalogueOwner = 'marque' | 'boutique'
 export type CatalogueSourceKind = 'gamme' | 'campagne' | 'choix'
 export type CatalogueStatus = 'brouillon' | 'pret' | 'imprime'
 export type CatalogueFormat = 'A5' | 'A4'
-export type CatalogueLayout = 'vedette' | 'grille' | 'liste' | 'presentation' | 'presentation_liste'
+/** `mosaique` : grandes vignettes 2 × 2 (4 produits). */
+export type CatalogueLayout = 'vedette' | 'grille' | 'liste' | 'mosaique' | 'presentation' | 'presentation_liste'
 /** Les deux mises en page d'une page de présentation de gamme. */
 export const CATALOGUE_PRESENTATIONS: CatalogueLayout[] = ['presentation', 'presentation_liste']
 /** Variantes de gabarit d'une page intérieure ; une page sans gabarit = A. */
 export type CatalogueTemplate = 'A' | 'B' | 'C'
+/** L'en-tête d'une page de produits et l'illustration de sa catégorie : titre + pictogramme · bandeau · grande illustration ; absent = titre. */
+export type CatalogueHeader = 'titre' | 'bandeau' | 'grande'
+export const CATALOGUE_HEADERS: CatalogueHeader[] = ['titre', 'bandeau', 'grande']
 /** Ce qui occupe la place libre d'une page de produits pas pleine. */
 export type CatalogueFiller = 'photo' | 'illustration'
 export type CatalogueLang = 'fr' | 'nl'
@@ -2895,6 +2899,10 @@ export interface CataloguePageRow {
   /** La place libre d'une page de produits pas pleine : photo (`fillerMediaId`) ou illustration ; absent = rien. */
   filler?: CatalogueFiller | null
   fillerMediaId?: number | null
+  /** L'en-tête d'une page de produits ; absent = titre. */
+  header?: CatalogueHeader | null
+  /** La catégorie en lettres manuscrites ; absent = non. */
+  script?: boolean
 }
 
 export interface Catalogue {
@@ -2951,6 +2959,8 @@ export interface CatalogueOfferRow {
   /** Identifiant de la promotion dans TFBuddy. */
   id: number
   on: boolean
+  /** Une image de la médiathèque à la place des photos des produits dans la vignette ; null / absent : les photos. */
+  mediaId?: number | null
 }
 
 /** Une promotion lue chez TFBuddy, telle que l'éditeur la montre (et telle que la vignette l'imprime). */
@@ -2981,7 +2991,8 @@ export interface WebshopOffer {
   moreProducts: number
 }
 
-export type CatalogueDocOffer = Omit<WebshopOffer, 'productIds' | 'categoryIds' | 'categoryId' | 'shopScope'>
+/** Au document, `imageUrl` : l'image choisie dans la médiathèque (null : les photos des produits). */
+export type CatalogueDocOffer = Omit<WebshopOffer, 'productIds' | 'categoryIds' | 'categoryId' | 'shopScope'> & { imageUrl?: string | null }
 
 export interface WebshopProduct {
   id: number
@@ -3061,10 +3072,18 @@ export type CatalogueDocPage =
       locked: false
       layout: CatalogueLayout
       template?: CatalogueTemplate
+      header?: CatalogueHeader
+      /** La catégorie (sous-titre) en lettres manuscrites. */
+      script?: boolean
+      /** La gamme de la page (sinon celle du catalogue que portent ses produits) : son nom et sa photo ; null sans gamme. */
+      /** Le dessin de la famille du titre de la page (vignettes sans photo), adresse absolue. */
+      familyDrawingUrl?: string | null
+      gammeTitle?: string | null
+      gammeImageUrl?: string | null
       category: number | null
       gamme?: number | null
       title: string
-      /** Le dessin de la gamme de la page (`img/print/…`), rappelé dans l'en-tête ; son adresse absolue. */
+      /** L'illustration de l'en-tête : le dessin de la famille de la catégorie, sinon de la gamme (`img/…`) ; son adresse absolue. */
       drawing?: string | null
       drawingUrl?: string | null
       /** Places libres sur la page (capacité du gabarit − produits). */
@@ -3073,6 +3092,8 @@ export type CatalogueDocPage =
       fillable?: boolean
       filler?: CatalogueDocFiller | null
       products: CatalogueDocItem[]
+      /** La disponibilité des produits de la page, en une ligne de pied de page ; null : rien de connu ou éteinte. */
+      availabilityFooter?: string | null
     }
   | {
       kind: 'presentation'
@@ -3087,6 +3108,7 @@ export type CatalogueDocPage =
       drawing: string | null
       drawingUrl: string | null
       products: CatalogueDocProduct[]
+      availabilityFooter?: string | null
     }
   | { kind: 'back'; locked: true; title: string; text: string; qrUrl: string | null; host: string | null; shop: CatalogueShopInfo | null }
 

@@ -253,3 +253,65 @@
 .cat-offer--row .cat-offer__deal, .cat-offer--row .cat-avail { grid-column: 1; }
 .cat-offer--row .cat-prices { grid-column: 2; grid-row: 1; }
 .cat-t-C .cat-offer { background: var(--s); }
+
+/* ---------- en-tête d'une page de produits : titre · bandeau · grande illustration (indépendant du gabarit) ---------- */
+/* Bandeau : la couleur principale à fond perdu en haut, l'illustration de la catégorie en blanc, le titre à gauche. */
+.cat-inner.cat-head-bandeau { padding-top: 0; }
+.cat-head-bandeau .cat-h {
+  justify-content: flex-start; text-align: left; background: var(--p); color: var(--s); border-bottom: 0;
+  margin: calc(-1 * var(--b)) calc(-1 * (var(--u) * 9mm + var(--b))) 0;
+  padding: calc(var(--u) * 7mm + var(--b)) calc(var(--u) * 9mm + var(--b)) calc(var(--u) * 5mm);
+}
+.cat-head-bandeau .cat-h__mark { height: calc(var(--u) * 16mm); max-width: calc(var(--u) * 24mm); margin: 0; filter: brightness(0) invert(1); }
+/* Grande illustration : en haut de la page, centrée, puis le titre. */
+.cat-h--grande { flex-direction: column; gap: calc(var(--u) * 3mm); }
+.cat-h__big { display: block; height: calc(var(--u) * 36mm); width: 100%; }
+.cat-h__big img { width: 100%; height: 100%; object-fit: contain; }
+.cat-t-B .cat-h--grande .cat-h__big img { filter: brightness(0) invert(1); }
+.cat-t-C .cat-h--grande { align-items: flex-start; }
+.cat-t-C .cat-h--grande .cat-h__big img { object-position: left center; }
+/* Avec la grande illustration, la page garde sa capacité : vedette et liste se resserrent. */
+.cat-head-grande .cat-body { margin-top: calc(var(--u) * 4mm); }
+.cat-head-grande.cat-inner--vedette .cat-card--big, .cat-head-grande.cat-inner--vedette .cat-offer--big { flex-basis: calc(var(--u) * 44mm); }
+.cat-head-grande.cat-inner--liste .cat-list { gap: calc(var(--u) * 1.5mm); }
+.cat-head-grande.cat-inner--liste .cat-row .cat-photo { height: calc(var(--u) * 8.2mm); width: calc(var(--u) * 10mm); }
+.cat-head-grande.cat-inner--liste .cat-row { grid-template-columns: calc(var(--u) * 10mm) auto 1fr auto; }
+.cat-head-grande.cat-inner--liste .cat-row .cat-name { font-size: calc(var(--u) * 3.9mm); }
+
+/* ---------- grandes vignettes 2 × 2 (mosaique) ---------- */
+.cat-grid--mosaique .cat-card { padding: calc(var(--u) * 3mm); }
+.cat-grid--mosaique .cat-name { font-size: calc(var(--u) * 5.2mm); }
+.cat-grid--mosaique .cat-price { font-size: calc(var(--u) * 5.4mm); }
+
+/* ---------- disponibilité en pied de page (une ligne par page de catégorie) ---------- */
+.cat-foot {
+  flex: 0 0 auto; margin-top: calc(var(--u) * 2.6mm); padding-top: calc(var(--u) * 1.8mm); border-top: 0.3mm solid rgba(36, 28, 26, 0.14);
+  font-size: calc(var(--u) * 2.75mm); line-height: 1.3; letter-spacing: 0; text-align: center; color: rgba(36, 28, 26, 0.72);
+  max-height: calc(var(--u) * 10mm); overflow: hidden;
+}
+.cat-t-B .cat-foot, .cat-t-C .cat-foot { text-align: left; }
+.cat-pres.cat-t-B .cat-foot { color: var(--s); border-top-color: rgba(255, 255, 255, 0.35); }
+
+/* ---------- en-tête : la gamme et son illustration, puis la catégorie (manuscrite au choix) ---------- */
+.cat-h { flex-direction: column; align-items: center; gap: 0; }
+.cat-h__top { display: flex; align-items: center; justify-content: center; gap: calc(var(--u) * 3mm); max-width: 100%; }
+.cat-h--grande .cat-h__top { flex-direction: column; gap: calc(var(--u) * 3mm); width: 100%; }
+.cat-h__mark.is-photo { height: calc(var(--u) * 11mm); max-width: calc(var(--u) * 16mm); border-radius: calc(var(--u) * 1.5mm); object-fit: cover; margin-top: 0; }
+.cat-t-B .cat-h__mark.is-photo, .cat-head-bandeau .cat-h__mark.is-photo, .cat-t-B .cat-h--grande .cat-h__big.is-photo img { filter: none; }
+.cat-h__big.is-photo img { object-fit: contain; border-radius: calc(var(--u) * 2mm); }
+.cat-h__sub {
+  margin-top: calc(var(--u) * 2.2mm); font-family: 'Vank', 'CmVank', 'GothamPrint', serif; font-size: calc(var(--u) * 6mm); line-height: 1;
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--i); overflow-wrap: anywhere;
+}
+.cat-h--gamme .cat-h__text { font-size: calc(var(--u) * 8.5mm); }
+/* La catégorie en lettres manuscrites (Playwrite, la police manuscrite de la marque déjà livrée avec le module). */
+.cat-h__script {
+  font-family: 'Playwrite', 'CmScript', cursive; font-weight: 400; text-transform: none; letter-spacing: 0;
+  font-size: calc(var(--u) * 6.4mm); line-height: 1.5;
+}
+.cat-h__text.cat-h__script { font-size: calc(var(--u) * 8mm); line-height: 1.4; color: var(--p); }
+.cat-t-B .cat-h, .cat-t-C .cat-h, .cat-head-bandeau .cat-h { align-items: flex-start; }
+.cat-t-B .cat-h__top, .cat-t-C .cat-h__top, .cat-head-bandeau .cat-h__top { justify-content: flex-start; }
+.cat-t-C .cat-h--grande .cat-h__top { align-items: flex-start; }
+.cat-t-B .cat-h__sub, .cat-head-bandeau .cat-h__sub { color: inherit; opacity: 0.92; }
+.cat-head-bandeau .cat-h--grande .cat-h__top, .cat-head-bandeau .cat-h:not(.cat-h--grande) .cat-h__top { align-items: center; }

@@ -933,6 +933,47 @@ au document, sous le prix, « du 1/12 au 6/12 · sur commande 48 h » (NL « van
 `showAvailability` (booléen, vrai par défaut ; autre valeur `422`) l'éteint. Le swagger ne décrit pas de
 jours de la semaine ni de précommande pour un produit : rien de tel n'est lu.
 
+**Une catégorie = sa page, en-têtes, grandes vignettes (14 novembre 2026, `OpenAPI v1.4`).** Demande du client
+(capture d'une page « COUGNOU · NOËL · FROMAGES & SALAISONS » qui mélangeait trois catégories après l'ajout
+d'une catégorie) : « quand je rajoute une catégorie, la catégorie est sur une page avec son illustration (2 ou 3
+possibilités de montrer le titre et l'illustration) et 3-4 possibilités de montrer les produits ». **Répartition
+automatique** : une page (ou plus) par catégorie ; sans la place même en listes, la dernière page devient
+« Notre sélection » en liste. **Ajout** : un `PUT` qui change `products` sans `pages` (`placeCategories`) donne sa
+page à chaque catégorie qui a gagné des produits cochés et ne tient plus dans ses pages — une page vide reprise
+(sans produit, ni présentation ; placée juste après les pages de la catégorie quand elle continue), sinon
+`pageCount` + 2 (16 au plus, les deux pages avec le gabarit et l'en-tête de la première page de produits), sinon
+rien ne bouge ; au document, `CATEGORY_NO_PAGE` nomme la catégorie (« ses produits vont en « Notre sélection » »
+ou « n'ont pas de place » ; « plus de place : 16 pages »). Retirer une catégorie laisse sa page vide (jamais
+retirée en silence ; elle est la première reprise). Les vignettes de promotions ne sont pas comptées par ce
+calcul (le document dit le débordement). **`header`** d'une page de produits : `titre` (défaut, absent) ·
+`bandeau` · `grande` ; autre valeur `422 VALIDATION_FAILED` (`pages[i].header`), ignoré sur une présentation ;
+rangé dans l'ordre fixe des clés d'une page (`PAGE_KEYS`, MySQL 8 réordonne les clés JSON). Distinct du gabarit
+A · B · C (fond, cartes, alignement) : B a déjà un bandeau avec un petit pictogramme, mais ni A ni C ne font la
+« grande illustration », d'où un réglage à part. **Illustration** (`drawing`, `drawingUrl` absolue) : le dessin
+de la famille de la catégorie (la règle des vignettes sans photo, `familyImage`), sinon la gamme de la page, sinon
+la première gamme du catalogue, sinon `null` — jamais inventée. **`mosaique`** : grandes vignettes 2 × 2,
+4 produits (place libre à 2 produits au plus). `catalogue-products` de la boutique rend `headers`. **Disponibilité en pied de page** (même jour, client : « la disponibilité en dessous de page en
+footer (par catégorie) ») : `availabilityFooter` sur chaque page de produits (et présentation avec liste), composé
+par le serveur pour que Marketing et dashboard impriment la même ligne (`availabilityFooter()`) — tous la même :
+« Disponible du 1/12 au 31/12 · sur commande 48 h » (NL « Beschikbaar … ») ; sinon la plus courante puis les
+produits qui diffèrent (« Bûchette individuelle : du 1/12 au 24/12 », un produit sans donnée : « voir en
+boutique ») ; au-delà de 80 caractères (une ligne en A5), la plus courante + « certains produits : voir en boutique » ; aucune donnée
+ou `showAvailability` faux : `null`. `availability` reste sur chaque produit (API), plus imprimé sous le prix ; les
+vignettes de promotions gardent leur période. **Image d'une vignette d'offre** (même jour, capture d'une vignette « Cougnou 4+1 » au cercle vide : « insert
+picture from médiathèque ») : `offers[i].mediaId` — une image de la médiathèque, même règle que la place libre
+(pas archivée, pas une vidéo ; pour un catalogue de boutique, du réseau ou d'elle-même), sinon `422`
+`offers[i].mediaId` ; `null` la retire. Rendu toujours `{type, id, on, mediaId}` dans cet ordre (MySQL 8). Au document,
+la vignette porte `imageUrl` (elle remplace les photos des produits) ; image disparue : `OFFER_MEDIA_MISSING` et les
+photos. Sans photo ni image : le dessin de la famille de la page (sinon l'illustration de l'en-tête), plus de cercle vide. **En-tête gamme puis catégorie** (même jour, capture d'une page « NOËL » au petit pictogramme : « commencer avec
+le nom de la gamme et son illustration, ensuite catégorie produit (possibilité ou pas en lettres manuscrites), ensuite les
+produits ») : la gamme de la page, sinon celle des gammes du catalogue que portent le plus de ses produits
+(`gammeTitle`, illustration `drawing` / `gammeImageUrl` : charte, photo du webshop, dessin de saison), puis la catégorie
+(`title`) en sous-titre ; les trois en-têtes (`titre` · `bandeau` · `grande`) s'appliquent à ce bloc. Sans gamme
+(catalogue « au choix », « Notre sélection ») : la catégorie seule, avec le dessin de sa famille. `script` (booléen par
+page, rangé seulement vrai, `422` sinon) : la catégorie en lettres manuscrites — Playwrite DE VA, la police manuscrite
+déjà livrée avec le module (`public/fonts`, la même que le Studio visuel) et avec le design system du cockpit ; aucune
+police ajoutée. `familyDrawingUrl` : le dessin de la famille du titre (vignettes sans photo, dashboard).
+
 **Routes de la marque** (session, rôle réseau ; un compte de boutique → `403 PERM_ROLE_REQUIRED`) :
 
 | Méthode | Chemin | Rôle |
