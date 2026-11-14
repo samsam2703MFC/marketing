@@ -470,6 +470,9 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
     change({ pages })
     setSelected(to)
   }
+  function setAllLayouts(layout: CatalogueLayout) {
+    change({ pages: innerPages.map((page) => ({ ...page, layout })) })
+  }
   function setPage(index: number, patch: Partial<api.CataloguePageRow>) {
     change({ pages: innerPages.map((page, i) => (i === index ? { ...page, ...patch } : page)) })
   }
@@ -768,14 +771,32 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
         <div className="catv-side">
           <section className="card">
             <h2>Mise en page des pages intérieures</h2>
+            <div className="bro-seg catv-scope">
+              <button type="button" className={selected === null ? 'is-on' : ''} onClick={() => setSelected(null)}>
+                Toutes les pages
+              </button>
+              <select
+                className={selected !== null ? 'is-on' : ''}
+                value={selected ?? ''}
+                onChange={(event) => setSelected(event.target.value === '' ? null : Number(event.target.value))}
+              >
+                <option value="">Une page…</option>
+                {innerPages.map((_, i) => (
+                  <option key={i} value={i}>
+                    Page {i + 3}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="catv-layouts">
               {(Object.keys(LAYOUT_LABELS) as CatalogueLayout[]).map((layout) => (
                 <button
                   key={layout}
                   type="button"
-                  className={`catv-layout${selectedPage?.layout === layout ? ' is-on' : ''}`}
-                  disabled={!selectedPage}
-                  onClick={() => selected !== null && setPage(selected, { layout })}
+                  className={`catv-layout${(selectedPage ? selectedPage.layout === layout : innerPages.length > 0 && innerPages.every((p) => p.layout === layout)) ? ' is-on' : ''}`}
+                  disabled={!innerPages.length}
+                  title={selectedPage ? `Page ${(selected as number) + 3} en « ${LAYOUT_LABELS[layout].label} »` : `Toutes les pages intérieures en « ${LAYOUT_LABELS[layout].label} »`}
+                  onClick={() => (selected !== null ? setPage(selected, { layout }) : setAllLayouts(layout))}
                 >
                   <LayoutIcon layout={layout} />
                   <span>{LAYOUT_LABELS[layout].label}</span>
@@ -794,9 +815,7 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
                   ))}
                 </select>
               </label>
-            ) : (
-              <p className="catv-note">Un clic sur une page intérieure change sa mise en page ; les produits se répartissent tout seuls, par catégorie du webshop.</p>
-            )}
+            ) : null}
             <div className="catv-field">
               <span>Format</span>
               <span className="bro-seg">

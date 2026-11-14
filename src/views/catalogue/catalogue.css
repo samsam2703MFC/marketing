@@ -175,3 +175,6 @@
 }
 .catv-sw.is-on .catv-sw__track { background: #8D1D2C; }
 .catv-sw.is-on .catv-sw__track::after { transform: translateX(19px); }
+.catv-scope { display: flex; gap: 4px; margin-bottom: 10px; }
+.catv-scope select { border: 0; background: transparent; font: inherit; padding: 4px 8px; border-radius: 7px; cursor: pointer; }
+.catv-scope select.is-on { background: #fff; color: var(--ink, #1c1a17); }
