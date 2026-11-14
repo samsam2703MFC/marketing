@@ -829,9 +829,10 @@ de la personne qui pilote la campagne.
 ## 14. Les catalogues produits (novembre 2026)
 
 Des catalogues imprimés tirés du **webshop** (prix web, gammes : Noël, Saint-Nicolas…), de
-**8, 12 ou 16 pages** (`pageCount`, choisi à la création, modifiable) : quatre pages fixées par
+**8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16 — client, 14 novembre 2026 :
+« rajouter une page, c'est toujours par 2 » ; choisi à la création, modifiable par 2) : quatre pages fixées par
 la **Charte des catalogues** de la marque et verrouillées — couverture (page 1), page 2,
-avant-dernière et dernière (« commandez en ligne ») —, et 4, 8 ou 12 pages intérieures (nombre
+avant-dernière et dernière (« commandez en ligne ») —, et 4 à 12 pages intérieures (nombre
 fixé par le format) remplies par catégorie du webshop dans l'une de trois
 mises en page (`vedette` 1 + 4, `grille` 2 × 3, `liste` 12 avec prix), A5 ou A4, FR / NL, une
 version générale et une version par boutique (prix de SA boutique, son QR, son adresse).
@@ -869,12 +870,39 @@ fin SANS produit partent — sinon `422 CATALOGUE_PAGES_NOT_EMPTY` (une ligne pa
 écrit. Le document rend `pageCount` pages : `cover`, `brand` (`slot: page2`), les pages intérieures,
 `brand` (`slot: penultimate`), `back` — les quatre de la marque `locked: true`.
 
+**Pages de présentation, gabarits, place libre (14 novembre 2026).** Demandes du client : « une
+page de présentation (seule ou avec liste de produits), templates et layout ; chaque gamme doit avoir
+son illustration », « choisir à chaque fois 2-3 possibilités », puis « chaque page a sa catégorie,
+avec possibilité, s'il y a de la place, de mettre soit une photo (de la médiathèque) soit une
+illustration ». Une page intérieure est désormais `{layout, category, template?, gamme?, text?,
+textNl?, filler?, fillerMediaId?}` (`OpenAPI v1.2`, ajouts compatibles : `{layout, category}` reste
+valable, sans `template` = A). `layout` gagne `presentation` (illustration, nom de la gamme, texte)
+et `presentation_liste` (la même avec les 8 premiers produits de la gamme et leurs prix) — `gamme`
+y est obligatoire (une gamme active du webshop), `text` / `textNl` 400 caractères au plus.
+`template` ∈ `A · B · C` sur toute page (produits : classique · bandeau · épuré ; présentation :
+illustration · pleine couleur · photo pleine). Sur une page de produits, `gamme` ne prend que les
+produits de cette gamme ; `filler` = `photo` (+ `fillerMediaId` : image de `mar_media`, pas
+archivée ; pour une boutique, du réseau ou d'elle-même) ou `illustration` (le dessin de la gamme de la
+page — ou de la première gamme du catalogue —, sinon le dessin de la famille de la catégorie,
+`img/print/…` et `img/…` livrés avec le module : jamais une image inventée). Tout autre valeur :
+`422 VALIDATION_FAILED`, champ nommé (`pages[i].template`…), rien n'est écrit. Rangement au plus
+court (seuls les champs qui ne valent pas leur défaut). Le document : pages `presentation`
+(`imageUrl` = visuel de la couverture de la gamme dans la charte, sinon photo du webshop ;
+`drawing` / `drawingUrl` = dessin de saison ; ni l'un ni l'autre : un cadre sobre et
+`GAMME_NO_ILLUSTRATION`) ; pages `products` avec `template`, `gamme`, `drawing` (rappel dans
+l'en-tête), `room`, `fillable` (une rangée entière libre) et `filler`. **Répartition automatique** d'un
+catalogue de plusieurs gammes : chaque gamme commence par sa page de présentation, puis ses
+produits par catégorie ; sans la place, la présentation porte la liste (`presentation_liste`), puis
+les pages passent en listes. Réduire `pageCount` ne retire jamais une présentation en silence
+(`CATALOGUE_PAGES_NOT_EMPTY`). Nouvelle route du dashboard : `GET …/shops/{shopId}/catalogue-media`
+(ci-dessous).
+
 **Routes de la marque** (session, rôle réseau ; un compte de boutique → `403 PERM_ROLE_REQUIRED`) :
 
 | Méthode | Chemin | Rôle |
 |---|---|---|
 | GET | `/api/v1/marketing/catalogues` | liste paginée (`page`, `perPage` ≤ 100, `sort` ∈ `updatedAt, createdAt, title`, `filter[owner|status|shop][eq]`) |
-| POST | `/api/v1/marketing/catalogues` | création `{title, source{kind, ref}, format?, pageCount? (8 · 12 · 16), langs?, shopIds?, products?, pages?}` — `201` |
+| POST | `/api/v1/marketing/catalogues` | création `{title, source{kind, ref}, format?, pageCount? (8 · 10 · 12 · 14 · 16), langs?, shopIds?, products?, pages?}` — `201` |
 | GET / PUT / DELETE | `/api/v1/marketing/catalogues/{id}` | lecture, remplacement des champs présents (`pages: []` = répartition automatique), suppression `204` puis `404` |
 | GET | `/api/v1/marketing/catalogues/{id}/document?shopId=&lang=` | la version mise en pages (couverture, pages, dernière page, alertes) |
 | GET | `/api/v1/marketing/catalogue-products?shopIds=` | le webshop des boutiques : par produit, le prix de chacune, le prix le plus répandu et les boutiques qui en ont un autre |
@@ -889,6 +917,7 @@ identifiant de caisse ERP de la boutique. Jeton de service entre portails : `X-S
 | Méthode | Chemin (après `…/shops/{shopId}`) | Rôle |
 |---|---|---|
 | GET | `/catalogue-products` | ce que la boutique vend au webshop, à SES prix (`priceCents`, `shopPriceCents`), catégories, gammes, mises en page et nombres de pages permis (`pageCounts`) |
+| GET | `/catalogue-media` | les images de la médiathèque qu'elle peut mettre à la place libre d'une page : du réseau et les siennes, ni archivées ni vidéos (paginé, `perPage` ≤ 100, `filter[name][like]`) |
 | GET | `/catalogues` | ses catalogues seulement (paginé, `filter[status][eq]`) |
 | POST | `/catalogues` | création `{title, source{kind: gamme | choix, ref?}, format?, pageCount?, langs?, products?, pages?}` |
 | GET / PUT / DELETE | `/catalogues/{id}` | le sien seulement : celui d'une autre boutique ou de la marque → `404` |
@@ -897,9 +926,9 @@ identifiant de caisse ERP de la boutique. Jeton de service entre portails : `X-S
 
 Contraintes **appliquées par le serveur** pour un catalogue de boutique : produits vendus par la
 boutique seulement (`422 CATALOGUE_PRODUCT_NOT_SOLD`, produit par produit) ; prix de la boutique
-toujours (aucun champ de prix accepté) ; 8, 12 ou 16 pages, dont les quatre de la charte
+toujours (aucun champ de prix accepté) ; 8 à 16 pages, par 2 (9, 11, 18… : 422), dont les quatre de la charte
 (couverture, page 2, avant-dernière, dernière : aucun champ pour elles, une page intérieure n'a que
-`{layout, category}`) ; trois mises en page ; source `gamme` ou `choix` ; aucune autre boutique.
+`{layout, category, template, gamme, text, textNl, filler, fillerMediaId}`) ; cinq mises en page ; photos de la place libre du réseau ou d'elle seule ; source `gamme` ou `choix` ; aucune autre boutique.
 Le filtrage est dans `CatalogueRepository` (`owner = 'boutique' AND shop_id = :boutique`).
 
 **Impression** : `GET /api/v1/public/marketing/catalogue-prints/{token}` (lien signé HMAC avec
@@ -921,7 +950,9 @@ Tests (`api/tests/smoke.php`, « Catalogues produits » ; TFBuddy simulé aux fo
 déjà en production) : 200 et enveloppe, 401 (sans identité ; sans jeton de service ; faux jeton),
 403 (compte de boutique sur les routes de la marque), 404 (catalogue, boutique, lien), 422
 (champs inconnus, source, gamme ou campagne inconnues, format, boutique inconnue, mise en page,
-état, quantité, charte), isolation d'une boutique (lecture, modification, suppression, document,
+état, quantité, charte, gabarit, présentation sans gamme ou d'une gamme inconnue, texte trop long,
+place libre inconnue, photo absente, inconnue, archivée, vidéo ou d'une autre boutique), présentations
+de chaque gamme en répartition automatique (et leur liste quand la place manque), isolation d'une boutique (lecture, modification, suppression, document,
 lien, liste), contraintes de la boutique, pagination et `perPage` ramené à 100, suppression
 idempotente (`204` puis `404`), cache des lectures du webshop.
 

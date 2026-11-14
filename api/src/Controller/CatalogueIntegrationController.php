@@ -22,9 +22,10 @@ use Marketing\Support\Response;
  * ensuite TOUT à elle — un catalogue d'une autre boutique, ou de la marque, répond 404.
  *
  * Contraintes appliquées ici, quoi que le dashboard envoie (voir `CatalogueService`) : produits
- * vendus par la boutique seulement, prix de la boutique, 8, 12 ou 16 pages dont les quatre de la
- * charte (couverture, page 2, avant-dernière, dernière — aucun champ pour elles), trois mises en page,
- * source gamme ou choix.
+ * vendus par la boutique seulement, prix de la boutique, 8 à 16 pages (par 2) dont les quatre de la
+ * charte (couverture, page 2, avant-dernière, dernière — aucun champ pour elles), cinq mises en page
+ * (dont les présentations de gamme), trois gabarits, photos de la place libre du réseau ou d'elle seule
+ * (`…/catalogue-media`), source gamme ou choix.
  *
  * Et une route publique : la page d'impression d'un catalogue, par un lien signé de 48 h
  * (`…/catalogue-prints/{token}`), que le dashboard ouvre pour produire le PDF.
@@ -54,7 +55,47 @@ final class CatalogueIntegrationController
             }
             unset($product);
 
-            return Envelope::ok($data + ['layouts' => array_keys(CatalogueService::LAYOUTS), 'pageCounts' => CatalogueService::PAGE_COUNTS]);
+            return Envelope::ok($data + ['layouts' => array_keys(CatalogueService::LAYOUTS), 'templates' => CatalogueService::TEMPLATES,
+                'fillers' => CatalogueService::FILLERS, 'pageCounts' => CatalogueService::PAGE_COUNTS]);
+        });
+    }
+
+    /**
+     * `GET …/shops/{shopId}/catalogue-media?page=&perPage=&filter[name][like]=` : les images de la
+     * médiathèque que la boutique peut mettre dans la place libre d'une page (celles du réseau et les
+     * siennes), paginées, les plus récentes d'abord.
+     */
+    public function media(Request $request): array
+    {
+        return $this->withShop($request, function (array $shop) use ($request): array {
+            $errors = [];
+            foreach (array_keys($request->query) as $key) {
+                if (!in_array($key, ['page', 'perPage', 'filter'], true)) {
+                    $errors[] = ['field' => (string) $key, 'message' => 'Paramètre inconnu.'];
+                }
+            }
+            $page = (string) ($request->query['page'] ?? '1');
+            $perPage = (string) ($request->query['perPage'] ?? '24');
+            if (!ctype_digit($page) || (int) $page < 1) {
+                $errors[] = ['field' => 'page', 'message' => 'Entier positif attendu.'];
+            }
+            if (!ctype_digit($perPage) || (int) $perPage < 1 || (int) $perPage > 100) {
+                $errors[] = ['field' => 'perPage', 'message' => 'Entre 1 et 100.'];
+            }
+            $filter = $request->query['filter'] ?? [];
+            $name = '';
+            if (!is_array($filter) || array_diff(array_keys($filter), ['name']) !== []
+                || (isset($filter['name']) && (!is_array($filter['name']) || array_keys($filter['name']) !== ['like'] || !is_string($filter['name']['like'])))) {
+                $errors[] = ['field' => 'filter', 'message' => 'Filtre accepté : filter[name][like]=texte.'];
+            } else {
+                $name = mb_substr(trim((string) ($filter['name']['like'] ?? '')), 0, 80);
+            }
+            if ($errors !== []) {
+                return Envelope::error('VALIDATION_FAILED', 'Paramètres invalides.', 422, $errors);
+            }
+            $result = $this->service->catalogueMedia($shop['id'], $name, (int) $page, (int) $perPage);
+
+            return Envelope::ok($result['items'], ['pagination' => Envelope::pagination((int) $page, (int) $perPage, $result['total'])]);
         });
     }
 

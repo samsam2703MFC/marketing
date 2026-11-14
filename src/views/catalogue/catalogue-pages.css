@@ -59,8 +59,9 @@
 .cat-name { font-family: 'Vank', 'GothamPrint', serif; font-size: calc(var(--u) * 4.4mm); line-height: 1.05; letter-spacing: 0.02em; text-transform: uppercase; color: var(--i); overflow-wrap: anywhere; }
 .cat-price { font-weight: 500; font-size: calc(var(--u) * 4.6mm); color: var(--p); white-space: nowrap; }
 .cat-price--none { color: #8A4B00; }
-.cat-photo { display: grid; place-items: center; overflow: hidden; background: #F3EDE4; border-radius: calc(var(--u) * 2mm); }
-.cat-photo img { width: 100%; height: 100%; object-fit: cover; }
+.cat-photo { display: grid; place-items: center; overflow: hidden; background: #FFFFFF; border-radius: calc(var(--u) * 2mm); }
+/* La photo entière, dans son format (portrait, carré, paysage) : jamais recadrée. */
+.cat-photo img { width: 100%; height: 100%; object-fit: contain; }
 .cat-photo__none { width: 40%; height: 40%; border: 0.3mm dashed rgba(36, 28, 26, 0.25); border-radius: 50%; }
 
 .cat-card { display: flex; flex-direction: column; min-height: 0; background: #fff; border: 0.3mm solid rgba(36, 28, 26, 0.1); border-radius: calc(var(--u) * 2.5mm); padding: calc(var(--u) * 2.4mm); overflow: hidden; }
@@ -78,7 +79,7 @@
 
 .cat-list { display: grid; gap: calc(var(--u) * 2.6mm); }
 .cat-row { display: grid; grid-template-columns: calc(var(--u) * 11mm) auto 1fr auto; gap: calc(var(--u) * 2.4mm); align-items: center; }
-.cat-row .cat-photo { width: calc(var(--u) * 11mm); height: calc(var(--u) * 11mm); border-radius: 50%; }
+.cat-row .cat-photo { width: calc(var(--u) * 13mm); height: calc(var(--u) * 11mm); border-radius: calc(var(--u) * 1.5mm); }
 .cat-row .cat-name { font-size: calc(var(--u) * 4.2mm); max-width: calc(var(--u) * 78mm); }
 .cat-row i { align-self: end; margin-bottom: calc(var(--u) * 1.6mm); border-bottom: 0.3mm dotted currentColor; opacity: 0.4; }
 .cat-row .cat-price { font-size: calc(var(--u) * 4mm); }
@@ -123,3 +124,73 @@
   flex: 1 1 0; display: grid; place-items: center; border: 0.3mm dashed rgba(36, 28, 26, 0.25); border-radius: calc(var(--u) * 2.5mm);
   font-size: calc(var(--u) * 3.6mm); letter-spacing: 0.12em; text-transform: uppercase; color: rgba(36, 28, 26, 0.45);
 }
+
+/* ---------- en-tête : le petit dessin de la gamme ---------- */
+.cat-h { display: flex; align-items: center; justify-content: center; gap: calc(var(--u) * 3mm); }
+.cat-h__mark { flex: 0 0 auto; height: calc(var(--u) * 10mm); width: auto; max-width: calc(var(--u) * 14mm); object-fit: contain; margin-top: calc(var(--u) * -1mm); }
+.cat-h__text { min-width: 0; overflow-wrap: anywhere; }
+
+/* ---------- gabarits des pages de produits : A classique · B bandeau · C épuré ---------- */
+.cat-inner.cat-t-B { padding-top: 0; }
+.cat-t-B .cat-h {
+  justify-content: flex-start; text-align: left; background: var(--p); color: var(--s);
+  margin: calc(-1 * var(--b)) calc(-1 * (var(--u) * 9mm + var(--b))) 0;
+  padding: calc(var(--u) * 9mm + var(--b)) calc(var(--u) * 9mm + var(--b)) calc(var(--u) * 5.5mm);
+}
+.cat-t-B .cat-h__mark { filter: brightness(0) invert(1); }
+.cat-face--products.cat-face--tC { background: #fff; }
+.cat-t-C .cat-h { justify-content: flex-start; text-align: left; padding-bottom: calc(var(--u) * 3.5mm); border-bottom: 0.6mm solid var(--a); }
+.cat-t-C .cat-card { border: 0; background: var(--s); }
+.cat-t-C .cat-row .cat-photo { background: var(--s); }
+
+/* ---------- place libre : photo de la médiathèque ou illustration ---------- */
+.cat-filler { min-height: 0; display: grid; place-items: center; overflow: hidden; border-radius: calc(var(--u) * 2.5mm); }
+.cat-filler img { width: 100%; height: 100%; object-fit: cover; }
+.cat-filler--drawing { background: rgba(255, 255, 255, 0.5); border: 0.3mm solid rgba(36, 28, 26, 0.08); }
+.cat-filler--drawing img { width: 78%; height: 78%; object-fit: contain; }
+.cat-t-C .cat-filler--drawing { background: var(--s); border: 0; }
+
+/* ---------- page de présentation d'une gamme ---------- */
+.cat-pres { position: absolute; inset: 0; display: flex; flex-direction: column; padding: calc(var(--u) * 14mm) calc(var(--u) * 13mm) calc(var(--u) * 12mm); }
+.cat-pres__visual { position: relative; flex: 1 1 0; min-height: 0; overflow: hidden; }
+.cat-pres__visual img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.cat-pres__visual.is-photo img { width: 100%; height: 100%; object-fit: cover; border-radius: calc(var(--u) * 3mm); }
+.cat-pres__visual.is-none { border: 0.4mm solid rgba(36, 28, 26, 0.14); border-radius: calc(var(--u) * 3mm); background: rgba(255, 255, 255, 0.45); }
+.cat-pres__head { flex: 0 0 auto; padding-top: calc(var(--u) * 8mm); text-align: center; display: flex; flex-direction: column; align-items: center; }
+.cat-pres__eyebrow { font-weight: 500; font-size: calc(var(--u) * 3.2mm); letter-spacing: 0.24em; text-transform: uppercase; color: var(--a); }
+.cat-pres__title {
+  margin-top: calc(var(--u) * 3mm); max-height: calc(var(--u) * 34mm); overflow: hidden; font-family: 'Vank', 'GothamPrint', serif;
+  font-size: calc(var(--u) * 15mm); line-height: 0.98; letter-spacing: 0.01em; text-transform: uppercase; color: var(--p); overflow-wrap: anywhere;
+}
+.cat-pres__rule { margin-top: calc(var(--u) * 5mm); width: calc(var(--u) * 16mm); border-top: 0.6mm solid var(--a); }
+.cat-pres__text { margin-top: calc(var(--u) * 5mm); max-width: calc(var(--u) * 110mm); max-height: calc(var(--u) * 40mm); overflow: hidden; font-size: calc(var(--u) * 4.1mm); line-height: 1.5; white-space: pre-line; }
+.cat-pres__list { flex: 0 1 auto; min-height: 0; overflow: hidden; margin-top: calc(var(--u) * 5mm); }
+.cat-pres--liste .cat-pres__visual { flex: 0 0 calc(var(--u) * 36mm); }
+.cat-pres--liste .cat-pres__head { padding-top: calc(var(--u) * 4mm); }
+.cat-pres--liste .cat-pres__title { margin-top: calc(var(--u) * 2mm); font-size: calc(var(--u) * 10mm); max-height: calc(var(--u) * 21mm); }
+.cat-pres--liste .cat-pres__rule { margin-top: calc(var(--u) * 3.5mm); }
+.cat-pres--liste .cat-pres__text { margin-top: calc(var(--u) * 3.5mm); max-height: calc(var(--u) * 13mm); font-size: calc(var(--u) * 3.8mm); }
+.cat-pres--liste .cat-row { grid-template-columns: calc(var(--u) * 10mm) auto 1fr auto; }
+.cat-pres--liste .cat-row .cat-photo { width: calc(var(--u) * 10mm); height: calc(var(--u) * 8.5mm); }
+.cat-pres--liste .cat-row .cat-name { font-size: calc(var(--u) * 3.9mm); }
+.cat-pres--liste .cat-row .cat-price { font-size: calc(var(--u) * 3.8mm); }
+.cat-pres--liste .cat-list { gap: calc(var(--u) * 1.6mm); }
+
+/* B pleine couleur : fond de la couleur principale, dessin et titre en papier, la liste sur un cartouche papier. */
+.cat-face--presentation.cat-face--tB { background: var(--p); }
+.cat-pres.cat-t-B { color: var(--s); }
+.cat-pres.cat-t-B .cat-pres__visual.is-drawing img { filter: brightness(0) invert(1); }
+.cat-pres.cat-t-B .cat-pres__visual.is-none { border-color: rgba(255, 255, 255, 0.35); background: transparent; }
+.cat-pres.cat-t-B .cat-pres__title { color: var(--s); }
+.cat-pres.cat-t-B .cat-pres__list { background: var(--s); color: var(--i); border-radius: calc(var(--u) * 3mm); padding: calc(var(--u) * 3mm) calc(var(--u) * 4mm); }
+
+/* C photo pleine : l'image à fond perdu en haut, le texte aligné à gauche. */
+.cat-pres.cat-t-C .cat-pres__visual {
+  flex: 0 0 calc(var(--u) * 118mm + var(--b)); margin: calc(-1 * (var(--u) * 14mm + var(--b))) calc(-1 * (var(--u) * 13mm + var(--b))) 0;
+  background: #F3EDE4;
+}
+.cat-pres.cat-t-C .cat-pres__visual.is-photo img { border-radius: 0; }
+.cat-pres.cat-t-C .cat-pres__visual.is-drawing img { inset: 13% 18%; width: 64%; height: 74%; }
+.cat-pres.cat-t-C .cat-pres__visual.is-none { border: 0; border-radius: 0; }
+.cat-pres.cat-t-C .cat-pres__head { text-align: left; align-items: flex-start; }
+.cat-pres--liste.cat-t-C .cat-pres__visual { flex-basis: calc(var(--u) * 54mm + var(--b)); }

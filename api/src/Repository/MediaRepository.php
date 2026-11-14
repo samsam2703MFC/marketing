@@ -225,6 +225,11 @@ final class MediaRepository
                 $params['f_' . $key] = $filters[$key];
             }
         }
+        // Les images qu'une boutique peut prendre : celles du réseau (sans boutique) et les siennes.
+        if (array_key_exists('shopOrNetwork', $filters)) {
+            $where[] = '(m.shop_id IS NULL OR m.shop_id = :f_shopOrNetwork)';
+            $params['f_shopOrNetwork'] = $filters['shopOrNetwork'];
+        }
         if (($filters['categoryIsNull'] ?? null) === true) {
             $where[] = 'm.category_code IS NULL';
         } elseif (($filters['categoryIsNull'] ?? null) === false) {

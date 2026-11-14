@@ -13,12 +13,13 @@ import type {
   CatalogueLayout,
   CataloguePageCount,
   CatalogueSourceKind,
+  CatalogueTemplate,
   WebshopProducts,
 } from '../../lib/api/module'
 import { TfBuddyError } from '../../lib/api/http'
 import { useAsync } from '../../lib/useAsync'
 import { openPrintWindow } from '../../lib/print'
-import { CatalogueSheet, FORMAT_MM, LAYOUT_LABELS, catalogueCss, formatCents, sheetSize } from './CataloguePages'
+import { CatalogueSheet, FORMAT_MM, LAYOUT_LABELS, TEMPLATE_LABELS, catalogueCss, formatCents, isPresentation, sheetSize } from './CataloguePages'
 import type { CatalogueSheetMode } from './CataloguePages'
 import './catalogue.css'
 
@@ -26,7 +27,7 @@ import './catalogue.css'
  * Les catalogues produits de la marque : prix du webshop, gammes (Noël, Saint-Nicolas…).
  *
  * Trois écrans : la liste (et « Nouveau catalogue » : une gamme du webshop, une campagne du
- * Marketing, ou des produits choisis un à un ; 8, 12 ou 16 pages), l'éditeur (produits à cocher,
+ * Marketing, ou des produits choisis un à un ; 8 à 16 pages, par 2), l'éditeur (produits à cocher,
  * nombre de pages, A5/A4, trois mises en page, version générale ou par boutique, FR/NL), et la
  * Charte des catalogues (logo, couvertures par gamme, page 2, avant-dernière et dernière pages,
  * couleurs) — les quatre pages que les franchisés ne peuvent pas changer quand ils font le leur
@@ -46,22 +47,27 @@ const STATUS_LABELS: Record<api.CatalogueStatus, string> = { brouillon: 'brouill
 
 const SOURCE_LABELS: Record<CatalogueSourceKind, string> = { gamme: 'Gamme', campagne: 'Campagne', choix: 'Au choix' }
 
-/** 8, 12 ou 16 pages : dont 4 de la marque (1, 2, avant-dernière, dernière). */
+/**
+ * Le nombre de pages, toujours par 2 (client : « rajouter une page, c'est toujours par 2 ») : de 8 à
+ * 16, dont 4 de la marque (1, 2, avant-dernière, dernière). « ＋ 2 pages » ajoute deux pages
+ * intérieures vides en fin ; « − 2 pages » retire les deux dernières (refusé si elles portent quelque chose).
+ */
 function PageCountChoice({ value, onChange, disabled = false }: { value: CataloguePageCount; onChange: (count: CataloguePageCount) => void; disabled?: boolean }) {
+  const counts = api.CATALOGUE_PAGE_COUNTS
+  const at = counts.indexOf(value)
+  const less = at > 0 ? counts[at - 1] : null
+  const more = at >= 0 && at < counts.length - 1 ? counts[at + 1] : null
   return (
-    <span className="bro-seg" role="group" aria-label="Nombre de pages">
-      {api.CATALOGUE_PAGE_COUNTS.map((count) => (
-        <button
-          key={count}
-          type="button"
-          className={value === count ? 'is-on' : ''}
-          disabled={disabled}
-          title={`${count - api.CATALOGUE_BRAND_PAGES} pages de produits + 4 pages de la marque`}
-          onClick={() => onChange(count)}
-        >
-          {count} pages
-        </button>
-      ))}
+    <span className="bro-seg catv-pagecount" role="group" aria-label="Nombre de pages">
+      <button type="button" disabled={disabled || less === null} title={less === null ? `${counts[0]} pages au moins` : `Retirer les deux dernières pages intérieures (${less} pages)`} onClick={() => less !== null && onChange(less)}>
+        − 2 pages
+      </button>
+      <span className="is-on catv-pagecount__n" title={`${value - api.CATALOGUE_BRAND_PAGES} pages de produits + 4 pages de la marque`}>
+        {value} pages
+      </span>
+      <button type="button" disabled={disabled || more === null} title={more === null ? `${counts[counts.length - 1]} pages au plus` : `Ajouter deux pages intérieures vides en fin (${more} pages)`} onClick={() => more !== null && onChange(more)}>
+        ＋ 2 pages
+      </button>
     </span>
   )
 }
@@ -154,7 +160,7 @@ function CatalogueList({ onOpen, onCharter }: { onOpen: (id: number) => void; on
                           ? `${cat.shopIds.length} · ${cat.langs.map((lang) => lang.toUpperCase()).join(' + ')}`
                           : `Générale · ${cat.langs.map((lang) => lang.toUpperCase()).join(' + ')}`}
                       {cat.owner === 'marque' && cat.shopIds.length ? (
-                        <small className="catv-sub">{cat.shopIds.map((id) => shopNames.get(id) ?? `#${id}`).join(', ')}</small>
+                        <small className="catv-subt">{cat.shopIds.map((id) => shopNames.get(id) ?? `#${id}`).join(', ')}</small>
                       ) : null}
                     </td>
                     <td>
@@ -470,9 +476,32 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
     change({ pages })
     setSelected(to)
   }
+  function setAllLayouts(layout: CatalogueLayout) {
+    change({ pages: innerPages.map((page) => (isPresentation(page.layout) ? page : { ...page, layout })) })
+  }
+  /** Le gabarit de toutes les pages intérieures (chacune garde sa mise en page). */
+  function setAllTemplates(template: CatalogueTemplate) {
+    change({ pages: innerPages.map((page) => ({ ...page, template })) })
+  }
   function setPage(index: number, patch: Partial<api.CataloguePageRow>) {
     change({ pages: innerPages.map((page, i) => (i === index ? { ...page, ...patch } : page)) })
   }
+  // Les gammes proposées : celles du catalogue d'abord, puis les autres gammes du webshop.
+  const allGammes = webshop.data?.gammes ?? []
+  const refs = (cat.source.kind === 'gamme' ? (cat.source.refs?.length ? cat.source.refs : cat.source.ref ? [cat.source.ref] : []) : []).map(Number)
+  const gammeOptions = [...refs.map((id) => allGammes.find((g) => g.id === id)).filter((g): g is api.WebshopGamme => !!g), ...allGammes.filter((g) => !refs.includes(g.id))]
+  /** Changer la mise en page d'une page : une présentation prend une gamme (la sienne, sinon la première du catalogue). */
+  function setLayout(index: number, layout: CatalogueLayout) {
+    const page = innerPages[index]
+    if (isPresentation(layout)) {
+      const gamme = page.gamme ?? refs[0] ?? gammeOptions[0]?.id ?? null
+      if (gamme === null) return
+      setPage(index, { layout, gamme, category: null, filler: null, fillerMediaId: null })
+    } else {
+      setPage(index, { layout, text: undefined, textNl: undefined })
+    }
+  }
+  const [fillerPicking, setFillerPicking] = useState(false)
   // Le nombre de pages : changer de format ajoute des pages vides ou retire celles de la fin — le
   // serveur refuse (CATALOGUE_PAGES_NOT_EMPTY) d'en retirer une qui porte des produits.
   function setPageCount(pageCount: CataloguePageCount) {
@@ -557,7 +586,11 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
     cat.source.kind === 'choix' ? 'Au choix'
     : cat.source.label && cat.source.label.toLowerCase().startsWith(SOURCE_LABELS[cat.source.kind].toLowerCase()) ? cat.source.label
     : `${SOURCE_LABELS[cat.source.kind]} ${cat.source.label ?? ''}`.trim()
-  const productsShown = docPages.reduce((sum, page) => sum + (page.kind === 'products' ? page.products.length : 0), 0)
+  const productsShown = docPages.reduce((sum, page) => sum + (page.kind === 'products' || page.kind === 'presentation' ? page.products.length : 0), 0)
+  const selectedDoc = selected !== null ? docPages[selected + 2] : undefined
+  const family: 'products' | 'presentation' = selectedPage && isPresentation(selectedPage.layout) ? 'presentation' : 'products'
+  const currentTemplate: CatalogueTemplate | null = selectedPage ? (selectedPage.template ?? 'A')
+    : innerPages.length && innerPages.every((p) => (p.template ?? 'A') === (innerPages[0].template ?? 'A')) ? (innerPages[0].template ?? 'A') : null
 
   return (
     <div className="catv catv-editor">
@@ -716,7 +749,7 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
           <div className="catv-pages">
             {docPages.map((page, index) => {
               // Les pages intérieures commencent à la page 3 (après la couverture et la page 2).
-              const inner = page.kind === 'products' ? index - 2 : null
+              const inner = page.kind === 'products' || page.kind === 'presentation' ? index - 2 : null
               return (
                 <div
                   key={`${index}-${page.kind}`}
@@ -768,21 +801,82 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
         <div className="catv-side">
           <section className="card">
             <h2>Mise en page des pages intérieures</h2>
+            <div className="bro-seg catv-scope">
+              <button type="button" className={selected === null ? 'is-on' : ''} onClick={() => setSelected(null)}>
+                Toutes les pages
+              </button>
+              <select
+                className={selected !== null ? 'is-on' : ''}
+                value={selected ?? ''}
+                onChange={(event) => setSelected(event.target.value === '' ? null : Number(event.target.value))}
+              >
+                <option value="">Une page…</option>
+                {innerPages.map((_, i) => (
+                  <option key={i} value={i}>
+                    Page {i + 3}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="catv-subt">Type de page</div>
+            <div className="catv-layouts catv-layouts--5">
+              {(Object.keys(LAYOUT_LABELS) as CatalogueLayout[]).map((layout) => {
+                const forAll = selected === null && isPresentation(layout)
+                return (
+                  <button
+                    key={layout}
+                    type="button"
+                    className={`catv-layout${(selectedPage ? selectedPage.layout === layout : innerPages.length > 0 && innerPages.every((p) => p.layout === layout)) ? ' is-on' : ''}`}
+                    disabled={!innerPages.length || forAll || (isPresentation(layout) && !gammeOptions.length)}
+                    title={
+                      forAll ? 'Une page de présentation présente UNE gamme : choisissez la page (« Une page… »)'
+                      : selectedPage ? `Page ${(selected as number) + 3} en « ${LAYOUT_LABELS[layout].label} »`
+                      : `Toutes les pages de produits en « ${LAYOUT_LABELS[layout].label} » (les présentations restent)`
+                    }
+                    onClick={() => (selected !== null ? setLayout(selected, layout) : setAllLayouts(layout))}
+                  >
+                    <LayoutIcon layout={layout} />
+                    <span>{LAYOUT_LABELS[layout].label}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <div className="catv-subt">Gabarit{selectedPage ? '' : ' de toutes les pages'}</div>
             <div className="catv-layouts">
-              {(Object.keys(LAYOUT_LABELS) as CatalogueLayout[]).map((layout) => (
+              {(['A', 'B', 'C'] as CatalogueTemplate[]).map((template) => (
                 <button
-                  key={layout}
+                  key={template}
                   type="button"
-                  className={`catv-layout${selectedPage?.layout === layout ? ' is-on' : ''}`}
-                  disabled={!selectedPage}
-                  onClick={() => selected !== null && setPage(selected, { layout })}
+                  className={`catv-layout catv-tpl${currentTemplate === template ? ' is-on' : ''}`}
+                  disabled={!innerPages.length}
+                  title={`${template} · ${TEMPLATE_LABELS[family][template].label} — ${TEMPLATE_LABELS[family][template].hint}`}
+                  onClick={() => (selected !== null ? setPage(selected, { template }) : setAllTemplates(template))}
                 >
-                  <LayoutIcon layout={layout} />
-                  <span>{LAYOUT_LABELS[layout].label}</span>
+                  <TemplateIcon family={family} template={template} />
+                  <span>
+                    {template} · {TEMPLATE_LABELS[family][template].label}
+                  </span>
                 </button>
               ))}
             </div>
             {selectedPage ? (
+              <label className="catv-field">
+                <span>Gamme de la page {(selected as number) + 3}</span>
+                <select
+                  value={selectedPage.gamme ?? ''}
+                  onChange={(event) => setPage(selected as number, { gamme: event.target.value ? Number(event.target.value) : null })}
+                >
+                  {isPresentation(selectedPage.layout) ? null : <option value="">Toutes les gammes</option>}
+                  {gammeOptions.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                      {refs.includes(g.id) ? ' · du catalogue' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {selectedPage && !isPresentation(selectedPage.layout) ? (
               <label className="catv-field">
                 <span>Catégorie de la page {(selected as number) + 3}</span>
                 <select value={selectedPage.category ?? ''} onChange={(event) => setPage(selected as number, { category: event.target.value ? Number(event.target.value) : null })}>
@@ -794,9 +888,39 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
                   ))}
                 </select>
               </label>
-            ) : (
-              <p className="catv-note">Un clic sur une page intérieure change sa mise en page ; les produits se répartissent tout seuls, par catégorie du webshop.</p>
-            )}
+            ) : null}
+            {selectedPage && isPresentation(selectedPage.layout) ? (
+              <PresentationTexts key={`${selected}-${selectedPage.gamme}`} page={selectedPage} langs={cat.langs} onSave={(patch) => setPage(selected as number, patch)} />
+            ) : null}
+            {selectedPage && !isPresentation(selectedPage.layout) && selectedDoc?.kind === 'products' && (selectedDoc.fillable || selectedPage.filler) ? (
+              <div className="catv-field">
+                <span title="Quand la page n’est pas pleine, une photo de la médiathèque ou l’illustration de la gamme prend la place libre">Place libre</span>
+                <span className="bro-seg">
+                  {([['', 'Rien'], ['photo', 'Photo'], ['illustration', 'Illustration']] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={(selectedPage.filler ?? '') === value ? 'is-on' : ''}
+                      onClick={() => {
+                        if (value === 'photo') setFillerPicking(true)
+                        else setPage(selected as number, { filler: value === '' ? null : value, fillerMediaId: null })
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </span>
+                {selectedPage.filler === 'photo' ? (
+                  <span className="catv-filler">
+                    {selectedDoc.filler?.imageUrl ? <img src={selectedDoc.filler.imageUrl} alt="" /> : null}
+                    <button type="button" className="btn btn--sm" onClick={() => setFillerPicking(true)}>
+                      Changer de photo…
+                    </button>
+                  </span>
+                ) : null}
+                {!selectedDoc.fillable && selectedPage.filler ? <span className="muted">La page est pleine : rien n’est imprimé à la place libre.</span> : null}
+              </div>
+            ) : null}
             <div className="catv-field">
               <span>Format</span>
               <span className="bro-seg">
@@ -901,11 +1025,79 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
           </section>
         </div>
       </div>
+      {fillerPicking && selected !== null ? (
+        <MediaPicker
+          onClose={() => setFillerPicking(false)}
+          onPick={(asset) => {
+            setFillerPicking(false)
+            setPage(selected, { filler: 'photo', fillerMediaId: Number(asset.id) })
+          }}
+        />
+      ) : null}
     </div>
   )
 }
 
+/** Le texte d'une page de présentation (FR, et NL si le catalogue l'est), enregistré en quittant le champ. */
+function PresentationTexts({ page, langs, onSave }: { page: api.CataloguePageRow; langs: CatalogueLang[]; onSave: (patch: Partial<api.CataloguePageRow>) => void }) {
+  const [fr, setFr] = useState(page.text ?? '')
+  const [nl, setNl] = useState(page.textNl ?? '')
+  return (
+    <>
+      <label className="catv-field">
+        <span>Texte de la présentation · {fr.length}/400 · vide = rien</span>
+        <textarea rows={3} maxLength={400} value={fr} onChange={(event) => setFr(event.target.value)} onBlur={() => fr !== (page.text ?? '') && onSave({ text: fr })} />
+      </label>
+      {langs.includes('nl') ? (
+        <label className="catv-field">
+          <span>Texte néerlandais · {nl.length}/400</span>
+          <textarea rows={3} maxLength={400} value={nl} onChange={(event) => setNl(event.target.value)} onBlur={() => nl !== (page.textNl ?? '') && onSave({ textNl: nl })} />
+        </label>
+      ) : null}
+    </>
+  )
+}
+
+/** Vignette d'une variante de gabarit. */
+function TemplateIcon({ family, template }: { family: 'products' | 'presentation'; template: CatalogueTemplate }) {
+  const ink = 'currentColor'
+  if (family === 'presentation') {
+    return (
+      <svg width="40" height="52" viewBox="0 0 40 52" aria-hidden="true">
+        <rect x="0.6" y="0.6" width="38.8" height="50.8" rx="2" fill={template === 'B' ? ink : 'none'} fillOpacity={template === 'B' ? 0.85 : 0} stroke={ink} strokeWidth="1.2" />
+        {template === 'C' ? <rect x="0.6" y="0.6" width="38.8" height="28" rx="2" fill={ink} fillOpacity="0.25" /> : <circle cx="20" cy="17" r="9" fill="none" stroke={template === 'B' ? '#fff' : ink} strokeWidth="1.2" />}
+        <rect x={template === 'C' ? 5 : 9} y="34" width="22" height="4" rx="1" fill={template === 'B' ? '#fff' : ink} />
+        <rect x={template === 'C' ? 5 : 12} y="41" width="16" height="2" rx="1" fill={template === 'B' ? '#fff' : ink} opacity="0.6" />
+      </svg>
+    )
+  }
+  return (
+    <svg width="40" height="52" viewBox="0 0 40 52" aria-hidden="true">
+      <rect x="0.6" y="0.6" width="38.8" height="50.8" rx="2" fill="none" stroke={ink} strokeWidth="1.2" />
+      {template === 'B' ? <rect x="0.6" y="0.6" width="38.8" height="10" fill={ink} fillOpacity="0.85" /> : null}
+      <rect x={template === 'A' ? 11 : 4} y={template === 'B' ? 4 : 4} width="18" height="3" rx="1" fill={template === 'B' ? '#fff' : ink} />
+      {template === 'C' ? <rect x="4" y="9.5" width="32" height="0.8" fill={ink} /> : null}
+      {[14, 26, 38].map((y) => (
+        <g key={y}>
+          <rect x="4" y={y} width="15" height="10" rx="1.5" fill={template === 'C' ? ink : 'none'} fillOpacity={template === 'C' ? 0.18 : 0} stroke={template === 'C' ? 'none' : ink} strokeWidth="1" />
+          <rect x="21" y={y} width="15" height="10" rx="1.5" fill={template === 'C' ? ink : 'none'} fillOpacity={template === 'C' ? 0.18 : 0} stroke={template === 'C' ? 'none' : ink} strokeWidth="1" />
+        </g>
+      ))}
+    </svg>
+  )
+}
+
 function LayoutIcon({ layout }: { layout: CatalogueLayout }) {
+  if (isPresentation(layout)) {
+    const list = layout === 'presentation_liste'
+    return (
+      <svg width="40" height="52" viewBox="0 0 40 52" aria-hidden="true">
+        <circle cx="20" cy={list ? 11 : 17} r={list ? 7 : 11} fill="none" stroke="currentColor" strokeWidth="1.2" />
+        <rect x="9" y={list ? 21 : 33} width="22" height="3.5" rx="1" fill="currentColor" />
+        {list ? [28, 34, 40, 46].map((y) => <rect key={y} x="3" y={y} width="34" height="4" rx="1" fill="none" stroke="currentColor" strokeWidth="1" />) : <rect x="12" y="40" width="16" height="2" rx="1" fill="currentColor" opacity="0.6" />}
+      </svg>
+    )
+  }
   const cells =
     layout === 'vedette'
       ? [[2, 2, 36, 18], [2, 22, 17, 13], [21, 22, 17, 13], [2, 37, 17, 13], [21, 37, 17, 13]]
