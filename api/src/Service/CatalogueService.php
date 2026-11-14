@@ -318,7 +318,13 @@ final class CatalogueService
      */
     public static function innerPages(array $settings): array
     {
-        $pages = array_values($settings['pages'] ?? []);
+        // Ordre des clés fixe (PAGE_KEYS) : MySQL 8 range les clés d'une colonne JSON à sa façon.
+        $pages = array_map(
+            static fn ($page): array => is_array($page)
+                ? array_replace(array_intersect_key(array_fill_keys(self::PAGE_KEYS, null), $page), $page)
+                : $page,
+            array_values($settings['pages'] ?? []),
+        );
         $inner = self::pageCountOf($settings) - self::BRAND_PAGES;
         while (count($pages) < $inner) {
             $pages[] = self::EMPTY_PAGE;
