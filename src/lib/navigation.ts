@@ -26,6 +26,8 @@ export type Route =
   | 'campaign-fix'
   /** Générateur de brochures : leaflet A5, dépliant A4 3 volets, une version par boutique et par langue — réseau seul. */
   | 'brochures'
+  /** Catalogues produits (prix du webshop, gammes), couverture et dernière page de la charte — réseau seul. */
+  | 'catalogues'
   /** La médiathèque commune : photos et vidéos de tout le marketing (Social, campagnes, brochures, bâches) — réseau seul. */
   | 'media'
   | 'promotions'
@@ -108,6 +110,7 @@ const ICONS: Record<string, string> = {
   settings: 'M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5zM12 15v2',
   promotions: 'M19 5L5 19M7 7a1.5 1.5 0 1 0 .01 0M17 17a1.5 1.5 0 1 0 .01 0',
   brochures: 'M3 5l6-2 6 2 6-2v16l-6 2-6-2-6 2zM9 3v16M15 5v16',
+  catalogues: 'M4 4h7a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4zM20 4h-7a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h7zM6.5 8h3M14.5 8h3M6.5 11h3M14.5 11h3',
   media: 'M3 5h18v14H3zM3 15l5-5 4 4 3-3 6 6M15.5 9a1.5 1.5 0 1 0 0-.01',
   bundles: 'M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8M12 13v8',
   vouchers: 'M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4zM13 6v12',
@@ -202,6 +205,8 @@ const NETWORK: NavGroup[] = [
       item('promotions', 'Offres'),
       // Les imprimés de la campagne (leaflet, dépliant) : une version par boutique, son QR code vers son webshop.
       item('brochures', 'Brochures & leaflets'),
+      // Les catalogues produits : prix du webshop, gammes ; couverture et dernière page fixées par la charte.
+      item('catalogues', 'Catalogues'),
       item('instore', 'Marketing en magasin'),
     ],
   },

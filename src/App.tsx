@@ -20,6 +20,7 @@ import AddressesView from './views/AddressesView'
 import CampaignFixView from './views/CampaignFixView'
 import LoginView from './views/LoginView'
 import BrochureView from './views/brochure/BrochureView'
+import CatalogueView from './views/catalogue/CatalogueView'
 import MediaLibraryView from './views/media/MediaLibraryView'
 import SettingsView from './views/SettingsView'
 import CampaignBuilder from './views/builder/CampaignBuilder'
@@ -386,7 +387,7 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
         )}
 
         <main
-          className={`app__body${route === 'builder' || route === 'brochures' || route === 'media' ? ' app__body--wide' : ''}${framed ? ' app__body--frame' : ''}`}
+          className={`app__body${route === 'builder' || route === 'brochures' || route === 'catalogues' || route === 'media' ? ' app__body--wide' : ''}${framed ? ' app__body--frame' : ''}`}
         >
           {/* Une entrée à onglets : les écrans qui montraient la même donnée sous plusieurs entrées du menu. */}
           {tabs ? (
@@ -442,6 +443,7 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
           {route === 'campaign-types' ? <CampaignTypesView /> : null}
           {route === 'addresses' ? <AddressesView /> : null}
           {route === 'brochures' && role === 'BRAND_ADMIN' ? <BrochureView campaignId={campaignId} onOpenCampaign={openCampaign} /> : null}
+          {route === 'catalogues' && role === 'BRAND_ADMIN' ? <CatalogueView /> : null}
           {route === 'media' && role === 'BRAND_ADMIN' ? <MediaLibraryView /> : null}
           {route === 'settings' && role === 'BRAND_ADMIN' ? <SettingsView /> : null}
 
