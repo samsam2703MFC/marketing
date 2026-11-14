@@ -5035,7 +5035,7 @@ check('catalogues : un catalogue d\'avant les formats — 5 pages intérieures �
     json_encode($ancien['body']));
 $pdo->exec('DELETE FROM mar_catalogue WHERE id = ' . $ancienId);
 $refusMaj = [
-    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['pages' => [['layout' => 'mosaique', 'category' => null]]])['status'],
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['pages' => [['layout' => 'magazine', 'category' => null]]])['status'],
     call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['status' => 'perdu'])['status'],
     call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['products' => [['id' => 'x']]])['status'],
     call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['owner' => 'boutique'])['status'],
@@ -5098,14 +5098,14 @@ $siens = call($catRouter, 'GET', $SA . '/catalogue-products');
 $sp = array_column($siens['body']['data']['products'] ?? [], null, 'id');
 check('boutique : ses produits seulement, au prix de SON webshop (et son prix au comptoir à côté)', $siens['status'] === 200 && array_keys($sp) === [12, 11, 13]
     && ($sp[12]['priceCents'] ?? 0) === 2990 && ($sp[12]['shopPriceCents'] ?? 0) === 3150 && !isset($sp[12]['prices'])
-    && ($siens['body']['data']['layouts'] ?? []) === ['vedette', 'grille', 'liste', 'presentation', 'presentation_liste'] && ($siens['body']['data']['pageCounts'] ?? []) === [8, 10, 12, 14, 16]
-    && ($siens['body']['data']['templates'] ?? []) === ['A', 'B', 'C'] && ($siens['body']['data']['fillers'] ?? []) === ['photo', 'illustration'], json_encode($siens['body']));
+    && ($siens['body']['data']['layouts'] ?? []) === ['vedette', 'grille', 'liste', 'mosaique', 'presentation', 'presentation_liste'] && ($siens['body']['data']['pageCounts'] ?? []) === [8, 10, 12, 14, 16]
+    && ($siens['body']['data']['templates'] ?? []) === ['A', 'B', 'C'] && ($siens['body']['data']['headers'] ?? []) === ['titre', 'bandeau', 'grande'] && ($siens['body']['data']['fillers'] ?? []) === ['photo', 'illustration'], json_encode($siens['body']));
 $refusB = [
     call($catRouter, 'POST', $SA . '/catalogues', [], ['title' => 'Mes bûches', 'source' => ['kind' => 'choix'], 'products' => [['id' => 11, 'on' => true], ['id' => 14, 'on' => true]]]),
     call($catRouter, 'POST', $SA . '/catalogues', [], ['title' => 'Mes bûches', 'source' => ['kind' => 'campagne', 'ref' => 10]]),
     call($catRouter, 'POST', $SA . '/catalogues', [], ['title' => 'Mes bûches', 'source' => ['kind' => 'choix'], 'cover' => ['title' => 'À moi']]),
     call($catRouter, 'POST', $SA . '/catalogues', [], ['title' => 'Mes bûches', 'source' => ['kind' => 'choix'], 'shopIds' => [$catB]]),
-    call($catRouter, 'POST', $SA . '/catalogues', [], ['title' => 'Mes bûches', 'source' => ['kind' => 'choix'], 'pages' => [['layout' => 'mosaique', 'category' => null]]]),
+    call($catRouter, 'POST', $SA . '/catalogues', [], ['title' => 'Mes bûches', 'source' => ['kind' => 'choix'], 'pages' => [['layout' => 'magazine', 'category' => null]]]),
     call($catRouter, 'POST', $SA . '/catalogues', [], ['title' => 'Mes bûches', 'source' => ['kind' => 'choix'], 'products' => [['id' => 11, 'on' => true, 'price' => 1]]]),
     call($catRouter, 'POST', $SA . '/catalogues', [], ['title' => 'Mes bûches', 'source' => ['kind' => 'choix'], 'pageCount' => 18]),
     call($catRouter, 'POST', $SA . '/catalogues', [], ['title' => 'Mes bûches', 'source' => ['kind' => 'choix'], 'pages' => [['kind' => 'brand', 'title' => 'Ma page 2']]]),
@@ -5263,7 +5263,7 @@ check('présentation : le document — liste de la gamme avec ses prix, texte (N
 $pageOk = ['layout' => 'grille', 'category' => null];
 $refusPres = [];
 foreach ([
-    ['layout' => 'mosaique', 'category' => null],
+    ['layout' => 'magazine', 'category' => null],
     ['layout' => 'grille', 'category' => null, 'template' => 'Z'],
     ['layout' => 'grille', 'category' => null, 'template' => 'a'],
     ['layout' => 'presentation', 'category' => null],
@@ -5351,6 +5351,122 @@ check('boutique : la route du dashboard accepte présentations, gabarits et plac
 call($catRouter, 'DELETE', $SA . '/catalogues/' . $idMienPres);
 unset($_SERVER['HTTP_X_SERVICE_TOKEN']);
 $pdo->exec("DELETE FROM mar_media WHERE sha256 LIKE 'catpres%'");
+
+// --- Une catégorie = sa page (client, 14/11/2026) ---------------------------
+// « Quand je rajoute une catégorie, la catégorie est sur une page avec son illustration (2 ou 3 possibilités de
+// montrer le titre et l'illustration) et 3-4 possibilités de montrer les produits. »
+$CS = \Marketing\Service\CatalogueService::class;
+$parCat = [];
+$lignesCat = [];
+foreach ([31 => 2, 32 => 3, 33 => 1] as $cid => $n) {
+    for ($k = 0; $k < $n; $k++) {
+        $pid = $cid * 100 + $k;
+        $parCat[$pid] = ['id' => $pid, 'categoryId' => $cid, 'gammes' => []];
+        $lignesCat[] = ['id' => $pid, 'on' => true];
+    }
+}
+$auto = $CS::autoPages($lignesCat, $parCat, 6);
+$autoSerre = $CS::autoPages($lignesCat, $parCat, 2);
+check('une catégorie = sa page : la répartition automatique donne sa page à chacune (pas de page qui mélange quand la place le permet) ; sans la place, la dernière devient « Notre sélection »',
+    array_column($auto, 'category') === [31, 32, 33, null, null, null] && $CS::fill($auto, array_values($parCat))['left'] === 0
+        && $autoSerre === [['layout' => 'vedette', 'category' => 31], ['layout' => 'liste', 'category' => null]] && $CS::fill($autoSerre, array_values($parCat))['left'] === 0,
+    json_encode([$auto, $autoSerre]));
+$sans33 = array_map(static fn (array $l): array => ['id' => $l['id'], 'on' => $l['id'] < 3300], $lignesCat);
+$pages3 = [['layout' => 'grille', 'category' => 31, 'template' => 'B', 'header' => 'grande'], ['layout' => 'grille', 'category' => 32], ['layout' => 'grille', 'category' => null], ['layout' => 'grille', 'category' => null]];
+$reprise = $CS::placeCategories($pages3, 8, $sans33, $lignesCat, $parCat);
+$pleines = [['layout' => 'grille', 'category' => 31, 'template' => 'C', 'header' => 'bandeau'], ['layout' => 'presentation', 'category' => null, 'gamme' => 1], ['layout' => 'presentation', 'category' => null, 'gamme' => 1], ['layout' => 'grille', 'category' => 32]];
+$agrandi = $CS::placeCategories($pleines, 8, $sans33, $lignesCat, $parCat);
+$seize = array_merge([['layout' => 'grille', 'category' => 31], ['layout' => 'grille', 'category' => 32]], array_fill(0, 10, ['layout' => 'presentation', 'category' => null, 'gamme' => 1]));
+$auMax = $CS::placeCategories($seize, 16, $sans33, $lignesCat, $parCat);
+$retire = $CS::placeCategories($pages3, 8, $lignesCat, $sans33, $parCat);
+// Une catégorie qui grandit au-delà de sa page continue juste après elle.
+$grand = [];
+$grandLignes = [];
+for ($k = 0; $k < 8; $k++) { $grand[3100 + $k] = ['id' => 3100 + $k, 'categoryId' => 31, 'gammes' => []]; $grandLignes[] = ['id' => 3100 + $k, 'on' => $k < 4]; }
+$grand[3200] = ['id' => 3200, 'categoryId' => 32, 'gammes' => []];
+$grandLignes[] = ['id' => 3200, 'on' => true];
+$suite = $CS::placeCategories([['layout' => 'grille', 'category' => 31], ['layout' => 'grille', 'category' => 32], ['layout' => 'grille', 'category' => null], ['layout' => 'grille', 'category' => null]], 8,
+    $grandLignes, array_map(static fn (array $l): array => ['id' => $l['id'], 'on' => true], $grandLignes), $grand);
+check('une catégorie ajoutée prend une page vide (gabarit et en-tête des autres) ; sinon +2 pages ; à 16 pages, elle est dite sans place ; retirée, sa page reste (vide) ; trop longue, elle continue juste après',
+    $reprise['pageCount'] === 8 && $reprise['pages'][2] === ['layout' => 'grille', 'category' => 33] && $reprise['added'] === [33]
+        && $agrandi['pageCount'] === 10 && count($agrandi['pages']) === 6 && $agrandi['pages'][4] === ['layout' => 'grille', 'category' => 33, 'template' => 'C', 'header' => 'bandeau']
+        && $agrandi['pages'][5] === ['layout' => 'grille', 'category' => null, 'template' => 'C', 'header' => 'bandeau']
+        && $auMax['pageCount'] === 16 && $auMax['pages'] === $seize && $auMax['unplaced'] === [33]
+        && $retire['pages'] === $pages3 && $retire['pageCount'] === 8
+        && array_column($suite['pages'], 'category') === [31, 31, 32, null] && $suite['pageCount'] === 8,
+    json_encode([$reprise, $agrandi, $auMax['unplaced'], $retire, $suite]));
+
+// Par l'API : un catalogue de la marque, une catégorie ajoutée en cochant ses produits.
+$parCatApi = call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Une catégorie par page', 'source' => ['kind' => 'choix'], 'shopIds' => [$catA, $catB],
+    'products' => [['id' => 11, 'on' => true], ['id' => 12, 'on' => true]]]);
+$idPc = (int) ($parCatApi['body']['data']['id'] ?? 0);
+$ajout = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPc, [], ['products' => [['id' => 11, 'on' => true], ['id' => 12, 'on' => true], ['id' => 13, 'on' => true], ['id' => 14, 'on' => true]]]);
+$docPc = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPc . '/document');
+$pPc = $docPc['body']['data']['pages'] ?? [];
+$sansBuches = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPc, [], ['products' => [['id' => 11, 'on' => false], ['id' => 12, 'on' => false], ['id' => 13, 'on' => true], ['id' => 14, 'on' => true]]]);
+check('une catégorie ajoutée (API) : ses produits cochés lui donnent sa page (la page vide reprise) ; le document ne mélange pas ; retirée, sa page reste vide',
+    $parCatApi['status'] === 201 && $ajout['status'] === 200
+        && array_slice($ajout['body']['data']['pages'] ?? [], 0, 2) === [['layout' => 'vedette', 'category' => 500], ['layout' => 'grille', 'category' => 600]]
+        && ($pPc[3]['title'] ?? '') === 'Viennoiseries de fête' && array_column($pPc[3]['products'] ?? [], 'id') === [13, 14]
+        && !in_array('CATEGORY_NO_PAGE', array_column($docPc['body']['data']['warnings'] ?? [], 'code'), true)
+        && ($sansBuches['body']['data']['pages'] ?? null) === ($ajout['body']['data']['pages'] ?? []) && ($sansBuches['body']['data']['pageCount'] ?? 0) === 8,
+    json_encode([$ajout['body']['data']['pages'] ?? $ajout['body'], array_slice($pPc, 2, 2), $docPc['body']['data']['warnings'] ?? null]));
+// Plus aucune page vide : la catégorie ajoutée fait passer le catalogue à 10 pages.
+$sansPlace = [['layout' => 'grille', 'category' => 500, 'template' => 'B'], ['layout' => 'presentation', 'category' => null, 'gamme' => 14], ['layout' => 'presentation', 'category' => null, 'gamme' => 16], ['layout' => 'presentation', 'category' => null, 'gamme' => 14]];
+call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPc, [], ['products' => [['id' => 11, 'on' => true], ['id' => 13, 'on' => false], ['id' => 14, 'on' => false]], 'pages' => $sansPlace]);
+$plus2 = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPc, [], ['products' => [['id' => 11, 'on' => true], ['id' => 13, 'on' => true], ['id' => 14, 'on' => true]]]);
+check('une catégorie ajoutée sans page vide : +2 pages (10), sa page avec le gabarit des autres, une page vide après',
+    $plus2['status'] === 200 && ($plus2['body']['data']['pageCount'] ?? 0) === 10
+        && array_slice($plus2['body']['data']['pages'] ?? [], 4) === [['layout' => 'grille', 'category' => 600, 'template' => 'B'], ['layout' => 'grille', 'category' => null, 'template' => 'B']],
+    json_encode($plus2['body']['data']['pages'] ?? $plus2['body']));
+// À 16 pages sans page libre : rien ne bouge, le document le dit.
+$plein16 = array_merge([['layout' => 'grille', 'category' => 500]], array_fill(0, 11, ['layout' => 'presentation', 'category' => null, 'gamme' => 14]));
+call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPc, [], ['pageCount' => 16, 'products' => [['id' => 11, 'on' => true], ['id' => 13, 'on' => false], ['id' => 14, 'on' => false]], 'pages' => $plein16]);
+$au16 = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPc, [], ['products' => [['id' => 11, 'on' => true], ['id' => 13, 'on' => true], ['id' => 14, 'on' => true]]]);
+$doc16 = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPc . '/document');
+$avert16 = array_column($doc16['body']['data']['warnings'] ?? [], 'message', 'code');
+check('une catégorie ajoutée à 16 pages sans page libre : pages inchangées, « plus de place : 16 pages » dit',
+    ($au16['body']['data']['pageCount'] ?? 0) === 16 && ($au16['body']['data']['pages'] ?? null) === $plein16
+        && str_contains((string) ($avert16['CATEGORY_NO_PAGE'] ?? ''), 'Viennoiseries de fête') && str_contains((string) ($avert16['CATEGORY_NO_PAGE'] ?? ''), 'plus de place : 16 pages'),
+    json_encode([$au16['body']['data']['pages'] ?? $au16['body'], $avert16]));
+
+// En-tête (titre · bandeau · grande) et grandes vignettes 2 × 2 (mosaique) : validés, rangés dans un ordre de clés fixe, rendus.
+$entetes = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPc, [], ['pageCount' => 8, 'pages' => [
+    ['header' => 'grande', 'category' => 500, 'template' => 'C', 'layout' => 'mosaique'],
+    ['header' => 'bandeau', 'layout' => 'grille', 'category' => 600],
+    ['layout' => 'liste', 'category' => null, 'header' => 'titre'],
+    ['layout' => 'presentation', 'category' => null, 'gamme' => 14],
+]]);
+$relu = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPc);
+$docE = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPc . '/document');
+$pE = $docE['body']['data']['pages'] ?? [];
+$refusE = [
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPc, [], ['pages' => [['layout' => 'grille', 'category' => null, 'header' => 'enorme']]]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPc, [], ['pages' => [['layout' => 'grille', 'category' => null, 'header' => 1]]]),
+];
+$attendu = [
+    ['layout' => 'mosaique', 'category' => 500, 'template' => 'C', 'header' => 'grande'],
+    ['layout' => 'grille', 'category' => 600, 'header' => 'bandeau'],
+    ['layout' => 'liste', 'category' => null],
+    ['layout' => 'presentation', 'category' => null, 'gamme' => 14],
+];
+check('en-tête et mosaïque : rangés au plus court, clés dans un ordre fixe ; le document rend l’en-tête, la mosaïque (4 produits) et l’illustration de la gamme à défaut de famille ; valeur inconnue refusée (422)',
+    $entetes['status'] === 200 && ($entetes['body']['data']['pages'] ?? null) === $attendu && ($relu['body']['data']['pages'] ?? null) === $attendu
+        && ($pE[2]['layout'] ?? '') === 'mosaique' && ($pE[2]['header'] ?? '') === 'grande' && ($pE[2]['template'] ?? '') === 'C' && count($pE[2]['products'] ?? []) === 1
+        && ($pE[2]['fillable'] ?? false) === true && ($pE[3]['header'] ?? '') === 'bandeau' && ($pE[4]['header'] ?? '') === 'titre'
+        && array_map(static fn (array $r): array => [$r['status'], $r['body']['error']['details'][0]['field'] ?? ''], $refusE) === [[422, 'pages[0].header'], [422, 'pages[0].header']],
+    json_encode([$entetes['body']['data']['pages'] ?? $entetes['body'], array_slice($pE, 2, 3), array_map(static fn (array $r) => $r['body'], $refusE)]));
+check('la mosaïque : 4 produits par page, place libre quand 2 au plus',
+    $CS::LAYOUTS['mosaique'] === 4 && $CS::fillable('mosaique', 2) && !$CS::fillable('mosaique', 3)
+        && array_map('count', $CS::fill([['layout' => 'mosaique', 'category' => 32], ['layout' => 'mosaique', 'category' => null]], array_values($parCat))['items']) === [3, 3],
+    '');
+// Le dessin de famille d'une catégorie dans l'en-tête (« Pains » → bread-1), sinon la gamme.
+$familleDoc = (new ReflectionMethod($CS, 'familyDrawing'));
+check('l’illustration d’une catégorie : le dessin de sa famille (celui des vignettes sans photo), sinon la gamme, sinon rien (jamais inventée)',
+    $familleDoc->invoke(null, 'Pains spéciaux') === 'img/bread-1.png' && $familleDoc->invoke(null, 'Cougnou') === null
+        && array_key_exists('drawing', $pE[2] ?? []) && $pE[2]['drawing'] === null && $pE[2]['drawingUrl'] === null,
+    json_encode([$pE[2]['drawing'] ?? null, $pE[2]['drawingUrl'] ?? null]));
+call($catRouter, 'DELETE', '/api/v1/marketing/catalogues/' . $idPc);
 
 // Webshop illisible (droits de l'ERP refusés) : le catalogue du Marketing, repris de l'ERP — le même
 // que l'assistant de campagne — donne les produits, leurs gammes (saisons) et leur prix de référence.

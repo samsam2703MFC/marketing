@@ -8,6 +8,7 @@ import type {
   CatalogueDocProduct,
   CatalogueDocument,
   CatalogueFormat,
+  CatalogueHeader,
   CatalogueLang,
   CatalogueLayout,
   CatalogueTemplate,
@@ -45,6 +46,7 @@ export const LAYOUT_LABELS: Record<CatalogueLayout, { label: string; capacity: n
   vedette: { label: '1 vedette + 4', capacity: 5 },
   grille: { label: 'Grille 2 × 3', capacity: 6 },
   liste: { label: 'Liste avec prix', capacity: 12 },
+  mosaique: { label: 'Grandes vignettes 2 × 2', capacity: 4 },
   presentation: { label: 'Présentation seule', capacity: 0 },
   presentation_liste: { label: 'Présentation + liste', capacity: 8 },
 }
@@ -66,6 +68,17 @@ export const TEMPLATE_LABELS: Record<'products' | 'presentation', Record<Catalog
     B: { label: 'Pleine couleur', hint: 'fond de couleur, dessin en blanc' },
     C: { label: 'Photo pleine', hint: 'grande image en haut' },
   },
+}
+
+/**
+ * L'en-tête d'une page de produits (client, 14/11/2026 : « la catégorie est sur une page avec son
+ * illustration — 2 ou 3 possibilités de montrer le titre et l'illustration ») : l'illustration est le
+ * dessin de la famille de la catégorie, sinon celui de la gamme, sinon rien. Indépendant du gabarit.
+ */
+export const HEADER_LABELS: Record<CatalogueHeader, { label: string; hint: string }> = {
+  titre: { label: 'Titre + pictogramme', hint: 'le titre et un petit pictogramme' },
+  bandeau: { label: 'Bandeau illustré', hint: 'bandeau de couleur, illustration en blanc' },
+  grande: { label: 'Grande illustration', hint: 'grande illustration en haut, puis le titre' },
 }
 
 export const isPresentation = (layout: CatalogueLayout): boolean => layout === 'presentation' || layout === 'presentation_liste'
@@ -247,12 +260,18 @@ function Filler({ filler, style }: { filler: CatalogueDocFiller; style?: CSSProp
   )
 }
 
-/** Le titre d'une page intérieure, avec le petit dessin de sa gamme. */
-function Heading({ title, drawing }: { title: string; drawing?: string | null }) {
+/** Le titre d'une page intérieure et l'illustration de sa catégorie, selon l'en-tête choisi. */
+function Heading({ title, drawing, header = 'titre' }: { title: string; drawing?: string | null; header?: CatalogueHeader }) {
   const src = drawingAsset(drawing)
   return (
-    <div className="cat-h">
-      {src ? <img className="cat-h__mark" src={src} alt="" /> : null}
+    <div className={`cat-h cat-h--${header}${src ? '' : ' cat-h--nodraw'}`}>
+      {src && header === 'grande' ? (
+        <span className="cat-h__big">
+          <img src={src} alt="" />
+        </span>
+      ) : src ? (
+        <img className="cat-h__mark" src={src} alt="" />
+      ) : null}
       <span className="cat-h__text">{title}</span>
     </div>
   )
@@ -262,6 +281,7 @@ function Heading({ title, drawing }: { title: string; drawing?: string | null })
 export function freeRows(layout: CatalogueLayout, count: number): number {
   if (layout === 'grille') return 3 - Math.ceil(count / 2)
   if (layout === 'vedette') return 2 - Math.ceil(Math.max(0, count - 1) / 2)
+  if (layout === 'mosaique') return 2 - Math.ceil(count / 2)
   return 0
 }
 
@@ -272,8 +292,8 @@ function Products({ page, lang }: { page: Extract<CatalogueDocPage, { kind: 'pro
   const rows = filler ? freeRows(page.layout, page.products.length) : 0
   const span: CSSProperties = { gridColumn: '1 / -1', gridRow: `span ${rows}` }
   return (
-    <div className={`cat-inner cat-inner--${page.layout} cat-t-${template}`}>
-      <Heading title={page.title} drawing={page.drawing} />
+    <div className={`cat-inner cat-inner--${page.layout} cat-t-${template} cat-head-${page.header ?? 'titre'}`}>
+      <Heading title={page.title} drawing={page.drawing} header={page.header ?? 'titre'} />
       <div className="cat-body" data-fit={page.title}>
         {page.products.length === 0 ? (
           filler ? <Filler filler={filler} style={{ flex: '1 1 0' }} /> : <div className="cat-empty">{lang === 'nl' ? 'Lege pagina' : 'Page vide'}</div>
@@ -292,6 +312,13 @@ function Products({ page, lang }: { page: Extract<CatalogueDocPage, { kind: 'pro
               {filler && rows > 0 ? <Filler filler={filler} style={span} /> : null}
             </div>
           </>
+        ) : page.layout === 'mosaique' ? (
+          <div className="cat-grid cat-grid--2x2 cat-grid--mosaique">
+            {page.products.map((product) => (
+              <ProductCard key={product.id} product={product} lang={lang} family={page.title} />
+            ))}
+            {filler && rows > 0 ? <Filler filler={filler} style={span} /> : null}
+          </div>
         ) : (
           <div className="cat-grid cat-grid--2x3">
             {page.products.map((product) => (

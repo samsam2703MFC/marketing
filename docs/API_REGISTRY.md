@@ -933,6 +933,27 @@ au document, sous le prix, « du 1/12 au 6/12 · sur commande 48 h » (NL « van
 `showAvailability` (booléen, vrai par défaut ; autre valeur `422`) l'éteint. Le swagger ne décrit pas de
 jours de la semaine ni de précommande pour un produit : rien de tel n'est lu.
 
+**Une catégorie = sa page, en-têtes, grandes vignettes (14 novembre 2026, `OpenAPI v1.4`).** Demande du client
+(capture d'une page « COUGNOU · NOËL · FROMAGES & SALAISONS » qui mélangeait trois catégories après l'ajout
+d'une catégorie) : « quand je rajoute une catégorie, la catégorie est sur une page avec son illustration (2 ou 3
+possibilités de montrer le titre et l'illustration) et 3-4 possibilités de montrer les produits ». **Répartition
+automatique** : une page (ou plus) par catégorie ; sans la place même en listes, la dernière page devient
+« Notre sélection » en liste. **Ajout** : un `PUT` qui change `products` sans `pages` (`placeCategories`) donne sa
+page à chaque catégorie qui a gagné des produits cochés et ne tient plus dans ses pages — une page vide reprise
+(sans produit, ni présentation ; placée juste après les pages de la catégorie quand elle continue), sinon
+`pageCount` + 2 (16 au plus, les deux pages avec le gabarit et l'en-tête de la première page de produits), sinon
+rien ne bouge ; au document, `CATEGORY_NO_PAGE` nomme la catégorie (« ses produits vont en « Notre sélection » »
+ou « n'ont pas de place » ; « plus de place : 16 pages »). Retirer une catégorie laisse sa page vide (jamais
+retirée en silence ; elle est la première reprise). Les vignettes de promotions ne sont pas comptées par ce
+calcul (le document dit le débordement). **`header`** d'une page de produits : `titre` (défaut, absent) ·
+`bandeau` · `grande` ; autre valeur `422 VALIDATION_FAILED` (`pages[i].header`), ignoré sur une présentation ;
+rangé dans l'ordre fixe des clés d'une page (`PAGE_KEYS`, MySQL 8 réordonne les clés JSON). Distinct du gabarit
+A · B · C (fond, cartes, alignement) : B a déjà un bandeau avec un petit pictogramme, mais ni A ni C ne font la
+« grande illustration », d'où un réglage à part. **Illustration** (`drawing`, `drawingUrl` absolue) : le dessin
+de la famille de la catégorie (la règle des vignettes sans photo, `familyImage`), sinon la gamme de la page, sinon
+la première gamme du catalogue, sinon `null` — jamais inventée. **`mosaique`** : grandes vignettes 2 × 2,
+4 produits (place libre à 2 produits au plus). `catalogue-products` de la boutique rend `headers`.
+
 **Routes de la marque** (session, rôle réseau ; un compte de boutique → `403 PERM_ROLE_REQUIRED`) :
 
 | Méthode | Chemin | Rôle |

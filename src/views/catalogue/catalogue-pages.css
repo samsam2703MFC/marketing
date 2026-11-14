@@ -253,3 +253,32 @@
 .cat-offer--row .cat-offer__deal, .cat-offer--row .cat-avail { grid-column: 1; }
 .cat-offer--row .cat-prices { grid-column: 2; grid-row: 1; }
 .cat-t-C .cat-offer { background: var(--s); }
+
+/* ---------- en-tête d'une page de produits : titre · bandeau · grande illustration (indépendant du gabarit) ---------- */
+/* Bandeau : la couleur principale à fond perdu en haut, l'illustration de la catégorie en blanc, le titre à gauche. */
+.cat-inner.cat-head-bandeau { padding-top: 0; }
+.cat-head-bandeau .cat-h {
+  justify-content: flex-start; text-align: left; background: var(--p); color: var(--s); border-bottom: 0;
+  margin: calc(-1 * var(--b)) calc(-1 * (var(--u) * 9mm + var(--b))) 0;
+  padding: calc(var(--u) * 7mm + var(--b)) calc(var(--u) * 9mm + var(--b)) calc(var(--u) * 5mm);
+}
+.cat-head-bandeau .cat-h__mark { height: calc(var(--u) * 16mm); max-width: calc(var(--u) * 24mm); margin: 0; filter: brightness(0) invert(1); }
+/* Grande illustration : en haut de la page, centrée, puis le titre. */
+.cat-h--grande { flex-direction: column; gap: calc(var(--u) * 3mm); }
+.cat-h__big { display: block; height: calc(var(--u) * 36mm); width: 100%; }
+.cat-h__big img { width: 100%; height: 100%; object-fit: contain; }
+.cat-t-B .cat-h--grande .cat-h__big img { filter: brightness(0) invert(1); }
+.cat-t-C .cat-h--grande { align-items: flex-start; }
+.cat-t-C .cat-h--grande .cat-h__big img { object-position: left center; }
+/* Avec la grande illustration, la page garde sa capacité : vedette et liste se resserrent. */
+.cat-head-grande .cat-body { margin-top: calc(var(--u) * 4mm); }
+.cat-head-grande.cat-inner--vedette .cat-card--big, .cat-head-grande.cat-inner--vedette .cat-offer--big { flex-basis: calc(var(--u) * 44mm); }
+.cat-head-grande.cat-inner--liste .cat-list { gap: calc(var(--u) * 1.5mm); }
+.cat-head-grande.cat-inner--liste .cat-row .cat-photo { height: calc(var(--u) * 8.2mm); width: calc(var(--u) * 10mm); }
+.cat-head-grande.cat-inner--liste .cat-row { grid-template-columns: calc(var(--u) * 10mm) auto 1fr auto; }
+.cat-head-grande.cat-inner--liste .cat-row .cat-name { font-size: calc(var(--u) * 3.9mm); }
+
+/* ---------- grandes vignettes 2 × 2 (mosaique) ---------- */
+.cat-grid--mosaique .cat-card { padding: calc(var(--u) * 3mm); }
+.cat-grid--mosaique .cat-name { font-size: calc(var(--u) * 5.2mm); }
+.cat-grid--mosaique .cat-price { font-size: calc(var(--u) * 5.4mm); }

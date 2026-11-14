@@ -19,7 +19,7 @@ import type {
 import { TfBuddyError } from '../../lib/api/http'
 import { useAsync } from '../../lib/useAsync'
 import { openPrintWindow } from '../../lib/print'
-import { CatalogueSheet, FORMAT_MM, LAYOUT_LABELS, TEMPLATE_LABELS, catalogueCss, formatCents, isPresentation, sheetSize } from './CataloguePages'
+import { CatalogueSheet, FORMAT_MM, HEADER_LABELS, LAYOUT_LABELS, TEMPLATE_LABELS, catalogueCss, formatCents, isPresentation, sheetSize } from './CataloguePages'
 import type { CatalogueSheetMode } from './CataloguePages'
 import './catalogue.css'
 
@@ -449,6 +449,30 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
     change({ products: next })
   }
 
+  /**
+   * Ajoute une catégorie du webshop : ses produits cochés. Le serveur lui donne SA page (une page vide,
+   * sinon +2 pages, 16 au plus) ; on dit ce qui s'est passé.
+   */
+  function addCategory(categoryId: number, name: string, ids: number[]) {
+    const before = cat.pageCount
+    const next = [...cat.products, ...ids.filter((id) => !cat.products.some((row) => row.id === id)).map((id) => ({ id, on: true }))]
+    setSave({ status: 'saving' })
+    queue.current = queue.current
+      .then(() => api.updateCatalogue(cat.id, { products: next }))
+      .then((saved) => {
+        setCat(saved)
+        const own = saved.pages.some((page) => !isPresentation(page.layout) && page.category === categoryId)
+        setSave({
+          status: 'saved',
+          text: !own ? `« ${name} » : plus de place (${saved.pageCount} pages) — ses produits vont en « Notre sélection ».`
+            : saved.pageCount > before ? `« ${name} » a sa page : 2 pages ajoutées (${saved.pageCount} pages).`
+            : `« ${name} » a sa page.`,
+        })
+        setRevision((value) => value + 1)
+      })
+      .catch((cause: unknown) => setSave({ status: 'error', text: message(cause) }))
+  }
+
   // Les catégories en accordéons : dépliées à l'ouverture celles qui ont un produit coché ; la
   // recherche déplie celles qui ont un résultat. Un clic sur l'en-tête déplie / replie.
   const [opened, setOpened] = useState<Set<string> | null>(null)
@@ -483,6 +507,10 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
   }
   function setAllLayouts(layout: CatalogueLayout) {
     change({ pages: innerPages.map((page) => (isPresentation(page.layout) ? page : { ...page, layout })) })
+  }
+  /** L'en-tête de toutes les pages de produits (les présentations ont le leur). */
+  function setAllHeaders(header: api.CatalogueHeader) {
+    change({ pages: innerPages.map((page) => (isPresentation(page.layout) ? page : { ...page, header })) })
   }
   /** Le gabarit de toutes les pages intérieures (chacune garde sa mise en page). */
   function setAllTemplates(template: CatalogueTemplate) {
@@ -594,6 +622,9 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
   const productsShown = docPages.reduce((sum, page) => sum + (page.kind === 'products' || page.kind === 'presentation' ? page.products.filter((item) => item.kind !== 'offer').length : 0), 0)
   const selectedDoc = selected !== null ? docPages[selected + 2] : undefined
   const family: 'products' | 'presentation' = selectedPage && isPresentation(selectedPage.layout) ? 'presentation' : 'products'
+  const productPages = innerPages.filter((p) => !isPresentation(p.layout))
+  const currentHeader: api.CatalogueHeader | null = selectedPage ? (isPresentation(selectedPage.layout) ? null : (selectedPage.header ?? 'titre'))
+    : productPages.length && productPages.every((p) => (p.header ?? 'titre') === (productPages[0].header ?? 'titre')) ? (productPages[0].header ?? 'titre') : null
   const currentTemplate: CatalogueTemplate | null = selectedPage ? (selectedPage.template ?? 'A')
     : innerPages.length && innerPages.every((p) => (p.template ?? 'A') === (innerPages[0].template ?? 'A')) ? (innerPages[0].template ?? 'A') : null
 
@@ -667,7 +698,7 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
                 onChange={(event) => {
                   const pick = addable.find(({ c }) => String(c.id) === event.target.value)
                   if (!pick) return
-                  toggleProducts(pick.ids, true)
+                  addCategory(pick.c.id, pick.c.name, pick.ids)
                   setOpened((prev) => new Set([...(prev ?? []), pick.c.name]))
                 }}
               >
@@ -767,7 +798,7 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
               </select>
             ) : null}
             <span className="catv-save">
-              {save.status === 'saving' ? 'Enregistrement…' : save.status === 'saved' ? 'Enregistré' : save.status === 'error' ? <span className="error">{save.text}</span> : null}
+              {save.status === 'saving' ? 'Enregistrement…' : save.status === 'saved' ? (save.text ?? 'Enregistré') : save.status === 'error' ? <span className="error">{save.text}</span> : null}
             </span>
           </div>
           {doc.error ? <p className="error">{doc.error}</p> : null}
@@ -867,6 +898,26 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
                 )
               })}
             </div>
+            {selectedPage && isPresentation(selectedPage.layout) ? null : (
+              <>
+                <div className="catv-subt">Titre et illustration de la catégorie{selectedPage ? '' : ' · toutes les pages'}</div>
+                <div className="catv-layouts">
+                  {api.CATALOGUE_HEADERS.map((header) => (
+                    <button
+                      key={header}
+                      type="button"
+                      className={`catv-layout catv-tpl${currentHeader === header ? ' is-on' : ''}`}
+                      disabled={!productPages.length}
+                      title={`${HEADER_LABELS[header].label} — ${HEADER_LABELS[header].hint} (le dessin de la famille de la catégorie, sinon celui de la gamme)`}
+                      onClick={() => (selected !== null ? setPage(selected, { header }) : setAllHeaders(header))}
+                    >
+                      <HeaderIcon header={header} />
+                      <span>{HEADER_LABELS[header].label}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             <div className="catv-subt">Gabarit{selectedPage ? '' : ' de toutes les pages'}</div>
             <div className="catv-layouts">
               {(['A', 'B', 'C'] as CatalogueTemplate[]).map((template) => (
@@ -1215,6 +1266,45 @@ function TemplateIcon({ family, template }: { family: 'products' | 'presentation
   )
 }
 
+/** Vignette d'un en-tête de page : titre seul · bandeau · grande illustration. */
+function HeaderIcon({ header }: { header: api.CatalogueHeader }) {
+  const ink = 'currentColor'
+  const drawing = (cx: number, cy: number, r: number, color: string) => (
+    <g fill="none" stroke={color} strokeWidth="1.1">
+      <path d={`M${cx - r} ${cy + r * 0.5} Q${cx} ${cy - r * 1.1} ${cx + r} ${cy + r * 0.5} Z`} />
+      <path d={`M${cx - r * 0.4} ${cy - r * 0.1} L${cx - r * 0.1} ${cy + r * 0.4} M${cx + r * 0.2} ${cy - r * 0.2} L${cx + r * 0.5} ${cy + r * 0.3}`} />
+    </g>
+  )
+  return (
+    <svg width="40" height="52" viewBox="0 0 40 52" aria-hidden="true">
+      <rect x="0.6" y="0.6" width="38.8" height="50.8" rx="2" fill="none" stroke={ink} strokeWidth="1.2" />
+      {header === 'bandeau' ? <rect x="0.6" y="0.6" width="38.8" height="13" fill={ink} fillOpacity="0.85" /> : null}
+      {header === 'titre' ? (
+        <>
+          {drawing(10, 6.5, 3, ink)}
+          <rect x="15" y="5" width="16" height="3" rx="1" fill={ink} />
+        </>
+      ) : header === 'bandeau' ? (
+        <>
+          {drawing(8.5, 7, 4.5, '#fff')}
+          <rect x="16" y="5.5" width="18" height="3" rx="1" fill="#fff" />
+        </>
+      ) : (
+        <>
+          {drawing(20, 10, 7, ink)}
+          <rect x="11" y="18" width="18" height="3" rx="1" fill={ink} />
+        </>
+      )}
+      {(header === 'grande' ? [25, 37] : [17, 29, 41]).map((y) => (
+        <g key={y}>
+          <rect x="4" y={y} width="15" height={header === 'grande' ? 10 : 9} rx="1.5" fill="none" stroke={ink} strokeWidth="1" />
+          <rect x="21" y={y} width="15" height={header === 'grande' ? 10 : 9} rx="1.5" fill="none" stroke={ink} strokeWidth="1" />
+        </g>
+      ))}
+    </svg>
+  )
+}
+
 function LayoutIcon({ layout }: { layout: CatalogueLayout }) {
   if (isPresentation(layout)) {
     const list = layout === 'presentation_liste'
@@ -1231,6 +1321,8 @@ function LayoutIcon({ layout }: { layout: CatalogueLayout }) {
       ? [[2, 2, 36, 18], [2, 22, 17, 13], [21, 22, 17, 13], [2, 37, 17, 13], [21, 37, 17, 13]]
       : layout === 'grille'
         ? [[2, 2, 17, 15], [21, 2, 17, 15], [2, 19, 17, 15], [21, 19, 17, 15], [2, 36, 17, 14], [21, 36, 17, 14]]
+        : layout === 'mosaique'
+          ? [[2, 2, 17, 23], [21, 2, 17, 23], [2, 27, 17, 23], [21, 27, 17, 23]]
         : [[2, 3, 36, 7], [2, 13, 36, 7], [2, 23, 36, 7], [2, 33, 36, 7], [2, 43, 36, 6]]
   return (
     <svg width="40" height="52" viewBox="0 0 40 52" aria-hidden="true">
