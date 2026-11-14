@@ -22,8 +22,9 @@ use Marketing\Support\Response;
  * ensuite TOUT à elle — un catalogue d'une autre boutique, ou de la marque, répond 404.
  *
  * Contraintes appliquées ici, quoi que le dashboard envoie (voir `CatalogueService`) : produits
- * vendus par la boutique seulement, prix de la boutique, couverture et dernière page de la charte,
- * trois mises en page, source gamme ou choix.
+ * vendus par la boutique seulement, prix de la boutique, 8, 12 ou 16 pages dont les quatre de la
+ * charte (couverture, page 2, avant-dernière, dernière — aucun champ pour elles), trois mises en page,
+ * source gamme ou choix.
  *
  * Et une route publique : la page d'impression d'un catalogue, par un lien signé de 48 h
  * (`…/catalogue-prints/{token}`), que le dashboard ouvre pour produire le PDF.
@@ -53,7 +54,7 @@ final class CatalogueIntegrationController
             }
             unset($product);
 
-            return Envelope::ok($data + ['layouts' => array_keys(CatalogueService::LAYOUTS)]);
+            return Envelope::ok($data + ['layouts' => array_keys(CatalogueService::LAYOUTS), 'pageCounts' => CatalogueService::PAGE_COUNTS]);
         });
     }
 

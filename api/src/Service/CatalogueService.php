@@ -12,9 +12,11 @@ use Marketing\Support\Keys;
 /**
  * Les catalogues produits : règles, contraintes et composition.
  *
- * Un catalogue = une couverture et une dernière page fixées par la Charte des catalogues de la
- * marque (verrouillées), et des pages intérieures remplies par catégorie du webshop, chacune dans
- * l'une des trois mises en page (`vedette` 1 + 4, `grille` 2 × 3, `liste` avec prix). Les produits,
+ * Un catalogue a 8, 12 ou 16 pages (`pageCount`, choisi à la création, modifiable). Quatre viennent
+ * de la Charte des catalogues de la marque et sont verrouillées : la couverture (page 1), la page 2,
+ * l'avant-dernière et la dernière (« commandez en ligne », QR et boutique). Les autres — 4, 8 ou 12
+ * pages intérieures, en nombre FIXÉ par le format — sont remplies par catégorie du webshop, chacune
+ * dans l'une des trois mises en page (`vedette` 1 + 4, `grille` 2 × 3, `liste` avec prix). Les produits,
  * leurs photos et leurs prix viennent du webshop (TFBuddy), relus à chaque composition : rien
  * n'est saisi à la main, aucun prix n'est inventé.
  *
@@ -36,10 +38,19 @@ final class CatalogueService
     /** Mise en page → nombre de produits qu'une page porte. */
     public const LAYOUTS = ['vedette' => 5, 'grille' => 6, 'liste' => 12];
 
+    /** Nombre de pages d'un catalogue (couverture et dernière page comprises). */
+    public const PAGE_COUNTS = [8, 12, 16];
+
+    /** Pages de la charte : couverture, page 2, avant-dernière, dernière. */
+    public const BRAND_PAGES = 4;
+
+    /** Une page intérieure vide : « Notre sélection », qui prend les produits restés sans place. */
+    public const EMPTY_PAGE = ['layout' => 'grille', 'category' => null];
+
     private const TITLE_MAX    = 160;
     private const PRODUCTS_MAX = 400;
-    private const PAGES_MAX    = 40;
     private const TEXT_MAX     = 240;
+    private const PAGE_TEXT_MAX = 1200;
     private const SHOPS_MAX    = 100;
 
     /** Validité d'un lien d'impression, en secondes. */
@@ -241,12 +252,67 @@ final class CatalogueService
             'langs'        => array_values($settings['langs'] ?? ['fr']),
             'shopIds'      => array_values(array_map('intval', $settings['shopIds'] ?? [])),
             'products'     => array_values($settings['products'] ?? []),
-            'pages'        => array_values($settings['pages'] ?? []),
+            'pages'        => self::innerPages($settings),
             'productCount' => count(array_filter($settings['products'] ?? [], static fn (array $p): bool => (bool) ($p['on'] ?? false))),
-            'pageCount'    => 2 + count($settings['pages'] ?? []),
+            'pageCount'    => self::pageCountOf($settings),
+            'innerPageCount' => self::pageCountOf($settings) - self::BRAND_PAGES,
             'createdAt'    => self::iso((string) $row['created_at']),
             'updatedAt'    => self::iso((string) $row['updated_at']),
         ];
+    }
+
+    /**
+     * Le nombre de pages d'un catalogue. Un catalogue d'avant les formats (sans `pageCount`, que la
+     * migration 049 pose une fois) : le plus petit format qui contient ses pages intérieures + 4.
+     */
+    public static function pageCountOf(array $settings): int
+    {
+        $count = $settings['pageCount'] ?? null;
+        if (is_int($count) && in_array($count, self::PAGE_COUNTS, true)) {
+            return $count;
+        }
+
+        return self::smallestFormat(count($settings['pages'] ?? []));
+    }
+
+    /** Le plus petit format qui contient `$inner` pages intérieures (16 au-delà). */
+    public static function smallestFormat(int $inner): int
+    {
+        foreach (self::PAGE_COUNTS as $count) {
+            if ($inner <= $count - self::BRAND_PAGES) {
+                return $count;
+            }
+        }
+
+        return self::PAGE_COUNTS[count(self::PAGE_COUNTS) - 1];
+    }
+
+    /**
+     * Les pages intérieures, exactement `pageCount − 4` : une liste plus courte (catalogue d'avant les
+     * formats) est complétée de pages vides. Rien n'est jamais retiré en lecture.
+     *
+     * @return list<array{layout:string, category:?int}>
+     */
+    public static function innerPages(array $settings): array
+    {
+        $pages = array_values($settings['pages'] ?? []);
+        $inner = self::pageCountOf($settings) - self::BRAND_PAGES;
+        while (count($pages) < $inner) {
+            $pages[] = self::EMPTY_PAGE;
+        }
+
+        return $pages;
+    }
+
+    private static function pageCountInput(mixed $value, array &$errors): int
+    {
+        if (!is_int($value) || !in_array($value, self::PAGE_COUNTS, true)) {
+            $errors[] = ['field' => 'pageCount', 'message' => 'Nombre de pages : 8, 12 ou 16 (dont 4 pages de la marque).'];
+
+            return self::PAGE_COUNTS[0];
+        }
+
+        return $value;
     }
 
     private static function iso(string $datetime): string
@@ -268,7 +334,7 @@ final class CatalogueService
     public function create(array $input, ?array $shop, ?int $userId): array
     {
         $owner = $shop === null ? 'marque' : 'boutique';
-        $allowed = ['title', 'source', 'format', 'langs', 'products', 'pages'];
+        $allowed = ['title', 'source', 'format', 'pageCount', 'langs', 'products', 'pages'];
         if ($owner === 'marque') {
             $allowed[] = 'shopIds';
         }
@@ -299,6 +365,7 @@ final class CatalogueService
             $errors[] = ['field' => 'source.ref', 'message' => 'Identifiant de la campagne attendu.'];
         }
         $format = self::format($input['format'] ?? 'A5', $errors);
+        $pageCount = self::pageCountInput($input['pageCount'] ?? self::PAGE_COUNTS[0], $errors);
         $langs = self::langs($input['langs'] ?? ['fr'], $errors);
         $shopIds = $owner === 'marque' ? $this->shopIds($input['shopIds'] ?? [], $errors) : [];
         if ($errors !== []) {
@@ -330,7 +397,7 @@ final class CatalogueService
             'format'       => $format,
             'status'       => 'brouillon',
             'print_qty'    => null,
-            'settings'     => ['langs' => $langs, 'shopIds' => $shopIds, 'products' => [], 'pages' => []],
+            'settings'     => ['langs' => $langs, 'shopIds' => $shopIds, 'pageCount' => $pageCount, 'products' => [], 'pages' => []],
         ];
         $data = $this->webshopProducts($this->shopsOf($row));
         $known = array_column($data['products'], null, 'id');
@@ -364,11 +431,11 @@ final class CatalogueService
             $row['settings']['products'] = array_map(static fn (int $id): array => ['id' => $id, 'on' => true], array_values(array_unique($products)));
         }
         $row['settings']['pages'] = array_key_exists('pages', $input)
-            ? $this->pageRows($input['pages'], $row, $known)
+            ? $this->pageRows($input['pages'], $pageCount)
             : [];
-        if ($row['settings']['pages'] === []) {
-            $row['settings']['pages'] = self::autoPages($row['settings']['products'], $known);
-        }
+        $row['settings']['pages'] = $row['settings']['pages'] === []
+            ? self::autoPages($row['settings']['products'], $known, $pageCount - self::BRAND_PAGES)
+            : self::pad($row['settings']['pages'], $pageCount);
 
         $id = $this->catalogues->insert($row, $userId);
 
@@ -384,7 +451,7 @@ final class CatalogueService
     public function update(array $current, array $input, ?int $scopeShopId, ?int $userId): array
     {
         $boutique = $current['owner'] === 'boutique';
-        $allowed = ['title', 'format', 'langs', 'products', 'pages', 'status', 'printQty'];
+        $allowed = ['title', 'format', 'pageCount', 'langs', 'products', 'pages', 'status', 'printQty'];
         if (!$boutique) {
             $allowed[] = 'shopIds';
         }
@@ -401,6 +468,8 @@ final class CatalogueService
         if (array_key_exists('langs', $input)) {
             $settings['langs'] = self::langs($input['langs'], $errors);
         }
+        $pageCountBefore = self::pageCountOf($settings);
+        $pageCount = array_key_exists('pageCount', $input) ? self::pageCountInput($input['pageCount'], $errors) : $pageCountBefore;
         if (array_key_exists('shopIds', $input)) {
             $settings['shopIds'] = $this->shopIds($input['shopIds'], $errors);
         }
@@ -423,18 +492,24 @@ final class CatalogueService
             throw new CatalogueError('VALIDATION_FAILED', 'Catalogue invalide.', 422, $errors);
         }
 
+        // Les pages pleines : celles d'un catalogue d'avant les formats sont complétées, jamais coupées.
+        $settings['pages'] = self::innerPages($settings);
+        $settings['pageCount'] = $pageCount;
         $row['settings'] = $settings;
-        if (array_key_exists('products', $input) || array_key_exists('pages', $input) || array_key_exists('shopIds', $input)) {
+        $resize = $pageCount !== $pageCountBefore && !array_key_exists('pages', $input);
+        if (array_key_exists('products', $input) || array_key_exists('pages', $input) || array_key_exists('shopIds', $input) || $resize) {
             $known = array_column($this->webshopProducts($this->shopsOf($row))['products'], null, 'id');
             if (array_key_exists('products', $input)) {
                 $settings['products'] = $this->productRows($input['products'], $row, $known);
             }
             $row['settings'] = $settings;
             if (array_key_exists('pages', $input)) {
-                $settings['pages'] = $this->pageRows($input['pages'], $row, $known);
-                if ($settings['pages'] === []) {
-                    $settings['pages'] = self::autoPages($settings['products'], $known);
-                }
+                $settings['pages'] = $this->pageRows($input['pages'], $pageCount);
+                $settings['pages'] = $settings['pages'] === []
+                    ? self::autoPages($settings['products'], $known, $pageCount - self::BRAND_PAGES)
+                    : self::pad($settings['pages'], $pageCount);
+            } elseif ($resize) {
+                $settings['pages'] = self::resize($settings['pages'], $pageCount, $settings['products'], $known);
             }
             $row['settings'] = $settings;
         }
@@ -491,15 +566,21 @@ final class CatalogueService
 
     /**
      * Les pages intérieures : `{layout, category}` (catégorie du webshop, ou null : « Notre
-     * sélection »). Trois mises en page, pas une de plus.
+     * sélection »). Trois mises en page, pas une de plus ; `pageCount − 4` pages au plus — les pages
+     * de la marque (1, 2, avant-dernière, dernière) ne s'envoient pas : elles viennent de la charte.
      *
      * @return list<array{layout:string, category:?int}>
      */
-    private function pageRows(mixed $raw, array $row, array $known): array
+    private function pageRows(mixed $raw, int $pageCount): array
     {
-        unset($row, $known);
-        if (!is_array($raw) || !array_is_list($raw) || count($raw) > self::PAGES_MAX) {
-            throw new CatalogueError('VALIDATION_FAILED', 'Pages invalides.', 422, [['field' => 'pages', 'message' => 'Liste de ' . self::PAGES_MAX . ' pages au plus attendue.']]);
+        $inner = $pageCount - self::BRAND_PAGES;
+        if (!is_array($raw) || !array_is_list($raw)) {
+            throw new CatalogueError('VALIDATION_FAILED', 'Pages invalides.', 422, [['field' => 'pages', 'message' => 'Liste des pages intérieures attendue.']]);
+        }
+        if (count($raw) > $inner) {
+            throw new CatalogueError('VALIDATION_FAILED', 'Trop de pages intérieures.', 422, [['field' => 'pages', 'message' => sprintf(
+                'Un catalogue de %d pages a %d pages intérieures (les 4 autres sont celles de la marque) : %d envoyées. Choisissez 12 ou 16 pages, ou retirez des pages.',
+                $pageCount, $inner, count($raw))]]);
         }
         $out = [];
         $errors = [];
@@ -524,13 +605,33 @@ final class CatalogueService
     }
 
     /**
-     * La répartition automatique : une catégorie après l'autre (dans l'ordre des produits), en
-     * grilles de six ; la première page de la première catégorie en vedette.
+     * La répartition automatique, sur exactement `$inner` pages : une catégorie après l'autre (dans
+     * l'ordre des produits), en grilles de six, la première page en vedette ; si ça ne tient pas, en
+     * listes de douze. Trop peu de produits : les pages restantes sont vides. Trop : le document le
+     * dit (`PRODUCTS_OVERFLOW`).
      *
      * @param list<array{id:int, on:bool}> $products
      * @return list<array{layout:string, category:?int}>
      */
-    public static function autoPages(array $products, array $known): array
+    public static function autoPages(array $products, array $known, int $inner): array
+    {
+        $pages = self::autoPagesWith($products, $known, false);
+        if (count($pages) > $inner) {
+            $dense = self::autoPagesWith($products, $known, true);
+            if (count($dense) < count($pages)) {
+                $pages = $dense;
+            }
+        }
+        $pages = array_slice($pages, 0, $inner);
+        while (count($pages) < $inner) {
+            $pages[] = self::EMPTY_PAGE;
+        }
+
+        return $pages;
+    }
+
+    /** @return list<array{layout:string, category:?int}> */
+    private static function autoPagesWith(array $products, array $known, bool $dense): array
     {
         $byCategory = [];
         foreach ($products as $product) {
@@ -545,7 +646,7 @@ final class CatalogueService
             $first = $pages === [];
             $left = $count;
             while ($left > 0) {
-                $layout = $first ? 'vedette' : 'grille';
+                $layout = $dense ? 'liste' : ($first ? 'vedette' : 'grille');
                 $pages[] = ['layout' => $layout, 'category' => $category > 0 ? $category : null];
                 $left -= self::LAYOUTS[$layout];
                 $first = false;
@@ -553,6 +654,88 @@ final class CatalogueService
         }
 
         return $pages;
+    }
+
+    /** @param list<array{layout:string, category:?int}> $pages @return list<array{layout:string, category:?int}> */
+    private static function pad(array $pages, int $pageCount): array
+    {
+        while (count($pages) < $pageCount - self::BRAND_PAGES) {
+            $pages[] = self::EMPTY_PAGE;
+        }
+
+        return $pages;
+    }
+
+    /**
+     * Change le nombre de pages sans liste de pages : des pages vides s'ajoutent à la fin ; en
+     * réduisant, seules des pages de la fin SANS produit sont retirées. Une page qui en porte n'est
+     * jamais retirée en silence : 422 `CATALOGUE_PAGES_NOT_EMPTY`, page par page — on renvoie alors
+     * `pages` (la liste voulue), ou « Répartir automatiquement » (`pages: []`).
+     *
+     * @param list<array{layout:string, category:?int}> $pages
+     * @param list<array{id:int, on:bool}> $products
+     * @return list<array{layout:string, category:?int}>
+     */
+    private static function resize(array $pages, int $pageCount, array $products, array $known): array
+    {
+        $inner = $pageCount - self::BRAND_PAGES;
+        if (count($pages) <= $inner) {
+            return self::pad($pages, $pageCount);
+        }
+        $chosen = [];
+        foreach ($products as $item) {
+            if (($item['on'] ?? false) && isset($known[$item['id']])) {
+                $chosen[] = ['id' => $item['id'], 'categoryId' => $known[$item['id']]['categoryId'] ?? null];
+            }
+        }
+        $filled = self::fill($pages, $chosen)['items'];
+        $details = [];
+        for ($i = $inner; $i < count($pages); $i++) {
+            if ($filled[$i] !== []) {
+                $details[] = ['field' => 'pages[' . $i . ']', 'message' => sprintf('La page %d porte %d produit(s).', $i + 3, count($filled[$i]))];
+            }
+        }
+        if ($details !== []) {
+            throw new CatalogueError('CATALOGUE_PAGES_NOT_EMPTY', sprintf(
+                'Passer à %d pages retirerait des pages qui portent des produits : réordonnez les pages, changez leur mise en page, ou répartissez automatiquement.', $pageCount), 422, $details);
+        }
+
+        return array_slice($pages, 0, $inner);
+    }
+
+    /**
+     * Range les produits choisis dans les pages, dans l'ordre : chaque page prend ceux de sa
+     * catégorie ; « Notre sélection » (catégorie nulle) prend ceux qui restent, toutes catégories.
+     *
+     * @param list<array{layout:string, category:?int}> $pages
+     * @param list<array<string,mixed>> $chosen Produits avec leur `categoryId`.
+     * @return array{items: list<list<array<string,mixed>>>, left:int}
+     */
+    public static function fill(array $pages, array $chosen): array
+    {
+        $queues = [];
+        foreach ($chosen as $product) {
+            $queues[(int) ($product['categoryId'] ?? 0)][] = $product;
+        }
+        $out = [];
+        foreach ($pages as $page) {
+            $capacity = self::LAYOUTS[$page['layout']] ?? 6;
+            $items = [];
+            if ($page['category'] !== null) {
+                $queues[$page['category']] ??= [];
+                $items = array_splice($queues[$page['category']], 0, $capacity);
+            } else {
+                foreach ($queues as $key => $queue) {
+                    if (count($items) >= $capacity) {
+                        break;
+                    }
+                    $items = array_merge($items, array_splice($queues[$key], 0, $capacity - count($items)));
+                }
+            }
+            $out[] = $items;
+        }
+
+        return ['items' => $out, 'left' => array_sum(array_map('count', $queues))];
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -659,6 +842,8 @@ final class CatalogueService
             'colors'      => array_replace($default['colors'], array_intersect_key((array) ($saved['colors'] ?? []), $default['colors'])),
             'covers'      => $covers,
             'back'        => array_replace($default['back'], array_intersect_key((array) ($saved['back'] ?? []), $default['back'])),
+            'page2'       => array_replace($default['page2'], array_intersect_key((array) ($saved['page2'] ?? []), $default['page2'])),
+            'penultimate' => array_replace($default['penultimate'], array_intersect_key((array) ($saved['penultimate'] ?? []), $default['penultimate'])),
             'updatedAt'   => isset(Config::all()[self::CHARTER_VARIABLE]) ? self::iso(Config::all()[self::CHARTER_VARIABLE]['updated_at']) : null,
         ];
         $out['logoUrl'] = $this->mediaUrl($out['logoMediaId']);
@@ -666,6 +851,10 @@ final class CatalogueService
             $cover['imageUrl'] = $this->mediaUrl($cover['mediaId']);
         }
         unset($cover);
+        foreach (['page2', 'penultimate'] as $slot) {
+            $out[$slot]['mediaId'] = is_int($out[$slot]['mediaId']) ? $out[$slot]['mediaId'] : null;
+            $out[$slot]['imageUrl'] = $this->mediaUrl($out[$slot]['mediaId']);
+        }
 
         return $out;
     }
@@ -683,6 +872,21 @@ final class CatalogueService
                 'textFr'  => 'Retrait en boutique ou livraison.',
                 'textNl'  => 'Afhalen in de winkel of levering.',
             ],
+            // Page 2 et avant-dernière : des textes à adapter par la marque, sans prix ni promesse chiffrée.
+            'page2'       => [
+                'titleFr' => 'Fait maison chaque matin',
+                'titleNl' => 'Elke ochtend huisgemaakt',
+                'textFr'  => "Chaque jour, nos boulangers et nos pâtissiers préparent dans notre atelier les pains, les viennoiseries et les pâtisseries que vous retrouvez en boutique.\n\nVoici notre sélection du moment : bonne découverte !",
+                'textNl'  => "Elke dag bereiden onze bakkers en patissiers in ons atelier de broden, de viennoiserie en het gebak die u in de winkel terugvindt.\n\nHier is onze selectie van het moment: veel ontdekplezier!",
+                'mediaId' => null,
+            ],
+            'penultimate' => [
+                'titleFr' => 'Nos services',
+                'titleNl' => 'Onze diensten',
+                'textFr'  => "Commande en ligne sur notre webshop\nRetrait en boutique\nLivraison\nGâteaux sur commande pour vos fêtes et vos événements",
+                'textNl'  => "Online bestellen via onze webshop\nAfhalen in de winkel\nLevering\nTaarten op bestelling voor uw feesten en evenementen",
+                'mediaId' => null,
+            ],
         ];
     }
 
@@ -693,7 +897,7 @@ final class CatalogueService
      */
     public function saveCharter(array $input, ?int $userId): array
     {
-        $errors = self::unknown($input, ['logoMediaId', 'colors', 'covers', 'back']);
+        $errors = self::unknown($input, ['logoMediaId', 'colors', 'covers', 'back', 'page2', 'penultimate']);
         $default = self::defaultCharter();
 
         $logo = $input['logoMediaId'] ?? null;
@@ -761,6 +965,35 @@ final class CatalogueService
             $cleanBack[$text] = self::text($back[$text] ?? '', 'back.' . $text, $errors);
         }
 
+        // Page 2 et avant-dernière : un titre, un texte (paragraphes), une image de la médiathèque.
+        // Absentes du corps : celles déjà enregistrées (ou les défauts) restent.
+        $current = $this->charter();
+        $brandPages = [];
+        foreach (['page2', 'penultimate'] as $slot) {
+            $raw = $input[$slot] ?? array_intersect_key($current[$slot], $default[$slot]);
+            if (!is_array($raw)) {
+                $errors[] = ['field' => $slot, 'message' => 'Objet {titleFr, titleNl, textFr, textNl, mediaId} attendu.'];
+                $raw = $default[$slot];
+            }
+            $errors = array_merge($errors, self::unknown($raw, array_keys($default[$slot]), $slot . '.'));
+            $media = $raw['mediaId'] ?? null;
+            if ($media !== null && (!is_int($media) || $this->media->find($media) === null)) {
+                $errors[] = ['field' => $slot . '.mediaId', 'message' => 'Fichier inconnu de la médiathèque.'];
+            }
+            $clean = [];
+            foreach (['titleFr', 'titleNl'] as $text) {
+                $clean[$text] = self::text($raw[$text] ?? '', $slot . '.' . $text, $errors);
+            }
+            foreach (['textFr', 'textNl'] as $text) {
+                $clean[$text] = self::text($raw[$text] ?? '', $slot . '.' . $text, $errors, self::PAGE_TEXT_MAX);
+            }
+            if ($clean['titleFr'] === '' && $clean['textFr'] === '') {
+                $errors[] = ['field' => $slot . '.titleFr', 'message' => 'Un titre ou un texte français est obligatoire : la page s’imprime dans chaque catalogue.'];
+            }
+            $clean['mediaId'] = $media;
+            $brandPages[$slot] = $clean;
+        }
+
         if ($errors !== []) {
             throw new CatalogueError('VALIDATION_FAILED', 'Charte des catalogues invalide.', 422, $errors);
         }
@@ -770,15 +1003,17 @@ final class CatalogueService
             'colors'      => array_replace($default['colors'], $colors),
             'covers'      => $covers,
             'back'        => $cleanBack,
-        ], 'marketing', $userId, 'Charte des catalogues : logo, couvertures par gamme, dernière page, couleurs.');
+            'page2'       => $brandPages['page2'],
+            'penultimate' => $brandPages['penultimate'],
+        ], 'marketing', $userId, 'Charte des catalogues : logo, couvertures par gamme, page 2, avant-dernière et dernière pages, couleurs.');
 
         return $this->charter();
     }
 
-    private static function text(mixed $value, string $field, array &$errors): string
+    private static function text(mixed $value, string $field, array &$errors, int $max = self::TEXT_MAX): string
     {
-        if (!is_string($value) || mb_strlen($value) > self::TEXT_MAX) {
-            $errors[] = ['field' => $field, 'message' => 'Texte de ' . self::TEXT_MAX . ' caractères au plus.'];
+        if (!is_string($value) || mb_strlen($value) > $max) {
+            $errors[] = ['field' => $field, 'message' => 'Texte de ' . $max . ' caractères au plus.'];
 
             return '';
         }
@@ -878,24 +1113,14 @@ final class CatalogueService
         }
 
         // Les pages intérieures : chaque page prend les produits de sa catégorie, dans l'ordre.
-        $queues = [];
-        foreach ($chosen as $product) {
-            $queues[(int) ($product['categoryId'] ?? 0)][] = $product;
-        }
+        $innerRows = self::innerPages($row['settings']);
+        $filled = self::fill($innerRows, $chosen);
         $inner = [];
-        foreach ($row['settings']['pages'] ?? [] as $page) {
-            $capacity = self::LAYOUTS[$page['layout']] ?? 6;
-            $items = [];
-            if ($page['category'] !== null) {
-                $queues[$page['category']] ??= [];
-                $items = array_splice($queues[$page['category']], 0, $capacity);
-            } else {
-                foreach ($queues as $key => $queue) {
-                    if (count($items) >= $capacity) {
-                        break;
-                    }
-                    $items = array_merge($items, array_splice($queues[$key], 0, $capacity - count($items)));
-                }
+        $empty = 0;
+        foreach ($innerRows as $index => $page) {
+            $items = $filled['items'][$index];
+            if ($items === []) {
+                $empty++;
             }
             $category = $page['category'] !== null ? ($categories[$page['category']] ?? null) : null;
             $inner[] = [
@@ -907,9 +1132,17 @@ final class CatalogueService
                 'products' => array_map(static fn (array $p): array => array_diff_key($p, ['categoryId' => true]), $items),
             ];
         }
-        $left = array_sum(array_map('count', $queues));
+        $left = $filled['left'];
+        $pageCount = self::pageCountOf($row['settings']);
         if ($left > 0) {
-            $warnings[] = ['code' => 'PRODUCTS_OVERFLOW', 'message' => sprintf('%d produit(s) sans place : ajoutez une page ou choisissez une mise en page plus dense.', $left)];
+            $warnings[] = ['code' => 'PRODUCTS_OVERFLOW', 'message' => sprintf('%d produit(s) sans place : %schoisissez une mise en page plus dense (liste) ou retirez des produits.',
+                $left, $pageCount < 16 ? 'passez à ' . ($pageCount + 4) . ' pages, ' : '')];
+        }
+        if ($empty > 0) {
+            $warnings[] = ['code' => 'PAGES_EMPTY', 'message' => sprintf('%d page(s) intérieure(s) sans produit : ajoutez des produits, changez la catégorie de la page ou passez à un catalogue plus court.', $empty)];
+        }
+        if (count($innerRows) > $pageCount - self::BRAND_PAGES) {
+            $warnings[] = ['code' => 'PAGES_OVER_FORMAT', 'message' => sprintf('Catalogue d’avant les formats : %d pages intérieures pour %d pages. Répartissez à nouveau pour revenir au format.', count($innerRows), $pageCount)];
         }
 
         // Couverture et dernière page : la charte, verrouillées.
@@ -960,6 +1193,23 @@ final class CatalogueService
             $warnings[] = ['code' => 'NL_TEXT_MISSING', 'message' => 'Dernière page néerlandaise à écrire dans la Charte des catalogues : le français est imprimé.'];
         }
 
+        // Page 2 et avant-dernière : la charte, verrouillées.
+        $brand = [];
+        foreach (['page2', 'penultimate'] as $slot) {
+            $content = $charter[$slot];
+            if ($lang === 'nl' && (($content['titleNl'] === '' && $content['titleFr'] !== '') || ($content['textNl'] === '' && $content['textFr'] !== ''))) {
+                $warnings[] = ['code' => 'NL_TEXT_MISSING', 'message' => sprintf('%s néerlandaise à écrire dans la Charte des catalogues : le français est imprimé.', $slot === 'page2' ? 'Page 2' : 'Avant-dernière page')];
+            }
+            $brand[$slot] = [
+                'kind'     => 'brand',
+                'locked'   => true,
+                'slot'     => $slot,
+                'title'    => $lang === 'nl' ? ($content['titleNl'] ?: $content['titleFr']) : $content['titleFr'],
+                'text'     => $lang === 'nl' ? ($content['textNl'] ?: $content['textFr']) : $content['textFr'],
+                'imageUrl' => $content['imageUrl'],
+            ];
+        }
+
         $webshop = self::webshopUrl();
         $shopInfo = null;
         if ($version !== null) {
@@ -991,7 +1241,9 @@ final class CatalogueService
                 'eyebrow'  => $version !== null ? $shopInfo['name'] : null,
                 'imageUrl' => $cover['imageUrl'] ?? $gammeImage,
             ]],
+            [$brand['page2']],
             $inner,
+            [$brand['penultimate']],
             [[
                 'kind'   => 'back',
                 'locked' => true,
@@ -1004,7 +1256,7 @@ final class CatalogueService
         );
 
         return [
-            'catalogue' => ['id' => (int) $row['id'], 'title' => (string) $row['title'], 'format' => (string) $row['format'], 'owner' => (string) $row['owner']],
+            'catalogue' => ['id' => (int) $row['id'], 'title' => (string) $row['title'], 'format' => (string) $row['format'], 'owner' => (string) $row['owner'], 'pageCount' => $pageCount],
             'version'   => ['shop' => $shopInfo, 'lang' => $lang],
             'charter'   => ['logoUrl' => $charter['logoUrl'], 'colors' => $charter['colors']],
             'pages'     => $pages,
