@@ -767,7 +767,7 @@ final class CatalogueService
             'langs'        => array_values($settings['langs'] ?? ['fr']),
             'shopIds'      => array_values(array_map('intval', $settings['shopIds'] ?? [])),
             'products'     => array_values($settings['products'] ?? []),
-            'offers'       => array_values($settings['offers'] ?? []),
+            'offers'       => array_map(static fn ($o): array => ['type' => $o['type'] ?? null, 'id' => $o['id'] ?? null, 'on' => $o['on'] ?? null], array_values($settings['offers'] ?? [])), // ordre fixe : MySQL 8 réordonne les clés JSON
             'showAvailability' => (bool) ($settings['showAvailability'] ?? true),
             'pages'        => self::innerPages($settings),
             'productCount' => count(array_filter($settings['products'] ?? [], static fn (array $p): bool => (bool) ($p['on'] ?? false))),
