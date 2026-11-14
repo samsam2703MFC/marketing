@@ -22,10 +22,11 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     base: env.VITE_BASE || '/',
     // Deux applications : le Marketing (index.html) et l'espace boutique des franchisés (franchise/index.html,
-    // servi sous /marketing/franchise/).
+    // servi sous /marketing/franchise/) ; et la page d'impression d'un catalogue (catalogue/index.html,
+    // /marketing/catalogue/?t=…), ouverte par un lien signé depuis le dashboard magasin.
     build: {
       rollupOptions: {
-        input: { main: 'index.html', franchise: 'franchise/index.html' },
+        input: { main: 'index.html', franchise: 'franchise/index.html', catalogue: 'catalogue/index.html' },
       },
     },
     server: {

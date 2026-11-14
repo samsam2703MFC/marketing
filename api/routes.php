@@ -17,6 +17,8 @@ declare(strict_types=1);
 use Marketing\Controller\BrochureController;
 use Marketing\Controller\CampaignController;
 use Marketing\Controller\CampaignVoucherController;
+use Marketing\Controller\CatalogueController;
+use Marketing\Controller\CatalogueIntegrationController;
 use Marketing\Controller\CatalogController;
 use Marketing\Controller\ErpPromotionController;
 use Marketing\Controller\ErpVoucherController;
@@ -55,6 +57,8 @@ return static function (Router $router): void {
     $production = new ProductionController();
     $kits       = new KitController();
     $erpVouchers = new ErpVoucherController();
+    $catalogues = new CatalogueController();
+    $shopCatalogues = new CatalogueIntegrationController();
 
     // Session — publique : elle ne dit que si l'appelant est authentifié.
     // Le front s'en sert pour savoir s'il est embarqué dans l'ERP, auquel cas
@@ -131,6 +135,33 @@ return static function (Router $router): void {
     $router->patch('/api/v1/marketing/media-assets/{id}',            [$media, 'update']);
     $router->put('/api/v1/marketing/media-assets/{id}/thumbnail',    [$media, 'thumbnail']);
     $router->delete('/api/v1/marketing/media-assets/{id}',           [$media, 'destroy']);
+
+    // Catalogues produits (prix du webshop, gammes) — écrits au standard : enveloppe, camelCase,
+    // centimes, pagination. Marque seule ; les boutiques passent par les routes d'intégration.
+    $router->get('/api/v1/marketing/catalogues',                 [$catalogues, 'index']);
+    $router->post('/api/v1/marketing/catalogues',                [$catalogues, 'store']);
+    $router->get('/api/v1/marketing/catalogues/{id}',            [$catalogues, 'show']);
+    $router->put('/api/v1/marketing/catalogues/{id}',            [$catalogues, 'update']);
+    $router->delete('/api/v1/marketing/catalogues/{id}',         [$catalogues, 'destroy']);
+    $router->get('/api/v1/marketing/catalogues/{id}/document',   [$catalogues, 'document']);
+    $router->get('/api/v1/marketing/catalogue-products',         [$catalogues, 'products']);
+    $router->get('/api/v1/marketing/catalogue-charter',          [$catalogues, 'charter']);
+    $router->put('/api/v1/marketing/catalogue-charter',          [$catalogues, 'saveCharter']);
+
+    // Les catalogues d'une boutique, pour le dashboard magasin du cockpit (entre portails) : jeton
+    // de service `erp_jeton_service` (en-tête X-Service-Token), vérifié par le contrôleur — d'où
+    // des routes « publiques » pour le routeur. `shopId` = identifiant de caisse ERP de la boutique.
+    $shopBase = '/api/v1/integration/marketing/shops/{shopId}';
+    $router->get($shopBase . '/catalogue-products',                [$shopCatalogues, 'products'], true);
+    $router->get($shopBase . '/catalogues',                        [$shopCatalogues, 'index'], true);
+    $router->post($shopBase . '/catalogues',                       [$shopCatalogues, 'store'], true);
+    $router->get($shopBase . '/catalogues/{id}',                   [$shopCatalogues, 'show'], true);
+    $router->put($shopBase . '/catalogues/{id}',                   [$shopCatalogues, 'update'], true);
+    $router->delete($shopBase . '/catalogues/{id}',                [$shopCatalogues, 'destroy'], true);
+    $router->get($shopBase . '/catalogues/{id}/document',          [$shopCatalogues, 'document'], true);
+    $router->post($shopBase . '/catalogues/{id}/print-links',      [$shopCatalogues, 'printLink'], true);
+    // La page d'impression d'un catalogue, par son lien signé (48 h) : lecture seule.
+    $router->get('/api/v1/public/marketing/catalogue-prints/{token}', [$shopCatalogues, 'printDocument'], true);
 
     // Bâches et cadres d'affiche des boutiques (Marketing en magasin), repris par l'assistant.
     $router->get('/api/v1/marketing/shop-supports',          [$shopSupports, 'index']);

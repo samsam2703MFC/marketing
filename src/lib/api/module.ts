@@ -2851,3 +2851,204 @@ export interface SocialSuivi {
 export function getSocialSuivi(jours: 7 | 28 | 90): Promise<SocialSuivi> {
   return request<SocialSuivi>(`${SOCIAL_ROOT}/api/v1/social/suivi/abonnes?jours=${jours}`)
 }
+
+// ---------------------------------------------------------------------------
+// Catalogues produits (prix du webshop, gammes) — routes écrites au standard
+// ---------------------------------------------------------------------------
+
+export type CatalogueOwner = 'marque' | 'boutique'
+export type CatalogueSourceKind = 'gamme' | 'campagne' | 'choix'
+export type CatalogueStatus = 'brouillon' | 'pret' | 'imprime'
+export type CatalogueFormat = 'A5' | 'A4'
+export type CatalogueLayout = 'vedette' | 'grille' | 'liste'
+export type CatalogueLang = 'fr' | 'nl'
+
+export interface CatalogueProductRow {
+  /** Identifiant du produit dans TFBuddy (webshop). */
+  id: number
+  on: boolean
+}
+
+export interface CataloguePageRow {
+  layout: CatalogueLayout
+  /** Catégorie du webshop ; null : « Notre sélection ». */
+  category: number | null
+}
+
+export interface Catalogue {
+  id: number
+  title: string
+  owner: CatalogueOwner
+  shop: { id: number; erpShopId: number | null; name: string } | null
+  source: { kind: CatalogueSourceKind; ref: string | null; label: string | null }
+  format: CatalogueFormat
+  status: CatalogueStatus
+  printQty: number | null
+  langs: CatalogueLang[]
+  /** Une version par boutique (identifiants de ce module). */
+  shopIds: number[]
+  products: CatalogueProductRow[]
+  pages: CataloguePageRow[]
+  productCount: number
+  /** Couverture et dernière page comprises. */
+  pageCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CatalogueCreate {
+  title: string
+  source: { kind: CatalogueSourceKind; ref?: number }
+  format?: CatalogueFormat
+  langs?: CatalogueLang[]
+  shopIds?: number[]
+  products?: CatalogueProductRow[]
+  pages?: CataloguePageRow[]
+}
+
+export type CatalogueUpdate = Partial<Pick<Catalogue, 'title' | 'format' | 'langs' | 'shopIds' | 'products' | 'pages' | 'status' | 'printQty'>>
+
+export interface WebshopProduct {
+  id: number
+  name: string
+  nameNl: string
+  imageUrl: string | null
+  categoryId: number | null
+  gammes: number[]
+  /** Prix de chaque boutique qui le vend, en centimes (webshop, comptoir). */
+  prices: Array<{ shopId: number; webPriceCents: number | null; shopPriceCents: number | null }>
+  /** Le prix du webshop le plus répandu parmi les boutiques. */
+  priceCents: number | null
+  /** Les boutiques qui en ont un autre. */
+  priceDiffers: number[]
+}
+
+export interface WebshopCategory {
+  id: number
+  name: string
+  nameNl: string
+}
+
+export interface WebshopGamme {
+  id: number
+  name: string
+  image: string | null
+  from: string | null
+  to: string | null
+}
+
+export interface WebshopProducts {
+  products: WebshopProduct[]
+  categories: WebshopCategory[]
+  gammes: WebshopGamme[]
+  shops: Array<{ id: number; erpShopId: number | null; name: string; products: number; error: string | null; readAt: string | null }>
+}
+
+export interface CatalogueShopInfo {
+  id: number
+  erpShopId: number | null
+  name: string
+  address: string
+  hours: string
+  phone: string
+}
+
+export interface CatalogueDocProduct {
+  id: number
+  name: string
+  imageUrl: string | null
+  priceCents: number | null
+  currency: 'EUR'
+}
+
+export type CatalogueDocPage =
+  | { kind: 'cover'; locked: true; title: string; subtitle: string; eyebrow: string | null; imageUrl: string | null }
+  | { kind: 'products'; locked: false; layout: CatalogueLayout; category: number | null; title: string; products: CatalogueDocProduct[] }
+  | { kind: 'back'; locked: true; title: string; text: string; qrUrl: string | null; host: string | null; shop: CatalogueShopInfo | null }
+
+export interface CatalogueColors {
+  primary: string
+  secondary: string
+  accent: string
+  ink: string
+}
+
+export interface CatalogueDocument {
+  catalogue: { id: number; title: string; format: CatalogueFormat; owner: CatalogueOwner }
+  version: { shop: CatalogueShopInfo | null; lang: CatalogueLang }
+  charter: { logoUrl: string | null; colors: CatalogueColors }
+  pages: CatalogueDocPage[]
+  warnings: Array<{ code: string; message: string }>
+}
+
+export interface CatalogueCover {
+  /** Gamme du webshop ; null : couverture générique. */
+  gamme: number | null
+  titleFr: string
+  titleNl: string
+  subtitleFr: string
+  subtitleNl: string
+  mediaId: number | null
+  imageUrl?: string | null
+}
+
+export interface CatalogueCharter {
+  logoMediaId: number | null
+  logoUrl: string | null
+  colors: CatalogueColors
+  covers: CatalogueCover[]
+  back: { titleFr: string; titleNl: string; textFr: string; textNl: string }
+  updatedAt: string | null
+}
+
+export async function listCatalogues(query: { owner?: CatalogueOwner; perPage?: number } = {}): Promise<{ items: Catalogue[]; total: number }> {
+  const params: Record<string, string | number> = { perPage: query.perPage ?? 100 }
+  if (query.owner) params['filter[owner][eq]'] = query.owner
+  const body = await request<Envelope<Catalogue[]>>(`${BASE}/catalogues`, { query: params })
+  return { items: body.data, total: body.meta.pagination?.total ?? body.data.length }
+}
+
+export async function createCatalogue(input: CatalogueCreate): Promise<Catalogue> {
+  return (await request<Envelope<Catalogue>>(`${BASE}/catalogues`, { method: 'POST', body: input })).data
+}
+
+export async function getCatalogue(id: number): Promise<Catalogue> {
+  return (await request<Envelope<Catalogue>>(`${BASE}/catalogues/${id}`)).data
+}
+
+export async function updateCatalogue(id: number, change: CatalogueUpdate): Promise<Catalogue> {
+  return (await request<Envelope<Catalogue>>(`${BASE}/catalogues/${id}`, { method: 'PUT', body: change })).data
+}
+
+export async function deleteCatalogue(id: number): Promise<void> {
+  await request<unknown>(`${BASE}/catalogues/${id}`, { method: 'DELETE' })
+}
+
+export async function getCatalogueDocument(id: number, lang: CatalogueLang, shopId: number | null): Promise<CatalogueDocument> {
+  const query: Record<string, string | number> = { lang }
+  if (shopId !== null) query.shopId = shopId
+  return (await request<Envelope<CatalogueDocument>>(`${BASE}/catalogues/${id}/document`, { query })).data
+}
+
+/** Le document d'un lien d'impression signé (page publique d'impression). */
+export async function getCataloguePrint(token: string): Promise<CatalogueDocument> {
+  return (await request<Envelope<CatalogueDocument>>(`${API_ROOT}/api/v1/public/marketing/catalogue-prints/${encodeURIComponent(token)}`, { anonymous: true })).data
+}
+
+export async function getWebshopProducts(shopIds: number[]): Promise<WebshopProducts> {
+  return (await request<Envelope<WebshopProducts>>(`${BASE}/catalogue-products`, { query: shopIds.length ? { shopIds: shopIds.join(',') } : {} })).data
+}
+
+export async function getCatalogueCharter(): Promise<CatalogueCharter> {
+  return (await request<Envelope<CatalogueCharter>>(`${BASE}/catalogue-charter`)).data
+}
+
+export async function saveCatalogueCharter(charter: Omit<CatalogueCharter, 'logoUrl' | 'updatedAt' | 'covers'> & { covers: CatalogueCover[] }): Promise<CatalogueCharter> {
+  const covers = charter.covers.map((cover) => ({
+    gamme: cover.gamme, titleFr: cover.titleFr, titleNl: cover.titleNl, subtitleFr: cover.subtitleFr, subtitleNl: cover.subtitleNl, mediaId: cover.mediaId,
+  }))
+  return (await request<Envelope<CatalogueCharter>>(`${BASE}/catalogue-charter`, {
+    method: 'PUT',
+    body: { logoMediaId: charter.logoMediaId, colors: charter.colors, covers, back: charter.back },
+  })).data
+}

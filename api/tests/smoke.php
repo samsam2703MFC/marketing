@@ -4763,6 +4763,328 @@ $pdo->exec('DELETE FROM mar_shop_support WHERE shop_id IN (' . $sA . ',' . $sB .
 \Marketing\Support\Env::set('MAR_SESSION_SECRET', null);
 \Marketing\Support\Keys::forget();
 
+// --- Catalogues produits (prix du webshop, gammes) --------------------------
+// Les produits viennent de TFBuddy par le client de l'ERP. Le transport rend les formes que le
+// module Social lit déjà en production pour « Créer un post » (api/social/bin/tests.php : produits
+// disponibles d'une boutique, périodes de disponibilité, boutiques publiques) : rien n'est inventé
+// sur la forme d'une réponse. Deux boutiques de test, retirées à la fin (le catalogue part avec).
+echo "\nCatalogues produits\n";
+$pdo->exec('DELETE FROM mar_catalogue');
+$pdo->exec("DELETE FROM mar_shop WHERE code IN ('cat-sombreffe', 'cat-corbais')");
+$pdo->exec("INSERT INTO mar_shop (brand_id, code, name, city, erp_shop_id) VALUES (1, 'cat-sombreffe', 'Sombreffe', 'Sombreffe', 9104), (1, 'cat-corbais', 'Corbais', 'Corbais', 9105)");
+$catA = (int) $pdo->query("SELECT id FROM mar_shop WHERE code = 'cat-sombreffe'")->fetchColumn();
+$catB = (int) $pdo->query("SELECT id FROM mar_shop WHERE code = 'cat-corbais'")->fetchColumn();
+\Marketing\Repository\WebshopCatalogueRepository::purge();
+$jetonAvant = $pdo->query("SELECT valeur FROM erp_cles WHERE cle = 'erp_jeton_service'")->fetchColumn();
+$pdo->exec("REPLACE INTO erp_cles (cle, valeur, secret, portail, integration, maj_le) VALUES ('erp_jeton_service', 'JETON-SERVICE-CATALOGUES-TEST', 1, 'commun', 'Interne', NOW())");
+$webshopAvant = \Marketing\Support\Config::value('webshop_url', 'social');
+\Marketing\Support\Config::put('webshop_url', 'https://webshop.test/', 'social');
+$charteAvant = \Marketing\Support\Config::value('catalogues.charte');
+\Marketing\Support\Config::delete('catalogues.charte');
+$baseCatAvant = getenv('MAR_ERP_API_BASE');
+\Marketing\Support\Env::set('MAR_ERP_API_BASE', 'https://erp.test');
+\Marketing\Support\Env::set('MAR_SESSION_SECRET', str_repeat('c', 40));
+
+$appelsCat = [];
+$tfbCat = static function (string $url, array $entetes = [], int $delai = 5, string $methode = 'GET', ?string $corps = null) use (&$appelsCat): array {
+    $appelsCat[] = $url;
+    $p = (string) parse_url($url, PHP_URL_PATH);
+    $nl = str_contains($url, 'lang_code=nl');
+    $img = static fn (string $q): array => ['attachment_id' => 1, 'url' => 'https://cdn.r2.dev/webshop/' . $q . '.webp'];
+    $buches = ['id' => 500, 'name' => $nl ? 'Kerststronken' : 'Bûches', 'groups' => [['id' => 50, 'name' => 'Pâtisserie']]];
+    $fete = ['id' => 600, 'name' => $nl ? 'Feestgebak' : 'Viennoiseries de fête', 'groups' => [['id' => 60, 'name' => 'Viennoiserie']]];
+    $produit = static fn (int $id, string $fr, string $nlName, array $cat, ?string $web, string $comptoir) => [
+        'id' => $id, 'name' => $nl ? $nlName : $fr, 'is_active' => 1, 'id_category' => $cat['id'], 'category_name' => $cat['name'], 'category' => $cat,
+        'portion_price' => $comptoir, 'webshop' => ['price_gross' => $web], 'webshop_image' => $img('p' . $id), 'availability_periods' => [['id' => 14, 'name' => 'Gamme Noël']]];
+    if ($p === '/api/v1/shops/9104/products/available' && str_contains($url, 'alias_type=webshop')) {
+        return [200, (string) json_encode([
+            $produit(11, 'Bûche praliné', 'Pralinéstronk', $buches, '32.90', '32.90'),
+            $produit(12, 'Bûche glacée vanille', 'IJsstronk vanille', $buches, '29.90', '31.50'),
+            $produit(13, 'Cougnou 500 g', 'Kerstbrood 500 g', $fete, '6.80', '6.80'),
+            ['id' => 15, 'name' => 'Carton pro', 'is_active' => 1, 'id_category' => 700, 'category_name' => 'B.2.B - Cartons', 'portion_price' => '39.60', 'webshop' => ['price_gross' => 39.6]],
+            ['id' => 16, 'name' => 'Ancien', 'is_active' => 0, 'id_category' => 500, 'category' => $buches],
+        ])];
+    }
+    if ($p === '/api/v1/shops/9105/products/available' && str_contains($url, 'alias_type=webshop')) {
+        return [200, (string) json_encode(['data' => [
+            $produit(11, 'Bûche praliné', 'Pralinéstronk', $buches, '32.90', '32.90'),
+            $produit(13, 'Cougnou 500 g', 'Kerstbrood 500 g', $fete, '7.00', '7.00'),
+            $produit(14, 'Pain d’épices', 'Peperkoek', $fete, '5.50', '5.50'),
+        ]])];
+    }
+    if ($p === '/api/v1/product-availability-periods') {
+        return [200, (string) json_encode([['id' => 14, 'name' => '🎄 Gamme Noël', 'is_active' => 1, 'photo' => $img('g14')], ['id' => 15, 'name' => 'Vieille', 'is_active' => 0]])];
+    }
+    if ($p === '/api/v1/public/shops') {
+        return [200, (string) json_encode([
+            ['id' => 9104, 'representative_name' => 'Atelier by - Sombreffe', 'street' => 'Rue de la Gare', 'street_num' => '12', 'city' => 'Sombreffe', 'zip' => '5140', 'phone' => '071 00 00 00', 'opening_hours' => '07:00', 'closing_hours' => '18:30'],
+            ['id' => 9105, 'representative_name' => 'Atelier by - Corbais', 'street' => 'Rue de Corbais', 'street_num' => '3', 'city' => 'Corbais', 'zip' => '1435', 'phone' => '010 00 00 00', 'opening_hours' => '07:30', 'closing_hours' => '19:00'],
+        ])];
+    }
+    if ($p === '/api/v1/shops') { return [403, '{"message":"Forbidden"}']; }
+    return [404, '{"status":"error","description":"NOT_FOUND"}'];
+};
+$catService = new \Marketing\Service\CatalogueService(
+    new \Marketing\Repository\CatalogueRepository(),
+    new \Marketing\Repository\WebshopCatalogueRepository(new \Marketing\Support\ErpClient($tfbCat))
+);
+$catRouter = new Router();
+$catBrand = new \Marketing\Controller\CatalogueController($catService);
+$catShop = new \Marketing\Controller\CatalogueIntegrationController($catService);
+$catRouter->get('/api/v1/marketing/catalogues', [$catBrand, 'index']);
+$catRouter->post('/api/v1/marketing/catalogues', [$catBrand, 'store']);
+$catRouter->get('/api/v1/marketing/catalogues/{id}', [$catBrand, 'show']);
+$catRouter->put('/api/v1/marketing/catalogues/{id}', [$catBrand, 'update']);
+$catRouter->delete('/api/v1/marketing/catalogues/{id}', [$catBrand, 'destroy']);
+$catRouter->get('/api/v1/marketing/catalogues/{id}/document', [$catBrand, 'document']);
+$catRouter->get('/api/v1/marketing/catalogue-products', [$catBrand, 'products']);
+$catRouter->get('/api/v1/marketing/catalogue-charter', [$catBrand, 'charter']);
+$catRouter->put('/api/v1/marketing/catalogue-charter', [$catBrand, 'saveCharter']);
+$SB = '/api/v1/integration/marketing/shops/{shopId}';
+$catRouter->get($SB . '/catalogue-products', [$catShop, 'products'], true);
+$catRouter->get($SB . '/catalogues', [$catShop, 'index'], true);
+$catRouter->post($SB . '/catalogues', [$catShop, 'store'], true);
+$catRouter->get($SB . '/catalogues/{id}', [$catShop, 'show'], true);
+$catRouter->put($SB . '/catalogues/{id}', [$catShop, 'update'], true);
+$catRouter->delete($SB . '/catalogues/{id}', [$catShop, 'destroy'], true);
+$catRouter->get($SB . '/catalogues/{id}/document', [$catShop, 'document'], true);
+$catRouter->post($SB . '/catalogues/{id}/print-links', [$catShop, 'printLink'], true);
+$catRouter->get('/api/v1/public/marketing/catalogue-prints/{token}', [$catShop, 'printDocument'], true);
+
+// Côté marque
+AuthContext::clear();
+check('catalogues : 401 sans identité (routeur réel)', call($router, 'GET', '/api/v1/marketing/catalogues')['status'] === 401
+    && call($router, 'GET', '/api/v1/marketing/catalogue-charter')['status'] === 401);
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+check('catalogues : un compte de boutique n\'a pas l\'écran de la marque (403)',
+    call($catRouter, 'GET', '/api/v1/marketing/catalogues')['status'] === 403
+    && (call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'x', 'source' => ['kind' => 'choix']])['body']['error']['code'] ?? '') === 'PERM_ROLE_REQUIRED'
+    && call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], [])['status'] === 403);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$lecture = call($catRouter, 'GET', '/api/v1/marketing/catalogue-products', ['shopIds' => $catA . ',' . $catB]);
+$prods = array_column($lecture['body']['data']['products'] ?? [], null, 'id');
+check('catalogues : le webshop des boutiques — actifs, sans les cartons B2B, nom NL, photo, gamme',
+    $lecture['status'] === 200 && array_keys($prods) === [12, 11, 13, 14] && ($prods[11]['nameNl'] ?? '') === 'Pralinéstronk'
+        && ($prods[11]['imageUrl'] ?? '') === 'https://cdn.r2.dev/webshop/p11.webp' && ($prods[11]['gammes'] ?? []) === [14]
+        && array_column($lecture['body']['data']['gammes'] ?? [], 'name') === ['Gamme Noël'],
+    json_encode(array_keys($prods)));
+check('catalogues : un prix par boutique, en centimes ; le prix général et les boutiques qui en ont un autre',
+    ($prods[13]['priceCents'] ?? null) !== null && count($prods[13]['prices']) === 2 && count($prods[13]['priceDiffers']) === 1
+        && ($prods[12]['prices'] ?? []) === [['shopId' => $catA, 'webPriceCents' => 2990, 'shopPriceCents' => 3150]] && $prods[11]['priceDiffers'] === [],
+    json_encode([$prods[13] ?? null, $prods[12] ?? null]));
+check('catalogues : paramètre illisible (422)', call($catRouter, 'GET', '/api/v1/marketing/catalogue-products', ['shopIds' => 'a'])['status'] === 422
+    && call($catRouter, 'GET', '/api/v1/marketing/catalogue-products', ['pirate' => '1'])['status'] === 422);
+
+$cree = call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Noël 2026 — catalogue du réseau', 'source' => ['kind' => 'gamme', 'ref' => 14], 'shopIds' => [$catA, $catB], 'langs' => ['fr', 'nl']]);
+$cat = $cree['body']['data'] ?? [];
+check('catalogues : créé depuis une gamme — ses produits du webshop cochés, pages réparties par catégorie',
+    $cree['status'] === 201 && ($cat['owner'] ?? '') === 'marque' && ($cat['source'] ?? []) === ['kind' => 'gamme', 'ref' => '14', 'label' => 'Gamme Noël']
+        && array_column($cat['products'] ?? [], 'id') === [12, 11, 13, 14] && ($cat['pages'][0] ?? null) === ['layout' => 'vedette', 'category' => 500]
+        && ($cat['pageCount'] ?? 0) === 2 + count($cat['pages'] ?? []) && ($cat['status'] ?? '') === 'brouillon' && ($cat['langs'] ?? []) === ['fr', 'nl'],
+    json_encode([$cree['status'], $cree['body']['error'] ?? null, $cat]));
+$idCat = (int) ($cat['id'] ?? 0);
+$refus = [
+    call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'x', 'source' => ['kind' => 'gamme', 'ref' => 14], 'pirate' => 1])['status'],
+    call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => '', 'source' => ['kind' => 'choix']])['status'],
+    call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'x', 'source' => ['kind' => 'magie']])['status'],
+    call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'x', 'source' => ['kind' => 'gamme', 'ref' => 99]])['status'],
+    call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'x', 'source' => ['kind' => 'campagne', 'ref' => 999999]])['status'],
+    call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'x', 'source' => ['kind' => 'choix'], 'format' => 'A3'])['status'],
+    call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'x', 'source' => ['kind' => 'choix'], 'shopIds' => [999999]])['status'],
+];
+check('catalogues : refusés (422) — champ inconnu, titre vide, source inconnue, gamme ou campagne inconnue, format, boutique inconnue',
+    array_unique($refus) === [422], json_encode($refus));
+$choix = call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Au choix', 'source' => ['kind' => 'choix'], 'shopIds' => [$catA], 'products' => [['id' => 13, 'on' => true]]]);
+check('catalogues : au choix — seulement les produits envoyés', $choix['status'] === 201 && array_column($choix['body']['data']['products'] ?? [], 'id') === [13]
+    && ($choix['body']['data']['pages'] ?? []) === [['layout' => 'vedette', 'category' => 600]], json_encode($choix['body']));
+$liste = call($catRouter, 'GET', '/api/v1/marketing/catalogues', ['perPage' => '1', 'filter' => ['owner' => ['eq' => 'marque']]]);
+check('catalogues : liste paginée, filtrée, triée (plus récent d\'abord)', $liste['status'] === 200 && count($liste['body']['data']) === 1
+    && ($liste['body']['meta']['pagination']['total'] ?? 0) === 2 && ($liste['body']['meta']['pagination']['totalPages'] ?? 0) === 2
+    && ($liste['body']['data'][0]['title'] ?? '') === 'Au choix', json_encode($liste['body']['meta'] ?? null));
+check('catalogues : liste — perPage ramené à 100, paramètre, tri ou filtre hors liste (422)',
+    (call($catRouter, 'GET', '/api/v1/marketing/catalogues', ['perPage' => '500'])['body']['meta']['pagination']['perPage'] ?? 0) === 100
+        && call($catRouter, 'GET', '/api/v1/marketing/catalogues', ['sort' => 'prix'])['status'] === 422
+        && call($catRouter, 'GET', '/api/v1/marketing/catalogues', ['filter' => ['owner' => ['eq' => 'pirate']]])['status'] === 422
+        && call($catRouter, 'GET', '/api/v1/marketing/catalogues', ['q' => 'x'])['status'] === 422);
+check('catalogues : inconnu (404)', call($catRouter, 'GET', '/api/v1/marketing/catalogues/999999')['status'] === 404
+    && call($catRouter, 'PUT', '/api/v1/marketing/catalogues/999999', [], ['title' => 'x'])['status'] === 404
+    && call($catRouter, 'GET', '/api/v1/marketing/catalogues/999999/document')['status'] === 404);
+
+$doc = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idCat . '/document');
+$pages = $doc['body']['data']['pages'] ?? [];
+$codes = array_column($doc['body']['data']['warnings'] ?? [], 'code');
+check('catalogues : version générale — couverture et dernière page verrouillées, produits rangés par catégorie, prix en centimes',
+    $doc['status'] === 200 && ($pages[0]['kind'] ?? '') === 'cover' && ($pages[0]['locked'] ?? false) === true && ($pages[0]['title'] ?? '') === 'Gamme Noël'
+        && (end($pages)['kind'] ?? '') === 'back' && (end($pages)['locked'] ?? false) === true && (end($pages)['qrUrl'] ?? '') === 'https://webshop.test/'
+        && ($pages[1]['title'] ?? '') === 'Bûches' && array_column($pages[1]['products'] ?? [], 'id') === [12, 11]
+        && ($pages[1]['products'][1]['priceCents'] ?? 0) === 3290 && ($pages[2]['title'] ?? '') === 'Viennoiseries de fête' && in_array('PRICE_DIFFERS', $codes, true),
+    json_encode([$doc['status'], $doc['body']['error'] ?? null, $pages, $codes]));
+$docB = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idCat . '/document', ['shopId' => (string) $catB, 'lang' => 'nl']);
+$pB = $docB['body']['data']['pages'] ?? [];
+$tous = array_merge(...array_map(static fn (array $p): array => $p['products'] ?? [], $pB));
+check('catalogues : version d\'une boutique — SES produits, SES prix, en néerlandais, son QR et son adresse',
+    $docB['status'] === 200 && !in_array(12, array_column($tous, 'id'), true) && (array_column($tous, 'priceCents', 'id')[13] ?? 0) === 700
+        && (array_column($tous, 'name', 'id')[14] ?? '') === 'Peperkoek' && ($pB[1]['title'] ?? '') === 'Kerststronken'
+        && (end($pB)['qrUrl'] ?? '') === 'https://webshop.test/?shop=9105' && (end($pB)['shop']['address'] ?? '') === 'Rue de Corbais 3, 1435 Corbais'
+        && (end($pB)['shop']['hours'] ?? '') === '7u30–19u00' && in_array('PRODUCT_NOT_SOLD', array_column($docB['body']['data']['warnings'] ?? [], 'code'), true),
+    json_encode([$docB['body']['error'] ?? null, $pB]));
+check('catalogues : document — boutique hors du catalogue, langue ou paramètre inconnus (422)',
+    call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idCat . '/document', ['shopId' => '999999'])['status'] === 422
+        && call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idCat . '/document', ['lang' => 'de'])['status'] === 422
+        && call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idCat . '/document', ['x' => '1'])['status'] === 422);
+
+$maj = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['pages' => [['layout' => 'liste', 'category' => null]], 'status' => 'pret', 'format' => 'A4']);
+$docMaj = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idCat . '/document', ['shopId' => (string) $catA]);
+check('catalogues : modifié — une page « liste » prend tout, format A4, prêt', $maj['status'] === 200 && ($maj['body']['data']['format'] ?? '') === 'A4'
+    && ($maj['body']['data']['status'] ?? '') === 'pret' && count($docMaj['body']['data']['pages'] ?? []) === 3
+    && count($docMaj['body']['data']['pages'][1]['products'] ?? []) === 3 && ($docMaj['body']['data']['pages'][1]['title'] ?? '') === 'Notre sélection',
+    json_encode([$maj['body']['error'] ?? null, $docMaj['body']['data']['pages'] ?? null]));
+$trop = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['pages' => [['layout' => 'grille', 'category' => 600]]]);
+$docTrop = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idCat . '/document');
+check('catalogues : un produit sans page est signalé, pas perdu en silence', $trop['status'] === 200
+    && in_array('PRODUCTS_OVERFLOW', array_column($docTrop['body']['data']['warnings'] ?? [], 'code'), true));
+$auto = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['pages' => []]);
+check('catalogues : pages vides = répartition automatique', ($auto['body']['data']['pages'] ?? []) === [['layout' => 'vedette', 'category' => 500], ['layout' => 'vedette', 'category' => 600]]
+    || count($auto['body']['data']['pages'] ?? []) >= 2, json_encode($auto['body']['data']['pages'] ?? null));
+$refusMaj = [
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['pages' => [['layout' => 'mosaique', 'category' => null]]])['status'],
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['status' => 'perdu'])['status'],
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['products' => [['id' => 'x']]])['status'],
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['owner' => 'boutique'])['status'],
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['printQty' => -2])['status'],
+];
+check('catalogues : modification refusée (422) — mise en page hors des trois, état, produit, champ non modifiable, quantité',
+    array_unique($refusMaj) === [422], json_encode($refusMaj));
+
+// Charte
+$charte = call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter');
+check('charte : par défaut, une couverture générique et la dernière page « Commandez en ligne »', $charte['status'] === 200
+    && array_key_exists('gamme', $charte['body']['data']['covers'][0] ?? []) && $charte['body']['data']['covers'][0]['gamme'] === null && ($charte['body']['data']['back']['titleFr'] ?? '') === 'Commandez en ligne'
+    && ($charte['body']['data']['colors']['primary'] ?? '') === '#8D1D2C', json_encode($charte['body']));
+$pose = call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], [
+    'colors' => ['primary' => '#8D1D2C', 'secondary' => '#F5EFE4', 'accent' => '#B0792A', 'ink' => '#241C1A'],
+    'covers' => [
+        ['gamme' => null, 'titleFr' => 'Notre catalogue', 'titleNl' => 'Onze catalogus', 'subtitleFr' => '', 'subtitleNl' => '', 'mediaId' => null],
+        ['gamme' => 14, 'titleFr' => 'Noël gourmand', 'titleNl' => 'Lekkere kerst', 'subtitleFr' => 'Catalogue 2026', 'subtitleNl' => 'Catalogus 2026', 'mediaId' => null],
+    ],
+    'back' => ['titleFr' => 'Commandez en ligne', 'titleNl' => 'Bestel online', 'textFr' => 'Retrait en boutique ou livraison.', 'textNl' => 'Afhalen of levering.'],
+]);
+$docCharte = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idCat . '/document', ['lang' => 'nl']);
+check('charte : enregistrée, la couverture de la gamme passe sur le catalogue', $pose['status'] === 200 && count($pose['body']['data']['covers'] ?? []) === 2
+    && ($docCharte['body']['data']['pages'][0]['title'] ?? '') === 'Lekkere kerst' && (end($docCharte['body']['data']['pages'])['title'] ?? '') === 'Bestel online',
+    json_encode([$pose['body']['error'] ?? null, $docCharte['body']['data']['pages'][0] ?? null]));
+$refusCharte = [
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['colors' => ['primary' => 'rouge']])['status'],
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['covers' => [['gamme' => 14, 'titleFr' => '']]])['status'],
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['covers' => [['gamme' => 14, 'titleFr' => 'a'], ['gamme' => 14, 'titleFr' => 'b']]])['status'],
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['logoMediaId' => 999999])['status'],
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['police' => 'Arial'])['status'],
+];
+check('charte : refusée (422) — couleur, titre vide, deux couvertures pour une gamme, logo inconnu, champ inconnu', array_unique($refusCharte) === [422], json_encode($refusCharte));
+
+// Dashboard magasin (jeton de service)
+AuthContext::clear();
+$SA = '/api/v1/integration/marketing/shops/9104';
+$SBo = '/api/v1/integration/marketing/shops/9105';
+unset($_SERVER['HTTP_X_SERVICE_TOKEN']);
+$sans = call($catRouter, 'GET', $SA . '/catalogues');
+$_SERVER['HTTP_X_SERVICE_TOKEN'] = 'faux-jeton';
+$faux = call($catRouter, 'GET', $SA . '/catalogues');
+check('boutique : 401 sans jeton de service, 401 avec un faux', $sans['status'] === 401 && ($sans['body']['error']['code'] ?? '') === 'AUTH_TOKEN_MISSING'
+    && $faux['status'] === 401 && ($faux['body']['error']['code'] ?? '') === 'AUTH_TOKEN_INVALID');
+$_SERVER['HTTP_X_SERVICE_TOKEN'] = 'JETON-SERVICE-CATALOGUES-TEST';
+check('boutique : boutique inconnue du Marketing (404)', call($catRouter, 'GET', '/api/v1/integration/marketing/shops/424242/catalogues')['status'] === 404);
+$siens = call($catRouter, 'GET', $SA . '/catalogue-products');
+$sp = array_column($siens['body']['data']['products'] ?? [], null, 'id');
+check('boutique : ses produits seulement, au prix de SON webshop (et son prix au comptoir à côté)', $siens['status'] === 200 && array_keys($sp) === [12, 11, 13]
+    && ($sp[12]['priceCents'] ?? 0) === 2990 && ($sp[12]['shopPriceCents'] ?? 0) === 3150 && !isset($sp[12]['prices'])
+    && ($siens['body']['data']['layouts'] ?? []) === ['vedette', 'grille', 'liste'], json_encode($siens['body']));
+$refusB = [
+    call($catRouter, 'POST', $SA . '/catalogues', [], ['title' => 'Mes bûches', 'source' => ['kind' => 'choix'], 'products' => [['id' => 11, 'on' => true], ['id' => 14, 'on' => true]]]),
+    call($catRouter, 'POST', $SA . '/catalogues', [], ['title' => 'Mes bûches', 'source' => ['kind' => 'campagne', 'ref' => 10]]),
+    call($catRouter, 'POST', $SA . '/catalogues', [], ['title' => 'Mes bûches', 'source' => ['kind' => 'choix'], 'cover' => ['title' => 'À moi']]),
+    call($catRouter, 'POST', $SA . '/catalogues', [], ['title' => 'Mes bûches', 'source' => ['kind' => 'choix'], 'shopIds' => [$catB]]),
+    call($catRouter, 'POST', $SA . '/catalogues', [], ['title' => 'Mes bûches', 'source' => ['kind' => 'choix'], 'pages' => [['layout' => 'mosaique', 'category' => null]]]),
+    call($catRouter, 'POST', $SA . '/catalogues', [], ['title' => 'Mes bûches', 'source' => ['kind' => 'choix'], 'products' => [['id' => 11, 'on' => true, 'price' => 1]]]),
+];
+check('boutique : contraintes du serveur (422) — produit pas vendu par la boutique, source campagne, couverture, autre boutique, mise en page, prix saisi',
+    array_unique(array_column($refusB, 'status')) === [422] && ($refusB[0]['body']['error']['code'] ?? '') === 'CATALOGUE_PRODUCT_NOT_SOLD'
+        && str_contains((string) json_encode($refusB[0]['body']['error']['details'] ?? []), 'Produit 14'),
+    json_encode(array_column($refusB, 'status')));
+$mien = call($catRouter, 'POST', $SA . '/catalogues', [], ['title' => 'Mes bûches 2026', 'source' => ['kind' => 'gamme', 'ref' => 14]]);
+$idMien = (int) ($mien['body']['data']['id'] ?? 0);
+check('boutique : créé depuis la gamme — seulement ce que SA boutique vend', $mien['status'] === 201 && ($mien['body']['data']['owner'] ?? '') === 'boutique'
+    && ($mien['body']['data']['shop']['erpShopId'] ?? 0) === 9104 && array_column($mien['body']['data']['products'] ?? [], 'id') === [12, 11, 13],
+    json_encode($mien['body']));
+$docMien = call($catRouter, 'GET', $SA . '/catalogues/' . $idMien . '/document');
+$pm = $docMien['body']['data']['pages'] ?? [];
+check('boutique : son document — couverture et dernière page de la charte, ses prix, son QR',
+    $docMien['status'] === 200 && ($pm[0]['title'] ?? '') === 'Noël gourmand' && ($pm[0]['locked'] ?? false) === true
+        && (end($pm)['qrUrl'] ?? '') === 'https://webshop.test/?shop=9104' && (end($pm)['shop']['name'] ?? '') === 'Sombreffe'
+        && (array_column($pm[1]['products'] ?? [], 'priceCents', 'id')[12] ?? 0) === 2990,
+    json_encode([$docMien['body']['error'] ?? null, $pm]));
+$majMien = call($catRouter, 'PUT', $SA . '/catalogues/' . $idMien, [], ['products' => [['id' => 11, 'on' => true], ['id' => 12, 'on' => false]], 'pages' => [['layout' => 'grille', 'category' => 500]], 'format' => 'A4']);
+check('boutique : modifié dans ses contraintes', $majMien['status'] === 200 && ($majMien['body']['data']['format'] ?? '') === 'A4'
+    && ($majMien['body']['data']['productCount'] ?? 0) === 1);
+check('boutique : la modification garde les contraintes (produit d\'une autre boutique, 422)',
+    call($catRouter, 'PUT', $SA . '/catalogues/' . $idMien, [], ['products' => [['id' => 14, 'on' => true]]])['status'] === 422);
+$listeA = call($catRouter, 'GET', $SA . '/catalogues');
+$listeB = call($catRouter, 'GET', $SBo . '/catalogues');
+check('boutique : isolation — elle liste les siens ; l\'autre boutique ne les voit pas, ni ceux de la marque',
+    array_column($listeA['body']['data'] ?? [], 'id') === [$idMien] && ($listeB['body']['data'] ?? null) === []
+        && ($listeA['body']['meta']['pagination']['total'] ?? 0) === 1, json_encode([$listeA['body'], $listeB['body']]));
+check('boutique : isolation — le catalogue d\'une autre boutique ou de la marque est introuvable (404), en lecture comme en écriture',
+    call($catRouter, 'GET', $SBo . '/catalogues/' . $idMien)['status'] === 404
+        && call($catRouter, 'PUT', $SBo . '/catalogues/' . $idMien, [], ['title' => 'Volé'])['status'] === 404
+        && call($catRouter, 'DELETE', $SBo . '/catalogues/' . $idMien)['status'] === 404
+        && call($catRouter, 'GET', $SBo . '/catalogues/' . $idMien . '/document')['status'] === 404
+        && call($catRouter, 'POST', $SBo . '/catalogues/' . $idMien . '/print-links', [], [])['status'] === 404
+        && call($catRouter, 'GET', $SA . '/catalogues/' . $idCat)['status'] === 404
+        && (string) $pdo->query('SELECT title FROM mar_catalogue WHERE id = ' . $idMien)->fetchColumn() === 'Mes bûches 2026');
+$lien = call($catRouter, 'POST', $SA . '/catalogues/' . $idMien . '/print-links', [], ['lang' => 'nl']);
+$token = (string) ($lien['body']['data']['token'] ?? '');
+unset($_SERVER['HTTP_X_SERVICE_TOKEN']);
+$imprime = call($catRouter, 'GET', '/api/v1/public/marketing/catalogue-prints/' . $token);
+check('boutique : lien d\'impression signé (48 h) — la page du Marketing compose son PDF, dans sa langue',
+    $lien['status'] === 201 && str_contains((string) ($lien['body']['data']['url'] ?? ''), '/catalogue/?t=') && $imprime['status'] === 200
+        && ($imprime['body']['data']['version']['lang'] ?? '') === 'nl' && ($imprime['body']['data']['version']['shop']['erpShopId'] ?? 0) === 9104,
+    json_encode([$lien['body'], $imprime['body']['error'] ?? null]));
+$falsifie = substr($token, 0, -2) . (str_ends_with($token, 'AA') ? 'BB' : 'AA');
+$expire = $catService->printToken($idMien, 'fr', time() - 200000)['token'] ?? '';
+check('boutique : lien falsifié, expiré ou mal formé (404)', call($catRouter, 'GET', '/api/v1/public/marketing/catalogue-prints/' . $falsifie)['status'] === 404
+    && call($catRouter, 'GET', '/api/v1/public/marketing/catalogue-prints/' . $expire)['status'] === 404
+    && call($catRouter, 'GET', '/api/v1/public/marketing/catalogue-prints/xyz')['status'] === 404);
+$_SERVER['HTTP_X_SERVICE_TOKEN'] = 'JETON-SERVICE-CATALOGUES-TEST';
+check('boutique : lien d\'impression — langue ou champ inconnus (422)', call($catRouter, 'POST', $SA . '/catalogues/' . $idMien . '/print-links', [], ['lang' => 'de'])['status'] === 422
+    && call($catRouter, 'POST', $SA . '/catalogues/' . $idMien . '/print-links', [], ['shop' => 1])['status'] === 422);
+$d1 = call($catRouter, 'DELETE', $SA . '/catalogues/' . $idMien);
+$d2 = call($catRouter, 'DELETE', $SA . '/catalogues/' . $idMien);
+check('boutique : supprimé (204), puis introuvable (404) — rien d\'autre ne bouge', $d1['status'] === 204 && $d1['body'] === null && $d2['status'] === 404
+    && (int) $pdo->query('SELECT COUNT(*) FROM mar_catalogue WHERE id = ' . $idCat)->fetchColumn() === 1);
+unset($_SERVER['HTTP_X_SERVICE_TOKEN']);
+
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$appelsAvant = count($appelsCat);
+call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idCat . '/document');
+check('catalogues : les lectures du webshop sont gardées (pas de nouvel appel à TFBuddy)', count($appelsCat) === $appelsAvant, (string) (count($appelsCat) - $appelsAvant));
+$e1 = call($catRouter, 'DELETE', '/api/v1/marketing/catalogues/' . $idCat);
+$e2 = call($catRouter, 'DELETE', '/api/v1/marketing/catalogues/' . $idCat);
+check('catalogues : supprimé (204), puis introuvable (404)', $e1['status'] === 204 && $e2['status'] === 404);
+$pdo->exec('DELETE FROM mar_catalogue');
+
+$pdo->exec("DELETE FROM mar_shop WHERE code IN ('cat-sombreffe', 'cat-corbais')");
+\Marketing\Repository\WebshopCatalogueRepository::purge();
+if ($jetonAvant === false) {
+    $pdo->exec("DELETE FROM erp_cles WHERE cle = 'erp_jeton_service'");
+} else {
+    $pdo->prepare("UPDATE erp_cles SET valeur = ? WHERE cle = 'erp_jeton_service'")->execute([$jetonAvant]);
+}
+$webshopAvant === null ? \Marketing\Support\Config::delete('webshop_url', 'social') : \Marketing\Support\Config::put('webshop_url', $webshopAvant, 'social');
+$charteAvant === null ? \Marketing\Support\Config::delete('catalogues.charte') : \Marketing\Support\Config::put('catalogues.charte', $charteAvant);
+\Marketing\Support\Env::set('MAR_ERP_API_BASE', $baseCatAvant === false ? null : $baseCatAvant);
+\Marketing\Support\Env::set('MAR_SESSION_SECRET', null);
+\Marketing\Support\Keys::forget();
+
 // --- Résultat -------------------------------------------------------------
 printf("\n%d réussis, %d échoués\n", $passed, $failed);
 exit($failed === 0 ? 0 : 1);
