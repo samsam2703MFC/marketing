@@ -1,6 +1,9 @@
 import type { CSSProperties } from 'react'
+import { isDocOffer } from '../../lib/api/module'
 import type {
   CatalogueDocFiller,
+  CatalogueDocItem,
+  CatalogueDocOffer,
   CatalogueDocPage,
   CatalogueDocProduct,
   CatalogueDocument,
@@ -99,8 +102,48 @@ function Qr({ url, size }: { url: string; size: number }) {
   )
 }
 
-function Price({ product, lang }: { product: CatalogueDocProduct; lang: CatalogueLang }) {
-  return <span className={`cat-price${product.priceCents === null ? ' cat-price--none' : ''}`}>{formatCents(product.priceCents, lang)}</span>
+/** Le prix ; barré par une remise programmée de TFBuddy : l'ancien prix à côté, rayé. */
+function Price({ product, lang }: { product: CatalogueDocProduct | CatalogueDocOffer; lang: CatalogueLang }) {
+  const old = product.oldPriceCents ?? null
+  return (
+    <span className="cat-prices">
+      {old !== null ? <s className="cat-old">{formatCents(old, lang)}</s> : null}
+      <span className={`cat-price${product.priceCents === null ? ' cat-price--none' : ''}${old !== null ? ' cat-price--promo' : ''}`}>{formatCents(product.priceCents, lang)}</span>
+    </span>
+  )
+}
+
+/** Ce que TFBuddy dit de la disponibilité (« du 1/12 au 6/12 · sur commande 48 h »), sous le prix ; rien sinon. */
+function Availability({ text }: { text?: string | null }) {
+  return text ? <span className="cat-avail">{text}</span> : null
+}
+
+/** La vignette d'une promotion (bundle, « 2+1 », « 3 pour 2 ») : badge, produits, prix et ancien prix, période. */
+function OfferCard({ offer, lang, family, big = false, row = false }: { offer: CatalogueDocOffer; lang: CatalogueLang; family: string; big?: boolean; row?: boolean }) {
+  const shown = offer.products.slice(0, row ? 3 : big ? 4 : offer.products.length > 2 ? 4 : 2)
+  const photos = (
+    <span className={`cat-offer__photos cat-offer__photos--${Math.max(1, shown.length)}`}>
+      {shown.length === 0 ? <span className="cat-photo"><span className="cat-photo__none" /></span> : null}
+      {shown.map((p) => (
+        <Photo key={p.id} product={{ id: p.id, name: p.name, imageUrl: p.imageUrl, priceCents: null, currency: 'EUR' }} family={family} />
+      ))}
+    </span>
+  )
+  const names = offer.products.map((p) => `${p.quantity !== null && p.quantity !== 1 ? `${p.quantity} × ` : ''}${p.name}`).join(' + ')
+  const more = offer.moreProducts > 0 ? (lang === 'nl' ? ` + ${offer.moreProducts} andere` : ` + ${offer.moreProducts} autre${offer.moreProducts > 1 ? 's' : ''}`) : ''
+  return (
+    <div className={`cat-offer cat-offer--${offer.type}${big ? ' cat-offer--big' : ''}${row ? ' cat-offer--row' : ''}`}>
+      <span className="cat-offer__badge">{offer.badge}</span>
+      {photos}
+      <div className="cat-offer__text">
+        <div className="cat-name">{offer.name}</div>
+        {names && !row ? <div className="cat-offer__items">{names + more}</div> : null}
+        {offer.deal ? <div className="cat-offer__deal">{offer.deal}</div> : null}
+        {offer.priceCents !== null ? <Price product={offer} lang={lang} /> : null}
+        {offer.period ? <span className="cat-avail">{offer.period}</span> : null}
+      </div>
+    </div>
+  )
 }
 
 /** La photo du webshop ; sans elle, le dessin de la famille (celui des brochures), jamais une photo inventée. */
@@ -176,13 +219,16 @@ function Brand({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'brand' 
   )
 }
 
-function ProductCard({ product, lang, family, big = false }: { product: CatalogueDocProduct; lang: CatalogueLang; family: string; big?: boolean }) {
+function ProductCard({ product, lang, family, big = false }: { product: CatalogueDocItem; lang: CatalogueLang; family: string; big?: boolean }) {
+  if (isDocOffer(product)) return <OfferCard offer={product} lang={lang} family={family} big={big} />
   return (
-    <div className={`cat-card${big ? ' cat-card--big' : ''}`}>
+    <div className={`cat-card${big ? ' cat-card--big' : ''}${product.oldPriceCents != null ? ' cat-card--promo' : ''}`}>
+      {product.promo ? <span className="cat-offer__badge cat-card__badge">{product.promo.label}</span> : null}
       <Photo product={product} family={family} />
       <div className="cat-card__text">
         <div className="cat-name">{product.name}</div>
         <Price product={product} lang={lang} />
+        <Availability text={product.availability} />
       </div>
     </div>
   )
@@ -259,17 +305,24 @@ function Products({ page, lang }: { page: Extract<CatalogueDocPage, { kind: 'pro
   )
 }
 
-function ProductList({ products, lang, family }: { products: CatalogueDocProduct[]; lang: CatalogueLang; family: string }) {
+function ProductList({ products, lang, family }: { products: CatalogueDocItem[]; lang: CatalogueLang; family: string }) {
   return (
     <div className="cat-list">
-      {products.map((product) => (
-        <div className="cat-row" key={product.id}>
-          <Photo product={product} family={family} />
-          <span className="cat-name">{product.name}</span>
-          <i />
-          <Price product={product} lang={lang} />
-        </div>
-      ))}
+      {products.map((product) =>
+        isDocOffer(product) ? (
+          <OfferCard key={product.id} offer={product} lang={lang} family={family} row />
+        ) : (
+          <div className={`cat-row${product.availability ? ' cat-row--avail' : ''}`} key={product.id}>
+            <Photo product={product} family={family} />
+            <span className="cat-name">
+              {product.name}
+              {product.availability ? <Availability text={product.availability} /> : null}
+            </span>
+            <i />
+            <Price product={product} lang={lang} />
+          </div>
+        ),
+      )}
     </div>
   )
 }

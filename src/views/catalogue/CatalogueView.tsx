@@ -586,7 +586,7 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
     cat.source.kind === 'choix' ? 'Au choix'
     : cat.source.label && cat.source.label.toLowerCase().startsWith(SOURCE_LABELS[cat.source.kind].toLowerCase()) ? cat.source.label
     : `${SOURCE_LABELS[cat.source.kind]} ${cat.source.label ?? ''}`.trim()
-  const productsShown = docPages.reduce((sum, page) => sum + (page.kind === 'products' || page.kind === 'presentation' ? page.products.length : 0), 0)
+  const productsShown = docPages.reduce((sum, page) => sum + (page.kind === 'products' || page.kind === 'presentation' ? page.products.filter((item) => item.kind !== 'offer').length : 0), 0)
   const selectedDoc = selected !== null ? docPages[selected + 2] : undefined
   const family: 'products' | 'presentation' = selectedPage && isPresentation(selectedPage.layout) ? 'presentation' : 'products'
   const currentTemplate: CatalogueTemplate | null = selectedPage ? (selectedPage.template ?? 'A')
@@ -933,6 +933,19 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
             </div>
           </section>
 
+          <OffersCard
+            offers={webshop.data?.offers ?? []}
+            error={webshop.data?.offersError ?? null}
+            loading={webshop.loading}
+            choices={cat.offers ?? []}
+            checkedIds={new Set(cat.products.filter((row) => row.on).map((row) => row.id))}
+            checkedCategories={new Set(cat.products.filter((row) => row.on).map((row) => byId.get(row.id)?.categoryId ?? null).filter((c): c is number => c !== null))}
+            categoryName={(id) => (id !== null ? (categories.get(id)?.name ?? null) : null)}
+            showAvailability={cat.showAvailability ?? true}
+            onOffers={(offers) => change({ offers })}
+            onAvailability={(showAvailability) => change({ showAvailability })}
+          />
+
           <section className="card">
             <h2>Fixé par la marque</h2>
             <dl className="catv-dl">
@@ -1039,6 +1052,95 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
 }
 
 /** Le texte d'une page de présentation (FR, et NL si le catalogue l'est), enregistré en quittant le champ. */
+/** Une offre est-elle cochée ? Le choix enregistré, sinon : touche-t-elle un produit coché ? (la règle de l'API) */
+function offerIsOn(offer: api.WebshopOffer, choices: api.CatalogueOfferRow[], checkedIds: Set<number>, checkedCategories: Set<number>): boolean {
+  const choice = choices.find((c) => c.type === offer.type && c.id === offer.erpId)
+  if (choice) return choice.on
+  return offer.productIds.some((id) => checkedIds.has(id)) || offer.categoryIds.some((id) => checkedCategories.has(id))
+}
+
+/**
+ * « Promotions et bundles » : les offres de TFBuddy qui valent pour ce catalogue (réseau ou ses boutiques), un
+ * interrupteur chacune — cochées d'office quand elles touchent un produit coché. Une vignette occupe une case de la
+ * page de sa catégorie ; une remise programmée barre le prix des produits qu'elle vise. Et l'interrupteur de la
+ * disponibilité (période, délai de commande) imprimée sous le prix.
+ */
+function OffersCard({
+  offers,
+  error,
+  loading,
+  choices,
+  checkedIds,
+  checkedCategories,
+  categoryName,
+  showAvailability,
+  onOffers,
+  onAvailability,
+}: {
+  offers: api.WebshopOffer[]
+  error: string | null
+  loading: boolean
+  choices: api.CatalogueOfferRow[]
+  checkedIds: Set<number>
+  checkedCategories: Set<number>
+  categoryName: (id: number | null) => string | null
+  showAvailability: boolean
+  onOffers: (offers: api.CatalogueOfferRow[]) => void
+  onAvailability: (on: boolean) => void
+}) {
+  function toggle(offer: api.WebshopOffer, on: boolean) {
+    const next = choices.filter((c) => !(c.type === offer.type && c.id === offer.erpId))
+    onOffers([...next, { type: offer.type, id: offer.erpId, on }])
+  }
+  return (
+    <section className="card">
+      <h2>Promotions et bundles</h2>
+      {loading && !offers.length ? <p className="catv-note">Lecture des promotions de TFBuddy…</p> : null}
+      {error ? <p className="catv-warn">Promotions de TFBuddy illisibles : {error}. Rien n’est inventé : le catalogue n’en montre aucune.</p> : null}
+      {!loading && !error && !offers.length ? <p className="catv-note">Aucune promotion active dans TFBuddy pour ces produits et ces boutiques.</p> : null}
+      <div className="catv-offers">
+        {offers.map((offer) => {
+          const on = offerIsOn(offer, choices, checkedIds, checkedCategories)
+          const where = offer.type === 'scheduledDiscount' ? 'prix barré' : (categoryName(offer.categoryId) ?? 'Notre sélection')
+          return (
+            <div key={offer.id} className={`catv-offer${on ? '' : ' is-off'}`}>
+              <span className="catv-offer__badge">{offer.badge}</span>
+              <span className="catv-offer__body">
+                <span className="catv-offer__name">{offer.name}</span>
+                <small className="catv-sub">
+                  {[offer.products.map((p) => p.name).join(' + ') + (offer.moreProducts ? ` + ${offer.moreProducts}` : ''), offer.period, offer.shopScope === 'selected' ? 'certaines boutiques' : null]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </small>
+                <small className="catv-sub">→ {where}</small>
+              </span>
+              <button
+                type="button"
+                className={`catv-sw${on ? ' is-on' : ''}`}
+                role="switch"
+                aria-checked={on}
+                aria-label={offer.name}
+                onClick={() => toggle(offer, !on)}
+              >
+                <span className="catv-sw__track" aria-hidden="true" />
+              </button>
+            </div>
+          )
+        })}
+      </div>
+      <div className="catv-offer catv-offer--avail">
+        <span className="catv-offer__body">
+          <span className="catv-offer__name">Afficher la disponibilité</span>
+          <small className="catv-sub">période et délai de commande lus dans TFBuddy, sous le prix</small>
+        </span>
+        <button type="button" className={`catv-sw${showAvailability ? ' is-on' : ''}`} role="switch" aria-checked={showAvailability} aria-label="Afficher la disponibilité" onClick={() => onAvailability(!showAvailability)}>
+          <span className="catv-sw__track" aria-hidden="true" />
+        </button>
+      </div>
+    </section>
+  )
+}
+
 function PresentationTexts({ page, langs, onSave }: { page: api.CataloguePageRow; langs: CatalogueLang[]; onSave: (patch: Partial<api.CataloguePageRow>) => void }) {
   const [fr, setFr] = useState(page.text ?? '')
   const [nl, setNl] = useState(page.textNl ?? '')

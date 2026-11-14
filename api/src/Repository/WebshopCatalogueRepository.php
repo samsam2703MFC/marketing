@@ -40,6 +40,14 @@ final class WebshopCatalogueRepository
 
     private const INCLUDE = 'webshop,portions,availability_periods,webshop_availability';
 
+    /** Les promotions qu'un catalogue montre (swagger de l'ERP, réalm admin). Les campagnes de bons n'y vont pas. */
+    private const PROMOTION_FAMILIES = [
+        'bundle'            => '/api/v1/admin/promotions/bundles',
+        'buyXGetY'          => '/api/v1/admin/promotions/buy-x-get-y',
+        'quantity'          => '/api/v1/admin/promotions/quantity',
+        'scheduledDiscount' => '/api/v1/admin/promotions/scheduled-product-discount',
+    ];
+
     /** Lectures déjà faites pendant la requête. @var array<string, array{data:array<mixed>, error:?string}> */
     private array $memo = [];
 
@@ -193,11 +201,18 @@ final class WebshopCatalogueRepository
                 }
                 $group  = is_array($cat['groups'][0] ?? null) ? $cat['groups'][0] : null;
                 $gammes = [];
+                $periods = [];
                 foreach ((array) ($row['availability_periods'] ?? []) as $period) {
                     if (is_array($period) && !empty($period['id'])) {
                         $gammes[] = (int) $period['id'];
+                        // Les dates de la période quand la ligne les porte (`from_md`/`to_md`, sinon
+                        // `start_date`/`end_date`) ; à défaut, celles de la gamme (`gammes()`).
+                        $periods[(int) $period['id']] = ['id' => (int) $period['id'], 'from' => self::dayMonth($period, 'from_md', 'start_date'), 'to' => self::dayMonth($period, 'to_md', 'end_date')];
                     }
                 }
+                // Délai de préparation du produit (colonne `preparation_lead_time_hours` de l'ERP) : 0 ou absent = rien.
+                $lead = is_numeric($row['preparation_lead_time_hours'] ?? null) && (float) $row['preparation_lead_time_hours'] > 0
+                    ? (int) round((float) $row['preparation_lead_time_hours']) : null;
                 $name = trim((string) ($row['name'] ?? ''));
                 $products[] = [
                     'id'             => (int) $row['id'],
@@ -211,6 +226,8 @@ final class WebshopCatalogueRepository
                     'gammes'         => array_values(array_unique($gammes)),
                     'webPrice'       => is_numeric($row['webshop']['price_gross'] ?? null) ? round((float) $row['webshop']['price_gross'], 2) : null,
                     'shopPrice'      => is_numeric($row['portion_price'] ?? null) ? round((float) $row['portion_price'], 2) : null,
+                    'periods'        => array_values($periods),
+                    'leadHours'      => $lead,
                 ];
             }
 
@@ -314,8 +331,8 @@ final class WebshopCatalogueRepository
                     'id'    => (int) $row['id'],
                     'name'  => $name,
                     'image' => self::image($row['photo'] ?? null),
-                    'from'  => isset($row['from_md']) ? sprintf('%02d/%02d', (int) $row['from_md'] % 100, intdiv((int) $row['from_md'], 100)) : null,
-                    'to'    => isset($row['to_md']) ? sprintf('%02d/%02d', (int) $row['to_md'] % 100, intdiv((int) $row['to_md'], 100)) : null,
+                    'from'  => self::dayMonth($row, 'from_md', 'start_date'),
+                    'to'    => self::dayMonth($row, 'to_md', 'end_date'),
                 ];
             }
             usort($out, static fn (array $a, array $b): int => strcasecmp($a['name'], $b['name']));
@@ -413,6 +430,105 @@ final class WebshopCatalogueRepository
             'hoursNl'   => str_replace('h', 'u', $hours),
             'phone'     => trim((string) ($row['phone'] ?? '')),
         ];
+    }
+
+    /**
+     * Le jour et le mois d'une période, « JJ/MM » : `from_md` / `to_md` (MMJJ, ex. 1201 = 1er décembre), sinon la
+     * date `start_date` / `end_date`. Rien de lisible : null.
+     */
+    private static function dayMonth(array $row, string $md, string $date): ?string
+    {
+        if (is_numeric($row[$md] ?? null) && (int) $row[$md] >= 101 && (int) $row[$md] <= 1231) {
+            return sprintf('%02d/%02d', (int) $row[$md] % 100, intdiv((int) $row[$md], 100));
+        }
+        if (is_string($row[$date] ?? null) && preg_match('/^\d{4}-(\d{2})-(\d{2})/', $row[$date], $m) === 1) {
+            return $m[2] . '/' . $m[1];
+        }
+
+        return null;
+    }
+
+    /**
+     * Les promotions de TFBuddy qu'un catalogue peut montrer : bundles, « X achetés = Y », promotions de quantité,
+     * remises programmées — les ACTIVES (`status=ACTIVE`), liste puis fiche de chacune (la liste ne porte que des
+     * compteurs), mises à la forme du module par `ErpPromotionService::normalize`. Mêmes chemins que les autres
+     * lectures (compte du Marketing, sinon celui de Social). Une famille illisible n'empêche pas les autres : son
+     * erreur est rendue dans `errors`. Gardé 15 minutes.
+     *
+     * @return array{offers: list<array<string,mixed>>, errors: array<string,string>, error: ?string}
+     */
+    public function promotions(): array
+    {
+        $read = $this->cached('promotions', self::TTL_REFERENCES, function (): array {
+            $normalizer = new \Marketing\Service\ErpPromotionService();
+            $offers = [];
+            $errors = [];
+            foreach (self::PROMOTION_FAMILIES as $family => $path) {
+                try {
+                    $rows = [];
+                    for ($page = 1; $page <= 10; $page++) {
+                        $payload = $this->lire($path, ['status' => 'ACTIVE', 'limit' => 100, 'page' => $page]);
+                        $items = ErpClient::rows($payload, ['items']);
+                        array_push($rows, ...$items);
+                        $pagination = $payload['pagination'] ?? ($payload['data']['pagination'] ?? null);
+                        $pages = is_array($pagination) ? (int) ($pagination['pages'] ?? 0) : 0;
+                        if ($items === [] || ($pages > 0 ? $page >= $pages : count($items) < 100)) {
+                            break;
+                        }
+                    }
+                    foreach ($rows as $row) {
+                        if (!isset($row['id'])) {
+                            continue;
+                        }
+                        try {
+                            $full = ErpClient::rows($this->lire($path . '/' . rawurlencode((string) $row['id'])));
+                            if ($full !== []) {
+                                $row = array_merge($row, $full[0]);
+                            }
+                        } catch (Throwable) {
+                            // La fiche illisible : la ligne de la liste, sans sa composition.
+                        }
+                        $offer = $normalizer->normalize($family, $row);
+                        if ($offer['erpId'] > 0) {
+                            $offers[] = $offer;
+                        }
+                    }
+                } catch (Throwable $e) {
+                    $errors[$family] = $e->getMessage();
+                }
+            }
+            if ($offers === [] && count($errors) === count(self::PROMOTION_FAMILIES)) {
+                throw new RuntimeException((string) reset($errors));
+            }
+
+            return ['offers' => $offers, 'errors' => $errors];
+        });
+
+        return ['offers' => $read['data']['offers'] ?? [], 'errors' => $read['data']['errors'] ?? [], 'error' => $read['error']];
+    }
+
+    /**
+     * Les remises programmées actives d'une boutique (`GET /shops/{id}/scheduled-product-discounts/active`) : leurs
+     * identifiants. La réponse n'est pas décrite par le swagger : une ligne porte `id_promotion`, `promotion_id` ou
+     * son `id`. Illisible : `ids` null (la liste du réseau, filtrée par ses dates et ses boutiques, fait foi).
+     *
+     * @return array{ids: ?list<int>, error: ?string}
+     */
+    public function activeScheduledDiscounts(int $erpShopId): array
+    {
+        $read = $this->cached('remises-actives:' . $erpShopId, self::TTL_REFERENCES, function () use ($erpShopId): array {
+            $ids = [];
+            foreach (ErpClient::rows($this->lire('/api/v1/shops/' . $erpShopId . '/scheduled-product-discounts/active'), ['items']) as $row) {
+                $id = $row['id_promotion'] ?? $row['promotion_id'] ?? (is_array($row['promotion'] ?? null) ? ($row['promotion']['id'] ?? null) : null) ?? $row['id'] ?? null;
+                if (is_numeric($id) && (int) $id > 0) {
+                    $ids[] = (int) $id;
+                }
+            }
+
+            return ['ids' => array_values(array_unique($ids))];
+        });
+
+        return ['ids' => $read['error'] !== null && $read['readAt'] === null ? null : ($read['data']['ids'] ?? null), 'error' => $read['error']];
     }
 
     private static function image(mixed $value): ?string

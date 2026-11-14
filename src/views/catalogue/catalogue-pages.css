@@ -201,3 +201,55 @@
 .cat-pres.cat-t-C .cat-pres__visual.is-none { border: 0; border-radius: 0; }
 .cat-pres.cat-t-C .cat-pres__head { text-align: left; align-items: flex-start; }
 .cat-pres--liste.cat-t-C .cat-pres__visual { flex-basis: calc(var(--u) * 54mm + var(--b)); }
+
+/* ---------- promotions de TFBuddy : vignette d'offre, prix barré, disponibilité ---------- */
+.cat-prices { display: inline-flex; align-items: baseline; justify-content: center; gap: calc(var(--u) * 1.6mm); flex-wrap: wrap; }
+.cat-card--big .cat-prices, .cat-offer--big .cat-prices, .cat-offer--row .cat-prices { justify-content: flex-start; }
+.cat-old { font-size: calc(var(--u) * 3.4mm); color: rgba(36, 28, 26, 0.55); text-decoration: line-through; text-decoration-thickness: 0.25mm; white-space: nowrap; }
+.cat-avail {
+  display: block; font-size: calc(var(--u) * 2.9mm); line-height: 1.25; letter-spacing: 0.02em; color: rgba(36, 28, 26, 0.72);
+  overflow-wrap: anywhere;
+}
+.cat-row .cat-name .cat-avail { margin-top: calc(var(--u) * 0.6mm); font-family: 'GothamPrint', system-ui, sans-serif; text-transform: none; }
+
+.cat-card { position: relative; }
+.cat-card__badge { position: absolute; top: calc(var(--u) * 2.4mm); left: calc(var(--u) * 2.4mm); z-index: 1; }
+
+.cat-offer {
+  position: relative; display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  background: #fff; border: 0.5mm solid var(--p); border-radius: calc(var(--u) * 2.5mm); padding: calc(var(--u) * 2.4mm);
+}
+.cat-offer__badge {
+  display: inline-block; align-self: flex-start; padding: calc(var(--u) * 0.9mm) calc(var(--u) * 2.2mm);
+  background: var(--p); color: var(--s); border-radius: calc(var(--u) * 1.2mm);
+  font-family: 'GothamPrint', system-ui, sans-serif; font-weight: 500; font-size: calc(var(--u) * 3.2mm); line-height: 1; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap;
+}
+.cat-offer > .cat-offer__badge { position: absolute; top: calc(var(--u) * 2.4mm); left: calc(var(--u) * 2.4mm); z-index: 1; }
+.cat-offer__photos { flex: 1 1 0; min-height: 0; display: grid; gap: calc(var(--u) * 1.4mm); grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr); }
+.cat-offer__photos--2 { grid-template-columns: 1fr 1fr; }
+.cat-offer__photos--3, .cat-offer__photos--4 { grid-template-columns: 1fr 1fr; grid-template-rows: repeat(2, minmax(0, 1fr)); }
+.cat-offer__photos .cat-photo { position: relative; min-height: 0; width: 100%; height: 100%; }
+.cat-offer__photos .cat-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.cat-offer__photos .cat-photo--drawing img { inset: 15%; width: 70%; height: 70%; }
+.cat-offer__text { flex: 0 0 auto; padding-top: calc(var(--u) * 2mm); text-align: center; display: grid; gap: calc(var(--u) * 0.8mm); }
+.cat-offer__items { font-size: calc(var(--u) * 2.9mm); line-height: 1.25; color: rgba(36, 28, 26, 0.72); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.cat-offer__deal { font-weight: 500; font-size: calc(var(--u) * 3.4mm); color: var(--p); }
+.cat-offer .cat-name { font-size: calc(var(--u) * 4.2mm); }
+
+.cat-offer--big { flex: 0 0 calc(var(--u) * 58mm); flex-direction: row; gap: calc(var(--u) * 4mm); align-items: stretch; }
+.cat-offer--big .cat-offer__photos { flex: 0 0 48%; padding-top: calc(var(--u) * 7mm); }
+.cat-offer--big .cat-offer__text { flex: 1 1 0; align-content: center; padding: 0; text-align: left; }
+.cat-offer--big .cat-name { font-size: calc(var(--u) * 6mm); }
+.cat-offer--big .cat-price { font-size: calc(var(--u) * 6.4mm); }
+
+.cat-offer--row {
+  flex-direction: row; align-items: center; gap: calc(var(--u) * 2.4mm); padding: calc(var(--u) * 1.6mm) calc(var(--u) * 2.4mm);
+}
+.cat-offer--row > .cat-offer__badge { position: static; flex: 0 0 auto; align-self: center; }
+.cat-offer--row .cat-offer__photos { flex: 0 0 auto; display: flex; gap: calc(var(--u) * 1mm); }
+.cat-offer--row .cat-offer__photos .cat-photo { width: calc(var(--u) * 10mm); height: calc(var(--u) * 9mm); flex: 0 0 auto; }
+.cat-offer--row .cat-offer__text { flex: 1 1 0; padding: 0; text-align: left; grid-template-columns: 1fr auto; column-gap: calc(var(--u) * 2.4mm); align-items: baseline; }
+.cat-offer--row .cat-offer__text .cat-name { font-size: calc(var(--u) * 4mm); }
+.cat-offer--row .cat-offer__deal, .cat-offer--row .cat-avail { grid-column: 1; }
+.cat-offer--row .cat-prices { grid-column: 2; grid-row: 1; }
+.cat-t-C .cat-offer { background: var(--s); }

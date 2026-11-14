@@ -67,6 +67,20 @@ final class CatalogueService
     /** Pages de la charte : couverture, page 2, avant-dernière, dernière. */
     public const BRAND_PAGES = 4;
 
+    /**
+     * Les promotions de TFBuddy qu'un catalogue montre (client, 14/11/2026 : « rajouter les bundles et promotions
+     * (via API) et les appliquer dans une vignette dans la catégorie ») : un bundle, un « X achetés = Y », une
+     * promotion de quantité occupent une case de la page de leur catégorie ; une remise programmée barre le prix
+     * des produits qu'elle vise. `settings.offers` : les choix explicites `{type, id, on}` ; une offre absente de la
+     * liste est cochée d'office quand elle touche un produit coché.
+     */
+    public const OFFER_TYPES = ['bundle', 'buyXGetY', 'quantity', 'scheduledDiscount'];
+
+    private const OFFERS_MAX = 200;
+
+    /** Produits d'une offre montrés dans sa vignette. */
+    private const OFFER_PRODUCTS_SHOWN = 4;
+
     /** Une page intérieure vide : « Notre sélection », qui prend les produits restés sans place. */
     public const EMPTY_PAGE = ['layout' => 'grille', 'category' => null];
 
@@ -124,9 +138,20 @@ final class CatalogueService
                         'categoryId' => $product['categoryId'],
                         'gammes'     => $product['gammes'],
                         'prices'     => [],
+                        'availability' => ['periods' => $product['periods'] ?? [], 'leadHours' => $product['leadHours'] ?? null],
                     ];
                 }
                 $byId[$id]['gammes'] = array_values(array_unique(array_merge($byId[$id]['gammes'], $product['gammes'])));
+                // La disponibilité d'un produit lu dans plusieurs boutiques : ce que chacune dit de plus (dates, délai).
+                $byId[$id]['availability']['leadHours'] ??= $product['leadHours'] ?? null;
+                $dates = array_column($byId[$id]['availability']['periods'], null, 'id');
+                foreach ($product['periods'] ?? [] as $period) {
+                    $have = $dates[$period['id']] ?? null;
+                    if ($have === null || ($have['from'] === null && $have['to'] === null)) {
+                        $dates[$period['id']] = $period;
+                    }
+                }
+                $byId[$id]['availability']['periods'] = array_values($dates);
                 $byId[$id]['imageUrl'] ??= $product['image'];
                 $byId[$id]['prices'][] = [
                     'shopId'         => $shop['id'],
@@ -152,6 +177,7 @@ final class CatalogueService
                     'categoryId' => $product['categoryId'],
                     'gammes'     => $product['gammes'],
                     'prices'     => [],
+                    'availability' => ['periods' => [], 'leadHours' => null],
                     'refPriceCents' => self::cents($product['webPrice']),
                 ];
                 if ($product['categoryId'] !== null && !isset($categories[$product['categoryId']])) {
@@ -176,12 +202,478 @@ final class CatalogueService
         usort($categoryOrder, static fn (array $a, array $b): int => strcasecmp($a['name'], $b['name']));
         usort($products, static fn (array $a, array $b): int => strcasecmp($a['name'], $b['name']));
 
+        $gammes = $this->webshop->gammes()['gammes'];
+        foreach ($products as &$product) {
+            $product['availability'] = self::availabilityOf($product, array_column($gammes, null, 'id'));
+        }
+        unset($product);
+
+        // Les promotions qui valent pour le réseau ou pour l'une de ces boutiques, encore valables aujourd'hui.
+        $erpIds = array_values(array_filter(array_map(static fn (array $s): ?int => $s['erpShopId'], $shops)));
+        $offers = $this->offersFor(array_column($products, null, 'id'), $erpIds, false, [date('Y-m-d'), null]);
+
         return [
-            'products'   => $products,
-            'categories' => $categoryOrder,
-            'gammes'     => $this->webshop->gammes()['gammes'],
-            'shops'      => $read,
+            'products'    => $products,
+            'categories'  => $categoryOrder,
+            'gammes'      => $gammes,
+            'shops'       => $read,
+            'offers'      => array_map(fn (array $o): array => $this->offerOut($o, array_column($products, null, 'id'), null, 'fr'), $offers['offers']),
+            'offersError' => $offers['error'],
         ];
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Promotions et disponibilité
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * La disponibilité d'un produit telle que TFBuddy la donne : ses périodes (gammes) avec leurs dates (celles de
+     * la ligne, sinon celles de la gamme) et son délai de préparation. Rien d'inventé : ce qui manque reste vide.
+     *
+     * @param array<int, array<string,mixed>> $gammesById
+     * @return array{periods: list<array{id:int, from:?string, to:?string}>, leadHours: ?int}
+     */
+    private static function availabilityOf(array $product, array $gammesById): array
+    {
+        $raw = $product['availability'] ?? [];
+        $periods = [];
+        $seen = [];
+        foreach ($raw['periods'] ?? [] as $period) {
+            $gid = (int) $period['id'];
+            $seen[$gid] = true;
+            $periods[] = ['id' => $gid, 'from' => $period['from'] ?? ($gammesById[$gid]['from'] ?? null), 'to' => $period['to'] ?? ($gammesById[$gid]['to'] ?? null)];
+        }
+        foreach ($product['gammes'] ?? [] as $gid) {
+            if (!isset($seen[(int) $gid]) && isset($gammesById[(int) $gid])) {
+                $periods[] = ['id' => (int) $gid, 'from' => $gammesById[(int) $gid]['from'] ?? null, 'to' => $gammesById[(int) $gid]['to'] ?? null];
+            }
+        }
+
+        return ['periods' => $periods, 'leadHours' => isset($raw['leadHours']) && is_int($raw['leadHours']) && $raw['leadHours'] > 0 ? $raw['leadHours'] : null];
+    }
+
+    /**
+     * La disponibilité imprimée sous le prix : « du 1/12 au 6/12 », « sur commande 48 h » (NL : « van 1/12 tot
+     * 6/12 », « op bestelling 48 u »). La période d'une gamme du catalogue d'abord, sinon la seule du produit.
+     * Rien de connu : null.
+     *
+     * @param list<int> $catalogueGammes
+     */
+    public static function availabilityText(array $availability, array $catalogueGammes, string $lang): ?string
+    {
+        $periods = array_values(array_filter($availability['periods'] ?? [], static fn (array $p): bool => ($p['from'] ?? null) !== null || ($p['to'] ?? null) !== null));
+        $period = null;
+        foreach ($periods as $p) {
+            if (in_array((int) $p['id'], $catalogueGammes, true)) {
+                $period = $p;
+                break;
+            }
+        }
+        if ($period === null && count($periods) === 1) {
+            $period = $periods[0];
+        }
+        $parts = [];
+        if ($period !== null) {
+            $parts[] = self::rangeText(self::shortDayMonth($period['from'] ?? null), self::shortDayMonth($period['to'] ?? null), $lang);
+        }
+        $lead = $availability['leadHours'] ?? null;
+        if (is_int($lead) && $lead > 0) {
+            $parts[] = $lang === 'nl' ? 'op bestelling ' . $lead . ' u' : 'sur commande ' . $lead . ' h';
+        }
+        $parts = array_values(array_filter($parts, static fn (?string $x): bool => $x !== null && $x !== ''));
+
+        return $parts === [] ? null : implode(' · ', $parts);
+    }
+
+    /** « 01/12 » → « 1/12 » ; « 2026-12-01 » → « 1/12 ». */
+    private static function shortDayMonth(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value, $m) === 1) {
+            return (int) $m[3] . '/' . (int) $m[2];
+        }
+        if (preg_match('/^(\d{1,2})\/(\d{1,2})$/', $value, $m) === 1) {
+            return (int) $m[1] . '/' . (int) $m[2];
+        }
+
+        return null;
+    }
+
+    private static function rangeText(?string $from, ?string $to, string $lang): ?string
+    {
+        $nl = $lang === 'nl';
+        if ($from !== null && $to !== null) {
+            return $nl ? "van $from tot $to" : "du $from au $to";
+        }
+        if ($to !== null) {
+            return $nl ? "tot $to" : "jusqu’au $to";
+        }
+        if ($from !== null) {
+            return $nl ? "vanaf $from" : "dès le $from";
+        }
+
+        return null;
+    }
+
+    /**
+     * Les promotions qui s'appliquent : actives, déclenchées d'office (pas « avec un bon seulement »), du réseau ou —
+     * hors version générale — de l'une des boutiques, valables pendant `$window` (`[début, fin|null]`, dates
+     * AAAA-MM-JJ), et qui touchent au moins un produit ou une catégorie du webshop lu. Pour une seule boutique, les
+     * remises programmées sont celles que TFBuddy dit actives pour elle (quand il le dit).
+     *
+     * @param array<int, array<string,mixed>> $known Produits lus, par identifiant.
+     * @param list<int> $erpShopIds
+     * @param array{0:string, 1:?string} $window
+     * @return array{offers: list<array<string,mixed>>, error: ?string}
+     */
+    private function offersFor(array $known, array $erpShopIds, bool $networkOnly, array $window): array
+    {
+        $read = $this->webshop->promotions();
+        $errors = [];
+        if ($read['error'] !== null) {
+            $errors[] = $read['error'];
+        }
+        foreach ($read['errors'] as $family => $message) {
+            $errors[] = $family . ' : ' . $message;
+        }
+        $active = null;
+        if (!$networkOnly && count($erpShopIds) === 1) {
+            $active = $this->webshop->activeScheduledDiscounts($erpShopIds[0])['ids'];
+        }
+        $categories = [];
+        foreach ($known as $product) {
+            if ($product['categoryId'] !== null) {
+                $categories[(int) $product['categoryId']] = true;
+            }
+        }
+        [$start, $end] = $window;
+        $out = [];
+        foreach ($read['offers'] as $offer) {
+            $type = (string) ($offer['family'] ?? '');
+            if (!in_array($type, self::OFFER_TYPES, true) || ($offer['status'] ?? '') !== 'ACTIVE' || ($offer['activationMode'] ?? null) === 'VOUCHER_ONLY') {
+                continue;
+            }
+            $shops = array_map(static fn (array $s): int => (int) $s['erpShopId'], $offer['shops'] ?? []);
+            if (($offer['shopScope'] ?? 'all') !== 'all' && ($networkOnly || array_intersect($shops, $erpShopIds) === [])) {
+                continue;
+            }
+            if (($offer['validTo'] ?? null) !== null && $offer['validTo'] < $start) {
+                continue;
+            }
+            if ($end !== null && ($offer['validFrom'] ?? null) !== null && $offer['validFrom'] > $end) {
+                continue;
+            }
+            if ($type === 'scheduledDiscount' && $active !== null && !in_array((int) $offer['erpId'], $active, true)) {
+                continue;
+            }
+            $productIds = [];
+            foreach ($offer['products'] ?? [] as $p) {
+                if (isset($known[(int) $p['erpProductId']])) {
+                    $productIds[] = (int) $p['erpProductId'];
+                }
+            }
+            $productIds = array_values(array_unique($productIds));
+            // Un bundle dont un produit n'est pas vendu ici ne s'achète pas ici.
+            if ($type === 'bundle' && count($productIds) < count(array_unique(array_map(static fn (array $p): int => (int) $p['erpProductId'], $offer['products'] ?? [])))) {
+                continue;
+            }
+            $categoryIds = array_values(array_filter(array_map(static fn (array $c): int => (int) $c['erpCategoryId'], $offer['categories'] ?? []), static fn (int $c): bool => isset($categories[$c])));
+            if ($productIds === [] && $categoryIds === []) {
+                continue;
+            }
+            $offer['knownProductIds'] = $productIds;
+            $offer['knownCategoryIds'] = $categoryIds;
+            $offer['categoryId'] = $productIds !== [] ? $known[$productIds[0]]['categoryId'] : $categoryIds[0];
+            $out[] = $offer;
+        }
+
+        return ['offers' => $out, 'error' => $errors === [] ? null : implode(' ; ', $errors)];
+    }
+
+    /** La clé d'une offre : « bundle-12 ». */
+    private static function offerKey(array $offer): string
+    {
+        return $offer['family'] . '-' . (int) $offer['erpId'];
+    }
+
+    /** Le prix d'un produit lu : celui de la boutique de la version, sinon le prix général. */
+    private static function priceOf(array $product, ?array $version): ?int
+    {
+        if ($version === null) {
+            return $product['priceCents'] ?? null;
+        }
+        $mine = $product['prices'][0] ?? null;
+
+        return $mine === null ? null : ($mine['webPriceCents'] ?? $mine['shopPriceCents'] ?? null);
+    }
+
+    /** Une remise appliquée à un prix (centimes). */
+    private static function discounted(int $price, ?array $reward): ?int
+    {
+        return match ($reward['type'] ?? null) {
+            'percentage' => is_numeric($reward['percent'] ?? null) && $reward['percent'] > 0 ? (int) round($price * (1 - min(100, (float) $reward['percent']) / 100)) : null,
+            'amountOff'  => is_int($reward['amountCents'] ?? null) && $reward['amountCents'] > 0 ? max(0, $price - $reward['amountCents']) : null,
+            'fixedPrice' => is_int($reward['amountCents'] ?? null) && $reward['amountCents'] < $price ? $reward['amountCents'] : null,
+            default      => null,
+        };
+    }
+
+    private static function pct(float $value): string
+    {
+        return rtrim(rtrim(number_format($value, 1, ',', ''), '0'), ',');
+    }
+
+    /**
+     * Le badge et la phrase d'une offre : « Bundle », « 2+1 » (« le 3e offert »), « 3 pour 2 », « −20 % ».
+     *
+     * @return array{0:string, 1:?string}
+     */
+    private static function offerTexts(array $offer, string $lang): array
+    {
+        $nl = $lang === 'nl';
+        $m = $offer['mechanic'] ?? [];
+        $reward = static function (?array $r): ?string {
+            return match ($r['type'] ?? null) {
+                'percentage' => is_numeric($r['percent'] ?? null) ? '−' . self::pct((float) $r['percent']) . ' %' : null,
+                'amountOff'  => is_int($r['amountCents'] ?? null) ? '−' . self::money($r['amountCents']) : null,
+                'fixedPrice' => is_int($r['amountCents'] ?? null) ? self::money($r['amountCents']) : null,
+                default      => null,
+            };
+        };
+        switch ($offer['family']) {
+            case 'bundle':
+                return [$nl ? 'Bundel' : 'Bundle', null];
+            case 'buyXGetY':
+                $x = $m['buyQuantity'] ?? null;
+                $y = $m['getQuantity'] ?? null;
+                if (!is_int($x) || !is_int($y) || $x < 1 || $y < 1) {
+                    return ['Promo', null];
+                }
+                $type = $m['reward']['type'] ?? null;
+                if ($type === 'free') {
+                    $deal = $y === 1 ? ($nl ? 'de ' . ($x + 1) . 'e gratis' : 'le ' . ($x + 1) . 'e offert') : ($nl ? $y . ' gratis' : $y . ' offerts');
+                } else {
+                    $r = $reward($m['reward'] ?? null);
+                    $deal = $r === null ? null : ($nl ? $y . ' aan ' . $r : $y . ' à ' . $r);
+                }
+
+                return [$x . '+' . $y, $deal];
+            case 'quantity':
+                $q = $m['quantity'] ?? null;
+                $f = $m['freeQuantity'] ?? null;
+                if (($m['mechanism'] ?? null) === 'BUY_X_GET_Y' && is_int($q) && is_int($f) && $q > $f && $f > 0) {
+                    return [$nl ? $q . ' voor ' . ($q - $f) : $q . ' pour ' . ($q - $f), null];
+                }
+
+                return ['Promo', null];
+            default:
+                return [$reward($m['reward'] ?? null) ?? 'Promo', null];
+        }
+    }
+
+    /** La période d'une offre : ses dates, ses jours (« le week-end »), ses heures quand elles sont les mêmes chaque jour. */
+    private static function offerPeriod(array $offer, string $lang): ?string
+    {
+        $nl = $lang === 'nl';
+        $parts = [];
+        $range = self::rangeText(self::shortDayMonth($offer['validFrom'] ?? null), self::shortDayMonth($offer['validTo'] ?? null), $lang);
+        if ($range !== null) {
+            $parts[] = $range;
+        }
+        $schedule = $offer['schedule'] ?? [];
+        if ($schedule !== []) {
+            $days = array_values(array_unique(array_map(static fn (array $w): int => (int) $w['dayOfWeek'], $schedule)));
+            sort($days);
+            if ($days === [6, 7]) {
+                $parts[] = $nl ? 'in het weekend' : 'le week-end';
+            } elseif (count($days) < 7) {
+                $names = $nl ? [1 => 'ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'] : [1 => 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'];
+                $parts[] = implode(', ', array_map(static fn (int $d): string => $names[$d], $days));
+            }
+            $hours = array_values(array_unique(array_map(static fn (array $w): string => $w['from'] . '-' . $w['to'], $schedule)));
+            if (count($hours) === 1) {
+                [$from, $to] = explode('-', $hours[0]);
+                if (!($from === '00:00' && in_array($to, ['23:59', '24:00'], true))) {
+                    $h = static fn (string $t): string => (string) preg_replace('/^0?(\d+):(\d{2})$/', $nl ? '$1u$2' : '$1h$2', $t);
+                    $parts[] = str_replace([$nl ? 'u00' : 'h00'], [$nl ? 'u' : 'h'], $h($from) . '–' . $h($to));
+                }
+            }
+        }
+
+        return $parts === [] ? null : implode(' · ', $parts);
+    }
+
+    /**
+     * Une offre telle que l'éditeur et le document la montrent : badge, phrase, période, ses produits (photo, nom,
+     * quantité), le prix de l'offre et l'ancien prix quand on les connaît — un bundle : son prix et la somme de ses
+     * produits ; un « X achetés = Y » ou une promotion de quantité sur UN produit : le prix des X et celui des X + Y.
+     *
+     * @param array<int, array<string,mixed>> $known
+     * @return array<string,mixed>
+     */
+    private function offerOut(array $offer, array $known, ?array $version, string $lang): array
+    {
+        [$badge, $deal] = self::offerTexts($offer, $lang);
+        $quantities = [];
+        foreach ($offer['products'] ?? [] as $p) {
+            $quantities[(int) $p['erpProductId']] ??= is_numeric($p['quantity'] ?? null) ? (float) $p['quantity'] : null;
+        }
+        $products = [];
+        foreach ($offer['knownProductIds'] as $pid) {
+            $product = $known[$pid];
+            $products[] = [
+                'id'       => $pid,
+                'name'     => $lang === 'nl' ? $product['nameNl'] : $product['name'],
+                'imageUrl' => $product['imageUrl'],
+                'quantity' => $quantities[$pid] ?? null,
+            ];
+        }
+        $m = $offer['mechanic'] ?? [];
+        $price = null;
+        $old = null;
+        if ($offer['family'] === 'bundle') {
+            $price = $m['priceCents'] ?? null;
+            $sum = 0;
+            $complete = $products !== [] && count($products) === count($offer['products'] ?? []);
+            foreach ($products as $p) {
+                $unit = self::priceOf($known[$p['id']], $version);
+                if ($unit === null) {
+                    $complete = false;
+                    break;
+                }
+                $sum += (int) round($unit * ($p['quantity'] ?? 1));
+            }
+            $old = $complete && $price !== null && $sum > $price ? $sum : null;
+        } elseif (count($products) === 1 && $offer['knownCategoryIds'] === []) {
+            $unit = self::priceOf($known[$products[0]['id']], $version);
+            $x = $offer['family'] === 'buyXGetY' ? ($m['buyQuantity'] ?? null) : (($m['mechanism'] ?? null) === 'BUY_X_GET_Y' ? ($m['quantity'] ?? null) - ($m['freeQuantity'] ?? 0) : null);
+            $y = $offer['family'] === 'buyXGetY' ? (($m['reward']['type'] ?? null) === 'free' ? ($m['getQuantity'] ?? null) : null) : (($m['mechanism'] ?? null) === 'BUY_X_GET_Y' ? ($m['freeQuantity'] ?? null) : null);
+            if ($unit !== null && is_int($x) && is_int($y) && $x > 0 && $y > 0) {
+                $price = $unit * $x;
+                $old = $unit * ($x + $y);
+            }
+        }
+
+        return [
+            'kind'          => 'offer',
+            'id'            => self::offerKey($offer),
+            'type'          => $offer['family'],
+            'erpId'         => (int) $offer['erpId'],
+            'name'          => (string) $offer['name'],
+            'badge'         => $badge,
+            'deal'          => $deal,
+            'period'        => self::offerPeriod($offer, $lang),
+            'validFrom'     => $offer['validFrom'] ?? null,
+            'validTo'       => $offer['validTo'] ?? null,
+            'shopScope'     => $offer['shopScope'] ?? 'all',
+            'categoryId'    => $offer['categoryId'],
+            'productIds'    => $offer['knownProductIds'],
+            'categoryIds'   => $offer['knownCategoryIds'],
+            'priceCents'    => $price,
+            'oldPriceCents' => $old,
+            'currency'      => 'EUR',
+            'products'      => array_slice($products, 0, self::OFFER_PRODUCTS_SHOWN),
+            'moreProducts'  => max(0, count($products) - self::OFFER_PRODUCTS_SHOWN),
+        ];
+    }
+
+    /** Une offre est-elle cochée ? Le choix enregistré, sinon : touche-t-elle un produit coché ? */
+    private static function offerOn(array $offer, array $choices, array $chosenIds, array $chosenCategories): bool
+    {
+        $key = self::offerKey($offer);
+        if (array_key_exists($key, $choices)) {
+            return $choices[$key];
+        }
+
+        return array_intersect($offer['knownProductIds'], $chosenIds) !== [] || array_intersect($offer['knownCategoryIds'], $chosenCategories) !== [];
+    }
+
+    /**
+     * La période d'un catalogue, pour ne garder que les promotions valables pendant qu'il circule : celle de sa
+     * première gamme datée (l'occurrence en cours ou la prochaine), sinon d'aujourd'hui sans fin. Jamais avant
+     * aujourd'hui : une promotion finie ne s'imprime pas.
+     *
+     * @param array<int, array<string,mixed>> $gammesById
+     * @return array{0:string, 1:?string}
+     */
+    private static function catalogueWindow(array $row, array $gammesById): array
+    {
+        $today = date('Y-m-d');
+        foreach (self::gammeIdsOf($row) as $gid) {
+            $from = $gammesById[$gid]['from'] ?? null;
+            $to = $gammesById[$gid]['to'] ?? null;
+            if (!is_string($from) || !is_string($to) || preg_match('#^(\d{2})/(\d{2})$#', $from, $a) !== 1 || preg_match('#^(\d{2})/(\d{2})$#', $to, $b) !== 1) {
+                continue;
+            }
+            $year = (int) date('Y');
+            $start = sprintf('%04d-%s-%s', $year, $a[2], $a[1]);
+            $end = sprintf('%04d-%s-%s', $year, $b[2], $b[1]);
+            if ($end < $start) {
+                $end = sprintf('%04d-%s-%s', $year + 1, $b[2], $b[1]);
+            }
+            if ($end < $today) {
+                $start = sprintf('%04d-%s-%s', $year + 1, $a[2], $a[1]);
+                $end = sprintf('%04d-%s', (int) substr($end, 0, 4) + 1, substr($end, 5));
+            }
+
+            return [max($today, $start), $end];
+        }
+
+        return [$today, null];
+    }
+
+    /**
+     * Les choix d'offres envoyés : `[{type, id, on}]`, chacune connue de TFBuddy pour ce catalogue (le réseau ou
+     * l'une de ses boutiques). TFBuddy muet : les choix sont gardés tels quels (rien à vérifier, rien d'inventé).
+     *
+     * @return list<array{type:string, id:int, on:bool}>
+     */
+    private function offerRows(mixed $raw, array $row): array
+    {
+        if (!is_array($raw) || !array_is_list($raw) || count($raw) > self::OFFERS_MAX) {
+            throw new CatalogueError('VALIDATION_FAILED', 'Promotions invalides.', 422, [['field' => 'offers', 'message' => 'Liste de ' . self::OFFERS_MAX . ' promotions au plus attendue.']]);
+        }
+        $errors = [];
+        $out = [];
+        foreach ($raw as $index => $item) {
+            $field = 'offers[' . $index . ']';
+            if (!is_array($item) || array_diff(array_keys($item), ['type', 'id', 'on']) !== []) {
+                $errors[] = ['field' => $field, 'message' => 'Forme attendue : {type, id, on}.'];
+                continue;
+            }
+            if (!is_string($item['type'] ?? null) || !in_array($item['type'], self::OFFER_TYPES, true)) {
+                $errors[] = ['field' => $field . '.type', 'message' => 'Type : ' . implode(', ', self::OFFER_TYPES) . '.'];
+                continue;
+            }
+            if (!is_int($item['id'] ?? null) || $item['id'] <= 0) {
+                $errors[] = ['field' => $field . '.id', 'message' => 'Identifiant de la promotion dans TFBuddy attendu.'];
+                continue;
+            }
+            if (!is_bool($item['on'] ?? null)) {
+                $errors[] = ['field' => $field . '.on', 'message' => 'Booléen attendu.'];
+                continue;
+            }
+            $out[$item['type'] . '-' . $item['id']] = ['type' => $item['type'], 'id' => $item['id'], 'on' => $item['on']];
+        }
+        if ($errors === [] && $out !== []) {
+            $data = $this->webshopProducts($this->shopsOf($row));
+            $read = $this->webshop->promotions();
+            if ($read['error'] === null || $read['offers'] !== []) {
+                $knownKeys = array_column($data['offers'], 'id');
+                foreach (array_values($out) as $index => $item) {
+                    if (!in_array($item['type'] . '-' . $item['id'], $knownKeys, true)) {
+                        $errors[] = ['field' => 'offers[' . $index . '].id', 'message' => sprintf('Promotion %s %d inconnue de TFBuddy pour ce catalogue (inactive, finie, ou hors de ses boutiques).', $item['type'], $item['id'])];
+                    }
+                }
+            }
+        }
+        if ($errors !== []) {
+            throw new CatalogueError('VALIDATION_FAILED', 'Promotions invalides.', 422, $errors);
+        }
+
+        return array_values($out);
     }
 
     /**
@@ -275,6 +767,8 @@ final class CatalogueService
             'langs'        => array_values($settings['langs'] ?? ['fr']),
             'shopIds'      => array_values(array_map('intval', $settings['shopIds'] ?? [])),
             'products'     => array_values($settings['products'] ?? []),
+            'offers'       => array_values($settings['offers'] ?? []),
+            'showAvailability' => (bool) ($settings['showAvailability'] ?? true),
             'pages'        => self::innerPages($settings),
             'productCount' => count(array_filter($settings['products'] ?? [], static fn (array $p): bool => (bool) ($p['on'] ?? false))),
             'pageCount'    => self::pageCountOf($settings),
@@ -363,7 +857,7 @@ final class CatalogueService
     public function create(array $input, ?array $shop, ?int $userId): array
     {
         $owner = $shop === null ? 'marque' : 'boutique';
-        $allowed = ['title', 'source', 'format', 'pageCount', 'langs', 'products', 'pages'];
+        $allowed = ['title', 'source', 'format', 'pageCount', 'langs', 'products', 'pages', 'offers', 'showAvailability'];
         if ($owner === 'marque') {
             $allowed[] = 'shopIds';
         }
@@ -397,6 +891,9 @@ final class CatalogueService
         $pageCount = self::pageCountInput($input['pageCount'] ?? self::PAGE_COUNTS[0], $errors);
         $langs = self::langs($input['langs'] ?? ['fr'], $errors);
         $shopIds = $owner === 'marque' ? $this->shopIds($input['shopIds'] ?? [], $errors) : [];
+        if (array_key_exists('showAvailability', $input) && !is_bool($input['showAvailability'])) {
+            $errors[] = ['field' => 'showAvailability', 'message' => 'Booléen attendu.'];
+        }
         if ($errors !== []) {
             throw new CatalogueError('VALIDATION_FAILED', 'Catalogue invalide.', 422, $errors);
         }
@@ -459,6 +956,12 @@ final class CatalogueService
         } else {
             $row['settings']['products'] = array_map(static fn (int $id): array => ['id' => $id, 'on' => true], array_values(array_unique($products)));
         }
+        if (array_key_exists('showAvailability', $input)) {
+            $row['settings']['showAvailability'] = $input['showAvailability'];
+        }
+        if (array_key_exists('offers', $input)) {
+            $row['settings']['offers'] = $this->offerRows($input['offers'], $row);
+        }
         $row['settings']['pages'] = array_key_exists('pages', $input)
             ? $this->pageRows($input['pages'], $pageCount, $row)
             : [];
@@ -480,7 +983,7 @@ final class CatalogueService
     public function update(array $current, array $input, ?int $scopeShopId, ?int $userId): array
     {
         $boutique = $current['owner'] === 'boutique';
-        $allowed = ['title', 'format', 'pageCount', 'langs', 'products', 'pages', 'status', 'printQty'];
+        $allowed = ['title', 'format', 'pageCount', 'langs', 'products', 'pages', 'status', 'printQty', 'offers', 'showAvailability'];
         if (!$boutique) {
             $allowed[] = 'shopIds';
         }
@@ -509,6 +1012,13 @@ final class CatalogueService
                 $row['status'] = $input['status'];
             }
         }
+        if (array_key_exists('showAvailability', $input)) {
+            if (!is_bool($input['showAvailability'])) {
+                $errors[] = ['field' => 'showAvailability', 'message' => 'Booléen attendu.'];
+            } else {
+                $settings['showAvailability'] = $input['showAvailability'];
+            }
+        }
         if (array_key_exists('printQty', $input)) {
             $qty = $input['printQty'];
             if ($qty !== null && (!is_int($qty) || $qty < 1 || $qty > 1000000)) {
@@ -525,6 +1035,10 @@ final class CatalogueService
         $settings['pages'] = self::innerPages($settings);
         $settings['pageCount'] = $pageCount;
         $row['settings'] = $settings;
+        if (array_key_exists('offers', $input)) {
+            $settings['offers'] = $this->offerRows($input['offers'], $row);
+            $row['settings'] = $settings;
+        }
         $resize = $pageCount !== $pageCountBefore && !array_key_exists('pages', $input);
         if (array_key_exists('products', $input) || array_key_exists('pages', $input) || array_key_exists('shopIds', $input) || $resize) {
             $known = array_column($this->webshopProducts($this->shopsOf($row))['products'], null, 'id');
@@ -962,6 +1476,10 @@ final class CatalogueService
                     continue;
                 }
                 $product = $chosen[$key];
+                // Une offre (vignette promotion) va sur une page de produits, jamais dans la liste d'une présentation.
+                if (isset($product['offer']) && in_array($page['layout'], self::PRESENTATIONS, true)) {
+                    continue;
+                }
                 if ($category !== null && (int) ($product['categoryId'] ?? 0) !== $category) {
                     continue;
                 }
@@ -1338,14 +1856,70 @@ final class CatalogueService
                 $warnings[] = ['code' => 'PRODUCT_NO_PRICE', 'message' => $product['name'] . ' : pas de prix au webshop.'];
             }
             $chosen[] = [
-                'id'         => $product['id'],
-                'name'       => $lang === 'nl' ? $product['nameNl'] : $product['name'],
-                'imageUrl'   => $product['imageUrl'],
-                'categoryId' => $product['categoryId'],
-                'gammes'     => $product['gammes'],
-                'priceCents' => $price,
-                'currency'   => 'EUR',
+                'kind'          => 'product',
+                'id'            => $product['id'],
+                'name'          => $lang === 'nl' ? $product['nameNl'] : $product['name'],
+                'imageUrl'      => $product['imageUrl'],
+                'categoryId'    => $product['categoryId'],
+                'gammes'        => $product['gammes'],
+                'priceCents'    => $price,
+                'oldPriceCents' => null,
+                'promo'         => null,
+                'currency'      => 'EUR',
+                'availability'  => ($row['settings']['showAvailability'] ?? true) ? self::availabilityText($product['availability'] ?? [], self::gammeIdsOf($row), $lang) : null,
             ];
+        }
+
+        // Les promotions (bundles, « X achetés = Y », quantité, remises programmées) : celles du réseau (version
+        // générale) ou de la boutique de la version, valables pendant que le catalogue circule, cochées.
+        $offers = $this->offersFor($known, $version !== null ? array_values(array_filter([$version['erpShopId']])) : [], $version === null,
+            self::catalogueWindow($row, array_column($data['gammes'], null, 'id')));
+        if ($offers['error'] !== null) {
+            $warnings[] = ['code' => 'PROMOTIONS_UNREADABLE', 'message' => 'Promotions et bundles de TFBuddy illisibles (' . $offers['error'] . ') : le catalogue n’en montre aucune et aucun prix n’est barré.'];
+        }
+        $choices = [];
+        foreach ($row['settings']['offers'] ?? [] as $choice) {
+            $choices[$choice['type'] . '-' . (int) $choice['id']] = (bool) $choice['on'];
+        }
+        $chosenIds = array_column($chosen, 'id');
+        $chosenCategories = array_values(array_unique(array_filter(array_map(static fn (array $c): int => (int) ($c['categoryId'] ?? 0), $chosen))));
+        foreach ($offers['offers'] as $offer) {
+            if (!self::offerOn($offer, $choices, $chosenIds, $chosenCategories)) {
+                continue;
+            }
+            if ($offer['family'] === 'scheduledDiscount') {
+                // Une remise programmée barre le prix des produits qu'elle vise.
+                [$label] = self::offerTexts($offer, $lang);
+                foreach ($chosen as &$item) {
+                    if (($item['priceCents'] ?? null) === null || !(in_array($item['id'], $offer['knownProductIds'], true) || in_array((int) ($item['categoryId'] ?? 0), $offer['knownCategoryIds'], true))) {
+                        continue;
+                    }
+                    $original = $item['oldPriceCents'] ?? $item['priceCents'];
+                    $new = self::discounted($original, $offer['mechanic']['reward'] ?? null);
+                    if ($new !== null && $new < $original && $new < $item['priceCents']) {
+                        $item['oldPriceCents'] = $original;
+                        $item['priceCents'] = $new;
+                        $item['promo'] = ['label' => $label, 'period' => self::offerPeriod($offer, $lang)];
+                    }
+                }
+                unset($item);
+                continue;
+            }
+            // Une vignette : elle occupe une case de la page de sa catégorie, devant ses produits.
+            $out = $this->offerOut($offer, $known, $version, $lang);
+            $gammes = [];
+            foreach ($offer['knownProductIds'] as $pid) {
+                $gammes = array_merge($gammes, $known[$pid]['gammes'] ?? []);
+            }
+            $vignette = ['id' => $out['id'], 'categoryId' => $offer['categoryId'], 'gammes' => array_values(array_unique($gammes)), 'offer' => array_diff_key($out, ['productIds' => true, 'categoryIds' => true, 'categoryId' => true, 'shopScope' => true])];
+            $at = count($chosen);
+            foreach ($chosen as $i => $item) {
+                if ((int) ($item['categoryId'] ?? 0) === (int) $offer['categoryId']) {
+                    $at = $i;
+                    break;
+                }
+            }
+            array_splice($chosen, $at, 0, [$vignette]);
         }
         if ($absent !== []) {
             $warnings[] = ['code' => 'PRODUCT_NOT_SOLD', 'message' => sprintf('%d produit(s) coché(s) absent(s) du webshop%s : retiré(s) de cette version.',
@@ -1361,7 +1935,7 @@ final class CatalogueService
         $filled = self::fill($innerRows, $chosen);
         $inner = [];
         $empty = 0;
-        $strip = static fn (array $p): array => array_diff_key($p, ['categoryId' => true, 'gammes' => true]);
+        $strip = static fn (array $p): array => $p['offer'] ?? array_diff_key($p, ['categoryId' => true, 'gammes' => true]);
         foreach ($innerRows as $index => $page) {
             $items = $filled['items'][$index];
             $no = $index + 3;

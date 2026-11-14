@@ -188,3 +188,14 @@
 .catv-pagecount { align-items: center; }
 .catv-pagecount button { margin-top: 0; white-space: nowrap; }
 .catv .bro-seg button { margin-top: 0; }
+
+/* promotions et bundles de TFBuddy */
+.catv-offers { display: grid; gap: 8px; }
+.catv-offer { text-align: left; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.catv-offer.is-off { background: transparent; }
+.catv-offer.is-off .catv-offer__name { color: var(--muted); }
+.catv-offer--avail { grid-template-columns: minmax(0, 1fr) auto; margin-top: 12px; }
+.catv-offer__badge { padding: 3px 7px; border-radius: 6px; background: #8D1D2C; color: #FBF7F1; font-size: 11px; letter-spacing: 0.04em; white-space: nowrap; }
+.catv-offer.is-off .catv-offer__badge { background: var(--chip); color: var(--muted-2); }
+.catv-offer__body { display: grid; gap: 2px; min-width: 0; }
+.catv-offer__name { font-size: 13px; color: var(--ink); overflow-wrap: anywhere; }
