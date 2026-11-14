@@ -45,7 +45,12 @@ info:
     présentation avec liste — une ligne qui résume la disponibilité de la page ; `availability` reste sur
     chaque produit, mais ne s'imprime plus sous le prix. Puis (« insert picture from médiathèque ») :
     `offers[].mediaId` (image de la médiathèque de la vignette, validée comme la place libre ; 422 sinon),
-    `imageUrl` de la vignette au document, alerte `OFFER_MEDIA_MISSING`.
+    `imageUrl` de la vignette au document, alerte `OFFER_MEDIA_MISSING`. Puis (« commencer avec le nom de la gamme et son
+    illustration, ensuite catégorie produit (possibilité ou pas en lettres manuscrites), ensuite les
+    produits ») : l'en-tête d'une page de produits = la gamme de la page (sinon celle du catalogue que
+    portent le plus de ses produits) et son illustration (`gammeTitle`, `drawing`, `gammeImageUrl`), puis la
+    catégorie (`title`) en sous-titre ; sans gamme, la catégorie seule et le dessin de sa famille ; `script`
+    (booléen, page) met la catégorie en lettres manuscrites ; `familyDrawingUrl`.
 
     v1.3 (14 novembre 2026, demandes du client : « rajouter les bundles et promotions (via API) et les
     appliquer dans une vignette dans la catégorie », puis « rajouter aussi les données de disponibilité ») :
@@ -564,6 +569,7 @@ components:
         filler: { type: [string, 'null'], enum: [photo, illustration, null], description: 'Place libre d''une page de produits pas pleine (ignorée sur une présentation).' }
         fillerMediaId: { type: [integer, 'null'], description: 'Avec `filler: photo` : une image de la médiathèque, pas archivée ; pour une boutique, du réseau ou d''elle-même.' }
         header: { $ref: '#/components/schemas/Header' }
+        script: { type: boolean, default: false, description: 'La catégorie en lettres manuscrites (police de la marque) ; autre valeur que booléen : 422. Rangé seulement quand vrai.' }
     CatalogueCreate:
       type: object
       additionalProperties: false
@@ -772,6 +778,10 @@ components:
                   layout: { $ref: '#/components/schemas/Layout' }
                   template: { $ref: '#/components/schemas/Template' }
                   header: { $ref: '#/components/schemas/Header' }
+                  script: { type: boolean, description: 'La catégorie (sous-titre) en lettres manuscrites.' }
+                  gammeTitle: { type: [string, 'null'], description: 'La gamme de la page (sinon celle du catalogue que portent le plus de ses produits) : son nom, en tête de page ; null sans gamme (la catégorie seule).' }
+                  gammeImageUrl: { type: [string, 'null'], description: 'La photo de cette gamme (charte, sinon webshop), quand elle n''a pas de dessin.' }
+                  familyDrawingUrl: { type: [string, 'null'], description: 'Le dessin de la famille du titre (vignettes sans photo).' }
                   category: { type: [integer, 'null'] }
                   gamme: { type: [integer, 'null'] }
                   title: { type: string, description: 'La catégorie, sinon le nom de la gamme, sinon « Notre sélection ».' }

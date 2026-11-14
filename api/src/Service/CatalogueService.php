@@ -68,7 +68,7 @@ final class CatalogueService
     public const PRESENTATION_TEXT_MAX = 400;
 
     /** Les champs d'une page intérieure. */
-    private const PAGE_KEYS = ['layout', 'category', 'template', 'gamme', 'text', 'textNl', 'filler', 'fillerMediaId', 'header'];
+    private const PAGE_KEYS = ['layout', 'category', 'template', 'gamme', 'text', 'textNl', 'filler', 'fillerMediaId', 'header', 'script'];
 
     /** Nombre de pages d'un catalogue (couverture et dernière page comprises). */
     /** Tout nombre PAIR de 8 à 16 (client, 14/11/2026 : « rajouter une page, c'est toujours par 2 »). */
@@ -1160,7 +1160,7 @@ final class CatalogueService
         foreach ($raw as $index => $page) {
             $field = 'pages[' . $index . ']';
             if (!is_array($page) || array_is_list($page) && $page !== []) {
-                $errors[] = ['field' => $field, 'message' => 'Forme attendue : {layout, category, template, gamme, text, textNl, filler, fillerMediaId, header}.'];
+                $errors[] = ['field' => $field, 'message' => 'Forme attendue : {layout, category, template, gamme, text, textNl, filler, fillerMediaId, header, script}.'];
                 continue;
             }
             $unknown = array_diff(array_keys($page), self::PAGE_KEYS);
@@ -1186,6 +1186,11 @@ final class CatalogueService
             if ($header !== null && (!is_string($header) || !in_array($header, self::HEADERS, true))) {
                 $errors[] = ['field' => $field . '.header', 'message' => 'En-tête : ' . implode(', ', self::HEADERS) . '.'];
                 $header = null;
+            }
+            $script = $page['script'] ?? false;
+            if (!is_bool($script)) {
+                $errors[] = ['field' => $field . '.script', 'message' => 'Booléen attendu (catégorie en lettres manuscrites).'];
+                $script = false;
             }
             $gamme = $page['gamme'] ?? null;
             if ($gamme !== null && (!is_int($gamme) || $gamme <= 0)) {
@@ -1244,6 +1249,9 @@ final class CatalogueService
                 }
                 if ($header !== null && $header !== self::HEADERS[0]) {
                     $clean['header'] = $header;
+                }
+                if ($script) {
+                    $clean['script'] = true;
                 }
             }
             $out[] = $clean;
@@ -2188,12 +2196,31 @@ final class CatalogueService
                     $filler = ['kind' => 'illustration', 'imageUrl' => $drawing === null ? $imageUrl : null, 'drawing' => $drawing, 'drawingUrl' => $drawing === null ? null : MediaService::publicUrl($drawing)];
                 }
             }
-            // L'illustration de l'en-tête : le dessin de la famille de la catégorie (celui des vignettes sans
-            // photo), sinon celui de la gamme de la page, sinon de la première gamme du catalogue ; sinon rien.
-            $mark = $category !== null ? self::familyDrawing((string) $category['name']) : null;
-            if ($mark === null) {
-                $mark = $visual['drawing'] ?? (isset($catalogueGammes[0]) ? $this->gammeVisual($catalogueGammes[0], $gammesById, $charter, $lang)['drawing'] : null);
+            // L'en-tête (client, 14/11/2026 : « commencer avec le nom de la gamme et son illustration, ensuite
+            // catégorie produit, ensuite les produits ») : la gamme de la page, sinon celle du catalogue que
+            // portent le plus de ses produits ; son nom et son illustration (charte, photo du webshop, dessin de
+            // saison), la catégorie en sous-titre. Sans gamme : la catégorie seule, avec le dessin de sa famille.
+            $headGid = $gid;
+            if ($headGid === null && $catalogueGammes !== []) {
+                $votes = [];
+                foreach ($items as $item) {
+                    foreach ($catalogueGammes as $g) {
+                        if (in_array($g, array_map('intval', $item['gammes'] ?? []), true)) {
+                            $votes[$g] = ($votes[$g] ?? 0) + 1;
+                            break;
+                        }
+                    }
+                }
+                if ($votes !== []) {
+                    arsort($votes);
+                    $headGid = (int) array_key_first($votes);
+                }
             }
+            $head = $headGid !== null ? ($headGid === $gid ? $visual : $this->gammeVisual($headGid, $gammesById, $charter, $lang)) : null;
+            if ($head !== null && $category === null && $title === ($visual['title'] ?? null)) {
+                $title = $lang === 'nl' ? 'Onze selectie' : 'Notre sélection';
+            }
+            $mark = $head !== null ? $head['drawing'] : ($category !== null ? self::familyDrawing((string) $category['name']) : null);
             $header = in_array($page['header'] ?? null, self::HEADERS, true) ? $page['header'] : self::HEADERS[0];
             $inner[] = [
                 'kind'       => 'products',
@@ -2201,8 +2228,13 @@ final class CatalogueService
                 'layout'     => $page['layout'],
                 'template'   => $template,
                 'header'     => $header,
+                'script'     => (bool) ($page['script'] ?? false),
                 'category'   => $page['category'],
                 'gamme'      => $gid,
+                // Le dessin de la famille du titre : celui des vignettes sans photo (`familyImage` de l'écran), pour le dashboard.
+                'familyDrawingUrl' => ($family = self::familyDrawing($title)) !== null ? MediaService::publicUrl($family) : null,
+                'gammeTitle' => $head['title'] ?? null,
+                'gammeImageUrl' => $head['imageUrl'] ?? null,
                 'title'      => $title,
                 'drawing'    => $mark,
                 'drawingUrl' => $mark !== null ? MediaService::publicUrl($mark) : null,
@@ -2423,7 +2455,7 @@ final class CatalogueService
             }
         }
         $full = $line . ' · ' . implode(' · ', $rest);
-        if (mb_strlen($full) <= 100) {
+        if (mb_strlen($full) <= 80) {
             return $full;
         }
 

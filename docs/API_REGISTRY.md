@@ -957,14 +957,22 @@ footer (par catégorie) ») : `availabilityFooter` sur chaque page de produits (
 par le serveur pour que Marketing et dashboard impriment la même ligne (`availabilityFooter()`) — tous la même :
 « Disponible du 1/12 au 31/12 · sur commande 48 h » (NL « Beschikbaar … ») ; sinon la plus courante puis les
 produits qui diffèrent (« Bûchette individuelle : du 1/12 au 24/12 », un produit sans donnée : « voir en
-boutique ») ; au-delà de 100 caractères, la plus courante + « certains produits : voir en boutique » ; aucune donnée
+boutique ») ; au-delà de 80 caractères (une ligne en A5), la plus courante + « certains produits : voir en boutique » ; aucune donnée
 ou `showAvailability` faux : `null`. `availability` reste sur chaque produit (API), plus imprimé sous le prix ; les
 vignettes de promotions gardent leur période. **Image d'une vignette d'offre** (même jour, capture d'une vignette « Cougnou 4+1 » au cercle vide : « insert
 picture from médiathèque ») : `offers[i].mediaId` — une image de la médiathèque, même règle que la place libre
 (pas archivée, pas une vidéo ; pour un catalogue de boutique, du réseau ou d'elle-même), sinon `422`
 `offers[i].mediaId` ; `null` la retire. Rendu toujours `{type, id, on, mediaId}` dans cet ordre (MySQL 8). Au document,
 la vignette porte `imageUrl` (elle remplace les photos des produits) ; image disparue : `OFFER_MEDIA_MISSING` et les
-photos. Sans photo ni image : le dessin de la famille de la page (sinon l'illustration de l'en-tête), plus de cercle vide.
+photos. Sans photo ni image : le dessin de la famille de la page (sinon l'illustration de l'en-tête), plus de cercle vide. **En-tête gamme puis catégorie** (même jour, capture d'une page « NOËL » au petit pictogramme : « commencer avec
+le nom de la gamme et son illustration, ensuite catégorie produit (possibilité ou pas en lettres manuscrites), ensuite les
+produits ») : la gamme de la page, sinon celle des gammes du catalogue que portent le plus de ses produits
+(`gammeTitle`, illustration `drawing` / `gammeImageUrl` : charte, photo du webshop, dessin de saison), puis la catégorie
+(`title`) en sous-titre ; les trois en-têtes (`titre` · `bandeau` · `grande`) s'appliquent à ce bloc. Sans gamme
+(catalogue « au choix », « Notre sélection ») : la catégorie seule, avec le dessin de sa famille. `script` (booléen par
+page, rangé seulement vrai, `422` sinon) : la catégorie en lettres manuscrites — Playwrite DE VA, la police manuscrite
+déjà livrée avec le module (`public/fonts`, la même que le Studio visuel) et avec le design system du cockpit ; aucune
+police ajoutée. `familyDrawingUrl` : le dessin de la famille du titre (vignettes sans photo, dashboard).
 
 **Routes de la marque** (session, rôle réseau ; un compte de boutique → `403 PERM_ROLE_REQUIRED`) :
 

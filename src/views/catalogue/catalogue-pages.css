@@ -286,8 +286,32 @@
 /* ---------- disponibilité en pied de page (une ligne par page de catégorie) ---------- */
 .cat-foot {
   flex: 0 0 auto; margin-top: calc(var(--u) * 2.6mm); padding-top: calc(var(--u) * 1.8mm); border-top: 0.3mm solid rgba(36, 28, 26, 0.14);
-  font-size: calc(var(--u) * 2.9mm); line-height: 1.3; letter-spacing: 0.02em; text-align: center; color: rgba(36, 28, 26, 0.72);
-  max-height: calc(var(--u) * 7.6mm); overflow: hidden;
+  font-size: calc(var(--u) * 2.75mm); line-height: 1.3; letter-spacing: 0; text-align: center; color: rgba(36, 28, 26, 0.72);
+  max-height: calc(var(--u) * 10mm); overflow: hidden;
 }
 .cat-t-B .cat-foot, .cat-t-C .cat-foot { text-align: left; }
 .cat-pres.cat-t-B .cat-foot { color: var(--s); border-top-color: rgba(255, 255, 255, 0.35); }
+
+/* ---------- en-tête : la gamme et son illustration, puis la catégorie (manuscrite au choix) ---------- */
+.cat-h { flex-direction: column; align-items: center; gap: 0; }
+.cat-h__top { display: flex; align-items: center; justify-content: center; gap: calc(var(--u) * 3mm); max-width: 100%; }
+.cat-h--grande .cat-h__top { flex-direction: column; gap: calc(var(--u) * 3mm); width: 100%; }
+.cat-h__mark.is-photo { height: calc(var(--u) * 11mm); max-width: calc(var(--u) * 16mm); border-radius: calc(var(--u) * 1.5mm); object-fit: cover; margin-top: 0; }
+.cat-t-B .cat-h__mark.is-photo, .cat-head-bandeau .cat-h__mark.is-photo, .cat-t-B .cat-h--grande .cat-h__big.is-photo img { filter: none; }
+.cat-h__big.is-photo img { object-fit: contain; border-radius: calc(var(--u) * 2mm); }
+.cat-h__sub {
+  margin-top: calc(var(--u) * 2.2mm); font-family: 'Vank', 'CmVank', 'GothamPrint', serif; font-size: calc(var(--u) * 6mm); line-height: 1;
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--i); overflow-wrap: anywhere;
+}
+.cat-h--gamme .cat-h__text { font-size: calc(var(--u) * 8.5mm); }
+/* La catégorie en lettres manuscrites (Playwrite, la police manuscrite de la marque déjà livrée avec le module). */
+.cat-h__script {
+  font-family: 'Playwrite', 'CmScript', cursive; font-weight: 400; text-transform: none; letter-spacing: 0;
+  font-size: calc(var(--u) * 6.4mm); line-height: 1.5;
+}
+.cat-h__text.cat-h__script { font-size: calc(var(--u) * 8mm); line-height: 1.4; color: var(--p); }
+.cat-t-B .cat-h, .cat-t-C .cat-h, .cat-head-bandeau .cat-h { align-items: flex-start; }
+.cat-t-B .cat-h__top, .cat-t-C .cat-h__top, .cat-head-bandeau .cat-h__top { justify-content: flex-start; }
+.cat-t-C .cat-h--grande .cat-h__top { align-items: flex-start; }
+.cat-t-B .cat-h__sub, .cat-head-bandeau .cat-h__sub { color: inherit; opacity: 0.92; }
+.cat-head-bandeau .cat-h--grande .cat-h__top, .cat-head-bandeau .cat-h:not(.cat-h--grande) .cat-h__top { align-items: center; }

@@ -512,6 +512,10 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
   function setAllHeaders(header: api.CatalogueHeader) {
     change({ pages: innerPages.map((page) => (isPresentation(page.layout) ? page : { ...page, header })) })
   }
+  /** La catégorie en lettres manuscrites, sur toutes les pages de produits. */
+  function setAllScript(script: boolean) {
+    change({ pages: innerPages.map((page) => (isPresentation(page.layout) ? page : { ...page, script })) })
+  }
   /** Le gabarit de toutes les pages intérieures (chacune garde sa mise en page). */
   function setAllTemplates(template: CatalogueTemplate) {
     change({ pages: innerPages.map((page) => ({ ...page, template })) })
@@ -625,6 +629,8 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
   const productPages = innerPages.filter((p) => !isPresentation(p.layout))
   const currentHeader: api.CatalogueHeader | null = selectedPage ? (isPresentation(selectedPage.layout) ? null : (selectedPage.header ?? 'titre'))
     : productPages.length && productPages.every((p) => (p.header ?? 'titre') === (productPages[0].header ?? 'titre')) ? (productPages[0].header ?? 'titre') : null
+  const currentScript: boolean | null = selectedPage ? !!selectedPage.script
+    : productPages.length && productPages.every((p) => !!p.script === !!productPages[0].script) ? !!productPages[0].script : null
   const currentTemplate: CatalogueTemplate | null = selectedPage ? (selectedPage.template ?? 'A')
     : innerPages.length && innerPages.every((p) => (p.template ?? 'A') === (innerPages[0].template ?? 'A')) ? (innerPages[0].template ?? 'A') : null
 
@@ -915,6 +921,24 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
                       <span>{HEADER_LABELS[header].label}</span>
                     </button>
                   ))}
+                </div>
+                <div className="catv-field catv-script">
+                  <span title="Le nom de la catégorie, sous celui de la gamme, en lettres manuscrites (Playwrite, la police manuscrite de la marque)">
+                    Catégorie en lettres manuscrites{selectedPage ? '' : ' · toutes les pages'}
+                  </span>
+                  <span className="bro-seg">
+                    {([[false, 'Non'], [true, 'Oui']] as const).map(([value, label]) => (
+                      <button
+                        key={label}
+                        type="button"
+                        disabled={!productPages.length}
+                        className={currentScript === value ? 'is-on' : ''}
+                        onClick={() => (selected !== null ? setPage(selected, { script: value }) : setAllScript(value))}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </span>
                 </div>
               </>
             )}

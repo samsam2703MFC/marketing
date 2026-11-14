@@ -5223,6 +5223,10 @@ check('présentation : le document — la page de la gamme porte son nom (charte
         && ($pg2[5]['kind'] ?? '') === 'presentation' && ($pg2[5]['title'] ?? '') === 'Saint-Nicolas' && array_key_exists('imageUrl', $pg2[5] ?? []) && $pg2[5]['imageUrl'] === null
         && ($pg2[5]['drawing'] ?? '') === 'img/print/saint-nicolas.png' && str_ends_with((string) ($pg2[5]['drawingUrl'] ?? ''), 'img/print/saint-nicolas.png'),
     json_encode(array_slice($pg2, 2, 4)));
+check('en-tête : la gamme de la page d’abord (son nom de la charte et son illustration), la catégorie ensuite en sous-titre',
+    ($pg2[3]['gammeTitle'] ?? '') === 'Noël gourmand' && ($pg2[3]['title'] ?? '') === 'Bûches' && ($pg2[3]['gammeImageUrl'] ?? '') === 'https://cdn.r2.dev/webshop/g14.webp'
+        && ($pg2[3]['drawing'] ?? '') === 'img/print/noel.png',
+    json_encode($pg2[3] ?? null));
 // Place manquante : la présentation porte la liste des premiers produits de la gamme, puis les pages suivent.
 $connus = [];
 $lignes = [];
@@ -5432,7 +5436,7 @@ check('une catégorie ajoutée à 16 pages sans page libre : pages inchangées, 
 
 // En-tête (titre · bandeau · grande) et grandes vignettes 2 × 2 (mosaique) : validés, rangés dans un ordre de clés fixe, rendus.
 $entetes = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPc, [], ['pageCount' => 8, 'pages' => [
-    ['header' => 'grande', 'category' => 500, 'template' => 'C', 'layout' => 'mosaique'],
+    ['script' => true, 'header' => 'grande', 'category' => 500, 'template' => 'C', 'layout' => 'mosaique'],
     ['header' => 'bandeau', 'layout' => 'grille', 'category' => 600],
     ['layout' => 'liste', 'category' => null, 'header' => 'titre'],
     ['layout' => 'presentation', 'category' => null, 'gamme' => 14],
@@ -5443,9 +5447,10 @@ $pE = $docE['body']['data']['pages'] ?? [];
 $refusE = [
     call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPc, [], ['pages' => [['layout' => 'grille', 'category' => null, 'header' => 'enorme']]]),
     call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPc, [], ['pages' => [['layout' => 'grille', 'category' => null, 'header' => 1]]]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPc, [], ['pages' => [['layout' => 'grille', 'category' => null, 'script' => 'oui']]]),
 ];
 $attendu = [
-    ['layout' => 'mosaique', 'category' => 500, 'template' => 'C', 'header' => 'grande'],
+    ['layout' => 'mosaique', 'category' => 500, 'template' => 'C', 'header' => 'grande', 'script' => true],
     ['layout' => 'grille', 'category' => 600, 'header' => 'bandeau'],
     ['layout' => 'liste', 'category' => null],
     ['layout' => 'presentation', 'category' => null, 'gamme' => 14],
@@ -5454,7 +5459,8 @@ check('en-tête et mosaïque : rangés au plus court, clés dans un ordre fixe ;
     $entetes['status'] === 200 && ($entetes['body']['data']['pages'] ?? null) === $attendu && ($relu['body']['data']['pages'] ?? null) === $attendu
         && ($pE[2]['layout'] ?? '') === 'mosaique' && ($pE[2]['header'] ?? '') === 'grande' && ($pE[2]['template'] ?? '') === 'C' && count($pE[2]['products'] ?? []) === 1
         && ($pE[2]['fillable'] ?? false) === true && ($pE[3]['header'] ?? '') === 'bandeau' && ($pE[4]['header'] ?? '') === 'titre'
-        && array_map(static fn (array $r): array => [$r['status'], $r['body']['error']['details'][0]['field'] ?? ''], $refusE) === [[422, 'pages[0].header'], [422, 'pages[0].header']],
+        && array_map(static fn (array $r): array => [$r['status'], $r['body']['error']['details'][0]['field'] ?? ''], $refusE) === [[422, 'pages[0].header'], [422, 'pages[0].header'], [422, 'pages[0].script']]
+        && ($pE[2]['script'] ?? null) === true && ($pE[3]['script'] ?? null) === false && array_key_exists('gammeTitle', $pE[2] ?? []) && $pE[2]['gammeTitle'] === null,
     json_encode([$entetes['body']['data']['pages'] ?? $entetes['body'], array_slice($pE, 2, 3), array_map(static fn (array $r) => $r['body'], $refusE)]));
 check('la mosaïque : 4 produits par page, place libre quand 2 au plus',
     $CS::LAYOUTS['mosaique'] === 4 && $CS::fillable('mosaique', 2) && !$CS::fillable('mosaique', 3)
@@ -5658,14 +5664,14 @@ check('promotions : une remise programmée barre le prix du produit qu’elle vi
 check('disponibilité : sous le prix — période et délai, rien pour un produit sans donnée',
     ($prodsP[11]['availability'] ?? '') === 'du 1/12 au 6/12 · sur commande 48 h' && array_key_exists('availability', $prodsP[12] ?? []) && $prodsP[12]['availability'] === null,
     json_encode([$prodsP[11]['availability'] ?? null, $prodsP[12]['availability'] ?? null], JSON_UNESCAPED_UNICODE));
-check('disponibilité en pied de page : une ligne pour la page de la catégorie — la période commune, puis le produit sans donnée (« voir en boutique »), jamais inventée',
-    ($pP[2]['availabilityFooter'] ?? '') === 'Disponible du 1/12 au 6/12 · sur commande 48 h · Bûche glacée vanille : voir en boutique',
+check('disponibilité en pied de page : une ligne pour la page de la catégorie — la période commune ; un produit sans donnée n’est jamais décrit par celle des autres (trop long : « certains produits : voir en boutique »)',
+    ($pP[2]['availabilityFooter'] ?? '') === 'Disponible du 1/12 au 6/12 · sur commande 48 h · certains produits : voir en boutique',
     json_encode($pP[2]['availabilityFooter'] ?? null, JSON_UNESCAPED_UNICODE));
 $pied = static fn (array $l, string $lang = 'fr'): ?string => \Marketing\Service\CatalogueService::availabilityFooter(array_map(static fn (array $x): array => ['kind' => 'product', 'name' => $x[0], 'availability' => $x[1]], $l), $lang);
 $noel = 'du 1/12 au 31/12 · sur commande 48 h';
 check('disponibilité en pied de page : tous la même · regroupée · trop longue (la plus courante + « certains produits ») · aucune donnée = rien · NL',
     $pied([['Bûche praliné', $noel], ['Bûche café', $noel]]) === 'Disponible du 1/12 au 31/12 · sur commande 48 h'
-        && $pied([['Bûche praliné', $noel], ['Bûchette individuelle', 'du 1/12 au 24/12'], ['Bûche café', $noel]]) === 'Disponible du 1/12 au 31/12 · sur commande 48 h · Bûchette individuelle : du 1/12 au 24/12'
+        && $pied([['Bûche praliné', $noel], ['Bûchette', 'du 1/12 au 24/12'], ['Bûche café', $noel]]) === 'Disponible du 1/12 au 31/12 · sur commande 48 h · Bûchette : du 1/12 au 24/12'
         && $pied([['A', $noel], ['B', $noel], ['Bûchette individuelle chocolat', 'du 1/12 au 24/12'], ['Bûchette individuelle framboise', 'du 1/12 au 20/12'], ['Bûchette individuelle vanille', 'du 5/12 au 24/12']])
             === 'Disponible du 1/12 au 31/12 · sur commande 48 h · certains produits : voir en boutique'
         && $pied([['A', null], ['B', null]]) === null && $pied([]) === null

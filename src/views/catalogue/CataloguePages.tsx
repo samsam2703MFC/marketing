@@ -276,19 +276,32 @@ function Filler({ filler, style }: { filler: CatalogueDocFiller; style?: CSSProp
   )
 }
 
-/** Le titre d'une page intérieure et l'illustration de sa catégorie, selon l'en-tête choisi. */
-function Heading({ title, drawing, header = 'titre' }: { title: string; drawing?: string | null; header?: CatalogueHeader }) {
-  const src = drawingAsset(drawing)
+/**
+ * L'en-tête d'une page de produits (client, 14/11/2026 : « commencer avec le nom de la gamme et son illustration,
+ * ensuite catégorie produit (possibilité ou pas en lettres manuscrites), ensuite les produits ») : la gamme et son
+ * illustration selon l'en-tête choisi (titre + pictogramme · bandeau · grande illustration), puis la catégorie en
+ * sous-titre. Sans gamme : la catégorie seule, avec le dessin de sa famille.
+ */
+function Heading({ page }: { page: Extract<CatalogueDocPage, { kind: 'products' }> }) {
+  const header = page.header ?? 'titre'
+  const drawing = drawingAsset(page.drawing)
+  const photo = drawing ? null : (page.gammeImageUrl ?? null)
+  const src = drawing ?? photo
+  const gamme = page.gammeTitle ?? null
+  const script = page.script ? ' cat-h__script' : ''
   return (
-    <div className={`cat-h cat-h--${header}${src ? '' : ' cat-h--nodraw'}`}>
-      {src && header === 'grande' ? (
-        <span className="cat-h__big">
-          <img src={src} alt="" />
-        </span>
-      ) : src ? (
-        <img className="cat-h__mark" src={src} alt="" />
-      ) : null}
-      <span className="cat-h__text">{title}</span>
+    <div className={`cat-h cat-h--${header}${src ? '' : ' cat-h--nodraw'}${gamme ? ' cat-h--gamme' : ''}`}>
+      <div className="cat-h__top">
+        {src && header === 'grande' ? (
+          <span className={`cat-h__big${photo ? ' is-photo' : ''}`}>
+            <img src={src} alt="" />
+          </span>
+        ) : src ? (
+          <img className={`cat-h__mark${photo ? ' is-photo' : ''}`} src={src} alt="" />
+        ) : null}
+        <span className={`cat-h__text${gamme ? '' : script}`}>{gamme ?? page.title}</span>
+      </div>
+      {gamme ? <div className={`cat-h__sub${script}`}>{page.title}</div> : null}
     </div>
   )
 }
@@ -309,7 +322,7 @@ function Products({ page, lang }: { page: Extract<CatalogueDocPage, { kind: 'pro
   const span: CSSProperties = { gridColumn: '1 / -1', gridRow: `span ${rows}` }
   return (
     <div className={`cat-inner cat-inner--${page.layout} cat-t-${template} cat-head-${page.header ?? 'titre'}`}>
-      <Heading title={page.title} drawing={page.drawing} header={page.header ?? 'titre'} />
+      <Heading page={page} />
       <div className="cat-body" data-fit={page.title}>
         {page.products.length === 0 ? (
           filler ? <Filler filler={filler} style={{ flex: '1 1 0' }} /> : <div className="cat-empty">{lang === 'nl' ? 'Lege pagina' : 'Page vide'}</div>

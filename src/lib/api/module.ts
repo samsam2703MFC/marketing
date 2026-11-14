@@ -2901,6 +2901,8 @@ export interface CataloguePageRow {
   fillerMediaId?: number | null
   /** L'en-tête d'une page de produits ; absent = titre. */
   header?: CatalogueHeader | null
+  /** La catégorie en lettres manuscrites ; absent = non. */
+  script?: boolean
 }
 
 export interface Catalogue {
@@ -3071,6 +3073,13 @@ export type CatalogueDocPage =
       layout: CatalogueLayout
       template?: CatalogueTemplate
       header?: CatalogueHeader
+      /** La catégorie (sous-titre) en lettres manuscrites. */
+      script?: boolean
+      /** La gamme de la page (sinon celle du catalogue que portent ses produits) : son nom et sa photo ; null sans gamme. */
+      /** Le dessin de la famille du titre de la page (vignettes sans photo), adresse absolue. */
+      familyDrawingUrl?: string | null
+      gammeTitle?: string | null
+      gammeImageUrl?: string | null
       category: number | null
       gamme?: number | null
       title: string
