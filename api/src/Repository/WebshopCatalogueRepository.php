@@ -109,7 +109,81 @@ final class WebshopCatalogueRepository
             return $products;
         });
 
+        // Le webshop de la boutique muet ou vide : le catalogue du Marketing (repris de l'ERP, le même que
+        // l'assistant de campagne) donne les produits, leurs gammes et leur prix. Le webshop lu, il
+        // complète seulement les gammes qu'il ne rend pas.
+        $local = $this->localProducts();
+        if ($read['data'] === [] && $local !== []) {
+            return ['products' => $local, 'error' => null, 'readAt' => $read['readAt'], 'source' => 'catalogue'];
+        }
+        if ($local !== []) {
+            $gammesById = [];
+            foreach ($local as $p) {
+                $gammesById[$p['id']] = $p['gammes'];
+            }
+            foreach ($read['data'] as &$p) {
+                if (($p['gammes'] ?? []) === [] && isset($gammesById[$p['id']])) {
+                    $p['gammes'] = $gammesById[$p['id']];
+                }
+            }
+            unset($p);
+        }
+
         return ['products' => $read['data'], 'error' => $read['error'], 'readAt' => $read['readAt']];
+    }
+
+    /**
+     * Le catalogue du Marketing (`mar_offer_item`, repris de l'ERP par la synchronisation : produits
+     * `erp-<id>`, gammes `erp-saison-<id>` et leurs liens `mar_offer_item_season`). L'identifiant d'un
+     * produit est son id ERP, celui d'une gamme l'id de sa période : les mêmes que le webshop.
+     *
+     * @return list<array{id:int, name:string, nameNl:string, image:?string, categoryId:?int, categoryName:string,
+     *              categoryNameNl:string, groupId:?int, gammes:list<int>, webPrice:?float, shopPrice:?float}>
+     */
+    public function localProducts(): array
+    {
+        try {
+            $db = Database::connection();
+            $saisons = [];
+            foreach ($db->query("SELECT id, sku_ref FROM mar_offer_item WHERE category = 'saison' AND sku_ref LIKE 'erp-saison-%'")->fetchAll() as $row) {
+                $saisons[(int) $row['id']] = (int) substr((string) $row['sku_ref'], strlen('erp-saison-'));
+            }
+            $liens = [];
+            foreach ($db->query('SELECT item_id, season_item_id FROM mar_offer_item_season')->fetchAll() as $row) {
+                if (isset($saisons[(int) $row['season_item_id']])) {
+                    $liens[(int) $row['item_id']][] = $saisons[(int) $row['season_item_id']];
+                }
+            }
+            $out = [];
+            foreach ($db->query(
+                "SELECT id, sku_ref, name, detail, price_amount, image_url FROM mar_offer_item
+                  WHERE category = 'produit' AND is_active = 1 AND sku_ref REGEXP '^erp-[0-9]+$'
+                  ORDER BY detail, name"
+            )->fetchAll() as $row) {
+                $famille = trim((string) ($row['detail'] ?? ''));
+                if (preg_match('/^b\.?\s?2\.?\s?b\b/i', $famille) === 1) {
+                    continue;
+                }
+                $image = trim((string) ($row['image_url'] ?? ''));
+                $out[] = [
+                    'id'             => (int) substr((string) $row['sku_ref'], 4),
+                    'name'           => (string) $row['name'],
+                    'nameNl'         => (string) $row['name'],
+                    'image'          => preg_match('#^https?://#', $image) === 1 ? $image : null,
+                    'categoryId'     => $famille !== '' ? (int) sprintf('%u', crc32($famille)) % 1000000000 : null,
+                    'categoryName'   => $famille !== '' ? $famille : 'Autres',
+                    'categoryNameNl' => $famille !== '' ? $famille : 'Overige',
+                    'groupId'        => null,
+                    'gammes'         => array_values(array_unique($liens[(int) $row['id']] ?? [])),
+                    'webPrice'       => $row['price_amount'] === null ? null : round((float) $row['price_amount'], 2),
+                    'shopPrice'      => null,
+                ];
+            }
+
+            return $out;
+        } catch (Throwable) {
+            return [];
+        }
     }
 
     /**
@@ -139,6 +213,31 @@ final class WebshopCatalogueRepository
 
             return $out;
         });
+
+        // TFBuddy muet ou sans période active : les gammes saisonnières du catalogue du Marketing.
+        if ($read['data'] === []) {
+            try {
+                $local = [];
+                foreach (Database::connection()->query(
+                    "SELECT sku_ref, name, image_url FROM mar_offer_item
+                      WHERE category = 'saison' AND is_active = 1 AND sku_ref LIKE 'erp-saison-%' ORDER BY name"
+                )->fetchAll() as $row) {
+                    $image = trim((string) ($row['image_url'] ?? ''));
+                    $local[] = [
+                        'id'    => (int) substr((string) $row['sku_ref'], strlen('erp-saison-')),
+                        'name'  => trim((string) preg_replace('/^[^\p{L}\p{N}]+/u', '', (string) $row['name'])),
+                        'image' => preg_match('#^https?://#', $image) === 1 ? $image : null,
+                        'from'  => null,
+                        'to'    => null,
+                    ];
+                }
+                if ($local !== []) {
+                    return ['gammes' => $local, 'error' => null];
+                }
+            } catch (Throwable) {
+                // rien de plus à proposer : l'erreur de TFBuddy reste dite
+            }
+        }
 
         return ['gammes' => $read['data'], 'error' => $read['error']];
     }

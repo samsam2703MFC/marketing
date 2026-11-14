@@ -105,9 +105,34 @@ final class CatalogueService
             }
         }
 
+        // Aucune boutique lisible (pas d'identifiant de caisse, webshop muet) : le catalogue du Marketing,
+        // repris de l'ERP, donne les produits, leurs gammes et leur prix de référence.
+        if ($byId === []) {
+            foreach ($this->webshop->localProducts() as $product) {
+                $id = (int) $product['id'];
+                $byId[$id] = [
+                    'id'         => $id,
+                    'name'       => $product['name'],
+                    'nameNl'     => $product['nameNl'],
+                    'imageUrl'   => $product['image'],
+                    'categoryId' => $product['categoryId'],
+                    'gammes'     => $product['gammes'],
+                    'prices'     => [],
+                    'refPriceCents' => self::cents($product['webPrice']),
+                ];
+                if ($product['categoryId'] !== null && !isset($categories[$product['categoryId']])) {
+                    $categories[$product['categoryId']] = ['id' => $product['categoryId'], 'name' => $product['categoryName'], 'nameNl' => $product['categoryNameNl']];
+                }
+            }
+        }
+
         $products = array_values($byId);
         foreach ($products as &$product) {
             [$price, $differs] = self::generalPrice($product['prices']);
+            if ($price === null && isset($product['refPriceCents'])) {
+                $price = $product['refPriceCents'];
+            }
+            unset($product['refPriceCents']);
             $product['priceCents'] = $price;
             $product['priceDiffers'] = $differs;
         }

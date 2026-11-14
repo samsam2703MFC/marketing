@@ -5072,6 +5072,32 @@ $e2 = call($catRouter, 'DELETE', '/api/v1/marketing/catalogues/' . $idCat);
 check('catalogues : supprimé (204), puis introuvable (404)', $e1['status'] === 204 && $e2['status'] === 404);
 $pdo->exec('DELETE FROM mar_catalogue');
 
+// Webshop illisible (droits de l'ERP refusés) : le catalogue du Marketing, repris de l'ERP — le même
+// que l'assistant de campagne — donne les produits, leurs gammes (saisons) et leur prix de référence.
+$pdo->exec("DELETE FROM mar_offer_item WHERE sku_ref IN ('erp-990001', 'erp-990002', 'erp-saison-990009')");
+$pdo->exec("INSERT INTO mar_offer_item (category, sku_ref, name, detail, price_amount, is_active) VALUES
+    ('produit', 'erp-990001', 'Bûche test catalogue', 'Bûches', 30.50, 1),
+    ('produit', 'erp-990002', 'Carton test', 'B2B - Cartons', 40.00, 1),
+    ('saison', 'erp-saison-990009', '🎄 Gamme test', NULL, NULL, 1)");
+$pdo->exec("INSERT INTO mar_offer_item_season (item_id, season_item_id)
+    SELECT p.id, s.id FROM mar_offer_item p, mar_offer_item s WHERE p.sku_ref = 'erp-990001' AND s.sku_ref = 'erp-saison-990009'");
+\Marketing\Repository\WebshopCatalogueRepository::purge();
+$muet = static fn (string $url, array $entetes = [], int $delai = 5, string $methode = 'GET', ?string $corps = null): array => [403, '{"message":"Forbidden"}'];
+$catMuet = new \Marketing\Service\CatalogueService(
+    new \Marketing\Repository\CatalogueRepository(),
+    new \Marketing\Repository\WebshopCatalogueRepository(new \Marketing\Support\ErpClient($muet))
+);
+$parBoutique = $catMuet->webshopProducts([['id' => $catA, 'name' => 'Sombreffe', 'erpShopId' => 9104]]);
+$sansBoutique = $catMuet->webshopProducts([]);
+$pb = array_column($parBoutique['products'], null, 'id');
+$sb = array_column($sansBoutique['products'], null, 'id');
+check('catalogues : webshop illisible ou aucune boutique — le catalogue du Marketing, ses gammes et son prix',
+    isset($pb[990001], $sb[990001]) && !isset($pb[990002]) && ($sb[990001]['gammes'] ?? []) === [990009]
+        && ($sb[990001]['priceCents'] ?? null) === 3050 && array_key_exists('error', $parBoutique['shops'][0] ?? []) && $parBoutique['shops'][0]['error'] === null
+        && in_array('Gamme test', array_column($sansBoutique['gammes'], 'name'), true),
+    json_encode([$sb[990001] ?? null, $parBoutique['shops'][0] ?? null, $sansBoutique['gammes']]));
+$pdo->exec("DELETE FROM mar_offer_item WHERE sku_ref IN ('erp-990001', 'erp-990002', 'erp-saison-990009')");
+
 $pdo->exec("DELETE FROM mar_shop WHERE code IN ('cat-sombreffe', 'cat-corbais')");
 \Marketing\Repository\WebshopCatalogueRepository::purge();
 if ($jetonAvant === false) {
