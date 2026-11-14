@@ -432,6 +432,11 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
     groups.set(key, [...(groups.get(key) ?? []), entry])
   }
   const checked = cat.products.filter((row) => row.on).length
+  // Les catégories du webshop qui ont des produits hors du catalogue : on peut les ajouter d'un coup.
+  const addable = [...categories.values()]
+    .map((c) => ({ c, ids: products.filter((product) => product.categoryId === c.id && !inCatalogue.has(product.id)).map((product) => product.id) }))
+    .filter(({ ids }) => ids.length > 0)
+    .sort((a, b) => a.c.name.localeCompare(b.c.name, 'fr'))
 
   function toggleProduct(productId: number, on: boolean) {
     toggleProducts([productId], on)
@@ -654,6 +659,27 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
             <input type="checkbox" checked={allWebshop} onChange={(event) => setAllWebshop(event.target.checked)} />
             Montrer tout le webshop {cat.owner === 'boutique' ? 'de la boutique' : ''}
           </label>
+          {addable.length ? (
+            <label className="catv-field catv-addcat">
+              <span>Ajouter une catégorie du webshop</span>
+              <select
+                value=""
+                onChange={(event) => {
+                  const pick = addable.find(({ c }) => String(c.id) === event.target.value)
+                  if (!pick) return
+                  toggleProducts(pick.ids, true)
+                  setOpened((prev) => new Set([...(prev ?? []), pick.c.name]))
+                }}
+              >
+                <option value="">＋ Choisir une catégorie…</option>
+                {addable.map(({ c, ids }) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({ids.length} produit{ids.length > 1 ? 's' : ''})
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           {webshop.loading ? <p className="muted">Lecture du webshop…</p> : null}
           {webshop.error ? <p className="error">{webshop.error}</p> : null}
           {(webshop.data?.shops ?? []).filter((s) => s.error).map((s) => (
