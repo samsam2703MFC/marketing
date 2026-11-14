@@ -206,3 +206,7 @@
 /* En-tête des pages (titre · bandeau · grande illustration) : vignettes comme les gabarits. */
 .catv-layouts--4 { grid-template-columns: repeat(2, 1fr); }
 .catv-head-note { margin: -6px 0 12px; font-size: 11px; line-height: 1.4; color: var(--muted); }
+/* L'image d'une vignette d'offre, choisie dans la médiathèque. */
+.catv-offer__img { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.catv-offer__img img { width: 44px; height: 32px; object-fit: contain; border-radius: 6px; border: 1px solid var(--line); background: #fff; }
+.catv-offer__img .btn { margin-top: 0; }

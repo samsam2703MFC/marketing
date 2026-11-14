@@ -40,7 +40,12 @@ info:
     `header` d'une page de produits (`titre` défaut · `bandeau` · `grande` ; autre valeur : 422), mise en
     page `mosaique` (grandes vignettes 2 × 2, 4 produits) ; au document, `header` et l'illustration
     (`drawing` / `drawingUrl`) = le dessin de la famille de la catégorie, sinon de la gamme de la page ou
-    du catalogue, sinon null ; `headers` dans `catalogue-products` de la boutique.
+    du catalogue, sinon null ; `headers` dans `catalogue-products` de la boutique. Puis (« la disponibilité
+    en dessous de page en footer, par catégorie ») : `availabilityFooter` sur les pages de produits et de
+    présentation avec liste — une ligne qui résume la disponibilité de la page ; `availability` reste sur
+    chaque produit, mais ne s'imprime plus sous le prix. Puis (« insert picture from médiathèque ») :
+    `offers[].mediaId` (image de la médiathèque de la vignette, validée comme la place libre ; 422 sinon),
+    `imageUrl` de la vignette au document, alerte `OFFER_MEDIA_MISSING`.
 
     v1.3 (14 novembre 2026, demandes du client : « rajouter les bundles et promotions (via API) et les
     appliquer dans une vignette dans la catégorie », puis « rajouter aussi les données de disponibilité ») :
@@ -581,7 +586,7 @@ components:
         products: { type: array, maxItems: 400, items: { $ref: '#/components/schemas/ProductRow' } }
         pages: { type: array, maxItems: 12, items: { $ref: '#/components/schemas/PageRow' }, description: 'Pages intérieures, pageCount − 4 au plus.' }
         offers: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/OfferRow' } }
-        showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) sous le prix ; vrai par défaut.' }
+        showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) en pied de page (`availabilityFooter`) ; vrai par défaut.' }
     CatalogueUpdate:
       type: object
       additionalProperties: false
@@ -596,7 +601,7 @@ components:
         status: { $ref: '#/components/schemas/Status' }
         printQty: { type: [integer, 'null'], minimum: 1 }
         offers: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/OfferRow' } }
-        showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) sous le prix ; vrai par défaut.' }
+        showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) en pied de page (`availabilityFooter`) ; vrai par défaut.' }
     ShopCatalogueCreate:
       type: object
       additionalProperties: false
@@ -618,7 +623,7 @@ components:
         products: { type: array, items: { $ref: '#/components/schemas/ProductRow' } }
         pages: { type: array, items: { $ref: '#/components/schemas/PageRow' } }
         offers: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/OfferRow' } }
-        showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) sous le prix ; vrai par défaut.' }
+        showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) en pied de page (`availabilityFooter`) ; vrai par défaut.' }
     ShopCatalogueUpdate:
       type: object
       additionalProperties: false
@@ -632,7 +637,7 @@ components:
         status: { $ref: '#/components/schemas/Status' }
         printQty: { type: [integer, 'null'] }
         offers: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/OfferRow' } }
-        showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) sous le prix ; vrai par défaut.' }
+        showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) en pied de page (`availabilityFooter`) ; vrai par défaut.' }
     Catalogue:
       type: object
       properties:
@@ -689,6 +694,7 @@ components:
         type: { type: string, enum: [bundle, buyXGetY, quantity, scheduledDiscount] }
         id: { type: integer, minimum: 1, description: Identifiant de la promotion dans TFBuddy (inconnu pour ce catalogue = 422). }
         on: { type: boolean }
+        mediaId: { type: [integer, 'null'], description: 'Une image de la médiathèque (pas archivée ; pour une boutique, du réseau ou d''elle-même ; sinon 422 `offers[i].mediaId`) à la place des photos des produits dans la vignette ; null : les photos. Toujours rendu, dans l''ordre type, id, on, mediaId.' }
     Availability:
       type: object
       description: Ce que TFBuddy dit de la disponibilité d'un produit ; rien d'inventé.
@@ -731,7 +737,9 @@ components:
         currency: { type: string, const: EUR }
     DocOffer:
       description: La vignette d'une promotion, une case d'une page de produits.
-      allOf: [{ $ref: '#/components/schemas/Offer' }]
+      allOf:
+        - { $ref: '#/components/schemas/Offer' }
+        - { type: object, properties: { imageUrl: { type: [string, 'null'], description: 'L''image choisie dans la médiathèque (`mediaId`) ; null : les photos des produits (sans photo : le dessin de la famille). Disparue : alerte OFFER_MEDIA_MISSING.' } } }
     Document:
       type: object
       properties:
@@ -773,6 +781,7 @@ components:
                   fillable: { type: boolean, description: 'Une rangée entière au moins est libre : la place libre peut être remplie.' }
                   filler: { $ref: '#/components/schemas/DocFiller' }
                   products: { type: array, items: { oneOf: [{ $ref: '#/components/schemas/DocProduct' }, { $ref: '#/components/schemas/DocOffer' }] }, description: 'Produits et vignettes de promotions (une vignette compte dans la capacité du gabarit).' }
+                  availabilityFooter: { type: [string, 'null'], description: 'La disponibilité des produits de la page en une ligne de pied de page (« Disponible du 1/12 au 31/12 · sur commande 48 h », puis les produits qui diffèrent, ou « certains produits : voir en boutique ») ; null sans donnée ou `showAvailability` faux. Les vignettes de promotions gardent leur période.' }
               - type: object
                 description: Page de présentation d'une gamme (illustration — photo de sa couverture dans la charte, sinon du webshop, sinon son dessin de saison, sinon un cadre sobre —, nom, texte, et au choix ses premiers produits).
                 properties:
@@ -787,6 +796,7 @@ components:
                   drawing: { type: [string, 'null'] }
                   drawingUrl: { type: [string, 'null'] }
                   products: { type: array, items: { $ref: '#/components/schemas/DocProduct' } }
+                  availabilityFooter: { type: [string, 'null'], description: 'La disponibilité des produits de la page en une ligne de pied de page (« Disponible du 1/12 au 31/12 · sur commande 48 h », puis les produits qui diffèrent, ou « certains produits : voir en boutique ») ; null sans donnée ou `showAvailability` faux. Les vignettes de promotions gardent leur période.' }
               - type: object
                 description: Dernière page (charte, verrouillée).
                 properties: { kind: { const: back }, locked: { const: true }, title: { type: string }, text: { type: string }, qrUrl: { type: [string, 'null'] }, host: { type: [string, 'null'] }, shop: { $ref: '#/components/schemas/DocShop' } }

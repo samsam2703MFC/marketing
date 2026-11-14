@@ -126,17 +126,26 @@ function Price({ product, lang }: { product: CatalogueDocProduct | CatalogueDocO
   )
 }
 
-/** Ce que TFBuddy dit de la disponibilité (« du 1/12 au 6/12 · sur commande 48 h »), sous le prix ; rien sinon. */
-function Availability({ text }: { text?: string | null }) {
-  return text ? <span className="cat-avail">{text}</span> : null
+/**
+ * La disponibilité de la page, en pied de page (client, 14/11/2026 : « la disponibilité en dessous de page en
+ * footer, par catégorie ») : une ligne composée par l'API (`availabilityFooter`) ; rien sans donnée.
+ */
+function AvailabilityFooter({ text }: { text?: string | null }) {
+  return text ? <div className="cat-foot">{text}</div> : null
 }
 
 /** La vignette d'une promotion (bundle, « 2+1 », « 3 pour 2 ») : badge, produits, prix et ancien prix, période. */
-function OfferCard({ offer, lang, family, big = false, row = false }: { offer: CatalogueDocOffer; lang: CatalogueLang; family: string; big?: boolean; row?: boolean }) {
-  const shown = offer.products.slice(0, row ? 3 : big ? 4 : offer.products.length > 2 ? 4 : 2)
+function OfferCard({ offer, lang, family, big = false, row = false }: { offer: CatalogueDocOffer; lang: CatalogueLang; family: Fam; big?: boolean; row?: boolean }) {
+  // L'image choisie dans la médiathèque remplace les photos des produits ; sans rien, le dessin de la famille.
+  const shown = offer.imageUrl ? [] : offer.products.slice(0, row ? 3 : big ? 4 : offer.products.length > 2 ? 4 : 2)
+  const fallback = absolute(familyImage(family.name)) ?? family.fallback
   const photos = (
     <span className={`cat-offer__photos cat-offer__photos--${Math.max(1, shown.length)}`}>
-      {shown.length === 0 ? <span className="cat-photo"><span className="cat-photo__none" /></span> : null}
+      {offer.imageUrl ? (
+        <span className="cat-photo cat-photo--media"><img src={offer.imageUrl} alt="" /></span>
+      ) : shown.length === 0 ? (
+        <span className={`cat-photo${fallback ? ' cat-photo--drawing' : ''}`}>{fallback ? <img src={fallback} alt="" /> : <span className="cat-photo__none" />}</span>
+      ) : null}
       {shown.map((p) => (
         <Photo key={p.id} product={{ id: p.id, name: p.name, imageUrl: p.imageUrl, priceCents: null, currency: 'EUR' }} family={family} />
       ))}
@@ -159,9 +168,17 @@ function OfferCard({ offer, lang, family, big = false, row = false }: { offer: C
   )
 }
 
+/**
+ * La famille d'une page pour les vignettes sans photo : le dessin de la famille de son titre, sinon
+ * l'illustration de l'en-tête de la page (famille de la catégorie ou gamme) — jamais un cercle vide quand on
+ * a un dessin.
+ */
+type Fam = { name: string; fallback: string | null }
+const famOf = (page: { title: string; drawing?: string | null }): Fam => ({ name: page.title, fallback: drawingAsset(page.drawing) })
+
 /** La photo du webshop ; sans elle, le dessin de la famille (celui des brochures), jamais une photo inventée. */
-function Photo({ product, family, className = '' }: { product: CatalogueDocProduct; family: string; className?: string }) {
-  const drawing = product.imageUrl ? null : absolute(familyImage(family))
+function Photo({ product, family, className = '' }: { product: CatalogueDocProduct; family: Fam; className?: string }) {
+  const drawing = product.imageUrl ? null : (absolute(familyImage(family.name)) ?? family.fallback)
   return (
     <span className={`cat-photo${drawing ? ' cat-photo--drawing' : ''}${product.imageUrl ? ' cat-photo--img' : ''} ${className}`}>
       {product.imageUrl ? <img src={product.imageUrl} alt="" /> : drawing ? <img src={drawing} alt="" /> : <span className="cat-photo__none" />}
@@ -232,7 +249,7 @@ function Brand({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'brand' 
   )
 }
 
-function ProductCard({ product, lang, family, big = false }: { product: CatalogueDocItem; lang: CatalogueLang; family: string; big?: boolean }) {
+function ProductCard({ product, lang, family, big = false }: { product: CatalogueDocItem; lang: CatalogueLang; family: Fam; big?: boolean }) {
   if (isDocOffer(product)) return <OfferCard offer={product} lang={lang} family={family} big={big} />
   return (
     <div className={`cat-card${big ? ' cat-card--big' : ''}${product.oldPriceCents != null ? ' cat-card--promo' : ''}`}>
@@ -241,7 +258,6 @@ function ProductCard({ product, lang, family, big = false }: { product: Catalogu
       <div className="cat-card__text">
         <div className="cat-name">{product.name}</div>
         <Price product={product} lang={lang} />
-        <Availability text={product.availability} />
       </div>
     </div>
   )
@@ -299,15 +315,15 @@ function Products({ page, lang }: { page: Extract<CatalogueDocPage, { kind: 'pro
           filler ? <Filler filler={filler} style={{ flex: '1 1 0' }} /> : <div className="cat-empty">{lang === 'nl' ? 'Lege pagina' : 'Page vide'}</div>
         ) : page.layout === 'liste' ? (
           <>
-            <ProductList products={page.products} lang={lang} family={page.title} />
+            <ProductList products={page.products} lang={lang} family={famOf(page)} />
             {filler ? <Filler filler={filler} style={{ flex: '1 1 0' }} /> : null}
           </>
         ) : page.layout === 'vedette' && first ? (
           <>
-            <ProductCard product={first} lang={lang} family={page.title} big />
+            <ProductCard product={first} lang={lang} family={famOf(page)} big />
             <div className="cat-grid cat-grid--2x2">
               {rest.map((product) => (
-                <ProductCard key={product.id} product={product} lang={lang} family={page.title} />
+                <ProductCard key={product.id} product={product} lang={lang} family={famOf(page)} />
               ))}
               {filler && rows > 0 ? <Filler filler={filler} style={span} /> : null}
             </div>
@@ -315,36 +331,34 @@ function Products({ page, lang }: { page: Extract<CatalogueDocPage, { kind: 'pro
         ) : page.layout === 'mosaique' ? (
           <div className="cat-grid cat-grid--2x2 cat-grid--mosaique">
             {page.products.map((product) => (
-              <ProductCard key={product.id} product={product} lang={lang} family={page.title} />
+              <ProductCard key={product.id} product={product} lang={lang} family={famOf(page)} />
             ))}
             {filler && rows > 0 ? <Filler filler={filler} style={span} /> : null}
           </div>
         ) : (
           <div className="cat-grid cat-grid--2x3">
             {page.products.map((product) => (
-              <ProductCard key={product.id} product={product} lang={lang} family={page.title} />
+              <ProductCard key={product.id} product={product} lang={lang} family={famOf(page)} />
             ))}
             {filler && rows > 0 ? <Filler filler={filler} style={span} /> : null}
           </div>
         )}
       </div>
+      <AvailabilityFooter text={page.availabilityFooter} />
     </div>
   )
 }
 
-function ProductList({ products, lang, family }: { products: CatalogueDocItem[]; lang: CatalogueLang; family: string }) {
+function ProductList({ products, lang, family }: { products: CatalogueDocItem[]; lang: CatalogueLang; family: Fam }) {
   return (
     <div className="cat-list">
       {products.map((product) =>
         isDocOffer(product) ? (
           <OfferCard key={product.id} offer={product} lang={lang} family={family} row />
         ) : (
-          <div className={`cat-row${product.availability ? ' cat-row--avail' : ''}`} key={product.id}>
+          <div className="cat-row" key={product.id}>
             <Photo product={product} family={family} />
-            <span className="cat-name">
-              {product.name}
-              {product.availability ? <Availability text={product.availability} /> : null}
-            </span>
+            <span className="cat-name">{product.name}</span>
             <i />
             <Price product={product} lang={lang} />
           </div>
@@ -381,9 +395,10 @@ function Presentation({ page, lang }: { page: Extract<CatalogueDocPage, { kind: 
       </div>
       {withList && page.products.length ? (
         <div className="cat-pres__list" data-fit={page.title}>
-          <ProductList products={page.products} lang={lang} family={page.title} />
+          <ProductList products={page.products} lang={lang} family={famOf(page)} />
         </div>
       ) : null}
+      {withList ? <AvailabilityFooter text={page.availabilityFooter} /> : null}
     </div>
   )
 }

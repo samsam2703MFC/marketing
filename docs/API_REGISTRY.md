@@ -952,7 +952,19 @@ A · B · C (fond, cartes, alignement) : B a déjà un bandeau avec un petit pic
 « grande illustration », d'où un réglage à part. **Illustration** (`drawing`, `drawingUrl` absolue) : le dessin
 de la famille de la catégorie (la règle des vignettes sans photo, `familyImage`), sinon la gamme de la page, sinon
 la première gamme du catalogue, sinon `null` — jamais inventée. **`mosaique`** : grandes vignettes 2 × 2,
-4 produits (place libre à 2 produits au plus). `catalogue-products` de la boutique rend `headers`.
+4 produits (place libre à 2 produits au plus). `catalogue-products` de la boutique rend `headers`. **Disponibilité en pied de page** (même jour, client : « la disponibilité en dessous de page en
+footer (par catégorie) ») : `availabilityFooter` sur chaque page de produits (et présentation avec liste), composé
+par le serveur pour que Marketing et dashboard impriment la même ligne (`availabilityFooter()`) — tous la même :
+« Disponible du 1/12 au 31/12 · sur commande 48 h » (NL « Beschikbaar … ») ; sinon la plus courante puis les
+produits qui diffèrent (« Bûchette individuelle : du 1/12 au 24/12 », un produit sans donnée : « voir en
+boutique ») ; au-delà de 100 caractères, la plus courante + « certains produits : voir en boutique » ; aucune donnée
+ou `showAvailability` faux : `null`. `availability` reste sur chaque produit (API), plus imprimé sous le prix ; les
+vignettes de promotions gardent leur période. **Image d'une vignette d'offre** (même jour, capture d'une vignette « Cougnou 4+1 » au cercle vide : « insert
+picture from médiathèque ») : `offers[i].mediaId` — une image de la médiathèque, même règle que la place libre
+(pas archivée, pas une vidéo ; pour un catalogue de boutique, du réseau ou d'elle-même), sinon `422`
+`offers[i].mediaId` ; `null` la retire. Rendu toujours `{type, id, on, mediaId}` dans cet ordre (MySQL 8). Au document,
+la vignette porte `imageUrl` (elle remplace les photos des produits) ; image disparue : `OFFER_MEDIA_MISSING` et les
+photos. Sans photo ni image : le dessin de la famille de la page (sinon l'illustration de l'en-tête), plus de cercle vide.
 
 **Routes de la marque** (session, rôle réseau ; un compte de boutique → `403 PERM_ROLE_REQUIRED`) :
 

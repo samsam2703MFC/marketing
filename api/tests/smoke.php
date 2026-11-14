@@ -5658,6 +5658,20 @@ check('promotions : une remise programmée barre le prix du produit qu’elle vi
 check('disponibilité : sous le prix — période et délai, rien pour un produit sans donnée',
     ($prodsP[11]['availability'] ?? '') === 'du 1/12 au 6/12 · sur commande 48 h' && array_key_exists('availability', $prodsP[12] ?? []) && $prodsP[12]['availability'] === null,
     json_encode([$prodsP[11]['availability'] ?? null, $prodsP[12]['availability'] ?? null], JSON_UNESCAPED_UNICODE));
+check('disponibilité en pied de page : une ligne pour la page de la catégorie — la période commune, puis le produit sans donnée (« voir en boutique »), jamais inventée',
+    ($pP[2]['availabilityFooter'] ?? '') === 'Disponible du 1/12 au 6/12 · sur commande 48 h · Bûche glacée vanille : voir en boutique',
+    json_encode($pP[2]['availabilityFooter'] ?? null, JSON_UNESCAPED_UNICODE));
+$pied = static fn (array $l, string $lang = 'fr'): ?string => \Marketing\Service\CatalogueService::availabilityFooter(array_map(static fn (array $x): array => ['kind' => 'product', 'name' => $x[0], 'availability' => $x[1]], $l), $lang);
+$noel = 'du 1/12 au 31/12 · sur commande 48 h';
+check('disponibilité en pied de page : tous la même · regroupée · trop longue (la plus courante + « certains produits ») · aucune donnée = rien · NL',
+    $pied([['Bûche praliné', $noel], ['Bûche café', $noel]]) === 'Disponible du 1/12 au 31/12 · sur commande 48 h'
+        && $pied([['Bûche praliné', $noel], ['Bûchette individuelle', 'du 1/12 au 24/12'], ['Bûche café', $noel]]) === 'Disponible du 1/12 au 31/12 · sur commande 48 h · Bûchette individuelle : du 1/12 au 24/12'
+        && $pied([['A', $noel], ['B', $noel], ['Bûchette individuelle chocolat', 'du 1/12 au 24/12'], ['Bûchette individuelle framboise', 'du 1/12 au 20/12'], ['Bûchette individuelle vanille', 'du 5/12 au 24/12']])
+            === 'Disponible du 1/12 au 31/12 · sur commande 48 h · certains produits : voir en boutique'
+        && $pied([['A', null], ['B', null]]) === null && $pied([]) === null
+        && $pied([['Kerststronk', 'van 1/12 tot 31/12'], ['IJsstronk', null]], 'nl') === 'Beschikbaar van 1/12 tot 31/12 · IJsstronk: zie in de winkel'
+        && \Marketing\Service\CatalogueService::availabilityFooter([['kind' => 'offer', 'offer' => [], 'availability' => 'x']], 'fr') === null,
+    '');
 check('promotions : aucune alerte quand TFBuddy répond', !in_array('PROMOTIONS_UNREADABLE', array_column($docPromo['body']['data']['warnings'] ?? [], 'code'), true));
 
 $docPromoB = call($promoRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPromo . '/document', ['shopId' => (string) $catB, 'lang' => 'nl']);
@@ -5679,10 +5693,40 @@ $majPromo = call($promoRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPromo
 $docSans = call($promoRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPromo . '/document');
 $tousS = array_merge(...array_map(static fn (array $p): array => $p['products'] ?? [], $docSans['body']['data']['pages'] ?? []));
 check('promotions : une offre décochée quitte la page ; la disponibilité éteinte ne s’imprime plus',
-    $majPromo['status'] === 200 && ($majPromo['body']['data']['offers'] ?? []) === [['type' => 'bundle', 'id' => 1, 'on' => false], ['type' => 'scheduledDiscount', 'id' => 4, 'on' => true]]
+    $majPromo['status'] === 200 && ($majPromo['body']['data']['offers'] ?? []) === [['type' => 'bundle', 'id' => 1, 'on' => false, 'mediaId' => null], ['type' => 'scheduledDiscount', 'id' => 4, 'on' => true, 'mediaId' => null]]
         && ($majPromo['body']['data']['showAvailability'] ?? null) === false && !in_array('bundle-1', array_column($tousS, 'id'), true)
-        && array_filter(array_column($tousS, 'availability')) === [],
+        && array_filter(array_column($tousS, 'availability')) === [] && array_filter(array_column($docSans['body']['data']['pages'] ?? [], 'availabilityFooter')) === [],
     json_encode([$majPromo['body'], array_column($tousS, 'id')], JSON_UNESCAPED_UNICODE));
+// L'image d'une vignette d'offre, choisie dans la médiathèque (client : « insert picture from médiathèque »).
+$pdo->exec("DELETE FROM mar_media WHERE sha256 LIKE 'catoffre%'");
+$pdo->exec("INSERT INTO mar_media (kind, file_path, mime, bytes, sha256, name, shop_id, archived_at) VALUES
+    ('image', 'media/test/cougnou-reseau.jpg', 'image/jpeg', 1000, RPAD('catoffre-reseau', 64, '0'), 'Cougnou réseau (test)', NULL, NULL),
+    ('image', 'media/test/cougnou-corbais.jpg', 'image/jpeg', 1000, RPAD('catoffre-corbais', 64, '0'), 'Cougnou Corbais (test)', $catB, NULL),
+    ('image', 'media/test/cougnou-ancien.jpg', 'image/jpeg', 1000, RPAD('catoffre-archivee', 64, '0'), 'Ancien (test)', NULL, NOW()),
+    ('video', 'media/test/cougnou.mp4', 'video/mp4', 1000, RPAD('catoffre-video', 64, '0'), 'Film (test)', NULL, NULL)");
+$mOffre = [];
+foreach ($pdo->query("SELECT sha256, id FROM mar_media WHERE sha256 LIKE 'catoffre%'") as $m) {
+    $mOffre[rtrim(substr((string) $m['sha256'], 9), '0')] = (int) $m['id'];
+}
+$avecImage = call($promoRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPromo, [], ['offers' => [['mediaId' => $mOffre['reseau'], 'on' => true, 'id' => 1, 'type' => 'bundle']]]);
+$docImg = call($promoRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPromo . '/document');
+$vign = array_column(array_merge(...array_map(static fn (array $p): array => $p['products'] ?? [], $docImg['body']['data']['pages'] ?? [])), null, 'id')['bundle-1'] ?? [];
+$refusImg = [];
+foreach (['archivee', 'video', 'corbais'] as $k) {
+    $r = call($promoRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPromo, [], ['offers' => [['type' => 'bundle', 'id' => 1, 'on' => true, 'mediaId' => $mOffre[$k]]]]);
+    $refusImg[] = $r['status'] . ':' . ($r['body']['error']['details'][0]['field'] ?? '');
+}
+$r = call($promoRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPromo, [], ['offers' => [['type' => 'bundle', 'id' => 1, 'on' => true, 'mediaId' => 99999999]]]);
+$refusImg[] = $r['status'] . ':' . ($r['body']['error']['details'][0]['field'] ?? '');
+$sansImage = call($promoRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPromo, [], ['offers' => [['type' => 'bundle', 'id' => 1, 'on' => true, 'mediaId' => null]]]);
+check('offre : une image de la médiathèque remplace les photos de la vignette — rangée {type, id, on, mediaId} dans cet ordre ; archivée, vidéo ou inconnue : 422 (la marque peut prendre l’image d’une boutique) ; null la retire',
+    $avecImage['status'] === 200 && ($avecImage['body']['data']['offers'] ?? null) === [['type' => 'bundle', 'id' => 1, 'on' => true, 'mediaId' => $mOffre['reseau']]]
+        && str_ends_with((string) ($vign['imageUrl'] ?? ''), 'media/test/cougnou-reseau.jpg')
+        && $refusImg === ['422:offers[0].mediaId', '422:offers[0].mediaId', '200:', '422:offers[0].mediaId']
+        && ($sansImage['body']['data']['offers'] ?? null) === [['type' => 'bundle', 'id' => 1, 'on' => true, 'mediaId' => null]],
+    json_encode([$avecImage['body']['error'] ?? null, $avecImage['body']['data']['offers'] ?? null, $vign['imageUrl'] ?? null, $refusImg]));
+$pdo->exec("DELETE FROM mar_media WHERE sha256 LIKE 'catoffre%'");
+call($promoRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPromo, [], ['offers' => [['type' => 'bundle', 'id' => 1, 'on' => false], ['type' => 'scheduledDiscount', 'id' => 4, 'on' => true]]]);
 $refusPromo = [];
 foreach ([[['type' => 'remise', 'id' => 1, 'on' => true]], [['type' => 'bundle', 'id' => 999, 'on' => true]], [['type' => 'bundle', 'id' => 1]], [['type' => 'quantity', 'id' => 3, 'on' => true]], 'x'] as $mauvais) {
     $r = call($promoRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPromo, [], ['offers' => $mauvais]);
@@ -5709,6 +5753,21 @@ check('promotions (boutique) : son offre cochée imprimée ; une offre d’aille
     $creeB['status'] === 201 && ($creeB['body']['data']['showAvailability'] ?? null) === false && in_array('buyXGetY-2', array_column($tousB2, 'id'), true)
         && $refusB2['status'] === 422 && ($refusB2['body']['error']['details'][0]['field'] ?? '') === 'offers[0].id',
     json_encode([$creeB['body'], $refusB2['body'], array_column($tousB2, 'id')]));
+$pdo->exec("INSERT INTO mar_media (kind, file_path, mime, bytes, sha256, name, shop_id, archived_at) VALUES
+    ('image', 'media/test/offre-sombreffe.jpg', 'image/jpeg', 1000, RPAD('catoffreb-sombreffe', 64, '0'), 'Sombreffe (test)', $catA, NULL),
+    ('image', 'media/test/offre-corbais.jpg', 'image/jpeg', 1000, RPAD('catoffreb-corbais', 64, '0'), 'Corbais (test)', $catB, NULL)");
+$mB = [];
+foreach ($pdo->query("SELECT sha256, id FROM mar_media WHERE sha256 LIKE 'catoffreb%'") as $m) {
+    $mB[rtrim(substr((string) $m['sha256'], 10), '0')] = (int) $m['id'];
+}
+$urlB = '/api/v1/integration/marketing/shops/9105/catalogues/' . (int) ($creeB['body']['data']['id'] ?? 0);
+$autreB = call($promoRouter, 'PUT', $urlB, [], ['offers' => [['type' => 'buyXGetY', 'id' => 2, 'on' => true, 'mediaId' => $mB['sombreffe']]]]);
+$sienneB = call($promoRouter, 'PUT', $urlB, [], ['offers' => [['type' => 'buyXGetY', 'id' => 2, 'on' => true, 'mediaId' => $mB['corbais']]]]);
+check('offre (boutique) : l’image d’une autre boutique refusée (422 offers[0].mediaId), la sienne acceptée',
+    $autreB['status'] === 422 && ($autreB['body']['error']['details'][0]['field'] ?? '') === 'offers[0].mediaId'
+        && $sienneB['status'] === 200 && ($sienneB['body']['data']['offers'][0]['mediaId'] ?? null) === $mB['corbais'],
+    json_encode([$autreB['body'], $sienneB['body']['data']['offers'] ?? $sienneB['body']]));
+$pdo->exec("DELETE FROM mar_media WHERE sha256 LIKE 'catoffreb%'");
 $pdo->exec('DELETE FROM mar_catalogue WHERE id = ' . (int) ($creeB['body']['data']['id'] ?? 0));
 unset($_SERVER['HTTP_X_SERVICE_TOKEN']);
 AuthContext::set(1, 'BRAND_ADMIN', 1);

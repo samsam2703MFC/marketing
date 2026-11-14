@@ -1019,6 +1019,9 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
             checkedCategories={new Set(cat.products.filter((row) => row.on).map((row) => byId.get(row.id)?.categoryId ?? null).filter((c): c is number => c !== null))}
             categoryName={(id) => (id !== null ? (categories.get(id)?.name ?? null) : null)}
             showAvailability={cat.showAvailability ?? true}
+            offerImages={Object.fromEntries(
+              docPages.flatMap((page) => (page.kind === 'products' ? page.products : [])).filter(api.isDocOffer).filter((o) => !!o.imageUrl).map((o) => [o.id, o.imageUrl as string]),
+            )}
             onOffers={(offers) => change({ offers })}
             onAvailability={(showAvailability) => change({ showAvailability })}
           />
@@ -1140,7 +1143,7 @@ function offerIsOn(offer: api.WebshopOffer, choices: api.CatalogueOfferRow[], ch
  * « Promotions et bundles » : les offres de TFBuddy qui valent pour ce catalogue (réseau ou ses boutiques), un
  * interrupteur chacune — cochées d'office quand elles touchent un produit coché. Une vignette occupe une case de la
  * page de sa catégorie ; une remise programmée barre le prix des produits qu'elle vise. Et l'interrupteur de la
- * disponibilité (période, délai de commande) imprimée sous le prix.
+ * disponibilité (période, délai de commande) imprimée en pied de page, une ligne par page de catégorie.
  */
 function OffersCard({
   offers,
@@ -1151,6 +1154,7 @@ function OffersCard({
   checkedCategories,
   categoryName,
   showAvailability,
+  offerImages,
   onOffers,
   onAvailability,
 }: {
@@ -1162,12 +1166,24 @@ function OffersCard({
   checkedCategories: Set<number>
   categoryName: (id: number | null) => string | null
   showAvailability: boolean
+  /** L'image de chaque vignette telle que le document l'imprime (id de l'offre → adresse). */
+  offerImages: Record<string, string>
   onOffers: (offers: api.CatalogueOfferRow[]) => void
   onAvailability: (on: boolean) => void
 }) {
-  function toggle(offer: api.WebshopOffer, on: boolean) {
+  // L'image d'une vignette (client, 14/11/2026 : « insert picture from médiathèque ») : choisie dans la médiathèque.
+  const [picking, setPicking] = useState<api.WebshopOffer | null>(null)
+  const [thumbs, setThumbs] = useState<Record<number, string>>({})
+  const choiceOf = (offer: api.WebshopOffer) => choices.find((c) => c.type === offer.type && c.id === offer.erpId)
+  function save(offer: api.WebshopOffer, patch: Partial<api.CatalogueOfferRow>) {
+    const current = choiceOf(offer)
     const next = choices.filter((c) => !(c.type === offer.type && c.id === offer.erpId))
-    onOffers([...next, { type: offer.type, id: offer.erpId, on }])
+    const on = patch.on ?? current?.on ?? offerIsOn(offer, choices, checkedIds, checkedCategories)
+    const mediaId = patch.mediaId !== undefined ? patch.mediaId : (current?.mediaId ?? null)
+    onOffers([...next, { type: offer.type, id: offer.erpId, on, mediaId }])
+  }
+  function toggle(offer: api.WebshopOffer, on: boolean) {
+    save(offer, { on })
   }
   return (
     <section className="card">
@@ -1190,6 +1206,25 @@ function OffersCard({
                     .join(' · ')}
                 </small>
                 <small className="catv-sub">→ {where}</small>
+                {offer.type !== 'scheduledDiscount' ? (
+                  <span className="catv-offer__img">
+                    {choiceOf(offer)?.mediaId ? (
+                      <>
+                        {(thumbs[choiceOf(offer)?.mediaId as number] ?? offerImages[offer.id]) ? <img src={thumbs[choiceOf(offer)?.mediaId as number] ?? offerImages[offer.id]} alt="" /> : <span className="catv-sub">image n° {choiceOf(offer)?.mediaId}</span>}
+                        <button type="button" className="linklike" onClick={() => setPicking(offer)}>
+                          Changer
+                        </button>
+                        <button type="button" className="linklike" onClick={() => save(offer, { mediaId: null })} title="Revenir aux photos des produits">
+                          Retirer
+                        </button>
+                      </>
+                    ) : (
+                      <button type="button" className="btn btn--sm" onClick={() => setPicking(offer)} title="Une image de la médiathèque à la place des photos des produits, dans la vignette">
+                        Image
+                      </button>
+                    )}
+                  </span>
+                ) : null}
               </span>
               <button
                 type="button"
@@ -1208,12 +1243,23 @@ function OffersCard({
       <div className="catv-offer catv-offer--avail">
         <span className="catv-offer__body">
           <span className="catv-offer__name">Afficher la disponibilité</span>
-          <small className="catv-sub">période et délai de commande lus dans TFBuddy, sous le prix</small>
+          <small className="catv-sub">période et délai de commande lus dans TFBuddy, en pied de chaque page</small>
         </span>
         <button type="button" className={`catv-sw${showAvailability ? ' is-on' : ''}`} role="switch" aria-checked={showAvailability} aria-label="Afficher la disponibilité" onClick={() => onAvailability(!showAvailability)}>
           <span className="catv-sw__track" aria-hidden="true" />
         </button>
       </div>
+      {picking ? (
+        <MediaPicker
+          onClose={() => setPicking(null)}
+          onPick={(asset) => {
+            const offer = picking
+            setPicking(null)
+            setThumbs((t) => ({ ...t, [Number(asset.id)]: asset.thumbnailUrl ?? asset.webUrl }))
+            save(offer, { mediaId: Number(asset.id) })
+          }}
+        />
+      ) : null}
     </section>
   )
 }

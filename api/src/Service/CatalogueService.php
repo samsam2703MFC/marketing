@@ -649,8 +649,8 @@ final class CatalogueService
         $out = [];
         foreach ($raw as $index => $item) {
             $field = 'offers[' . $index . ']';
-            if (!is_array($item) || array_diff(array_keys($item), ['type', 'id', 'on']) !== []) {
-                $errors[] = ['field' => $field, 'message' => 'Forme attendue : {type, id, on}.'];
+            if (!is_array($item) || array_diff(array_keys($item), ['type', 'id', 'on', 'mediaId']) !== []) {
+                $errors[] = ['field' => $field, 'message' => 'Forme attendue : {type, id, on, mediaId}.'];
                 continue;
             }
             if (!is_string($item['type'] ?? null) || !in_array($item['type'], self::OFFER_TYPES, true)) {
@@ -665,7 +665,14 @@ final class CatalogueService
                 $errors[] = ['field' => $field . '.on', 'message' => 'Booléen attendu.'];
                 continue;
             }
-            $out[$item['type'] . '-' . $item['id']] = ['type' => $item['type'], 'id' => $item['id'], 'on' => $item['on']];
+            // L'image de la vignette (client, 14/11/2026 : « insert picture from médiathèque ») : une image de la
+            // médiathèque, pas archivée ; pour une boutique, du réseau ou d'elle-même. null / absente : les photos des produits.
+            $media = $item['mediaId'] ?? null;
+            if ($media !== null && (!is_int($media) || $media <= 0 || !$this->catalogueImage($media, $row))) {
+                $errors[] = ['field' => $field . '.mediaId', 'message' => 'Image inconnue de la médiathèque (ou archivée, vidéo, d’une autre boutique).'];
+                continue;
+            }
+            $out[$item['type'] . '-' . $item['id']] = ['type' => $item['type'], 'id' => $item['id'], 'on' => $item['on']] + ($media !== null ? ['mediaId' => $media] : []);
         }
         if ($errors === [] && $out !== []) {
             $data = $this->webshopProducts($this->shopsOf($row));
@@ -777,7 +784,7 @@ final class CatalogueService
             'langs'        => array_values($settings['langs'] ?? ['fr']),
             'shopIds'      => array_values(array_map('intval', $settings['shopIds'] ?? [])),
             'products'     => array_values($settings['products'] ?? []),
-            'offers'       => array_map(static fn ($o): array => ['type' => $o['type'] ?? null, 'id' => $o['id'] ?? null, 'on' => $o['on'] ?? null], array_values($settings['offers'] ?? [])), // ordre fixe : MySQL 8 réordonne les clés JSON
+            'offers'       => array_map(static fn ($o): array => ['type' => $o['type'] ?? null, 'id' => $o['id'] ?? null, 'on' => $o['on'] ?? null, 'mediaId' => isset($o['mediaId']) ? (int) $o['mediaId'] : null], array_values($settings['offers'] ?? [])), // ordre fixe : MySQL 8 réordonne les clés JSON
             'showAvailability' => (bool) ($settings['showAvailability'] ?? true),
             'pages'        => self::innerPages($settings),
             'productCount' => count(array_filter($settings['products'] ?? [], static fn (array $p): bool => (bool) ($p['on'] ?? false))),
@@ -2026,8 +2033,12 @@ final class CatalogueService
             $warnings[] = ['code' => 'PROMOTIONS_UNREADABLE', 'message' => 'Promotions et bundles de TFBuddy illisibles (' . $offers['error'] . ') : le catalogue n’en montre aucune et aucun prix n’est barré.'];
         }
         $choices = [];
+        $offerMedia = [];
         foreach ($row['settings']['offers'] ?? [] as $choice) {
             $choices[$choice['type'] . '-' . (int) $choice['id']] = (bool) $choice['on'];
+            if (isset($choice['mediaId'])) {
+                $offerMedia[$choice['type'] . '-' . (int) $choice['id']] = (int) $choice['mediaId'];
+            }
         }
         $chosenIds = array_column($chosen, 'id');
         $chosenCategories = array_values(array_unique(array_filter(array_map(static fn (array $c): int => (int) ($c['categoryId'] ?? 0), $chosen))));
@@ -2055,6 +2066,17 @@ final class CatalogueService
             }
             // Une vignette : elle occupe une case de la page de sa catégorie, devant ses produits.
             $out = $this->offerOut($offer, $known, $version, $lang);
+            // L'image choisie dans la médiathèque remplace les photos des produits dans la vignette.
+            $out['imageUrl'] = null;
+            $key = self::offerKey($offer);
+            if (isset($offerMedia[$key])) {
+                $media = $this->media->find($offerMedia[$key]);
+                if ($media === null || $media['archived_at'] !== null || (string) $media['kind'] !== 'image') {
+                    $warnings[] = ['code' => 'OFFER_MEDIA_MISSING', 'message' => sprintf('« %s » : l’image choisie n’est plus dans la médiathèque — les photos des produits sont imprimées.', $out['name'])];
+                } else {
+                    $out['imageUrl'] = (string) $this->media->serialize($media)['webUrl'];
+                }
+            }
             $gammes = [];
             foreach ($offer['knownProductIds'] as $pid) {
                 $gammes = array_merge($gammes, $known[$pid]['gammes'] ?? []);
@@ -2114,6 +2136,7 @@ final class CatalogueService
                     'drawing'    => $visual['drawing'] ?? null,
                     'drawingUrl' => $visual['drawingUrl'] ?? null,
                     'products'   => $page['layout'] === 'presentation_liste' ? array_map($strip, $items) : [],
+                    'availabilityFooter' => $page['layout'] === 'presentation_liste' ? self::availabilityFooter($items, $lang) : null,
                 ];
                 continue;
             }
@@ -2187,6 +2210,9 @@ final class CatalogueService
                 'fillable'   => $fillable,
                 'filler'     => $filler,
                 'products'   => array_map($strip, $items),
+                // La disponibilité en pied de page (client, 14/11/2026 : « la disponibilité en dessous de page en
+                // footer, par catégorie ») : une ligne pour la page, plus sous le prix de chaque vignette.
+                'availabilityFooter' => self::availabilityFooter($items, $lang),
             ];
         }
         $left = $filled['left'];
@@ -2351,6 +2377,57 @@ final class CatalogueService
             'pages'     => $pages,
             'warnings'  => array_values(array_unique($warnings, SORT_REGULAR)),
         ];
+    }
+
+    /**
+     * Le pied de page « disponibilité » d'une page : une seule ligne courte qui résume la disponibilité de ses
+     * produits (les vignettes de promotions gardent leur période). Tous la même : « Disponible du 1/12 au 31/12 ·
+     * sur commande 48 h » ; sinon la plus courante, puis les autres produit par produit (« Bûchette
+     * individuelle : du 1/12 au 24/12 ») ; trop long : la plus courante + « certains produits : voir en
+     * boutique ». Un produit sans donnée n'est jamais décrit à la place d'un autre ; aucune donnée : null.
+     * La disponibilité est déjà éteinte (null) quand le catalogue ne l'affiche pas (`showAvailability`).
+     *
+     * @param list<array<string,mixed>> $items
+     */
+    public static function availabilityFooter(array $items, string $lang): ?string
+    {
+        $groups = [];
+        $known = false;
+        foreach ($items as $item) {
+            if (isset($item['offer']) || ($item['kind'] ?? 'product') !== 'product') {
+                continue;
+            }
+            $text = $item['availability'] ?? null;
+            $known = $known || $text !== null;
+            $groups[(string) $text][] = (string) ($item['name'] ?? '');
+        }
+        if (!$known) {
+            return null;
+        }
+        $nl = $lang === 'nl';
+        $available = $nl ? 'Beschikbaar' : 'Disponible';
+        $unknown = $nl ? 'zie in de winkel' : 'voir en boutique';
+        // La plus courante d'abord (à égalité, l'ordre de la page) ; « sans donnée » jamais en tête.
+        $order = array_keys($groups);
+        usort($order, static fn (string $a, string $b): int => [$a === '' ? 1 : 0, -count($groups[$a]), array_search($a, array_keys($groups), true)]
+            <=> [$b === '' ? 1 : 0, -count($groups[$b]), array_search($b, array_keys($groups), true)]);
+        $base = array_shift($order);
+        $line = $available . ' ' . $base;
+        if ($order === []) {
+            return $line;
+        }
+        $rest = [];
+        foreach ($order as $text) {
+            foreach ($groups[$text] as $name) {
+                $rest[] = $name . ($nl ? ': ' : ' : ') . ($text === '' ? $unknown : $text);
+            }
+        }
+        $full = $line . ' · ' . implode(' · ', $rest);
+        if (mb_strlen($full) <= 100) {
+            return $full;
+        }
+
+        return $line . ' · ' . ($nl ? 'sommige producten: ' . $unknown : 'certains produits : ' . $unknown);
     }
 
     /**

@@ -2957,6 +2957,8 @@ export interface CatalogueOfferRow {
   /** Identifiant de la promotion dans TFBuddy. */
   id: number
   on: boolean
+  /** Une image de la médiathèque à la place des photos des produits dans la vignette ; null / absent : les photos. */
+  mediaId?: number | null
 }
 
 /** Une promotion lue chez TFBuddy, telle que l'éditeur la montre (et telle que la vignette l'imprime). */
@@ -2987,7 +2989,8 @@ export interface WebshopOffer {
   moreProducts: number
 }
 
-export type CatalogueDocOffer = Omit<WebshopOffer, 'productIds' | 'categoryIds' | 'categoryId' | 'shopScope'>
+/** Au document, `imageUrl` : l'image choisie dans la médiathèque (null : les photos des produits). */
+export type CatalogueDocOffer = Omit<WebshopOffer, 'productIds' | 'categoryIds' | 'categoryId' | 'shopScope'> & { imageUrl?: string | null }
 
 export interface WebshopProduct {
   id: number
@@ -3080,6 +3083,8 @@ export type CatalogueDocPage =
       fillable?: boolean
       filler?: CatalogueDocFiller | null
       products: CatalogueDocItem[]
+      /** La disponibilité des produits de la page, en une ligne de pied de page ; null : rien de connu ou éteinte. */
+      availabilityFooter?: string | null
     }
   | {
       kind: 'presentation'
@@ -3094,6 +3099,7 @@ export type CatalogueDocPage =
       drawing: string | null
       drawingUrl: string | null
       products: CatalogueDocProduct[]
+      availabilityFooter?: string | null
     }
   | { kind: 'back'; locked: true; title: string; text: string; qrUrl: string | null; host: string | null; shop: CatalogueShopInfo | null }
 
