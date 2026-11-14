@@ -159,7 +159,8 @@ function NewCatalogue({ open, onOpen, onCreated }: { open: boolean; onOpen: () =
   const webshop = useAsync<WebshopProducts | null>(() => (open ? api.getWebshopProducts([]) : Promise.resolve(null)), [open])
   const campaigns = useAsync(() => (open ? api.listCampaigns() : Promise.resolve([])), [open])
   const [kind, setKind] = useState<CatalogueSourceKind>('gamme')
-  const [gamme, setGamme] = useState<number | null>(null)
+  // Une ou plusieurs gammes : leurs produits se cumulent.
+  const [choisies, setChoisies] = useState<number[]>([])
   const [campaign, setCampaign] = useState<number | null>(null)
   const [title, setTitle] = useState('')
   const [busy, setBusy] = useState(false)
@@ -170,11 +171,14 @@ function NewCatalogue({ open, onOpen, onCreated }: { open: boolean; onOpen: () =
   const sorted = [...(campaigns.data ?? [])].sort((a, b) => (b.starts_on ?? '').localeCompare(a.starts_on ?? ''))
 
   useEffect(() => {
-    if (gamme === null && gammes.length) setGamme(gammes[0].id)
-  }, [gamme, gammes])
+    if (!choisies.length && gammes.length) setChoisies([gammes[0].id])
+  }, [choisies.length, gammes])
+  const basculer = (id: number) => setChoisies((l) => (l.includes(id) ? l.filter((x) => x !== id) : l.length >= 8 ? l : [...l, id]))
+  const nomsChoisis = choisies.map((id) => gammes.find((g) => g.id === id)?.name ?? '').filter(Boolean)
+  const produitsChoisis = (webshop.data?.products ?? []).filter((product) => product.gammes.some((id) => choisies.includes(id))).length
 
   const suggestion =
-    kind === 'gamme' ? `${gammes.find((g) => g.id === gamme)?.name ?? 'Gamme'} ${new Date().getFullYear()} — catalogue du réseau`
+    kind === 'gamme' ? `${nomsChoisis.join(' + ') || 'Gamme'} ${new Date().getFullYear()} — catalogue du réseau`
     : kind === 'campagne' ? `${sorted.find((c) => c.id === campaign)?.name ?? 'Campagne'} — catalogue`
     : 'Catalogue — produits choisis'
 
@@ -184,7 +188,7 @@ function NewCatalogue({ open, onOpen, onCreated }: { open: boolean; onOpen: () =
     try {
       const created = await api.createCatalogue({
         title: title.trim() || suggestion,
-        source: kind === 'choix' ? { kind } : { kind, ref: (kind === 'gamme' ? gamme : campaign) ?? 0 },
+        source: kind === 'choix' ? { kind } : kind === 'gamme' ? { kind, ref: choisies.length === 1 ? choisies[0] : choisies } : { kind, ref: campaign ?? 0 },
       })
       onCreated(created.id)
     } catch (cause) {
@@ -197,10 +201,10 @@ function NewCatalogue({ open, onOpen, onCreated }: { open: boolean; onOpen: () =
   const options: Array<{ kind: CatalogueSourceKind; head: string; title: string; text: string; tag: string | null; drawing: string }> = [
     {
       kind: 'gamme',
-      head: kind === 'gamme' && gamme !== null ? (gammes.find((g) => g.id === gamme)?.name ?? 'Gamme') : 'Gamme',
-      title: 'Une gamme du webshop',
+      head: kind === 'gamme' && choisies.length ? (choisies.length > 1 ? `${choisies.length} gammes` : nomsChoisis[0] ?? 'Gamme') : 'Gamme',
+      title: 'Une ou plusieurs gammes du webshop',
       text: `Gammes lues au webshop${gammes.length ? ` : ${gammes.map((g) => g.name).join(' · ')}` : ''}. Les produits et leurs prix web arrivent d’office.`,
-      tag: gamme !== null && webshop.data ? `${countIn(gamme)} produits` : null,
+      tag: choisies.length && webshop.data ? `${produitsChoisis} produits` : null,
       drawing: 'img/cake-slice.png',
     },
     {
@@ -254,23 +258,31 @@ function NewCatalogue({ open, onOpen, onCreated }: { open: boolean; onOpen: () =
       {open ? (
         <div className="catv-create">
           {kind === 'gamme' ? (
-            <label className="catv-field">
-              <span>Gamme</span>
+            <div className="catv-field catv-field--grow">
+              <span>Gammes · une ou plusieurs ({choisies.length} choisie{choisies.length > 1 ? 's' : ''}, {produitsChoisis} produits)</span>
               {webshop.loading ? <span className="muted">Lecture du webshop…</span> : null}
               {webshop.error ? <span className="error">{webshop.error}</span> : null}
               {webshop.data && !gammes.length ? (
                 <span className="muted">Le webshop ne donne aucune gamme active : partez d’une campagne ou de produits choisis.</span>
               ) : null}
               {gammes.length ? (
-                <select value={gamme ?? ''} onChange={(event) => setGamme(Number(event.target.value))}>
+                <span className="catv-gammes">
                   {gammes.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.name} · {countIn(g.id)} produits{g.from && g.to ? ` · du ${g.from} au ${g.to}` : ''}
-                    </option>
+                    <button
+                      key={g.id}
+                      type="button"
+                      className={`catv-gamme${choisies.includes(g.id) ? ' is-on' : ''}`}
+                      aria-pressed={choisies.includes(g.id)}
+                      onClick={() => basculer(g.id)}
+                    >
+                      <span className="catv-gamme__box" aria-hidden="true">{choisies.includes(g.id) ? '✓' : ''}</span>
+                      <span>{g.name}</span>
+                      <span className="catv-gamme__n">{countIn(g.id)} produits{g.from && g.to ? ` · ${g.from}–${g.to}` : ''}</span>
+                    </button>
                   ))}
-                </select>
+                </span>
               ) : null}
-            </label>
+            </div>
           ) : null}
           {kind === 'campagne' ? (
             <label className="catv-field">
@@ -293,7 +305,7 @@ function NewCatalogue({ open, onOpen, onCreated }: { open: boolean; onOpen: () =
           <button
             type="button"
             className="btn btn--primary"
-            disabled={busy || (kind === 'gamme' && gamme === null) || (kind === 'campagne' && campaign === null)}
+            disabled={busy || (kind === 'gamme' && !choisies.length) || (kind === 'campagne' && campaign === null)}
             onClick={() => void create()}
           >
             {busy ? 'Création…' : 'Créer le catalogue'}

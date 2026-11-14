@@ -234,7 +234,7 @@ final class CatalogueService
                 'erpShopId' => $row['shop_erp_id'] !== null ? (int) $row['shop_erp_id'] : null,
                 'name'      => (string) ($row['shop_name'] ?? ''),
             ] : null,
-            'source'       => ['kind' => (string) $row['source_kind'], 'ref' => $row['source_ref'], 'label' => $row['source_label']],
+            'source'       => ['kind' => (string) $row['source_kind'], 'ref' => $row['source_ref'] === null ? null : explode(',', (string) $row['source_ref'])[0], 'refs' => $row['source_ref'] === null ? [] : explode(',', (string) $row['source_ref']), 'label' => $row['source_label']],
             'format'       => (string) $row['format'],
             'status'       => (string) $row['status'],
             'printQty'     => $row['print_qty'] !== null ? (int) $row['print_qty'] : null,
@@ -285,8 +285,18 @@ final class CatalogueService
             $errors = array_merge($errors, self::unknown($source, ['kind', 'ref'], 'source.'));
         }
         $ref = $source['ref'] ?? null;
-        if (in_array($kind, ['gamme', 'campagne'], true) && (!is_int($ref) && !(is_string($ref) && ctype_digit($ref)))) {
-            $errors[] = ['field' => 'source.ref', 'message' => 'Identifiant de la ' . $kind . ' attendu.'];
+        $estId = static fn (mixed $v): bool => is_int($v) || (is_string($v) && ctype_digit($v));
+        // Une gamme ou plusieurs : `ref` est un identifiant ou une liste d'identifiants (au plus 8).
+        $gammeIds = [];
+        if ($kind === 'gamme') {
+            $liste = is_array($ref) ? $ref : [$ref];
+            if ($liste === [] || count($liste) > 8 || array_filter($liste, static fn ($v): bool => !$estId($v)) !== []) {
+                $errors[] = ['field' => 'source.ref', 'message' => 'Une gamme, ou une liste de gammes (8 au plus), attendue.'];
+            } else {
+                $gammeIds = array_values(array_unique(array_map('intval', $liste)));
+            }
+        } elseif ($kind === 'campagne' && !$estId($ref)) {
+            $errors[] = ['field' => 'source.ref', 'message' => 'Identifiant de la campagne attendu.'];
         }
         $format = self::format($input['format'] ?? 'A5', $errors);
         $langs = self::langs($input['langs'] ?? ['fr'], $errors);
@@ -297,7 +307,7 @@ final class CatalogueService
 
         $label = null;
         $products = [];
-        $refId = in_array($kind, ['gamme', 'campagne'], true) ? (int) $ref : null;
+        $refId = $kind === 'campagne' ? (int) $ref : ($kind === 'gamme' ? $gammeIds[0] : null);
         if ($kind === 'campagne') {
             $campaign = $this->catalogues->campaign((int) $refId);
             if ($campaign === null) {
@@ -315,7 +325,7 @@ final class CatalogueService
             'owner'        => $owner,
             'shop_id'      => $shop['id'] ?? null,
             'source_kind'  => $kind,
-            'source_ref'   => $refId !== null ? (string) $refId : null,
+            'source_ref'   => $kind === 'gamme' ? implode(',', $gammeIds) : ($refId !== null ? (string) $refId : null),
             'source_label' => $label,
             'format'       => $format,
             'status'       => 'brouillon',
@@ -326,18 +336,22 @@ final class CatalogueService
         $known = array_column($data['products'], null, 'id');
 
         if ($kind === 'gamme') {
-            $gamme = null;
-            foreach ($data['gammes'] as $candidate) {
-                if ((int) $candidate['id'] === $refId) {
-                    $gamme = $candidate;
+            $noms = [];
+            foreach ($gammeIds as $gid) {
+                $nom = null;
+                foreach ($data['gammes'] as $candidate) {
+                    if ((int) $candidate['id'] === $gid) {
+                        $nom = $candidate['name'];
+                    }
                 }
+                if ($nom === null) {
+                    throw new CatalogueError('VALIDATION_FAILED', 'Gamme inconnue du webshop.', 422, [['field' => 'source.ref', 'message' => sprintf('Gamme %d inconnue ou inactive.', $gid)]]);
+                }
+                $noms[] = $nom;
             }
-            if ($gamme === null) {
-                throw new CatalogueError('VALIDATION_FAILED', 'Gamme inconnue du webshop.', 422, [['field' => 'source.ref', 'message' => 'Gamme inconnue ou inactive.']]);
-            }
-            $row['source_label'] = $gamme['name'];
+            $row['source_label'] = mb_substr(implode(' + ', $noms), 0, 160);
             foreach ($data['products'] as $product) {
-                if (in_array($refId, $product['gammes'], true)) {
+                if (array_intersect($gammeIds, $product['gammes']) !== []) {
                     $products[] = (int) $product['id'];
                 }
             }
@@ -900,7 +914,15 @@ final class CatalogueService
 
         // Couverture et dernière page : la charte, verrouillées.
         $charter = $this->charter();
-        $gammeId = $row['source_kind'] === 'gamme' ? (int) $row['source_ref'] : null;
+        // Plusieurs gammes : la couverture de la première qui en a une dans la charte, sinon la générique.
+        $gammeIds = $row['source_kind'] === 'gamme' ? array_map('intval', explode(',', (string) $row['source_ref'])) : [];
+        $gammeId = $gammeIds[0] ?? null;
+        foreach ($gammeIds as $gid) {
+            if (in_array($gid, array_column($charter['covers'] ?? [], 'gamme'), true)) {
+                $gammeId = $gid;
+                break;
+            }
+        }
         $generic = $charter['covers'][0];
         $cover = $generic;
         foreach ($charter['covers'] as $candidate) {
