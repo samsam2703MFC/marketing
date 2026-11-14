@@ -190,7 +190,7 @@ entière, pour attraper une colonne ajoutée plus tard.
 | 15 | Validation à la main dans les dépôts (exceptions métier), pas par schéma déclaratif strict. Un champ inconnu est ignoré, pas rejeté. | module entier |
 | 12 | Ni `Idempotency-Key` ni `ETag`/`If-Match`. La reprise ERP est idempotente **par construction** (relecture de l’existant). | écritures |
 | 13 | Les visuels sont stockés et servis par l'application, pas sur R2 par URL présignée. | `…/uploads` |
-| 16 | Pas d'OpenAPI. Ce registre est le seul contrat écrit. | module entier |
+| 16 | Pas d'OpenAPI, sauf pour les catalogues (`docs/openapi/catalogues.yaml`, §14, novembre 2026). Ailleurs, ce registre est le seul contrat écrit. | module entier sauf catalogues |
 | 17 | Pas de `requestId` ni de log structuré JSON. Les erreurs SQL partent dans `error_log`. | module entier |
 | 11.3 | Pas de rate limiting côté module. | module entier |
 
@@ -825,3 +825,91 @@ codes par lots (100 + 100 + 50), activation et repli `UNIQUE`, suspension
 idempotente, refus de l'ERP sans trace, 403 franchisé, isolation d'une boutique,
 ERP non configuré (503). Le premier vrai bon se crée en production, par un geste
 de la personne qui pilote la campagne.
+
+## 14. Les catalogues produits (novembre 2026)
+
+Des catalogues imprimés tirés du **webshop** (prix web, gammes : Noël, Saint-Nicolas…) :
+une couverture et une dernière page fixées par la **Charte des catalogues** de la marque
+(verrouillées), des pages intérieures remplies par catégorie du webshop dans l'une de trois
+mises en page (`vedette` 1 + 4, `grille` 2 × 3, `liste` 12 avec prix), A5 ou A4, FR / NL, une
+version générale et une version par boutique (prix de SA boutique, son QR, son adresse).
+Contrat écrit **avant le code** : `docs/openapi/catalogues.yaml` (premier OpenAPI du module).
+
+**Sources (lecture seule).** Rien du webshop n'est recopié. Les produits, photos, catégories,
+gammes et prix sont relus dans TFBuddy par le client unique de l'ERP (`ErpClient`,
+`WebshopCatalogueRepository`), avec les mêmes lectures que « Créer un post » du module Social :
+`GET /api/v1/shops/{id}/products/available?webshop_active=1&alias_type=webshop&include=webshop,portions,availability_periods,webshop_availability`
+(FR, puis NL pour les noms ; `webshop.price_gross` = prix du webshop de la boutique,
+`portion_price` = prix au comptoir, `availability_periods` = gammes ; cartons B2B écartés),
+`GET /api/v1/product-availability-periods` (gammes actives) et `GET /api/v1/public/shops`
+(adresse, horaires, téléphone ; `GET /api/v1/shops` en complément). Gardé 30 min (produits) et
+15 min (gammes, boutiques) dans `mar_catalogue_cache` — un cache, pas une copie ; TFBuddy muet :
+la dernière lecture, et l'erreur est dite (`WEBSHOP_UNREADABLE`). Campagne : les produits ERP de
+son offre (`mar_offer_item.sku_ref` = `erp-{id}`) et ses boutiques. Adresse du webshop (QR) :
+réglage `webshop_url` du module Social, à défaut `MAR_WEBSHOP_URL` ; sinon pas de QR, dit.
+
+**Stockage.** Migration 047 : `mar_catalogue` (titre, propriétaire `marque | boutique`,
+`shop_id`, source `gamme | campagne | choix` et sa référence, format, état
+`brouillon | pret | imprime`, exemplaires, réglages JSON validés : langues, boutiques des
+versions, produits `{id, on}`, pages `{layout, category}`), `mar_catalogue_cache`. La charte vit
+dans `mar_variable` (`catalogues.charte` : logo de la médiathèque, couleurs, couvertures par gamme
+avec une générique, dernière page FR / NL).
+
+**Routes de la marque** (session, rôle réseau ; un compte de boutique → `403 PERM_ROLE_REQUIRED`) :
+
+| Méthode | Chemin | Rôle |
+|---|---|---|
+| GET | `/api/v1/marketing/catalogues` | liste paginée (`page`, `perPage` ≤ 100, `sort` ∈ `updatedAt, createdAt, title`, `filter[owner|status|shop][eq]`) |
+| POST | `/api/v1/marketing/catalogues` | création `{title, source{kind, ref}, format?, langs?, shopIds?, products?, pages?}` — `201` |
+| GET / PUT / DELETE | `/api/v1/marketing/catalogues/{id}` | lecture, remplacement des champs présents (`pages: []` = répartition automatique), suppression `204` puis `404` |
+| GET | `/api/v1/marketing/catalogues/{id}/document?shopId=&lang=` | la version mise en pages (couverture, pages, dernière page, alertes) |
+| GET | `/api/v1/marketing/catalogue-products?shopIds=` | le webshop des boutiques : par produit, le prix de chacune, le prix le plus répandu et les boutiques qui en ont un autre |
+| GET / PUT | `/api/v1/marketing/catalogue-charter` | la Charte des catalogues |
+
+**Routes du dashboard magasin** (cockpit, portail Pilotage réseau — à brancher dans un second
+temps, dépôt consultant_BO) : `/api/v1/integration/marketing/shops/{shopId}/…`, `shopId` =
+identifiant de caisse ERP de la boutique. Jeton de service entre portails : `X-Service-Token` =
+`erp_jeton_service` d'`erp_cles` (portail `commun`), comparé en temps constant — absent
+`401 AUTH_TOKEN_MISSING`, faux `401 AUTH_TOKEN_INVALID` ; boutique inconnue du Marketing `404`.
+
+| Méthode | Chemin (après `…/shops/{shopId}`) | Rôle |
+|---|---|---|
+| GET | `/catalogue-products` | ce que la boutique vend au webshop, à SES prix (`priceCents`, `shopPriceCents`), catégories, gammes, mises en page permises |
+| GET | `/catalogues` | ses catalogues seulement (paginé, `filter[status][eq]`) |
+| POST | `/catalogues` | création `{title, source{kind: gamme | choix, ref?}, format?, langs?, products?, pages?}` |
+| GET / PUT / DELETE | `/catalogues/{id}` | le sien seulement : celui d'une autre boutique ou de la marque → `404` |
+| GET | `/catalogues/{id}/document?lang=` | sa version (ses produits, ses prix, son QR, ses coordonnées) |
+| POST | `/catalogues/{id}/print-links` `{lang}` | lien signé 48 h vers la page d'impression du Marketing (`{MAR_PUBLIC_BASE_URL}/catalogue/?t=…`) — `201 {url, token, expiresAt}` ; `503` sans `MAR_SESSION_SECRET` |
+
+Contraintes **appliquées par le serveur** pour un catalogue de boutique : produits vendus par la
+boutique seulement (`422 CATALOGUE_PRODUCT_NOT_SOLD`, produit par produit) ; prix de la boutique
+toujours (aucun champ de prix accepté) ; couverture et dernière page de la charte (aucun champ de
+couverture accepté) ; trois mises en page ; source `gamme` ou `choix` ; aucune autre boutique.
+Le filtrage est dans `CatalogueRepository` (`owner = 'boutique' AND shop_id = :boutique`).
+
+**Impression** : `GET /api/v1/public/marketing/catalogue-prints/{token}` (lien signé HMAC avec
+`MAR_SESSION_SECRET`, sans point, 48 h ; falsifié, expiré ou mal formé → `404`). La page
+`catalogue/index.html` compose les pages et ouvre la boîte d'impression : « Enregistrer au format
+PDF ». **Un seul moteur d'impression** pour les brochures et les catalogues (`src/lib/print.ts`,
+polices `fontFaces` des brochures) : le PDF est celui du navigateur, comme pour les brochures.
+
+**Écarts résiduels, signalés plutôt que contournés :**
+- La **gamme** est une période de disponibilité de TFBuddy (`product-availability-periods`) :
+  sans gamme active au webshop, on part d'une campagne ou de produits choisis.
+- Le PDF n'est pas produit par le serveur (aucun moteur PDF côté module, comme pour les
+  brochures) : le dashboard ouvre la page d'impression par son lien signé.
+- `POST` sans clé d'idempotence ; pas d'`ETag` (l'écran enregistre chaque geste dans l'ordre).
+- Préfixe des routes de la marque sans segment `{app}` (§3.2) ; le `401` sans identité de ces
+  routes garde la forme du routeur.
+
+Tests (`api/tests/smoke.php`, « Catalogues produits » ; TFBuddy simulé aux formes que Social lit
+déjà en production) : 200 et enveloppe, 401 (sans identité ; sans jeton de service ; faux jeton),
+403 (compte de boutique sur les routes de la marque), 404 (catalogue, boutique, lien), 422
+(champs inconnus, source, gamme ou campagne inconnues, format, boutique inconnue, mise en page,
+état, quantité, charte), isolation d'une boutique (lecture, modification, suppression, document,
+lien, liste), contraintes de la boutique, pagination et `perPage` ramené à 100, suppression
+idempotente (`204` puis `404`), cache des lectures du webshop.
+
+Couches : contrôleurs `CatalogueController` (marque) et `CatalogueIntegrationController`
+(boutique, impression) → service `CatalogueService` (règles, contraintes, composition, charte,
+liens signés) → dépôts `CatalogueRepository` et `WebshopCatalogueRepository` (seuls à faire du SQL).

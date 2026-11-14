@@ -900,6 +900,9 @@ final class CatalogueService
         $coverTitle = $lang === 'nl' ? ($cover['titleNl'] ?: $cover['titleFr']) : $cover['titleFr'];
         if ($cover === $generic && $gammeId !== null && $row['source_label']) {
             $coverTitle = (string) $row['source_label'];
+            if ($lang === 'nl') {
+                $warnings[] = ['code' => 'NL_TEXT_MISSING', 'message' => sprintf('Pas de couverture « %s » dans la Charte des catalogues : le nom français de la gamme est imprimé.', $coverTitle)];
+            }
         }
         if ($lang === 'nl' && $cover['titleNl'] === '' && !($cover === $generic && $gammeId !== null)) {
             $warnings[] = ['code' => 'NL_TEXT_MISSING', 'message' => 'Titre néerlandais de la couverture à écrire dans la Charte des catalogues : le français est imprimé.'];
@@ -998,7 +1001,9 @@ final class CatalogueService
         $expires = ($now ?? time()) + self::PRINT_TTL;
         $payload = $catalogueId . '.' . $lang . '.' . $expires;
         $signature = hash_hmac('sha256', 'catalogue:' . $payload, $secret, true);
-        $token = self::b64($payload) . '.' . self::b64($signature);
+        // Sans point : un « . » dans le chemin ferait prendre le lien pour un fichier par certains serveurs.
+        // La signature (32 octets) fait toujours 43 caractères : elle se détache par la fin.
+        $token = self::b64($payload) . self::b64($signature);
 
         return ['token' => $token, 'expiresAt' => gmdate('Y-m-d\TH:i:s\Z', $expires)];
     }
@@ -1007,12 +1012,11 @@ final class CatalogueService
     public function readPrintToken(string $token, ?int $now = null): ?array
     {
         $secret = (string) (Keys::get('MAR_SESSION_SECRET') ?? '');
-        $parts = explode('.', $token);
-        if (strlen($secret) < 32 || count($parts) !== 2) {
+        if (strlen($secret) < 32 || strlen($token) <= 43) {
             return null;
         }
-        $payload = self::unb64($parts[0]);
-        $signature = self::unb64($parts[1]);
+        $payload = self::unb64(substr($token, 0, -43));
+        $signature = self::unb64(substr($token, -43));
         if ($payload === null || $signature === null || !hash_equals(hash_hmac('sha256', 'catalogue:' . $payload, $secret, true), $signature)) {
             return null;
         }

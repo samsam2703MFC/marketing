@@ -48,7 +48,8 @@ pour vivre avec l'ERP), le site public `landing` (`lp_`, **à décider**), et le
   d'`erp_cles`, en-tête `X-Service-Token`). En place (7 nov. 2026) : Social →
   `GET …/social/integration/formulaires` (ses formulaires de prospects, pour l'API franchise) ;
   Recrutement → `GET /crm/api/v1/integration/recrutement/scouting-reseau` (positions et données
-  d'étude des magasins, pour le Cockpit). Exemples :
+  d'étude des magasins, pour le Cockpit) ; Marketing → `/marketing/api/v1/integration/marketing/shops/{shopId}/catalogues`
+  (les catalogues d'une boutique, pour le dashboard magasin du cockpit — 14 nov. 2026). Exemples :
   Pilotage lit les campagnes de Marketing ; Recrutement pousse un franchisé signé vers Pilotage ;
   Recrutement lit les chiffres des magasins chez Pilotage (déjà le cas, `GET /stores`) ; Social lit
   les avis et la réputation des boutiques chez Pilotage au lieu de `ceo_shop_review`.

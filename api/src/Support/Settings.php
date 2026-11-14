@@ -22,6 +22,7 @@ final class Settings
         'MAR_ERP_PRICE_LIST_PATH' => ['group' => 'ERP', 'label' => 'Chemin du tarif d\'une boutique', 'help' => '/api/v1/shops/{shop}/products/price-list/document par défaut.'],
         'MAR_ERP_BRANDS_TABLE'    => ['group' => 'ERP', 'label' => 'Table des marques de l\'ERP', 'help' => 'À renseigner seulement si la reprise ne la trouve pas seule.'],
         'MAR_WEBSHOP_API_BASE'    => ['group' => 'Webshop', 'label' => 'Adresse de l\'API du webshop', 'help' => 'Rayons, et relecture des anciens bons du webshop (les nouveaux se créent dans TFBuddy).'],
+        'MAR_WEBSHOP_URL'         => ['group' => 'Webshop', 'label' => 'Adresse publique du webshop', 'help' => 'QR code des catalogues, quand le module Social n\'a pas la sienne (réglage webshop_url de Social, qui prime).'],
         'MAR_WEBSHOP_API_TIMEOUT' => ['group' => 'Webshop', 'label' => 'Délai des appels au webshop (s)', 'help' => ''],
         'MAR_PUBLIC_BASE_URL'     => ['group' => 'Module', 'label' => 'Adresse publique du module', 'help' => 'https://<hôte>/marketing — pour les adresses absolues de la médiathèque. Vide : l\'hôte de la requête.'],
         'MAR_UPLOAD_DIR'          => ['group' => 'Module', 'label' => 'Dossier des fichiers envoyés', 'help' => 'Chemin sur le serveur. Vide : uploads/ à la racine du module.'],
