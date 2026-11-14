@@ -306,6 +306,24 @@ final class Keys
         return self::$rows[$module] = $rows;
     }
 
+    /**
+     * Une clé `commun` d'erp_cles (en clair, tenue par le portail qui la saisit), lue par son nom :
+     * `erp_jeton_service`, le jeton de service entre portails (en-tête `X-Service-Token`).
+     * Jamais gardée en mémoire : relue à chaque appel.
+     */
+    public static function common(string $name): ?string
+    {
+        try {
+            $statement = Database::connection()->prepare("SELECT valeur FROM erp_cles WHERE cle = :cle AND portail = 'commun'");
+            $statement->execute(['cle' => $name]);
+            $value = $statement->fetchColumn();
+        } catch (Throwable) {
+            return null;
+        }
+
+        return is_string($value) && $value !== '' ? $value : null;
+    }
+
     /** Le nom de la ligne dans erp_cles : `mar.{module}.{nom}`. */
     public static function cle(string $module, string $name): string
     {
