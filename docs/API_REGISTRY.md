@@ -828,9 +828,11 @@ de la personne qui pilote la campagne.
 
 ## 14. Les catalogues produits (novembre 2026)
 
-Des catalogues imprimés tirés du **webshop** (prix web, gammes : Noël, Saint-Nicolas…) :
-une couverture et une dernière page fixées par la **Charte des catalogues** de la marque
-(verrouillées), des pages intérieures remplies par catégorie du webshop dans l'une de trois
+Des catalogues imprimés tirés du **webshop** (prix web, gammes : Noël, Saint-Nicolas…), de
+**8, 12 ou 16 pages** (`pageCount`, choisi à la création, modifiable) : quatre pages fixées par
+la **Charte des catalogues** de la marque et verrouillées — couverture (page 1), page 2,
+avant-dernière et dernière (« commandez en ligne ») —, et 4, 8 ou 12 pages intérieures (nombre
+fixé par le format) remplies par catégorie du webshop dans l'une de trois
 mises en page (`vedette` 1 + 4, `grille` 2 × 3, `liste` 12 avec prix), A5 ou A4, FR / NL, une
 version générale et une version par boutique (prix de SA boutique, son QR, son adresse).
 Contrat écrit **avant le code** : `docs/openapi/catalogues.yaml` (premier OpenAPI du module).
@@ -851,16 +853,28 @@ réglage `webshop_url` du module Social, à défaut `MAR_WEBSHOP_URL` ; sinon pa
 **Stockage.** Migration 047 : `mar_catalogue` (titre, propriétaire `marque | boutique`,
 `shop_id`, source `gamme | campagne | choix` et sa référence, format, état
 `brouillon | pret | imprime`, exemplaires, réglages JSON validés : langues, boutiques des
-versions, produits `{id, on}`, pages `{layout, category}`), `mar_catalogue_cache`. La charte vit
-dans `mar_variable` (`catalogues.charte` : logo de la médiathèque, couleurs, couvertures par gamme
-avec une générique, dernière page FR / NL).
+versions, nombre de pages `pageCount`, produits `{id, on}`, pages intérieures `{layout, category}`),
+`mar_catalogue_cache`. Migration 049 : `pageCount` posé une fois sur les catalogues d'avant (le plus
+petit de 8 / 12 / 16 qui contient leurs pages intérieures + 4 ; aucune page retirée, une liste plus
+courte est complétée de pages vides à la lecture). La charte vit dans `mar_variable`
+(`catalogues.charte` : logo de la médiathèque, couleurs, couvertures par gamme avec une générique,
+page 2 et avant-dernière page — titre, texte, image, FR / NL —, dernière page FR / NL).
+
+**Nombre de pages (novembre 2026).** `pages` = exactement `pageCount − 4` pages intérieures : plus
+courte, complétée de pages vides (« Notre sélection », qui prend les produits restés sans place) ;
+plus longue, `422 VALIDATION_FAILED` (`pages`) ; `[]` = répartition automatique sur ce nombre exact
+(grilles, puis listes si ça ne tient pas ; `PAGES_EMPTY` / `PRODUCTS_OVERFLOW` au document). Changer
+`pageCount` sans `pages` : des pages vides s'ajoutent à la fin ; en réduisant, seules des pages de la
+fin SANS produit partent — sinon `422 CATALOGUE_PAGES_NOT_EMPTY` (une ligne par page) et rien n'est
+écrit. Le document rend `pageCount` pages : `cover`, `brand` (`slot: page2`), les pages intérieures,
+`brand` (`slot: penultimate`), `back` — les quatre de la marque `locked: true`.
 
 **Routes de la marque** (session, rôle réseau ; un compte de boutique → `403 PERM_ROLE_REQUIRED`) :
 
 | Méthode | Chemin | Rôle |
 |---|---|---|
 | GET | `/api/v1/marketing/catalogues` | liste paginée (`page`, `perPage` ≤ 100, `sort` ∈ `updatedAt, createdAt, title`, `filter[owner|status|shop][eq]`) |
-| POST | `/api/v1/marketing/catalogues` | création `{title, source{kind, ref}, format?, langs?, shopIds?, products?, pages?}` — `201` |
+| POST | `/api/v1/marketing/catalogues` | création `{title, source{kind, ref}, format?, pageCount? (8 · 12 · 16), langs?, shopIds?, products?, pages?}` — `201` |
 | GET / PUT / DELETE | `/api/v1/marketing/catalogues/{id}` | lecture, remplacement des champs présents (`pages: []` = répartition automatique), suppression `204` puis `404` |
 | GET | `/api/v1/marketing/catalogues/{id}/document?shopId=&lang=` | la version mise en pages (couverture, pages, dernière page, alertes) |
 | GET | `/api/v1/marketing/catalogue-products?shopIds=` | le webshop des boutiques : par produit, le prix de chacune, le prix le plus répandu et les boutiques qui en ont un autre |
@@ -874,17 +888,18 @@ identifiant de caisse ERP de la boutique. Jeton de service entre portails : `X-S
 
 | Méthode | Chemin (après `…/shops/{shopId}`) | Rôle |
 |---|---|---|
-| GET | `/catalogue-products` | ce que la boutique vend au webshop, à SES prix (`priceCents`, `shopPriceCents`), catégories, gammes, mises en page permises |
+| GET | `/catalogue-products` | ce que la boutique vend au webshop, à SES prix (`priceCents`, `shopPriceCents`), catégories, gammes, mises en page et nombres de pages permis (`pageCounts`) |
 | GET | `/catalogues` | ses catalogues seulement (paginé, `filter[status][eq]`) |
-| POST | `/catalogues` | création `{title, source{kind: gamme | choix, ref?}, format?, langs?, products?, pages?}` |
+| POST | `/catalogues` | création `{title, source{kind: gamme | choix, ref?}, format?, pageCount?, langs?, products?, pages?}` |
 | GET / PUT / DELETE | `/catalogues/{id}` | le sien seulement : celui d'une autre boutique ou de la marque → `404` |
 | GET | `/catalogues/{id}/document?lang=` | sa version (ses produits, ses prix, son QR, ses coordonnées) |
 | POST | `/catalogues/{id}/print-links` `{lang}` | lien signé 48 h vers la page d'impression du Marketing (`{MAR_PUBLIC_BASE_URL}/catalogue/?t=…`) — `201 {url, token, expiresAt}` ; `503` sans `MAR_SESSION_SECRET` |
 
 Contraintes **appliquées par le serveur** pour un catalogue de boutique : produits vendus par la
 boutique seulement (`422 CATALOGUE_PRODUCT_NOT_SOLD`, produit par produit) ; prix de la boutique
-toujours (aucun champ de prix accepté) ; couverture et dernière page de la charte (aucun champ de
-couverture accepté) ; trois mises en page ; source `gamme` ou `choix` ; aucune autre boutique.
+toujours (aucun champ de prix accepté) ; 8, 12 ou 16 pages, dont les quatre de la charte
+(couverture, page 2, avant-dernière, dernière : aucun champ pour elles, une page intérieure n'a que
+`{layout, category}`) ; trois mises en page ; source `gamme` ou `choix` ; aucune autre boutique.
 Le filtrage est dans `CatalogueRepository` (`owner = 'boutique' AND shop_id = :boutique`).
 
 **Impression** : `GET /api/v1/public/marketing/catalogue-prints/{token}` (lien signé HMAC avec

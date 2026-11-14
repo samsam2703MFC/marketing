@@ -97,3 +97,29 @@
 .cat-back__shop { margin-top: auto; padding-top: calc(var(--u) * 5mm); border-top: 0.3mm solid rgba(36, 28, 26, 0.18); }
 .cat-back__who { font-family: 'Vank', 'GothamPrint', serif; font-size: calc(var(--u) * 6mm); text-transform: uppercase; color: var(--i); }
 .cat-back__shop p { margin-top: calc(var(--u) * 2mm); font-size: calc(var(--u) * 3.6mm); line-height: 1.55; }
+
+/* ---------- page 2 et avant-dernière (charte de la marque) ---------- */
+.cat-brand { position: absolute; inset: 0; display: flex; flex-direction: column; padding: calc(var(--u) * 14mm) calc(var(--u) * 13mm) calc(var(--u) * 12mm); }
+.cat-brand__logo { height: calc(var(--u) * 8mm); }
+.cat-brand__visual {
+  margin: calc(-1 * var(--u) * 14mm) calc(-1 * var(--u) * 13mm) 0; flex: 0 0 calc(var(--u) * 78mm);
+  overflow: hidden; background: #F3EDE4;
+}
+.cat-brand__visual img { width: 100%; height: 100%; object-fit: cover; }
+.cat-brand__title {
+  margin-top: calc(var(--u) * 10mm); font-family: 'Vank', 'GothamPrint', serif; font-size: calc(var(--u) * 11mm);
+  line-height: 0.98; text-transform: uppercase; color: var(--p); white-space: pre-line; overflow-wrap: anywhere;
+}
+.cat-brand--image .cat-brand__title { margin-top: calc(var(--u) * 8mm); }
+.cat-brand__rule { margin-top: calc(var(--u) * 5mm); width: calc(var(--u) * 16mm); border-top: 0.6mm solid var(--a); }
+.cat-brand__text { margin-top: calc(var(--u) * 6mm); min-height: 0; overflow: hidden; font-size: calc(var(--u) * 4.1mm); line-height: 1.5; display: grid; gap: calc(var(--u) * 3.6mm); align-content: start; }
+.cat-brand__text ul { margin: 0; padding: 0; list-style: none; display: grid; gap: calc(var(--u) * 2.8mm); }
+.cat-brand__text li { position: relative; padding-left: calc(var(--u) * 6mm); }
+.cat-brand__text li::before {
+  content: ''; position: absolute; left: 0; top: calc(var(--u) * 1.6mm); width: calc(var(--u) * 2.2mm); height: calc(var(--u) * 2.2mm);
+  background: var(--p); border-radius: calc(var(--u) * 0.5mm);
+}
+.cat-empty {
+  flex: 1 1 0; display: grid; place-items: center; border: 0.3mm dashed rgba(36, 28, 26, 0.25); border-radius: calc(var(--u) * 2.5mm);
+  font-size: calc(var(--u) * 3.6mm); letter-spacing: 0.12em; text-transform: uppercase; color: rgba(36, 28, 26, 0.45);
+}

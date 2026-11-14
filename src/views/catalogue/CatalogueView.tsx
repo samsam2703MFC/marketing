@@ -5,14 +5,17 @@ import { createRoot } from 'react-dom/client'
 import * as api from '../../lib/api/module'
 import type {
   Catalogue,
+  CatalogueBrandPage,
   CatalogueCharter,
   CatalogueCover,
   CatalogueDocument,
   CatalogueLang,
   CatalogueLayout,
+  CataloguePageCount,
   CatalogueSourceKind,
   WebshopProducts,
 } from '../../lib/api/module'
+import { TfBuddyError } from '../../lib/api/http'
 import { useAsync } from '../../lib/useAsync'
 import { openPrintWindow } from '../../lib/print'
 import { CatalogueSheet, FORMAT_MM, LAYOUT_LABELS, catalogueCss, formatCents, sheetSize } from './CataloguePages'
@@ -23,10 +26,11 @@ import './catalogue.css'
  * Les catalogues produits de la marque : prix du webshop, gammes (Noël, Saint-Nicolas…).
  *
  * Trois écrans : la liste (et « Nouveau catalogue » : une gamme du webshop, une campagne du
- * Marketing, ou des produits choisis un à un), l'éditeur (produits à cocher, pages A5/A4,
- * trois mises en page, version générale ou par boutique, FR/NL), et la Charte des catalogues
- * (logo, couvertures par gamme, dernière page, couleurs) — ce que les franchisés ne peuvent pas
- * changer quand ils font le leur dans le dashboard magasin.
+ * Marketing, ou des produits choisis un à un ; 8, 12 ou 16 pages), l'éditeur (produits à cocher,
+ * nombre de pages, A5/A4, trois mises en page, version générale ou par boutique, FR/NL), et la
+ * Charte des catalogues (logo, couvertures par gamme, page 2, avant-dernière et dernière pages,
+ * couleurs) — les quatre pages que les franchisés ne peuvent pas changer quand ils font le leur
+ * dans le dashboard magasin.
  *
  * L'API compose chaque version (`…/document`) : produits, prix de la boutique, couverture et
  * dernière page de la charte. L'écran met en page et imprime par le moteur des brochures.
@@ -41,6 +45,26 @@ const message = (cause: unknown): string => (cause instanceof Error ? cause.mess
 const STATUS_LABELS: Record<api.CatalogueStatus, string> = { brouillon: 'brouillon', pret: 'PDF prêt', imprime: 'imprimé' }
 
 const SOURCE_LABELS: Record<CatalogueSourceKind, string> = { gamme: 'Gamme', campagne: 'Campagne', choix: 'Au choix' }
+
+/** 8, 12 ou 16 pages : dont 4 de la marque (1, 2, avant-dernière, dernière). */
+function PageCountChoice({ value, onChange, disabled = false }: { value: CataloguePageCount; onChange: (count: CataloguePageCount) => void; disabled?: boolean }) {
+  return (
+    <span className="bro-seg" role="group" aria-label="Nombre de pages">
+      {api.CATALOGUE_PAGE_COUNTS.map((count) => (
+        <button
+          key={count}
+          type="button"
+          className={value === count ? 'is-on' : ''}
+          disabled={disabled}
+          title={`${count - api.CATALOGUE_BRAND_PAGES} pages de produits + 4 pages de la marque`}
+          onClick={() => onChange(count)}
+        >
+          {count} pages
+        </button>
+      ))}
+    </span>
+  )
+}
 
 export default function CatalogueView() {
   const [screen, setScreen] = useState<Screen>({ kind: 'list' })
@@ -163,6 +187,7 @@ function NewCatalogue({ open, onOpen, onCreated }: { open: boolean; onOpen: () =
   const [choisies, setChoisies] = useState<number[]>([])
   const [campaign, setCampaign] = useState<number | null>(null)
   const [title, setTitle] = useState('')
+  const [pageCount, setPageCount] = useState<CataloguePageCount>(8)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -188,6 +213,7 @@ function NewCatalogue({ open, onOpen, onCreated }: { open: boolean; onOpen: () =
     try {
       const created = await api.createCatalogue({
         title: title.trim() || suggestion,
+        pageCount,
         source: kind === 'choix' ? { kind } : kind === 'gamme' ? { kind, ref: choisies.length === 1 ? choisies[0] : choisies } : { kind, ref: campaign ?? 0 },
       })
       onCreated(created.id)
@@ -298,6 +324,10 @@ function NewCatalogue({ open, onOpen, onCreated }: { open: boolean; onOpen: () =
               </select>
             </label>
           ) : null}
+          <div className="catv-field">
+            <span>Nombre de pages · dont 4 de la marque</span>
+            <PageCountChoice value={pageCount} onChange={setPageCount} />
+          </div>
           <label className="catv-field catv-field--grow">
             <span>Titre (interne)</span>
             <input value={title} placeholder={suggestion} maxLength={160} onChange={(event) => setTitle(event.target.value)} />
@@ -398,9 +428,33 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
   const checked = cat.products.filter((row) => row.on).length
 
   function toggleProduct(productId: number, on: boolean) {
-    const exists = cat.products.some((row) => row.id === productId)
-    const next = exists ? cat.products.map((row) => (row.id === productId ? { ...row, on } : row)) : [...cat.products, { id: productId, on }]
+    toggleProducts([productId], on)
+  }
+  /** Coche ou décoche plusieurs produits d'un coup (« toute la catégorie »). */
+  function toggleProducts(ids: number[], on: boolean) {
+    const wanted = new Set(ids)
+    const next = cat.products.map((row) => (wanted.has(row.id) ? { ...row, on } : row))
+    for (const id of ids) if (!cat.products.some((row) => row.id === id)) next.push({ id, on })
     change({ products: next })
+  }
+
+  // Les catégories en accordéons : dépliées à l'ouverture celles qui ont un produit coché ; la
+  // recherche déplie celles qui ont un résultat. Un clic sur l'en-tête déplie / replie.
+  const [opened, setOpened] = useState<Set<string> | null>(null)
+  useEffect(() => {
+    if (opened !== null || !webshop.data) return
+    const start = new Set<string>()
+    for (const [group, entries] of groups) if (entries.some(({ row }) => row.on)) start.add(group)
+    setOpened(start)
+  }, [opened, webshop.data, groups])
+  const isOpen = (group: string) => (needle !== '' ? true : (opened?.has(group) ?? false))
+  function flip(group: string) {
+    setOpened((current) => {
+      const next = new Set(current ?? [])
+      if (next.has(group)) next.delete(group)
+      else next.add(group)
+      return next
+    })
   }
 
   // --- pages ---
@@ -419,13 +473,28 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
   function setPage(index: number, patch: Partial<api.CataloguePageRow>) {
     change({ pages: innerPages.map((page, i) => (i === index ? { ...page, ...patch } : page)) })
   }
-  function addPage() {
-    change({ pages: [...innerPages, { layout: 'grille', category: null }] })
-    setSelected(innerPages.length)
-  }
-  function removePage(index: number) {
-    change({ pages: innerPages.filter((_, i) => i !== index) })
+  // Le nombre de pages : changer de format ajoute des pages vides ou retire celles de la fin — le
+  // serveur refuse (CATALOGUE_PAGES_NOT_EMPTY) d'en retirer une qui porte des produits.
+  function setPageCount(pageCount: CataloguePageCount) {
+    if (pageCount === cat.pageCount) return
     setSelected(null)
+    setSave({ status: 'saving' })
+    queue.current = queue.current
+      .then(() => api.updateCatalogue(cat.id, { pageCount }))
+      .then((saved) => {
+        setCat(saved)
+        setSave({ status: 'saved' })
+        setRevision((value) => value + 1)
+      })
+      .catch((cause: unknown) => {
+        const text = message(cause)
+        // 422 : une page à retirer porte des produits — on propose de répartir sur le nouveau format.
+        const redistribute = cause instanceof TfBuddyError && cause.status === 422 && window.confirm(
+          `${text}\n\nRépartir automatiquement les produits sur ${pageCount} pages (${pageCount - api.CATALOGUE_BRAND_PAGES} pages de produits) ?`,
+        )
+        if (redistribute) change({ pageCount, pages: [] })
+        else setSave({ status: 'error', text })
+      })
   }
 
   // --- aperçu ---
@@ -560,17 +629,41 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
             </p>
           ))}
           <div className="catv-products">
-            {[...groups.entries()].map(([group, entries]) => (
-              <div key={group}>
-                <h3 className="catv-group">{group}</h3>
-                {entries.map(({ row, product }) => {
+            {[...groups.entries()].map(([group, entries]) => {
+              const sellable = entries.filter(({ product }) => product !== null)
+              const on = sellable.filter(({ row }) => row.on).length
+              const all = sellable.length > 0 && on === sellable.length
+              const open = isOpen(group)
+              return (
+              <div key={group} className={`catv-acc${open ? ' is-open' : ''}`}>
+                <div className="catv-acc__head">
+                  <button type="button" className="catv-acc__title" aria-expanded={open} onClick={() => flip(group)}>
+                    <span className="catv-acc__chev" aria-hidden="true">›</span>
+                    <span className="catv-acc__name">{group}</span>
+                    <span className="catv-acc__count">
+                      {on} / {sellable.length} produit{sellable.length > 1 ? 's' : ''}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`catv-sw${all ? ' is-on' : ''}`}
+                    role="switch"
+                    aria-checked={all}
+                    disabled={!sellable.length}
+                    title={all ? 'Retirer toute la catégorie' : 'Toute la catégorie'}
+                    onClick={() => toggleProducts(sellable.map(({ row }) => row.id), !all)}
+                  >
+                    <span className="catv-sw__label">toute la catégorie</span>
+                    <span className="catv-sw__track" aria-hidden="true" />
+                  </button>
+                </div>
+                {open ? entries.map(({ row, product }) => {
                   const missing = product ? versionShops.filter((s) => !product.prices.some((p) => p.shopId === s)) : []
                   const differs = product?.priceDiffers ?? []
                   const mine = versionShop !== null ? product?.prices.find((p) => p.shopId === versionShop) : null
                   const price = versionShop !== null ? (mine ? (mine.webPriceCents ?? mine.shopPriceCents) : null) : (product?.priceCents ?? null)
                   return (
-                    <label key={row.id} className={`catv-product${!row.on ? ' is-off' : ''}`}>
-                      <input type="checkbox" checked={row.on} disabled={!product} onChange={(event) => toggleProduct(row.id, event.target.checked)} />
+                    <div key={row.id} className={`catv-product${!row.on ? ' is-off' : ''}`}>
                       <span className="catv-thumb">{product?.imageUrl ? <img src={product.imageUrl} alt="" loading="lazy" /> : null}</span>
                       <span className="catv-product__name">
                         {product ? (lang === 'nl' ? product.nameNl : product.name) : `Produit ${row.id}`}
@@ -579,11 +672,23 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
                         {differs.length && versionShop === null ? <small className="catv-flag">prix différent à {differs.map(shopName).join(', ')}</small> : null}
                       </span>
                       <span className="catv-product__price">{formatCents(price, lang)}</span>
-                    </label>
+                      <button
+                        type="button"
+                        className={`catv-sw${row.on ? ' is-on' : ''}`}
+                        role="switch"
+                        aria-checked={row.on}
+                        aria-label={product ? product.name : `Produit ${row.id}`}
+                        disabled={!product}
+                        onClick={() => toggleProduct(row.id, !row.on)}
+                      >
+                        <span className="catv-sw__track" aria-hidden="true" />
+                      </button>
+                    </div>
                   )
-                })}
+                }) : null}
               </div>
-            ))}
+              )
+            })}
           </div>
         </section>
 
@@ -591,7 +696,7 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
         <section className="catv-stage" ref={stageRef}>
           <div className="catv-stagebar">
             <h2>
-              {cat.pages.length + 2} pages · {cat.format} · glisser une page pour la déplacer
+              {cat.pageCount} pages · {cat.format} · dont 4 de la marque · glisser une page de produits pour la déplacer
             </h2>
             {cat.owner === 'marque' && versionShop !== null ? (
               <select value={versionShop} onChange={(event) => setVersionShop(Number(event.target.value))}>
@@ -610,7 +715,8 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
           <style>{catalogueCss()}</style>
           <div className="catv-pages">
             {docPages.map((page, index) => {
-              const inner = page.kind === 'products' ? index - 1 : null
+              // Les pages intérieures commencent à la page 3 (après la couverture et la page 2).
+              const inner = page.kind === 'products' ? index - 2 : null
               return (
                 <div
                   key={`${index}-${page.kind}`}
@@ -639,19 +745,8 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
                     <span className="catv-lock" title="Fixée par la Charte des catalogues">
                       <LockIcon /> Marque
                     </span>
-                  ) : (
-                    <button
-                      type="button"
-                      className="catv-page__remove"
-                      title="Retirer cette page"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        removePage(inner as number)
-                      }}
-                    >
-                      ✕
-                    </button>
-                  )}
+                  ) : null}
+                  <span className="catv-page__no">{index + 1}</span>
                 </div>
               )
             })}
@@ -659,13 +754,11 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
           <div className="catv-stagefoot">
             {docPages.length ? (
               <span className="bro-tag">
-                pages 2 à {docPages.length - 1} · {productsShown} produits
+                pages 3 à {docPages.length - 2} · {productsShown} produits
               </span>
             ) : null}
-            <button type="button" className="btn btn--sm" onClick={addPage}>
-              ＋ Ajouter une page
-            </button>
-            <button type="button" className="btn btn--sm" onClick={() => change({ pages: [] })} title="Une catégorie après l’autre, en grilles">
+            <PageCountChoice value={cat.pageCount} onChange={setPageCount} disabled={save.status === 'saving'} />
+            <button type="button" className="btn btn--sm" onClick={() => change({ pages: [] })} title={`Une catégorie après l’autre, sur les ${cat.innerPageCount} pages de produits`}>
               Répartir automatiquement
             </button>
           </div>
@@ -691,7 +784,7 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
             </div>
             {selectedPage ? (
               <label className="catv-field">
-                <span>Catégorie de la page {(selected as number) + 2}</span>
+                <span>Catégorie de la page {(selected as number) + 3}</span>
                 <select value={selectedPage.category ?? ''} onChange={(event) => setPage(selected as number, { category: event.target.value ? Number(event.target.value) : null })}>
                   <option value="">Notre sélection (toutes catégories)</option>
                   {(webshop.data?.categories ?? []).map((c) => (
@@ -723,7 +816,11 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
               <dd>{doc.data?.charter.logoUrl ? 'logo de la charte' : 'logo officiel'}</dd>
               <dt>Page 1</dt>
               <dd>Couverture « {docPages[0]?.kind === 'cover' ? docPages[0].title : '…'} »</dd>
-              <dt>Dernière page</dt>
+              <dt>Page 2</dt>
+              <dd>« {docPages[1]?.kind === 'brand' ? docPages[1].title : '…'} »</dd>
+              <dt>Page {cat.pageCount - 1}</dt>
+              <dd>« {docPages[docPages.length - 2]?.kind === 'brand' ? (docPages[docPages.length - 2] as { title: string }).title : '…'} »</dd>
+              <dt>Page {cat.pageCount}</dt>
               <dd>Commande en ligne + boutique</dd>
               <dt>Couleurs, polices</dt>
               <dd>charte</dd>
@@ -832,7 +929,7 @@ function CharterEditor({ onBack }: { onBack: () => void }) {
   const loaded = useAsync(() => api.getCatalogueCharter(), [])
   const webshop = useAsync(() => api.getWebshopProducts([]), [])
   const [charter, setCharter] = useState<CatalogueCharter | null>(null)
-  const [picking, setPicking] = useState<null | 'logo' | number>(null)
+  const [picking, setPicking] = useState<null | 'logo' | 'page2' | 'penultimate' | number>(null)
   const [state, setState] = useState<{ status: 'idle' | 'saving' | 'saved' | 'error'; text?: string }>({ status: 'idle' })
   const [lang, setLang] = useState<CatalogueLang>('fr')
 
@@ -845,6 +942,21 @@ function CharterEditor({ onBack }: { onBack: () => void }) {
 
   const gammes = webshop.data?.gammes ?? []
   const used = new Set(charter.covers.map((cover) => cover.gamme))
+
+  function setBrand(slot: 'page2' | 'penultimate', patch: Partial<CatalogueBrandPage>) {
+    setCharter((current) => (current ? { ...current, [slot]: { ...current[slot], ...patch } } : current))
+  }
+  const brandDoc = (slot: 'page2' | 'penultimate') => {
+    const content = charter[slot]
+    return {
+      kind: 'brand' as const,
+      locked: true as const,
+      slot,
+      title: lang === 'nl' ? content.titleNl || content.titleFr : content.titleFr,
+      text: lang === 'nl' ? content.textNl || content.textFr : content.textFr,
+      imageUrl: content.imageUrl ?? null,
+    }
+  }
 
   function setCover(index: number, patch: Partial<CatalogueCover>) {
     setCharter((current) => (current ? { ...current, covers: current.covers.map((cover, i) => (i === index ? { ...cover, ...patch } : cover)) } : current))
@@ -868,6 +980,8 @@ function CharterEditor({ onBack }: { onBack: () => void }) {
     charter: { logoUrl: charter.logoUrl, colors: charter.colors },
     pages: [
       { kind: 'cover', locked: true, title: (lang === 'nl' ? cover.titleNl || cover.titleFr : cover.titleFr) || '—', subtitle: lang === 'nl' ? cover.subtitleNl || cover.subtitleFr : cover.subtitleFr, eyebrow: null, imageUrl: cover.imageUrl ?? null },
+      brandDoc('page2'),
+      brandDoc('penultimate'),
       { kind: 'back', locked: true, title: lang === 'nl' ? charter.back.titleNl || charter.back.titleFr : charter.back.titleFr, text: lang === 'nl' ? charter.back.textNl || charter.back.textFr : charter.back.textFr, qrUrl: null, host: null, shop: null },
     ],
     warnings: [],
@@ -897,8 +1011,8 @@ function CharterEditor({ onBack }: { onBack: () => void }) {
         </button>
       </div>
       <p className="catv-note">
-        <LockIcon /> Le logo, la couverture (page 1), la dernière page et les couleurs de tous les catalogues — ceux de la marque et ceux que les franchisés font dans
-        leur dashboard — viennent d’ici.
+        <LockIcon /> Le logo, les couleurs et les quatre pages de la marque de tous les catalogues — couverture (page 1), page 2, avant-dernière et dernière page —,
+        ceux de la marque et ceux que les franchisés font dans leur dashboard, viennent d’ici.
       </p>
 
       <style>{catalogueCss()}</style>
@@ -998,6 +1112,40 @@ function CharterEditor({ onBack }: { onBack: () => void }) {
             {webshop.error ? <p className="catv-warn">Gammes du webshop illisibles : {webshop.error}</p> : null}
           </section>
 
+          {(['page2', 'penultimate'] as const).map((slot) => (
+            <section key={slot} className="card">
+              <h2>{slot === 'page2' ? 'Page 2' : 'Avant-dernière page'}</h2>
+              <div className="catv-grid2">
+                {(['titleFr', 'titleNl'] as const).map((key) => (
+                  <label key={key} className="catv-field">
+                    <span>{key === 'titleFr' ? 'Titre FR' : 'Titre NL'}</span>
+                    <input value={charter[slot][key]} maxLength={240} onChange={(event) => setBrand(slot, { [key]: event.target.value })} />
+                  </label>
+                ))}
+                {(['textFr', 'textNl'] as const).map((key) => (
+                  <label key={key} className="catv-field">
+                    <span>{key === 'textFr' ? 'Texte FR' : 'Texte NL'}</span>
+                    <textarea rows={6} value={charter[slot][key]} maxLength={1200} onChange={(event) => setBrand(slot, { [key]: event.target.value })} />
+                  </label>
+                ))}
+              </div>
+              <div className="catv-inline">
+                {charter[slot].imageUrl ? <img className="catv-visual" src={charter[slot].imageUrl ?? ''} alt="" /> : <span className="muted">Sans image : le logo</span>}
+                <button type="button" className="btn btn--sm" onClick={() => setPicking(slot)}>
+                  Image de la médiathèque
+                </button>
+                {charter[slot].mediaId !== null ? (
+                  <button type="button" className="linklike" onClick={() => setBrand(slot, { mediaId: null, imageUrl: null })}>
+                    retirer l’image
+                  </button>
+                ) : null}
+              </div>
+              <p className="catv-note" title="Une ligne vide sépare deux paragraphes ; un paragraphe de plusieurs lignes s’imprime en liste.">
+                Textes à adapter : {slot === 'page2' ? 'le mot de la boulangerie, ce qui est fait maison.' : 'les services de vos boutiques (commande en ligne, retrait, livraison, gâteaux sur commande).'}
+              </p>
+            </section>
+          ))}
+
           <section className="card">
             <h2>Dernière page (commande en ligne)</h2>
             <div className="catv-grid2">
@@ -1015,7 +1163,7 @@ function CharterEditor({ onBack }: { onBack: () => void }) {
         <div className="catv-charter__preview">
           {[charter.covers[0], ...charter.covers.slice(1)].slice(0, 1).map((cover) => {
             const d = preview(cover)
-            return [0, 1].map((index) => (
+            return [0, 1, 2, 3].map((index) => (
               <div key={index} className="catv-page is-locked" style={{ width: 148 * MM * 0.42, height: 210 * MM * 0.42 }}>
                 <span style={{ zoom: 0.42 }}>
                   <CatalogueSheet doc={d} index={index} mode="preview" />
@@ -1032,6 +1180,7 @@ function CharterEditor({ onBack }: { onBack: () => void }) {
           onPick={(asset) => {
             const mediaId = Number(asset.id)
             if (picking === 'logo') setCharter({ ...charter, logoMediaId: mediaId, logoUrl: asset.url })
+            else if (picking === 'page2' || picking === 'penultimate') setBrand(picking, { mediaId, imageUrl: asset.url })
             else setCover(picking, { mediaId, imageUrl: asset.url })
             setPicking(null)
           }}
