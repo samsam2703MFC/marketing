@@ -31,6 +31,7 @@ import type { BrochureCheck, BrochureShop, Lang, TextKey, Version } from '../../
 import { Sheet, fontFaces, pageSize } from './Pages'
 import type { Side } from './Pages'
 import PAGE_CSS from './brochure.css?inline'
+import { openPrintWindow } from '../../lib/print'
 
 /**
  * Générateur de brochures : un leaflet A5 recto-verso ou un dépliant A4 trois
@@ -355,34 +356,10 @@ function Generator({ bundle, shops, socialShops, brandLangs, webshopUrl, today }
     const markup = container.innerHTML
     root.unmount()
 
-    const win = window.open('', '_blank')
-    if (!win) {
-      setPrintError('Le navigateur a bloqué la fenêtre d’impression : autorisez les fenêtres pour ce site, puis recommencez.')
-      return
-    }
     const title = [file.campaign.name, def.label, targets.length === 1 ? targets[0].label.replace(' · ', ' ') : `${targets.length} versions`, mode === 'proof' ? 'épreuve' : 'imprimeur']
       .join(' – ')
-      .replace(/[<>&"]/g, '')
-    win.document.open()
-    win.document.write(
-      `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${title}</title><style>${fontFaces()}\n${PAGE_CSS}\n` +
-        `@page{size:${size.w}mm ${size.h}mm;margin:0}html,body{margin:0;padding:0;background:#fff}.bro-page{break-after:page}.bro-page:last-child{break-after:auto}` +
-        `@media screen{body{background:#8a857e;display:flex;flex-direction:column;align-items:center;gap:8mm;padding:8mm 0}}</style></head><body>${markup}</body></html>`,
-    )
-    win.document.close()
-    const loaded = (img: HTMLImageElement) =>
-      img.complete
-        ? Promise.resolve()
-        : new Promise<void>((resolve) => {
-            img.addEventListener('load', () => resolve())
-            img.addEventListener('error', () => resolve())
-          })
-    void win.document.fonts.ready
-      .then(() => Promise.all(Array.from(win.document.images).map(loaded)))
-      .then(() => {
-        win.focus()
-        win.print()
-      })
+    const failure = openPrintWindow({ title, markup, css: `${fontFaces()}\n${PAGE_CSS}`, size, pageClass: 'bro-page' })
+    if (failure) setPrintError(failure)
   }
 
   const ready = versions.filter((target) => !blocking(checksOf(target)))
