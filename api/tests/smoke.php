@@ -5209,6 +5209,42 @@ check('catalogues : webshop illisible ou aucune boutique — le catalogue du Mar
     json_encode([$sb[990001] ?? null, $parBoutique['shops'][0] ?? null, $sansBoutique['gammes']]));
 $pdo->exec("DELETE FROM mar_offer_item WHERE sku_ref IN ('erp-990001', 'erp-990002', 'erp-saison-990009')");
 
+// Le compte ERP du Marketing refusé : la lecture passe par le compte TFBuddy de Social (celui de
+// « Créer un post ») — photos du webshop et prix de la boutique, comme Social les lit.
+$phoneAvant = \Marketing\Support\Config::value('tfb_admin_phone', 'social');
+$baseAvant  = \Marketing\Support\Config::value('tfb_base', 'social');
+$passAvant  = \Marketing\Support\Keys::get('tfb_admin_password', 'social');
+$jetAvant   = \Marketing\Support\Keys::get('tfb_jeton_admin', 'social');
+\Marketing\Support\Config::put('tfb_admin_phone', '+32000000000', 'social');
+\Marketing\Support\Config::put('tfb_base', 'https://tfb.social.test/api/v1', 'social');
+\Marketing\Support\Keys::put('tfb_admin_password', (string) json_encode('mot-de-passe-social'), 'social');
+\Marketing\Support\Keys::delete('tfb_jeton_admin', 'social');
+\Marketing\Support\Keys::forget();
+\Marketing\Repository\WebshopCatalogueRepository::purge();
+$vuSocial = [];
+$socialHttp = static function (string $m, string $url, array $h, ?string $corps) use (&$vuSocial, $tfbCat): array {
+    $vuSocial[] = $m . ' ' . $url;
+    if ($m === 'POST' && $url === 'https://tfb.social.test/api/v1/admin/auth/login') {
+        return str_contains((string) $corps, 'mot-de-passe-social') ? [200, '{"access_token":"JETON-SOCIAL"}'] : [401, '{}'];
+    }
+    if (!in_array('Authorization: Bearer JETON-SOCIAL', $h, true)) { return [401, '{}']; }
+    // Même réponse que l'ERP simulé plus haut, servie à l'adresse de Social.
+    return $tfbCat(str_replace('https://tfb.social.test/api/v1', 'https://erp.test/api/v1', $url));
+};
+$viaSocial = new \Marketing\Repository\WebshopCatalogueRepository(new \Marketing\Support\ErpClient($muet), $socialHttp);
+$lu = $viaSocial->products(9104);
+$luP = array_column($lu['products'], null, 'id');
+check('catalogues : compte ERP du Marketing refusé — lu par le compte de Social, photos du webshop et prix de la boutique',
+    $lu['error'] === null && ($luP[12]['image'] ?? '') === 'https://cdn.r2.dev/webshop/p12.webp' && ($luP[12]['shopPrice'] ?? null) === 31.5
+        && in_array('POST https://tfb.social.test/api/v1/admin/auth/login', $vuSocial, true)
+        && in_array('Gamme Noël', array_column($viaSocial->gammes()['gammes'], 'name'), true),
+    json_encode([$lu['error'], $luP[12] ?? null, $vuSocial]));
+$phoneAvant === null ? \Marketing\Support\Config::delete('tfb_admin_phone', 'social') : \Marketing\Support\Config::put('tfb_admin_phone', $phoneAvant, 'social');
+$baseAvant === null ? \Marketing\Support\Config::delete('tfb_base', 'social') : \Marketing\Support\Config::put('tfb_base', $baseAvant, 'social');
+$passAvant === null ? \Marketing\Support\Keys::delete('tfb_admin_password', 'social') : \Marketing\Support\Keys::put('tfb_admin_password', $passAvant, 'social');
+if ($jetAvant !== null) { \Marketing\Support\Keys::put('tfb_jeton_admin', $jetAvant, 'social'); }
+\Marketing\Support\Keys::forget();
+
 $pdo->exec("DELETE FROM mar_shop WHERE code IN ('cat-sombreffe', 'cat-corbais')");
 \Marketing\Repository\WebshopCatalogueRepository::purge();
 if ($jetonAvant === false) {
