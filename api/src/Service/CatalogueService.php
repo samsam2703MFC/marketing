@@ -1400,6 +1400,25 @@ final class CatalogueService
             }
             $category = $page['category'] !== null ? ($categories[$page['category']] ?? null) : null;
             $title = $category !== null ? ($lang === 'nl' ? $category['nameNl'] : $category['name']) : ($visual !== null ? $visual['title'] : ($lang === 'nl' ? 'Onze selectie' : 'Notre sélection'));
+            // Page sans catégorie : ses produits sont rangés par catégorie et le titre dit lesquelles
+            // (« Cougnou · Noël »), trois au plus ; au-delà, le titre de la gamme ou « Notre sélection ».
+            if ($category === null && $items !== []) {
+                $order = [];
+                foreach ($items as $item) {
+                    $order[(int) ($item['categoryId'] ?? 0)] ??= count($order);
+                }
+                usort($items, static fn (array $a, array $b): int => $order[(int) ($a['categoryId'] ?? 0)] <=> $order[(int) ($b['categoryId'] ?? 0)]);
+                $names = [];
+                foreach (array_keys($order) as $cid) {
+                    $c = $categories[$cid] ?? null;
+                    if ($c !== null) {
+                        $names[] = $lang === 'nl' ? $c['nameNl'] : $c['name'];
+                    }
+                }
+                if ($names !== [] && count($names) === count($order) && count($names) <= 3) {
+                    $title = implode(' · ', $names);
+                }
+            }
             $capacity = self::LAYOUTS[$page['layout']];
             $room = max(0, $capacity - count($items));
             $fillable = self::fillable($page['layout'], count($items));

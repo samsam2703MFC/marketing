@@ -4958,9 +4958,9 @@ check('catalogues : document — boutique hors du catalogue, langue ou paramètr
 
 $maj = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['pages' => [['layout' => 'liste', 'category' => null]], 'status' => 'pret', 'format' => 'A4']);
 $docMaj = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idCat . '/document', ['shopId' => (string) $catA]);
-check('catalogues : modifié — une page « liste » prend tout (les 3 autres complétées, vides), format A4, prêt', $maj['status'] === 200 && ($maj['body']['data']['format'] ?? '') === 'A4'
+check('catalogues : modifié — une page « liste » prend tout, titrée par ses catégories (les 3 autres complétées, vides), format A4, prêt', $maj['status'] === 200 && ($maj['body']['data']['format'] ?? '') === 'A4'
     && ($maj['body']['data']['status'] ?? '') === 'pret' && count($maj['body']['data']['pages'] ?? []) === 4 && count($docMaj['body']['data']['pages'] ?? []) === 8
-    && count($docMaj['body']['data']['pages'][2]['products'] ?? []) === 3 && ($docMaj['body']['data']['pages'][2]['title'] ?? '') === 'Notre sélection'
+    && count($docMaj['body']['data']['pages'][2]['products'] ?? []) === 3 && ($docMaj['body']['data']['pages'][2]['title'] ?? '') === 'Bûches · Viennoiseries de fête' && ($docMaj['body']['data']['pages'][3]['title'] ?? '') === 'Notre sélection'
     && ($docMaj['body']['data']['pages'][3]['products'] ?? null) === [],
     json_encode([$maj['body']['error'] ?? null, $docMaj['body']['data']['pages'] ?? null]));
 $trop = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['pages' => array_fill(0, 4, ['layout' => 'grille', 'category' => 600])]);
