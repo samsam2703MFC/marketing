@@ -10,9 +10,10 @@ import CATALOGUE_CSS from './catalogue-pages.css?inline'
  * l'impression (même balisage, même feuille de style), comme les brochures — et par le même
  * moteur (`lib/print.ts`), avec les mêmes polices de la marque (`fontFaces`).
  *
- * Le document est composé par l'API (`…/catalogues/{id}/document`) : la couverture et la
- * dernière page viennent de la Charte des catalogues, les pages intérieures portent leurs
- * produits et leurs prix. Ici, rien n'est recalculé : on met en page.
+ * Le document est composé par l'API (`…/catalogues/{id}/document`) : 8, 12 ou 16 pages ; la
+ * couverture, la page 2, l'avant-dernière et la dernière page viennent de la Charte des catalogues
+ * (`cover`, `brand`, `back`), les pages intérieures portent leurs produits et leurs prix. Ici, rien
+ * n'est recalculé : on met en page.
  *
  * A5 (148 × 210 mm) ou A4 (210 × 297 mm), mêmes proportions : `--u` met tout à l'échelle.
  */
@@ -108,6 +109,41 @@ function Cover({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'cover' 
   )
 }
 
+/**
+ * Page 2 et avant-dernière page (charte de la marque) : une image, un titre, un texte. Paragraphes
+ * séparés par une ligne vide ; un paragraphe de plusieurs lignes devient une liste (« Nos services »).
+ */
+function Brand({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'brand' }>; doc: CatalogueDocument }) {
+  const blocks = page.text.split(/\n\s*\n/).map((block) => block.split('\n').map((line) => line.trim()).filter(Boolean)).filter((lines) => lines.length)
+  const logo = doc.charter.logoUrl ?? asset('img/logo.png')
+  return (
+    <div className={`cat-brand cat-brand--${page.slot}${page.imageUrl ? ' cat-brand--image' : ''}`}>
+      {page.imageUrl ? (
+        <div className="cat-brand__visual">
+          <img src={page.imageUrl} alt="" />
+        </div>
+      ) : (
+        <img className="cat-logo cat-logo--dark cat-brand__logo" src={logo} alt="" />
+      )}
+      <div className="cat-brand__title">{page.title}</div>
+      <div className="cat-brand__rule" />
+      <div className="cat-brand__text" data-fit={page.title}>
+        {blocks.map((lines, index) =>
+          lines.length > 1 ? (
+            <ul key={index}>
+              {lines.map((line, i) => (
+                <li key={i}>{line}</li>
+              ))}
+            </ul>
+          ) : (
+            <p key={index}>{lines[0]}</p>
+          ),
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ProductCard({ product, lang, family, big = false }: { product: CatalogueDocProduct; lang: CatalogueLang; family: string; big?: boolean }) {
   return (
     <div className={`cat-card${big ? ' cat-card--big' : ''}`}>
@@ -126,7 +162,9 @@ function Products({ page, lang }: { page: Extract<CatalogueDocPage, { kind: 'pro
     <div className={`cat-inner cat-inner--${page.layout}`}>
       <div className="cat-h">{page.title}</div>
       <div className="cat-body" data-fit={page.title}>
-        {page.layout === 'liste' ? (
+        {page.products.length === 0 ? (
+          <div className="cat-empty">Page vide</div>
+        ) : page.layout === 'liste' ? (
           <div className="cat-list">
             {page.products.map((product) => (
               <div className="cat-row" key={product.id}>
@@ -215,6 +253,7 @@ export function CataloguePage({ doc, index }: { doc: CatalogueDocument; index: n
     <div className={`cat-face cat-face--${page.kind}`} style={style} lang={doc.version.lang}>
       <div className="cat-trim">
         {page.kind === 'cover' ? <Cover page={page} doc={doc} /> : null}
+        {page.kind === 'brand' ? <Brand page={page} doc={doc} /> : null}
         {page.kind === 'products' ? <Products page={page} lang={doc.version.lang} /> : null}
         {page.kind === 'back' ? <Back page={page} doc={doc} /> : null}
       </div>

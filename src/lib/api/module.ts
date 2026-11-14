@@ -2862,6 +2862,11 @@ export type CatalogueStatus = 'brouillon' | 'pret' | 'imprime'
 export type CatalogueFormat = 'A5' | 'A4'
 export type CatalogueLayout = 'vedette' | 'grille' | 'liste'
 export type CatalogueLang = 'fr' | 'nl'
+/** Pages d'un catalogue, dont 4 de la marque (1, 2, avant-dernière, dernière). */
+export type CataloguePageCount = 8 | 12 | 16
+export const CATALOGUE_PAGE_COUNTS: CataloguePageCount[] = [8, 12, 16]
+/** Les pages de la charte : couverture, page 2, avant-dernière, dernière. */
+export const CATALOGUE_BRAND_PAGES = 4
 
 export interface CatalogueProductRow {
   /** Identifiant du produit dans TFBuddy (webshop). */
@@ -2888,10 +2893,12 @@ export interface Catalogue {
   /** Une version par boutique (identifiants de ce module). */
   shopIds: number[]
   products: CatalogueProductRow[]
+  /** Exactement `pageCount − 4` pages intérieures. */
   pages: CataloguePageRow[]
   productCount: number
-  /** Couverture et dernière page comprises. */
-  pageCount: number
+  /** 8, 12 ou 16, les 4 pages de la marque comprises. */
+  pageCount: CataloguePageCount
+  innerPageCount: number
   createdAt: string
   updatedAt: string
 }
@@ -2901,13 +2908,14 @@ export interface CatalogueCreate {
   /** `ref` : une gamme, ou plusieurs (liste d'identifiants, 8 au plus). */
   source: { kind: CatalogueSourceKind; ref?: number | number[] }
   format?: CatalogueFormat
+  pageCount?: CataloguePageCount
   langs?: CatalogueLang[]
   shopIds?: number[]
   products?: CatalogueProductRow[]
   pages?: CataloguePageRow[]
 }
 
-export type CatalogueUpdate = Partial<Pick<Catalogue, 'title' | 'format' | 'langs' | 'shopIds' | 'products' | 'pages' | 'status' | 'printQty'>>
+export type CatalogueUpdate = Partial<Pick<Catalogue, 'title' | 'format' | 'pageCount' | 'langs' | 'shopIds' | 'products' | 'pages' | 'status' | 'printQty'>>
 
 export interface WebshopProduct {
   id: number
@@ -2964,6 +2972,7 @@ export interface CatalogueDocProduct {
 
 export type CatalogueDocPage =
   | { kind: 'cover'; locked: true; title: string; subtitle: string; eyebrow: string | null; imageUrl: string | null }
+  | { kind: 'brand'; locked: true; slot: 'page2' | 'penultimate'; title: string; text: string; imageUrl: string | null }
   | { kind: 'products'; locked: false; layout: CatalogueLayout; category: number | null; title: string; products: CatalogueDocProduct[] }
   | { kind: 'back'; locked: true; title: string; text: string; qrUrl: string | null; host: string | null; shop: CatalogueShopInfo | null }
 
@@ -2975,7 +2984,7 @@ export interface CatalogueColors {
 }
 
 export interface CatalogueDocument {
-  catalogue: { id: number; title: string; format: CatalogueFormat; owner: CatalogueOwner }
+  catalogue: { id: number; title: string; format: CatalogueFormat; owner: CatalogueOwner; pageCount?: CataloguePageCount }
   version: { shop: CatalogueShopInfo | null; lang: CatalogueLang }
   charter: { logoUrl: string | null; colors: CatalogueColors }
   pages: CatalogueDocPage[]
@@ -2993,12 +3002,24 @@ export interface CatalogueCover {
   imageUrl?: string | null
 }
 
+/** Page 2 ou avant-dernière page de tous les catalogues : titre, texte (paragraphes), image. */
+export interface CatalogueBrandPage {
+  titleFr: string
+  titleNl: string
+  textFr: string
+  textNl: string
+  mediaId: number | null
+  imageUrl?: string | null
+}
+
 export interface CatalogueCharter {
   logoMediaId: number | null
   logoUrl: string | null
   colors: CatalogueColors
   covers: CatalogueCover[]
   back: { titleFr: string; titleNl: string; textFr: string; textNl: string }
+  page2: CatalogueBrandPage
+  penultimate: CatalogueBrandPage
   updatedAt: string | null
 }
 
@@ -3044,12 +3065,14 @@ export async function getCatalogueCharter(): Promise<CatalogueCharter> {
   return (await request<Envelope<CatalogueCharter>>(`${BASE}/catalogue-charter`)).data
 }
 
+const brandPage = (page: CatalogueBrandPage) => ({ titleFr: page.titleFr, titleNl: page.titleNl, textFr: page.textFr, textNl: page.textNl, mediaId: page.mediaId })
+
 export async function saveCatalogueCharter(charter: Omit<CatalogueCharter, 'logoUrl' | 'updatedAt' | 'covers'> & { covers: CatalogueCover[] }): Promise<CatalogueCharter> {
   const covers = charter.covers.map((cover) => ({
     gamme: cover.gamme, titleFr: cover.titleFr, titleNl: cover.titleNl, subtitleFr: cover.subtitleFr, subtitleNl: cover.subtitleNl, mediaId: cover.mediaId,
   }))
   return (await request<Envelope<CatalogueCharter>>(`${BASE}/catalogue-charter`, {
     method: 'PUT',
-    body: { logoMediaId: charter.logoMediaId, colors: charter.colors, covers, back: charter.back },
+    body: { logoMediaId: charter.logoMediaId, colors: charter.colors, covers, back: charter.back, page2: brandPage(charter.page2), penultimate: brandPage(charter.penultimate) },
   })).data
 }

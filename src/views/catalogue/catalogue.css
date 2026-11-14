@@ -41,7 +41,7 @@
 .catv-create { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
 .catv-field { display: grid; gap: 6px; font-size: 11px; color: var(--muted); }
 .catv-field > span:first-child { letter-spacing: 0.04em; }
-.catv-field select, .catv-field input:not([type='checkbox']):not([type='color']) {
+.catv-field select, .catv-field textarea, .catv-field input:not([type='checkbox']):not([type='color']) {
   font: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); max-width: 100%;
 }
 .catv-field input[type='color'] { width: 56px; height: 34px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
@@ -63,8 +63,8 @@
 .catv-products { max-height: calc(100vh - 290px); overflow: auto; margin-top: 6px; }
 .catv-group { margin: 14px 0 4px; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
 .catv-product {
-  display: grid; grid-template-columns: auto 44px minmax(0, 1fr) auto; gap: 10px; align-items: center;
-  padding: 8px 2px; border-bottom: 1px solid var(--row-line); font-size: 13px; cursor: pointer;
+  display: grid; grid-template-columns: 44px minmax(0, 1fr) auto 46px; gap: 10px; align-items: center;
+  padding: 8px 2px 8px 22px; border-bottom: 1px solid var(--row-line); font-size: 13px;
 }
 .catv-product input { accent-color: var(--accent); width: 16px; height: 16px; }
 .catv-product.is-off .catv-product__name, .catv-product.is-off .catv-product__price { color: var(--muted); }
@@ -87,11 +87,6 @@
   position: absolute; top: 6px; right: 6px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px;
   border-radius: 6px; background: rgba(28, 26, 23, 0.78); color: #fff; font-size: 11px;
 }
-.catv-page__remove {
-  position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 6px;
-  background: #fff; color: var(--muted-2); font-size: 12px; cursor: pointer; opacity: 0; transition: opacity 0.15s;
-}
-.catv-page:hover .catv-page__remove, .catv-page.is-selected .catv-page__remove { opacity: 1; }
 .catv-stagefoot { display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 
 .catv-side { display: grid; gap: 14px; }
@@ -142,7 +137,7 @@
   .catv-body, .catv-charter, .catv-sources { grid-template-columns: 1fr; }
 }
 
-.catv-field .bro-seg { justify-self: start; }
+.catv-field .bro-seg { justify-self: start; align-self: start; }
 .catv-inline .muted { font-size: 12px; }
 
 /* Gammes du webshop : une ou plusieurs, cochées comme des cases (rectangles, pas de pilules). */
@@ -153,3 +148,30 @@
 .catv-gamme__box { width: 16px; height: 16px; border: 1.5px solid var(--line); border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; flex: 0 0 auto; }
 .catv-gamme.is-on .catv-gamme__box { background: var(--accent); border-color: var(--accent); }
 .catv-gamme__n { color: var(--muted); font-size: 11.5px; }
+
+/* Numéro de page sous chaque vignette (les pages de la marque restent aux places 1, 2, n−1, n). */
+.catv-page__no {
+  position: absolute; left: 6px; bottom: 6px; min-width: 20px; padding: 1px 6px; border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92); border: 1px solid #e6e0d8; font-size: 11px; color: #5c5852; text-align: center;
+}
+.catv-field textarea { resize: vertical; line-height: 1.45; }
+
+/* Produits par catégorie : accordéons repliables, interrupteurs (46 × 27). */
+.catv-acc { border-bottom: 1px solid #e6e0d8; }
+.catv-acc__head { display: flex; align-items: center; gap: 10px; padding: 10px 2px; }
+.catv-acc__title { flex: 1 1 auto; display: grid; grid-template-columns: 14px minmax(0, 1fr); column-gap: 8px; align-items: center; min-width: 0; padding: 0; border: 0; background: none; font: inherit; color: var(--ink); cursor: pointer; text-align: left; }
+.catv-acc__chev { grid-row: 1 / span 2; color: #7a736a; transition: transform 0.15s ease; }
+.catv-acc.is-open .catv-acc__chev { transform: rotate(90deg); }
+.catv-acc__name { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.catv-acc__count { grid-column: 2; font-size: 11.5px; color: #7a736a; }
+.catv-sw { display: inline-flex; align-items: center; height: 27px; margin: 0; line-height: 1; gap: 8px; padding: 0; border: 0; background: none; font: inherit; cursor: pointer; }
+.catv-sw:disabled { cursor: default; opacity: 0.45; }
+.catv-sw:focus-visible { outline: 2px solid #8D1D2C; outline-offset: 2px; border-radius: 14px; }
+.catv-sw__label { font-size: 11.5px; color: #7a736a; white-space: nowrap; }
+.catv-sw__track { display: block; position: relative; flex: 0 0 46px; width: 46px; height: 27px; border-radius: 14px; background: #EDE7DE; transition: background 0.15s ease; }
+.catv-sw__track::after {
+  content: ''; position: absolute; top: 3px; left: 3px; width: 21px; height: 21px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(28, 26, 23, 0.25); transition: transform 0.15s ease;
+}
+.catv-sw.is-on .catv-sw__track { background: #8D1D2C; }
+.catv-sw.is-on .catv-sw__track::after { transform: translateX(19px); }
