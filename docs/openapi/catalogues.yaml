@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Marketing — catalogues produits
-  version: 1.2.0
+  version: 1.3.0
   description: |
     Les catalogues produits du Marketing (prix du webshop, gammes) : un imprimé A5 (A4 en option)
     de **8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16). Quatre pages viennent de la Charte des catalogues de la
@@ -28,6 +28,20 @@ info:
     pair de 8 à 16 (« rajouter une page, c'est toujours par 2 » : + 2 = deux pages intérieures vides en
     fin, − 2 = même règle qu'avant, `CATALOGUE_PAGES_NOT_EMPTY`). Rien n'est rompu : une page
     `{layout, category}` et un catalogue de 8, 12 ou 16 pages restent valables et se lisent comme avant.
+
+    v1.3 (14 novembre 2026, demandes du client : « rajouter les bundles et promotions (via API) et les
+    appliquer dans une vignette dans la catégorie », puis « rajouter aussi les données de disponibilité ») :
+    `offers` (choix `{type, id, on}` des promotions de TFBuddy — bundle, buyXGetY, quantity,
+    scheduledDiscount ; type ou identifiant inconnu : 422) et `showAvailability` (vrai par défaut) en
+    écriture et en lecture ; `offers` / `offersError` et `availability` des produits dans
+    `catalogue-products` ; au document, une page de produits porte des `DocProduct` ET des `DocOffer`
+    (`kind: offer`, une case de la page de sa catégorie) ; un produit porte `oldPriceCents` et `promo`
+    (remise programmée) et `availability` (« du 1/12 au 6/12 · sur commande 48 h ») ; alerte
+    `PROMOTIONS_UNREADABLE` quand TFBuddy ne rend pas ses promotions (rien n'est alors inventé). Une
+    offre absente de `offers` est cochée d'office si elle touche un produit coché. Lues : les quatre
+    routes `/api/v1/admin/promotions/{bundles|buy-x-get-y|quantity|scheduled-product-discount}`
+    (`status=ACTIVE`, liste puis fiche) et `/api/v1/shops/{id}/scheduled-product-discounts/active`
+    pour la version d'une boutique ; gardées 15 minutes (`mar_catalogue_cache`).
 
     Premier contrat OpenAPI du module (docs/API_REGISTRY.md, §3, écart 16) : il ne couvre que ces
     routes, écrites au standard (enveloppe `{success, data, meta}`, camelCase, montants en centimes,
@@ -450,6 +464,9 @@ components:
                             gammes: { type: array, items: { type: integer } }
                             priceCents: { type: [integer, 'null'], description: Prix du webshop de la boutique (à défaut son prix au comptoir). }
                             shopPriceCents: { type: [integer, 'null'], description: Prix au comptoir (pour signaler un écart). }
+                            availability: { $ref: '#/components/schemas/Availability' }
+                      offers: { type: array, items: { $ref: '#/components/schemas/Offer' } }
+                      offersError: { type: [string, 'null'] }
                       categories: { type: array, items: { $ref: '#/components/schemas/Category' } }
                       gammes: { type: array, items: { $ref: '#/components/schemas/Gamme' } }
                       shops: { type: array, items: { $ref: '#/components/schemas/ShopRead' } }
@@ -547,6 +564,8 @@ components:
         shopIds: { type: array, items: { type: integer }, description: 'Une version par boutique (mar_shop.id).' }
         products: { type: array, maxItems: 400, items: { $ref: '#/components/schemas/ProductRow' } }
         pages: { type: array, maxItems: 12, items: { $ref: '#/components/schemas/PageRow' }, description: 'Pages intérieures, pageCount − 4 au plus.' }
+        offers: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/OfferRow' } }
+        showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) sous le prix ; vrai par défaut.' }
     CatalogueUpdate:
       type: object
       additionalProperties: false
@@ -560,6 +579,8 @@ components:
         pages: { type: array, items: { $ref: '#/components/schemas/PageRow' } }
         status: { $ref: '#/components/schemas/Status' }
         printQty: { type: [integer, 'null'], minimum: 1 }
+        offers: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/OfferRow' } }
+        showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) sous le prix ; vrai par défaut.' }
     ShopCatalogueCreate:
       type: object
       additionalProperties: false
@@ -580,6 +601,8 @@ components:
         langs: { type: array, items: { type: string, enum: [fr, nl] } }
         products: { type: array, items: { $ref: '#/components/schemas/ProductRow' } }
         pages: { type: array, items: { $ref: '#/components/schemas/PageRow' } }
+        offers: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/OfferRow' } }
+        showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) sous le prix ; vrai par défaut.' }
     ShopCatalogueUpdate:
       type: object
       additionalProperties: false
@@ -592,6 +615,8 @@ components:
         pages: { type: array, items: { $ref: '#/components/schemas/PageRow' } }
         status: { $ref: '#/components/schemas/Status' }
         printQty: { type: [integer, 'null'] }
+        offers: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/OfferRow' } }
+        showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) sous le prix ; vrai par défaut.' }
     Catalogue:
       type: object
       properties:
@@ -608,6 +633,8 @@ components:
         products: { type: array, items: { $ref: '#/components/schemas/ProductRow' } }
         pages: { type: array, items: { $ref: '#/components/schemas/PageRow' }, description: 'Les pageCount − 4 pages intérieures (un catalogue d’avant les formats est complété de pages vides).' }
         productCount: { type: integer }
+        offers: { type: array, items: { $ref: '#/components/schemas/OfferRow' }, description: 'Choix explicites ; une offre absente est cochée si elle touche un produit coché.' }
+        showAvailability: { type: boolean }
         pageCount: { $ref: '#/components/schemas/PageCount' }
         innerPageCount: { type: integer, enum: [4, 8, 12], description: 'pageCount − 4.' }
         createdAt: { type: string, format: date-time }
@@ -632,12 +659,63 @@ components:
               prices: { type: array, items: { type: object, properties: { shopId: { type: integer }, webPriceCents: { type: [integer, 'null'] }, shopPriceCents: { type: [integer, 'null'] } } } }
               priceCents: { type: [integer, 'null'], description: Prix du webshop le plus répandu parmi les boutiques. }
               priceDiffers: { type: array, items: { type: integer }, description: Boutiques qui ont un autre prix. }
+              availability: { $ref: '#/components/schemas/Availability' }
         categories: { type: array, items: { $ref: '#/components/schemas/Category' } }
         gammes: { type: array, items: { $ref: '#/components/schemas/Gamme' } }
         shops: { type: array, items: { $ref: '#/components/schemas/ShopRead' } }
+        offers: { type: array, items: { $ref: '#/components/schemas/Offer' }, description: 'Promotions actives de TFBuddy qui valent pour le réseau ou l''une des boutiques, pas finies, et touchent un produit ou une catégorie lus.' }
+        offersError: { type: [string, 'null'], description: 'TFBuddy illisible pour les promotions (ou une famille) : la raison.' }
+    OfferRow:
+      type: object
+      additionalProperties: false
+      required: [type, id, on]
+      properties:
+        type: { type: string, enum: [bundle, buyXGetY, quantity, scheduledDiscount] }
+        id: { type: integer, minimum: 1, description: Identifiant de la promotion dans TFBuddy (inconnu pour ce catalogue = 422). }
+        on: { type: boolean }
+    Availability:
+      type: object
+      description: Ce que TFBuddy dit de la disponibilité d'un produit ; rien d'inventé.
+      properties:
+        periods: { type: array, items: { type: object, properties: { id: { type: integer }, from: { type: [string, 'null'], description: JJ/MM }, to: { type: [string, 'null'] } } } }
+        leadHours: { type: [integer, 'null'], description: 'Délai de préparation (preparation_lead_time_hours de l''ERP) ; 0 = null.' }
+    Offer:
+      type: object
+      properties:
+        kind: { const: offer }
+        id: { type: string, description: '« bundle-12 ».' }
+        type: { type: string, enum: [bundle, buyXGetY, quantity, scheduledDiscount] }
+        erpId: { type: integer }
+        name: { type: string }
+        badge: { type: string, description: '« Bundle », « 2+1 », « 3 pour 2 », « −20 % ».' }
+        deal: { type: [string, 'null'], description: '« le 3e offert ».' }
+        period: { type: [string, 'null'], description: '« du 1/12 au 6/12 · le week-end · 8h–12h ».' }
+        validFrom: { type: [string, 'null'], format: date }
+        validTo: { type: [string, 'null'], format: date }
+        shopScope: { type: string, enum: [all, selected] }
+        categoryId: { type: [integer, 'null'], description: Catégorie de la page où la vignette se range (celle de son premier produit). }
+        productIds: { type: array, items: { type: integer } }
+        categoryIds: { type: array, items: { type: integer } }
+        priceCents: { type: [integer, 'null'], description: "Prix de l'offre quand on le connaît (bundle : bundle_price ; X achetés = Y sur un produit : prix des X)." }
+        oldPriceCents: { type: [integer, 'null'], description: 'Somme des produits du bundle, ou prix des X + Y ; null sinon.' }
+        currency: { const: EUR }
+        products: { type: array, maxItems: 4, items: { type: object, properties: { id: { type: integer }, name: { type: string }, imageUrl: { type: [string, 'null'] }, quantity: { type: [number, 'null'] } } } }
+        moreProducts: { type: integer }
     DocProduct:
       type: object
-      properties: { id: { type: integer }, name: { type: string }, imageUrl: { type: [string, 'null'] }, priceCents: { type: [integer, 'null'] }, currency: { type: string, const: EUR } }
+      properties:
+        kind: { const: product }
+        id: { type: integer }
+        name: { type: string }
+        imageUrl: { type: [string, 'null'] }
+        priceCents: { type: [integer, 'null'], description: Prix imprimé (après une remise programmée cochée). }
+        oldPriceCents: { type: [integer, 'null'], description: Prix barré (avant la remise programmée). }
+        promo: { type: [object, 'null'], properties: { label: { type: string }, period: { type: [string, 'null'] } } }
+        availability: { type: [string, 'null'], description: '« du 1/12 au 6/12 · sur commande 48 h » (NL : « van 1/12 tot 6/12 · op bestelling 48 u ») ; null : rien de connu, ou showAvailability éteint.' }
+        currency: { type: string, const: EUR }
+    DocOffer:
+      description: La vignette d'une promotion, une case d'une page de produits.
+      allOf: [{ $ref: '#/components/schemas/Offer' }]
     Document:
       type: object
       properties:
@@ -677,7 +755,7 @@ components:
                   room: { type: integer, description: Places libres (capacité − produits). }
                   fillable: { type: boolean, description: 'Une rangée entière au moins est libre : la place libre peut être remplie.' }
                   filler: { $ref: '#/components/schemas/DocFiller' }
-                  products: { type: array, items: { $ref: '#/components/schemas/DocProduct' } }
+                  products: { type: array, items: { oneOf: [{ $ref: '#/components/schemas/DocProduct' }, { $ref: '#/components/schemas/DocOffer' }] }, description: 'Produits et vignettes de promotions (une vignette compte dans la capacité du gabarit).' }
               - type: object
                 description: Page de présentation d'une gamme (illustration — photo de sa couverture dans la charte, sinon du webshop, sinon son dessin de saison, sinon un cadre sobre —, nom, texte, et au choix ses premiers produits).
                 properties:
@@ -700,7 +778,7 @@ components:
           items:
             type: object
             properties:
-              code: { type: string, enum: [WEBSHOP_UNREADABLE, PRICE_DIFFERS, PRODUCT_NO_PRICE, PRODUCT_NOT_SOLD, PRODUCTS_OVERFLOW, PAGES_EMPTY, PAGES_OVER_FORMAT, NL_TEXT_MISSING, SHOP_ADDRESS_MISSING, WEBSHOP_URL_UNKNOWN, GAMME_UNKNOWN, GAMME_NO_ILLUSTRATION, FILLER_MEDIA_MISSING, FILLER_NO_ILLUSTRATION] }
+              code: { type: string, enum: [WEBSHOP_UNREADABLE, PRICE_DIFFERS, PRODUCT_NO_PRICE, PRODUCT_NOT_SOLD, PRODUCTS_OVERFLOW, PAGES_EMPTY, PAGES_OVER_FORMAT, NL_TEXT_MISSING, SHOP_ADDRESS_MISSING, WEBSHOP_URL_UNKNOWN, GAMME_UNKNOWN, GAMME_NO_ILLUSTRATION, FILLER_MEDIA_MISSING, FILLER_NO_ILLUSTRATION, PROMOTIONS_UNREADABLE] }
               message: { type: string }
     DocShop:
       type: [object, 'null']

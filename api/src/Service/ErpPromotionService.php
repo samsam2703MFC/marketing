@@ -65,8 +65,13 @@ final class ErpPromotionService
         return ['rows' => $rows, 'sources' => $sources];
     }
 
-    /** @param array<string,mixed> $p @return array<string,mixed> */
-    private function normalize(string $family, array $p): array
+    /**
+     * Une promotion brute de l'ERP, à la forme du module (lue aussi par les catalogues).
+     *
+     * @param array<string,mixed> $p
+     * @return array<string,mixed>
+     */
+    public function normalize(string $family, array $p): array
     {
         $shopIds = self::ids($p['shop_ids'] ?? $p['shops'] ?? []);
         $scope   = strtoupper(self::text($p['shop_scope_type'] ?? null) ?? '');
@@ -117,15 +122,16 @@ final class ErpPromotionService
             $trigger = is_array($p['trigger'] ?? null) ? $p['trigger'] : [];
             $reward  = is_array($p['reward'] ?? null) ? $p['reward'] : [];
             $products = [
-                ...array_map(static fn (int $id): array => ['erpProductId' => $id, 'name' => null, 'quantity' => null, 'role' => 'trigger'], self::productIds($trigger['product_ids'] ?? [])),
-                ...array_map(static fn (int $id): array => ['erpProductId' => $id, 'name' => null, 'quantity' => null, 'role' => 'reward'], self::productIds($reward['product_ids'] ?? [])),
+                // La fiche rend `products` (objets) là où le contrat d'écriture dit `product_ids`.
+                ...array_map(static fn (int $id): array => ['erpProductId' => $id, 'name' => null, 'quantity' => null, 'role' => 'trigger'], self::productIds($trigger['product_ids'] ?? $trigger['products'] ?? [])),
+                ...array_map(static fn (int $id): array => ['erpProductId' => $id, 'name' => null, 'quantity' => null, 'role' => 'reward'], self::productIds($reward['product_ids'] ?? $reward['products'] ?? [])),
             ];
 
             return [[
                 'buyQuantity' => self::int($trigger['quantity'] ?? null),
                 'getQuantity' => self::int($reward['quantity'] ?? null),
                 'reward'      => self::reward($reward['type'] ?? null, $reward['value'] ?? null),
-            ], $products, array_values(array_unique([...self::ids($trigger['category_ids'] ?? []), ...self::ids($reward['category_ids'] ?? [])]))];
+            ], $products, array_values(array_unique([...self::ids($trigger['category_ids'] ?? $trigger['categories'] ?? []), ...self::ids($reward['category_ids'] ?? $reward['categories'] ?? [])]))];
         }
 
         if ($family === 'quantity') {
@@ -220,6 +226,10 @@ final class ErpPromotionService
     /** Identifiants : des entiers, ou des objets qui en portent un. @return list<int> */
     private static function ids(mixed $list): array
     {
+        // `shop_ids` de la liste peut être un texte (« 4,5 ») : relevé en production par le cockpit.
+        if (is_string($list)) {
+            $list = array_map('trim', explode(',', $list));
+        }
         $out = [];
         foreach (is_array($list) ? $list : [] as $v) {
             $id = self::int(is_array($v) ? ($v['id'] ?? $v['id_shop'] ?? $v['shop_id'] ?? null) : $v);
@@ -244,7 +254,7 @@ final class ErpPromotionService
     /** @param mixed $v */
     private static function productId($v): ?int
     {
-        return is_array($v) ? self::int($v['id_product'] ?? $v['product_id'] ?? null) : null;
+        return is_array($v) ? self::int($v['id_product'] ?? $v['product_id'] ?? $v['id'] ?? null) : null;
     }
 
     private static function text(mixed $v): ?string

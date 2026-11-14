@@ -4958,9 +4958,9 @@ check('catalogues : document — boutique hors du catalogue, langue ou paramètr
 
 $maj = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['pages' => [['layout' => 'liste', 'category' => null]], 'status' => 'pret', 'format' => 'A4']);
 $docMaj = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idCat . '/document', ['shopId' => (string) $catA]);
-check('catalogues : modifié — une page « liste » prend tout (les 3 autres complétées, vides), format A4, prêt', $maj['status'] === 200 && ($maj['body']['data']['format'] ?? '') === 'A4'
+check('catalogues : modifié — une page « liste » prend tout, titrée par ses catégories (les 3 autres complétées, vides), format A4, prêt', $maj['status'] === 200 && ($maj['body']['data']['format'] ?? '') === 'A4'
     && ($maj['body']['data']['status'] ?? '') === 'pret' && count($maj['body']['data']['pages'] ?? []) === 4 && count($docMaj['body']['data']['pages'] ?? []) === 8
-    && count($docMaj['body']['data']['pages'][2]['products'] ?? []) === 3 && ($docMaj['body']['data']['pages'][2]['title'] ?? '') === 'Notre sélection'
+    && count($docMaj['body']['data']['pages'][2]['products'] ?? []) === 3 && ($docMaj['body']['data']['pages'][2]['title'] ?? '') === 'Bûches · Viennoiseries de fête' && ($docMaj['body']['data']['pages'][3]['title'] ?? '') === 'Notre sélection'
     && ($docMaj['body']['data']['pages'][3]['products'] ?? null) === [],
     json_encode([$maj['body']['error'] ?? null, $docMaj['body']['data']['pages'] ?? null]));
 $trop = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['pages' => array_fill(0, 4, ['layout' => 'grille', 'category' => 600])]);
@@ -5414,6 +5414,200 @@ $passAvant === null ? \Marketing\Support\Keys::delete('tfb_admin_password', 'soc
 if ($jetAvant !== null) { \Marketing\Support\Keys::put('tfb_jeton_admin', $jetAvant, 'social'); }
 \Marketing\Support\Keys::forget();
 
+// --- Catalogues : promotions, bundles et disponibilité ----------------------
+// Client (14/11/2026) : « rajouter les bundles et promotions (via API) et les appliquer dans une vignette dans la
+// catégorie » ; « rajouter aussi les données de disponibilité ». Les promotions sont lues sur les quatre routes
+// admin de TFBuddy (liste {items, pagination}, puis la fiche de chacune). Leurs corps reprennent les champs que le
+// swagger de l'ERP documente (BundlePromotionWrite, BuyXGetYPromotionPatch, QuantityPromotionWrite,
+// ScheduledProductDiscountPromotionCreate) ; la disponibilité, les colonnes de l'ERP que le cockpit lit déjà
+// (`from_md`/`to_md` d'une période, `preparation_lead_time_hours` d'un produit).
+echo "\nCatalogues : promotions, bundles et disponibilité\n";
+\Marketing\Repository\WebshopCatalogueRepository::purge();
+$dans = static fn (int $jours): string => date('Y-m-d', strtotime(($jours >= 0 ? '+' : '') . $jours . ' days')) . ' 23:59:59';
+$promosCat = [
+    'bundles' => [
+        array_replace($exempleErp('BundlePromotionWrite'), ['id' => 1, 'name' => 'Duo de bûches', 'status' => 'ACTIVE', 'shop_scope_type' => 'ALL_SHOPS', 'activation_mode' => 'AUTOMATIC',
+            'bundle_promotion' => ['bundle_price' => 55.0], 'items' => [['id_product' => 11, 'quantity' => 1], ['id_product' => 12, 'quantity' => 1]], 'valid_to' => $dans(20)]),
+        array_replace($exempleErp('BundlePromotionWrite'), ['id' => 5, 'name' => 'Bundle d’une autre boutique', 'status' => 'ACTIVE', 'shop_scope_type' => 'SELECTED_SHOPS', 'shop_ids' => [9999],
+            'items' => [['id_product' => 13, 'quantity' => 2]]]),
+    ],
+    'buy-x-get-y' => [
+        ['id' => 2, 'name' => 'Cougnou 2+1', 'promotion_type' => 'BUY_X_GET_Y', 'status' => 'ACTIVE', 'shop_scope_type' => 'SELECTED_SHOPS', 'shop_ids' => [9105], 'activation_mode' => 'AUTOMATIC',
+            'valid_from' => $dans(-1), 'valid_to' => $dans(10), 'trigger' => ['quantity' => 2, 'product_ids' => [13]], 'reward' => ['quantity' => 1, 'product_ids' => [13], 'type' => 'FREE', 'value' => null, 'selection_strategy' => 'CHEAPEST'],
+            'schedule' => [['day_of_week' => 6, 'time_from' => '08:00', 'time_to' => '12:00'], ['day_of_week' => 7, 'time_from' => '08:00', 'time_to' => '12:00']]],
+        ['id' => 6, 'name' => 'Avec un bon seulement', 'status' => 'ACTIVE', 'shop_scope_type' => 'ALL_SHOPS', 'activation_mode' => 'VOUCHER_ONLY',
+            'trigger' => ['quantity' => 1, 'product_ids' => [11]], 'reward' => ['quantity' => 1, 'product_ids' => [11], 'type' => 'FREE']],
+    ],
+    'quantity' => [
+        array_replace($exempleErp('QuantityPromotionWrite'), ['id' => 3, 'status' => 'ACTIVE', 'eligible_product_ids' => [13], 'valid_to' => $dans(-3)]),
+    ],
+    'scheduled-product-discount' => [
+        ['id' => 4, 'name' => 'Praliné −10 %', 'promotion_type' => 'SCHEDULED_PRODUCT_DISCOUNT', 'status' => 'ACTIVE', 'shop_scope_type' => 'ALL_SHOPS', 'activation_mode' => 'AUTOMATIC',
+            'reward_product_ids' => [11], 'discount_type' => 'PERCENTAGE_DISCOUNT', 'discount_value' => 10, 'valid_from' => $dans(-2), 'valid_to' => $dans(30)],
+    ],
+];
+$appelsPromoCat = [];
+$tfbPromo = static function (string $url, array $entetes = [], int $delai = 5, string $methode = 'GET', ?string $corps = null) use ($tfbCat, $promosCat, &$appelsPromoCat): array {
+    $chemin = (string) parse_url($url, PHP_URL_PATH);
+    if (preg_match('#^/api/v1/admin/promotions/([a-z-]+)(?:/(\d+))?$#', $chemin, $m) === 1 && isset($promosCat[$m[1]])) {
+        $appelsPromoCat[] = $methode . ' ' . $url;
+        if ($methode !== 'GET') { return [405, '{}']; }
+        if (isset($m[2])) {
+            foreach ($promosCat[$m[1]] as $promo) {
+                if ((int) $promo['id'] === (int) $m[2]) { return [200, (string) json_encode(['data' => $promo])]; }
+            }
+            return [404, '{}'];
+        }
+        // La liste ne porte que l'en-tête : la composition se lit sur la fiche.
+        $items = array_map(static fn (array $p): array => array_intersect_key($p, array_flip(['id', 'name', 'status', 'activation_mode', 'shop_scope_type'])), $promosCat[$m[1]]);
+        return [200, (string) json_encode(['items' => $items, 'pagination' => ['page' => 1, 'limit' => 100, 'total' => count($items), 'pages' => 1]])];
+    }
+    if ($chemin === '/api/v1/shops/9105/scheduled-product-discounts/active') {
+        return [200, '[]'];
+    }
+    [$code, $corpsRendu] = $tfbCat($url, $entetes, $delai, $methode, $corps);
+    if ($chemin === '/api/v1/shops/9104/products/available' && $code === 200) {
+        $lignes = json_decode($corpsRendu, true);
+        foreach ($lignes as &$ligne) {
+            if ((int) $ligne['id'] === 11) {
+                $ligne['availability_periods'] = [['id' => 14, 'name' => 'Gamme Noël', 'from_md' => 1201, 'to_md' => 1206]];
+                $ligne['preparation_lead_time_hours'] = 48;
+            }
+            if ((int) $ligne['id'] === 12) { $ligne['preparation_lead_time_hours'] = 0; }
+        }
+        unset($ligne);
+        $corpsRendu = (string) json_encode($lignes);
+    }
+    return [$code, $corpsRendu];
+};
+$promoService = new \Marketing\Service\CatalogueService(
+    new \Marketing\Repository\CatalogueRepository(),
+    new \Marketing\Repository\WebshopCatalogueRepository(new \Marketing\Support\ErpClient($tfbPromo))
+);
+$promoRouter = new Router();
+$promoBrand = new \Marketing\Controller\CatalogueController($promoService);
+$promoShop = new \Marketing\Controller\CatalogueIntegrationController($promoService);
+$promoRouter->get('/api/v1/marketing/catalogue-products', [$promoBrand, 'products']);
+$promoRouter->post('/api/v1/marketing/catalogues', [$promoBrand, 'store']);
+$promoRouter->put('/api/v1/marketing/catalogues/{id}', [$promoBrand, 'update']);
+$promoRouter->get('/api/v1/marketing/catalogues/{id}/document', [$promoBrand, 'document']);
+$promoRouter->get($SB . '/catalogue-products', [$promoShop, 'products'], true);
+$promoRouter->post($SB . '/catalogues', [$promoShop, 'store'], true);
+$promoRouter->put($SB . '/catalogues/{id}', [$promoShop, 'update'], true);
+$promoRouter->get($SB . '/catalogues/{id}/document', [$promoShop, 'document'], true);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+$lu = call($promoRouter, 'GET', '/api/v1/marketing/catalogue-products', ['shopIds' => $catA . ',' . $catB]);
+$offres = array_column($lu['body']['data']['offers'] ?? [], null, 'id');
+check('promotions : les quatre routes de TFBuddy lues (actives, liste puis fiche) — en lecture seulement',
+    count(array_filter($appelsPromoCat, static fn (string $a): bool => str_contains($a, 'status=ACTIVE'))) === 4
+        && in_array('GET https://erp.test/api/v1/admin/promotions/bundles/1', $appelsPromoCat, true)
+        && array_filter($appelsPromoCat, static fn (string $a): bool => !str_starts_with($a, 'GET ')) === [], json_encode($appelsPromoCat));
+check('promotions : celles du réseau ou des boutiques du catalogue, actives, automatiques, pas finies',
+    array_keys($offres) === ['bundle-1', 'buyXGetY-2', 'scheduledDiscount-4'] && array_key_exists('offersError', $lu['body']['data'] ?? []) && $lu['body']['data']['offersError'] === null,
+    json_encode(array_keys($offres)));
+check('promotions : badge, produits, catégorie et période d’une offre',
+    ($offres['bundle-1']['badge'] ?? '') === 'Bundle' && ($offres['bundle-1']['productIds'] ?? []) === [11, 12] && ($offres['bundle-1']['categoryId'] ?? null) === 500
+        && ($offres['bundle-1']['priceCents'] ?? null) === 5500 && ($offres['buyXGetY-2']['badge'] ?? '') === '2+1' && ($offres['buyXGetY-2']['deal'] ?? '') === 'le 3e offert'
+        && str_contains((string) ($offres['buyXGetY-2']['period'] ?? ''), 'le week-end · 8h–12h') && ($offres['scheduledDiscount-4']['badge'] ?? '') === '−10 %',
+    json_encode($offres, JSON_UNESCAPED_UNICODE));
+$luP = array_column($lu['body']['data']['products'] ?? [], null, 'id');
+check('disponibilité : la période et le délai de préparation lus chez TFBuddy, rien pour un produit sans donnée',
+    ($luP[11]['availability'] ?? null) === ['periods' => [['id' => 14, 'from' => '01/12', 'to' => '06/12']], 'leadHours' => 48]
+        && ($luP[12]['availability']['leadHours'] ?? null) === null && ($luP[12]['availability']['periods'][0]['id'] ?? null) === 14 && ($luP[12]['availability']['periods'][0]['from'] ?? null) === null,
+    json_encode([$luP[11]['availability'] ?? null, $luP[12]['availability'] ?? null]));
+
+$creePromo = call($promoRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Noël — promotions', 'source' => ['kind' => 'gamme', 'ref' => 14], 'shopIds' => [$catA, $catB], 'langs' => ['fr', 'nl']]);
+$idPromo = (int) ($creePromo['body']['data']['id'] ?? 0);
+check('promotions : un catalogue neuf — aucun choix enregistré, la disponibilité affichée d’office',
+    $creePromo['status'] === 201 && ($creePromo['body']['data']['offers'] ?? null) === [] && ($creePromo['body']['data']['showAvailability'] ?? null) === true,
+    json_encode($creePromo['body']));
+$docPromo = call($promoRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPromo . '/document');
+$pP = $docPromo['body']['data']['pages'] ?? [];
+$premier = $pP[2]['products'][0] ?? [];
+$prodsP = array_column(array_filter(array_merge(...array_map(static fn (array $p): array => $p['products'] ?? [], $pP)), static fn (array $x): bool => ($x['kind'] ?? '') === 'product'), null, 'id');
+check('promotions : version générale — le bundle du réseau en vignette, en tête de la page de sa catégorie, prix et ancien prix',
+    $docPromo['status'] === 200 && ($pP[2]['category'] ?? null) === 500 && ($premier['kind'] ?? '') === 'offer' && ($premier['id'] ?? '') === 'bundle-1'
+        && ($premier['badge'] ?? '') === 'Bundle' && ($premier['priceCents'] ?? null) === 5500 && ($premier['oldPriceCents'] ?? null) === 6280
+        && array_column($premier['products'] ?? [], 'id') === [11, 12] && ($premier['products'][0]['imageUrl'] ?? '') === 'https://cdn.r2.dev/webshop/p11.webp'
+        && array_column($pP[2]['products'], 'id') === ['bundle-1', 12, 11],
+    json_encode([$docPromo['body']['error'] ?? null, $pP[2] ?? null], JSON_UNESCAPED_UNICODE));
+check('promotions : la vignette compte dans la capacité du gabarit (vedette : 5 cases, 3 prises)', ($pP[2]['room'] ?? null) === 2);
+check('promotions : la promotion d’une seule boutique n’est pas dans la version générale',
+    !in_array('buyXGetY-2', array_column(array_merge(...array_map(static fn (array $p): array => $p['products'] ?? [], $pP)), 'id'), true));
+check('promotions : une remise programmée barre le prix du produit qu’elle vise',
+    ($prodsP[11]['oldPriceCents'] ?? null) === 3290 && ($prodsP[11]['priceCents'] ?? null) === 2961 && ($prodsP[11]['promo']['label'] ?? '') === '−10 %'
+        && array_key_exists('oldPriceCents', $prodsP[12] ?? []) && $prodsP[12]['oldPriceCents'] === null,
+    json_encode([$prodsP[11] ?? null, $prodsP[12] ?? null], JSON_UNESCAPED_UNICODE));
+check('disponibilité : sous le prix — période et délai, rien pour un produit sans donnée',
+    ($prodsP[11]['availability'] ?? '') === 'du 1/12 au 6/12 · sur commande 48 h' && array_key_exists('availability', $prodsP[12] ?? []) && $prodsP[12]['availability'] === null,
+    json_encode([$prodsP[11]['availability'] ?? null, $prodsP[12]['availability'] ?? null], JSON_UNESCAPED_UNICODE));
+check('promotions : aucune alerte quand TFBuddy répond', !in_array('PROMOTIONS_UNREADABLE', array_column($docPromo['body']['data']['warnings'] ?? [], 'code'), true));
+
+$docPromoB = call($promoRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPromo . '/document', ['shopId' => (string) $catB, 'lang' => 'nl']);
+$pPB = $docPromoB['body']['data']['pages'] ?? [];
+$tousB = array_merge(...array_map(static fn (array $p): array => $p['products'] ?? [], $pPB));
+$xy = array_column($tousB, null, 'id')['buyXGetY-2'] ?? [];
+$prodsB = array_column(array_filter($tousB, static fn (array $x): bool => ($x['kind'] ?? '') === 'product'), null, 'id');
+check('promotions : version d’une boutique — SA promotion « 2+1 », dans la page de sa catégorie, en néerlandais, à SES prix',
+    ($xy['badge'] ?? '') === '2+1' && ($xy['deal'] ?? '') === 'de 3e gratis' && ($xy['priceCents'] ?? null) === 1400 && ($xy['oldPriceCents'] ?? null) === 2100
+        && str_contains((string) ($xy['period'] ?? ''), 'in het weekend') && ($pPB[3]['category'] ?? null) === 600 && ($pPB[3]['products'][0]['id'] ?? '') === 'buyXGetY-2',
+    json_encode([$xy, $pPB[3] ?? null], JSON_UNESCAPED_UNICODE));
+check('promotions : un bundle dont la boutique ne vend pas tous les produits n’est pas dans sa version',
+    !in_array('bundle-1', array_column($tousB, 'id'), true));
+check('promotions : la remise que TFBuddy ne dit pas active pour la boutique ne barre aucun prix',
+    array_key_exists('oldPriceCents', $prodsB[11] ?? []) && $prodsB[11]['oldPriceCents'] === null && ($prodsB[11]['priceCents'] ?? null) === 3290, json_encode($prodsB[11] ?? null));
+
+// Les choix de l'éditeur : décocher une offre, refus des types et identifiants inconnus, disponibilité éteinte.
+$majPromo = call($promoRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPromo, [], ['offers' => [['type' => 'bundle', 'id' => 1, 'on' => false], ['type' => 'scheduledDiscount', 'id' => 4, 'on' => true]], 'showAvailability' => false]);
+$docSans = call($promoRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPromo . '/document');
+$tousS = array_merge(...array_map(static fn (array $p): array => $p['products'] ?? [], $docSans['body']['data']['pages'] ?? []));
+check('promotions : une offre décochée quitte la page ; la disponibilité éteinte ne s’imprime plus',
+    $majPromo['status'] === 200 && ($majPromo['body']['data']['offers'] ?? []) === [['type' => 'bundle', 'id' => 1, 'on' => false], ['type' => 'scheduledDiscount', 'id' => 4, 'on' => true]]
+        && ($majPromo['body']['data']['showAvailability'] ?? null) === false && !in_array('bundle-1', array_column($tousS, 'id'), true)
+        && array_filter(array_column($tousS, 'availability')) === [],
+    json_encode([$majPromo['body'], array_column($tousS, 'id')], JSON_UNESCAPED_UNICODE));
+$refusPromo = [];
+foreach ([[['type' => 'remise', 'id' => 1, 'on' => true]], [['type' => 'bundle', 'id' => 999, 'on' => true]], [['type' => 'bundle', 'id' => 1]], [['type' => 'quantity', 'id' => 3, 'on' => true]], 'x'] as $mauvais) {
+    $r = call($promoRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPromo, [], ['offers' => $mauvais]);
+    $refusPromo[] = $r['status'] . ':' . ($r['body']['error']['details'][0]['field'] ?? '');
+}
+$r = call($promoRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPromo, [], ['showAvailability' => 'oui']);
+$refusPromo[] = $r['status'] . ':' . ($r['body']['error']['details'][0]['field'] ?? '');
+check('promotions : refusés (422) — type inconnu, offre inconnue ou finie, forme, disponibilité non booléenne',
+    $refusPromo === ['422:offers[0].type', '422:offers[0].id', '422:offers[0].on', '422:offers[0].id', '422:offers', '422:showAvailability'], json_encode($refusPromo));
+
+// Une boutique (dashboard) : la même chose par l'API de service — SES promotions, à SES prix.
+$_SERVER['HTTP_X_SERVICE_TOKEN'] = 'JETON-SERVICE-CATALOGUES-TEST';
+AuthContext::clear();
+$siensP = call($promoRouter, 'GET', '/api/v1/integration/marketing/shops/9105/catalogue-products');
+check('promotions (boutique) : ses offres seulement — sa « 2+1 », ni le bundle d’un produit qu’elle ne vend pas, ni la remise qu’elle n’a pas',
+    $siensP['status'] === 200 && array_column($siensP['body']['data']['offers'] ?? [], 'id') === ['buyXGetY-2'], json_encode($siensP['body']['data']['offers'] ?? null));
+$creeB = call($promoRouter, 'POST', '/api/v1/integration/marketing/shops/9105/catalogues', [], ['title' => 'Ma promo', 'source' => ['kind' => 'choix'],
+    'products' => [['id' => 13, 'on' => true]], 'offers' => [['type' => 'buyXGetY', 'id' => 2, 'on' => true]], 'showAvailability' => false]);
+$refusB2 = call($promoRouter, 'POST', '/api/v1/integration/marketing/shops/9105/catalogues', [], ['title' => 'Ma promo', 'source' => ['kind' => 'choix'],
+    'offers' => [['type' => 'bundle', 'id' => 1, 'on' => true]]]);
+$docB2 = call($promoRouter, 'GET', '/api/v1/integration/marketing/shops/9105/catalogues/' . (int) ($creeB['body']['data']['id'] ?? 0) . '/document');
+$tousB2 = array_merge(...array_map(static fn (array $p): array => $p['products'] ?? [], $docB2['body']['data']['pages'] ?? []));
+check('promotions (boutique) : son offre cochée imprimée ; une offre d’ailleurs refusée (422)',
+    $creeB['status'] === 201 && ($creeB['body']['data']['showAvailability'] ?? null) === false && in_array('buyXGetY-2', array_column($tousB2, 'id'), true)
+        && $refusB2['status'] === 422 && ($refusB2['body']['error']['details'][0]['field'] ?? '') === 'offers[0].id',
+    json_encode([$creeB['body'], $refusB2['body'], array_column($tousB2, 'id')]));
+$pdo->exec('DELETE FROM mar_catalogue WHERE id = ' . (int) ($creeB['body']['data']['id'] ?? 0));
+unset($_SERVER['HTTP_X_SERVICE_TOKEN']);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+// TFBuddy muet sur les promotions : le document le dit, aucune vignette, aucun prix barré — rien d'inventé.
+\Marketing\Repository\WebshopCatalogueRepository::purge();
+$call = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPromo, [], ['offers' => [['type' => 'bundle', 'id' => 1, 'on' => true]], 'showAvailability' => true]);
+$docMuet = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPromo . '/document');
+$tousM = array_merge(...array_map(static fn (array $p): array => $p['products'] ?? [], $docMuet['body']['data']['pages'] ?? []));
+check('promotions : TFBuddy muet — l’alerte le dit, aucune vignette ni prix barré (les choix restent enregistrés)',
+    $call['status'] === 200 && in_array('PROMOTIONS_UNREADABLE', array_column($docMuet['body']['data']['warnings'] ?? [], 'code'), true)
+        && array_filter($tousM, static fn (array $x): bool => ($x['kind'] ?? '') === 'offer') === []
+        && array_filter(array_column($tousM, 'oldPriceCents')) === [],
+    json_encode([$call['body'], $docMuet['body']['data']['warnings'] ?? null], JSON_UNESCAPED_UNICODE));
+$pdo->exec('DELETE FROM mar_catalogue WHERE id = ' . $idPromo);
 $pdo->exec("DELETE FROM mar_shop WHERE code IN ('cat-sombreffe', 'cat-corbais')");
 \Marketing\Repository\WebshopCatalogueRepository::purge();
 if ($jetonAvant === false) {

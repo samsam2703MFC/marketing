@@ -2913,6 +2913,13 @@ export interface Catalogue {
   /** Exactement `pageCount − 4` pages intérieures. */
   pages: CataloguePageRow[]
   productCount: number
+  /**
+   * Les choix explicites de promotions TFBuddy ; une offre absente est cochée d'office quand elle touche un
+   * produit coché.
+   */
+  offers: CatalogueOfferRow[]
+  /** La disponibilité (période, délai de commande) sous le prix ; vrai par défaut. */
+  showAvailability: boolean
   /** 8, 10, 12, 14 ou 16, les 4 pages de la marque comprises. */
   pageCount: CataloguePageCount
   innerPageCount: number
@@ -2930,9 +2937,51 @@ export interface CatalogueCreate {
   shopIds?: number[]
   products?: CatalogueProductRow[]
   pages?: CataloguePageRow[]
+  offers?: CatalogueOfferRow[]
+  showAvailability?: boolean
 }
 
-export type CatalogueUpdate = Partial<Pick<Catalogue, 'title' | 'format' | 'pageCount' | 'langs' | 'shopIds' | 'products' | 'pages' | 'status' | 'printQty'>>
+export type CatalogueUpdate = Partial<Pick<Catalogue, 'title' | 'format' | 'pageCount' | 'langs' | 'shopIds' | 'products' | 'pages' | 'status' | 'printQty' | 'offers' | 'showAvailability'>>
+
+/** Les promotions de TFBuddy qu'un catalogue montre. */
+export type CatalogueOfferType = 'bundle' | 'buyXGetY' | 'quantity' | 'scheduledDiscount'
+
+export interface CatalogueOfferRow {
+  type: CatalogueOfferType
+  /** Identifiant de la promotion dans TFBuddy. */
+  id: number
+  on: boolean
+}
+
+/** Une promotion lue chez TFBuddy, telle que l'éditeur la montre (et telle que la vignette l'imprime). */
+export interface WebshopOffer {
+  kind: 'offer'
+  /** « bundle-12 ». */
+  id: string
+  type: CatalogueOfferType
+  erpId: number
+  name: string
+  /** « Bundle », « 2+1 », « 3 pour 2 », « −20 % ». */
+  badge: string
+  /** « le 3e offert »… */
+  deal: string | null
+  /** « du 1/12 au 6/12 · le week-end ». */
+  period: string | null
+  validFrom: string | null
+  validTo: string | null
+  shopScope: 'all' | 'selected'
+  /** La catégorie de la page où la vignette se range (celle de son premier produit). */
+  categoryId: number | null
+  productIds: number[]
+  categoryIds: number[]
+  priceCents: number | null
+  oldPriceCents: number | null
+  currency: 'EUR'
+  products: Array<{ id: number; name: string; imageUrl: string | null; quantity: number | null }>
+  moreProducts: number
+}
+
+export type CatalogueDocOffer = Omit<WebshopOffer, 'productIds' | 'categoryIds' | 'categoryId' | 'shopScope'>
 
 export interface WebshopProduct {
   id: number
@@ -2947,6 +2996,8 @@ export interface WebshopProduct {
   priceCents: number | null
   /** Les boutiques qui en ont un autre. */
   priceDiffers: number[]
+  /** Ce que TFBuddy dit de sa disponibilité : périodes (JJ/MM) et délai de préparation. */
+  availability?: { periods: Array<{ id: number; from: string | null; to: string | null }>; leadHours: number | null }
 }
 
 export interface WebshopCategory {
@@ -2968,6 +3019,10 @@ export interface WebshopProducts {
   categories: WebshopCategory[]
   gammes: WebshopGamme[]
   shops: Array<{ id: number; erpShopId: number | null; name: string; products: number; error: string | null; readAt: string | null }>
+  /** Promotions et bundles de TFBuddy qui valent pour le réseau ou l'une des boutiques. */
+  offers?: WebshopOffer[]
+  /** TFBuddy illisible pour les promotions : la raison. */
+  offersError?: string | null
 }
 
 export interface CatalogueShopInfo {
@@ -2980,12 +3035,23 @@ export interface CatalogueShopInfo {
 }
 
 export interface CatalogueDocProduct {
+  kind?: 'product'
   id: number
   name: string
   imageUrl: string | null
   priceCents: number | null
+  /** Prix avant la remise programmée qui le barre. */
+  oldPriceCents?: number | null
+  promo?: { label: string; period: string | null } | null
+  /** « du 1/12 au 6/12 · sur commande 48 h » ; null : rien à dire (ou éteint). */
+  availability?: string | null
   currency: 'EUR'
 }
+
+/** Une case d'une page de produits : un produit, ou la vignette d'une promotion. */
+export type CatalogueDocItem = CatalogueDocProduct | CatalogueDocOffer
+
+export const isDocOffer = (item: CatalogueDocItem): item is CatalogueDocOffer => item.kind === 'offer'
 
 export type CatalogueDocPage =
   | { kind: 'cover'; locked: true; title: string; subtitle: string; eyebrow: string | null; imageUrl: string | null }
@@ -3006,7 +3072,7 @@ export type CatalogueDocPage =
       /** Une rangée entière au moins est libre : la place peut recevoir une photo ou une illustration. */
       fillable?: boolean
       filler?: CatalogueDocFiller | null
-      products: CatalogueDocProduct[]
+      products: CatalogueDocItem[]
     }
   | {
       kind: 'presentation'

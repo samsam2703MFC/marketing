@@ -897,6 +897,42 @@ les pages passent en listes. Réduire `pageCount` ne retire jamais une présenta
 (`CATALOGUE_PAGES_NOT_EMPTY`). Nouvelle route du dashboard : `GET …/shops/{shopId}/catalogue-media`
 (ci-dessous).
 
+**Promotions, bundles et disponibilité (14 novembre 2026, `OpenAPI v1.3`).** Demandes du client :
+« rajouter les bundles et promotions (via API) et les appliquer dans une vignette dans la catégorie », puis
+« rajouter aussi les données de disponibilité ». **Lues** (même chemin que les autres lectures : compte du
+Marketing, sinon celui de Social ; jamais d'écriture) : `GET /api/v1/admin/promotions/bundles`,
+`/buy-x-get-y`, `/quantity`, `/scheduled-product-discount` (`status=ACTIVE&limit=100`, liste `{items,
+pagination}` puis la fiche `/{id}` de chacune — la liste ne porte que des compteurs), mises à la forme du
+module par `ErpPromotionService::normalize` (celle de la route `erp-promotions`) : `bundle_promotion.bundle_price`
+et `items[].id_product/quantity` ; `trigger`/`reward` (`quantity`, `product_ids` ou `products`, `category_ids`
+ou `categories`, `type`, `value`) ; `quantity_promotion` (`mechanism_type`, `bundle_quantity`, `free_quantity`)
+et `eligible_product_ids` ; `reward_product_ids`, `reward_category_ids`, `discount_type`, `discount_value` ;
+`valid_from`/`valid_to`, `schedule[]`, `shop_scope_type`/`shop_ids` (texte « 4,5 » accepté),
+`activation_mode`. Version d'une boutique : `GET /api/v1/shops/{id}/scheduled-product-discounts/active` (non
+décrite par le swagger : identifiants `id_promotion`, `promotion_id` ou `id` ; illisible = la liste du
+réseau fait foi). Gardé 15 min (`mar_catalogue_cache`, clés `promotions`, `remises-actives:{id}`).
+**Appliquées** : actives, pas « avec un bon seulement » (`VOUCHER_ONLY`), du réseau (version générale) ou de la
+boutique de la version, valables pendant que le catalogue circule (la période de sa première gamme datée,
+sinon dès aujourd'hui ; une promotion finie ne s'imprime jamais), touchant au moins un produit ou une
+catégorie lus ; un bundle dont un produit n'est pas vendu par la boutique est écarté. Un bundle, un « X achetés
+= Y », une promotion de quantité = une **vignette** (`kind: offer` au document : badge « Bundle » · « 2+1 » ·
+« 3 pour 2 », phrase « le 3e offert », produits et photos, prix et ancien prix quand on les connaît — bundle :
+`bundle_price` et la somme de ses produits aux prix de la version ; X+Y sur un seul produit : prix des X et des
+X + Y —, période « du 1/12 au 6/12 · le week-end · 8h–12h ») qui **occupe une case** de la page de la
+catégorie de son premier produit (devant ses produits ; jamais dans la liste d'une présentation) ; une remise
+programmée **barre le prix** des produits visés (`oldPriceCents`, `promo.label` « −10 % »). **Choix** :
+`offers: [{type, id, on}]` (`type` ∈ `bundle · buyXGetY · quantity · scheduledDiscount`) dans les réglages ;
+une offre absente est cochée d'office si elle touche un produit coché ; type inconnu, forme, ou identifiant
+que TFBuddy ne rend pas pour ce catalogue → `422 VALIDATION_FAILED` (`offers[i].type|id|on`) ; TFBuddy muet :
+les choix sont gardés tels quels. TFBuddy muet au document : alerte `PROMOTIONS_UNREADABLE`, aucune vignette,
+aucun prix barré. **Disponibilité** : `availability` de chaque produit de `catalogue-products`
+(`periods[{id, from, to}]` en JJ/MM — `from_md`/`to_md`, sinon `start_date`/`end_date` de la période sur la
+ligne du produit, sinon ceux de la gamme — et `leadHours` = `preparation_lead_time_hours` de l'ERP, 0 = rien) ;
+au document, sous le prix, « du 1/12 au 6/12 · sur commande 48 h » (NL « van 1/12 tot 6/12 · op bestelling
+48 u ») — la période d'une gamme du catalogue, sinon la seule du produit ; rien de connu : `null`.
+`showAvailability` (booléen, vrai par défaut ; autre valeur `422`) l'éteint. Le swagger ne décrit pas de
+jours de la semaine ni de précommande pour un produit : rien de tel n'est lu.
+
 **Routes de la marque** (session, rôle réseau ; un compte de boutique → `403 PERM_ROLE_REQUIRED`) :
 
 | Méthode | Chemin | Rôle |
