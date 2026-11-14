@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Marketing\Repository;
 
+use Marketing\Support\Config;
 use Marketing\Support\Database;
+use Marketing\Support\Keys;
 use Marketing\Support\ErpClient;
 use RuntimeException;
 use Throwable;
@@ -41,8 +43,113 @@ final class WebshopCatalogueRepository
     /** Lectures déjà faites pendant la requête. @var array<string, array{data:array<mixed>, error:?string}> */
     private array $memo = [];
 
-    public function __construct(private readonly ErpClient $erp = new ErpClient())
+    /** @var null|callable(string $method, string $url, list<string> $headers, ?string $body): array{0:int,1:string} */
+    private $socialTransport;
+
+    /** Jeton du compte TFBuddy de Social, gardé le temps de la requête. */
+    private ?string $socialToken = null;
+
+    /**
+     * @param null|callable(string, string, list<string>, ?string): array{0:int,1:string} $socialTransport
+     *        transport HTTP de l'accès de Social (tests) ; par défaut curl.
+     */
+    public function __construct(private readonly ErpClient $erp = new ErpClient(), ?callable $socialTransport = null)
     {
+        $this->socialTransport = $socialTransport;
+    }
+
+    /**
+     * Une lecture de l'ERP : par le compte du Marketing (`MAR_ERP_API_*`), et s'il échoue (non réglé,
+     * refusé), par le compte TFBuddy du module Social — celui de « Créer un post », qui lit déjà ce
+     * même webshop (photos, prix des boutiques). L'erreur du premier reste dite si le second échoue aussi.
+     *
+     * @param array<string, string|int|null> $query
+     * @return array<mixed>
+     */
+    private function lire(string $path, array $query = []): array
+    {
+        try {
+            return $this->erp->get($path, $query);
+        } catch (Throwable $first) {
+            try {
+                return $this->lireViaSocial($path, $query);
+            } catch (Throwable $second) {
+                throw new RuntimeException($first->getMessage() . ' (accès de Social : ' . $second->getMessage() . ')', 0, $first);
+            }
+        }
+    }
+
+    /**
+     * @param array<string, string|int|null> $query
+     * @return array<mixed>
+     */
+    private function lireViaSocial(string $path, array $query): array
+    {
+        $base = rtrim((string) (Config::value('tfb_base', 'social') ?: 'https://atelierby.tfbuddy.com/api/v1'), '/');
+        $rel  = (string) preg_replace('#^/api/v\d+#', '', $path);
+        $q    = array_filter($query, static fn ($v): bool => $v !== null && $v !== '');
+        $url  = $base . '/' . ltrim($rel, '/') . ($q === [] ? '' : '?' . http_build_query($q));
+        for ($essai = 0; $essai < 2; $essai++) {
+            [$code, $body] = $this->socialHttp('GET', $url, ['Accept: application/json', 'Authorization: Bearer ' . $this->socialJeton($base, $essai > 0)], null);
+            if ($code === 401 && $essai === 0) {
+                continue;
+            }
+            if ($code < 200 || $code >= 300) {
+                throw new RuntimeException('HTTP ' . $code);
+            }
+            $json = json_decode($body, true);
+            if (!is_array($json)) {
+                throw new RuntimeException('réponse illisible');
+            }
+
+            return $json;
+        }
+        throw new RuntimeException('HTTP 401');
+    }
+
+    private function socialJeton(string $base, bool $forcer): string
+    {
+        if (!$forcer && $this->socialToken !== null) {
+            return $this->socialToken;
+        }
+        // Le jeton que Social a gardé (30 min), s'il est encore bon.
+        $garde = json_decode((string) (Keys::get('tfb_jeton_admin', 'social') ?? ''), true);
+        if (!$forcer && is_array($garde) && ($garde['exp'] ?? 0) > time() + 60 && is_string($garde['token'] ?? null) && $garde['token'] !== '') {
+            return $this->socialToken = $garde['token'];
+        }
+        $phone = trim((string) (Config::value('tfb_admin_phone', 'social') ?? ''));
+        $pass  = json_decode((string) (Keys::get('tfb_admin_password', 'social') ?? ''), true);
+        if ($phone === '' || !is_string($pass) || $pass === '') {
+            throw new RuntimeException('compte TFBuddy de Social non renseigné');
+        }
+        [$code, $body] = $this->socialHttp('POST', $base . '/admin/auth/login', ['Accept: application/json', 'Content-Type: application/json'], (string) json_encode(['phone' => $phone, 'password' => $pass]));
+        $j = json_decode($body, true);
+        $j = is_array($j) ? $j : [];
+        foreach ([$j['access_token'] ?? null, $j['token'] ?? null, $j['data']['access_token'] ?? null, $j['data']['token'] ?? null] as $t) {
+            if (is_string($t) && $t !== '') {
+                return $this->socialToken = $t;
+            }
+        }
+        throw new RuntimeException('connexion refusée (HTTP ' . $code . ')');
+    }
+
+    /** @return array{0:int,1:string} */
+    private function socialHttp(string $method, string $url, array $headers, ?string $body): array
+    {
+        if ($this->socialTransport !== null) {
+            return ($this->socialTransport)($method, $url, $headers, $body);
+        }
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30, CURLOPT_CONNECTTIMEOUT => 8,
+            CURLOPT_CUSTOMREQUEST => $method, CURLOPT_HTTPHEADER => $headers]);
+        if ($body !== null) {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+        }
+        $r = curl_exec($ch);
+        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        return [$r === false ? 0 : $code, $r === false ? '' : (string) $r];
     }
 
     /**
@@ -56,11 +163,11 @@ final class WebshopCatalogueRepository
     {
         $read = $this->cached('produits:' . $erpShopId, self::TTL_PRODUCTS, function () use ($erpShopId): array {
             $query = ['webshop_active' => 1, 'alias_type' => 'webshop', 'include' => self::INCLUDE];
-            $fr = ErpClient::rows($this->erp->get('/api/v1/shops/' . $erpShopId . '/products/available', ['lang_code' => 'fr'] + $query));
+            $fr = ErpClient::rows($this->lire('/api/v1/shops/' . $erpShopId . '/products/available', ['lang_code' => 'fr'] + $query));
             $nl = [];
             $nlCats = [];
             try {
-                foreach (ErpClient::rows($this->erp->get('/api/v1/shops/' . $erpShopId . '/products/available', ['lang_code' => 'nl'] + $query)) as $row) {
+                foreach (ErpClient::rows($this->lire('/api/v1/shops/' . $erpShopId . '/products/available', ['lang_code' => 'nl'] + $query)) as $row) {
                     $nl[(string) ($row['id'] ?? '')] = trim((string) ($row['name'] ?? ''));
                     $cat = is_array($row['category'] ?? null) ? $row['category'] : [];
                     $catId = (int) ($row['id_category'] ?? ($cat['id'] ?? 0));
@@ -197,7 +304,7 @@ final class WebshopCatalogueRepository
     {
         $read = $this->cached('gammes', self::TTL_REFERENCES, function (): array {
             $out = [];
-            foreach (ErpClient::rows($this->erp->get('/api/v1/product-availability-periods', ['lang_code' => 'fr', 'alias_type' => 'webshop'])) as $row) {
+            foreach (ErpClient::rows($this->lire('/api/v1/product-availability-periods', ['lang_code' => 'fr', 'alias_type' => 'webshop'])) as $row) {
                 if (empty($row['id']) || empty($row['is_active'])) {
                     continue;
                 }
@@ -256,7 +363,7 @@ final class WebshopCatalogueRepository
             $errors = [];
             foreach (['/api/v1/public/shops', '/api/v1/shops'] as $path) {
                 try {
-                    foreach (ErpClient::rows($this->erp->get($path), ['shops']) as $row) {
+                    foreach (ErpClient::rows($this->lire($path), ['shops']) as $row) {
                         if (!isset($row['id'])) {
                             continue;
                         }
