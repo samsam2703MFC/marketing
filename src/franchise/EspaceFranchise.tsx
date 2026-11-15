@@ -15,7 +15,7 @@ import {
   pastilles,
   useFranchise,
 } from '../lib/franchise/store'
-import { adresseEspace, pageCourante, type PageEspace } from './routes'
+import { adresseEspace, INTEGRE, pageCourante, type PageEspace } from './routes'
 import './espace.css'
 
 /**
@@ -107,6 +107,48 @@ export default function EspaceFranchise() {
   const boutiques = etat.me.shops ?? []
   const nom = etat.me.name || 'Gérant'
 
+  const pages = (
+    <>
+      {page === 'cal' ? (
+        <CalendrierFranchiseView
+          onPublier={(query) => aller('pub', query ?? '')}
+          onCommentaires={() => aller('com')}
+          onGoogle={() => aller('google')}
+          onOperations={() => aller('camp')}
+        />
+      ) : null}
+      {page === 'pub' ? <PublierView onCalendrier={(query) => aller('cal', query)} /> : null}
+      {page === 'com' ? <CommentairesView /> : null}
+      {page === 'msg' ? <MessagesView /> : null}
+      {page === 'google' ? <GoogleFranchiseView /> : null}
+      {page === 'camp' ? <OperationsView onNaviguer={(pg, query) => aller(pg, query)} /> : null}
+      {page === 'ig' ? <InstagramView onNaviguer={(pg, query) => aller(pg, query)} /> : null}
+    </>
+  )
+
+  // Dans le cockpit franchisé : la page seule, et le quota de la semaine en tête (le menu est celui du cockpit).
+  if (INTEGRE) {
+    return (
+      <div className="esp esp--integre">
+        <main className="esp-corps" key={cle}>
+          <div className="esp-integre-quota" title={ligneRegles(r)}>
+            <span>
+              Cette semaine · {q.used} / {q.max} post{q.max > 1 ? 's' : ''}
+            </span>
+            <span className="esp-quota-piste">
+              <span
+                className={`esp-quota-barre${q.used >= q.max ? ' is-plein' : ''}`}
+                style={{ width: `${Math.min(100, q.max ? (q.used / q.max) * 100 : 100)}%` }}
+              />
+            </span>
+          </div>
+          {erreur ? <div className="esp-erreur esp-erreur--ligne">{erreur}</div> : null}
+          {pages}
+        </main>
+      </div>
+    )
+  }
+
   return (
     <div className={`esp${tiroir ? ' esp--tiroir' : ''}`}>
       <aside className="esp-rail" aria-label="Menu de l’espace boutique">
@@ -188,20 +230,7 @@ export default function EspaceFranchise() {
 
       <main className="esp-corps" key={cle}>
         {erreur ? <div className="esp-erreur esp-erreur--ligne">{erreur}</div> : null}
-        {page === 'cal' ? (
-          <CalendrierFranchiseView
-            onPublier={(query) => aller('pub', query ?? '')}
-            onCommentaires={() => aller('com')}
-            onGoogle={() => aller('google')}
-            onOperations={() => aller('camp')}
-          />
-        ) : null}
-        {page === 'pub' ? <PublierView onCalendrier={(query) => aller('cal', query)} /> : null}
-        {page === 'com' ? <CommentairesView /> : null}
-        {page === 'msg' ? <MessagesView /> : null}
-        {page === 'google' ? <GoogleFranchiseView /> : null}
-        {page === 'camp' ? <OperationsView onNaviguer={(pg, query) => aller(pg, query)} /> : null}
-        {page === 'ig' ? <InstagramView onNaviguer={(pg, query) => aller(pg, query)} /> : null}
+        {pages}
       </main>
     </div>
   )

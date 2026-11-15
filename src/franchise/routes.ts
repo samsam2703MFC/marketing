@@ -18,10 +18,24 @@ export const CHEMINS: Record<Exclude<PageEspace, 'suivi'>, string> = {
 /** La racine de l'espace, sous l'adresse de l'application (`/marketing/franchise/`). */
 export const RACINE_ESPACE = `${(import.meta.env.BASE_URL || '/').replace(/\/?$/, '/')}franchise/`
 
+/**
+ * Le mode intégré (15/11/2026) : l'espace affiché dans le dashboard magasin du cockpit (`?embed=1`), sans son menu ni sa
+ * barre — le cockpit a les siens. Il se garde de page en page, avec la boutique demandée.
+ */
+const PARAMS_DEPART = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
+export const INTEGRE = PARAMS_DEPART.get('embed') === '1'
+const BOUTIQUE_INTEGREE = INTEGRE ? (PARAMS_DEPART.get('shop') ?? '') : ''
+
 /** L'adresse d'une page de l'espace. « Suivi » est un onglet du calendrier (`?vue=suivi`). */
 export function adresseEspace(page: PageEspace, query = ''): string {
   if (page === 'suivi') return adresseEspace('cal', ['vue=suivi', query].filter(Boolean).join('&'))
-  return `${RACINE_ESPACE}${CHEMINS[page]}${query ? `?${query}` : ''}`
+  const q = new URLSearchParams(query)
+  if (INTEGRE) {
+    q.set('embed', '1')
+    if (BOUTIQUE_INTEGREE && !q.has('shop')) q.set('shop', BOUTIQUE_INTEGREE)
+  }
+  const s = q.toString()
+  return `${RACINE_ESPACE}${CHEMINS[page]}${s ? `?${s}` : ''}`
 }
 
 /** Les anciens noms de fichier de l'espace (liens de l'ERP, favoris) : la même page. */
