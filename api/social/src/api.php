@@ -66,6 +66,11 @@ function socRoute(string $method, string $path): array
         socInstall();
         return [200, socIntegrationFormulaires()];
     }
+    // Le cockpit franchisé (15/11/2026) : un jeton court qui ouvre l'espace d'une boutique dans le cockpit (src/franchise.php).
+    if ($method === 'POST' && $path === '/integration/franchise/sessions') {
+        socInstall();
+        return [200, sfIntegrationSession(body())];
+    }
     if ($path === '/webhook') {
         socInstall();
         if ($method === 'GET') { return [200, socWebhookVerif()]; }

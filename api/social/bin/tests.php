@@ -1052,6 +1052,41 @@ $_SERVER['HTTP_X_SERVICE_TOKEN'] = 'JETON-SERVICE-TEST';
 [$code, $b] = socRoute('GET', '/integration/formulaires');
 check('intégration : nos formulaires de prospects, au bon jeton', $code === 200 && ($b['formulaires'] ?? null) === array_values(array_unique(array_map('strval', $nosForms))), json_encode($b));
 unset($_SERVER['HTTP_X_SERVICE_TOKEN']);
+// Le cockpit franchisé (15/11/2026) : un lien court, demandé au jeton de service, ouvre l'espace d'une boutique en mode
+// intégré — la session de cette boutique seule, deux minutes pour l'ouvrir ; un lien modifié ou expiré n'ouvre rien.
+$hoteAvant = $GLOBALS['SOCIAL_HOTE'] ?? null;
+$GLOBALS['SOCIAL_HOTE'] = ['franchise_session' => static fn (): ?array => null];
+unset($_COOKIE[SF_COOKIE]);
+$_SERVER['REQUEST_URI'] = '/marketing/social/api/v1/social/integration/franchise/sessions';
+$_SERVER['HTTP_X_SERVICE_TOKEN'] = 'faux';
+[$code] = $fr('POST', '/integration/franchise/sessions', ['shop' => '4', 'page' => 'publier']);
+check('cockpit : sans le bon jeton de service, pas de lien (401)', $code === 401);
+$_SERVER['HTTP_X_SERVICE_TOKEN'] = 'JETON-SERVICE-TEST';
+[$code] = $fr('POST', '/integration/franchise/sessions', ['shop' => '999']);
+check('cockpit : une boutique hors du réseau, 404', $code === 404);
+[$code, $b] = $fr('POST', '/integration/franchise/sessions', ['shop' => '4', 'page' => 'publier']);
+unset($_SERVER['HTTP_X_SERVICE_TOKEN']);
+$q = [];
+parse_str((string) parse_url((string) ($b['url'] ?? ''), PHP_URL_QUERY), $q);
+check('cockpit : un lien court, sur l’adresse de l’API', $code === 200 && str_starts_with((string) ($b['url'] ?? ''), '/marketing/social/api/v1/social/franchise/ouvrir?jeton=')
+    && (string) ($q['jeton'] ?? '') !== '' && empty($_COOKIE[SF_COOKIE]), json_encode($b));
+$_SERVER['REQUEST_URI'] = '/marketing/social/api/v1/social/franchise/ouvrir';
+[$code, $r] = $fr('GET', '/franchise/ouvrir', [], ['jeton' => (string) ($q['jeton'] ?? '')]);
+$s = sfSession('4');
+check('cockpit : le lien pose la session de la boutique (origine cockpit) et ouvre la page en mode intégré', $code === 302 && $r instanceof SocRedirection
+    && str_ends_with($r->url, '/publier?embed=1&shop=4') && ($s['via'] ?? '') === 'cockpit' && ($s['shops'] ?? []) === ['4'],
+    json_encode([$code, $r instanceof SocRedirection ? $r->url : $r, $s]));
+[$code] = $fr('GET', '/franchise/etat', [], ['shop' => '5']);
+check('cockpit : la session ouverte ne sert que sa boutique (403 ailleurs)', $code === 403);
+unset($_COOKIE[SF_COOKIE]);
+$sig = explode('.', (string) ($q['jeton'] ?? '.'), 2)[1] ?? '';
+$autre = rtrim(strtr(base64_encode((string) json_encode(['shop' => '5', 'page' => 'publier', 'exp' => time() + 60, 'n' => 'x'])), '+/', '-_'), '=');
+[$code] = $fr('GET', '/franchise/ouvrir', [], ['jeton' => $autre . '.' . $sig]);
+$vieux = rtrim(strtr(base64_encode((string) json_encode(['shop' => '4', 'page' => 'publier', 'exp' => time() - 5, 'n' => 'x'])), '+/', '-_'), '=');
+[$code2] = $fr('GET', '/franchise/ouvrir', [], ['jeton' => $vieux . '.' . hash_hmac('sha256', 'cockpit|' . $vieux, sfSecret())]);
+check('cockpit : un lien modifié ou expiré est refusé (401), sans session', $code === 401 && $code2 === 401 && empty($_COOKIE[SF_COOKIE]));
+if ($hoteAvant !== null) { $GLOBALS['SOCIAL_HOTE'] = $hoteAvant; } else { unset($GLOBALS['SOCIAL_HOTE']); }
+unset($_SERVER['REQUEST_URI']);
 $appels = [];
 $lf['status'] = 'Archivé';
 socStateSave(['changes' => ['leadforms' => ['upsert' => [$lf]]]]);

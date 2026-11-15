@@ -246,6 +246,65 @@ function sfExiger(?string $shop = null): array
     return $s;
 }
 
+/* --- le cockpit franchisé (15/11/2026) ------------------------------------------------------ */
+
+/*
+ * Le dashboard magasin du cockpit (portail Pilotage) affiche les pages de l'espace boutique dans son propre écran, en mode
+ * intégré (sans le menu de l'espace) : « tout doit se faire dans le cockpit franchisé ». Le cockpit, qui a vérifié la
+ * boutique de sa session, demande un jeton court par l'API d'intégration (jeton de service de l'ERP) ; le navigateur du
+ * gérant l'échange contre la session de l'espace (le même cookie signé que l'aperçu, origine « cockpit ») et arrive sur
+ * la page demandée. Le jeton ne sert qu'une boutique, deux minutes.
+ */
+const SF_JETON_COCKPIT = 120;
+const SF_PAGES_INTEGREES = ['calendrier', 'publier', 'commentaires', 'messages', 'avis-google', 'operations', 'instagram'];
+
+function sfPageIntegree(string $p): string { return in_array($p, SF_PAGES_INTEGREES, true) ? $p : 'calendrier'; }
+
+/** Le jeton de service de l'ERP (`erp_cles.erp_jeton_service`), comparé à temps constant ; 401 sinon. */
+function sfJetonServiceExige(): void
+{
+    $h = (string) ($_SERVER['HTTP_X_SERVICE_TOKEN'] ?? '');
+    $r = Db::hasTable('erp_cles') ? Db::row("SELECT valeur FROM erp_cles WHERE cle = 'erp_jeton_service'") : null;
+    $v = $r !== null ? (string) $r['valeur'] : '';
+    if ($h === '' || $v === '' || !hash_equals($v, $h)) { throw new HttpError(401, 'jeton de service'); }
+}
+
+/**
+ * POST /integration/franchise/sessions {shop, page?} — pour le cockpit : un jeton court qui ouvre l'espace de la boutique
+ * dans son cadre. Rend {url, expire} : l'adresse (sur cet hôte) que le navigateur du gérant ouvre.
+ */
+function sfIntegrationSession(array $b): array
+{
+    sfJetonServiceExige();
+    $shop = trim((string) ($b['shop'] ?? ''));
+    $reseau = array_map('strval', array_column(socReseau(), 'id'));
+    if ($shop === '' || !in_array($shop, $reseau, true)) { throw new HttpError(404, 'Boutique inconnue du réseau.'); }
+    $exp = time() + SF_JETON_COCKPIT;
+    $p = rtrim(strtr(base64_encode((string) json_encode(['shop' => $shop, 'page' => sfPageIntegree((string) ($b['page'] ?? '')), 'exp' => $exp, 'n' => bin2hex(random_bytes(8))])), '+/', '-_'), '=');
+    $jeton = $p . '.' . hash_hmac('sha256', 'cockpit|' . $p, sfSecret());
+    $chemin = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+    $base = (string) preg_replace('#/integration/franchise/sessions/?$#', '', $chemin);
+    return ['url' => $base . '/franchise/ouvrir?jeton=' . rawurlencode($jeton), 'expire' => date('c', $exp)];
+}
+
+/**
+ * GET /franchise/ouvrir?jeton=…[&page=] — le jeton du cockpit vérifié (signature, échéance) : la session de la boutique
+ * est posée et le navigateur va à la page, en mode intégré (`?embed=1`).
+ */
+function sfOuvrirDepuisCockpit(string $jeton, string $page): SocRedirection
+{
+    [$p, $sig] = array_pad(explode('.', $jeton, 2), 2, '');
+    $d = $p !== '' && hash_equals(hash_hmac('sha256', 'cockpit|' . $p, sfSecret()), $sig) ? json_decode((string) base64_decode(strtr($p, '-_', '+/')), true) : null;
+    if (!is_array($d) || (int) ($d['exp'] ?? 0) < time() || (string) ($d['shop'] ?? '') === '') {
+        throw new HttpError(401, 'Le lien du cockpit a expiré : rouvrez la page depuis le cockpit.');
+    }
+    $shop = (string) $d['shop'];
+    $b = socShop($shop);
+    sfSessionOuvrir([$shop], 'Gérant · ' . (string) ($b['name'] ?? $shop), 'cockpit');
+    $racine = rtrim((string) (socSetting('url_franchise') ?? '/marketing/franchise/'), '/') . '/';
+    return new SocRedirection($racine . sfPageIntegree($page !== '' ? $page : (string) ($d['page'] ?? '')) . '?embed=1&shop=' . rawurlencode($shop));
+}
+
 /* --- catalogue de la boutique ------------------------------------------------------- */
 
 /** Les produits vendus dans la boutique (API TFBuddy), mémorisés 6 h ; à défaut, le catalogue du réseau. Sans prix : écartés. */
@@ -1108,6 +1167,8 @@ function sfRoute(string $method, string $path): ?array
     if (!str_starts_with($path, '/franchise/') || str_starts_with($path, '/franchise/admin')) { return null; }
     socInstall();
     // Pas de connexion propre à l'espace : l'ERP ouvre la session ; seul l'aperçu du franchiseur se ferme ici.
+    // Le cockpit franchisé : son jeton court pose la session de la boutique (avant la session exigée ci-dessous).
+    if ($method === 'GET' && $path === '/franchise/ouvrir') { return [302, sfOuvrirDepuisCockpit((string) ($_GET['jeton'] ?? ''), (string) ($_GET['page'] ?? ''))]; }
     if ($method === 'POST' && $path === '/franchise/deconnexion') { sfSessionFermer(); return [200, ['ok' => true]]; }
     $shop = (string) ($_GET['shop'] ?? (body()['shop'] ?? '')) ?: (string) sfExiger()['shops'][0];
     $session = sfExiger($shop);

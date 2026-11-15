@@ -160,7 +160,7 @@ export interface EtatFranchise {
   today: string
   now: string
   mode: string
-  me: { name: string; via: 'hote' | 'apercu' | 'libre' | string; shops: { id: string; name: string }[] }
+  me: { name: string; via: 'hote' | 'apercu' | 'cockpit' | 'libre' | string; shops: { id: string; name: string }[] }
   shop: BoutiqueFranchise
   rules: Regles
   templates: Modele[]
@@ -532,7 +532,7 @@ export function pastilles(etat: EtatFranchise) {
 
 /** « Connecté par l'ERP » · « Aperçu du franchiseur » · « Accès ouvert ». */
 export const libelleAcces = (via: string) =>
-  via === 'hote' ? 'Connecté par l’ERP' : via === 'apercu' ? 'Aperçu du franchiseur' : via === 'libre' ? 'Accès ouvert (en attendant l’ERP)' : ''
+  via === 'hote' ? 'Connecté par l’ERP' : via === 'apercu' ? 'Aperçu du franchiseur' : via === 'cockpit' ? 'Ouvert depuis le cockpit franchisé' : via === 'libre' ? 'Accès ouvert (en attendant l’ERP)' : ''
 
 // ---------------------------------------------------------------------------
 // Liens entre les pages de l'espace (dans le rail du Marketing)
