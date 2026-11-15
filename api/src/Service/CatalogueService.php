@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Marketing\Service;
 
 use Marketing\Repository\CatalogueRepository;
+use Marketing\Repository\CatalogueShopRepository;
 use Marketing\Repository\WebshopCatalogueRepository;
 use Marketing\Support\Config;
 use Marketing\Support\Keys;
@@ -103,13 +104,32 @@ final class CatalogueService
     /** Validité d'un lien d'impression, en secondes. */
     private const PRINT_TTL = 172800;
 
-    /** La charte telle qu'elle vit dans `mar_variable`. */
+    /** Le BROUILLON de la charte, tel qu'il vit dans `mar_variable` (les versions publiées : `mar_catalogue_charter_version`). */
     public const CHARTER_VARIABLE = 'catalogues.charte';
+
+    /** Gabarits de la couverture (maquette A1) : A Pleine couleur · B Illustration · C Photo. */
+    public const COVER_TEMPLATES = ['A', 'B', 'C'];
+
+    /** Le visuel d'une couverture : un dessin de saison, une photo de la médiathèque, rien (null : comme avant l'assistant). */
+    public const COVER_VISUALS = ['illustration', 'media', 'none'];
+
+    /** Les dessins de saison livrés avec le module (`public/img/print/<slug>.png`). */
+    public const SEASON_DRAWINGS = ['noel', 'saint-nicolas', 'epiphanie', 'chandeleur', 'saint-valentin', 'paques', 'fete-des-meres', 'printemps', 'ete', 'automne', 'hiver', 'glace'];
+
+    /** Gabarits de la page 2 et de l'avant-dernière (maquette A2) : A Texte seul · B Image en haut · C Image en bas. */
+    public const BRAND_TEMPLATES = ['A', 'B', 'C'];
+
+    /** Gabarits de la dernière page (maquette A3) : A QR et boutique · B Boutique en avant. */
+    public const BACK_TEMPLATES = ['A', 'B'];
+
+    /** Caractères qu'un texte de la page 2 / avant-dernière peut porter sans déborder, par gabarit (A5 ; l'A4 est à l'échelle). */
+    public const BRAND_TEXT_FIT = ['A' => 1000, 'B' => 520, 'C' => 520];
 
     public function __construct(
         private readonly CatalogueRepository $catalogues = new CatalogueRepository(),
         private readonly WebshopCatalogueRepository $webshop = new WebshopCatalogueRepository(),
         private readonly MediaService $media = new MediaService(),
+        private readonly CatalogueShopRepository $shopRepo = new CatalogueShopRepository(),
     ) {
     }
 
@@ -781,6 +801,7 @@ final class CatalogueService
             'format'       => (string) $row['format'],
             'status'       => (string) $row['status'],
             'printQty'     => $row['print_qty'] !== null ? (int) $row['print_qty'] : null,
+            'charterVersion' => isset($row['charter_version']) ? (int) $row['charter_version'] : null,
             'langs'        => array_values($settings['langs'] ?? ['fr']),
             'shopIds'      => array_values(array_map('intval', $settings['shopIds'] ?? [])),
             'products'     => array_values($settings['products'] ?? []),
@@ -1081,6 +1102,10 @@ final class CatalogueService
         }
 
         $this->catalogues->update((int) $current['id'], $row, $userId, $scopeShopId);
+        // « Marquer imprimé » fige la version publiée de la charte : ce catalogue garde ses pages de la marque.
+        if ($row['status'] !== $current['status'] && ($row['status'] === 'imprime' || $current['status'] === 'imprime')) {
+            $this->shopRepo->freezeCatalogue((int) $current['id'], $row['status'] === 'imprime' ? $this->publishedVersion() : null);
+        }
 
         return $this->serialize((array) $this->catalogues->find((int) $current['id'], $scopeShopId));
     }
@@ -1740,11 +1765,64 @@ final class CatalogueService
     // Charte des catalogues
     // ---------------------------------------------------------------------------------------------
 
-    /** La charte enregistrée, complétée des valeurs par défaut. @return array<string,mixed> */
+    /**
+     * Le BROUILLON de la charte (ce que l'assistant des pages de la marque édite), complété des valeurs par défaut,
+     * avec l'état de sa publication (`publication` : dernière version publiée, brouillon différent ou non).
+     *
+     * @return array<string,mixed>
+     */
     public function charter(): array
     {
         $saved = Config::value(self::CHARTER_VARIABLE);
-        $saved = is_array($saved) ? $saved : [];
+        $out = $this->normalizeCharter(is_array($saved) ? $saved : []);
+        $out['updatedAt'] = isset(Config::all()[self::CHARTER_VARIABLE]) ? self::iso(Config::all()[self::CHARTER_VARIABLE]['updated_at']) : null;
+        $published = $this->shopRepo->charterVersion();
+        $publishedContent = $published !== null ? json_decode($published['content'], true) : null;
+        $out['publication'] = [
+            'version'      => $published['version'] ?? null,
+            'publishedAt'  => $published['publishedAt'] ?? null,
+            'draftChanged' => $published === null
+                ? $saved !== null
+                : self::charterStored($this->normalizeCharter(is_array($saved) ? $saved : [])) !== self::charterStored($this->normalizeCharter(is_array($publishedContent) ? $publishedContent : [])),
+        ];
+
+        return $out;
+    }
+
+    /**
+     * La charte PUBLIÉE que lisent les catalogues : la version demandée (celle figée à l'impression), sinon la
+     * dernière publiée ; aucune version (base neuve) : les valeurs par défaut.
+     *
+     * @return array<string,mixed>
+     */
+    public function publishedCharter(?int $version = null): array
+    {
+        $row = $this->shopRepo->charterVersion($version);
+        if ($row === null && $version !== null) {
+            $row = $this->shopRepo->charterVersion();
+        }
+        $content = $row !== null ? json_decode($row['content'], true) : null;
+        $out = $this->normalizeCharter(is_array($content) ? $content : []);
+        $out['version'] = $row['version'] ?? null;
+
+        return $out;
+    }
+
+    /** Le numéro de la dernière version publiée (null : aucune). */
+    public function publishedVersion(): ?int
+    {
+        return $this->shopRepo->charterVersion()['version'] ?? null;
+    }
+
+    /**
+     * Une charte enregistrée, complétée des défauts, clés dans un ordre FIXE (celui des défauts : MySQL 8 réordonne
+     * les clés JSON), visuels résolus en adresses.
+     *
+     * @param array<string,mixed> $saved
+     * @return array<string,mixed>
+     */
+    private function normalizeCharter(array $saved): array
+    {
         $default = self::defaultCharter();
 
         $covers = [];
@@ -1764,19 +1842,248 @@ final class CatalogueService
             'back'        => array_replace($default['back'], array_intersect_key((array) ($saved['back'] ?? []), $default['back'])),
             'page2'       => array_replace($default['page2'], array_intersect_key((array) ($saved['page2'] ?? []), $default['page2'])),
             'penultimate' => array_replace($default['penultimate'], array_intersect_key((array) ($saved['penultimate'] ?? []), $default['penultimate'])),
-            'updatedAt'   => isset(Config::all()[self::CHARTER_VARIABLE]) ? self::iso(Config::all()[self::CHARTER_VARIABLE]['updated_at']) : null,
         ];
         $out['logoUrl'] = $this->mediaUrl($out['logoMediaId']);
         foreach ($out['covers'] as &$cover) {
+            $cover['mediaId'] = is_int($cover['mediaId']) ? $cover['mediaId'] : null;
+            $cover['template'] = in_array($cover['template'], self::COVER_TEMPLATES, true) ? $cover['template'] : 'A';
+            $cover['visual'] = in_array($cover['visual'], self::COVER_VISUALS, true) ? $cover['visual'] : null;
+            $cover['illustration'] = in_array($cover['illustration'], self::SEASON_DRAWINGS, true) ? $cover['illustration'] : null;
             $cover['imageUrl'] = $this->mediaUrl($cover['mediaId']);
         }
         unset($cover);
         foreach (['page2', 'penultimate'] as $slot) {
             $out[$slot]['mediaId'] = is_int($out[$slot]['mediaId']) ? $out[$slot]['mediaId'] : null;
+            // Sans gabarit choisi (charte d'avant l'assistant) : image en haut s'il y a une image, texte seul sinon.
+            $out[$slot]['template'] = in_array($out[$slot]['template'], self::BRAND_TEMPLATES, true) ? $out[$slot]['template'] : ($out[$slot]['mediaId'] !== null ? 'B' : 'A');
             $out[$slot]['imageUrl'] = $this->mediaUrl($out[$slot]['mediaId']);
+        }
+        $out['back']['template'] = in_array($out['back']['template'], self::BACK_TEMPLATES, true) ? $out['back']['template'] : 'A';
+
+        return $out;
+    }
+
+    /** Ce qu'on enregistre d'une charte normalisée : sans les adresses calculées. @return array<string,mixed> */
+    private static function charterStored(array $charter): array
+    {
+        $out = array_intersect_key($charter, array_flip(['logoMediaId', 'colors', 'covers', 'back', 'page2', 'penultimate']));
+        $out['covers'] = array_map(static fn (array $c): array => array_diff_key($c, ['imageUrl' => 1]), $out['covers']);
+        foreach (['page2', 'penultimate'] as $slot) {
+            unset($out[$slot]['imageUrl']);
         }
 
         return $out;
+    }
+
+    /**
+     * « Publier pour tous les catalogues » : le brouillon (ou, `fromVersion`, une version d'avant — « Revenir à la
+     * version du … ») devient la nouvelle version publiée. Les catalogues pas encore marqués imprimés la prennent à
+     * leur prochain aperçu et à leur prochain PDF ; un catalogue imprimé garde la sienne.
+     *
+     * @param array<string,mixed> $input {fromVersion?: int, note?: string}
+     * @return array<string,mixed>
+     */
+    public function publishCharter(array $input, ?int $userId): array
+    {
+        $errors = self::unknown($input, ['fromVersion', 'note']);
+        $note = $input['note'] ?? null;
+        if ($note !== null && (!is_string($note) || mb_strlen($note) > 200)) {
+            $errors[] = ['field' => 'note', 'message' => 'Texte de 200 caractères au plus.'];
+        }
+        $from = $input['fromVersion'] ?? null;
+        $source = null;
+        if ($from !== null) {
+            if (!is_int($from) || $from < 1) {
+                $errors[] = ['field' => 'fromVersion', 'message' => 'Numéro de version attendu.'];
+            } else {
+                $source = $this->shopRepo->charterVersion($from);
+                if ($source === null) {
+                    throw new CatalogueError('RESOURCE_NOT_FOUND', 'Version de la charte inconnue.', 404);
+                }
+            }
+        }
+        if ($errors !== []) {
+            throw new CatalogueError('VALIDATION_FAILED', 'Publication invalide.', 422, $errors);
+        }
+        if ($source !== null) {
+            $content = json_decode($source['content'], true);
+            $stored = self::charterStored($this->normalizeCharter(is_array($content) ? $content : []));
+            // Revenir à une version : le brouillon la reprend aussi (sinon le prochain « Publier » l'effacerait).
+            Config::put(self::CHARTER_VARIABLE, $stored, 'marketing', $userId, 'Charte des catalogues (brouillon) : reprise de la version ' . $from . '.');
+            $note ??= 'Retour à la version ' . $from;
+        } else {
+            $saved = Config::value(self::CHARTER_VARIABLE);
+            $stored = self::charterStored($this->normalizeCharter(is_array($saved) ? $saved : []));
+        }
+        $version = $this->shopRepo->insertCharterVersion((string) json_encode($stored, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $note, $userId);
+        $published = $this->shopRepo->charterVersion($version);
+
+        return [
+            'version'     => $version,
+            'publishedAt' => $published['publishedAt'] ?? null,
+            'note'        => $note,
+            'catalogues'  => $this->shopRepo->cataloguesCount(),
+        ];
+    }
+
+    /**
+     * « Avant de publier » (maquette A4) et « Boutiques à compléter » (A3) : ce que le brouillon de la charte imprimera,
+     * vérifié. Rien n'est bloquant : chaque point dit ce qui s'imprimera à la place (le français, pas de QR…).
+     *
+     * @return array<string,mixed>
+     */
+    public function charterChecks(): array
+    {
+        $charter = $this->charter();
+        $items = [];
+        $gammes = [];
+        try {
+            foreach ($this->webshopProducts([])['gammes'] as $gamme) {
+                $gammes[(int) $gamme['id']] = self::gammeLabel((string) $gamme['name']);
+            }
+        } catch (\Throwable) {
+            // TFBuddy muet : les couvertures sont nommées par leur titre.
+        }
+        $coverName = static fn (array $c): string => $c['gamme'] === null ? 'couverture générique' : 'couverture ' . ($gammes[$c['gamme']] ?? $c['titleFr']);
+
+        $items[] = ['code' => 'fr', 'level' => 'ok', 'step' => 1, 'message' => sprintf('Français complet : %d couverture%s, page 2, avant-dernière, dernière page.', count($charter['covers']), count($charter['covers']) > 1 ? 's' : '')];
+
+        $nl = [];
+        foreach ($charter['covers'] as $cover) {
+            $missing = [];
+            if ($cover['titleNl'] === '') {
+                $missing[] = 'titre';
+            }
+            if ($cover['subtitleFr'] !== '' && $cover['subtitleNl'] === '') {
+                $missing[] = 'sous-titre';
+            }
+            if ($missing !== []) {
+                $nl[] = implode(' et ', $missing) . ' de la ' . $coverName($cover);
+            }
+        }
+        foreach (['page2' => 'page 2', 'penultimate' => 'avant-dernière'] as $slot => $label) {
+            $content = $charter[$slot];
+            $missing = [];
+            if ($content['titleFr'] !== '' && $content['titleNl'] === '') {
+                $missing[] = 'titre';
+            }
+            if ($content['textFr'] !== '' && $content['textNl'] === '') {
+                $missing[] = 'texte';
+            }
+            if ($missing !== []) {
+                $nl[] = implode(' et ', $missing) . ' de la ' . $label;
+            }
+        }
+        if ($charter['back']['titleNl'] === '' || $charter['back']['textNl'] === '') {
+            $nl[] = 'dernière page';
+        }
+        $items[] = $nl === []
+            ? ['code' => 'nl', 'level' => 'ok', 'step' => 1, 'message' => 'Néerlandais complet.']
+            : ['code' => 'nl', 'level' => 'warn', 'step' => self::stepOf($nl[0]), 'message' => 'Néerlandais à écrire : ' . implode(', ', $nl) . '. Sinon le français est imprimé dans les versions NL.'];
+
+        $webshop = self::webshopUrl();
+        $items[] = $webshop === null
+            ? ['code' => 'qr', 'level' => 'warn', 'step' => 4, 'message' => 'Adresse du webshop inconnue : la dernière page s’imprime sans QR code.']
+            : ['code' => 'qr', 'level' => 'ok', 'step' => 4, 'message' => 'QR code : le webshop de chaque boutique (' . preg_replace('#^https?://|/+$#', '', $webshop) . ').'];
+
+        $over = [];
+        foreach (['page2' => 'page 2', 'penultimate' => 'avant-dernière'] as $slot => $label) {
+            $content = $charter[$slot];
+            foreach (['textFr' => 'FR', 'textNl' => 'NL'] as $key => $l) {
+                if (self::textWeight($content[$key]) > self::BRAND_TEXT_FIT[$content['template']]) {
+                    $over[] = $label . ' ' . $l;
+                }
+            }
+        }
+        $items[] = $over === []
+            ? ['code' => 'fit', 'level' => 'ok', 'step' => 2, 'message' => 'Chaque texte tient sur sa page en A5 et en A4.']
+            : ['code' => 'fit', 'level' => 'warn', 'step' => str_starts_with($over[0], 'page 2') ? 2 : 3, 'message' => 'Texte trop long pour son gabarit (' . implode(', ', $over) . ') : la fin sera coupée. Raccourcissez-le ou choisissez « texte seul ».'];
+
+        $shops = $this->charterShops();
+        $noAddress = array_values(array_filter($shops, static fn (array $sh): bool => in_array('address', $sh['missing'], true)));
+        if ($noAddress !== []) {
+            $items[] = ['code' => 'shops', 'level' => 'warn', 'step' => 4, 'message' => sprintf('%d boutique%s sans adresse dans TFBuddy (%s) : sa dernière page s’imprime sans adresse.', count($noAddress), count($noAddress) > 1 ? 's' : '', implode(', ', array_column($noAddress, 'name')))];
+        }
+
+        return [
+            'items'       => $items,
+            'catalogues'  => $this->shopRepo->cataloguesCount(),
+            'shops'       => $shops,
+            'webshopUrl'  => $webshop,
+            'publication' => $charter['publication'],
+        ];
+    }
+
+    /** L'étape de l'assistant d'un point (le premier élément nommé). */
+    private static function stepOf(string $item): int
+    {
+        return str_contains($item, 'couverture') ? 1 : (str_contains($item, 'page 2') ? 2 : (str_contains($item, 'avant-dernière') ? 3 : 4));
+    }
+
+    /** Le poids d'un texte de page : ses caractères, une ligne vide comptée comme une demi-ligne (40). */
+    public static function textWeight(string $text): int
+    {
+        return mb_strlen($text) + 40 * substr_count($text, "\n");
+    }
+
+    /**
+     * Ce que la dernière page imprime pour chaque boutique (maquette A3, « Rempli par chaque boutique ») : nom,
+     * adresse, horaires, téléphone (TFBuddy, fiche publique de la boutique), QR (webshop de la boutique). Rien n'est
+     * recopié : c'est lu, et ce qui manque est nommé (`missing`).
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function charterShops(): array
+    {
+        $webshop = self::webshopUrl();
+        $out = [];
+        foreach ($this->catalogues->shops() as $shop) {
+            $info = $shop['erpShopId'] !== null ? $this->webshop->shop($shop['erpShopId']) : ['shop' => null, 'error' => null];
+            $read = $info['shop'];
+            $missing = [];
+            if ($read === null || $read['address'] === '') {
+                $missing[] = 'address';
+            }
+            if ($read === null || $read['hours'] === '') {
+                $missing[] = 'hours';
+            }
+            if ($read === null || $read['phone'] === '') {
+                $missing[] = 'phone';
+            }
+            if ($webshop === null) {
+                $missing[] = 'qr';
+            }
+            $out[] = [
+                'id'        => $shop['id'],
+                'erpShopId' => $shop['erpShopId'],
+                'name'      => $read !== null && $read['name'] !== '' ? $read['name'] : $shop['name'],
+                'address'   => $read['address'] ?? '',
+                'hours'     => $read['hours'] ?? '',
+                'hoursNl'   => $read['hoursNl'] ?? '',
+                'phone'     => $read['phone'] ?? '',
+                'qrUrl'     => $webshop === null ? null : $webshop . '?shop=' . $shop['erpShopId'],
+                'host'      => $webshop === null ? null : (string) preg_replace('#^https?://|/+$#', '', $webshop),
+                'missing'   => $missing,
+                'error'     => $info['error'],
+            ];
+        }
+
+        return $out;
+    }
+
+    /** @return array{items: list<array<string,mixed>>, total:int} L'historique des versions publiées. */
+    public function charterVersions(int $page, int $perPage): array
+    {
+        $result = $this->shopRepo->charterVersions($page, $perPage);
+        $latest = $this->publishedVersion();
+
+        return ['items' => array_map(static fn (array $v): array => [
+            'version'     => $v['version'],
+            'publishedAt' => $v['publishedAt'],
+            'publishedBy' => $v['publishedBy'],
+            'note'        => $v['note'],
+            'current'     => $v['version'] === $latest,
+        ], $result['items']), 'total' => $result['total']];
     }
 
     /** @return array<string,mixed> */
@@ -1785,12 +2092,14 @@ final class CatalogueService
         return [
             'logoMediaId' => null,
             'colors'      => ['primary' => '#8D1D2C', 'secondary' => '#F5EFE4', 'accent' => '#B0792A', 'ink' => '#241C1A'],
-            'covers'      => [['gamme' => null, 'titleFr' => 'Notre catalogue', 'titleNl' => 'Onze catalogus', 'subtitleFr' => '', 'subtitleNl' => '', 'mediaId' => null]],
+            'covers'      => [['gamme' => null, 'titleFr' => 'Notre catalogue', 'titleNl' => 'Onze catalogus', 'subtitleFr' => '', 'subtitleNl' => '', 'mediaId' => null,
+                'template' => 'A', 'visual' => null, 'illustration' => null]],
             'back'        => [
                 'titleFr' => 'Commandez en ligne',
                 'titleNl' => 'Bestel online',
                 'textFr'  => 'Retrait en boutique ou livraison.',
                 'textNl'  => 'Afhalen in de winkel of levering.',
+                'template' => 'A',
             ],
             // Page 2 et avant-dernière : des textes à adapter par la marque, sans prix ni promesse chiffrée.
             'page2'       => [
@@ -1799,6 +2108,7 @@ final class CatalogueService
                 'textFr'  => "Chaque jour, nos boulangers et nos pâtissiers préparent dans notre atelier les pains, les viennoiseries et les pâtisseries que vous retrouvez en boutique.\n\nVoici notre sélection du moment : bonne découverte !",
                 'textNl'  => "Elke dag bereiden onze bakkers en patissiers in ons atelier de broden, de viennoiserie en het gebak die u in de winkel terugvindt.\n\nHier is onze selectie van het moment: veel ontdekplezier!",
                 'mediaId' => null,
+                'template' => null,
             ],
             'penultimate' => [
                 'titleFr' => 'Nos services',
@@ -1806,12 +2116,14 @@ final class CatalogueService
                 'textFr'  => "Commande en ligne sur notre webshop\nRetrait en boutique\nLivraison\nGâteaux sur commande pour vos fêtes et vos événements",
                 'textNl'  => "Online bestellen via onze webshop\nAfhalen in de winkel\nLevering\nTaarten op bestelling voor uw feesten en evenementen",
                 'mediaId' => null,
+                'template' => null,
             ],
         ];
     }
 
     /**
-     * Remplace la charte. Réservé à la marque (le contrôleur le vérifie).
+     * Remplace le BROUILLON de la charte (« Brouillon enregistré » de l'assistant). Réservé à la marque (le contrôleur
+     * le vérifie). Rien ne change sur les catalogues avant « Publier pour tous les catalogues » (`publishCharter`).
      *
      * @param array<string,mixed> $input
      */
@@ -1864,10 +2176,29 @@ final class CatalogueService
             if ($media !== null && (!is_int($media) || $this->media->find($media) === null)) {
                 $errors[] = ['field' => $field . '.mediaId', 'message' => 'Fichier inconnu de la médiathèque.'];
             }
-            $clean = ['gamme' => $gamme, 'mediaId' => $media];
+            $clean = ['gamme' => $gamme];
             foreach (['titleFr', 'titleNl', 'subtitleFr', 'subtitleNl'] as $text) {
                 $clean[$text] = self::text($cover[$text] ?? '', $field . '.' . $text, $errors);
             }
+            $clean['mediaId'] = $media;
+            $template = $cover['template'] ?? 'A';
+            if (!in_array($template, self::COVER_TEMPLATES, true)) {
+                $errors[] = ['field' => $field . '.template', 'message' => 'Gabarit : A (pleine couleur), B (illustration) ou C (photo).'];
+            }
+            $visual = $cover['visual'] ?? null;
+            if ($visual !== null && !in_array($visual, self::COVER_VISUALS, true)) {
+                $errors[] = ['field' => $field . '.visual', 'message' => 'Visuel : illustration, media ou none.'];
+            }
+            if ($visual === 'media' && $media === null) {
+                $errors[] = ['field' => $field . '.mediaId', 'message' => 'Visuel « médiathèque » : choisissez une image.'];
+            }
+            $drawing = $cover['illustration'] ?? null;
+            if ($drawing !== null && !in_array($drawing, self::SEASON_DRAWINGS, true)) {
+                $errors[] = ['field' => $field . '.illustration', 'message' => 'Dessin de saison : ' . implode(', ', self::SEASON_DRAWINGS) . '.'];
+            }
+            $clean['template'] = $template;
+            $clean['visual'] = $visual;
+            $clean['illustration'] = $drawing;
             if ($clean['titleFr'] === '') {
                 $errors[] = ['field' => $field . '.titleFr', 'message' => 'Le titre français est obligatoire.'];
             }
@@ -1881,8 +2212,12 @@ final class CatalogueService
         }
         $errors = array_merge($errors, self::unknown($back, array_keys($default['back']), 'back.'));
         $cleanBack = [];
-        foreach (array_keys($default['back']) as $text) {
+        foreach (['titleFr', 'titleNl', 'textFr', 'textNl'] as $text) {
             $cleanBack[$text] = self::text($back[$text] ?? '', 'back.' . $text, $errors);
+        }
+        $cleanBack['template'] = $back['template'] ?? 'A';
+        if (!in_array($cleanBack['template'], self::BACK_TEMPLATES, true)) {
+            $errors[] = ['field' => 'back.template', 'message' => 'Gabarit : A (QR et boutique) ou B (boutique en avant).'];
         }
 
         // Page 2 et avant-dernière : un titre, un texte (paragraphes), une image de la médiathèque.
@@ -1911,6 +2246,11 @@ final class CatalogueService
                 $errors[] = ['field' => $slot . '.titleFr', 'message' => 'Un titre ou un texte français est obligatoire : la page s’imprime dans chaque catalogue.'];
             }
             $clean['mediaId'] = $media;
+            $template = $raw['template'] ?? null;
+            if ($template !== null && !in_array($template, self::BRAND_TEMPLATES, true)) {
+                $errors[] = ['field' => $slot . '.template', 'message' => 'Gabarit : A (texte seul), B (image en haut) ou C (image en bas).'];
+            }
+            $clean['template'] = $template;
             $brandPages[$slot] = $clean;
         }
 
@@ -1925,7 +2265,7 @@ final class CatalogueService
             'back'        => $cleanBack,
             'page2'       => $brandPages['page2'],
             'penultimate' => $brandPages['penultimate'],
-        ], 'marketing', $userId, 'Charte des catalogues : logo, couvertures par gamme, page 2, avant-dernière et dernière pages, couleurs.');
+        ], 'marketing', $userId, 'Charte des catalogues (brouillon de l’assistant des pages de la marque ; les catalogues lisent la version publiée).');
 
         return $this->charter();
     }
@@ -1962,7 +2302,7 @@ final class CatalogueService
      *
      * @return array<string,mixed>
      */
-    public function document(array $row, ?int $versionShopId, string $lang): array
+    public function document(array $row, ?int $versionShopId, string $lang, ?int $charterVersion = null): array
     {
         if (!in_array($lang, self::LANGS, true)) {
             throw new CatalogueError('VALIDATION_FAILED', 'Langue : fr ou nl.', 422, [['field' => 'lang', 'message' => 'fr ou nl.']]);
@@ -2106,7 +2446,10 @@ final class CatalogueService
 
         // Les pages intérieures : chaque page prend les produits de sa catégorie (et de sa gamme), dans
         // l'ordre ; une page de présentation montre sa gamme, son illustration et, au choix, sa liste.
-        $charter = $this->charter();
+        // La charte PUBLIÉE ; un catalogue marqué imprimé garde celle de son impression (la boutique qui imprime un
+        // catalogue de la marque passe la sienne, `$charterVersion`).
+        $frozen = $charterVersion ?? (($row['status'] ?? '') === 'imprime' && isset($row['charter_version']) ? (int) $row['charter_version'] : null);
+        $charter = $this->publishedCharter($frozen);
         $gammesById = array_column($data['gammes'], null, 'id');
         $catalogueGammes = self::gammeIdsOf($row);
         $innerRows = self::innerPages($row['settings']);
@@ -2353,7 +2696,9 @@ final class CatalogueService
                 'slot'     => $slot,
                 'title'    => $lang === 'nl' ? ($content['titleNl'] ?: $content['titleFr']) : $content['titleFr'],
                 'text'     => $lang === 'nl' ? ($content['textNl'] ?: $content['textFr']) : $content['textFr'],
-                'imageUrl' => $content['imageUrl'],
+                // Texte seul : pas d'image, même si la charte en garde une.
+                'imageUrl' => $content['template'] === 'A' ? null : $content['imageUrl'],
+                'template' => $content['template'],
             ];
         }
 
@@ -2380,14 +2725,7 @@ final class CatalogueService
         $qrUrl = $webshop === null ? null : ($version !== null && $version['erpShopId'] !== null ? $webshop . '?shop=' . $version['erpShopId'] : $webshop);
 
         $pages = array_merge(
-            [[
-                'kind'     => 'cover',
-                'locked'   => true,
-                'title'    => $coverTitle,
-                'subtitle' => $lang === 'nl' ? ($cover['subtitleNl'] ?: $cover['subtitleFr']) : $cover['subtitleFr'],
-                'eyebrow'  => $version !== null ? $shopInfo['name'] : null,
-                'imageUrl' => $cover['imageUrl'] ?? $gammeImage,
-            ]],
+            [self::coverPage($cover, $coverTitle, $lang, $version !== null ? $shopInfo['name'] : null, $gammeImage, $cover['gamme'] !== null || $gammeId !== null)],
             [$brand['page2']],
             $inner,
             [$brand['penultimate']],
@@ -2399,15 +2737,51 @@ final class CatalogueService
                 'qrUrl'  => $qrUrl,
                 'host'   => $webshop === null ? null : (string) preg_replace('#^https?://|/+$#', '', $webshop),
                 'shop'   => $shopInfo,
+                'template' => $charter['back']['template'],
             ]],
         );
 
         return [
             'catalogue' => ['id' => (int) $row['id'], 'title' => (string) $row['title'], 'format' => (string) $row['format'], 'owner' => (string) $row['owner'], 'pageCount' => $pageCount],
             'version'   => ['shop' => $shopInfo, 'lang' => $lang],
-            'charter'   => ['logoUrl' => $charter['logoUrl'], 'colors' => $charter['colors']],
+            'charter'   => ['logoUrl' => $charter['logoUrl'], 'colors' => $charter['colors'], 'version' => $charter['version']],
             'pages'     => $pages,
             'warnings'  => array_values(array_unique($warnings, SORT_REGULAR)),
+        ];
+    }
+
+    /**
+     * La couverture telle qu'elle s'imprime, d'après son gabarit et son visuel (maquette A1) : A Pleine couleur · B
+     * Illustration · C Photo. Visuel `illustration` : le dessin de saison choisi (sinon reconnu au titre) ; `media` :
+     * la photo de la médiathèque ; `none` : rien ; null (charte d'avant l'assistant) : la photo de la charte, sinon
+     * celle de la gamme au webshop, sinon le dessin reconnu au titre.
+     *
+     * @param array<string,mixed> $cover
+     * @return array<string,mixed>
+     */
+    public static function coverPage(array $cover, string $title, string $lang, ?string $shopName, ?string $gammeImage, bool $isGamme): array
+    {
+        $visual = $cover['visual'] ?? null;
+        $imageUrl = match ($visual) {
+            'media'        => $cover['imageUrl'] ?? null,
+            'illustration', 'none' => null,
+            default        => $cover['imageUrl'] ?? $gammeImage,
+        };
+        $slug = $visual === 'none' ? null : ($cover['illustration'] ?? null) ?? self::seasonSlug($title) ?? self::seasonSlug((string) ($cover['titleFr'] ?? ''));
+        $drawing = $imageUrl === null && $slug !== null ? 'img/print/' . $slug . '.png' : null;
+
+        return [
+            'kind'       => 'cover',
+            'locked'     => true,
+            'title'      => $title,
+            'subtitle'   => $lang === 'nl' ? (($cover['subtitleNl'] ?? '') ?: (string) ($cover['subtitleFr'] ?? '')) : (string) ($cover['subtitleFr'] ?? ''),
+            'eyebrow'    => $shopName,
+            'imageUrl'   => $imageUrl,
+            'template'   => in_array($cover['template'] ?? 'A', self::COVER_TEMPLATES, true) ? ($cover['template'] ?? 'A') : 'A',
+            'kicker'     => $isGamme ? ($lang === 'nl' ? 'Het gamma' : 'La gamme') : null,
+            'drawing'    => $drawing,
+            'drawingUrl' => $drawing !== null ? MediaService::publicUrl($drawing) : null,
+            'noVisual'   => $visual === 'none',
         ];
     }
 
@@ -2580,6 +2954,21 @@ final class CatalogueService
         return rtrim($url, '/') . '/';
     }
 
+    /**
+     * L'adresse d'une page publique du catalogue servie par le Marketing : `{adresse publique}/catalogue/?{clé}=…`
+     * (`t` : le lien d'impression de 48 h ; `l` : le lien permanent du catalogue en ligne).
+     */
+    public static function publicPage(string $key, string $token): string
+    {
+        $base = rtrim((string) (Config::get('MAR_PUBLIC_BASE_URL') ?? ''), '/');
+        if ($base === '') {
+            $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
+            $base = $host !== '' ? ((($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off') ? 'https://' : 'http://') . $host . '/marketing' : '/marketing';
+        }
+
+        return $base . '/catalogue/?' . $key . '=' . rawurlencode($token);
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Liens d'impression (le PDF d'un catalogue de boutique, ouvert depuis le dashboard)
     // ---------------------------------------------------------------------------------------------
@@ -2590,14 +2979,15 @@ final class CatalogueService
      *
      * @return array{token:string, expiresAt:string}|null
      */
-    public function printToken(int $catalogueId, string $lang, ?int $now = null): ?array
+    public function printToken(int $catalogueId, string $lang, ?int $now = null, ?int $shopId = null): ?array
     {
         $secret = (string) (Keys::get('MAR_SESSION_SECRET') ?? '');
         if (strlen($secret) < 32 || !in_array($lang, self::LANGS, true)) {
             return null;
         }
         $expires = ($now ?? time()) + self::PRINT_TTL;
-        $payload = $catalogueId . '.' . $lang . '.' . $expires;
+        // La boutique de la version (catalogue de la marque reçu par une boutique) : un 4e champ.
+        $payload = $catalogueId . '.' . $lang . '.' . $expires . ($shopId !== null ? '.' . $shopId : '');
         $signature = hash_hmac('sha256', 'catalogue:' . $payload, $secret, true);
         // Sans point : un « . » dans le chemin ferait prendre le lien pour un fichier par certains serveurs.
         // La signature (32 octets) fait toujours 43 caractères : elle se détache par la fin.
@@ -2606,7 +2996,7 @@ final class CatalogueService
         return ['token' => $token, 'expiresAt' => gmdate('Y-m-d\TH:i:s\Z', $expires)];
     }
 
-    /** @return array{id:int, lang:string}|null Le catalogue et la langue d'un lien valable. */
+    /** @return array{id:int, lang:string, shop:?int}|null Le catalogue, la langue et la boutique de la version d'un lien valable. */
     public function readPrintToken(string $token, ?int $now = null): ?array
     {
         $secret = (string) (Keys::get('MAR_SESSION_SECRET') ?? '');
@@ -2618,11 +3008,11 @@ final class CatalogueService
         if ($payload === null || $signature === null || !hash_equals(hash_hmac('sha256', 'catalogue:' . $payload, $secret, true), $signature)) {
             return null;
         }
-        if (preg_match('/^(\d+)\.(fr|nl)\.(\d+)$/', $payload, $m) !== 1 || (int) $m[3] < ($now ?? time())) {
+        if (preg_match('/^(\d+)\.(fr|nl)\.(\d+)(?:\.(\d+))?$/', $payload, $m) !== 1 || (int) $m[3] < ($now ?? time())) {
             return null;
         }
 
-        return ['id' => (int) $m[1], 'lang' => $m[2]];
+        return ['id' => (int) $m[1], 'lang' => $m[2], 'shop' => isset($m[4]) && $m[4] !== '' ? (int) $m[4] : null];
     }
 
     private static function b64(string $raw): string

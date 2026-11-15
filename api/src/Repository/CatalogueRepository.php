@@ -20,7 +20,7 @@ final class CatalogueRepository
     public const SORTS = ['updatedAt' => 'c.updated_at', 'createdAt' => 'c.created_at', 'title' => 'c.title'];
 
     private const COLUMNS = 'c.id, c.title, c.owner, c.shop_id, c.source_kind, c.source_ref, c.source_label, c.format, c.status,
-        c.print_qty, c.settings, c.created_at, c.updated_at, s.name AS shop_name, s.erp_shop_id AS shop_erp_id';
+        c.print_qty, c.charter_version, c.settings, c.created_at, c.updated_at, s.name AS shop_name, s.erp_shop_id AS shop_erp_id';
 
     /**
      * Une page de catalogues.

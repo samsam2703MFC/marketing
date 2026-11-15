@@ -170,6 +170,55 @@ final class CatalogueController
         return self::guard(fn (): array => Envelope::ok($this->service->saveCharter($request->body, self::userId())));
     }
 
+    /** `GET …/catalogue-charter/checks` : « Avant de publier », les boutiques à compléter, les catalogues concernés. */
+    public function charterChecks(Request $request): array
+    {
+        if (($denied = self::deny()) !== null) {
+            return $denied;
+        }
+        if ($request->query !== []) {
+            return Envelope::error('VALIDATION_FAILED', 'Paramètres invalides.', 422, [['field' => (string) array_key_first($request->query), 'message' => 'Paramètre inconnu.']]);
+        }
+
+        return Envelope::ok($this->service->charterChecks());
+    }
+
+    /** `GET …/catalogue-charter/publications?page=&perPage=` : les versions publiées, la plus récente d'abord. */
+    public function charterVersions(Request $request): array
+    {
+        if (($denied = self::deny()) !== null) {
+            return $denied;
+        }
+        $errors = [];
+        foreach (array_keys($request->query) as $key) {
+            if (!in_array($key, ['page', 'perPage'], true)) {
+                $errors[] = ['field' => (string) $key, 'message' => 'Paramètre inconnu.'];
+            }
+        }
+        $page = (string) ($request->query['page'] ?? '1');
+        $perPage = (string) ($request->query['perPage'] ?? '25');
+        if (!ctype_digit($page) || (int) $page < 1 || !ctype_digit($perPage) || (int) $perPage < 1) {
+            $errors[] = ['field' => 'page', 'message' => 'page et perPage : entiers positifs.'];
+        }
+        if ($errors !== []) {
+            return Envelope::error('VALIDATION_FAILED', 'Paramètres invalides.', 422, $errors);
+        }
+        $per = min(self::PER_PAGE_MAX, (int) $perPage);
+        $result = $this->service->charterVersions((int) $page, $per);
+
+        return Envelope::ok($result['items'], ['pagination' => Envelope::pagination((int) $page, $per, $result['total'])]);
+    }
+
+    /** `POST …/catalogue-charter/publications` `{fromVersion?, note?}` : « Publier pour tous les catalogues ». */
+    public function publishCharter(Request $request): array
+    {
+        if (($denied = self::deny()) !== null) {
+            return $denied;
+        }
+
+        return self::guard(fn (): array => Envelope::ok($this->service->publishCharter($request->body, self::userId()), [], 201));
+    }
+
     // ---------------------------------------------------------------------------------------------
 
     /** @return array<string,mixed> La ligne, ou une réponse 404. */

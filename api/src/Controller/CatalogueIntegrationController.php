@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Marketing\Controller;
 
 use Marketing\Service\CatalogueService;
-use Marketing\Support\Config;
+use Marketing\Service\CatalogueShopService;
 use Marketing\Support\Envelope;
 use Marketing\Support\Keys;
 use Marketing\Support\Request;
@@ -34,8 +34,11 @@ final class CatalogueIntegrationController
 {
     private const FILTERS = ['status' => CatalogueService::STATUSES];
 
-    public function __construct(private readonly CatalogueService $service = new CatalogueService())
+    private readonly CatalogueShopService $shops;
+
+    public function __construct(private readonly CatalogueService $service = new CatalogueService(), ?CatalogueShopService $shops = null)
     {
+        $this->shops = $shops ?? new CatalogueShopService($service);
     }
 
     /** `GET …/shops/{shopId}/catalogue-products` : ce que la boutique vend au webshop, à ses prix. */
@@ -108,8 +111,10 @@ final class CatalogueIntegrationController
                 return Envelope::error('VALIDATION_FAILED', 'Paramètres de la liste invalides.', 422, $errors);
             }
             $result = $this->service->page($query['filters'], $query['sort'], $query['descending'], $query['page'], $query['perPage'], $shop['id']);
+            // Ce que la boutique en a fait (impression) : ajouté à chaque catalogue.
+            $items = array_map(fn (array $item): array => $item + ['print' => $this->printOf((int) $item['id'], $shop)], $result['items']);
 
-            return Envelope::ok($result['items'], ['pagination' => Envelope::pagination($query['page'], $query['perPage'], $result['total'])]);
+            return Envelope::ok($items, ['pagination' => Envelope::pagination($query['page'], $query['perPage'], $result['total'])]);
         });
     }
 
@@ -124,7 +129,7 @@ final class CatalogueIntegrationController
     /** `GET …/shops/{shopId}/catalogues/{id}` */
     public function show(Request $request): array
     {
-        return $this->withCatalogue($request, fn (array $row): array => Envelope::ok($this->service->serialize($row)));
+        return $this->withCatalogue($request, fn (array $row, array $shop): array => Envelope::ok($this->shops->serialize($row, $shop)));
     }
 
     /** `PUT …/shops/{shopId}/catalogues/{id}` */
@@ -163,19 +168,30 @@ final class CatalogueIntegrationController
      */
     public function printLink(Request $request): array
     {
-        return $this->withCatalogue($request, function (array $row) use ($request): array {
+        return $this->withCatalogue($request, fn (array $row, array $shop): array => $this->printLinkFor($row, $shop, $request));
+    }
+
+    /** `POST …/shops/{shopId}/brand-catalogues/{id}/print-links` : la version de la boutique d'un catalogue de la marque. */
+    public function brandPrintLink(Request $request): array
+    {
+        return $this->withReceived($request, fn (array $row, array $shop): array => $this->printLinkFor($row, $shop, $request));
+    }
+
+    private function printLinkFor(array $row, array $shop, Request $request): array
+    {
+        return (function () use ($row, $shop, $request): array {
             $lang = $request->body['lang'] ?? 'fr';
             $unknown = array_diff(array_keys($request->body), ['lang']);
             if ($unknown !== [] || !in_array($lang, CatalogueService::LANGS, true)) {
                 return Envelope::error('VALIDATION_FAILED', 'Corps invalide.', 422, [['field' => $unknown !== [] ? (string) reset($unknown) : 'lang', 'message' => $unknown !== [] ? 'Champ inconnu.' : 'fr ou nl.']]);
             }
-            $token = $this->service->printToken((int) $row['id'], $lang);
+            $token = $this->service->printToken((int) $row['id'], $lang, null, $row['owner'] === 'marque' ? $shop['id'] : null);
             if ($token === null) {
                 return Envelope::error('DEPENDENCY_UNAVAILABLE', 'MAR_SESSION_SECRET n’est pas renseigné : le lien d’impression ne peut pas être signé.', 503);
             }
 
-            return Envelope::ok(['url' => self::printPage($token['token']), 'token' => $token['token'], 'expiresAt' => $token['expiresAt']], [], 201);
-        });
+            return Envelope::ok(['url' => CatalogueService::publicPage('t', $token['token']), 'token' => $token['token'], 'expiresAt' => $token['expiresAt']], [], 201);
+        })();
     }
 
     /** `GET /api/v1/public/marketing/catalogue-prints/{token}` : le document d'un lien d'impression valable. */
@@ -186,23 +202,167 @@ final class CatalogueIntegrationController
         if ($row === null) {
             return Envelope::error('RESOURCE_NOT_FOUND', 'Lien d’impression inconnu ou expiré.', 404);
         }
+        if ($read['shop'] !== null) {
+            $shop = $this->service->shops([$read['shop']])[0] ?? null;
+            if ($shop === null || $row['owner'] !== 'marque') {
+                return Envelope::error('RESOURCE_NOT_FOUND', 'Lien d’impression inconnu ou expiré.', 404);
+            }
+
+            return CatalogueController::guard(fn (): array => Envelope::ok($this->shops->document($row, $shop, $read['lang'])));
+        }
 
         return CatalogueController::guard(fn (): array => Envelope::ok($this->service->document($row, null, $read['lang'])));
     }
 
     // ---------------------------------------------------------------------------------------------
+    // L'assistant du franchisé : Vérifier · Imprimer · Diffuser (son catalogue ou celui de la marque reçu)
+    // ---------------------------------------------------------------------------------------------
 
-    /** L'adresse de la page d'impression : `{adresse publique du module}/catalogue/?t=…`. */
-    private static function printPage(string $token): string
+    /** `GET …/catalogues/{id}/checks?lang=` · `GET …/brand-catalogues/{id}/checks?lang=` : les points à voir avant d'imprimer. */
+    public function checks(Request $request): array
     {
-        $base = rtrim((string) (Config::get('MAR_PUBLIC_BASE_URL') ?? ''), '/');
-        if ($base === '') {
-            $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
-            $base = $host !== '' ? ((($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off') ? 'https://' : 'http://') . $host . '/marketing' : '/marketing';
+        return $this->withAny($request, function (array $row, array $shop) use ($request): array {
+            $lang = self::langQuery($request);
+            if (is_array($lang)) {
+                return $lang;
+            }
+
+            return CatalogueController::guard(fn (): array => Envelope::ok($this->shops->checks($row, $shop, $lang)));
+        });
+    }
+
+    /** `PUT …/catalogues/{id}/checks/{code}` `{seen}` : un point vu (idempotent). */
+    public function markSeen(Request $request): array
+    {
+        return $this->withAny($request, fn (array $row, array $shop): array => CatalogueController::guard(
+            fn (): array => Envelope::ok($this->shops->markSeen($row, $shop, (string) $request->param('code'), $request->body))
+        ));
+    }
+
+    /** `POST …/catalogues/{id}/prints` `{quantity}` : « Marquer imprimé · N ex. » — la charte publiée est figée. */
+    public function prints(Request $request): array
+    {
+        return $this->withAny($request, fn (array $row, array $shop): array => CatalogueController::guard(
+            fn (): array => Envelope::ok($this->shops->recordPrint($row, $shop, $request->body), [], 201)
+        ));
+    }
+
+    /** `GET …/catalogues/{id}/public-links` : le lien permanent en cours (liste d'un élément, ou vide). */
+    public function links(Request $request): array
+    {
+        return $this->withAny($request, function (array $row, array $shop) use ($request): array {
+            if ($request->query !== []) {
+                return Envelope::error('VALIDATION_FAILED', 'Paramètres invalides.', 422, [['field' => (string) array_key_first($request->query), 'message' => 'Paramètre inconnu.']]);
+            }
+            $link = $this->shops->currentLink($row, $shop);
+
+            return Envelope::ok($link === null ? [] : [$link], ['pagination' => Envelope::pagination(1, 1, $link === null ? 0 : 1)]);
+        });
+    }
+
+    /** `POST …/catalogues/{id}/public-links` : un nouveau lien permanent ; le précédent est révoqué (« Nouveau lien »). */
+    public function newLink(Request $request): array
+    {
+        return $this->withAny($request, function (array $row, array $shop) use ($request): array {
+            if ($request->body !== []) {
+                return Envelope::error('VALIDATION_FAILED', 'Corps invalide.', 422, [['field' => (string) array_key_first($request->body), 'message' => 'Champ inconnu.']]);
+            }
+
+            return CatalogueController::guard(fn (): array => Envelope::ok($this->shops->renewLink($row, $shop), [], 201));
+        });
+    }
+
+    /** `GET /api/v1/public/marketing/catalogue-links/{token}?lang=` : le catalogue en ligne (lecture seule, dernière version). */
+    public function linkDocument(Request $request): array
+    {
+        $read = $this->shops->readLink((string) $request->param('token'));
+        if ($read === null) {
+            return Envelope::error('RESOURCE_NOT_FOUND', 'Catalogue en ligne introuvable : le lien a été remplacé ou n’existe pas.', 404);
+        }
+        $lang = self::langQuery($request);
+        if (is_array($lang)) {
+            return $lang;
         }
 
-        return $base . '/catalogue/?t=' . rawurlencode($token);
+        return CatalogueController::guard(fn (): array => Envelope::ok($this->shops->linkDocument($read[0], $read[1], $lang)));
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // Les catalogues de la marque préparés pour la boutique (maquette B4)
+    // ---------------------------------------------------------------------------------------------
+
+    /** `GET …/shops/{shopId}/brand-catalogues?page=&perPage=` : prêts ou imprimés, les nouveaux d'abord. */
+    public function brandIndex(Request $request): array
+    {
+        return $this->withShop($request, function (array $shop) use ($request): array {
+            $errors = [];
+            foreach (array_keys($request->query) as $key) {
+                if (!in_array($key, ['page', 'perPage'], true)) {
+                    $errors[] = ['field' => (string) $key, 'message' => 'Paramètre inconnu.'];
+                }
+            }
+            $page = (string) ($request->query['page'] ?? '1');
+            $perPage = (string) ($request->query['perPage'] ?? '25');
+            if (!ctype_digit($page) || (int) $page < 1) {
+                $errors[] = ['field' => 'page', 'message' => 'Entier positif attendu.'];
+            }
+            if (!ctype_digit($perPage) || (int) $perPage < 1) {
+                $errors[] = ['field' => 'perPage', 'message' => 'Entier positif attendu.'];
+            }
+            if ($errors !== []) {
+                return Envelope::error('VALIDATION_FAILED', 'Paramètres invalides.', 422, $errors);
+            }
+            $per = min(100, (int) $perPage);
+            $result = $this->shops->received($shop, (int) $page, $per);
+
+            return Envelope::ok($result['items'], ['pagination' => Envelope::pagination((int) $page, $per, $result['total'])]);
+        });
+    }
+
+    /** `GET …/brand-catalogues/{id}` */
+    public function brandShow(Request $request): array
+    {
+        return $this->withReceived($request, fn (array $row, array $shop): array => Envelope::ok($this->shops->serialize($row, $shop)));
+    }
+
+    /** `GET …/brand-catalogues/{id}/document?lang=` : la version de la boutique (ses produits, ses prix, son QR). */
+    public function brandDocument(Request $request): array
+    {
+        return $this->withReceived($request, function (array $row, array $shop) use ($request): array {
+            $lang = self::langQuery($request);
+            if (is_array($lang)) {
+                return $lang;
+            }
+
+            return CatalogueController::guard(fn (): array => Envelope::ok($this->shops->document($row, $shop, $lang)));
+        });
+    }
+
+    /** `PUT …/brand-catalogues/{id}/reception` `{status: pris|nouveau}` : « Le prendre tel quel » (idempotent). */
+    public function reception(Request $request): array
+    {
+        return $this->withReceived($request, fn (array $row, array $shop): array => CatalogueController::guard(
+            fn (): array => Envelope::ok($this->shops->receive($row, $shop, $request->body))
+        ));
+    }
+
+    /** `POST …/brand-catalogues/{id}/adaptations` : « L'adapter à ma boutique » — 201 la copie, 200 la même ensuite. */
+    public function adaptation(Request $request): array
+    {
+        return $this->withReceived($request, function (array $row, array $shop) use ($request): array {
+            if ($request->body !== []) {
+                return Envelope::error('VALIDATION_FAILED', 'Corps invalide.', 422, [['field' => (string) array_key_first($request->body), 'message' => 'Champ inconnu.']]);
+            }
+
+            return CatalogueController::guard(function () use ($row, $shop): array {
+                $out = $this->shops->adapt($row, $shop);
+
+                return Envelope::ok($out['catalogue'], ['removedProducts' => $out['removed']], $out['created'] ? 201 : 200);
+            });
+        });
+    }
+
+    // ---------------------------------------------------------------------------------------------
 
     /** Le jeton de service : rien ne passe sans lui. */
     private static function denyService(): ?array
@@ -232,6 +392,49 @@ final class CatalogueIntegrationController
         }
 
         return $action($shop);
+    }
+
+    /** Un catalogue de la marque préparé pour la boutique du chemin ; 404 sinon. @param callable(array, array): array $action */
+    private function withReceived(Request $request, callable $action): array
+    {
+        return $this->withShop($request, function (array $shop) use ($request, $action): array {
+            $id = $request->intParam('id');
+            $row = $id !== null ? $this->shops->findReceived($id, $shop) : null;
+
+            return $row === null ? Envelope::error('RESOURCE_NOT_FOUND', 'Catalogue introuvable.', 404) : $action($row, $shop);
+        });
+    }
+
+    /** Le sien (`…/catalogues/{id}`) ou celui de la marque reçu (`…/brand-catalogues/{id}`), d'après le chemin. @param callable(array, array): array $action */
+    private function withAny(Request $request, callable $action): array
+    {
+        return str_contains($request->path, '/brand-catalogues/')
+            ? $this->withReceived($request, $action)
+            : $this->withCatalogue($request, $action);
+    }
+
+    /** `?lang=fr|nl` seul ; la langue, ou une réponse 422. @return string|array<string,mixed> */
+    private static function langQuery(Request $request): string|array
+    {
+        foreach (array_keys($request->query) as $key) {
+            if ($key !== 'lang') {
+                return Envelope::error('VALIDATION_FAILED', 'Paramètres invalides.', 422, [['field' => (string) $key, 'message' => 'Paramètre inconnu.']]);
+            }
+        }
+        $lang = $request->query['lang'] ?? 'fr';
+        if (!in_array($lang, CatalogueService::LANGS, true)) {
+            return Envelope::error('VALIDATION_FAILED', 'Langue : fr ou nl.', 422, [['field' => 'lang', 'message' => 'fr ou nl.']]);
+        }
+
+        return $lang;
+    }
+
+    /** L'impression d'un catalogue de la boutique. @return array<string,mixed> */
+    private function printOf(int $id, array $shop): array
+    {
+        $row = $this->service->find($id, $shop['id']);
+
+        return $row === null ? [] : $this->shops->serialize($row, $shop)['print'];
     }
 
     /** @param callable(array, array): array $action */
