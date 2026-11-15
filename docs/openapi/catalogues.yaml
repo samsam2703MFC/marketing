@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Marketing — catalogues produits
-  version: 1.4.0
+  version: 1.5.0
   description: |
     Les catalogues produits du Marketing (prix du webshop, gammes) : un imprimé A5 (A4 en option)
     de **8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16). Quatre pages viennent de la Charte des catalogues de la
@@ -66,6 +66,27 @@ info:
     (`status=ACTIVE`, liste puis fiche) et `/api/v1/shops/{id}/scheduled-product-discounts/active`
     pour la version d'une boutique ; gardées 15 minutes (`mar_catalogue_cache`).
 
+    v1.5 (15 novembre 2026, client : « les deux, garde les 3 gabarits, code-le » — assistant des pages de la
+    marque, maquettes A1-A4 ; assistant du franchisé, maquettes B1-B4) :
+    - la charte a un BROUILLON (`GET|PUT …/catalogue-charter`, que l'assistant enregistre tout seul) et des
+      VERSIONS PUBLIÉES (`…/catalogue-charter/publications` : POST publie le brouillon — ou `fromVersion`, revenir à
+      une version —, GET l'historique). Les catalogues lisent la dernière version publiée ; « Marquer imprimé »
+      (état `imprime`, ou `…/prints` d'une boutique) FIGE la version de ce catalogue (`charterVersion`). Un PUT de
+      la charte ne change donc plus les catalogues : il faut publier. La charte d'avant est la version 1
+      (migration 050). `…/catalogue-charter/checks` : « Avant de publier », les boutiques (ce que la dernière page
+      imprime pour chacune, ce qui manque), les catalogues concernés.
+    - gabarits : couverture `template` A (pleine couleur) · B (illustration) · C (photo), `visual`
+      `illustration | media | none` (null : comme avant), `illustration` (dessin de saison) ; page 2 et
+      avant-dernière `template` A (texte seul) · B (image en haut) · C (image en bas) ; dernière page `template`
+      A (QR et boutique) · B (boutique en avant). Au document : `template`, `kicker`, `drawing` sur la couverture,
+      `template` sur `brand` et `back`, `charter.version`.
+    - boutique : `…/catalogues/{id}/checks` (points de vérification calculés, `seen`), `…/checks/{code}` (PUT
+      `{seen}`), `…/prints` (POST `{quantity}`), `…/public-links` (GET le lien permanent, POST un nouveau — l'ancien
+      est révoqué) ; les mêmes sous `…/brand-catalogues/{id}/…` pour un catalogue de la marque préparé pour la
+      boutique (`GET …/brand-catalogues`, `…/{id}`, `…/{id}/document`, PUT `…/{id}/reception` `{status: pris}`,
+      POST `…/{id}/adaptations`, POST `…/{id}/print-links`) ; page publique `…/public/marketing/catalogue-links/{token}`
+      (le catalogue en ligne, dernière version, sans session).
+
     Premier contrat OpenAPI du module (docs/API_REGISTRY.md, §3, écart 16) : il ne couvre que ces
     routes, écrites au standard (enveloppe `{success, data, meta}`, camelCase, montants en centimes,
     dates ISO 8601 UTC, pagination, codes d'erreur du catalogue §7.2).
@@ -75,7 +96,8 @@ info:
     - `/api/v1/integration/marketing/shops/{shopId}/…` : le dashboard magasin du cockpit (portail
       Pilotage réseau), jeton de service `erp_jeton_service` (en-tête `X-Service-Token`) ; la boutique
       est celle du chemin, toutes les contraintes sont appliquées par le serveur ;
-    - `/api/v1/public/marketing/catalogue-prints/{token}` : le document d'un lien d'impression signé.
+    - `/api/v1/public/marketing/catalogue-prints/{token}` : le document d'un lien d'impression signé ;
+      `/api/v1/public/marketing/catalogue-links/{token}` : le catalogue en ligne (lien permanent, révocable).
 servers:
   - url: /marketing
     description: Le module, servi sous /marketing (l'adresse vient de la configuration du client).
@@ -218,6 +240,48 @@ paths:
         '200': { $ref: '#/components/responses/Charter' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/marketing/catalogue-charter/checks:
+    get:
+      tags: [Catalogues (marque)]
+      summary: « Avant de publier » — points vérifiés, boutiques, catalogues concernés
+      security: [{ session: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Generic' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/marketing/catalogue-charter/publications:
+    get:
+      tags: [Catalogues (marque)]
+      summary: Les versions publiées de la charte, la plus récente d'abord
+      security: [{ session: [] }]
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/perPage' }]
+      responses:
+        '200': { $ref: '#/components/responses/Generic' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Catalogues (marque)]
+      summary: « Publier pour tous les catalogues » (le brouillon, ou `fromVersion`)
+      security: [{ session: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                fromVersion: { type: integer, minimum: 1 }
+                note: { type: string, maxLength: 200 }
+      responses:
+        '201': { $ref: '#/components/responses/Generic' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
         '422': { $ref: '#/components/responses/Error' }
 
   /api/v1/integration/marketing/shops/{shopId}/catalogue-products:
@@ -388,6 +452,227 @@ paths:
         '422': { $ref: '#/components/responses/Error' }
         '503': { $ref: '#/components/responses/Error' }
 
+  /api/v1/integration/marketing/shops/{shopId}/catalogues/{id}/checks:
+    parameters: [{ $ref: '#/components/parameters/shopId' }, { $ref: '#/components/parameters/id' }]
+    get:
+      tags: [Catalogues (boutique, entre portails)]
+      summary: Les points à voir avant d'imprimer (calculés à partir du document), vus ou non
+      security: [{ serviceToken: [] }]
+      parameters:
+        - { name: lang, in: query, schema: { type: string, enum: [fr, nl], default: fr } }
+      responses:
+        '200': { $ref: '#/components/responses/Generic' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/integration/marketing/shops/{shopId}/catalogues/{id}/checks/{code}:
+    parameters: [{ $ref: '#/components/parameters/shopId' }, { $ref: '#/components/parameters/id' }, { name: code, in: path, required: true, schema: { type: string, pattern: '^[a-z0-9-]{1,60}$' } }]
+    put:
+      tags: [Catalogues (boutique, entre portails)]
+      summary: Un point vu (idempotent)
+      security: [{ serviceToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [seen], properties: { seen: { type: boolean } } }
+      responses:
+        '200': { $ref: '#/components/responses/Generic' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/integration/marketing/shops/{shopId}/catalogues/{id}/prints:
+    parameters: [{ $ref: '#/components/parameters/shopId' }, { $ref: '#/components/parameters/id' }]
+    post:
+      tags: [Catalogues (boutique, entre portails)]
+      summary: « Marquer imprimé · N ex. » — quantité, date, version de la charte figée
+      security: [{ serviceToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [quantity], properties: { quantity: { type: integer, minimum: 1, maximum: 1000000 } } }
+      responses:
+        '201': { $ref: '#/components/responses/Generic' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/integration/marketing/shops/{shopId}/catalogues/{id}/public-links:
+    parameters: [{ $ref: '#/components/parameters/shopId' }, { $ref: '#/components/parameters/id' }]
+    get:
+      tags: [Catalogues (boutique, entre portails)]
+      summary: Le lien permanent du catalogue en ligne (liste d'un élément, ou vide)
+      security: [{ serviceToken: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Generic' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Catalogues (boutique, entre portails)]
+      summary: Un nouveau lien permanent (`{token, url, createdAt}`) ; le précédent est révoqué
+      security: [{ serviceToken: [] }]
+      responses:
+        '201': { $ref: '#/components/responses/Generic' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+
+  /api/v1/integration/marketing/shops/{shopId}/brand-catalogues:
+    parameters: [{ $ref: '#/components/parameters/shopId' }]
+    get:
+      tags: [Catalogues (boutique, entre portails)]
+      summary: Les catalogues de la marque préparés pour la boutique (prêts ou imprimés), les nouveaux d'abord
+      description: Chaque catalogue porte `reception` {status nouveau | pris | adapte, adaptedId, receivedAt} et `print`.
+      security: [{ serviceToken: [] }]
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/perPage' }]
+      responses:
+        '200': { $ref: '#/components/responses/Generic' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/integration/marketing/shops/{shopId}/brand-catalogues/{id}:
+    parameters: [{ $ref: '#/components/parameters/shopId' }, { $ref: '#/components/parameters/id' }]
+    get:
+      tags: [Catalogues (boutique, entre portails)]
+      summary: Un catalogue de la marque reçu (404 s'il ne vise pas la boutique, ou brouillon)
+      security: [{ serviceToken: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Generic' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/integration/marketing/shops/{shopId}/brand-catalogues/{id}/document:
+    parameters: [{ $ref: '#/components/parameters/shopId' }, { $ref: '#/components/parameters/id' }]
+    get:
+      tags: [Catalogues (boutique, entre portails)]
+      summary: La version de la boutique (ses produits, ses prix, son QR ; la charte figée à SON impression)
+      security: [{ serviceToken: [] }]
+      parameters:
+        - { name: lang, in: query, schema: { type: string, enum: [fr, nl], default: fr } }
+      responses:
+        '200': { $ref: '#/components/responses/Document' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/integration/marketing/shops/{shopId}/brand-catalogues/{id}/reception:
+    parameters: [{ $ref: '#/components/parameters/shopId' }, { $ref: '#/components/parameters/id' }]
+    put:
+      tags: [Catalogues (boutique, entre portails)]
+      summary: « Le prendre tel quel » (`pris`) ou le remettre en proposition (`nouveau`) — idempotent ; 409 s'il est adapté
+      security: [{ serviceToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [status], properties: { status: { type: string, enum: [pris, nouveau] } } }
+      responses:
+        '200': { $ref: '#/components/responses/Generic' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/integration/marketing/shops/{shopId}/brand-catalogues/{id}/adaptations:
+    parameters: [{ $ref: '#/components/parameters/shopId' }, { $ref: '#/components/parameters/id' }]
+    post:
+      tags: [Catalogues (boutique, entre portails)]
+      summary: « L'adapter à ma boutique » — une copie à elle (201), la même ensuite (200) ; `meta.removedProducts`
+      security: [{ serviceToken: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Generic' }
+        '201': { $ref: '#/components/responses/Generic' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/integration/marketing/shops/{shopId}/brand-catalogues/{id}/print-links:
+    parameters: [{ $ref: '#/components/parameters/shopId' }, { $ref: '#/components/parameters/id' }]
+    post:
+      tags: [Catalogues (boutique, entre portails), Impression]
+      summary: Un lien d'impression signé (48 h) de la version de la boutique
+      security: [{ serviceToken: [] }]
+      responses:
+        '201': { $ref: '#/components/responses/Generic' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+
+  /api/v1/integration/marketing/shops/{shopId}/brand-catalogues/{id}/checks:
+    parameters: [{ $ref: '#/components/parameters/shopId' }, { $ref: '#/components/parameters/id' }]
+    get:
+      tags: [Catalogues (boutique, entre portails)]
+      summary: Les points à voir avant d'imprimer (calculés à partir du document), vus ou non
+      security: [{ serviceToken: [] }]
+      parameters:
+        - { name: lang, in: query, schema: { type: string, enum: [fr, nl], default: fr } }
+      responses:
+        '200': { $ref: '#/components/responses/Generic' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/integration/marketing/shops/{shopId}/brand-catalogues/{id}/checks/{code}:
+    parameters: [{ $ref: '#/components/parameters/shopId' }, { $ref: '#/components/parameters/id' }, { name: code, in: path, required: true, schema: { type: string, pattern: '^[a-z0-9-]{1,60}$' } }]
+    put:
+      tags: [Catalogues (boutique, entre portails)]
+      summary: Un point vu (idempotent)
+      security: [{ serviceToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [seen], properties: { seen: { type: boolean } } }
+      responses:
+        '200': { $ref: '#/components/responses/Generic' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/integration/marketing/shops/{shopId}/brand-catalogues/{id}/prints:
+    parameters: [{ $ref: '#/components/parameters/shopId' }, { $ref: '#/components/parameters/id' }]
+    post:
+      tags: [Catalogues (boutique, entre portails)]
+      summary: « Marquer imprimé · N ex. » — quantité, date, version de la charte figée
+      security: [{ serviceToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, required: [quantity], properties: { quantity: { type: integer, minimum: 1, maximum: 1000000 } } }
+      responses:
+        '201': { $ref: '#/components/responses/Generic' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/integration/marketing/shops/{shopId}/brand-catalogues/{id}/public-links:
+    parameters: [{ $ref: '#/components/parameters/shopId' }, { $ref: '#/components/parameters/id' }]
+    get:
+      tags: [Catalogues (boutique, entre portails)]
+      summary: Le lien permanent du catalogue en ligne (liste d'un élément, ou vide)
+      security: [{ serviceToken: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Generic' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Catalogues (boutique, entre portails)]
+      summary: Un nouveau lien permanent (`{token, url, createdAt}`) ; le précédent est révoqué
+      security: [{ serviceToken: [] }]
+      responses:
+        '201': { $ref: '#/components/responses/Generic' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+
   /api/v1/public/marketing/catalogue-prints/{token}:
     get:
       tags: [Impression]
@@ -398,6 +683,20 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/Document' }
         '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/public/marketing/catalogue-links/{token}:
+    get:
+      tags: [Impression]
+      summary: Le catalogue en ligne d'un lien permanent (QR, affiche) — dernière version, lecture seule
+      description: Page `{MAR_PUBLIC_BASE_URL}/catalogue/?l=…`. Lien révoqué, inconnu ou falsifié — 404.
+      security: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+        - { name: lang, in: query, schema: { type: string, enum: [fr, nl], default: fr } }
+      responses:
+        '200': { $ref: '#/components/responses/Document' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
 
 components:
   securitySchemes:

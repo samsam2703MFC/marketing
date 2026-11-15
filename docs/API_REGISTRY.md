@@ -1036,3 +1036,44 @@ idempotente (`204` puis `404`), cache des lectures du webshop.
 Couches : contrôleurs `CatalogueController` (marque) et `CatalogueIntegrationController`
 (boutique, impression) → service `CatalogueService` (règles, contraintes, composition, charte,
 liens signés) → dépôts `CatalogueRepository` et `WebshopCatalogueRepository` (seuls à faire du SQL).
+
+**Les deux assistants (15 novembre 2026, `OpenAPI v1.5`).** Client : « les deux, garde les 3 gabarits, code-le »
+(maquettes A1-A4 et B1-B4), puis « côté franchisé c'est un assistant : choix du catalogue, ensuite les gammes, la
+présentation, validation et exportation PDF ».
+
+- *Charte : brouillon et versions publiées* (choix appliqué, le client n'avait pas tranché). L'assistant des pages de la
+  marque édite un BROUILLON (`PUT …/catalogue-charter`, enregistré tout seul) ; « Publier pour tous les catalogues »
+  (`POST …/catalogue-charter/publications` → `201 {version, publishedAt, note, catalogues: {affected, printed}}`) en
+  fait une version, rangée dans `mar_catalogue_charter_version` (contenu en texte, relu dans un ordre de clés fixe).
+  Le document d'un catalogue lit la dernière version publiée (`charter.version`) ; « Marquer imprimé » fige la version
+  du moment (`mar_catalogue.charter_version`, ou `mar_catalogue_shop.charter_version` quand une boutique imprime un
+  catalogue de la marque) : un catalogue imprimé garde ses pages de la marque ; repassé « prêt », il reprend la
+  dernière. `fromVersion` : revenir à une version (republiée comme nouvelle version, et reprise dans le brouillon) ;
+  inconnue → 404. `GET …/publications` (paginé, `current`), `GET …/catalogue-charter/checks` (« Avant de publier » :
+  `fr`, `nl`, `qr`, `fit`, `shops` ; les boutiques et ce qui manque à leur dernière page ; les catalogues concernés).
+  Migration 050 : la charte d'avant devient la version 1, les catalogues déjà imprimés lui sont rattachés.
+  **Changement de comportement** : un `PUT …/catalogue-charter` seul ne touche plus les catalogues (l'écran l'a
+  remplacé par l'assistant ; le dashboard ne l'appelle pas).
+- *Gabarits* : couverture `template` A · B · C, `visual` (`illustration | media | none` ; null = comme avant),
+  `illustration` (dessin de saison, liste fermée) ; page 2 / avant-dernière `template` A · B · C (null = B avec image,
+  A sinon) ; dernière page `template` A · B. Autre valeur → 422, champ nommé.
+- *Boutique* (jeton de service, boutique du chemin ; les dépôts appliquent le périmètre) : `GET …/catalogues/{id}/checks`
+  (points calculés à partir du document : pages vides, produits sans photo, disponibilité en pied de page, dates de
+  promotion, prix — manquants ou différents au comptoir —, pages de la marque, QR, adresse, NL ; chacun `{code, level
+  alerte|question|ok, title, text, page, actions, seen}`, et les pages marquées), `PUT …/checks/{code}` `{seen}`
+  (idempotent, retenu dans `mar_catalogue_shop.checks_seen`), `POST …/prints` `{quantity}`, `GET|POST …/public-links`
+  (jeton `{id}-{aléa}-{HMAC}` signé par `MAR_SESSION_SECRET`, rangé dans `mar_catalogue_link`, révoqué par le POST
+  suivant ; page publique `GET /api/v1/public/marketing/catalogue-links/{token}?lang=` → la dernière version).
+  Catalogues de la marque préparés pour la boutique (elle est dans ses boutiques des versions ; prêts ou imprimés) :
+  `GET …/brand-catalogues[/{id}[/document]]`, `PUT …/{id}/reception {status: pris}` (409 s'il est adapté),
+  `POST …/{id}/adaptations` (copie propriétaire boutique, ses produits seulement, `meta.removedProducts` ; 201 puis 200
+  la même), `POST …/{id}/print-links` (jeton à 4 champs : la boutique de la version) et les routes checks / prints /
+  public-links. Une autre boutique : 404.
+- *Page publique* (`catalogue/index.html`) : `?t=` + `&mode=printer` (PDF imprimeur) · `&mode=livret` (livret A4, 2 pages
+  A5 par face, ordre de pliage) · `&mode=proof` ; `&affiche=A4|A3&l=…` (affiche du magasin, QR du catalogue en ligne) ;
+  `?l=` : le catalogue en ligne à feuilleter (FR | NL).
+- Écart résiduel noté : réponses `Generic` dans l'OpenAPI (forme de `data` décrite ici) ; le « PDF léger » est le PDF
+  sans traits de coupe du navigateur (les images ne sont pas recompressées).
+
+Couches ajoutées : `CatalogueShopService` (vérifications, réception, adaptation, impression, liens) → dépôt
+`CatalogueShopRepository` (versions de la charte, `mar_catalogue_shop`, `mar_catalogue_link`).
