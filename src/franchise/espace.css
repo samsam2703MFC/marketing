@@ -53,7 +53,14 @@
    se fond dans le cockpit : fond transparent, pas de marge à elle. Le cockpit porte le menu (ses onglets), le quota et le
    titre : la page ne répète ni son titre ni les sous-onglets du calendrier (Calendrier, Vues et abonnés, Suivi), qui
    sont des onglets du cockpit. */
-.esp-integre-doc, .esp-integre-doc body { background: transparent !important; scrollbar-width: thin; }
+/* La barre de défilement : une ligne fine, ruby (15/11/2026, « une fine ligne ruby »). */
+.esp-integre-doc, .esp-integre-doc body { background: transparent !important; scrollbar-width: thin; scrollbar-color: #8D1D2C transparent; }
+.esp-integre-doc * { scrollbar-width: thin; scrollbar-color: #8D1D2C transparent; }
+.esp-integre-doc ::-webkit-scrollbar { width: 6px; height: 6px; }
+.esp-integre-doc ::-webkit-scrollbar-thumb { background: #8D1D2C; border-radius: 3px; }
+.esp-integre-doc ::-webkit-scrollbar-track { background: transparent; }
+/* Toute la largeur du cockpit (15/11/2026, « utiliser toute la largeur disponible ») : plus de plafond aux pages. */
+.esp--integre .fcal, .esp--integre .fpub, .esp--integre .social-native { max-width: none; }
 .esp--integre { min-height: 0; background: transparent; }
 .esp--integre .esp-corps { margin-left: 0; max-width: none; padding: 2px 24px 24px 2px; }
 .esp--integre .fcal__onglets, .esp--integre .fcal__titre, .esp--integre .fpub__tete { display: none; }
