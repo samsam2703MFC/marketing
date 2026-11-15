@@ -4781,6 +4781,9 @@ $webshopAvant = \Marketing\Support\Config::value('webshop_url', 'social');
 \Marketing\Support\Config::put('webshop_url', 'https://webshop.test/', 'social');
 $charteAvant = \Marketing\Support\Config::value('catalogues.charte');
 \Marketing\Support\Config::delete('catalogues.charte');
+// Les versions publiées de la charte (migration 050) : gardées et remises à la fin, la suite part de zéro.
+$versionsCharteAvant = $pdo->query('SELECT version_no, content, note, published_at, published_by FROM mar_catalogue_charter_version')->fetchAll(PDO::FETCH_ASSOC);
+$pdo->exec('DELETE FROM mar_catalogue_charter_version');
 $baseCatAvant = getenv('MAR_ERP_API_BASE');
 \Marketing\Support\Env::set('MAR_ERP_API_BASE', 'https://erp.test');
 \Marketing\Support\Env::set('MAR_SESSION_SECRET', str_repeat('c', 40));
@@ -4840,6 +4843,9 @@ $catRouter->get('/api/v1/marketing/catalogues/{id}/document', [$catBrand, 'docum
 $catRouter->get('/api/v1/marketing/catalogue-products', [$catBrand, 'products']);
 $catRouter->get('/api/v1/marketing/catalogue-charter', [$catBrand, 'charter']);
 $catRouter->put('/api/v1/marketing/catalogue-charter', [$catBrand, 'saveCharter']);
+$catRouter->get('/api/v1/marketing/catalogue-charter/checks', [$catBrand, 'charterChecks']);
+$catRouter->get('/api/v1/marketing/catalogue-charter/publications', [$catBrand, 'charterVersions']);
+$catRouter->post('/api/v1/marketing/catalogue-charter/publications', [$catBrand, 'publishCharter']);
 $SB = '/api/v1/integration/marketing/shops/{shopId}';
 $catRouter->get($SB . '/catalogue-products', [$catShop, 'products'], true);
 $catRouter->get($SB . '/catalogue-media', [$catShop, 'media'], true);
@@ -4851,6 +4857,20 @@ $catRouter->delete($SB . '/catalogues/{id}', [$catShop, 'destroy'], true);
 $catRouter->get($SB . '/catalogues/{id}/document', [$catShop, 'document'], true);
 $catRouter->post($SB . '/catalogues/{id}/print-links', [$catShop, 'printLink'], true);
 $catRouter->get('/api/v1/public/marketing/catalogue-prints/{token}', [$catShop, 'printDocument'], true);
+foreach (['catalogues', 'brand-catalogues'] as $kind) {
+    $catRouter->get($SB . '/' . $kind . '/{id}/checks', [$catShop, 'checks'], true);
+    $catRouter->put($SB . '/' . $kind . '/{id}/checks/{code}', [$catShop, 'markSeen'], true);
+    $catRouter->post($SB . '/' . $kind . '/{id}/prints', [$catShop, 'prints'], true);
+    $catRouter->get($SB . '/' . $kind . '/{id}/public-links', [$catShop, 'links'], true);
+    $catRouter->post($SB . '/' . $kind . '/{id}/public-links', [$catShop, 'newLink'], true);
+}
+$catRouter->get($SB . '/brand-catalogues', [$catShop, 'brandIndex'], true);
+$catRouter->get($SB . '/brand-catalogues/{id}', [$catShop, 'brandShow'], true);
+$catRouter->get($SB . '/brand-catalogues/{id}/document', [$catShop, 'brandDocument'], true);
+$catRouter->put($SB . '/brand-catalogues/{id}/reception', [$catShop, 'reception'], true);
+$catRouter->post($SB . '/brand-catalogues/{id}/adaptations', [$catShop, 'adaptation'], true);
+$catRouter->post($SB . '/brand-catalogues/{id}/print-links', [$catShop, 'brandPrintLink'], true);
+$catRouter->get('/api/v1/public/marketing/catalogue-links/{token}', [$catShop, 'linkDocument'], true);
 
 // Côté marque
 AuthContext::clear();
@@ -5060,15 +5080,25 @@ $pose = call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], [
     'back' => ['titleFr' => 'Commandez en ligne', 'titleNl' => 'Bestel online', 'textFr' => 'Retrait en boutique ou livraison.', 'textNl' => 'Afhalen of levering.'],
     'page2' => ['titleFr' => 'Le mot de la boulangerie', 'titleNl' => 'Het woord van de bakkerij', 'textFr' => "Premier paragraphe.\n\nSecond paragraphe.", 'textNl' => '', 'mediaId' => null],
 ]);
+// Le brouillon enregistré ne change rien aux catalogues : ils lisent la version publiée.
+$docBrouillon = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idCat . '/document', ['lang' => 'nl']);
+$etatBrouillon = call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter');
+check('charte : le brouillon enregistré ne touche pas les catalogues avant « Publier » (ils gardent la charte publiée)',
+    $pose['status'] === 200 && ($docBrouillon['body']['data']['pages'][1]['title'] ?? '') === 'Elke ochtend huisgemaakt'
+        && array_key_exists('version', $docBrouillon['body']['data']['charter'] ?? []) && $docBrouillon['body']['data']['charter']['version'] === null
+        && array_key_exists('version', $etatBrouillon['body']['data']['publication'] ?? []) && $etatBrouillon['body']['data']['publication']['version'] === null
+        && ($etatBrouillon['body']['data']['publication']['draftChanged'] ?? false) === true,
+    json_encode([$docBrouillon['body']['data']['pages'][1] ?? null, $etatBrouillon['body']['data']['publication'] ?? null]));
+$publie1 = call($catRouter, 'POST', '/api/v1/marketing/catalogue-charter/publications', [], ['note' => 'Charte de test']);
 $docCharte = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idCat . '/document', ['lang' => 'nl']);
 $pc = $docCharte['body']['data']['pages'] ?? [];
-check('charte : enregistrée, la couverture de la gamme et la page 2 passent sur le catalogue ; avant-dernière gardée ; NL manquant dit',
-    $pose['status'] === 200 && count($pose['body']['data']['covers'] ?? []) === 2
+check('charte : publiée (version 1), la couverture de la gamme et la page 2 passent sur le catalogue ; avant-dernière gardée ; NL manquant dit',
+    $pose['status'] === 200 && $publie1['status'] === 201 && ($publie1['body']['data']['version'] ?? 0) === 1 && ($docCharte['body']['data']['charter']['version'] ?? 0) === 1 && count($pose['body']['data']['covers'] ?? []) === 2
     && ($pc[0]['title'] ?? '') === 'Lekkere kerst' && (end($pc)['title'] ?? '') === 'Bestel online'
     && ($pc[1]['title'] ?? '') === 'Het woord van de bakkerij' && ($pc[1]['text'] ?? '') === "Premier paragraphe.\n\nSecond paragraphe."
     && ($pc[count($pc) - 2]['title'] ?? '') === 'Onze diensten'
     && str_contains((string) json_encode($docCharte['body']['data']['warnings'] ?? []), 'Page 2'),
-    json_encode([$pose['body']['error'] ?? null, $docCharte['body']['data']['pages'][0] ?? null]));
+    json_encode([$pose["body"]["error"] ?? null, $publie1["body"], $docCharte["body"]["data"]["charter"] ?? null, $docCharte["body"]["data"]["pages"][0] ?? null]));
 $refusCharte = [
     call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['colors' => ['primary' => 'rouge']])['status'],
     call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['covers' => [['gamme' => 14, 'titleFr' => '']]])['status'],
@@ -5178,6 +5208,243 @@ $d2 = call($catRouter, 'DELETE', $SA . '/catalogues/' . $idMien);
 check('boutique : supprimé (204), puis introuvable (404) — rien d\'autre ne bouge', $d1['status'] === 204 && $d1['body'] === null && $d2['status'] === 404
     && (int) $pdo->query('SELECT COUNT(*) FROM mar_catalogue WHERE id = ' . $idCat)->fetchColumn() === 1);
 unset($_SERVER['HTTP_X_SERVICE_TOKEN']);
+
+// --- Assistant des pages de la marque (maquettes A1-A4) : brouillon, gabarits, publication, version figée --------
+echo "\nCatalogues : assistant de la marque\n";
+AuthContext::clear();
+check('charte : publications et vérifications — 401 sans identité (routeur réel)',
+    call($router, 'GET', '/api/v1/marketing/catalogue-charter/checks')['status'] === 401
+        && call($router, 'POST', '/api/v1/marketing/catalogue-charter/publications', [], [])['status'] === 401);
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+check('charte : un compte de boutique ne publie pas la charte (403), ne lit ni ses vérifications ni ses versions',
+    call($catRouter, 'POST', '/api/v1/marketing/catalogue-charter/publications', [], [])['status'] === 403
+        && call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter/checks')['status'] === 403
+        && call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter/publications')['status'] === 403
+        && (int) $pdo->query('SELECT COUNT(*) FROM mar_catalogue_charter_version')->fetchColumn() === 1);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$verifs = call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter/checks');
+$vc = array_column($verifs['body']['data']['items'] ?? [], null, 'code');
+$vShops = array_column($verifs['body']['data']['shops'] ?? [], null, 'erpShopId');
+check('charte : « Avant de publier » — français complet, NL à écrire (page 2), QR du webshop, textes qui tiennent ; boutiques lues dans TFBuddy ; catalogues concernés comptés',
+    $verifs['status'] === 200 && ($vc['fr']['level'] ?? '') === 'ok' && ($vc['nl']['level'] ?? '') === 'warn' && str_contains((string) ($vc['nl']['message'] ?? ''), 'page 2')
+        && ($vc['qr']['level'] ?? '') === 'ok' && ($vc['fit']['level'] ?? '') === 'ok'
+        && ($vShops[9104]['address'] ?? '') !== '' && ($vShops[9104]['qrUrl'] ?? '') === 'https://webshop.test/?shop=9104' && ($vShops[9104]['missing'] ?? ['x']) === []
+        && ($verifs['body']['data']['catalogues']['affected'] ?? 0) >= 1,
+    json_encode($verifs['body'], JSON_UNESCAPED_UNICODE));
+check('charte : vérifications — paramètre inconnu (422)', call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter/checks', ['x' => '1'])['status'] === 422);
+$gabarits = [
+    'colors' => ['primary' => '#8D1D2C', 'secondary' => '#F5EFE4', 'accent' => '#B0792A', 'ink' => '#241C1A'],
+    'covers' => [
+        ['gamme' => null, 'titleFr' => 'Notre catalogue', 'titleNl' => 'Onze catalogus', 'subtitleFr' => '', 'subtitleNl' => '', 'mediaId' => null],
+        ['gamme' => 14, 'titleFr' => 'Noël', 'titleNl' => 'Kerst', 'subtitleFr' => 'Bûches et cougnous', 'subtitleNl' => 'Stronken en kerstbrood', 'mediaId' => null, 'template' => 'B', 'visual' => 'illustration', 'illustration' => 'noel'],
+    ],
+    'back' => ['titleFr' => 'Commandez en ligne', 'titleNl' => 'Bestel online', 'textFr' => 'Retrait en boutique ou livraison.', 'textNl' => 'Afhalen of levering.', 'template' => 'B'],
+    'page2' => ['titleFr' => 'Le mot de la boulangerie', 'titleNl' => 'Het woord van de bakkerij', 'textFr' => 'Un paragraphe.', 'textNl' => 'Een alinea.', 'mediaId' => null, 'template' => 'C'],
+];
+$poseG = call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], $gabarits);
+$avantPub = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idCat . '/document');
+$pubG = call($catRouter, 'POST', '/api/v1/marketing/catalogue-charter/publications', [], []);
+$apresPub = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idCat . '/document');
+$ap = $apresPub['body']['data']['pages'] ?? [];
+check('charte : gabarits — brouillon enregistré sans effet, puis publié (version 2) : couverture B au dessin de Noël, page 2 « image en bas », dernière page « boutique en avant »',
+    $poseG['status'] === 200 && ($poseG['body']['data']['covers'][1]['template'] ?? '') === 'B' && ($poseG['body']['data']['publication']['draftChanged'] ?? false) === true
+        && ($avantPub['body']['data']['pages'][0]['template'] ?? '') === 'A' && ($avantPub['body']['data']['charter']['version'] ?? 0) === 1
+        && $pubG['status'] === 201 && ($pubG['body']['data']['version'] ?? 0) === 2 && ($pubG['body']['data']['catalogues']['affected'] ?? 0) >= 1
+        && ($ap[0]['template'] ?? '') === 'B' && ($ap[0]['drawing'] ?? '') === 'img/print/noel.png' && ($ap[0]['title'] ?? '') === 'Noël' && ($ap[0]['kicker'] ?? '') === 'La gamme'
+        && ($ap[1]['template'] ?? '') === 'C' && (end($ap)['template'] ?? '') === 'B' && ($apresPub['body']['data']['charter']['version'] ?? 0) === 2,
+    json_encode([$poseG['body']['error'] ?? null, $pubG['body'], $ap[0] ?? null, $ap[1] ?? null], JSON_UNESCAPED_UNICODE));
+$etatPub = call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter');
+check('charte : publiée, le brouillon n’a plus de différence ; l’ordre des clés relues est fixe',
+    ($etatPub['body']['data']['publication']['version'] ?? 0) === 2 && ($etatPub['body']['data']['publication']['draftChanged'] ?? true) === false
+        && array_keys($etatPub['body']['data']['covers'][1] ?? []) === ['gamme', 'titleFr', 'titleNl', 'subtitleFr', 'subtitleNl', 'mediaId', 'template', 'visual', 'illustration', 'imageUrl']
+        && array_keys($etatPub['body']['data']['back'] ?? []) === ['titleFr', 'titleNl', 'textFr', 'textNl', 'template'],
+    json_encode($etatPub['body']['data'] ?? null, JSON_UNESCAPED_UNICODE));
+$refusG = [
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['covers' => [['gamme' => 14, 'titleFr' => 'a', 'template' => 'Z']]]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['covers' => [['gamme' => 14, 'titleFr' => 'a', 'visual' => 'media']]]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['covers' => [['gamme' => 14, 'titleFr' => 'a', 'illustration' => 'licorne']]]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['back' => ['titleFr' => 'a', 'template' => 'C']]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['page2' => ['titleFr' => 'a', 'template' => 'D']]),
+];
+check('charte : gabarits refusés (422, champ nommé) — couverture Z, « médiathèque » sans image, dessin inconnu, dernière page C, page 2 D ; rien d’écrit',
+    array_unique(array_column($refusG, 'status')) === [422]
+        && array_map(static fn (array $r): string => (string) ($r['body']['error']['details'][0]['field'] ?? ''), $refusG) === ['covers[0].template', 'covers[0].mediaId', 'covers[0].illustration', 'back.template', 'page2.template']
+        && (call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter')['body']['data']['publication']['draftChanged'] ?? true) === false,
+    json_encode(array_map(static fn (array $r): mixed => $r['body']['error']['details'] ?? null, $refusG), JSON_UNESCAPED_UNICODE));
+$histo = call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter/publications', ['perPage' => '1']);
+check('charte : historique paginé, la plus récente d’abord (« current »)', $histo['status'] === 200 && ($histo['body']['data'][0]['version'] ?? 0) === 2
+    && ($histo['body']['data'][0]['current'] ?? false) === true && ($histo['body']['meta']['pagination']['total'] ?? 0) === 2 && count($histo['body']['data']) === 1
+    && call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter/publications', ['tri' => 'x'])['status'] === 422);
+
+// « Marquer imprimé » fige la version : une nouvelle publication ne touche pas un catalogue imprimé.
+$imprimeM = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['status' => 'imprime', 'printQty' => 500]);
+$retour = call($catRouter, 'POST', '/api/v1/marketing/catalogue-charter/publications', [], ['fromVersion' => 1]);
+$docFige = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idCat . '/document');
+check('charte : « Revenir à la version 1 » publie la version 3 (= 1) ; le catalogue marqué imprimé garde la version 2, figée',
+    $imprimeM['status'] === 200 && ($imprimeM['body']['data']['charterVersion'] ?? 0) === 2
+        && $retour['status'] === 201 && ($retour['body']['data']['version'] ?? 0) === 3
+        && ($docFige['body']['data']['charter']['version'] ?? 0) === 2 && ($docFige['body']['data']['pages'][0]['template'] ?? '') === 'B'
+        && (call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter')['body']['data']['covers'][1]['titleFr'] ?? '') === 'Noël gourmand',
+    json_encode([$imprimeM['body']['data']['charterVersion'] ?? null, $retour['body'], $docFige['body']['data']['charter'] ?? null], JSON_UNESCAPED_UNICODE));
+$rePret = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['status' => 'pret']);
+check('charte : repassé « prêt », le catalogue reprend la dernière version publiée (3) ; version inconnue (404), corps invalide (422)',
+    array_key_exists('charterVersion', $rePret['body']['data'] ?? []) && $rePret['body']['data']['charterVersion'] === null && (call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idCat . '/document')['body']['data']['charter']['version'] ?? 0) === 3
+        && call($catRouter, 'POST', '/api/v1/marketing/catalogue-charter/publications', [], ['fromVersion' => 99])['status'] === 404
+        && call($catRouter, 'POST', '/api/v1/marketing/catalogue-charter/publications', [], ['fromVersion' => 'x'])['status'] === 422
+        && call($catRouter, 'POST', '/api/v1/marketing/catalogue-charter/publications', [], ['pirate' => 1])['status'] === 422
+        && (int) $pdo->query('SELECT COUNT(*) FROM mar_catalogue_charter_version')->fetchColumn() === 3);
+
+// --- Assistant du franchisé (maquettes B1-B4) : Vérifier · Imprimer · Diffuser, catalogue de la marque reçu ----
+echo "\nCatalogues : assistant du franchisé\n";
+$seulA = call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Pour Sombreffe seule', 'source' => ['kind' => 'gamme', 'ref' => 14], 'shopIds' => [$catA]]);
+$idSeulA = (int) ($seulA['body']['data']['id'] ?? 0);
+call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idSeulA, [], ['status' => 'pret']);
+$brouillonM = call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Brouillon de la marque', 'source' => ['kind' => 'gamme', 'ref' => 14], 'shopIds' => [$catA, $catB]]);
+$idBrouillonM = (int) ($brouillonM['body']['data']['id'] ?? 0);
+AuthContext::clear();
+unset($_SERVER['HTTP_X_SERVICE_TOKEN']);
+check('franchisé : 401 sans jeton de service (catalogues de la marque, vérifications, liens)',
+    call($catRouter, 'GET', $SA . '/brand-catalogues')['status'] === 401
+        && call($catRouter, 'GET', $SA . '/brand-catalogues/' . $idCat . '/checks')['status'] === 401
+        && call($catRouter, 'POST', $SA . '/brand-catalogues/' . $idCat . '/public-links')['status'] === 401);
+$_SERVER['HTTP_X_SERVICE_TOKEN'] = 'JETON-SERVICE-CATALOGUES-TEST';
+$recusA = call($catRouter, 'GET', $SA . '/brand-catalogues');
+$recusB = call($catRouter, 'GET', $SBo . '/brand-catalogues', ['perPage' => '1']);
+$rA = array_column($recusA['body']['data'] ?? [], null, 'id');
+check('franchisé : les catalogues de la marque préparés pour elle, « nouveau » (pas un brouillon de la marque) ; l’autre boutique ne voit pas celui de Sombreffe seule',
+    $recusA['status'] === 200 && isset($rA[$idCat], $rA[$idSeulA]) && !isset($rA[$idBrouillonM]) && ($rA[$idCat]['reception']['status'] ?? '') === 'nouveau'
+        && ($recusB['body']['meta']['pagination']['total'] ?? 0) === 1 && ($recusB['body']['data'][0]['id'] ?? 0) === $idCat
+        && call($catRouter, 'GET', $SBo . '/brand-catalogues/' . $idSeulA)['status'] === 404
+        && call($catRouter, 'GET', $SBo . '/brand-catalogues/' . $idSeulA . '/document')['status'] === 404
+        && call($catRouter, 'PUT', $SBo . '/brand-catalogues/' . $idSeulA . '/reception', [], ['status' => 'pris'])['status'] === 404
+        && call($catRouter, 'GET', $SA . '/brand-catalogues/' . $idBrouillonM)['status'] === 404
+        && call($catRouter, 'GET', $SA . '/brand-catalogues', ['x' => '1'])['status'] === 422,
+    json_encode([$recusA['body'], $recusB['body']['meta'] ?? null], JSON_UNESCAPED_UNICODE));
+$pris1 = call($catRouter, 'PUT', $SA . '/brand-catalogues/' . $idCat . '/reception', [], ['status' => 'pris']);
+$pris2 = call($catRouter, 'PUT', $SA . '/brand-catalogues/' . $idCat . '/reception', [], ['status' => 'pris']);
+$docRecu = call($catRouter, 'GET', $SA . '/brand-catalogues/' . $idCat . '/document', ['lang' => 'fr']);
+check('franchisé : « Le prendre tel quel » (idempotent) — sa version : ses produits, ses prix, son QR ; refus (422)',
+    $pris1['status'] === 200 && ($pris2['body']['data']['reception']['status'] ?? '') === 'pris'
+        && ($docRecu['body']['data']['version']['shop']['erpShopId'] ?? 0) === 9104 && (end($docRecu['body']['data']['pages'])['qrUrl'] ?? '') === 'https://webshop.test/?shop=9104'
+        && call($catRouter, 'PUT', $SA . '/brand-catalogues/' . $idCat . '/reception', [], ['status' => 'adapte'])['status'] === 422
+        && call($catRouter, 'PUT', $SA . '/brand-catalogues/' . $idCat . '/reception', [], ['status' => 'pris', 'x' => 1])['status'] === 422
+        && call($catRouter, 'GET', $SA . '/brand-catalogues/' . $idCat . '/document', ['lang' => 'de'])['status'] === 422,
+    json_encode([$pris1['body'], $docRecu['body']['error'] ?? null], JSON_UNESCAPED_UNICODE));
+
+$monCat = call($catRouter, 'POST', $SA . '/catalogues', [], ['title' => 'Mon catalogue à vérifier', 'source' => ['kind' => 'gamme', 'ref' => 14], 'pageCount' => 10]);
+$idMon = (int) ($monCat['body']['data']['id'] ?? 0);
+$v1 = call($catRouter, 'GET', $SA . '/catalogues/' . $idMon . '/checks');
+$pv = array_column($v1['body']['data']['items'] ?? [], null, 'code');
+$vide = array_values(array_filter(array_keys($pv), static fn (string $c): bool => str_starts_with($c, 'page-vide-')));
+check('franchisé : Vérifier — points calculés (page vide, prix différent au comptoir, pages de la marque), des gestes, « x sur n vus », vignettes marquées',
+    $v1['status'] === 200 && $vide !== [] && ($pv[$vide[0]]['level'] ?? '') === 'alerte' && in_array('ouvrir-page', $pv[$vide[0]]['actions'] ?? [], true)
+        && ($pv['prix']['level'] ?? '') === 'question' && str_contains((string) ($pv['prix']['text'] ?? ''), 'Bûche glacée vanille')
+        && ($pv['pages-marque']['level'] ?? '') === 'ok' && ($pv['pages-marque']['seen'] ?? false) === true
+        && ($v1['body']['data']['total'] ?? 0) === count($pv) && count($v1['body']['data']['pages'] ?? []) === 10
+        && in_array('alerte', array_column($v1['body']['data']['pages'] ?? [], 'mark'), true),
+    json_encode($v1['body'], JSON_UNESCAPED_UNICODE));
+$vu1 = call($catRouter, 'PUT', $SA . '/catalogues/' . $idMon . '/checks/prix', [], ['seen' => true]);
+$vu2 = call($catRouter, 'PUT', $SA . '/catalogues/' . $idMon . '/checks/prix', [], ['seen' => true]);
+$v2 = call($catRouter, 'GET', $SA . '/catalogues/' . $idMon . '/checks');
+check('franchisé : un point vu est retenu (idempotent : compté une fois) ; refus (422) ; la boutique voisine n’y touche pas (404)',
+    $vu1['status'] === 200 && $vu2['status'] === 200 && ($v2['body']['data']['seen'] ?? 0) === ($v1['body']['data']['seen'] ?? 0) + 1
+        && (array_column($v2['body']['data']['items'] ?? [], 'seen', 'code')['prix'] ?? false) === true
+        && call($catRouter, 'PUT', $SA . '/catalogues/' . $idMon . '/checks/prix', [], ['seen' => 'oui'])['status'] === 422
+        && call($catRouter, 'PUT', $SA . '/catalogues/' . $idMon . '/checks/PRIX!', [], ['seen' => true])['status'] === 422
+        && call($catRouter, 'GET', $SBo . '/catalogues/' . $idMon . '/checks')['status'] === 404
+        && call($catRouter, 'PUT', $SBo . '/catalogues/' . $idMon . '/checks/prix', [], ['seen' => true])['status'] === 404,
+    json_encode([$vu1['body'], $v2['body']['data']['seen'] ?? null], JSON_UNESCAPED_UNICODE));
+$impr = call($catRouter, 'POST', $SA . '/catalogues/' . $idMon . '/prints', [], ['quantity' => 250]);
+$listeMon = array_column(call($catRouter, 'GET', $SA . '/catalogues')['body']['data'] ?? [], null, 'id');
+check('franchisé : « Marquer imprimé · 250 ex. » — imprimé, la charte publiée figée (3), date ; refus (422) ; autre boutique (404)',
+    $impr['status'] === 201 && ($impr['body']['data']['status'] ?? '') === 'imprime' && ($impr['body']['data']['print']['quantity'] ?? 0) === 250
+        && ($impr['body']['data']['print']['charterVersion'] ?? 0) === 3 && is_string($impr['body']['data']['print']['printedAt'] ?? null)
+        && ($listeMon[$idMon]['print']['quantity'] ?? 0) === 250
+        && call($catRouter, 'POST', $SA . '/catalogues/' . $idMon . '/prints', [], ['quantity' => 0])['status'] === 422
+        && call($catRouter, 'POST', $SA . '/catalogues/' . $idMon . '/prints', [], ['quantity' => 5, 'prix' => 1])['status'] === 422
+        && call($catRouter, 'POST', $SBo . '/catalogues/' . $idMon . '/prints', [], ['quantity' => 5])['status'] === 404,
+    json_encode($impr['body'], JSON_UNESCAPED_UNICODE));
+$imprRecu = call($catRouter, 'POST', $SA . '/brand-catalogues/' . $idCat . '/prints', [], ['quantity' => 120]);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+call($catRouter, 'POST', '/api/v1/marketing/catalogue-charter/publications', [], ['fromVersion' => 2]);
+AuthContext::clear();
+$docRecuFige = call($catRouter, 'GET', $SA . '/brand-catalogues/' . $idCat . '/document');
+$docRecuB = call($catRouter, 'GET', $SBo . '/brand-catalogues/' . $idCat . '/document');
+check('franchisé : le catalogue de la marque imprimé par Sombreffe garde SA version (3) ; Corbais, qui ne l’a pas imprimé, prend la nouvelle (4)',
+    $imprRecu['status'] === 201 && ($imprRecu['body']['data']['print']['quantity'] ?? 0) === 120 && ($imprRecu['body']['data']['status'] ?? '') === 'pret'
+        && ($docRecuFige['body']['data']['charter']['version'] ?? 0) === 3 && ($docRecuB['body']['data']['charter']['version'] ?? 0) === 4,
+    json_encode([$imprRecu['body'], $docRecuFige['body']['data']['charter'] ?? null, $docRecuB['body']['data']['charter'] ?? null], JSON_UNESCAPED_UNICODE));
+$lienRecu = call($catRouter, 'POST', $SA . '/brand-catalogues/' . $idCat . '/print-links', [], ['lang' => 'fr']);
+unset($_SERVER['HTTP_X_SERVICE_TOKEN']);
+$imprRecuDoc = call($catRouter, 'GET', '/api/v1/public/marketing/catalogue-prints/' . ($lienRecu['body']['data']['token'] ?? ''));
+check('franchisé : le lien d’impression d’un catalogue de la marque reçu compose SA version (sa boutique, sa charte figée)',
+    $lienRecu['status'] === 201 && ($imprRecuDoc['body']['data']['version']['shop']['erpShopId'] ?? 0) === 9104 && ($imprRecuDoc['body']['data']['charter']['version'] ?? 0) === 3,
+    json_encode([$lienRecu['body'], $imprRecuDoc['body']['error'] ?? null], JSON_UNESCAPED_UNICODE));
+$_SERVER['HTTP_X_SERVICE_TOKEN'] = 'JETON-SERVICE-CATALOGUES-TEST';
+
+// Diffuser : le lien permanent.
+$aucun = call($catRouter, 'GET', $SA . '/catalogues/' . $idMon . '/public-links');
+$l1 = call($catRouter, 'POST', $SA . '/catalogues/' . $idMon . '/public-links');
+$t1 = (string) ($l1['body']['data']['token'] ?? '');
+$courant = call($catRouter, 'GET', $SA . '/catalogues/' . $idMon . '/public-links');
+unset($_SERVER['HTTP_X_SERVICE_TOKEN']);
+$enLigne = call($catRouter, 'GET', '/api/v1/public/marketing/catalogue-links/' . $t1, ['lang' => 'nl']);
+check('franchisé : Diffuser — aucun lien, puis un lien permanent signé (page /catalogue/?l=…) ; la page publique sert le catalogue sans session, dans la langue demandée',
+    $aucun['status'] === 200 && ($aucun['body']['data'] ?? null) === [] && $l1['status'] === 201 && str_contains((string) ($l1['body']['data']['url'] ?? ''), '/catalogue/?l=')
+        && ($courant['body']['data'][0]['token'] ?? '') === $t1 && $enLigne['status'] === 200 && ($enLigne['body']['data']['catalogue']['id'] ?? 0) === $idMon
+        && ($enLigne['body']['data']['version']['lang'] ?? '') === 'nl',
+    json_encode([$l1['body'], $enLigne['body']['error'] ?? null], JSON_UNESCAPED_UNICODE));
+$_SERVER['HTTP_X_SERVICE_TOKEN'] = 'JETON-SERVICE-CATALOGUES-TEST';
+call($catRouter, 'PUT', $SA . '/catalogues/' . $idMon, [], ['title' => 'Mon catalogue, nouvelle version']);
+$l2 = call($catRouter, 'POST', $SA . '/catalogues/' . $idMon . '/public-links');
+$t2 = (string) ($l2['body']['data']['token'] ?? '');
+$lRecu = call($catRouter, 'POST', $SA . '/brand-catalogues/' . $idCat . '/public-links');
+unset($_SERVER['HTTP_X_SERVICE_TOKEN']);
+$parT2 = call($catRouter, 'GET', '/api/v1/public/marketing/catalogue-links/' . $t2);
+$parRecu = call($catRouter, 'GET', '/api/v1/public/marketing/catalogue-links/' . ($lRecu['body']['data']['token'] ?? ''));
+$t2faux = substr($t2, 0, -2) . (str_ends_with($t2, 'AA') ? 'BB' : 'AA');
+check('franchisé : « Nouveau lien » révoque l’ancien (404) ; le lien suit la dernière version ; lien d’un catalogue de la marque = sa boutique ; falsifié, mal formé, langue (404/422)',
+    $t2 !== $t1 && call($catRouter, 'GET', '/api/v1/public/marketing/catalogue-links/' . $t1)['status'] === 404
+        && ($parT2['body']['data']['catalogue']['title'] ?? '') === 'Mon catalogue, nouvelle version'
+        && ($parRecu['body']['data']['version']['shop']['erpShopId'] ?? 0) === 9104
+        && call($catRouter, 'GET', '/api/v1/public/marketing/catalogue-links/' . $t2faux)['status'] === 404
+        && call($catRouter, 'GET', '/api/v1/public/marketing/catalogue-links/xyz')['status'] === 404
+        && call($catRouter, 'GET', '/api/v1/public/marketing/catalogue-links/' . $t2, ['lang' => 'de'])['status'] === 422,
+    json_encode([$l2['body'], $parT2['body']['error'] ?? null, $parRecu['body']['error'] ?? null], JSON_UNESCAPED_UNICODE));
+$_SERVER['HTTP_X_SERVICE_TOKEN'] = 'JETON-SERVICE-CATALOGUES-TEST';
+check('franchisé : liens — la boutique voisine ne lit ni ne renouvelle le lien d’un autre (404), corps inconnu (422)',
+    call($catRouter, 'GET', $SBo . '/catalogues/' . $idMon . '/public-links')['status'] === 404
+        && call($catRouter, 'POST', $SBo . '/catalogues/' . $idMon . '/public-links')['status'] === 404
+        && call($catRouter, 'POST', $SA . '/catalogues/' . $idMon . '/public-links', [], ['x' => 1])['status'] === 422);
+
+// L'adapter à ma boutique (Corbais) : une copie à elle.
+$ad1 = call($catRouter, 'POST', $SBo . '/brand-catalogues/' . $idCat . '/adaptations');
+$idCopie = (int) ($ad1['body']['data']['id'] ?? 0);
+$ad2 = call($catRouter, 'POST', $SBo . '/brand-catalogues/' . $idCat . '/adaptations');
+$recuB = call($catRouter, 'GET', $SBo . '/brand-catalogues/' . $idCat);
+$copieB = call($catRouter, 'GET', $SBo . '/catalogues/' . $idCopie);
+check('franchisé : « L’adapter à ma boutique » — une copie à elle (201), ses produits seulement, la même au second appel (200) ; la réception le dit ; plus de « tel quel » (409)',
+    $ad1['status'] === 201 && ($ad1['body']['data']['owner'] ?? '') === 'boutique' && ($ad1['body']['data']['shop']['erpShopId'] ?? 0) === 9105
+        && array_diff(array_column($ad1['body']['data']['products'] ?? [], 'id'), [11, 13, 14]) === [] && in_array(12, $ad1['body']['meta']['removedProducts'] ?? [], true)
+        && $ad2['status'] === 200 && ($ad2['body']['data']['id'] ?? 0) === $idCopie
+        && ($recuB['body']['data']['reception']['status'] ?? '') === 'adapte' && ($recuB['body']['data']['reception']['adaptedId'] ?? 0) === $idCopie
+        && $copieB['status'] === 200 && call($catRouter, 'GET', $SA . '/catalogues/' . $idCopie)['status'] === 404
+        && call($catRouter, 'PUT', $SBo . '/brand-catalogues/' . $idCat . '/reception', [], ['status' => 'pris'])['status'] === 409
+        && call($catRouter, 'POST', $SBo . '/brand-catalogues/' . $idCat . '/adaptations', [], ['x' => 1])['status'] === 422,
+    json_encode([$ad1['body'], $ad2['status'], $recuB['body']['data']['reception'] ?? null], JSON_UNESCAPED_UNICODE));
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['title' => 'Noël — modifié par la marque']);
+AuthContext::clear();
+check('franchisé : la marque modifie son catalogue — la copie adaptée ne bouge pas',
+    (call($catRouter, 'GET', $SBo . '/catalogues/' . $idCopie)['body']['data']['title'] ?? '') !== 'Noël — modifié par la marque'
+        && (call($catRouter, 'GET', $SA . '/brand-catalogues/' . $idCat)['body']['data']['title'] ?? '') === 'Noël — modifié par la marque');
+call($catRouter, 'DELETE', $SA . '/catalogues/' . $idMon);
+call($catRouter, 'DELETE', $SBo . '/catalogues/' . $idCopie);
+unset($_SERVER['HTTP_X_SERVICE_TOKEN']);
+$pdo->exec('DELETE FROM mar_catalogue WHERE id IN (' . $idSeulA . ', ' . $idBrouillonM . ')');
+// La suite relit la charte de la version 1 (couverture « Noël gourmand ») : on y revient.
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+call($catRouter, 'POST', '/api/v1/marketing/catalogue-charter/publications', [], ['fromVersion' => 1]);
 
 AuthContext::set(1, 'BRAND_ADMIN', 1);
 $appelsAvant = count($appelsCat);
@@ -5798,6 +6065,11 @@ if ($jetonAvant === false) {
 }
 $webshopAvant === null ? \Marketing\Support\Config::delete('webshop_url', 'social') : \Marketing\Support\Config::put('webshop_url', $webshopAvant, 'social');
 $charteAvant === null ? \Marketing\Support\Config::delete('catalogues.charte') : \Marketing\Support\Config::put('catalogues.charte', $charteAvant);
+$pdo->exec('DELETE FROM mar_catalogue_charter_version');
+$remet = $pdo->prepare('INSERT INTO mar_catalogue_charter_version (version_no, content, note, published_at, published_by) VALUES (?, ?, ?, ?, ?)');
+foreach ($versionsCharteAvant as $v) {
+    $remet->execute([$v['version_no'], $v['content'], $v['note'], $v['published_at'], $v['published_by']]);
+}
 \Marketing\Support\Env::set('MAR_ERP_API_BASE', $baseCatAvant === false ? null : $baseCatAvant);
 \Marketing\Support\Env::set('MAR_SESSION_SECRET', null);
 \Marketing\Support\Keys::forget();

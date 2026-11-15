@@ -191,10 +191,52 @@ const absolute = (url: string | null): string | null => (url ? new URL(url, wind
 /** L'illustration d'une gamme en définition d'impression (celle des brochures). */
 const seasonDrawing = (title: string): string | null => absolute(seasonImage(title)?.replace('/img/seasons/', '/img/print/') ?? null)
 
+/**
+ * La couverture (charte de la marque), dans l'un de ses trois gabarits (maquette A1) : A Pleine couleur (titre sur la
+ * couleur principale, dessin au trait blanc ou photo en bas) · B Illustration (papier, dessin au centre, « La gamme »,
+ * titre en couleur) · C Photo (visuel en haut, bandeau de couleur avec le titre).
+ */
 function Cover({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'cover' }>; doc: CatalogueDocument }) {
+  const template = page.template ?? 'A'
+  // Le dessin choisi (ou reconnu au titre) ; une charte d'avant l'assistant : l'illustration de la gamme reconnue au titre.
+  const drawing = page.imageUrl || page.noVisual ? null : (drawingAsset(page.drawing) ?? seasonDrawing(page.title))
+  const shop = page.eyebrow ? `L’Atelier By · ${page.eyebrow}` : null
+  if (template === 'B') {
+    return (
+      <div className="cat-cover cat-cover--B">
+        <img className="cat-logo cat-logo--dark cat-cover__logoB" src={doc.charter.logoUrl ?? asset('img/logo.png')} alt="" />
+        <div className="cat-cover__art">
+          {page.imageUrl ? <img className="cat-cover__photoB" src={page.imageUrl} alt="" /> : drawing ? <img className="cat-cover__drawB" src={drawing} alt="" /> : null}
+        </div>
+        {page.kicker ? <div className="cat-cover__kicker">{page.kicker}</div> : null}
+        <div className="cat-cover__title" data-fit="Titre de couverture">
+          {page.title}
+        </div>
+        <div className="cat-cover__rule" />
+        {page.subtitle ? <div className="cat-cover__subB">{page.subtitle}</div> : null}
+        {shop ? <div className="cat-cover__shopB">{shop}</div> : null}
+      </div>
+    )
+  }
+  if (template === 'C') {
+    return (
+      <div className="cat-cover cat-cover--C">
+        <div className="cat-cover__top">
+          {page.imageUrl ? <img className="cat-cover__photoC" src={page.imageUrl} alt="" /> : drawing ? <img className="cat-cover__drawC" src={drawing} alt="" /> : null}
+        </div>
+        <div className="cat-cover__band">
+          <img className={`cat-logo${doc.charter.logoUrl ? ' cat-logo--custom' : ''}`} src={doc.charter.logoUrl ?? asset('img/logo-white.png')} alt="" />
+          {page.kicker ? <div className="cat-cover__kicker">{page.kicker}</div> : null}
+          <div className="cat-cover__title" data-fit="Titre de couverture">
+            {page.title}
+          </div>
+          {page.subtitle ? <div className="cat-cover__sub">{page.subtitle}</div> : null}
+          {shop ? <div className="cat-cover__shop">{shop}</div> : null}
+        </div>
+      </div>
+    )
+  }
   const logo = doc.charter.logoUrl ?? asset('img/logo-white.png')
-  // Sans visuel dans la charte : l'illustration de la gamme (Noël, Saint-Nicolas…), au trait blanc.
-  const drawing = page.imageUrl ? null : seasonDrawing(page.title)
   return (
     <div className="cat-cover">
       <img className={`cat-logo${doc.charter.logoUrl ? ' cat-logo--custom' : ''}`} src={logo} alt="" />
@@ -221,11 +263,15 @@ function Cover({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'cover' 
 function Brand({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'brand' }>; doc: CatalogueDocument }) {
   const blocks = page.text.split(/\n\s*\n/).map((block) => block.split('\n').map((line) => line.trim()).filter(Boolean)).filter((lines) => lines.length)
   const logo = doc.charter.logoUrl ?? asset('img/logo.png')
+  // Gabarits (maquette A2) : A texte seul · B image en haut · C image en bas (pleine largeur) ; sans gabarit : B avec une image.
+  const template = page.template ?? (page.imageUrl ? 'B' : 'A')
+  const top = template === 'B' && page.imageUrl
+  const bottom = template === 'C' && page.imageUrl
   return (
-    <div className={`cat-brand cat-brand--${page.slot}${page.imageUrl ? ' cat-brand--image' : ''}`}>
-      {page.imageUrl ? (
+    <div className={`cat-brand cat-brand--${page.slot} cat-brand--t${template}${top ? ' cat-brand--image' : ''}`}>
+      {bottom ? <img className="cat-logo cat-logo--dark cat-brand__logo" src={logo} alt="" /> : top ? (
         <div className="cat-brand__visual">
-          <img src={page.imageUrl} alt="" />
+          <img src={page.imageUrl ?? undefined} alt="" />
         </div>
       ) : (
         <img className="cat-logo cat-logo--dark cat-brand__logo" src={logo} alt="" />
@@ -245,6 +291,11 @@ function Brand({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'brand' 
           ),
         )}
       </div>
+      {bottom ? (
+        <div className="cat-brand__visual cat-brand__visual--bottom">
+          <img src={page.imageUrl ?? ''} alt="" />
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -420,6 +471,32 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
   const lang = doc.version.lang
   const shop = page.shop
   const logo = doc.charter.logoUrl ?? asset('img/logo.png')
+  const lines = shop ? [shop.address, shop.hours ? (lang === 'nl' ? `Open ${shop.hours}` : `Ouvert ${shop.hours}`) : '', shop.phone].filter(Boolean) : []
+  if (page.template === 'B') {
+    // Boutique en avant (maquette A3, gabarit B) : l'adresse et les horaires en grand, le QR plus petit en bas.
+    return (
+      <div className="cat-back cat-back--B">
+        <img className="cat-logo cat-logo--dark" src={logo} alt="" />
+        <div className="cat-back__title">{page.title}</div>
+        {page.text ? <div className="cat-back__text">{page.text}</div> : null}
+        <div className="cat-back__shopB">
+          <div className="cat-back__who">{shop ? `L’Atelier By — ${shop.name}` : 'L’Atelier By'}</div>
+          {lines.map((line, index) => (
+            <p key={index}>{line}</p>
+          ))}
+        </div>
+        {page.qrUrl ? (
+          <div className="cat-back__qr cat-back__qr--small">
+            <Qr url={page.qrUrl} size={20} />
+            <div>
+              <div className="cat-back__host">{page.host}</div>
+              <div className="cat-back__hint">{shop ? (lang === 'nl' ? `De webshop van ${shop.name}` : `Le webshop de ${shop.name}`) : lang === 'nl' ? 'Al onze winkels' : 'Toutes nos boutiques'}</div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    )
+  }
   return (
     <div className="cat-back">
       <img className="cat-logo cat-logo--dark" src={logo} alt="" />
@@ -470,7 +547,7 @@ export function CataloguePage({ doc, index }: { doc: CatalogueDocument; index: n
     '--i': doc.charter.colors.ink,
   } as CSSProperties
   return (
-    <div className={`cat-face cat-face--${page.kind}${page.kind === 'products' || page.kind === 'presentation' ? ` cat-face--t${page.template ?? 'A'}` : ''}`} style={style} lang={doc.version.lang}>
+    <div className={`cat-face cat-face--${page.kind}${page.kind === 'products' || page.kind === 'presentation' ? ` cat-face--t${page.template ?? 'A'}` : ''}${page.kind === 'cover' ? ` cat-face--cover${page.template ?? 'A'}` : ''}`} style={style} lang={doc.version.lang}>
       <div className="cat-trim">
         {page.kind === 'cover' ? <Cover page={page} doc={doc} /> : null}
         {page.kind === 'brand' ? <Brand page={page} doc={doc} /> : null}

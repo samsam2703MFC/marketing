@@ -147,6 +147,10 @@ return static function (Router $router): void {
     $router->get('/api/v1/marketing/catalogue-products',         [$catalogues, 'products']);
     $router->get('/api/v1/marketing/catalogue-charter',          [$catalogues, 'charter']);
     $router->put('/api/v1/marketing/catalogue-charter',          [$catalogues, 'saveCharter']);
+    // L'assistant des pages de la marque : le brouillon (PUT ci-dessus), ses vérifications, ses publications.
+    $router->get('/api/v1/marketing/catalogue-charter/checks',        [$catalogues, 'charterChecks']);
+    $router->get('/api/v1/marketing/catalogue-charter/publications',  [$catalogues, 'charterVersions']);
+    $router->post('/api/v1/marketing/catalogue-charter/publications', [$catalogues, 'publishCharter']);
 
     // Les catalogues d'une boutique, pour le dashboard magasin du cockpit (entre portails) : jeton
     // de service `erp_jeton_service` (en-tête X-Service-Token), vérifié par le contrôleur — d'où
@@ -161,8 +165,25 @@ return static function (Router $router): void {
     $router->delete($shopBase . '/catalogues/{id}',                [$shopCatalogues, 'destroy'], true);
     $router->get($shopBase . '/catalogues/{id}/document',          [$shopCatalogues, 'document'], true);
     $router->post($shopBase . '/catalogues/{id}/print-links',      [$shopCatalogues, 'printLink'], true);
+    // L'assistant du franchisé : Vérifier · Imprimer · Diffuser (son catalogue, ou celui de la marque reçu).
+    foreach (['catalogues', 'brand-catalogues'] as $kind) {
+        $router->get($shopBase . '/' . $kind . '/{id}/checks',          [$shopCatalogues, 'checks'], true);
+        $router->put($shopBase . '/' . $kind . '/{id}/checks/{code}',   [$shopCatalogues, 'markSeen'], true);
+        $router->post($shopBase . '/' . $kind . '/{id}/prints',         [$shopCatalogues, 'prints'], true);
+        $router->get($shopBase . '/' . $kind . '/{id}/public-links',    [$shopCatalogues, 'links'], true);
+        $router->post($shopBase . '/' . $kind . '/{id}/public-links',   [$shopCatalogues, 'newLink'], true);
+    }
+    // Les catalogues de la marque préparés pour la boutique : « Le prendre tel quel » ou « L'adapter à ma boutique ».
+    $router->get($shopBase . '/brand-catalogues',                       [$shopCatalogues, 'brandIndex'], true);
+    $router->get($shopBase . '/brand-catalogues/{id}',                  [$shopCatalogues, 'brandShow'], true);
+    $router->get($shopBase . '/brand-catalogues/{id}/document',         [$shopCatalogues, 'brandDocument'], true);
+    $router->put($shopBase . '/brand-catalogues/{id}/reception',        [$shopCatalogues, 'reception'], true);
+    $router->post($shopBase . '/brand-catalogues/{id}/adaptations',     [$shopCatalogues, 'adaptation'], true);
+    $router->post($shopBase . '/brand-catalogues/{id}/print-links',     [$shopCatalogues, 'brandPrintLink'], true);
     // La page d'impression d'un catalogue, par son lien signé (48 h) : lecture seule.
     $router->get('/api/v1/public/marketing/catalogue-prints/{token}', [$shopCatalogues, 'printDocument'], true);
+    // Le catalogue en ligne, par son lien PERMANENT (QR, affiche ; révocable) : lecture seule, dernière version.
+    $router->get('/api/v1/public/marketing/catalogue-links/{token}',  [$shopCatalogues, 'linkDocument'], true);
 
     // Bâches et cadres d'affiche des boutiques (Marketing en magasin), repris par l'assistant.
     $router->get('/api/v1/marketing/shop-supports',          [$shopSupports, 'index']);

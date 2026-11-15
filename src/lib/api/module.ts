@@ -3065,8 +3065,24 @@ export type CatalogueDocItem = CatalogueDocProduct | CatalogueDocOffer
 export const isDocOffer = (item: CatalogueDocItem): item is CatalogueDocOffer => item.kind === 'offer'
 
 export type CatalogueDocPage =
-  | { kind: 'cover'; locked: true; title: string; subtitle: string; eyebrow: string | null; imageUrl: string | null }
-  | { kind: 'brand'; locked: true; slot: 'page2' | 'penultimate'; title: string; text: string; imageUrl: string | null }
+  | {
+      kind: 'cover'
+      locked: true
+      title: string
+      subtitle: string
+      eyebrow: string | null
+      imageUrl: string | null
+      /** Gabarit (maquette A1) : A Pleine couleur · B Illustration · C Photo ; absent = A. */
+      template?: CatalogueCoverTemplate
+      /** « La gamme » au-dessus du titre d'une couverture de gamme. */
+      kicker?: string | null
+      /** Le dessin de saison (`img/print/…`) quand il n'y a pas de photo. */
+      drawing?: string | null
+      drawingUrl?: string | null
+      /** « Sans visuel » choisi : ni photo ni dessin. */
+      noVisual?: boolean
+    }
+  | { kind: 'brand'; locked: true; slot: 'page2' | 'penultimate'; title: string; text: string; imageUrl: string | null; template?: CatalogueBrandTemplate }
   | {
       kind: 'products'
       locked: false
@@ -3110,7 +3126,7 @@ export type CatalogueDocPage =
       products: CatalogueDocProduct[]
       availabilityFooter?: string | null
     }
-  | { kind: 'back'; locked: true; title: string; text: string; qrUrl: string | null; host: string | null; shop: CatalogueShopInfo | null }
+  | { kind: 'back'; locked: true; title: string; text: string; qrUrl: string | null; host: string | null; shop: CatalogueShopInfo | null; template?: CatalogueBackTemplate }
 
 export interface CatalogueDocFiller {
   kind: CatalogueFiller
@@ -3131,7 +3147,8 @@ export interface CatalogueColors {
 export interface CatalogueDocument {
   catalogue: { id: number; title: string; format: CatalogueFormat; owner: CatalogueOwner; pageCount?: CataloguePageCount }
   version: { shop: CatalogueShopInfo | null; lang: CatalogueLang }
-  charter: { logoUrl: string | null; colors: CatalogueColors }
+  /** `version` : la version publiée de la charte que ce document lit (null : aucune encore, les défauts). */
+  charter: { logoUrl: string | null; colors: CatalogueColors; version?: number | null }
   pages: CatalogueDocPage[]
   warnings: Array<{ code: string; message: string }>
 }
@@ -3145,7 +3162,22 @@ export interface CatalogueCover {
   subtitleNl: string
   mediaId: number | null
   imageUrl?: string | null
+  template: CatalogueCoverTemplate
+  /** null : comme avant l'assistant (photo de la charte, sinon de la gamme, sinon dessin reconnu au titre). */
+  visual: CatalogueCoverVisual | null
+  /** Dessin de saison choisi (`img/print/<slug>.png`) ; null : reconnu au titre. */
+  illustration: string | null
 }
+
+export type CatalogueCoverTemplate = 'A' | 'B' | 'C'
+export type CatalogueCoverVisual = 'illustration' | 'media' | 'none'
+export type CatalogueBrandTemplate = 'A' | 'B' | 'C'
+export type CatalogueBackTemplate = 'A' | 'B'
+/** Les dessins de saison livrés avec le module (`public/img/print/`). */
+export const SEASON_DRAWINGS = ['noel', 'saint-nicolas', 'epiphanie', 'chandeleur', 'saint-valentin', 'paques', 'fete-des-meres', 'printemps', 'ete', 'automne', 'hiver', 'glace'] as const
+/** Caractères qu'un texte de page 2 / avant-dernière porte sans déborder, par gabarit (la règle de l'API). */
+export const BRAND_TEXT_FIT: Record<CatalogueBrandTemplate, number> = { A: 1000, B: 520, C: 520 }
+export const textWeight = (text: string): number => text.length + 40 * (text.match(/\n/g)?.length ?? 0)
 
 /** Page 2 ou avant-dernière page de tous les catalogues : titre, texte (paragraphes), image. */
 export interface CatalogueBrandPage {
@@ -3155,17 +3187,51 @@ export interface CatalogueBrandPage {
   textNl: string
   mediaId: number | null
   imageUrl?: string | null
+  template: CatalogueBrandTemplate
 }
 
+/** Le BROUILLON de la charte (l'assistant des pages de la marque) et l'état de sa publication. */
 export interface CatalogueCharter {
   logoMediaId: number | null
   logoUrl: string | null
   colors: CatalogueColors
   covers: CatalogueCover[]
-  back: { titleFr: string; titleNl: string; textFr: string; textNl: string }
+  back: { titleFr: string; titleNl: string; textFr: string; textNl: string; template: CatalogueBackTemplate }
   page2: CatalogueBrandPage
   penultimate: CatalogueBrandPage
   updatedAt: string | null
+  publication?: { version: number | null; publishedAt: string | null; draftChanged: boolean }
+}
+
+export interface CatalogueCharterShop {
+  id: number
+  erpShopId: number | null
+  name: string
+  address: string
+  hours: string
+  hoursNl: string
+  phone: string
+  qrUrl: string | null
+  host: string | null
+  /** Ce que TFBuddy ne donne pas : address, hours, phone ; qr (adresse du webshop inconnue). */
+  missing: Array<'address' | 'hours' | 'phone' | 'qr'>
+  error: string | null
+}
+
+export interface CatalogueCharterChecks {
+  items: Array<{ code: string; level: 'ok' | 'warn'; step: number; message: string }>
+  catalogues: { affected: number; printed: number }
+  shops: CatalogueCharterShop[]
+  webshopUrl: string | null
+  publication: { version: number | null; publishedAt: string | null; draftChanged: boolean }
+}
+
+export interface CatalogueCharterVersion {
+  version: number
+  publishedAt: string
+  publishedBy: number | null
+  note: string | null
+  current: boolean
 }
 
 export async function listCatalogues(query: { owner?: CatalogueOwner; perPage?: number } = {}): Promise<{ items: Catalogue[]; total: number }> {
@@ -3210,14 +3276,34 @@ export async function getCatalogueCharter(): Promise<CatalogueCharter> {
   return (await request<Envelope<CatalogueCharter>>(`${BASE}/catalogue-charter`)).data
 }
 
-const brandPage = (page: CatalogueBrandPage) => ({ titleFr: page.titleFr, titleNl: page.titleNl, textFr: page.textFr, textNl: page.textNl, mediaId: page.mediaId })
+const brandPage = (page: CatalogueBrandPage) => ({ titleFr: page.titleFr, titleNl: page.titleNl, textFr: page.textFr, textNl: page.textNl, mediaId: page.mediaId, template: page.template })
 
-export async function saveCatalogueCharter(charter: Omit<CatalogueCharter, 'logoUrl' | 'updatedAt' | 'covers'> & { covers: CatalogueCover[] }): Promise<CatalogueCharter> {
+export async function saveCatalogueCharter(charter: Omit<CatalogueCharter, 'logoUrl' | 'updatedAt' | 'covers' | 'publication'> & { covers: CatalogueCover[] }): Promise<CatalogueCharter> {
   const covers = charter.covers.map((cover) => ({
     gamme: cover.gamme, titleFr: cover.titleFr, titleNl: cover.titleNl, subtitleFr: cover.subtitleFr, subtitleNl: cover.subtitleNl, mediaId: cover.mediaId,
+    template: cover.template, visual: cover.visual, illustration: cover.illustration,
   }))
   return (await request<Envelope<CatalogueCharter>>(`${BASE}/catalogue-charter`, {
     method: 'PUT',
     body: { logoMediaId: charter.logoMediaId, colors: charter.colors, covers, back: charter.back, page2: brandPage(charter.page2), penultimate: brandPage(charter.penultimate) },
   })).data
+}
+
+/** « Avant de publier », les boutiques (ce que la dernière page imprime pour chacune), les catalogues concernés. */
+export async function getCatalogueCharterChecks(): Promise<CatalogueCharterChecks> {
+  return (await request<Envelope<CatalogueCharterChecks>>(`${BASE}/catalogue-charter/checks`)).data
+}
+
+/** « Publier pour tous les catalogues » ; `fromVersion` : revenir à une version publiée. */
+export async function publishCatalogueCharter(input: { fromVersion?: number; note?: string } = {}): Promise<{ version: number; publishedAt: string; note: string | null; catalogues: { affected: number; printed: number } }> {
+  return (await request<Envelope<{ version: number; publishedAt: string; note: string | null; catalogues: { affected: number; printed: number } }>>(`${BASE}/catalogue-charter/publications`, { method: 'POST', body: input })).data
+}
+
+export async function listCatalogueCharterVersions(perPage = 20): Promise<CatalogueCharterVersion[]> {
+  return (await request<Envelope<CatalogueCharterVersion[]>>(`${BASE}/catalogue-charter/publications`, { query: { perPage } })).data
+}
+
+/** Le catalogue en ligne d'un lien permanent (QR, affiche) : lecture seule, dernière version. */
+export async function getCatalogueLink(token: string, lang: CatalogueLang): Promise<CatalogueDocument> {
+  return (await request<Envelope<CatalogueDocument>>(`${API_ROOT}/api/v1/public/marketing/catalogue-links/${encodeURIComponent(token)}`, { query: { lang }, anonymous: true })).data
 }

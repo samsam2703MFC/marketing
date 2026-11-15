@@ -5,9 +5,6 @@ import { createRoot } from 'react-dom/client'
 import * as api from '../../lib/api/module'
 import type {
   Catalogue,
-  CatalogueBrandPage,
-  CatalogueCharter,
-  CatalogueCover,
   CatalogueDocument,
   CatalogueLang,
   CatalogueLayout,
@@ -22,6 +19,8 @@ import { openPrintWindow } from '../../lib/print'
 import { CatalogueSheet, FORMAT_MM, HEADER_LABELS, LAYOUT_LABELS, TEMPLATE_LABELS, catalogueCss, formatCents, isPresentation, sheetSize } from './CataloguePages'
 import type { CatalogueSheetMode } from './CataloguePages'
 import './catalogue.css'
+import CharterAssistant from './CharterAssistant'
+import { MediaPicker } from './MediaPicker'
 
 /**
  * Les catalogues produits de la marque : prix du webshop, gammes (Noël, Saint-Nicolas…).
@@ -73,10 +72,11 @@ function PageCountChoice({ value, onChange, disabled = false }: { value: Catalog
 }
 
 export default function CatalogueView() {
-  const [screen, setScreen] = useState<Screen>({ kind: 'list' })
+  // `?pages-marque` ouvre l'assistant des pages de la marque (lien direct, captures).
+  const [screen, setScreen] = useState<Screen>(() => (new URLSearchParams(window.location.search).has('pages-marque') ? { kind: 'charter' } : { kind: 'list' }))
 
   if (screen.kind === 'editor') return <Editor id={screen.id} onBack={() => setScreen({ kind: 'list' })} />
-  if (screen.kind === 'charter') return <CharterEditor onBack={() => setScreen({ kind: 'list' })} />
+  if (screen.kind === 'charter') return <CharterAssistant onBack={() => setScreen({ kind: 'list' })} />
   return <CatalogueList onOpen={(id) => setScreen({ kind: 'editor', id })} onCharter={() => setScreen({ kind: 'charter' })} />
 }
 
@@ -105,7 +105,7 @@ function CatalogueList({ onOpen, onCharter }: { onOpen: (id: number) => void; on
         </span>
         <span className="catv-grow" />
         <button type="button" className="btn" onClick={onCharter}>
-          Charte des catalogues (couverture, dernière page)
+          Pages de la marque (couverture, page 2, dernière page)
         </button>
         <button
           type="button"
@@ -1403,305 +1403,3 @@ function LayoutIcon({ layout }: { layout: CatalogueLayout }) {
   )
 }
 
-// =================================================================================================
-// Charte des catalogues
-// =================================================================================================
-
-function CharterEditor({ onBack }: { onBack: () => void }) {
-  const loaded = useAsync(() => api.getCatalogueCharter(), [])
-  const webshop = useAsync(() => api.getWebshopProducts([]), [])
-  const [charter, setCharter] = useState<CatalogueCharter | null>(null)
-  const [picking, setPicking] = useState<null | 'logo' | 'page2' | 'penultimate' | number>(null)
-  const [state, setState] = useState<{ status: 'idle' | 'saving' | 'saved' | 'error'; text?: string }>({ status: 'idle' })
-  const [lang, setLang] = useState<CatalogueLang>('fr')
-
-  useEffect(() => {
-    if (loaded.data && !charter) setCharter(loaded.data)
-  }, [loaded.data, charter])
-
-  if (loaded.error) return <p className="error">{loaded.error}</p>
-  if (!charter) return <p className="muted">Lecture de la charte…</p>
-
-  const gammes = webshop.data?.gammes ?? []
-  const used = new Set(charter.covers.map((cover) => cover.gamme))
-
-  function setBrand(slot: 'page2' | 'penultimate', patch: Partial<CatalogueBrandPage>) {
-    setCharter((current) => (current ? { ...current, [slot]: { ...current[slot], ...patch } } : current))
-  }
-  const brandDoc = (slot: 'page2' | 'penultimate') => {
-    const content = charter[slot]
-    return {
-      kind: 'brand' as const,
-      locked: true as const,
-      slot,
-      title: lang === 'nl' ? content.titleNl || content.titleFr : content.titleFr,
-      text: lang === 'nl' ? content.textNl || content.textFr : content.textFr,
-      imageUrl: content.imageUrl ?? null,
-    }
-  }
-
-  function setCover(index: number, patch: Partial<CatalogueCover>) {
-    setCharter((current) => (current ? { ...current, covers: current.covers.map((cover, i) => (i === index ? { ...cover, ...patch } : cover)) } : current))
-  }
-
-  async function saveAll() {
-    if (!charter) return
-    setState({ status: 'saving' })
-    try {
-      setCharter(await api.saveCatalogueCharter(charter))
-      setState({ status: 'saved' })
-    } catch (cause) {
-      setState({ status: 'error', text: message(cause) })
-    }
-  }
-
-  // L'aperçu : la couverture générique et la dernière page, telles que la charte les fixe (sans produit).
-  const preview = (cover: CatalogueCover): CatalogueDocument => ({
-    catalogue: { id: 0, title: '', format: 'A5', owner: 'marque' },
-    version: { shop: null, lang },
-    charter: { logoUrl: charter.logoUrl, colors: charter.colors },
-    pages: [
-      { kind: 'cover', locked: true, title: (lang === 'nl' ? cover.titleNl || cover.titleFr : cover.titleFr) || '—', subtitle: lang === 'nl' ? cover.subtitleNl || cover.subtitleFr : cover.subtitleFr, eyebrow: null, imageUrl: cover.imageUrl ?? null },
-      brandDoc('page2'),
-      brandDoc('penultimate'),
-      { kind: 'back', locked: true, title: lang === 'nl' ? charter.back.titleNl || charter.back.titleFr : charter.back.titleFr, text: lang === 'nl' ? charter.back.textNl || charter.back.textFr : charter.back.textFr, qrUrl: null, host: null, shop: null },
-    ],
-    warnings: [],
-  })
-
-  return (
-    <div className="catv">
-      <div className="catv-head">
-        <div>
-          <button type="button" className="linklike catv-back" onClick={onBack}>
-            ‹ Catalogues
-          </button>
-          <p className="catv-kicker">Catalogues · réglage de la marque</p>
-          <h2 className="catv-h1">Charte des catalogues</h2>
-        </div>
-        <span className="catv-grow" />
-        <span className="bro-seg" role="group" aria-label="Langue de l’aperçu">
-          {(['fr', 'nl'] as CatalogueLang[]).map((l) => (
-            <button key={l} type="button" className={lang === l ? 'is-on' : ''} onClick={() => setLang(l)}>
-              {l.toUpperCase()}
-            </button>
-          ))}
-        </span>
-        <span className="catv-save">{state.status === 'saved' ? 'Enregistré' : state.status === 'error' ? <span className="error">{state.text}</span> : null}</span>
-        <button type="button" className="btn btn--primary" disabled={state.status === 'saving'} onClick={() => void saveAll()}>
-          {state.status === 'saving' ? 'Enregistrement…' : 'Enregistrer la charte'}
-        </button>
-      </div>
-      <p className="catv-note">
-        <LockIcon /> Le logo, les couleurs et les quatre pages de la marque de tous les catalogues — couverture (page 1), page 2, avant-dernière et dernière page —,
-        ceux de la marque et ceux que les franchisés font dans leur dashboard, viennent d’ici.
-      </p>
-
-      <style>{catalogueCss()}</style>
-      <div className="catv-charter">
-        <div className="catv-charter__form">
-          <section className="card">
-            <h2>Logo et couleurs</h2>
-            <div className="catv-field">
-              <span>Logo</span>
-              <span className="catv-inline">
-                {charter.logoUrl ? <img className="catv-logo" src={charter.logoUrl} alt="" /> : <span className="muted">Logo officiel de la marque</span>}
-                <button type="button" className="btn btn--sm" onClick={() => setPicking('logo')}>
-                  Choisir dans la médiathèque
-                </button>
-                {charter.logoMediaId !== null ? (
-                  <button type="button" className="linklike" onClick={() => setCharter({ ...charter, logoMediaId: null, logoUrl: null })}>
-                    logo officiel
-                  </button>
-                ) : null}
-              </span>
-            </div>
-            <div className="catv-colors">
-              {(['primary', 'secondary', 'accent', 'ink'] as const).map((key) => (
-                <label key={key} className="catv-field">
-                  <span>{{ primary: 'Principale', secondary: 'Papier', accent: 'Accent', ink: 'Encre' }[key]}</span>
-                  <input type="color" value={charter.colors[key]} onChange={(event) => setCharter({ ...charter, colors: { ...charter.colors, [key]: event.target.value.toUpperCase() } })} />
-                </label>
-              ))}
-            </div>
-          </section>
-
-          <section className="card">
-            <h2>Couvertures (page 1)</h2>
-            {charter.covers.map((cover, index) => (
-              <div key={`${cover.gamme ?? 'g'}-${index}`} className="catv-cover">
-                <div className="catv-cover__head">
-                  <span className="bro-tag">{cover.gamme === null ? 'Générique (par défaut)' : (gammes.find((g) => g.id === cover.gamme)?.name ?? `Gamme ${cover.gamme}`)}</span>
-                  {cover.gamme !== null ? (
-                    <button type="button" className="linklike" onClick={() => setCharter({ ...charter, covers: charter.covers.filter((_, i) => i !== index) })}>
-                      retirer
-                    </button>
-                  ) : null}
-                </div>
-                <div className="catv-grid2">
-                  <label className="catv-field">
-                    <span>Titre FR</span>
-                    <input value={cover.titleFr} maxLength={240} onChange={(event) => setCover(index, { titleFr: event.target.value })} />
-                  </label>
-                  <label className="catv-field">
-                    <span>Titre NL</span>
-                    <input value={cover.titleNl} maxLength={240} onChange={(event) => setCover(index, { titleNl: event.target.value })} />
-                  </label>
-                  <label className="catv-field">
-                    <span>Sous-titre FR</span>
-                    <input value={cover.subtitleFr} maxLength={240} onChange={(event) => setCover(index, { subtitleFr: event.target.value })} />
-                  </label>
-                  <label className="catv-field">
-                    <span>Sous-titre NL</span>
-                    <input value={cover.subtitleNl} maxLength={240} onChange={(event) => setCover(index, { subtitleNl: event.target.value })} />
-                  </label>
-                </div>
-                <div className="catv-inline">
-                  {cover.imageUrl ? <img className="catv-visual" src={cover.imageUrl} alt="" /> : <span className="muted">Sans visuel</span>}
-                  <button type="button" className="btn btn--sm" onClick={() => setPicking(index)}>
-                    Visuel de la médiathèque
-                  </button>
-                  {cover.mediaId !== null ? (
-                    <button type="button" className="linklike" onClick={() => setCover(index, { mediaId: null, imageUrl: null })}>
-                      retirer le visuel
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-            {gammes.filter((g) => !used.has(g.id)).length ? (
-              <label className="catv-field">
-                <span>Ajouter la couverture d’une gamme</span>
-                <select
-                  value=""
-                  onChange={(event) => {
-                    const gamme = Number(event.target.value)
-                    const name = gammes.find((g) => g.id === gamme)?.name ?? ''
-                    setCharter({ ...charter, covers: [...charter.covers, { gamme, titleFr: name, titleNl: '', subtitleFr: '', subtitleNl: '', mediaId: null, imageUrl: null }] })
-                  }}
-                >
-                  <option value="">Choisir une gamme du webshop…</option>
-                  {gammes
-                    .filter((g) => !used.has(g.id))
-                    .map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.name}
-                      </option>
-                    ))}
-                </select>
-              </label>
-            ) : null}
-            {webshop.error ? <p className="catv-warn">Gammes du webshop illisibles : {webshop.error}</p> : null}
-          </section>
-
-          {(['page2', 'penultimate'] as const).map((slot) => (
-            <section key={slot} className="card">
-              <h2>{slot === 'page2' ? 'Page 2' : 'Avant-dernière page'}</h2>
-              <div className="catv-grid2">
-                {(['titleFr', 'titleNl'] as const).map((key) => (
-                  <label key={key} className="catv-field">
-                    <span>{key === 'titleFr' ? 'Titre FR' : 'Titre NL'}</span>
-                    <input value={charter[slot][key]} maxLength={240} onChange={(event) => setBrand(slot, { [key]: event.target.value })} />
-                  </label>
-                ))}
-                {(['textFr', 'textNl'] as const).map((key) => (
-                  <label key={key} className="catv-field">
-                    <span>{key === 'textFr' ? 'Texte FR' : 'Texte NL'}</span>
-                    <textarea rows={6} value={charter[slot][key]} maxLength={1200} onChange={(event) => setBrand(slot, { [key]: event.target.value })} />
-                  </label>
-                ))}
-              </div>
-              <div className="catv-inline">
-                {charter[slot].imageUrl ? <img className="catv-visual" src={charter[slot].imageUrl ?? ''} alt="" /> : <span className="muted">Sans image : le logo</span>}
-                <button type="button" className="btn btn--sm" onClick={() => setPicking(slot)}>
-                  Image de la médiathèque
-                </button>
-                {charter[slot].mediaId !== null ? (
-                  <button type="button" className="linklike" onClick={() => setBrand(slot, { mediaId: null, imageUrl: null })}>
-                    retirer l’image
-                  </button>
-                ) : null}
-              </div>
-              <p className="catv-note" title="Une ligne vide sépare deux paragraphes ; un paragraphe de plusieurs lignes s’imprime en liste.">
-                Textes à adapter : {slot === 'page2' ? 'le mot de la boulangerie, ce qui est fait maison.' : 'les services de vos boutiques (commande en ligne, retrait, livraison, gâteaux sur commande).'}
-              </p>
-            </section>
-          ))}
-
-          <section className="card">
-            <h2>Dernière page (commande en ligne)</h2>
-            <div className="catv-grid2">
-              {(['titleFr', 'titleNl', 'textFr', 'textNl'] as const).map((key) => (
-                <label key={key} className="catv-field">
-                  <span>{{ titleFr: 'Titre FR', titleNl: 'Titre NL', textFr: 'Texte FR', textNl: 'Texte NL' }[key]}</span>
-                  <input value={charter.back[key]} maxLength={240} onChange={(event) => setCharter({ ...charter, back: { ...charter.back, [key]: event.target.value } })} />
-                </label>
-              ))}
-            </div>
-            <p className="catv-note">Le QR code (webshop de la boutique), l’adresse, les horaires et le téléphone de la boutique s’ajoutent seuls à chaque version.</p>
-          </section>
-        </div>
-
-        <div className="catv-charter__preview">
-          {[charter.covers[0], ...charter.covers.slice(1)].slice(0, 1).map((cover) => {
-            const d = preview(cover)
-            return [0, 1, 2, 3].map((index) => (
-              <div key={index} className="catv-page is-locked" style={{ width: 148 * MM * 0.42, height: 210 * MM * 0.42 }}>
-                <span style={{ zoom: 0.42 }}>
-                  <CatalogueSheet doc={d} index={index} mode="preview" />
-                </span>
-              </div>
-            ))
-          })}
-        </div>
-      </div>
-
-      {picking !== null ? (
-        <MediaPicker
-          onClose={() => setPicking(null)}
-          onPick={(asset) => {
-            const mediaId = Number(asset.id)
-            if (picking === 'logo') setCharter({ ...charter, logoMediaId: mediaId, logoUrl: asset.url })
-            else if (picking === 'page2' || picking === 'penultimate') setBrand(picking, { mediaId, imageUrl: asset.url })
-            else setCover(picking, { mediaId, imageUrl: asset.url })
-            setPicking(null)
-          }}
-        />
-      ) : null}
-    </div>
-  )
-}
-
-function MediaPicker({ onPick, onClose }: { onPick: (asset: api.MediaAsset) => void; onClose: () => void }) {
-  const [name, setName] = useState('')
-  const [query, setQuery] = useState('')
-  const page = useAsync(() => api.listMedia({ kind: 'image', perPage: 48, name: query }), [query])
-  useEffect(() => {
-    const timer = window.setTimeout(() => setQuery(name), 300)
-    return () => window.clearTimeout(timer)
-  }, [name])
-  return (
-    <div className="catv-modal" role="dialog" aria-label="Médiathèque" onClick={onClose}>
-      <div className="catv-modal__box" onClick={(event) => event.stopPropagation()}>
-        <div className="catv-modal__head">
-          <h2>Médiathèque</h2>
-          <input placeholder="Chercher…" value={name} onChange={(event) => setName(event.target.value)} />
-          <button type="button" className="btn btn--icon" onClick={onClose} aria-label="Fermer">
-            ✕
-          </button>
-        </div>
-        {page.error ? <p className="error">{page.error}</p> : null}
-        {page.loading ? <p className="muted">Lecture…</p> : null}
-        <div className="catv-media">
-          {(page.data?.items ?? []).map((asset) => (
-            <button key={asset.id} type="button" className="catv-media__item" onClick={() => onPick(asset)} title={asset.name}>
-              <img src={asset.thumbnailUrl ?? asset.webUrl} alt="" loading="lazy" />
-              <span>{asset.name}</span>
-            </button>
-          ))}
-          {page.data && !page.data.items.length ? <p className="muted">Aucune image.</p> : null}
-        </div>
-      </div>
-    </div>
-  )
-}

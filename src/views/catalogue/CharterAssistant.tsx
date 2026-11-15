@@ -1,0 +1,891 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import * as api from '../../lib/api/module'
+import type {
+  CatalogueBackTemplate,
+  CatalogueBrandPage,
+  CatalogueBrandTemplate,
+  CatalogueCharter,
+  CatalogueCharterChecks,
+  CatalogueCharterShop,
+  CatalogueCharterVersion,
+  CatalogueCover,
+  CatalogueCoverTemplate,
+  CatalogueDocPage,
+  CatalogueDocument,
+  CatalogueFormat,
+  CatalogueLang,
+  MediaAsset,
+} from '../../lib/api/module'
+import { useAsync } from '../../lib/useAsync'
+import { seasonLabel } from '../builder/illustrations'
+import { CatalogueSheet, FORMAT_MM, catalogueCss } from './CataloguePages'
+import { MediaPicker } from './MediaPicker'
+import './charter-assistant.css'
+
+/**
+ * L'assistant des pages de la marque (maquettes A1-A4, client 15/11/2026 : « les deux, garde les 3 gabarits ») : les
+ * quatre pages que chaque catalogue reçoit de la marque — couverture (une par gamme), page 2, avant-dernière, dernière
+ * page —, en cinq étapes avec leur aperçu en direct, FR et NL.
+ *
+ * Ce que l'assistant écrit est un BROUILLON (enregistré tout seul, « Brouillon enregistré ») : les catalogues lisent la
+ * charte PUBLIÉE. « Publier pour tous les catalogues » (étape 5) en fait une nouvelle version, que prennent les
+ * catalogues pas encore marqués imprimés ; un catalogue imprimé garde la version de son impression. L'historique
+ * permet de revenir à une version d'avant.
+ */
+
+const MM = 96 / 25.4
+
+type Step = 1 | 2 | 3 | 4 | 5
+
+const STEPS: Array<{ n: Step; label: string; hint: string; next: string }> = [
+  { n: 1, label: 'Couverture', hint: 'page 1 · une par gamme', next: 'Page 2' },
+  { n: 2, label: 'Page 2', hint: 'le mot de la boulangerie', next: 'Avant-dernière' },
+  { n: 3, label: 'Avant-dernière', hint: 'nos services', next: 'Dernière page' },
+  { n: 4, label: 'Dernière page', hint: 'QR · boutique', next: 'Récapitulatif' },
+  { n: 5, label: 'Récapitulatif', hint: 'puis publier', next: '' },
+]
+
+const COVER_TEMPLATES: Array<{ t: CatalogueCoverTemplate; label: string; hint: string }> = [
+  { t: 'A', label: 'Pleine couleur', hint: 'titre sur le bordeaux' },
+  { t: 'B', label: 'Illustration', hint: 'papier, dessin au centre' },
+  { t: 'C', label: 'Photo', hint: 'visuel en haut, bandeau' },
+]
+
+const BRAND_TEMPLATES: Array<{ t: CatalogueBrandTemplate; label: string; hint: string }> = [
+  { t: 'A', label: 'Texte seul', hint: 'le texte et le logo' },
+  { t: 'B', label: 'Image en haut', hint: 'photo, puis le texte' },
+  { t: 'C', label: 'Image en bas', hint: 'texte, photo pleine largeur' },
+]
+
+const BACK_TEMPLATES: Array<{ t: CatalogueBackTemplate; label: string; hint: string }> = [
+  { t: 'A', label: 'QR et boutique', hint: 'le QR à gauche, une phrase à droite, la boutique en pied' },
+  { t: 'B', label: 'Boutique en avant', hint: 'QR plus petit, adresse et horaires en grand' },
+]
+
+const message = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause))
+
+const asset = (path: string): string => new URL(`${import.meta.env.BASE_URL}${path}`, window.location.href).href
+
+const dateFr = (iso: string | null | undefined): string =>
+  iso ? new Date(iso).toLocaleDateString('fr-BE', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
+
+/** Le dessin de saison reconnu dans un nom de gamme (la règle de `seasonSlug` de l'API). */
+function seasonOf(name: string): string | null {
+  const flat = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
+  const found = (
+    [
+      ['noel', 'noel'], ['nicolas', 'saint-nicolas'], ['epiphanie', 'epiphanie'], ['chandeleur', 'chandeleur'], ['valentin', 'saint-valentin'],
+      ['paque', 'paques'], ['pascal', 'paques'], ['mere', 'fete-des-meres'], ['printan', 'printemps'], ['estival', 'ete'], ['automn', 'automne'],
+      ['hivern', 'hiver'], ['glace', 'glace'],
+    ] as const
+  ).find(([key]) => flat.includes(key))
+  return found ? found[1] : null
+}
+
+const pick = (lang: CatalogueLang, fr: string, nl: string): string => (lang === 'nl' ? nl || fr : fr)
+
+/** La couverture telle que l'API la composera (`CatalogueService::coverPage`). */
+function coverPage(cover: CatalogueCover, lang: CatalogueLang, shop: CatalogueCharterShop | null): Extract<CatalogueDocPage, { kind: 'cover' }> {
+  const imageUrl = cover.visual === 'media' ? (cover.imageUrl ?? null) : cover.visual === null ? (cover.imageUrl ?? null) : null
+  const slug = cover.visual === 'none' ? null : (cover.illustration ?? seasonOf(cover.titleFr))
+  return {
+    kind: 'cover',
+    locked: true,
+    title: pick(lang, cover.titleFr, cover.titleNl) || '—',
+    subtitle: pick(lang, cover.subtitleFr, cover.subtitleNl),
+    eyebrow: shop?.name ?? null,
+    imageUrl,
+    template: cover.template,
+    kicker: cover.gamme !== null ? (lang === 'nl' ? 'Het gamma' : 'La gamme') : null,
+    drawing: imageUrl === null && slug ? `img/print/${slug}.png` : null,
+    noVisual: cover.visual === 'none',
+  }
+}
+
+function brandPage(slot: 'page2' | 'penultimate', content: CatalogueBrandPage, lang: CatalogueLang): Extract<CatalogueDocPage, { kind: 'brand' }> {
+  return {
+    kind: 'brand',
+    locked: true,
+    slot,
+    title: pick(lang, content.titleFr, content.titleNl),
+    text: pick(lang, content.textFr, content.textNl),
+    imageUrl: content.template === 'A' ? null : (content.imageUrl ?? null),
+    template: content.template,
+  }
+}
+
+function backPage(charter: CatalogueCharter, lang: CatalogueLang, shop: CatalogueCharterShop | null): Extract<CatalogueDocPage, { kind: 'back' }> {
+  return {
+    kind: 'back',
+    locked: true,
+    title: pick(lang, charter.back.titleFr, charter.back.titleNl),
+    text: pick(lang, charter.back.textFr, charter.back.textNl),
+    qrUrl: shop?.qrUrl ?? null,
+    host: shop?.host ?? null,
+    shop: shop ? { id: shop.id, erpShopId: shop.erpShopId, name: shop.name, address: shop.address, hours: lang === 'nl' ? shop.hoursNl || shop.hours : shop.hours, phone: shop.phone } : null,
+    template: charter.back.template,
+  }
+}
+
+/** Les quatre pages de la marque, composées dans le navigateur pour l'aperçu en direct. */
+function brandDoc(charter: CatalogueCharter, cover: CatalogueCover, lang: CatalogueLang, shop: CatalogueCharterShop | null, format: CatalogueFormat): CatalogueDocument {
+  return {
+    catalogue: { id: 0, title: '', format, owner: 'marque' },
+    version: { shop: null, lang },
+    charter: { logoUrl: charter.logoUrl, colors: charter.colors },
+    pages: [coverPage(cover, lang, shop), brandPage('page2', charter.page2, lang), brandPage('penultimate', charter.penultimate, lang), backPage(charter, lang, shop)],
+    warnings: [],
+  }
+}
+
+/** Une page, au format, réduite à `width` pixels. */
+function Page({ doc, index, width }: { doc: CatalogueDocument; index: number; width: number }) {
+  const size = FORMAT_MM[doc.catalogue.format]
+  const zoom = width / (size.w * MM)
+  return (
+    <div className="cha-page" style={{ width, height: size.h * MM * zoom }}>
+      <span style={{ zoom }}>
+        <CatalogueSheet doc={doc} index={index} mode="preview" />
+      </span>
+    </div>
+  )
+}
+
+/** Une vignette de gabarit (choix), dessinée simplement. */
+function TemplateMini({ kind, t }: { kind: 'cover' | 'brand' | 'back'; t: string }) {
+  if (kind === 'cover') {
+    if (t === 'A') return <span className="cha-mini cha-mini--fill"><i className="l1" /><i className="l2" /></span>
+    if (t === 'B') return <span className="cha-mini"><img src={asset('img/print/noel.png')} alt="" /><i className="bar" /><i className="gold" /></span>
+    return <span className="cha-mini"><i className="photo" /><i className="band" /></span>
+  }
+  if (kind === 'brand') {
+    if (t === 'A') return <span className="cha-mini"><i className="bar bar--top" /><i className="lines" /></span>
+    if (t === 'B') return <span className="cha-mini"><i className="photo photo--top" /><i className="bar bar--mid" /><i className="lines lines--low" /></span>
+    return <span className="cha-mini"><i className="bar bar--top" /><i className="lines lines--short" /><i className="photo photo--bottom" /></span>
+  }
+  return t === 'A' ? <span className="cha-mini cha-mini--wide"><i className="qr" /><i className="foot" /></span> : <span className="cha-mini cha-mini--wide"><i className="qr qr--small" /><i className="block" /></span>
+}
+
+function Choice<T extends string>({ items, value, onChange, kind }: { items: Array<{ t: T; label: string; hint: string }>; value: T; onChange: (t: T) => void; kind: 'cover' | 'brand' | 'back' }) {
+  return (
+    <div className={`cha-choices cha-choices--${items.length}`}>
+      {items.map((item) => (
+        <button key={item.t} type="button" className={`cha-choice${value === item.t ? ' is-on' : ''}`} onClick={() => onChange(item.t)} aria-pressed={value === item.t}>
+          <TemplateMini kind={kind} t={item.t} />
+          <span className="cha-choice__text">
+            <span className="cha-choice__l">{`${item.t} · ${item.label}`}</span>
+            <span className="cha-choice__s">{item.hint}</span>
+          </span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function Field({ label, value, onChange, placeholder, area = false, max = 240 }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; area?: boolean; max?: number }) {
+  return (
+    <label className="cha-field">
+      <span>{label}</span>
+      {area ? (
+        <textarea rows={7} value={value} maxLength={max} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+      ) : (
+        <input value={value} maxLength={max} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+      )}
+    </label>
+  )
+}
+
+export default function CharterAssistant({ onBack }: { onBack: () => void }) {
+  const loaded = useAsync(() => api.getCatalogueCharter(), [])
+  const webshop = useAsync(() => api.getWebshopProducts([]), [])
+  const recent = useAsync(() => api.listMedia({ kind: 'image', perPage: 3 }), [])
+  const [checks, setChecks] = useState<CatalogueCharterChecks | null>(null)
+  const [checksError, setChecksError] = useState<string | null>(null)
+  const [versions, setVersions] = useState<CatalogueCharterVersion[] | null>(null)
+  const [charter, setCharter] = useState<CatalogueCharter | null>(null)
+  const [step, setStep] = useState<Step>(() => {
+    const n = Number(new URLSearchParams(window.location.search).get('etape'))
+    return (n >= 1 && n <= 5 ? n : 1) as Step
+  })
+  const [lang, setLang] = useState<CatalogueLang>('fr')
+  const [format, setFormat] = useState<CatalogueFormat>('A5')
+  const [coverIndex, setCoverIndex] = useState(0)
+  const [shopId, setShopId] = useState<number | null>(null)
+  const [picking, setPicking] = useState<null | 'cover' | 'page2' | 'penultimate' | 'logo'>(null)
+  const [save, setSave] = useState<{ status: 'idle' | 'saving' | 'saved' | 'error'; text?: string }>({ status: 'idle' })
+  const [published, setPublished] = useState<string | null>(null)
+  const [publishing, setPublishing] = useState(false)
+  const [allDrawings, setAllDrawings] = useState(false)
+  const dirty = useRef(false)
+  const timer = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (loaded.data && !charter) {
+      setCharter(loaded.data)
+      // Ouvert sur la couverture d'une gamme du webshop (la première après la générique), comme la maquette.
+      if (loaded.data.covers.length > 1) setCoverIndex(1)
+    }
+  }, [loaded.data, charter])
+
+  function readChecks() {
+    api.getCatalogueCharterChecks().then(
+      (read) => {
+        setChecks(read)
+        setChecksError(null)
+        setShopId((current) => current ?? [...read.shops].sort((a, b) => a.missing.length - b.missing.length)[0]?.id ?? null)
+      },
+      (cause: unknown) => setChecksError(message(cause)),
+    )
+  }
+  useEffect(readChecks, [])
+  useEffect(() => {
+    if (step === 5) api.listCatalogueCharterVersions().then(setVersions, () => setVersions([]))
+  }, [step])
+
+  // Le brouillon s'enregistre tout seul, 0,8 s après la dernière modification.
+  function change(update: (current: CatalogueCharter) => CatalogueCharter) {
+    setCharter((current) => (current ? update(current) : current))
+    dirty.current = true
+    setSave({ status: 'idle' })
+    if (timer.current !== null) window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => void flush(), 800)
+  }
+  const latest = useRef<CatalogueCharter | null>(null)
+  latest.current = charter
+
+  async function flush(): Promise<boolean> {
+    if (timer.current !== null) window.clearTimeout(timer.current)
+    timer.current = null
+    const current = latest.current
+    if (!current || !dirty.current) return true
+    dirty.current = false
+    setSave({ status: 'saving' })
+    try {
+      const saved = await api.saveCatalogueCharter(current)
+      setCharter((now) => (now ? { ...now, publication: saved.publication, updatedAt: saved.updatedAt } : saved))
+      setSave({ status: 'saved' })
+      return true
+    } catch (cause) {
+      dirty.current = true
+      setSave({ status: 'error', text: message(cause) })
+      return false
+    }
+  }
+
+  async function go(next: Step) {
+    if (!(await flush())) return
+    setStep(next)
+    if (next >= 4) readChecks()
+    window.scrollTo({ top: 0 })
+  }
+
+  const gammes = webshop.data?.gammes ?? []
+  const shops = checks?.shops ?? []
+  const shop = shops.find((s) => s.id === shopId) ?? shops[0] ?? null
+
+  const doc = useMemo(
+    () => (charter ? brandDoc(charter, charter.covers[coverIndex] ?? charter.covers[0], lang, shop, format) : null),
+    [charter, coverIndex, lang, shop, format],
+  )
+
+  if (loaded.error) return <p className="error">{loaded.error}</p>
+  if (!charter || !doc) return <p className="muted">Lecture de la charte…</p>
+
+  const cover = charter.covers[coverIndex] ?? charter.covers[0]
+  const gammeName = (id: number | null): string => (id === null ? 'Générique' : seasonLabel(gammes.find((g) => g.id === id)?.name ?? cover.titleFr))
+
+  function setCover(patch: Partial<CatalogueCover>) {
+    change((c) => ({ ...c, covers: c.covers.map((one, i) => (i === coverIndex ? { ...one, ...patch } : one)) }))
+  }
+  function addCover(gamme: number) {
+    const name = seasonLabel(gammes.find((g) => g.id === gamme)?.name ?? '')
+    const next = charter?.covers.length ?? 0
+    change((c) => ({
+      ...c,
+      covers: [...c.covers, { gamme, titleFr: name, titleNl: '', subtitleFr: '', subtitleNl: '', mediaId: null, imageUrl: null, template: 'B', visual: 'illustration', illustration: seasonOf(name) }],
+    }))
+    setCoverIndex(next)
+  }
+  function setBrand(slot: 'page2' | 'penultimate', patch: Partial<CatalogueBrandPage>) {
+    change((c) => ({ ...c, [slot]: { ...c[slot], ...patch } }))
+  }
+
+  async function publish(fromVersion?: number) {
+    if (!(await flush())) return
+    const affected = checks?.catalogues.affected ?? 0
+    const text = fromVersion
+      ? `Revenir à la version ${fromVersion} ? Elle est republiée pour les ${affected} catalogue(s) pas encore imprimé(s).`
+      : `Publier ces 4 pages pour tous les catalogues ? ${affected} catalogue(s) pas encore imprimé(s) les prennent à leur prochain aperçu et à leur prochain PDF ; ${checks?.catalogues.printed ?? 0} catalogue(s) imprimé(s) gardent leur version.`
+    if (!window.confirm(text)) return
+    setPublishing(true)
+    try {
+      const done = await api.publishCatalogueCharter(fromVersion ? { fromVersion } : {})
+      setPublished(`Version ${done.version} publiée le ${dateFr(done.publishedAt)} : ${done.catalogues.affected} catalogue(s) la prennent.`)
+      const fresh = await api.getCatalogueCharter()
+      setCharter(fresh)
+      setVersions(await api.listCatalogueCharterVersions())
+      readChecks()
+    } catch (cause) {
+      setPublished(`Publication refusée : ${message(cause)}`)
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  const coverStatus = (c: CatalogueCover): { label: string; tone: '' | 'ok' | 'warn' } =>
+    !c.titleNl || (c.subtitleFr && !c.subtitleNl) ? { label: 'NL à écrire', tone: 'warn' } : { label: 'Faite', tone: 'ok' }
+  const stepDone = (n: Step): boolean => n < step
+  const publication = charter.publication
+
+  // --- étapes ---------------------------------------------------------------------------------------
+  const drawings = (() => {
+    const first = cover.illustration ?? seasonOf(cover.titleFr)
+    const all = [...new Set([...(first ? [first] : []), ...api.SEASON_DRAWINGS])]
+    return allDrawings ? all : all.slice(0, 3)
+  })()
+
+  const coverStep = (
+    <>
+      <section className="cha-card">
+        <div className="cha-lab">
+          Couverture de quelle gamme ? <span className="cha-tag">une couverture par gamme du webshop</span>
+        </div>
+        <div className="cha-gammes">
+          {charter.covers.map((c, i) => {
+            const st = coverStatus(c)
+            return (
+              <button key={i} type="button" className={`cha-gamme${i === coverIndex ? ' is-on' : ''}`} onClick={() => setCoverIndex(i)}>
+                <span className="cha-gamme__t">{c.gamme === null ? 'Générique' : `Gamme ${gammeName(c.gamme)}`}</span>
+                <span className="cha-gamme__s">{c.gamme === null ? 'par défaut · quand la gamme n’a pas la sienne' : i === coverIndex ? 'en cours' : ' '}</span>
+                <span className={`cha-tag cha-tag--${st.tone}`}>{st.label}</span>
+              </button>
+            )
+          })}
+          {gammes
+            .filter((g) => !charter.covers.some((c) => c.gamme === g.id))
+            .slice(0, Math.max(0, 4 - charter.covers.length))
+            .map((g) => (
+              <button key={g.id} type="button" className="cha-gamme" onClick={() => addCover(g.id)}>
+                <span className="cha-gamme__t">{`Gamme ${seasonLabel(g.name)}`}</span>
+                <span className="cha-gamme__s">&nbsp;</span>
+                <span className="cha-tag">À faire</span>
+              </button>
+            ))}
+          {gammes.some((g) => !charter.covers.some((c) => c.gamme === g.id)) ? (
+            <label className="cha-gamme cha-gamme--add">
+              <span>＋ Une gamme du webshop</span>
+              <select value="" onChange={(event) => event.target.value && addCover(Number(event.target.value))}>
+                <option value="">Choisir…</option>
+                {gammes
+                  .filter((g) => !charter.covers.some((c) => c.gamme === g.id))
+                  .map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {seasonLabel(g.name)}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
+        {webshop.error ? <p className="cha-warn">Gammes du webshop illisibles : {webshop.error}</p> : null}
+        {coverIndex > 0 ? (
+          <button type="button" className="linklike cha-remove" onClick={() => { change((c) => ({ ...c, covers: c.covers.filter((_, i) => i !== coverIndex) })); setCoverIndex(0) }}>
+            Retirer la couverture de cette gamme (la générique la remplace)
+          </button>
+        ) : null}
+      </section>
+
+      <section className="cha-card">
+        <div className="cha-lab">
+          Visuel <span className="cha-grow" />
+          <span className="bro-seg" role="group" aria-label="Visuel">
+            <button type="button" className={cover.visual === 'illustration' || cover.visual === null ? 'is-on' : ''} onClick={() => setCover({ visual: 'illustration', illustration: cover.illustration ?? seasonOf(cover.titleFr) })}>
+              Illustration de saison
+            </button>
+            <button type="button" className={cover.visual === 'media' ? 'is-on' : ''} onClick={() => setPicking('cover')}>
+              Médiathèque
+            </button>
+            <button type="button" className={cover.visual === 'none' ? 'is-on' : ''} onClick={() => setCover({ visual: 'none' })}>
+              Sans visuel
+            </button>
+          </span>
+        </div>
+        <div className={`cha-visuals${allDrawings ? ' cha-visuals--all' : ''}`}>
+          {drawings.map((slug) => (
+            <button
+              key={slug}
+              type="button"
+              className={`cha-visual${cover.visual !== 'media' && cover.visual !== 'none' && (cover.illustration ?? seasonOf(cover.titleFr)) === slug ? ' is-on' : ''}`}
+              title={slug}
+              onClick={() => setCover({ visual: 'illustration', illustration: slug })}
+            >
+              <img src={asset(`img/print/${slug}.png`)} alt="" />
+            </button>
+          ))}
+          {(recent.data?.items ?? []).map((m) => (
+            <button key={m.id} type="button" className={`cha-visual cha-visual--photo${cover.visual === 'media' && cover.mediaId === Number(m.id) ? ' is-on' : ''}`} title={m.name} onClick={() => setCover({ visual: 'media', mediaId: Number(m.id), imageUrl: m.url })}>
+              <img src={m.thumbnailUrl ?? m.webUrl} alt="" />
+            </button>
+          ))}
+          {cover.visual === 'media' && cover.mediaId !== null && !(recent.data?.items ?? []).some((m) => Number(m.id) === cover.mediaId) ? (
+            <button type="button" className="cha-visual cha-visual--photo is-on" onClick={() => setPicking('cover')}>
+              <img src={cover.imageUrl ?? ''} alt="" />
+            </button>
+          ) : null}
+        </div>
+        <p className="cha-note">
+          Illustrations de saison de la marque (dessin au trait) · trois photos récentes de la médiathèque, « Médiathèque » ouvre le reste.{' '}
+          <button type="button" className="linklike" onClick={() => setAllDrawings((v) => !v)}>
+            {allDrawings ? 'Moins de dessins' : `Les ${api.SEASON_DRAWINGS.length} dessins`}
+          </button>
+        </p>
+      </section>
+
+      <section className="cha-card">
+        <div className="cha-lab">Textes de la couverture</div>
+        <div className="cha-grid2">
+          <Field label="Titre FR" value={cover.titleFr} onChange={(v) => setCover({ titleFr: v })} />
+          <Field label="Titre NL" value={cover.titleNl} placeholder="À écrire — sinon le titre français est imprimé" onChange={(v) => setCover({ titleNl: v })} />
+          <Field label="Sous-titre FR" value={cover.subtitleFr} onChange={(v) => setCover({ subtitleFr: v })} />
+          <Field label="Sous-titre NL" value={cover.subtitleNl} placeholder="À écrire" onChange={(v) => setCover({ subtitleNl: v })} />
+        </div>
+        <p className="cha-note">Le nom de la boutique s’ajoute seul en bas de la couverture, dans chaque version.</p>
+      </section>
+
+      <section className="cha-card">
+        <div className="cha-lab">Gabarit de la couverture</div>
+        <Choice kind="cover" items={COVER_TEMPLATES} value={cover.template} onChange={(t) => setCover({ template: t })} />
+      </section>
+    </>
+  )
+
+  const brandStep = (slot: 'page2' | 'penultimate') => {
+    const content = charter[slot]
+    const label = slot === 'page2' ? 'page 2' : 'avant-dernière page'
+    const fit = api.BRAND_TEXT_FIT[content.template]
+    const weight = Math.max(api.textWeight(content.textFr), api.textWeight(content.textNl))
+    return (
+      <>
+        <section className="cha-card">
+          <div className="cha-lab">{`Titre de la ${label}`}</div>
+          <div className="cha-grid2">
+            <Field label="Titre FR" value={content.titleFr} onChange={(v) => setBrand(slot, { titleFr: v })} />
+            <Field label="Titre NL" value={content.titleNl} placeholder="À écrire — sinon le français est imprimé" onChange={(v) => setBrand(slot, { titleNl: v })} />
+          </div>
+        </section>
+        <section className="cha-card">
+          <div className="cha-lab">
+            Texte <span className="cha-grow" />
+            <span className="cha-hint" title="Une ligne vide sépare deux paragraphes ; des lignes qui se suivent deviennent une liste à puces.">ⓘ mise en forme</span>
+          </div>
+          <div className="cha-grid2">
+            <div>
+              <Field area label="Texte FR" value={content.textFr} max={1200} onChange={(v) => setBrand(slot, { textFr: v })} />
+              <div className="cha-count">{`${content.textFr.length.toLocaleString('fr-BE')} / 1 200 caractères`}</div>
+              <div className={`cha-fit${weight > fit ? ' is-over' : ''}`}>
+                <i style={{ width: `${Math.min(100, (weight / fit) * 100)}%` }} />
+              </div>
+              <p className={`cha-note${weight > fit ? ' cha-note--warn' : ''}`}>
+                {weight > fit ? 'Trop long pour ce gabarit : la fin sera coupée. Raccourcissez, ou choisissez « texte seul ».' : 'Tient sur la page avec ce gabarit (A5 et A4).'}
+              </p>
+            </div>
+            <div>
+              <Field area label="Texte NL" value={content.textNl} max={1200} placeholder="À écrire" onChange={(v) => setBrand(slot, { textNl: v })} />
+              {!content.textNl && content.textFr ? (
+                <>
+                  <p className="cha-tag cha-tag--warn cha-tag--block">NL à écrire : le français sera imprimé dans les versions néerlandaises</p>
+                  <button type="button" className="btn btn--sm" onClick={() => setBrand(slot, { textNl: content.textFr })}>
+                    Recopier le français pour traduire
+                  </button>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </section>
+        <section className="cha-card">
+          <div className="cha-lab">Image</div>
+          <div className="cha-image">
+            {content.imageUrl ? <img src={content.imageUrl} alt="" /> : <span className="cha-image__none">Sans image : le logo</span>}
+            <div>
+              <div className="cha-image__name">{content.imageUrl ? 'Photo de la médiathèque' : 'Aucune photo'}</div>
+              <div className="cha-row">
+                <button type="button" className="btn btn--sm" onClick={() => setPicking(slot)}>
+                  {content.imageUrl ? 'Changer' : 'Choisir dans la médiathèque'}
+                </button>
+                {content.mediaId !== null ? (
+                  <button type="button" className="btn btn--sm" onClick={() => setBrand(slot, { mediaId: null, imageUrl: null, template: 'A' })}>
+                    Retirer (le logo seul)
+                  </button>
+                ) : null}
+              </div>
+              {content.template !== 'A' && !content.imageUrl ? <p className="cha-note cha-note--warn">Ce gabarit attend une image : sans elle, le logo seul est imprimé.</p> : null}
+            </div>
+          </div>
+        </section>
+        <section className="cha-card">
+          <div className="cha-lab">{`Gabarit de la ${label}`}</div>
+          <Choice kind="brand" items={BRAND_TEMPLATES} value={content.template} onChange={(t) => setBrand(slot, { template: t })} />
+        </section>
+      </>
+    )
+  }
+
+  const missingFor = (s: CatalogueCharterShop, key: 'address' | 'hours' | 'phone' | 'qr'): boolean => s.missing.includes(key)
+  const toComplete = shops.filter((s) => s.missing.some((m) => m !== 'qr'))
+  const backStep = (
+    <>
+      <section className="cha-card">
+        <div className="cha-lab">Ce que la marque écrit</div>
+        <div className="cha-grid2">
+          <Field label="Titre FR" value={charter.back.titleFr} onChange={(v) => change((c) => ({ ...c, back: { ...c.back, titleFr: v } }))} />
+          <Field label="Titre NL" value={charter.back.titleNl} placeholder="À écrire" onChange={(v) => change((c) => ({ ...c, back: { ...c.back, titleNl: v } }))} />
+          <Field label="Texte FR" value={charter.back.textFr} onChange={(v) => change((c) => ({ ...c, back: { ...c.back, textFr: v } }))} />
+          <Field label="Texte NL" value={charter.back.textNl} placeholder="À écrire" onChange={(v) => change((c) => ({ ...c, back: { ...c.back, textNl: v } }))} />
+        </div>
+        <div className="cha-lab cha-lab--sub">Gabarit</div>
+        <Choice kind="back" items={BACK_TEMPLATES} value={charter.back.template} onChange={(t) => change((c) => ({ ...c, back: { ...c.back, template: t } }))} />
+      </section>
+
+      <section className="cha-card">
+        <div className="cha-lab">
+          Rempli par chaque boutique — rien à saisir <span className="cha-grow" />
+          <span className="cha-lab__plain">Boutique de l’aperçu</span>
+          <select className="cha-select" value={shop?.id ?? ''} onChange={(event) => setShopId(Number(event.target.value))}>
+            {shops.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        {checksError ? <p className="cha-warn">{checksError}</p> : null}
+        {shop ? (
+          <table className="cha-table">
+            <thead>
+              <tr>
+                <th>Sur la page</th>
+                <th>{`Valeur pour ${shop.name}`}</th>
+                <th>Vient de</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(
+                [
+                  ['Nom', `L’Atelier By — ${shop.name}`, 'ERP · fiche de la boutique', false],
+                  ['Adresse', shop.address, 'TFBuddy · boutique', missingFor(shop, 'address')],
+                  ['Horaires', lang === 'nl' ? shop.hoursNl || shop.hours : shop.hours, 'TFBuddy · boutique', missingFor(shop, 'hours')],
+                  ['Téléphone', shop.phone, 'TFBuddy · boutique', missingFor(shop, 'phone')],
+                  ['QR code', shop.qrUrl ? 'Webshop de la boutique' : '', 'Réglage webshop_url (Social)', missingFor(shop, 'qr')],
+                ] as Array<[string, string, string, boolean]>
+              ).map(([what, value, from, missing]) => (
+                <tr key={what}>
+                  <td>{what}</td>
+                  <td>{missing || !value ? <span className="cha-tag cha-tag--warn">inconnu</span> : value}</td>
+                  <td>
+                    <span className={`cha-dot${missing ? ' cha-dot--warn' : ''}`} /> {from}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="muted">{checks ? 'Aucune boutique reliée à la caisse.' : 'Lecture des boutiques…'}</p>
+        )}
+        <p className="cha-note">Changer une adresse ou des horaires se fait dans l’ERP : le prochain PDF les reprend. Rien n’est recopié ici.</p>
+      </section>
+
+      {toComplete.length || (checks && checks.webshopUrl === null) ? (
+        <section className="cha-card cha-card--warn">
+          <div className="cha-lab">Boutiques à compléter avant d’imprimer</div>
+          {toComplete.map((s) => (
+            <div key={s.id} className="cha-todo">
+              <span className="cha-todo__name">{s.name}</span>
+              <span className="cha-tag cha-tag--warn">
+                {[missingFor(s, 'address') ? 'adresse' : '', missingFor(s, 'hours') ? 'horaires' : '', missingFor(s, 'phone') ? 'téléphone' : ''].filter(Boolean).join(', ')} inconnu(s) de TFBuddy
+              </span>
+              <span className="cha-todo__where">à corriger dans l’ERP (fiche de la boutique)</span>
+            </div>
+          ))}
+          {checks && checks.webshopUrl === null ? (
+            <div className="cha-todo">
+              <span className="cha-todo__name">Toutes les boutiques</span>
+              <span className="cha-tag cha-tag--warn">Adresse du webshop inconnue : pas de QR code</span>
+              <span className="cha-todo__where">réglage webshop_url du module Social</span>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+    </>
+  )
+
+  const recapDocs = doc
+  const recap = (
+    <>
+      <section className="cha-card">
+        <div className="cha-lab">
+          Les 4 pages de la marque <span className="cha-grow" />
+          <span className="cha-lab__plain">Couverture de la gamme</span>
+          <span className="bro-seg" role="group" aria-label="Couverture">
+            {charter.covers.map((c, i) => (
+              <button key={i} type="button" className={i === coverIndex ? 'is-on' : ''} onClick={() => setCoverIndex(i)}>
+                {gammeName(c.gamme)}
+              </button>
+            ))}
+          </span>
+          <span className="cha-lab__plain">Boutique</span>
+          <select className="cha-select" value={shop?.id ?? ''} onChange={(event) => setShopId(Number(event.target.value))}>
+            {shops.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="cha-recap">
+          {(
+            [
+              [0, 'Couverture', cover.template, 1],
+              [1, 'Page 2', charter.page2.template, 2],
+              [2, 'Avant-dernière', charter.penultimate.template, 3],
+              [3, 'Dernière page', charter.back.template, 4],
+            ] as Array<[number, string, string, Step]>
+          ).map(([index, label, t, s]) => (
+            <figure key={index}>
+              <Page doc={recapDocs} index={index} width={250} />
+              <figcaption>
+                {`${label} · gabarit ${t} · `}
+                <button type="button" className="linklike" onClick={() => void go(s)}>
+                  modifier
+                </button>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      </section>
+      <div className="cha-recap__bottom">
+        <section className="cha-card">
+          <div className="cha-lab">Avant de publier</div>
+          {checks ? (
+            <ul className="cha-checks">
+              {checks.items.map((item) => (
+                <li key={item.code} className={`cha-check cha-check--${item.level}`}>
+                  <span className="cha-check__icon">{item.level === 'ok' ? '✓' : '!'}</span>
+                  <span>
+                    {item.message}{' '}
+                    {item.level === 'warn' ? (
+                      <button type="button" className="linklike" onClick={() => void go(item.step as Step)}>
+                        {item.code === 'nl' ? 'Écrire ›' : 'Voir ›'}
+                      </button>
+                    ) : null}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="muted">{checksError ?? 'Vérification…'}</p>
+          )}
+        </section>
+        <section className="cha-card">
+          <div className="cha-lab">Ce que fait « Publier »</div>
+          <ul className="cha-checks">
+            <li className="cha-check cha-check--ok">
+              <span className="cha-check__icon">✓</span>
+              <span>Les catalogues de la marque et ceux des franchisés prennent ces 4 pages à leur prochain aperçu et à leur prochain PDF.</span>
+            </li>
+            <li className="cha-check cha-check--ok">
+              <span className="cha-check__icon">✓</span>
+              <span>Un catalogue déjà marqué imprimé ne change pas : il garde la version de son impression.</span>
+            </li>
+            <li className="cha-check cha-check--ok">
+              <span className="cha-check__icon">✓</span>
+              <span>La version publiée reste dans l’historique : « Revenir à la version du … ».</span>
+            </li>
+          </ul>
+          <p className="cha-note">
+            {checks
+              ? `${checks.catalogues.affected} catalogue(s) pas encore imprimé(s) la prendront ; ${checks.catalogues.printed} imprimé(s) gardent leur version.`
+              : 'Le nombre de catalogues concernés est compté et affiché dans la confirmation.'}
+            {publication?.version ? ` En ligne : version ${publication.version} du ${dateFr(publication.publishedAt)}${publication.draftChanged ? ' — le brouillon a changé depuis.' : ' — le brouillon est publié.'}` : ' Aucune version publiée encore : les catalogues lisent la charte d’origine.'}
+          </p>
+          {published ? <p className="cha-published">{published}</p> : null}
+          <div className="cha-row cha-row--end">
+            <button type="button" className="btn btn--primary" disabled={publishing} onClick={() => void publish()}>
+              {publishing ? 'Publication…' : 'Publier pour tous les catalogues'}
+            </button>
+          </div>
+        </section>
+      </div>
+      <div className="cha-recap__bottom">
+        <section className="cha-card">
+          <div className="cha-lab">Versions publiées</div>
+          {versions === null ? <p className="cha-note">Lecture…</p> : versions.length === 0 ? <p className="cha-note">Aucune version publiée : les catalogues lisent la charte d’origine.</p> : null}
+          <ul className="cha-versions">
+            {(versions ?? []).map((v) => (
+              <li key={v.version}>
+                <span>{`Version ${v.version} · ${dateFr(v.publishedAt)}${v.note ? ` · ${v.note}` : ''}`}</span>
+                {v.current ? (
+                  <span className="cha-tag cha-tag--ok">en ligne</span>
+                ) : (
+                  <button type="button" className="linklike" disabled={publishing} onClick={() => void publish(v.version)}>
+                    {`Revenir à la version du ${dateFr(v.publishedAt)}`}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section className="cha-card">
+          <div className="cha-lab">Logo et couleurs de tous les catalogues</div>
+          <div className="cha-row">
+            {charter.logoUrl ? <img className="cha-logo" src={charter.logoUrl} alt="" /> : <span className="cha-note cha-note--inline">Logo officiel de la marque</span>}
+            <button type="button" className="btn btn--sm" onClick={() => setPicking('logo')}>
+              Logo de la médiathèque
+            </button>
+            {charter.logoMediaId !== null ? (
+              <button type="button" className="linklike" onClick={() => change((c) => ({ ...c, logoMediaId: null, logoUrl: null }))}>
+                logo officiel
+              </button>
+            ) : null}
+          </div>
+          <div className="cha-colors">
+            {(
+              [
+                ['primary', 'Principale'],
+                ['secondary', 'Papier'],
+                ['accent', 'Accent'],
+                ['ink', 'Encre'],
+              ] as const
+            ).map(([key, label]) => (
+              <label key={key}>
+                <input type="color" value={charter.colors[key]} onChange={(event) => change((c) => ({ ...c, colors: { ...c.colors, [key]: event.target.value.toUpperCase() } }))} />
+                {label}
+              </label>
+            ))}
+          </div>
+        </section>
+      </div>
+    </>
+  )
+
+  // --- l'aperçu de droite ---------------------------------------------------------------------------
+  const previewIndex = step === 1 ? 0 : step === 2 ? 1 : step === 3 ? 2 : 3
+  const previewTitle = step === 1 ? `Couverture « ${gammeName(cover.gamme)} »` : step === 2 ? 'Page 2' : step === 3 ? 'Avant-dernière' : 'Dernière page'
+  const preview = (
+    <aside className="cha-preview">
+      <section className="cha-card">
+        <div className="cha-lab">
+          {`Aperçu · ${previewTitle}`} <span className="cha-grow" />
+          {step === 2 || step === 3 ? (
+            <span className="bro-seg" role="group" aria-label="Format">
+              {(['A5', 'A4'] as CatalogueFormat[]).map((f) => (
+                <button key={f} type="button" className={format === f ? 'is-on' : ''} onClick={() => setFormat(f)}>
+                  {f}
+                </button>
+              ))}
+            </span>
+          ) : (
+            <span className="cha-tag cha-tag--ex">{`boutique : ${shop?.name ?? '—'}`}</span>
+          )}
+        </div>
+        <div className="cha-preview__page">
+          <Page doc={doc} index={previewIndex} width={360} />
+          <span className="cha-lock">🔒 Marque</span>
+        </div>
+        {step === 1 ? (
+          <div className="cha-strip">
+            {(
+              [
+                [0, '1'],
+                [1, '2'],
+                [-1, 'pages produits'],
+                [2, 'avant-dern.'],
+                [3, 'dernière'],
+              ] as Array<[number, string]>
+            ).map(([index, label]) => (
+              <div key={label} className="cha-strip__item">
+                {index >= 0 ? <Page doc={{ ...doc, catalogue: { ...doc.catalogue, format: 'A5' } }} index={index} width={62} /> : <span className="cha-strip__gap">pages<br />produits</span>}
+                {index >= 0 ? <span>{label}</span> : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {step === 2 || step === 3 ? <p className="cha-note">La même page dans tous les catalogues : ceux de la marque et ceux que les franchisés font dans leur dashboard.</p> : null}
+        {step === 4 ? (
+          <p className="cha-note">
+            <span className="cha-green">● Rempli par la boutique :</span> nom, adresse, horaires, téléphone et QR (le webshop de chaque boutique).
+          </p>
+        ) : null}
+      </section>
+    </aside>
+  )
+
+  const current = STEPS[step - 1]
+  return (
+    <div className="catv cha">
+      <style>{catalogueCss()}</style>
+      <div className="cha-head">
+        <div>
+          <button type="button" className="linklike catv-back" onClick={() => void flush().then(onBack)}>
+            ‹ Catalogues
+          </button>
+          <p className="catv-kicker">Catalogues · réglage de la marque</p>
+          <h2 className="catv-h1">Assistant des pages de la marque</h2>
+        </div>
+        <span className="cha-grow" />
+        <span className="bro-seg" role="group" aria-label="Langue de l’aperçu">
+          {(['fr', 'nl'] as CatalogueLang[]).map((l) => (
+            <button key={l} type="button" className={lang === l ? 'is-on' : ''} onClick={() => setLang(l)}>
+              {l.toUpperCase()}
+            </button>
+          ))}
+        </span>
+        <span className={`cha-save${save.status === 'error' ? ' is-error' : ''}`}>
+          {save.status === 'saving' ? 'Enregistrement…' : save.status === 'error' ? `Non enregistré : ${save.text ?? ''}` : 'Brouillon enregistré'}
+        </span>
+        <button type="button" className="btn" disabled={step === 1} onClick={() => void go((step - 1) as Step)}>
+          ‹ Précédent
+        </button>
+        {step < 5 ? (
+          <button type="button" className="btn btn--primary" onClick={() => void go((step + 1) as Step)}>
+            {`Suivant · ${current.next} ›`}
+          </button>
+        ) : (
+          <button type="button" className="btn" onClick={() => { dirty.current = true; void flush() }}>
+            Enregistrer sans publier
+          </button>
+        )}
+      </div>
+      <nav className="cha-steps" aria-label="Étapes">
+        {STEPS.map((s) => (
+          <button key={s.n} type="button" className={`cha-step${s.n === step ? ' is-on' : ''}${stepDone(s.n) ? ' is-done' : ''}`} onClick={() => void go(s.n)}>
+            <span className="cha-step__no">{stepDone(s.n) ? '✓' : s.n}</span>
+            <span>
+              <span className="cha-step__l">{`${s.n} · ${s.label}`}</span>
+              <span className="cha-step__d">{s.hint}</span>
+            </span>
+          </button>
+        ))}
+      </nav>
+      {step === 5 ? (
+        recap
+      ) : (
+        <div className="cha-body">
+          <div className="cha-main">{step === 1 ? coverStep : step === 2 ? brandStep('page2') : step === 3 ? brandStep('penultimate') : backStep}</div>
+          {preview}
+        </div>
+      )}
+      {picking !== null ? (
+        <MediaPicker
+          onClose={() => setPicking(null)}
+          onPick={(asset: MediaAsset) => {
+            const mediaId = Number(asset.id)
+            if (picking === 'logo') change((c) => ({ ...c, logoMediaId: mediaId, logoUrl: asset.url }))
+            else if (picking === 'cover') setCover({ visual: 'media', mediaId, imageUrl: asset.url })
+            else setBrand(picking, { mediaId, imageUrl: asset.url, template: charter[picking].template === 'A' ? 'B' : charter[picking].template })
+            setPicking(null)
+          }}
+        />
+      ) : null}
+    </div>
+  )
+}
