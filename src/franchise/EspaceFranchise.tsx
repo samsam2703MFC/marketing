@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import CalendrierFranchiseView from '../views/franchise/CalendrierFranchiseView'
 import CommentairesView from '../views/franchise/CommentairesView'
 import GoogleFranchiseView from '../views/franchise/GoogleFranchiseView'
@@ -29,6 +29,29 @@ import './espace.css'
 
 type Page = Exclude<PageEspace, 'suivi'>
 
+/** Une entrée du menu, telle que le cockpit la reçoit en mode intégré (ses onglets la reprennent). */
+type EntreeMenu = { k: string; label: string; aller: () => void; actif: boolean; n?: number; groupe?: boolean }
+
+// Le mode intégré : la page se fond dans le cockpit — fond transparent, de la racine du document au corps.
+if (INTEGRE && typeof document !== 'undefined') document.documentElement.classList.add('esp-integre-doc')
+
+/**
+ * Le dialogue avec le cockpit (mode intégré, 15/11/2026). Même origine seulement : le cockpit et le Marketing sont servis
+ * par le même serveur, un cadre ouvert ailleurs ne reçoit rien et n'est pas écouté.
+ *  - l'espace dit son menu au cockpit à chaque changement : les entrées (libellé, page active, pastilles) et le quota de
+ *    la semaine — les onglets du cockpit sont ce menu ;
+ *  - le cockpit demande une page (`{source: 'cockpit', type: 'aller', k}`) : l'espace y va sans se recharger.
+ */
+function dialogueCockpit(menu: EntreeMenu[], quota: { used: number; max: number }, regles: string, boutique: string): string {
+  return JSON.stringify({
+    source: 'espace-boutique',
+    type: 'menu',
+    entrees: menu.map(({ k, label, actif, n, groupe }) => ({ k, label, actif, n: n ?? 0, groupe: !!groupe })),
+    quota: { used: quota.used, max: quota.max, regles },
+    boutique,
+  })
+}
+
 const TITRES: Record<Page, string> = {
   cal: 'Calendrier',
   pub: 'Créer un post',
@@ -47,6 +70,9 @@ export default function EspaceFranchise() {
   // Change à chaque navigation : les pages relisent leurs paramètres d'adresse en se remontant.
   const [cle, setCle] = useState(() => window.location.pathname + window.location.search)
   const [tiroir, setTiroir] = useState(false)
+  // Le menu du dernier rendu, et le dernier message envoyé au cockpit (mode intégré).
+  const menuRef = useRef<EntreeMenu[]>([])
+  const dernierEnvoi = useRef('')
 
   useEffect(() => {
     void charger(boutiqueDemandee() || undefined)
@@ -70,6 +96,28 @@ export default function EspaceFranchise() {
     window.scrollTo(0, 0)
   }, [])
 
+  // Mode intégré : le cockpit demande une page de son onglet.
+  useEffect(() => {
+    if (!INTEGRE) return
+    const ecouter = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin || e.source !== window.parent) return
+      const d = e.data as { source?: string; type?: string; k?: string } | null
+      if (!d || d.source !== 'cockpit' || d.type !== 'aller') return
+      menuRef.current.find((x) => x.k === d.k)?.aller()
+    }
+    window.addEventListener('message', ecouter)
+    return () => window.removeEventListener('message', ecouter)
+  }, [])
+
+  // Mode intégré : le menu part au cockpit après chaque rendu qui le change.
+  useEffect(() => {
+    if (!INTEGRE || !etat || window.parent === window) return
+    const m = dialogueCockpit(menuRef.current, etat.quota, ligneRegles(etat.rules), etat.shop.name)
+    if (m === dernierEnvoi.current) return
+    dernierEnvoi.current = m
+    window.parent.postMessage(JSON.parse(m), window.location.origin)
+  })
+
   useEffect(() => {
     document.title = `${TITRES[page]} · ${etat?.shop.name ?? 'Espace boutique'} — L'Atelier By`
   }, [page, etat?.shop.name])
@@ -88,7 +136,7 @@ export default function EspaceFranchise() {
   const r = etat.rules
   const p = pastilles(etat)
   const vue = page === 'cal' ? new URLSearchParams(window.location.search).get('vue') ?? '' : ''
-  const entrees: { k: string; label: string; aller: () => void; actif: boolean; n?: number; groupe?: boolean }[] = [
+  const entrees: EntreeMenu[] = [
     { k: 'cal', label: 'Calendrier', aller: () => aller('cal'), actif: page === 'cal' && vue !== 'analyse' && vue !== 'suivi', n: p.refuses + p.aValider },
     ...(r.voirAnalyse !== false ? [{ k: 'analyse', label: 'Vues et abonnés', aller: () => aller('cal', 'vue=analyse'), actif: page === 'cal' && vue === 'analyse' }] : []),
     ...(r.voirSuivi !== false ? [{ k: 'suivi', label: 'Suivi de ma boutique', aller: () => aller('suivi'), actif: page === 'cal' && vue === 'suivi' }] : []),
@@ -103,6 +151,7 @@ export default function EspaceFranchise() {
       ? [{ k: 'ig', label: etat.instagramUnique ? 'Grille Instagram du réseau' : 'Grille Instagram', aller: () => aller('ig'), actif: page === 'ig', groupe: true }]
       : []),
   ]
+  menuRef.current = entrees
   const q = etat.quota
   const boutiques = etat.me.shops ?? []
   const nom = etat.me.name || 'Gérant'
@@ -126,22 +175,12 @@ export default function EspaceFranchise() {
     </>
   )
 
-  // Dans le cockpit franchisé : la page seule, et le quota de la semaine en tête (le menu est celui du cockpit).
+  // Dans le cockpit franchisé : la page seule. Le menu et le quota de la semaine sont dans la barre d'onglets du cockpit
+  // (dialogueCockpit) ; le titre de la page et les sous-onglets du calendrier, qui la répètent, sont masqués (espace.css).
   if (INTEGRE) {
     return (
       <div className="esp esp--integre">
         <main className="esp-corps" key={cle}>
-          <div className="esp-integre-quota" title={ligneRegles(r)}>
-            <span>
-              Cette semaine · {q.used} / {q.max} post{q.max > 1 ? 's' : ''}
-            </span>
-            <span className="esp-quota-piste">
-              <span
-                className={`esp-quota-barre${q.used >= q.max ? ' is-plein' : ''}`}
-                style={{ width: `${Math.min(100, q.max ? (q.used / q.max) * 100 : 100)}%` }}
-              />
-            </span>
-          </div>
           {erreur ? <div className="esp-erreur esp-erreur--ligne">{erreur}</div> : null}
           {pages}
         </main>
