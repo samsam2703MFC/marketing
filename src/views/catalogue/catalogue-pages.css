@@ -315,3 +315,39 @@
 .cat-t-C .cat-h--grande .cat-h__top { align-items: flex-start; }
 .cat-t-B .cat-h__sub, .cat-head-bandeau .cat-h__sub { color: inherit; opacity: 0.92; }
 .cat-head-bandeau .cat-h--grande .cat-h__top, .cat-head-bandeau .cat-h:not(.cat-h--grande) .cat-h__top { align-items: center; }
+
+/* ---------- gabarits de la charte (assistant des pages de la marque, maquettes A1-A3) ---------- */
+/* Couverture B · Illustration : papier, dessin au centre, « La gamme », titre en couleur. */
+.cat-face--coverB { background: var(--s); }
+.cat-cover--B { color: var(--i); align-items: center; text-align: center; padding: calc(var(--u) * 12mm) calc(var(--u) * 12mm) calc(var(--u) * 11mm); }
+.cat-cover__logoB { height: calc(var(--u) * 9mm); object-position: center; }
+.cat-cover__art { flex: 1 1 0; min-height: 0; width: 100%; display: grid; place-items: center; margin: calc(var(--u) * 6mm) 0 calc(var(--u) * 4mm); }
+.cat-cover__drawB { max-width: calc(var(--u) * 70mm); max-height: 100%; width: auto; height: 100%; object-fit: contain; }
+.cat-cover__photoB { width: 100%; height: 100%; object-fit: cover; border-radius: calc(var(--u) * 3mm); }
+.cat-cover__kicker { font-weight: 500; font-size: calc(var(--u) * 3.1mm); letter-spacing: 0.3em; text-transform: uppercase; color: var(--a); }
+.cat-cover--B .cat-cover__title { margin-top: calc(var(--u) * 2mm); padding-top: 0; color: var(--p); font-size: calc(var(--u) * 19mm); max-height: calc(var(--u) * 40mm); }
+.cat-cover__rule { width: calc(var(--u) * 14mm); border-top: 0.6mm solid var(--a); margin: calc(var(--u) * 5mm) auto calc(var(--u) * 4mm); }
+.cat-cover__subB { font-weight: 500; font-size: calc(var(--u) * 4.2mm); line-height: 1.35; max-width: calc(var(--u) * 100mm); }
+.cat-cover__shopB { margin-top: auto; padding-top: calc(var(--u) * 6mm); font-weight: 500; font-size: calc(var(--u) * 3mm); letter-spacing: 0.22em; text-transform: uppercase; }
+/* Couverture C · Photo : le visuel en haut, un bandeau de couleur avec le titre. */
+.cat-face--coverC { background: var(--s); }
+.cat-cover--C { padding: 0; }
+.cat-cover__top { flex: 0 0 58%; min-height: 0; overflow: hidden; display: grid; place-items: center; margin: calc(-1 * var(--b)) calc(-1 * var(--b)) 0; background: var(--s); }
+.cat-cover__photoC { width: 100%; height: 100%; object-fit: cover; }
+.cat-cover__drawC { width: 60%; height: 80%; object-fit: contain; }
+.cat-cover__band { flex: 1 1 0; min-height: 0; background: var(--p); color: var(--s); margin: 0 calc(-1 * var(--b)) calc(-1 * var(--b)); padding: calc(var(--u) * 8mm) calc(var(--u) * 13mm + var(--b)) calc(var(--u) * 9mm + var(--b)); display: flex; flex-direction: column; }
+.cat-cover--C .cat-logo { height: calc(var(--u) * 7mm); }
+.cat-cover--C .cat-cover__kicker { margin-top: calc(var(--u) * 5mm); color: var(--s); opacity: 0.85; }
+.cat-cover--C .cat-cover__title { margin-top: calc(var(--u) * 2mm); padding-top: 0; font-size: calc(var(--u) * 15mm); max-height: calc(var(--u) * 34mm); }
+.cat-cover--C .cat-cover__shop { margin-top: auto; }
+
+/* Page 2 / avant-dernière, gabarit C · image en bas, pleine largeur. */
+.cat-brand--tC .cat-brand__text { flex: 0 1 auto; }
+.cat-brand__visual--bottom { margin: auto calc(-1 * var(--u) * 13mm) calc(-1 * var(--u) * 12mm); flex: 0 0 calc(var(--u) * 72mm); }
+
+/* Dernière page B · boutique en avant. */
+.cat-back--B .cat-back__title { margin-top: calc(var(--u) * 10mm); }
+.cat-back__shopB { margin-top: calc(var(--u) * 10mm); padding-top: calc(var(--u) * 6mm); border-top: 0.3mm solid rgba(36, 28, 26, 0.18); }
+.cat-back__shopB .cat-back__who { font-size: calc(var(--u) * 8mm); color: var(--p); }
+.cat-back__shopB p { margin-top: calc(var(--u) * 2.4mm); font-size: calc(var(--u) * 4.8mm); line-height: 1.4; }
+.cat-back__qr--small { margin-top: auto; }
