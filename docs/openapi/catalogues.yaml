@@ -330,6 +330,50 @@ paths:
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
         '422': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Catalogues (boutique, entre portails)]
+      summary: Importer une photo dans la médiathèque de la boutique
+      description: |
+        15/11/2026 (« dans le catalogue, je dois pouvoir changer ou importer de la médiathèque une photo ou une
+        illustration pour les bundles ou les promotions »). L'image entre dans la médiathèque, rangée à la boutique
+        du chemin (source `cockpit`) : elle la retrouve dans la liste ci-dessus, pour la place libre d'une page
+        (`fillerMediaId`) ou la vignette d'une promotion (`offers[].mediaId`). Une image seulement (PNG, JPEG, GIF,
+        WebP, AVIF), 5 Mo au plus. Le même fichier déjà déposé n'est pas recopié : il est rendu (200).
+      security: [{ serviceToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [contentBase64]
+              properties:
+                name: { type: string, maxLength: 120, description: 'Le nom de la photo (défaut : « Photo de la boutique »).' }
+                contentBase64: { type: string, description: 'Le fichier, en base64 (un préfixe data:… est accepté).' }
+      responses:
+        '201':
+          description: Photo importée.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/EnvelopeOk'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          id: { type: integer }
+                          name: { type: string }
+                          url: { type: string }
+                          thumbnailUrl: { type: [string, 'null'] }
+                          duplicate: { type: boolean }
+        '200': { description: 'Le même fichier était déjà dans la médiathèque de la boutique (ou du réseau) : il est rendu, sans copie.' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
 
   /api/v1/integration/marketing/shops/{shopId}/catalogues:
     parameters: [{ $ref: '#/components/parameters/shopId' }]

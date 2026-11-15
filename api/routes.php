@@ -158,6 +158,7 @@ return static function (Router $router): void {
     $shopBase = '/api/v1/integration/marketing/shops/{shopId}';
     $router->get($shopBase . '/catalogue-products',                [$shopCatalogues, 'products'], true);
     $router->get($shopBase . '/catalogue-media',                   [$shopCatalogues, 'media'], true);
+    $router->post($shopBase . '/catalogue-media',                  [$shopCatalogues, 'mediaUpload'], true);
     $router->get($shopBase . '/catalogues',                        [$shopCatalogues, 'index'], true);
     $router->post($shopBase . '/catalogues',                       [$shopCatalogues, 'store'], true);
     $router->get($shopBase . '/catalogues/{id}',                   [$shopCatalogues, 'show'], true);

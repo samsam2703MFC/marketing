@@ -6,8 +6,10 @@ namespace Marketing\Controller;
 
 use Marketing\Service\CatalogueService;
 use Marketing\Service\CatalogueShopService;
+use Marketing\Service\MediaService;
 use Marketing\Support\Envelope;
 use Marketing\Support\Keys;
+use Marketing\Support\MediaStore;
 use Marketing\Support\Request;
 use Marketing\Support\Response;
 
@@ -33,6 +35,8 @@ use Marketing\Support\Response;
 final class CatalogueIntegrationController
 {
     private const FILTERS = ['status' => CatalogueService::STATUSES];
+    /** Une photo importée par la boutique (un JSON en base64 doit rester sous la taille de requête du serveur). */
+    private const UPLOAD_MAX_BYTES = 5_000_000;
 
     private readonly CatalogueShopService $shops;
 
@@ -99,6 +103,56 @@ final class CatalogueIntegrationController
             $result = $this->service->catalogueMedia($shop['id'], $name, (int) $page, (int) $perPage);
 
             return Envelope::ok($result['items'], ['pagination' => Envelope::pagination((int) $page, (int) $perPage, $result['total'])]);
+        });
+    }
+
+    /**
+     * `POST …/shops/{shopId}/catalogue-media` {name, contentBase64} : une photo que la boutique importe (15/11/2026,
+     * demande : « dans le catalogue, je dois pouvoir changer ou importer de la médiathèque une photo ou une illustration
+     * pour les bundles ou les promotions »). Elle entre dans la médiathèque, rangée à SA boutique (`shop_id`, source
+     * `cockpit`) : la boutique la retrouve dans `catalogue-media`, et elle seule (avec le réseau). Une image seulement
+     * (JPEG, PNG, WebP…, pas de vidéo), 5 Mo au plus. Le même fichier déjà déposé n'est pas copié : il est rendu (200).
+     */
+    public function mediaUpload(Request $request): array
+    {
+        return $this->withShop($request, function (array $shop) use ($request): array {
+            $body = is_array($request->body) ? $request->body : [];
+            $errors = [];
+            foreach (array_keys($body) as $key) {
+                if (!in_array($key, ['name', 'contentBase64'], true)) {
+                    $errors[] = ['field' => (string) $key, 'message' => 'Champ inconnu.'];
+                }
+            }
+            $name = trim(mb_substr((string) ($body['name'] ?? ''), 0, 120));
+            $raw = (string) ($body['contentBase64'] ?? '');
+            $binary = $raw !== '' ? base64_decode((string) preg_replace('#^data:[^,]*,#', '', $raw), true) : false;
+            if ($binary === false || $binary === '') {
+                $errors[] = ['field' => 'contentBase64', 'message' => 'Le fichier, encodé en base64, est attendu.'];
+            } elseif (strlen($binary) > self::UPLOAD_MAX_BYTES) {
+                $errors[] = ['field' => 'contentBase64', 'message' => 'Image trop lourde : 5 Mo au plus.'];
+            }
+            if ($errors !== []) {
+                return Envelope::error('VALIDATION_FAILED', 'Photo invalide.', 422, $errors);
+            }
+            try {
+                $info = MediaStore::inspect((string) $binary);
+            } catch (\RuntimeException $e) {
+                return Envelope::error('VALIDATION_FAILED', 'Photo invalide.', 422, [['field' => 'contentBase64', 'message' => $e->getMessage()]]);
+            }
+            if ($info['kind'] !== 'image') {
+                return Envelope::error('VALIDATION_FAILED', 'Photo invalide.', 422, [['field' => 'contentBase64', 'message' => 'Une image est attendue (pas une vidéo).']]);
+            }
+            $media = new MediaService();
+            $result = $media->create((string) $binary, ['name' => $name !== '' ? $name : 'Photo de la boutique', 'shop_id' => (int) $shop['id'], 'source' => 'cockpit'], null, 0);
+            $m = $result['media'];
+            // Un doublon d'une image d'une AUTRE boutique ne devient pas la sienne : la place libre ne l'accepterait pas.
+            $row = $media->find((int) $m['id']);
+            if ($row !== null && $row['shop_id'] !== null && (int) $row['shop_id'] !== (int) $shop['id']) {
+                return Envelope::error('CONFLICT', 'Cette image est déjà dans la médiathèque d’une autre boutique.', 409);
+            }
+
+            return Envelope::ok(['id' => (int) $m['id'], 'name' => $m['name'], 'url' => $m['webUrl'], 'thumbnailUrl' => $m['thumbnailUrl'], 'duplicate' => $result['duplicate']],
+                [], $result['duplicate'] ? 200 : 201);
         });
     }
 

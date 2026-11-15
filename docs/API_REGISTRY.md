@@ -995,6 +995,7 @@ identifiant de caisse ERP de la boutique. Jeton de service entre portails : `X-S
 |---|---|---|
 | GET | `/catalogue-products` | ce que la boutique vend au webshop, à SES prix (`priceCents`, `shopPriceCents`), catégories, gammes, mises en page et nombres de pages permis (`pageCounts`) |
 | GET | `/catalogue-media` | les images de la médiathèque qu'elle peut mettre à la place libre d'une page : du réseau et les siennes, ni archivées ni vidéos (paginé, `perPage` ≤ 100, `filter[name][like]`) |
+| POST | `/catalogue-media` | importer une photo `{name, contentBase64}` (15/11/2026) : dans la médiathèque, rangée à SA boutique (source `cockpit`) ; une image seulement, 5 Mo au plus ; `201` créée, `200` si le même fichier y est déjà (pas de copie), `409` s'il est à une autre boutique ; `422` sinon. Pour la place libre d'une page ou la vignette d'une promotion (`offers[].mediaId`) |
 | GET | `/catalogues` | ses catalogues seulement (paginé, `filter[status][eq]`) |
 | POST | `/catalogues` | création `{title, source{kind: gamme | choix, ref?}, format?, pageCount?, langs?, products?, pages?}` |
 | GET / PUT / DELETE | `/catalogues/{id}` | le sien seulement : celui d'une autre boutique ou de la marque → `404` |

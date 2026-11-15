@@ -4849,6 +4849,7 @@ $catRouter->post('/api/v1/marketing/catalogue-charter/publications', [$catBrand,
 $SB = '/api/v1/integration/marketing/shops/{shopId}';
 $catRouter->get($SB . '/catalogue-products', [$catShop, 'products'], true);
 $catRouter->get($SB . '/catalogue-media', [$catShop, 'media'], true);
+$catRouter->post($SB . '/catalogue-media', [$catShop, 'mediaUpload'], true);
 $catRouter->get($SB . '/catalogues', [$catShop, 'index'], true);
 $catRouter->post($SB . '/catalogues', [$catShop, 'store'], true);
 $catRouter->get($SB . '/catalogues/{id}', [$catShop, 'show'], true);
@@ -5600,6 +5601,31 @@ check('boutique : ses images pour la place libre — celles du réseau et les si
         && array_column($mediasCherche['body']['data'] ?? [], 'name') === ['Vitrine Sombreffe (test)']
         && array_unique($refusMedias) === [422] && $sansJetonMedias['status'] === 401,
     json_encode([$medias['body'], $refusMedias, $sansJetonMedias['status']]));
+// La photo qu'importe la boutique (15/11/2026, « importer une photo ou une illustration pour les bundles ou les promotions ») :
+// dans SA médiathèque, une image seulement ; le même fichier n'est pas recopié (deuxième passage : 200, même id).
+$photoImport = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
+if (function_exists('imagecreatetruecolor')) {
+    $ci = imagecreatetruecolor(40, 30);
+    imagefilledrectangle($ci, 0, 0, 40, 30, imagecolorallocate($ci, 17, 133, 71));
+    ob_start(); imagepng($ci); $photoImport = base64_encode((string) ob_get_clean()); imagedestroy($ci);
+}
+$import = call($catRouter, 'POST', $SA . '/catalogue-media', [], ['name' => 'Cougnou 4+1 (test)', 'contentBase64' => $photoImport]);
+$importBis = call($catRouter, 'POST', $SA . '/catalogue-media', [], ['name' => 'Cougnou 4+1 (test)', 'contentBase64' => $photoImport]);
+$listeImport = call($catRouter, 'GET', $SA . '/catalogue-media', ['filter' => ['name' => ['like' => 'Cougnou 4+1']]]);
+$refusImport = [
+    call($catRouter, 'POST', $SA . '/catalogue-media', [], ['name' => 'x', 'contentBase64' => base64_encode('pas une image')])['status'],
+    call($catRouter, 'POST', $SA . '/catalogue-media', [], ['name' => 'x'])['status'],
+    call($catRouter, 'POST', $SA . '/catalogue-media', [], ['name' => 'x', 'contentBase64' => $photoImport, 'shopId' => 1])['status'],
+];
+unset($_SERVER['HTTP_X_SERVICE_TOKEN']);
+$sansJetonImport = call($catRouter, 'POST', $SA . '/catalogue-media', [], ['name' => 'x', 'contentBase64' => $photoImport])['status'];
+$_SERVER['HTTP_X_SERVICE_TOKEN'] = 'JETON-SERVICE-CATALOGUES-TEST';
+check('boutique : importer une photo — dans sa médiathèque (201, puis 200 sans copie), retrouvée par la liste ; 422 ; 401',
+    in_array($import['status'], [200, 201], true) && $importBis['status'] === 200
+        && ($importBis['body']['data']['id'] ?? 0) === ($import['body']['data']['id'] ?? -1)
+        && in_array('Cougnou 4+1 (test)', array_column($listeImport['body']['data'] ?? [], 'name'), true)
+        && array_unique($refusImport) === [422] && $sansJetonImport === 401,
+    json_encode([$import['status'], $import['body'], $importBis['status'], $refusImport, $sansJetonImport]));
 $mienPres = call($catRouter, 'POST', $SA . '/catalogues', [], ['title' => 'Mes fêtes', 'source' => ['kind' => 'gamme', 'ref' => [14, 16]], 'pageCount' => 8]);
 $idMienPres = (int) ($mienPres['body']['data']['id'] ?? 0);
 $mienPages = [
