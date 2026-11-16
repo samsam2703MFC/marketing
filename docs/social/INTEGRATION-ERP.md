@@ -100,3 +100,20 @@ Espace franchisé (session de l'ERP via `franchise_session`, ou aperçu du franc
 ### Espace franchisé intégré dans le module Marketing
 
 La version franchisé du module Marketing (`/marketingc`) affiche les pages de l'espace franchisé dans un cadre (groupe « Mes réseaux sociaux ») : `/social_franchisee/{calendrier|publier|commentaires|messages|avis-google|operations|instagram}?embed=1`. Avec `embed=1`, l'espace retire son propre menu (barre latérale, barres du téléphone), chaque lien garde le paramètre, et la page affichée est annoncée au Marketing par `postMessage({ type: 'social:page', page: 'f:cal' | 'f:com' | … })` (même origine). La boutique et les droits restent ceux de la session de l'espace franchisé (ERP) : l'adresse ne choisit qu'entre les boutiques de cette session. La boutique est celle du lien (`?shop=`) : elle ne se change pas dans la page.
+
+### Espace boutique ouvert depuis le cockpit franchisé (15 nov. 2026)
+
+Le dashboard magasin du cockpit (portail Pilotage) affiche les pages de l'espace boutique dans son propre écran, en mode intégré. Côté gérant :
+
+- la page de l'espace s'affiche **seule** dans le cockpit : ni le menu de l'espace, ni sa barre, ni le titre de la page, ni les sous-onglets du calendrier (Calendrier, Vues et abonnés, Suivi), ni la ligne du quota de la semaine. Ces éléments sont portés par la **barre d'onglets du cockpit** : l'espace lui envoie son menu (entrées, page active, pastilles, quota de la semaine) à chaque changement ;
+- un clic sur un onglet du cockpit change la page de l'espace **sans recharger** : la session reste ouverte ;
+- la page prend **toute la largeur** que lui donne le cockpit (le calendrier et la page Publier ne sont plus plafonnés), sur fond transparent, avec une barre de défilement réduite à un fil ruby de 3 px ;
+- l'origine de la session est affichée « Ouvert depuis le cockpit franchisé ». La session ne porte que la boutique ouverte depuis le cockpit.
+
+Pages disponibles dans le cockpit : `calendrier`, `publier`, `commentaires`, `messages`, `avis-google`, `operations`, `instagram` (toute autre valeur ouvre le calendrier).
+
+Ouverture, côté technique :
+
+1. le cockpit demande un lien par `POST /integration/franchise/sessions` `{shop, page}`, avec le jeton de service de l'ERP (`X-Service-Token`, valeur de `erp_cles.erp_jeton_service`) ; réponse `{url, expire}`. Jeton absent ou faux : 401 ; boutique hors réseau : 404 ;
+2. le navigateur du gérant ouvre `url` (`GET /franchise/ouvrir?jeton=…`) : le jeton, signé et valable **deux minutes** pour cette seule boutique, pose la session de l'espace (même cookie signé que l'aperçu, origine « cockpit ») et renvoie vers `/marketing/franchise/{page}?embed=1&shop={boutique}`. Lien modifié ou expiré : 401 « Le lien du cockpit a expiré : rouvrez la page depuis le cockpit. » ;
+3. en mode intégré, chaque lien interne garde `embed=1` et la boutique. Le dialogue avec le cockpit passe par `postMessage`, même origine seulement : l'espace envoie `{source: 'espace-boutique', type: 'menu', entrees, quota, boutique}`, le cockpit demande une page par `{source: 'cockpit', type: 'aller', k}`.
