@@ -2860,8 +2860,8 @@ export type CatalogueOwner = 'marque' | 'boutique'
 export type CatalogueSourceKind = 'gamme' | 'campagne' | 'choix'
 export type CatalogueStatus = 'brouillon' | 'pret' | 'imprime'
 export type CatalogueFormat = 'A5' | 'A4'
-/** `mosaique` : grandes vignettes 2 × 2 (4 produits). */
-export type CatalogueLayout = 'vedette' | 'grille' | 'liste' | 'mosaique' | 'presentation' | 'presentation_liste'
+/** `mosaique` : grandes vignettes 2 × 2 (4 produits). `pleine` : un seul produit sur la page, et sa promotion. */
+export type CatalogueLayout = 'vedette' | 'grille' | 'liste' | 'mosaique' | 'pleine' | 'presentation' | 'presentation_liste'
 /** Les deux mises en page d'une page de présentation de gamme. */
 export const CATALOGUE_PRESENTATIONS: CatalogueLayout[] = ['presentation', 'presentation_liste']
 /** Variantes de gabarit d'une page intérieure ; une page sans gabarit = A. */
@@ -2889,6 +2889,8 @@ export interface CataloguePageRow {
   layout: CatalogueLayout
   /** Catégorie du webshop ; null : « Notre sélection ». Toujours null pour une présentation. */
   category: number | null
+  /** Pleine page : le produit du webshop qu'elle montre seul ; absent = le premier de sa catégorie. */
+  product?: number | null
   /** Variante de gabarit ; absent = A. */
   template?: CatalogueTemplate
   /** La gamme : obligatoire pour une présentation ; sur une page de produits, seulement ses produits. */

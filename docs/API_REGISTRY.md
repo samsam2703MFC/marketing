@@ -952,7 +952,11 @@ A · B · C (fond, cartes, alignement) : B a déjà un bandeau avec un petit pic
 « grande illustration », d'où un réglage à part. **Illustration** (`drawing`, `drawingUrl` absolue) : le dessin
 de la famille de la catégorie (la règle des vignettes sans photo, `familyImage`), sinon la gamme de la page, sinon
 la première gamme du catalogue, sinon `null` — jamais inventée. **`mosaique`** : grandes vignettes 2 × 2,
-4 produits (place libre à 2 produits au plus). `catalogue-products` de la boutique rend `headers`. **Disponibilité en pied de page** (même jour, client : « la disponibilité en dessous de page en
+4 produits (place libre à 2 produits au plus). **`pleine`** (17/11/2026, client : « une possibilité de produit
+pleine page, 1 seul produit et sa promotion ») : un produit sur toute la page, le champ de page `product` (seulement
+avec `pleine`, sinon `422 pages[i].product`) le choisit et le réserve à sa page avec sa promotion (la première
+vignette qui le contient) ; sans `product`, le premier de sa catégorie ; absent de la version : `PAGE_PRODUCT_MISSING`.
+Une page vide reprise pour une catégorie ajoutée repasse en `grille`. `catalogue-products` de la boutique rend `headers`. **Disponibilité en pied de page** (même jour, client : « la disponibilité en dessous de page en
 footer (par catégorie) ») : `availabilityFooter` sur chaque page de produits (et présentation avec liste), composé
 par le serveur pour que Marketing et dashboard impriment la même ligne (`availabilityFooter()`) — tous la même :
 « Disponible du 1/12 au 31/12 · sur commande 48 h » (NL « Beschikbaar … ») ; sinon la plus courante puis les

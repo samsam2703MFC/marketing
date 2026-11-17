@@ -43,9 +43,11 @@ final class CatalogueService
      * Mise en page → nombre de produits qu'une page porte. `presentation` : la page d'une gamme (son
      * illustration, son nom, un texte), sans produit ; `presentation_liste` : la même, avec une courte
      * liste des produits de la gamme et leurs prix (8 au plus). `mosaique` : grandes vignettes 2 × 2
-     * (client, 14/11/2026 : « 3-4 possibilités de montrer les produits »).
+     * (client, 14/11/2026 : « 3-4 possibilités de montrer les produits »). `pleine` : un seul produit sur toute la
+     * page, et sa promotion (client, 17/11/2026 : « une possibilité de produit pleine page, 1 seul produit et sa
+     * promotion par exemple ») — le produit choisi (`product`), sinon le premier de sa catégorie.
      */
-    public const LAYOUTS = ['vedette' => 5, 'grille' => 6, 'liste' => 12, 'mosaique' => 4, 'presentation' => 0, 'presentation_liste' => 8];
+    public const LAYOUTS = ['vedette' => 5, 'grille' => 6, 'liste' => 12, 'mosaique' => 4, 'pleine' => 1, 'presentation' => 0, 'presentation_liste' => 8];
 
     /** Les mises en page d'une page de présentation (rattachées à une gamme). */
     public const PRESENTATIONS = ['presentation', 'presentation_liste'];
@@ -69,7 +71,7 @@ final class CatalogueService
     public const PRESENTATION_TEXT_MAX = 400;
 
     /** Les champs d'une page intérieure. */
-    private const PAGE_KEYS = ['layout', 'category', 'template', 'gamme', 'text', 'textNl', 'filler', 'fillerMediaId', 'header', 'script'];
+    private const PAGE_KEYS = ['layout', 'category', 'product', 'template', 'gamme', 'text', 'textNl', 'filler', 'fillerMediaId', 'header', 'script'];
 
     /** Nombre de pages d'un catalogue (couverture et dernière page comprises). */
     /** Tout nombre PAIR de 8 à 16 (client, 14/11/2026 : « rajouter une page, c'est toujours par 2 »). */
@@ -1194,7 +1196,7 @@ final class CatalogueService
         foreach ($raw as $index => $page) {
             $field = 'pages[' . $index . ']';
             if (!is_array($page) || array_is_list($page) && $page !== []) {
-                $errors[] = ['field' => $field, 'message' => 'Forme attendue : {layout, category, template, gamme, text, textNl, filler, fillerMediaId, header, script}.'];
+                $errors[] = ['field' => $field, 'message' => 'Forme attendue : {layout, category, product, template, gamme, text, textNl, filler, fillerMediaId, header, script}.'];
                 continue;
             }
             $unknown = array_diff(array_keys($page), self::PAGE_KEYS);
@@ -1211,6 +1213,15 @@ final class CatalogueService
             $category = $page['category'] ?? null;
             if ($category !== null && (!is_int($category) || $category <= 0)) {
                 $errors[] = ['field' => $field . '.category', 'message' => 'Identifiant de catégorie du webshop, ou null.'];
+            }
+            // Le produit d'une pleine page : celui que la page montre seul (sinon le premier de sa catégorie).
+            $product = $page['product'] ?? null;
+            if ($product !== null && (!is_int($product) || $product <= 0)) {
+                $errors[] = ['field' => $field . '.product', 'message' => 'Identifiant de produit du webshop, ou null.'];
+                $product = null;
+            } elseif ($product !== null && $layout !== 'pleine') {
+                $errors[] = ['field' => $field . '.product', 'message' => 'Seulement avec la mise en page « pleine » (un seul produit sur la page).'];
+                $product = null;
             }
             $template = $page['template'] ?? null;
             if ($template !== null && (!is_string($template) || !in_array($template, self::TEMPLATES, true))) {
@@ -1262,6 +1273,9 @@ final class CatalogueService
             }
 
             $clean = ['layout' => $layout, 'category' => $presentation ? null : $category];
+            if ($product !== null) {
+                $clean['product'] = $product;
+            }
             if ($template !== null && $template !== self::TEMPLATES[0]) {
                 $clean['template'] = $template;
             }
@@ -1543,17 +1557,65 @@ final class CatalogueService
         usort($order, static fn (int $a, int $b): int => [$rank[(int) ($chosen[$a]['categoryId'] ?? 0)], $a] <=> [$rank[(int) ($chosen[$b]['categoryId'] ?? 0)], $b]);
         $placed = [];
         $out = [];
-        foreach ($pages as $page) {
+        // Une pleine page (17/11/2026) : le produit choisi pour elle lui est réservé, et sa promotion avec lui (la
+        // première vignette qui le contient) — les pages d'avant ne les prennent pas.
+        $byId = [];
+        foreach ($order as $key) {
+            if (!isset($chosen[$key]['offer'])) {
+                $byId[(int) $chosen[$key]['id']] ??= $key;
+            }
+        }
+        $reserved = [];
+        foreach ($pages as $index => $page) {
+            $pin = ($page['layout'] ?? null) === 'pleine' && isset($page['product']) ? ($byId[(int) $page['product']] ?? null) : null;
+            if ($pin === null || isset($reserved[$pin])) {
+                continue;
+            }
+            $reserved[$pin] = $index;
+            $offer = self::offerOf($chosen, $order, (int) $page['product'], $reserved);
+            if ($offer !== null) {
+                $reserved[$offer] = $index;
+            }
+        }
+        foreach ($pages as $index => $page) {
             $capacity = self::LAYOUTS[$page['layout']] ?? 6;
             $category = $page['category'] ?? null;
             $gamme = $page['gamme'] ?? null;
             $items = [];
+            if ($page['layout'] === 'pleine') {
+                // Son produit réservé ; sinon le premier de sa catégorie (et de sa gamme) — puis sa promotion.
+                $mine = array_keys(array_filter($reserved, static fn (int $at): bool => $at === $index));
+                $main = $mine[0] ?? null;
+                if ($main === null) {
+                    foreach ($order as $key) {
+                        $product = $chosen[$key];
+                        if (isset($placed[$key]) || isset($reserved[$key]) || isset($product['offer'])
+                            || ($category !== null && (int) ($product['categoryId'] ?? 0) !== $category)
+                            || ($gamme !== null && !in_array($gamme, array_map('intval', $product['gammes'] ?? []), true))) {
+                            continue;
+                        }
+                        $main = $key;
+                        break;
+                    }
+                }
+                if ($main !== null) {
+                    $offer = $mine[1] ?? self::offerOf($chosen, $order, (int) $chosen[$main]['id'], $reserved + $placed);
+                    foreach ([$main, $offer] as $key) {
+                        if ($key !== null) {
+                            $placed[$key] = true;
+                            $items[] = $chosen[$key];
+                        }
+                    }
+                }
+                $out[] = $items;
+                continue;
+            }
             // Une présentation avec liste : les premiers produits de sa gamme, dans l'ordre du catalogue.
             foreach (in_array($page['layout'], self::PRESENTATIONS, true) ? array_keys($chosen) : $order as $key) {
                 if (count($items) >= $capacity) {
                     break;
                 }
-                if (isset($placed[$key])) {
+                if (isset($placed[$key]) || isset($reserved[$key])) {
                     continue;
                 }
                 $product = $chosen[$key];
@@ -1574,6 +1636,18 @@ final class CatalogueService
         }
 
         return ['items' => $out, 'left' => count($chosen) - count($placed)];
+    }
+
+    /** La promotion d'un produit : la première vignette (dans l'ordre du catalogue) qui le contient, hors `$taken`. */
+    private static function offerOf(array $chosen, array $order, int $productId, array $taken): int|string|null
+    {
+        foreach ($order as $key) {
+            if (!isset($taken[$key]) && isset($chosen[$key]['offer']) && in_array($productId, array_map('intval', $chosen[$key]['productIds'] ?? []), true)) {
+                return $key;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -1666,8 +1740,9 @@ final class CatalogueService
                     continue;
                 }
                 $page = $pages[$at];
-                $layout = self::LAYOUTS[$page['layout']] > 0 && !in_array($page['layout'], self::PRESENTATIONS, true) ? $page['layout'] : 'grille';
-                $page = ['layout' => $layout, 'category' => $category] + array_diff_key($page, ['layout' => true, 'category' => true, 'gamme' => true]);
+                // Une page vide reprise garde sa mise en page, sauf une présentation ou une pleine page (un seul produit).
+                $layout = self::LAYOUTS[$page['layout']] > 1 && !in_array($page['layout'], self::PRESENTATIONS, true) ? $page['layout'] : 'grille';
+                $page = ['layout' => $layout, 'category' => $category] + array_diff_key($page, ['layout' => true, 'category' => true, 'product' => true, 'gamme' => true]);
                 // Une catégorie qui continue : la page vient juste après les siennes.
                 $last = null;
                 foreach ($pages as $i => $other) {
@@ -2448,7 +2523,8 @@ final class CatalogueService
             foreach ($offer['knownProductIds'] as $pid) {
                 $gammes = array_merge($gammes, $known[$pid]['gammes'] ?? []);
             }
-            $vignette = ['id' => $out['id'], 'categoryId' => $offer['categoryId'], 'gammes' => array_values(array_unique($gammes)), 'offer' => array_diff_key($out, ['productIds' => true, 'categoryIds' => true, 'categoryId' => true, 'shopScope' => true])];
+            $vignette = ['id' => $out['id'], 'categoryId' => $offer['categoryId'], 'gammes' => array_values(array_unique($gammes)), 'productIds' => $offer['knownProductIds'],
+                'offer' => array_diff_key($out, ['productIds' => true, 'categoryIds' => true, 'categoryId' => true, 'shopScope' => true])];
             $at = count($chosen);
             foreach ($chosen as $i => $item) {
                 if ((int) ($item['categoryId'] ?? 0) === (int) $offer['categoryId']) {
@@ -2512,6 +2588,10 @@ final class CatalogueService
             }
             if ($items === []) {
                 $empty++;
+            }
+            if ($page['layout'] === 'pleine' && isset($page['product']) && (int) ($items[0]['id'] ?? 0) !== (int) $page['product']) {
+                $warnings[] = ['code' => 'PAGE_PRODUCT_MISSING', 'message' => sprintf('Page %d : le produit choisi pour la pleine page n’est pas dans %s — %s.', $no,
+                    $version !== null ? 'la version de ' . $version['name'] : 'ce catalogue', $items === [] ? 'la page reste vide' : 'le premier de sa catégorie est montré')];
             }
             $category = $page['category'] !== null ? ($categories[$page['category']] ?? null) : null;
             $title = $category !== null ? ($lang === 'nl' ? $category['nameNl'] : $category['name']) : ($visual !== null ? $visual['title'] : ($lang === 'nl' ? 'Onze selectie' : 'Notre sélection'));
@@ -2871,6 +2951,7 @@ final class CatalogueService
             'vedette' => $count <= 3,
             'liste'   => $count <= 9,
             'mosaique' => $count <= 2,
+            'pleine'  => $count === 0,
             default   => false,
         };
     }

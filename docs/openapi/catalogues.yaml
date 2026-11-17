@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Marketing — catalogues produits
-  version: 1.5.0
+  version: 1.8.0
   description: |
     Les catalogues produits du Marketing (prix du webshop, gammes) : un imprimé A5 (A4 en option)
     de **8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16). Quatre pages viennent de la Charte des catalogues de la
@@ -73,6 +73,13 @@ info:
     `brand` de l'avant-dernière porte `allergens`, ceux des produits du catalogue, dont elle imprime la légende ;
     alerte `PRODUCT_NO_WEIGHT` pour les produits sans poids. Le rendu (`CataloguePages.tsx`) imprime le poids et les
     pictogrammes sous le nom de chaque produit (vignette et liste).
+
+    v1.8 (17 novembre 2026, client : « une possibilité de produit pleine page, 1 seul produit et sa promotion par
+    exemple ») : `layout: pleine` (un produit) et `PageRow.product`, le produit que la page montre seul (seulement avec
+    `pleine`, sinon 422 `pages[i].product`). Ce produit est réservé à sa page, et sa promotion avec lui (la première
+    vignette `DocOffer` qui le contient) : au document, la page porte le produit puis cette offre, les autres pages ne
+    les prennent pas. Sans `product`, la pleine page prend le premier produit de sa catégorie. Un produit choisi absent
+    de la version : alerte `PAGE_PRODUCT_MISSING` (le premier de la catégorie est montré, sinon la page reste vide).
 
     v1.5 (15 novembre 2026, client : « les deux, garde les 3 gabarits, code-le » — assistant des pages de la
     marque, maquettes A1-A4 ; assistant du franchisé, maquettes B1-B4) :
@@ -888,7 +895,7 @@ components:
         meta: { type: object, properties: { requestId: { type: string } } }
     Status: { type: string, enum: [brouillon, pret, imprime] }
     PageCount: { type: integer, enum: [8, 10, 12, 14, 16], description: 'Pages du catalogue, toujours un nombre pair de 8 à 16 (« rajouter une page, c''est toujours par 2 »), dont 4 de la marque (1, 2, avant-dernière, dernière). Autre valeur : 422.' }
-    Layout: { type: string, enum: [vedette, grille, liste, mosaique, presentation, presentation_liste], description: 'vedette : 1 + 4 produits ; grille : 2 × 3 ; liste : 12 avec prix ; mosaique : grandes vignettes 2 × 2 (4 produits) ; presentation : la page d''une gamme (illustration, nom, texte), sans produit ; presentation_liste : la même avec les 8 premiers produits de la gamme et leurs prix.' }
+    Layout: { type: string, enum: [vedette, grille, liste, mosaique, pleine, presentation, presentation_liste], description: 'vedette : 1 + 4 produits ; grille : 2 × 3 ; liste : 12 avec prix ; mosaique : grandes vignettes 2 × 2 (4 produits) ; pleine : un seul produit sur la page, et sa promotion (v1.8) ; presentation : la page d''une gamme (illustration, nom, texte), sans produit ; presentation_liste : la même avec les 8 premiers produits de la gamme et leurs prix.' }
     Header: { type: string, enum: [titre, bandeau, grande], description: 'En-tête d''une page de produits et illustration de sa catégorie : titre (titre et petit pictogramme, le défaut) · bandeau (bandeau de la couleur principale, illustration en blanc) · grande (grande illustration en haut de page, puis le titre). Indépendant du gabarit.' }
     Template: { type: string, enum: [A, B, C], description: 'Variante de gabarit. Pages de produits : A classique (fond papier, titre centré), B bandeau (bandeau de la couleur principale), C épuré (fond blanc, titre à gauche). Présentations : A illustration, B pleine couleur, C photo pleine.' }
     DocFiller:
@@ -913,6 +920,7 @@ components:
       properties:
         layout: { $ref: '#/components/schemas/Layout' }
         category: { type: [integer, 'null'], description: 'Catégorie du webshop ; null : « Notre sélection » (les suivants, toutes catégories). Ignorée (rangée null) pour une présentation.' }
+        product: { type: [integer, 'null'], minimum: 1, description: 'v1.8 — Seulement avec `layout: pleine` : le produit du webshop que la page montre seul, réservé à elle avec sa promotion ; absent = le premier de sa catégorie. Ailleurs : 422.' }
         template: { $ref: '#/components/schemas/Template' }
         gamme: { type: [integer, 'null'], description: 'Gamme du webshop (active) : obligatoire pour une présentation ; sur une page de produits, seulement les produits de cette gamme.' }
         text: { type: string, maxLength: 400, description: 'Texte d''une présentation (ignoré ailleurs) ; vide = rien.' }
