@@ -4820,7 +4820,7 @@ $tfbCat = static function (string $url, array $entetes = [], int $delai = 5, str
     }
     if ($p === '/api/v1/public/shops') {
         return [200, (string) json_encode([
-            ['id' => 9104, 'representative_name' => 'Atelier by - Sombreffe', 'street' => 'Rue de la Gare', 'street_num' => '12', 'city' => 'Sombreffe', 'zip' => '5140', 'phone' => '071 00 00 00', 'opening_hours' => '07:00', 'closing_hours' => '18:30'],
+            ['id' => 9104, 'representative_name' => 'Atelier by - Sombreffe', 'street' => 'Rue de la Gare', 'street_num' => '12', 'city' => 'Sombreffe', 'zip' => '5140', 'phone' => '071 00 00 00', 'opening_hours' => '07:00', 'closing_hours' => '18:30', 'email' => 'sombreffe@atelier.test'],
             ['id' => 9105, 'representative_name' => 'Atelier by - Corbais', 'street' => 'Rue de Corbais', 'street_num' => '3', 'city' => 'Corbais', 'zip' => '1435', 'phone' => '010 00 00 00', 'opening_hours' => '07:30', 'closing_hours' => '19:00'],
         ])];
     }
@@ -4867,6 +4867,7 @@ $catRouter->get('/api/v1/marketing/catalogue-products', [$catBrand, 'products'])
 $catRouter->get('/api/v1/marketing/catalogue-charter', [$catBrand, 'charter']);
 $catRouter->put('/api/v1/marketing/catalogue-charter', [$catBrand, 'saveCharter']);
 $catRouter->get('/api/v1/marketing/catalogue-charter/checks', [$catBrand, 'charterChecks']);
+$catRouter->put('/api/v1/marketing/catalogue-shops/{id}', [$catBrand, 'saveShop']);
 $catRouter->get('/api/v1/marketing/catalogue-charter/publications', [$catBrand, 'charterVersions']);
 $catRouter->post('/api/v1/marketing/catalogue-charter/publications', [$catBrand, 'publishCharter']);
 $SB = '/api/v1/integration/marketing/shops/{shopId}';
@@ -5517,6 +5518,38 @@ check('présentation : deux gammes, répartition automatique — chaque gamme co
         ['layout' => 'grille', 'category' => 600, 'gamme' => 14],
         ['layout' => 'presentation', 'category' => null, 'gamme' => 16],
     ], json_encode([$gammes2['status'], $gammes2['body']['error'] ?? null, $g2['pages'] ?? null]));
+
+// La dernière page (17/11/2026, client : « rajouter mail, téléphone 2, QR code de l'adresse directe du webshop, un logo
+// différent par magasin ») : l'e-mail lu dans l'ERP ; second téléphone, webshop direct et logo saisis par boutique.
+$coordA = call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['phone2' => '0470 12 34 56', 'webshopUrl' => 'https://sombreffe.webshop.test/', 'logoMediaId' => $mediaTest['sombreffe']]);
+$docCoord = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idG2 . '/document', ['shopId' => (string) $catA]);
+$dosA = end($docCoord['body']['data']['pages']) ?: [];
+$docCoordB = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idG2 . '/document', ['shopId' => (string) $catB]);
+check('dernière page : e-mail de l’ERP, second téléphone, QR du webshop direct de la boutique et son logo (à la place de celui de la charte) ; la voisine garde les siens',
+    $coordA['status'] === 200 && ($coordA['body']['data']['phone2'] ?? '') === '0470 12 34 56' && ($coordA['body']['data']['email'] ?? '') === 'sombreffe@atelier.test'
+        && ($coordA['body']['data']['qrUrl'] ?? '') === 'https://sombreffe.webshop.test/' && ($coordA['body']['data']['logoMediaId'] ?? 0) === $mediaTest['sombreffe'] && ($coordA['body']['data']['logoUrl'] ?? '') !== ''
+        && ($dosA['shop']['email'] ?? '') === 'sombreffe@atelier.test' && ($dosA['shop']['phone2'] ?? '') === '0470 12 34 56'
+        && ($dosA['qrUrl'] ?? '') === 'https://sombreffe.webshop.test/' && ($dosA['host'] ?? '') === 'sombreffe.webshop.test'
+        && ($docCoord['body']['data']['charter']['logoUrl'] ?? '') === ($coordA['body']['data']['logoUrl'] ?? 'x')
+        && (end($docCoordB['body']['data']['pages'])['qrUrl'] ?? '') === 'https://webshop.test/?shop=9105' && (end($docCoordB['body']['data']['pages'])['shop']['phone2'] ?? 'x') === ''
+        && ($docCoordB['body']['data']['charter']['logoUrl'] ?? 'x') !== ($coordA['body']['data']['logoUrl'] ?? ''),
+    json_encode([$coordA['body'], $dosA, $docCoord['body']['data']['charter'] ?? null], JSON_UNESCAPED_UNICODE));
+$refusCoord = [
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['phone2' => 'appelez-nous']),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['webshopUrl' => 'ftp://webshop.test']),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['logoMediaId' => $mediaTest['corbais']]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['logoMediaId' => $mediaTest['archivee']]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['fax' => '1']),
+];
+$inconnue = call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/999999999', [], ['phone2' => '1']);
+// Effacées (chaînes vides, logo null) : la boutique revient au webshop du réseau et au logo de la charte — la recette repasse.
+$effaceA = call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['phone2' => '', 'webshopUrl' => '', 'logoMediaId' => null]);
+check('dernière page : refusés (422, champ nommé) — téléphone en lettres, adresse non http, logo d’une autre boutique, archivé, champ inconnu ; boutique inconnue (404) ; effacées, la boutique revient au réseau',
+    array_map(static fn (array $r): int => $r['status'], $refusCoord) === [422, 422, 422, 422, 422]
+        && array_map(static fn (array $r): string => (string) ($r['body']['error']['details'][0]['field'] ?? ''), $refusCoord) === ['phone2', 'webshopUrl', 'logoMediaId', 'logoMediaId', 'fax']
+        && $inconnue['status'] === 404 && $effaceA['status'] === 200 && ($effaceA['body']['data']['qrUrl'] ?? '') === 'https://webshop.test/?shop=9104'
+        && ($effaceA['body']['data']['phone2'] ?? 'x') === '' && array_key_exists('logoMediaId', $effaceA['body']['data'] ?? []) && $effaceA['body']['data']['logoMediaId'] === null,
+    json_encode([array_map(static fn (array $r): mixed => $r['body'], $refusCoord), $effaceA['body']], JSON_UNESCAPED_UNICODE));
 $docG2 = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idG2 . '/document');
 $pg2 = $docG2['body']['data']['pages'] ?? [];
 check('présentation : le document — la page de la gamme porte son nom (charte), sa photo ou son dessin de saison ; ses pages de produits rappellent son dessin',

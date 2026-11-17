@@ -987,7 +987,8 @@ police ajoutée. `familyDrawingUrl` : le dessin de la famille du titre (vignette
 | GET / PUT / DELETE | `/api/v1/marketing/catalogues/{id}` | lecture, remplacement des champs présents (`pages: []` = répartition automatique), suppression `204` puis `404` |
 | GET | `/api/v1/marketing/catalogues/{id}/document?shopId=&lang=` | la version mise en pages (couverture, pages, dernière page, alertes) |
 | GET | `/api/v1/marketing/catalogue-products?shopIds=` | le webshop des boutiques : par produit, le prix de chacune, le prix le plus répandu et les boutiques qui en ont un autre |
-| GET / PUT | `/api/v1/marketing/catalogue-charter` | la Charte des catalogues |
+| GET / PUT | `/api/v1/marketing/catalogue-charter` | la Charte des catalogues (v1.9 : police et couleur du titre et du sous-titre de chaque couverture) |
+| PUT | `/api/v1/marketing/catalogue-shops/{id}` | v1.9 (17/11/2026) — ce qu'une boutique imprime en plus à la dernière page et que l'ERP ne porte pas : second téléphone, webshop direct (le QR), logo (médiathèque) ; `mar_catalogue_shop_contact`. L'e-mail est lu dans l'ERP. Marque seule ; 404 boutique inconnue, 422 nommé |
 
 **Routes du dashboard magasin** (cockpit, portail Pilotage réseau — à brancher dans un second
 temps, dépôt consultant_BO) : `/api/v1/integration/marketing/shops/{shopId}/…`, `shopId` =

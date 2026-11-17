@@ -3045,6 +3045,10 @@ export interface CatalogueShopInfo {
   address: string
   hours: string
   phone: string
+  /** L'e-mail de la boutique (fiche publique de l'ERP) ; vide : rien n'est imprimé. */
+  email?: string
+  /** Le second téléphone saisi dans la charte ; vide : rien n'est imprimé. */
+  phone2?: string
 }
 
 export interface CatalogueDocProduct {
@@ -3255,6 +3259,13 @@ export interface CatalogueCharterShop {
   hours: string
   hoursNl: string
   phone: string
+  /** L'e-mail de la fiche publique de l'ERP. */
+  email: string
+  /** Saisis ici, par boutique (17/11/2026) : second téléphone, adresse directe de son webshop (le QR), logo. */
+  phone2: string
+  webshopUrl: string
+  logoMediaId: number | null
+  logoUrl: string | null
   qrUrl: string | null
   host: string | null
   /** Ce que TFBuddy ne donne pas : address, hours, phone ; qr (adresse du webshop inconnue). */
@@ -3334,6 +3345,11 @@ export async function saveCatalogueCharter(charter: Omit<CatalogueCharter, 'logo
 }
 
 /** « Avant de publier », les boutiques (ce que la dernière page imprime pour chacune), les catalogues concernés. */
+/** Ce qu'une boutique imprime en plus à la dernière page : second téléphone, webshop direct (QR), logo ; rend la boutique. */
+export async function saveCatalogueShop(id: number, patch: { phone2?: string; webshopUrl?: string; logoMediaId?: number | null }): Promise<CatalogueCharterShop> {
+  return (await request<Envelope<CatalogueCharterShop>>(`${BASE}/catalogue-shops/${id}`, { method: 'PUT', body: patch })).data
+}
+
 export async function getCatalogueCharterChecks(): Promise<CatalogueCharterChecks> {
   return (await request<Envelope<CatalogueCharterChecks>>(`${BASE}/catalogue-charter/checks`)).data
 }

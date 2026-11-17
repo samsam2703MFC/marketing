@@ -86,6 +86,11 @@ info:
     (police : vank · gotham · playwrite ; couleur par son nom : rubis · abricot · or · creme · encre · blanc ; null :
     celles du gabarit ; autre valeur : 422 `covers[i].…`). Au document, la page `cover` les porte (la couleur en
     #RRGGBB).
+    Même jour (client : « rajouter mail, téléphone 2, QR code de l'adresse directe du webshop, un logo différent par
+    magasin ») : la dernière page imprime l'e-mail de la boutique (fiche publique de l'ERP, `DocShop.email`) et ce que
+    l'ERP ne porte pas, saisi par boutique (`PUT …/catalogue-shops/{id}` `{phone2, webshopUrl, logoMediaId}`, table
+    `mar_catalogue_shop_contact`) : `DocShop.phone2` ; le QR mène au webshop direct de la boutique quand il est saisi
+    (sinon celui du réseau, `?shop=`) ; son logo remplace celui de la charte dans ses catalogues (`charter.logoUrl`).
 
     v1.5 (15 novembre 2026, client : « les deux, garde les 3 gabarits, code-le » — assistant des pages de la
     marque, maquettes A1-A4 ; assistant du franchisé, maquettes B1-B4) :
@@ -272,6 +277,33 @@ paths:
         '200': { $ref: '#/components/responses/Generic' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/marketing/catalogue-shops/{id}:
+    put:
+      tags: [Catalogues (marque)]
+      summary: v1.9 — Ce qu'une boutique imprime en plus à la dernière page (second téléphone, webshop direct, logo)
+      description: |
+        L'ERP ne porte ni second téléphone, ni adresse directe du webshop de la boutique, ni logo à elle : ils se
+        saisissent ici, par boutique (`mar_shop.id`). Un champ absent garde sa valeur ; « » (ou `null` pour le logo)
+        l'efface. Réponse : la boutique telle que `…/catalogue-charter/checks` la rend (`shops[]`).
+      security: [{ session: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                phone2: { type: string, maxLength: 40, pattern: '^[0-9+().\/ -]*$' }
+                webshopUrl: { type: string, maxLength: 300, description: 'http:// ou https:// ; « » : le webshop du réseau.' }
+                logoMediaId: { type: [integer, 'null'], description: 'Une image de la médiathèque, du réseau ou de cette boutique, pas archivée ; null : le logo de la charte.' }
+      responses:
+        '200': { $ref: '#/components/responses/Generic' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
         '422': { $ref: '#/components/responses/Error' }
 
   /api/v1/marketing/catalogue-charter/publications:
@@ -1189,7 +1221,7 @@ components:
               message: { type: string }
     DocShop:
       type: [object, 'null']
-      properties: { id: { type: integer }, erpShopId: { type: [integer, 'null'] }, name: { type: string }, address: { type: string }, hours: { type: string }, phone: { type: string } }
+      properties: { id: { type: integer }, erpShopId: { type: [integer, 'null'] }, name: { type: string }, address: { type: string }, hours: { type: string }, phone: { type: string }, email: { type: string, description: 'v1.9 — fiche publique de l''ERP ; vide : rien.' }, phone2: { type: string, description: 'v1.9 — saisi dans la charte ; vide : rien.' } }
     Colors:
       type: object
       properties: { primary: { type: string }, secondary: { type: string }, accent: { type: string }, ink: { type: string } }

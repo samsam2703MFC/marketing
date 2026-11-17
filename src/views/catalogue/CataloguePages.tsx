@@ -571,7 +571,9 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
   const lang = doc.version.lang
   const shop = page.shop
   const logo = doc.charter.logoUrl ?? asset('img/logo.png')
-  const lines = shop ? [shop.address, shop.hours ? (lang === 'nl' ? `Open ${shop.hours}` : `Ouvert ${shop.hours}`) : '', shop.phone].filter(Boolean) : []
+  // Les coordonnées : adresse, horaires, téléphone(s), e-mail (17/11/2026 : « rajouter mail, téléphone 2 »).
+  const phones = shop ? [shop.phone, shop.phone2 ?? ''].filter(Boolean).join(' · ') : ''
+  const lines = shop ? [shop.address, shop.hours ? (lang === 'nl' ? `Open ${shop.hours}` : `Ouvert ${shop.hours}`) : '', phones, shop.email ?? ''].filter(Boolean) : []
   if (page.template === 'B') {
     // Boutique en avant (maquette A3, gabarit B) : l'adresse et les horaires en grand, le QR plus petit en bas.
     return (

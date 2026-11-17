@@ -173,3 +173,10 @@
 .cha-swatch { width: 24px; height: 24px; border-radius: 50%; border: 1px solid rgba(28, 26, 23, 0.18); padding: 0; cursor: pointer; }
 .cha-swatch.is-on { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent); }
 .cha-swatch--auto { background: #fff; font-size: 11px; color: var(--muted); }
+
+/* Ce que chaque boutique imprime en plus à la dernière page (17/11/2026) */
+.cha-shopin { width: 100%; font: inherit; font-size: 12.5px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
+.cha-shopin:focus { outline: none; border-color: var(--accent); }
+.cha-shoplogo { display: inline-flex; align-items: center; gap: 10px; }
+.cha-shoplogo img { height: 28px; max-width: 110px; object-fit: contain; }
+.cha-dot--off { background: var(--chip); }
