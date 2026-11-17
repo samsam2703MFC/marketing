@@ -3066,7 +3066,17 @@ final class CatalogueService
     {
         $base = rtrim((string) (Config::get('MAR_PUBLIC_BASE_URL') ?? ''), '/');
         if ($base === '') {
-            $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
+            // Appelé par un autre module du serveur (le dashboard, à 127.0.0.1), le Marketing ne voit pas l'adresse que le
+            // navigateur joint : le module la passe en X-Forwarded-Host (17/11/2026 : le PDF s'ouvrait sur 127.0.0.1), la règle
+            // de MediaService::publicUrl.
+            $host = '';
+            foreach ([$_SERVER['HTTP_X_FORWARDED_HOST'] ?? '', $_SERVER['HTTP_HOST'] ?? ''] as $candidat) {
+                $candidat = trim(explode(',', (string) $candidat)[0]);
+                if (preg_match('/^[A-Za-z0-9.-]+(:\d+)?$/', $candidat) === 1) {
+                    $host = $candidat;
+                    break;
+                }
+            }
             $base = $host !== '' ? ((($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off') ? 'https://' : 'http://') . $host . '/marketing' : '/marketing';
         }
 

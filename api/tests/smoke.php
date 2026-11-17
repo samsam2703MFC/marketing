@@ -4832,6 +4832,21 @@ check('catalogues : les allergènes de la recette, en codes de l’annexe II, sa
     \Marketing\Support\Allergens::fromText('Céréales contenant du gluten, Œufs, Lait') === ['gluten', 'oeufs', 'lait']
     && \Marketing\Support\Allergens::fromText('Anhydride sulfureux et sulfites, Fruits à coque, Graines de sésame, Peut contenir des traces d’arachides') === ['fruits_coque', 'sesame', 'sulfites']
     && \Marketing\Support\Allergens::fromText('') === [] && \Marketing\Support\Allergens::fromText('Noix de coco') === []);
+check('lien public du catalogue (PDF, Diffuser) : l’hôte que le dashboard passe (X-Forwarded-Host), pas 127.0.0.1 ; sinon l’hôte de la requête ; un hôte illisible ignoré',
+    (static function (): bool {
+        $avant = [$_SERVER['HTTP_HOST'] ?? null, $_SERVER['HTTP_X_FORWARDED_HOST'] ?? null];
+        $_SERVER['HTTP_HOST'] = '127.0.0.1';
+        $_SERVER['HTTP_X_FORWARDED_HOST'] = '185.180.206.46';
+        $a = \Marketing\Service\CatalogueService::publicPage('t', 'abc');
+        $_SERVER['HTTP_X_FORWARDED_HOST'] = 'x/<y>';
+        $c = \Marketing\Service\CatalogueService::publicPage('l', 'abc');
+        unset($_SERVER['HTTP_X_FORWARDED_HOST']);
+        $b = \Marketing\Service\CatalogueService::publicPage('t', 'abc');
+        [$h, $f] = $avant;
+        if ($h === null) { unset($_SERVER['HTTP_HOST']); } else { $_SERVER['HTTP_HOST'] = $h; }
+        if ($f !== null) { $_SERVER['HTTP_X_FORWARDED_HOST'] = $f; }
+        return $a === 'http://185.180.206.46/marketing/catalogue/?t=abc' && $b === 'http://127.0.0.1/marketing/catalogue/?t=abc' && $c === 'http://127.0.0.1/marketing/catalogue/?l=abc';
+    })());
 check('catalogues : le poids d’une pièce, celui de l’ERP sinon celui du nom',
     \Marketing\Support\Allergens::weightGrams(85, 'Croissant') === 85 && \Marketing\Support\Allergens::weightGrams(0, 'Cougnou Nature - 400 g.') === 400
     && \Marketing\Support\Allergens::weightGrams(null, 'Baguette 1 kg') === 1000 && \Marketing\Support\Allergens::weightGrams(0, 'Tarte Ø 28 cm') === null);
