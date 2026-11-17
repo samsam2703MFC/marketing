@@ -366,3 +366,21 @@
 .cat-allegend__item { display: flex; align-items: center; gap: calc(var(--u) * 2mm); font-size: calc(var(--u) * 3.3mm); color: var(--i); }
 .cat-allegend__item .cat-al { width: calc(var(--u) * 5mm); height: calc(var(--u) * 5mm); }
 .cat-allegend__note { margin: calc(var(--u) * 3mm) 0 0; font-size: calc(var(--u) * 2.8mm); line-height: 1.4; color: var(--i); opacity: 0.75; }
+
+/* ---------- pleine page : un seul produit et sa promotion (17/11/2026) ---------- */
+.cat-full { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; gap: calc(var(--u) * 4mm); }
+.cat-full__visual { position: relative; flex: 1 1 0; min-height: 0; display: flex; }
+.cat-full__visual .cat-photo { flex: 1 1 0; min-height: 0; width: 100%; height: 100%; border-radius: calc(var(--u) * 3mm); }
+.cat-full__visual .cat-photo--img { background: #fff; }
+.cat-full__visual .cat-photo--img img { object-fit: contain; }
+.cat-full__badge { position: absolute; top: calc(var(--u) * 3.4mm); left: calc(var(--u) * 3.4mm); z-index: 1; font-size: calc(var(--u) * 5mm); padding: calc(var(--u) * 1.6mm) calc(var(--u) * 3.4mm); }
+.cat-full__text { flex: 0 0 auto; display: grid; gap: calc(var(--u) * 1.8mm); justify-items: center; text-align: center; }
+.cat-full__name { font-size: calc(var(--u) * 9mm); line-height: 1; }
+.cat-full .cat-facts { font-size: calc(var(--u) * 3.6mm); gap: calc(var(--u) * 2mm); }
+.cat-full .cat-al { width: calc(var(--u) * 4.6mm); height: calc(var(--u) * 4.6mm); }
+.cat-full .cat-price { font-size: calc(var(--u) * 10mm); }
+.cat-full .cat-old { font-size: calc(var(--u) * 6mm); }
+.cat-full .cat-avail { font-size: calc(var(--u) * 3.4mm); }
+.cat-full__offer { flex: 0 0 auto; display: grid; gap: calc(var(--u) * 1.6mm); }
+.cat-full__also { font-weight: 500; font-size: calc(var(--u) * 3mm); letter-spacing: 0.16em; text-transform: uppercase; color: var(--p); }
+.cat-t-C .cat-full__text { text-align: left; justify-items: start; }

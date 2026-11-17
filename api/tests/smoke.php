@@ -5141,7 +5141,7 @@ $siens = call($catRouter, 'GET', $SA . '/catalogue-products');
 $sp = array_column($siens['body']['data']['products'] ?? [], null, 'id');
 check('boutique : ses produits seulement, au prix de SON webshop (et son prix au comptoir à côté)', $siens['status'] === 200 && array_keys($sp) === [12, 11, 13]
     && ($sp[12]['priceCents'] ?? 0) === 2990 && ($sp[12]['shopPriceCents'] ?? 0) === 3150 && !isset($sp[12]['prices'])
-    && ($siens['body']['data']['layouts'] ?? []) === ['vedette', 'grille', 'liste', 'mosaique', 'presentation', 'presentation_liste'] && ($siens['body']['data']['pageCounts'] ?? []) === [8, 10, 12, 14, 16]
+    && ($siens['body']['data']['layouts'] ?? []) === ['vedette', 'grille', 'liste', 'mosaique', 'pleine', 'presentation', 'presentation_liste'] && ($siens['body']['data']['pageCounts'] ?? []) === [8, 10, 12, 14, 16]
     && ($siens['body']['data']['templates'] ?? []) === ['A', 'B', 'C'] && ($siens['body']['data']['headers'] ?? []) === ['titre', 'bandeau', 'grande'] && ($siens['body']['data']['fillers'] ?? []) === ['photo', 'illustration'], json_encode($siens['body']));
 $refusB = [
     call($catRouter, 'POST', $SA . '/catalogues', [], ['title' => 'Mes bûches', 'source' => ['kind' => 'choix'], 'products' => [['id' => 11, 'on' => true], ['id' => 14, 'on' => true]]]),
@@ -5984,6 +5984,42 @@ check('disponibilité en pied de page : tous la même · regroupée · trop long
         && \Marketing\Service\CatalogueService::availabilityFooter([['kind' => 'offer', 'offer' => [], 'availability' => 'x']], 'fr') === null,
     '');
 check('promotions : aucune alerte quand TFBuddy répond', !in_array('PROMOTIONS_UNREADABLE', array_column($docPromo['body']['data']['warnings'] ?? [], 'code'), true));
+
+// Pleine page (17/11/2026, client : « une possibilité de produit pleine page, 1 seul produit et sa promotion par exemple »).
+$crePleine = call($promoRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Noël — pleine page', 'source' => ['kind' => 'gamme', 'ref' => 14], 'shopIds' => [$catA, $catB], 'langs' => ['fr', 'nl']]);
+$idPleine = (int) ($crePleine['body']['data']['id'] ?? 0);
+$pagesPleine = [['layout' => 'grille', 'category' => 500], ['layout' => 'pleine', 'category' => 500, 'product' => 11], ['layout' => 'grille', 'category' => 600], ['layout' => 'grille', 'category' => null]];
+$majPleine = call($promoRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPleine, [], ['pages' => $pagesPleine]);
+$docPleine = call($promoRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPleine . '/document');
+$pPl = $docPleine['body']['data']['pages'] ?? [];
+$seul = $pPl[3]['products'][0] ?? [];
+check('pleine page : rangée {layout, category, product} ; le produit choisi seul sur sa page, prix barré par sa remise, et sa promotion (le bundle qui le contient) avec lui',
+    $majPleine['status'] === 200 && ($majPleine['body']['data']['pages'] ?? null) === $pagesPleine
+        && ($pPl[3]['layout'] ?? '') === 'pleine' && array_column($pPl[3]['products'] ?? [], 'id') === [11, 'bundle-1']
+        && ($seul['oldPriceCents'] ?? null) === 3290 && ($seul['priceCents'] ?? null) === 2961 && ($seul['promo']['label'] ?? '') === '−10 %'
+        && ($pPl[3]['room'] ?? null) === 0 && ($pPl[3]['fillable'] ?? null) === false,
+    json_encode([$majPleine['body'], $pPl[3] ?? null], JSON_UNESCAPED_UNICODE));
+check('pleine page : son produit et sa promotion réservés — la page d’avant, de la même catégorie, ne les prend pas',
+    array_column($pPl[2]['products'] ?? [], 'id') === [12] && !in_array('PAGE_PRODUCT_MISSING', array_column($docPleine['body']['data']['warnings'] ?? [], 'code'), true),
+    json_encode([$pPl[2] ?? null, $docPleine['body']['data']['warnings'] ?? null], JSON_UNESCAPED_UNICODE));
+$majPleine2 = call($promoRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPleine, [], ['pages' => [['layout' => 'pleine', 'category' => 500, 'product' => 12], ['layout' => 'grille', 'category' => 500], ['layout' => 'grille', 'category' => 600], ['layout' => 'grille', 'category' => null]]]);
+$docPleineB = call($promoRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPleine . '/document', ['shopId' => (string) $catB]);
+$pPlB = $docPleineB['body']['data']['pages'] ?? [];
+check('pleine page : le produit choisi que la boutique ne vend pas — le premier de la catégorie, et l’alerte PAGE_PRODUCT_MISSING',
+    $majPleine2['status'] === 200 && array_column($pPlB[2]['products'] ?? [], 'id') === [11] && ($pPlB[3]['products'] ?? null) === []
+        && in_array('PAGE_PRODUCT_MISSING', array_column($docPleineB['body']['data']['warnings'] ?? [], 'code'), true),
+    json_encode([$pPlB[2] ?? null, $docPleineB['body']['data']['warnings'] ?? null], JSON_UNESCAPED_UNICODE));
+$refusPleine = [
+    call($promoRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPleine, [], ['pages' => [['layout' => 'grille', 'category' => 500, 'product' => 11]]]),
+    call($promoRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPleine, [], ['pages' => [['layout' => 'pleine', 'category' => 500, 'product' => 'onze']]]),
+    call($promoRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPleine, [], ['pages' => [['layout' => 'pleine', 'category' => 500, 'product' => 0]]]),
+];
+check('pleine page : refusés (422, champ nommé) — un produit sur une autre mise en page, un produit illisible ; rien n’est écrit',
+    array_map(static fn (array $r): int => $r['status'], $refusPleine) === [422, 422, 422]
+        && array_map(static fn (array $r): string => (string) ($r['body']['error']['details'][0]['field'] ?? ''), $refusPleine) === ['pages[0].product', 'pages[0].product', 'pages[0].product']
+        && (call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPleine)['body']['data']['pages'][0]['product'] ?? null) === 12,
+    json_encode(array_map(static fn (array $r): mixed => $r['body'], $refusPleine), JSON_UNESCAPED_UNICODE));
+call($catRouter, 'DELETE', '/api/v1/marketing/catalogues/' . $idPleine);
 
 $docPromoB = call($promoRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPromo . '/document', ['shopId' => (string) $catB, 'lang' => 'nl']);
 $pPB = $docPromoB['body']['data']['pages'] ?? [];

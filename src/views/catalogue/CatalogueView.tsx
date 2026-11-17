@@ -506,7 +506,7 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
     setSelected(to)
   }
   function setAllLayouts(layout: CatalogueLayout) {
-    change({ pages: innerPages.map((page) => (isPresentation(page.layout) ? page : { ...page, layout })) })
+    change({ pages: innerPages.map((page) => (isPresentation(page.layout) ? page : { ...page, layout, product: layout === 'pleine' ? page.product : undefined })) })
   }
   /** L'en-tête de toutes les pages de produits (les présentations ont le leur). */
   function setAllHeaders(header: api.CatalogueHeader) {
@@ -535,7 +535,8 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
       if (gamme === null) return
       setPage(index, { layout, gamme, category: null, filler: null, fillerMediaId: null })
     } else {
-      setPage(index, { layout, text: undefined, textNl: undefined })
+      // Le produit choisi n'a de sens que pour une pleine page (le serveur le refuse ailleurs).
+      setPage(index, { layout, text: undefined, textNl: undefined, product: layout === 'pleine' ? page.product : undefined })
     }
   }
   const [fillerPicking, setFillerPicking] = useState(false)
@@ -990,6 +991,23 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
                 </select>
               </label>
             ) : null}
+            {selectedPage && selectedPage.layout === 'pleine' ? (
+              <label className="catv-field">
+                <span title="Le produit seul sur la page, avec sa promotion quand il en a une">Produit de la pleine page</span>
+                <select value={selectedPage.product ?? ''} onChange={(event) => setPage(selected as number, { product: event.target.value ? Number(event.target.value) : null })}>
+                  <option value="">Le premier de la catégorie</option>
+                  {cat.products
+                    .filter((row) => row.on)
+                    .map((row) => byId.get(row.id))
+                    .filter((product): product is api.WebshopProduct => !!product && (selectedPage.category === null || product.categoryId === selectedPage.category))
+                    .map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {lang === 'nl' ? product.nameNl : product.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            ) : null}
             {selectedPage && isPresentation(selectedPage.layout) ? (
               <PresentationTexts key={`${selected}-${selectedPage.gamme}`} page={selectedPage} langs={cat.langs} onSave={(patch) => setPage(selected as number, patch)} />
             ) : null}
@@ -1393,6 +1411,8 @@ function LayoutIcon({ layout }: { layout: CatalogueLayout }) {
         ? [[2, 2, 17, 15], [21, 2, 17, 15], [2, 19, 17, 15], [21, 19, 17, 15], [2, 36, 17, 14], [21, 36, 17, 14]]
         : layout === 'mosaique'
           ? [[2, 2, 17, 23], [21, 2, 17, 23], [2, 27, 17, 23], [21, 27, 17, 23]]
+        : layout === 'pleine'
+          ? [[2, 2, 36, 34], [2, 39, 36, 11]]
         : [[2, 3, 36, 7], [2, 13, 36, 7], [2, 23, 36, 7], [2, 33, 36, 7], [2, 43, 36, 6]]
   return (
     <svg width="40" height="52" viewBox="0 0 40 52" aria-hidden="true">

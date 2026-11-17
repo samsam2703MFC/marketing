@@ -48,6 +48,7 @@ export const LAYOUT_LABELS: Record<CatalogueLayout, { label: string; capacity: n
   grille: { label: 'Grille 2 × 3', capacity: 6 },
   liste: { label: 'Liste avec prix', capacity: 12 },
   mosaique: { label: 'Grandes vignettes 2 × 2', capacity: 4 },
+  pleine: { label: 'Pleine page', capacity: 1 },
   presentation: { label: 'Présentation seule', capacity: 0 },
   presentation_liste: { label: 'Présentation + liste', capacity: 8 },
 }
@@ -440,6 +441,8 @@ function Products({ page, lang }: { page: Extract<CatalogueDocPage, { kind: 'pro
               {filler && rows > 0 ? <Filler filler={filler} style={span} /> : null}
             </div>
           </>
+        ) : page.layout === 'pleine' ? (
+          <FullPage items={page.products} lang={lang} family={famOf(page)} />
         ) : page.layout === 'mosaique' ? (
           <div className="cat-grid cat-grid--2x2 cat-grid--mosaique">
             {page.products.map((product) => (
@@ -457,6 +460,37 @@ function Products({ page, lang }: { page: Extract<CatalogueDocPage, { kind: 'pro
         )}
       </div>
       <AvailabilityFooter text={page.availabilityFooter} />
+    </div>
+  )
+}
+
+/**
+ * Pleine page (client, 17/11/2026 : « une possibilité de produit pleine page, 1 seul produit et sa promotion par
+ * exemple ») : le produit en grand — photo, nom, poids et allergènes, prix (barré par sa remise, son badge et sa
+ * période) — et, dessous, la promotion qui le contient (bundle, « 2+1 ») que l'API a placée avec lui.
+ */
+function FullPage({ items, lang, family }: { items: CatalogueDocItem[]; lang: CatalogueLang; family: Fam }) {
+  const product = items.find((item): item is CatalogueDocProduct => !isDocOffer(item)) ?? null
+  const offers = items.filter(isDocOffer)
+  if (!product) return <>{offers.map((offer) => <OfferCard key={offer.id} offer={offer} lang={lang} family={family} big />)}</>
+  return (
+    <div className={`cat-full${product.oldPriceCents != null ? ' cat-full--promo' : ''}`}>
+      <div className="cat-full__visual">
+        {product.promo ? <span className="cat-offer__badge cat-full__badge">{product.promo.label}</span> : null}
+        <Photo product={product} family={family} className="cat-full__photo" />
+      </div>
+      <div className="cat-full__text">
+        <div className="cat-name cat-full__name">{product.name}</div>
+        <Facts product={product} lang={lang} />
+        <Price product={product} lang={lang} />
+        {product.promo?.period ? <span className="cat-avail">{product.promo.period}</span> : null}
+      </div>
+      {offers.map((offer) => (
+        <div className="cat-full__offer" key={offer.id}>
+          <div className="cat-full__also">{lang === 'nl' ? 'Ook in promotie' : 'Aussi en promotion'}</div>
+          <OfferCard offer={offer} lang={lang} family={family} row />
+        </div>
+      ))}
     </div>
   )
 }
