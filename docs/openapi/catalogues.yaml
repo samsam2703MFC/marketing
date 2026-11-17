@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Marketing — catalogues produits
-  version: 1.8.0
+  version: 1.9.0
   description: |
     Les catalogues produits du Marketing (prix du webshop, gammes) : un imprimé A5 (A4 en option)
     de **8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16). Quatre pages viennent de la Charte des catalogues de la
@@ -80,6 +80,12 @@ info:
     vignette `DocOffer` qui le contient) : au document, la page porte le produit puis cette offre, les autres pages ne
     les prennent pas. Sans `product`, la pleine page prend le premier produit de sa catégorie. Un produit choisi absent
     de la version : alerte `PAGE_PRODUCT_MISSING` (le premier de la catégorie est montré, sinon la page reste vide).
+
+    v1.9 (17 novembre 2026, client : « éditer en fonction du design system la typo — Gotham, Vank, Deva — et la couleur
+    — abricot, rubis… ») : une couverture de la charte porte `titleFont`, `titleColor`, `subtitleFont`, `subtitleColor`
+    (police : vank · gotham · playwrite ; couleur par son nom : rubis · abricot · or · creme · encre · blanc ; null :
+    celles du gabarit ; autre valeur : 422 `covers[i].…`). Au document, la page `cover` les porte (la couleur en
+    #RRGGBB).
 
     v1.5 (15 novembre 2026, client : « les deux, garde les 3 gabarits, code-le » — assistant des pages de la
     marque, maquettes A1-A4 ; assistant du franchisé, maquettes B1-B4) :
@@ -1130,7 +1136,7 @@ components:
             oneOf:
               - type: object
                 description: Couverture (charte, verrouillée).
-                properties: { kind: { const: cover }, locked: { const: true }, title: { type: string }, subtitle: { type: string }, eyebrow: { type: [string, 'null'] }, imageUrl: { type: [string, 'null'] } }
+                properties: { kind: { const: cover }, locked: { const: true }, title: { type: string }, subtitle: { type: string }, eyebrow: { type: [string, 'null'] }, imageUrl: { type: [string, 'null'] }, titleFont: { $ref: '#/components/schemas/CoverFont' }, titleColor: { type: [string, 'null'], description: 'v1.9 — #RRGGBB ; null : celle du gabarit.' }, subtitleFont: { $ref: '#/components/schemas/CoverFont' }, subtitleColor: { type: [string, 'null'] } }
               - type: object
                 description: Page 2 (`slot` page2) ou avant-dernière page (`slot` penultimate) — charte, verrouillées.
                 properties: { kind: { const: brand }, locked: { const: true }, slot: { type: string, enum: [page2, penultimate] }, title: { type: string }, text: { type: string, description: Paragraphes séparés par une ligne vide ; lignes par un saut de ligne. }, imageUrl: { type: [string, 'null'] }, allergens: { type: array, items: { $ref: '#/components/schemas/Allergen' }, description: "v1.7 — avant-dernière page : les allergènes des produits du catalogue, dont elle imprime la légende." } }
@@ -1198,6 +1204,12 @@ components:
         subtitleFr: { type: string, maxLength: 240 }
         subtitleNl: { type: string, maxLength: 240 }
         mediaId: { type: [integer, 'null'], description: Visuel de la médiathèque. }
+        titleFont: { $ref: '#/components/schemas/CoverFont' }
+        titleColor: { $ref: '#/components/schemas/CoverColor' }
+        subtitleFont: { $ref: '#/components/schemas/CoverFont' }
+        subtitleColor: { $ref: '#/components/schemas/CoverColor' }
+    CoverFont: { type: [string, 'null'], enum: [vank, gotham, playwrite, null], description: 'v1.9 — Police de la marque (Vank titres, Gotham texte, Playwrite DEVA manuscrite) ; null : celle du gabarit.' }
+    CoverColor: { type: [string, 'null'], enum: [rubis, abricot, or, creme, encre, blanc, null], description: 'v1.9 — Couleur de la marque par son nom (rubis #8D1D2C, abricot #F2C9A0, or #B0792A, creme #F5EFE4, encre #241C1A, blanc #FFFFFF) ; null : celle du gabarit.' }
     CharterWrite:
       type: object
       additionalProperties: false

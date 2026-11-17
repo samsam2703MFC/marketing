@@ -163,3 +163,13 @@
 .cha .linklike.cha-link { display: inline; padding: 0; border: 0; background: none; font: inherit; color: var(--accent); text-decoration: none; cursor: pointer; }
 .cha-check .linklike, .cha-note .linklike, .cha-recap figcaption .linklike { display: inline; min-height: 0; height: auto; line-height: inherit; vertical-align: baseline; padding: 0; border: 0; background: none; font: inherit; color: var(--accent); text-decoration: none; }
 .cha-note--inline { margin: 0; font-size: 13px; }
+
+/* La police et la couleur des textes de la couverture (17/11/2026) */
+.cha-styles { display: grid; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.cha-style { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cha-style__l { width: 74px; font-size: 12.5px; color: var(--muted-2); }
+.cha-style__fonts button { font-size: 13px; }
+.cha-swatches { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.cha-swatch { width: 24px; height: 24px; border-radius: 50%; border: 1px solid rgba(28, 26, 23, 0.18); padding: 0; cursor: pointer; }
+.cha-swatch.is-on { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent); }
+.cha-swatch--auto { background: #fff; font-size: 11px; color: var(--muted); }

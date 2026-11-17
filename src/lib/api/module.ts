@@ -3087,6 +3087,11 @@ export type CatalogueDocPage =
       drawingUrl?: string | null
       /** « Sans visuel » choisi : ni photo ni dessin. */
       noVisual?: boolean
+      /** La police (vank · gotham · playwrite) et la couleur (#RRGGBB) du titre et du sous-titre ; null : celles du gabarit. */
+      titleFont?: CatalogueCoverFont | null
+      titleColor?: string | null
+      subtitleFont?: CatalogueCoverFont | null
+      subtitleColor?: string | null
     }
   | {
       kind: 'brand'
@@ -3183,7 +3188,30 @@ export interface CatalogueCover {
   visual: CatalogueCoverVisual | null
   /** Dessin de saison choisi (`img/print/<slug>.png`) ; null : reconnu au titre. */
   illustration: string | null
+  /** La police et la couleur du titre et du sous-titre (design system) ; null ou absent : celles du gabarit. */
+  titleFont?: CatalogueCoverFont | null
+  titleColor?: CatalogueCoverColor | null
+  subtitleFont?: CatalogueCoverFont | null
+  subtitleColor?: CatalogueCoverColor | null
 }
+
+/** Les polices de la marque : Vank (titres), Gotham (texte), Playwrite DEVA (manuscrite). */
+export type CatalogueCoverFont = 'vank' | 'gotham' | 'playwrite'
+/** Les couleurs de la marque, par leur nom (le serveur les rend en #RRGGBB au document). */
+export type CatalogueCoverColor = 'rubis' | 'abricot' | 'or' | 'creme' | 'encre' | 'blanc'
+export const CATALOGUE_COVER_FONTS: { id: CatalogueCoverFont; label: string; css: string }[] = [
+  { id: 'vank', label: 'Vank', css: "'Vank', 'GothamPrint', serif" },
+  { id: 'gotham', label: 'Gotham', css: "'GothamPrint', system-ui, sans-serif" },
+  { id: 'playwrite', label: 'Playwrite DEVA', css: "'Playwrite', cursive" },
+]
+export const CATALOGUE_COVER_COLORS: { id: CatalogueCoverColor; label: string; hex: string }[] = [
+  { id: 'rubis', label: 'Rubis', hex: '#8D1D2C' },
+  { id: 'abricot', label: 'Abricot', hex: '#F2C9A0' },
+  { id: 'or', label: 'Or', hex: '#B0792A' },
+  { id: 'creme', label: 'Crème', hex: '#F5EFE4' },
+  { id: 'encre', label: 'Encre', hex: '#241C1A' },
+  { id: 'blanc', label: 'Blanc', hex: '#FFFFFF' },
+]
 
 export type CatalogueCoverTemplate = 'A' | 'B' | 'C'
 export type CatalogueCoverVisual = 'illustration' | 'media' | 'none'

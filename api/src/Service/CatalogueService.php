@@ -115,6 +115,17 @@ final class CatalogueService
     /** Le visuel d'une couverture : un dessin de saison, une photo de la médiathèque, rien (null : comme avant l'assistant). */
     public const COVER_VISUALS = ['illustration', 'media', 'none'];
 
+    /**
+     * La police et la couleur du titre et du sous-titre d'une couverture (17/11/2026, Sam : « éditer en fonction du
+     * design system la typo — Gotham, Vank, Deva — et la couleur — abricot, rubis… »). Les polices de la marque : Vank
+     * (titres), Gotham (texte), Playwrite DEVA (manuscrite) ; les couleurs de la marque, par leur nom. null : celles du
+     * gabarit (comme avant).
+     */
+    public const COVER_FONTS = ['vank', 'gotham', 'playwrite'];
+    public const COVER_COLORS = ['rubis' => '#8D1D2C', 'abricot' => '#F2C9A0', 'or' => '#B0792A', 'creme' => '#F5EFE4', 'encre' => '#241C1A', 'blanc' => '#FFFFFF'];
+    /** Les champs de style d'une couverture. */
+    private const COVER_STYLE = ['titleFont', 'titleColor', 'subtitleFont', 'subtitleColor'];
+
     /** Les dessins de saison livrés avec le module (`public/img/print/<slug>.png`). */
     public const SEASON_DRAWINGS = ['noel', 'saint-nicolas', 'epiphanie', 'chandeleur', 'saint-valentin', 'paques', 'fete-des-meres', 'printemps', 'ete', 'automne', 'hiver', 'glace'];
 
@@ -2177,7 +2188,7 @@ final class CatalogueService
             'logoMediaId' => null,
             'colors'      => ['primary' => '#8D1D2C', 'secondary' => '#F5EFE4', 'accent' => '#B0792A', 'ink' => '#241C1A'],
             'covers'      => [['gamme' => null, 'titleFr' => 'Notre catalogue', 'titleNl' => 'Onze catalogus', 'subtitleFr' => '', 'subtitleNl' => '', 'mediaId' => null,
-                'template' => 'A', 'visual' => null, 'illustration' => null]],
+                'template' => 'A', 'visual' => null, 'illustration' => null, 'titleFont' => null, 'titleColor' => null, 'subtitleFont' => null, 'subtitleColor' => null]],
             'back'        => [
                 'titleFr' => 'Commandez en ligne',
                 'titleNl' => 'Bestel online',
@@ -2283,6 +2294,15 @@ final class CatalogueService
             $clean['template'] = $template;
             $clean['visual'] = $visual;
             $clean['illustration'] = $drawing;
+            foreach (self::COVER_STYLE as $key) {
+                $value = $cover[$key] ?? null;
+                $allowed = str_ends_with($key, 'Font') ? self::COVER_FONTS : array_keys(self::COVER_COLORS);
+                if ($value !== null && (!is_string($value) || !in_array($value, $allowed, true))) {
+                    $errors[] = ['field' => $field . '.' . $key, 'message' => (str_ends_with($key, 'Font') ? 'Police : ' : 'Couleur : ') . implode(', ', $allowed) . ', ou null (celle du gabarit).'];
+                    $value = null;
+                }
+                $clean[$key] = $value;
+            }
             if ($clean['titleFr'] === '') {
                 $errors[] = ['field' => $field . '.titleFr', 'message' => 'Le titre français est obligatoire.'];
             }
@@ -2885,6 +2905,11 @@ final class CatalogueService
             'drawing'    => $drawing,
             'drawingUrl' => $drawing !== null ? MediaService::publicUrl($drawing) : null,
             'noVisual'   => $visual === 'none',
+            // La police (vank · gotham · playwrite) et la couleur (#RRGGBB) choisies ; null : celles du gabarit.
+            'titleFont'     => in_array($cover['titleFont'] ?? null, self::COVER_FONTS, true) ? $cover['titleFont'] : null,
+            'titleColor'    => self::COVER_COLORS[(string) ($cover['titleColor'] ?? '')] ?? null,
+            'subtitleFont'  => in_array($cover['subtitleFont'] ?? null, self::COVER_FONTS, true) ? $cover['subtitleFont'] : null,
+            'subtitleColor' => self::COVER_COLORS[(string) ($cover['subtitleColor'] ?? '')] ?? null,
         ];
     }
 

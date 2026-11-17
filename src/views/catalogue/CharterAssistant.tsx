@@ -98,6 +98,10 @@ function coverPage(cover: CatalogueCover, lang: CatalogueLang, shop: CatalogueCh
     template: cover.template,
     kicker: cover.gamme !== null ? (lang === 'nl' ? 'Het gamma' : 'La gamme') : null,
     drawing: imageUrl === null && slug ? `img/print/${slug}.png` : null,
+    titleFont: cover.titleFont ?? null,
+    titleColor: api.CATALOGUE_COVER_COLORS.find((c) => c.id === cover.titleColor)?.hex ?? null,
+    subtitleFont: cover.subtitleFont ?? null,
+    subtitleColor: api.CATALOGUE_COVER_COLORS.find((c) => c.id === cover.subtitleColor)?.hex ?? null,
     noVisual: cover.visual === 'none',
   }
 }
@@ -178,6 +182,36 @@ function Choice<T extends string>({ items, value, onChange, kind }: { items: Arr
           </span>
         </button>
       ))}
+    </div>
+  )
+}
+
+/**
+ * La police et la couleur d'un texte de la couverture (17/11/2026, Sam : « éditer en fonction du design system la typo
+ * — Gotham, Vank, Deva — et la couleur — abricot, rubis… ») : « Gabarit » garde celles du gabarit.
+ */
+function TextStyle({ label, font, color, onChange }: { label: string; font: api.CatalogueCoverFont | null; color: api.CatalogueCoverColor | null; onChange: (patch: { font?: api.CatalogueCoverFont | null; color?: api.CatalogueCoverColor | null }) => void }) {
+  return (
+    <div className="cha-style">
+      <span className="cha-style__l">{label}</span>
+      <span className="bro-seg cha-style__fonts" role="group" aria-label={`Police — ${label}`}>
+        <button type="button" className={font === null ? 'is-on' : ''} onClick={() => onChange({ font: null })} title="La police du gabarit">
+          Gabarit
+        </button>
+        {api.CATALOGUE_COVER_FONTS.map((f) => (
+          <button key={f.id} type="button" className={font === f.id ? 'is-on' : ''} style={{ fontFamily: f.css }} onClick={() => onChange({ font: f.id })} title={f.label}>
+            {f.label}
+          </button>
+        ))}
+      </span>
+      <span className="cha-swatches" role="group" aria-label={`Couleur — ${label}`}>
+        <button type="button" className={`cha-swatch cha-swatch--auto${color === null ? ' is-on' : ''}`} onClick={() => onChange({ color: null })} title="La couleur du gabarit" aria-label="Couleur du gabarit">
+          A
+        </button>
+        {api.CATALOGUE_COVER_COLORS.map((c) => (
+          <button key={c.id} type="button" className={`cha-swatch${color === c.id ? ' is-on' : ''}`} style={{ background: c.hex }} onClick={() => onChange({ color: c.id })} title={c.label} aria-label={c.label} />
+        ))}
+      </span>
     </div>
   )
 }
@@ -449,7 +483,11 @@ export default function CharterAssistant({ onBack }: { onBack: () => void }) {
           <Field label="Sous-titre FR" value={cover.subtitleFr} onChange={(v) => setCover({ subtitleFr: v })} />
           <Field label="Sous-titre NL" value={cover.subtitleNl} placeholder="À écrire" onChange={(v) => setCover({ subtitleNl: v })} />
         </div>
-        <p className="cha-note">Le nom de la boutique s’ajoute seul en bas de la couverture, dans chaque version.</p>
+        <div className="cha-styles">
+          <TextStyle label="Titre" font={cover.titleFont ?? null} color={cover.titleColor ?? null} onChange={(p) => setCover({ ...('font' in p ? { titleFont: p.font } : {}), ...('color' in p ? { titleColor: p.color } : {}) })} />
+          <TextStyle label="Sous-titre" font={cover.subtitleFont ?? null} color={cover.subtitleColor ?? null} onChange={(p) => setCover({ ...('font' in p ? { subtitleFont: p.font } : {}), ...('color' in p ? { subtitleColor: p.color } : {}) })} />
+        </div>
+        <p className="cha-note">Le nom de la boutique s’ajoute seul en bas de la couverture, dans chaque version. Police et couleur : celles de la marque (design system) ; « Gabarit » et « A » gardent celles du gabarit.</p>
       </section>
 
       <section className="cha-card">

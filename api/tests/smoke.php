@@ -5264,7 +5264,8 @@ $gabarits = [
     'colors' => ['primary' => '#8D1D2C', 'secondary' => '#F5EFE4', 'accent' => '#B0792A', 'ink' => '#241C1A'],
     'covers' => [
         ['gamme' => null, 'titleFr' => 'Notre catalogue', 'titleNl' => 'Onze catalogus', 'subtitleFr' => '', 'subtitleNl' => '', 'mediaId' => null],
-        ['gamme' => 14, 'titleFr' => 'Noël', 'titleNl' => 'Kerst', 'subtitleFr' => 'Bûches et cougnous', 'subtitleNl' => 'Stronken en kerstbrood', 'mediaId' => null, 'template' => 'B', 'visual' => 'illustration', 'illustration' => 'noel'],
+        ['gamme' => 14, 'titleFr' => 'Noël', 'titleNl' => 'Kerst', 'subtitleFr' => 'Bûches et cougnous', 'subtitleNl' => 'Stronken en kerstbrood', 'mediaId' => null, 'template' => 'B', 'visual' => 'illustration', 'illustration' => 'noel',
+            'titleFont' => 'playwrite', 'titleColor' => 'abricot', 'subtitleColor' => 'or'],
     ],
     'back' => ['titleFr' => 'Commandez en ligne', 'titleNl' => 'Bestel online', 'textFr' => 'Retrait en boutique ou livraison.', 'textNl' => 'Afhalen of levering.', 'template' => 'B'],
     'page2' => ['titleFr' => 'Le mot de la boulangerie', 'titleNl' => 'Het woord van de bakkerij', 'textFr' => 'Un paragraphe.', 'textNl' => 'Een alinea.', 'mediaId' => null, 'template' => 'C'],
@@ -5281,10 +5282,17 @@ check('charte : gabarits — brouillon enregistré sans effet, puis publié (ver
         && ($ap[0]['template'] ?? '') === 'B' && ($ap[0]['drawing'] ?? '') === 'img/print/noel.png' && ($ap[0]['title'] ?? '') === 'Noël' && ($ap[0]['kicker'] ?? '') === 'La gamme'
         && ($ap[1]['template'] ?? '') === 'C' && (end($ap)['template'] ?? '') === 'B' && ($apresPub['body']['data']['charter']['version'] ?? 0) === 2,
     json_encode([$poseG['body']['error'] ?? null, $pubG['body'], $ap[0] ?? null, $ap[1] ?? null], JSON_UNESCAPED_UNICODE));
+check('charte : la police et la couleur du titre et du sous-titre (design system : Vank, Gotham, Playwrite DEVA ; rubis, abricot, or…) — enregistrées par leur nom, rendues au document en #RRGGBB ; absentes = celles du gabarit',
+    ($poseG['body']['data']['covers'][1]['titleFont'] ?? '') === 'playwrite' && ($poseG['body']['data']['covers'][1]['titleColor'] ?? '') === 'abricot'
+        && array_key_exists('subtitleFont', $poseG['body']['data']['covers'][1] ?? []) && $poseG['body']['data']['covers'][1]['subtitleFont'] === null
+        && ($ap[0]['titleFont'] ?? '') === 'playwrite' && ($ap[0]['titleColor'] ?? '') === '#F2C9A0' && ($ap[0]['subtitleColor'] ?? '') === '#B0792A'
+        && array_key_exists('subtitleFont', $ap[0] ?? []) && $ap[0]['subtitleFont'] === null
+        && array_key_exists('titleColor', $avantPub['body']['data']['pages'][0] ?? []) && $avantPub['body']['data']['pages'][0]['titleColor'] === null,
+    json_encode([$poseG['body']['data']['covers'][1] ?? null, $ap[0] ?? null], JSON_UNESCAPED_UNICODE));
 $etatPub = call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter');
 check('charte : publiée, le brouillon n’a plus de différence ; l’ordre des clés relues est fixe',
     ($etatPub['body']['data']['publication']['version'] ?? 0) === 2 && ($etatPub['body']['data']['publication']['draftChanged'] ?? true) === false
-        && array_keys($etatPub['body']['data']['covers'][1] ?? []) === ['gamme', 'titleFr', 'titleNl', 'subtitleFr', 'subtitleNl', 'mediaId', 'template', 'visual', 'illustration', 'imageUrl']
+        && array_keys($etatPub['body']['data']['covers'][1] ?? []) === ['gamme', 'titleFr', 'titleNl', 'subtitleFr', 'subtitleNl', 'mediaId', 'template', 'visual', 'illustration', 'titleFont', 'titleColor', 'subtitleFont', 'subtitleColor', 'imageUrl']
         && array_keys($etatPub['body']['data']['back'] ?? []) === ['titleFr', 'titleNl', 'textFr', 'textNl', 'template'],
     json_encode($etatPub['body']['data'] ?? null, JSON_UNESCAPED_UNICODE));
 $refusG = [
@@ -5293,10 +5301,12 @@ $refusG = [
     call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['covers' => [['gamme' => 14, 'titleFr' => 'a', 'illustration' => 'licorne']]]),
     call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['back' => ['titleFr' => 'a', 'template' => 'C']]),
     call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['page2' => ['titleFr' => 'a', 'template' => 'D']]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['covers' => [['gamme' => 14, 'titleFr' => 'a', 'titleFont' => 'comic']]]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['covers' => [['gamme' => 14, 'titleFr' => 'a', 'subtitleColor' => '#FF0000']]]),
 ];
 check('charte : gabarits refusés (422, champ nommé) — couverture Z, « médiathèque » sans image, dessin inconnu, dernière page C, page 2 D ; rien d’écrit',
     array_unique(array_column($refusG, 'status')) === [422]
-        && array_map(static fn (array $r): string => (string) ($r['body']['error']['details'][0]['field'] ?? ''), $refusG) === ['covers[0].template', 'covers[0].mediaId', 'covers[0].illustration', 'back.template', 'page2.template']
+        && array_map(static fn (array $r): string => (string) ($r['body']['error']['details'][0]['field'] ?? ''), $refusG) === ['covers[0].template', 'covers[0].mediaId', 'covers[0].illustration', 'back.template', 'page2.template', 'covers[0].titleFont', 'covers[0].subtitleColor']
         && (call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter')['body']['data']['publication']['draftChanged'] ?? true) === false,
     json_encode(array_map(static fn (array $r): mixed => $r['body']['error']['details'] ?? null, $refusG), JSON_UNESCAPED_UNICODE));
 $histo = call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter/publications', ['perPage' => '1']);
