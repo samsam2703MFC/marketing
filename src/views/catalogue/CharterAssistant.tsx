@@ -189,18 +189,40 @@ function Choice<T extends string>({ items, value, onChange, kind }: { items: Arr
 
 /**
  * La police et la couleur d'un texte de la couverture (17/11/2026, Sam : « éditer en fonction du design system la typo
- * — Gotham, Vank, Deva — et la couleur — abricot, rubis… ») : « Gabarit » garde celles du gabarit.
+ * — Gotham, Vank, Deva — et la couleur — abricot, rubis… ») ; « A » garde la couleur du gabarit.
+ *
+ * Pas de choix « Gabarit » pour la police (Sam, 17/11 : « take off gabarit typo ») : la police du gabarit est l'une des
+ * trois — Vank pour le titre, Gotham pour le sous-titre — et c'est elle qui est montrée choisie. La choisir enregistre
+ * l'absence de choix (`null`) : le texte s'imprime exactement comme le gabarit le règle.
  */
-function TextStyle({ label, font, color, onChange }: { label: string; font: api.CatalogueCoverFont | null; color: api.CatalogueCoverColor | null; onChange: (patch: { font?: api.CatalogueCoverFont | null; color?: api.CatalogueCoverColor | null }) => void }) {
+function TextStyle({
+  label,
+  font,
+  fallback,
+  color,
+  onChange,
+}: {
+  label: string
+  font: api.CatalogueCoverFont | null
+  /** La police du gabarit pour ce texte. */
+  fallback: api.CatalogueCoverFont
+  color: api.CatalogueCoverColor | null
+  onChange: (patch: { font?: api.CatalogueCoverFont | null; color?: api.CatalogueCoverColor | null }) => void
+}) {
+  const current = font ?? fallback
   return (
     <div className="cha-style">
       <span className="cha-style__l">{label}</span>
       <span className="bro-seg cha-style__fonts" role="group" aria-label={`Police — ${label}`}>
-        <button type="button" className={font === null ? 'is-on' : ''} onClick={() => onChange({ font: null })} title="La police du gabarit">
-          Gabarit
-        </button>
         {api.CATALOGUE_COVER_FONTS.map((f) => (
-          <button key={f.id} type="button" className={font === f.id ? 'is-on' : ''} style={{ fontFamily: f.css }} onClick={() => onChange({ font: f.id })} title={f.label}>
+          <button
+            key={f.id}
+            type="button"
+            className={current === f.id ? 'is-on' : ''}
+            style={{ fontFamily: f.css }}
+            onClick={() => onChange({ font: f.id === fallback ? null : f.id })}
+            title={f.id === fallback ? `${f.label} — la police du gabarit` : f.label}
+          >
             {f.label}
           </button>
         ))}
@@ -581,10 +603,10 @@ export default function CharterAssistant({ onBack }: { onBack: () => void }) {
           <Field label="Sous-titre NL" value={cover.subtitleNl} placeholder="À écrire" onChange={(v) => setCover({ subtitleNl: v })} />
         </div>
         <div className="cha-styles">
-          <TextStyle label="Titre" font={cover.titleFont ?? null} color={cover.titleColor ?? null} onChange={(p) => setCover({ ...('font' in p ? { titleFont: p.font } : {}), ...('color' in p ? { titleColor: p.color } : {}) })} />
-          <TextStyle label="Sous-titre" font={cover.subtitleFont ?? null} color={cover.subtitleColor ?? null} onChange={(p) => setCover({ ...('font' in p ? { subtitleFont: p.font } : {}), ...('color' in p ? { subtitleColor: p.color } : {}) })} />
+          <TextStyle label="Titre" font={cover.titleFont ?? null} fallback="vank" color={cover.titleColor ?? null} onChange={(p) => setCover({ ...('font' in p ? { titleFont: p.font } : {}), ...('color' in p ? { titleColor: p.color } : {}) })} />
+          <TextStyle label="Sous-titre" font={cover.subtitleFont ?? null} fallback="gotham" color={cover.subtitleColor ?? null} onChange={(p) => setCover({ ...('font' in p ? { subtitleFont: p.font } : {}), ...('color' in p ? { subtitleColor: p.color } : {}) })} />
         </div>
-        <p className="cha-note">Le nom de la boutique s’ajoute seul en bas de la couverture, dans chaque version. Police et couleur : celles de la marque (design system) ; « Gabarit » et « A » gardent celles du gabarit.</p>
+        <p className="cha-note">Le nom de la boutique s’ajoute seul en bas de la couverture, dans chaque version. Polices et couleurs de la marque (design system) : le titre est en Vank, le sous-titre en Gotham, sauf autre choix ; « A » garde la couleur du gabarit.</p>
       </section>
 
       <section className="cha-card">
