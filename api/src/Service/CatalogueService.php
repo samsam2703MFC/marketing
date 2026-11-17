@@ -169,7 +169,14 @@ final class CatalogueService
                         'gammes'     => $product['gammes'],
                         'prices'     => [],
                         'availability' => ['periods' => $product['periods'] ?? [], 'leadHours' => $product['leadHours'] ?? null],
+                        'weightGrams' => $product['weightGrams'] ?? null,
+                        'allergens'  => $product['allergens'] ?? [],
                     ];
+                }
+                // Le poids et les allergènes sont ceux de la fiche du réseau : la première boutique qui les dit.
+                $byId[$id]['weightGrams'] ??= $product['weightGrams'] ?? null;
+                if (($byId[$id]['allergens'] ?? []) === [] && ($product['allergens'] ?? []) !== []) {
+                    $byId[$id]['allergens'] = $product['allergens'];
                 }
                 $byId[$id]['gammes'] = array_values(array_unique(array_merge($byId[$id]['gammes'], $product['gammes'])));
                 // La disponibilité d'un produit lu dans plusieurs boutiques : ce que chacune dit de plus (dates, délai).
@@ -209,6 +216,8 @@ final class CatalogueService
                     'prices'     => [],
                     'availability' => ['periods' => [], 'leadHours' => null],
                     'refPriceCents' => self::cents($product['webPrice']),
+                    'weightGrams' => \Marketing\Support\Allergens::weightGrams(null, (string) $product['name']),
+                    'allergens'  => [],
                 ];
                 if ($product['categoryId'] !== null && !isset($categories[$product['categoryId']])) {
                     $categories[$product['categoryId']] = ['id' => $product['categoryId'], 'name' => $product['categoryName'], 'nameNl' => $product['categoryNameNl']];
@@ -2370,8 +2379,18 @@ final class CatalogueService
                 'promo'         => null,
                 'currency'      => 'EUR',
                 'availability'  => ($row['settings']['showAvailability'] ?? true) ? self::availabilityText($product['availability'] ?? [], self::gammeIdsOf($row), $lang) : null,
+                // Obligatoires au catalogue imprimé (17/11/2026) : le poids d'une pièce, les allergènes de la recette.
+                'weightGrams'   => $product['weightGrams'] ?? null,
+                'allergens'     => $product['allergens'] ?? [],
             ];
         }
+        $sansPoids = array_values(array_map(static fn (array $p): string => $p['name'], array_filter($chosen, static fn (array $p): bool => $p['weightGrams'] === null)));
+        if ($sansPoids !== []) {
+            $warnings[] = ['code' => 'PRODUCT_NO_WEIGHT', 'message' => sprintf('%d produit%s sans poids : %s%s — à saisir dans l’ERP (« Poids d’une pièce »), il s’imprime à côté du prix.',
+                count($sansPoids), count($sansPoids) > 1 ? 's' : '', implode(', ', array_slice($sansPoids, 0, 6)), count($sansPoids) > 6 ? '…' : '')];
+        }
+        // Les allergènes des produits du catalogue, dans l'ordre de l'annexe II : leur légende à l'avant-dernière page.
+        $allergensUsed = array_values(array_intersect(\Marketing\Support\Allergens::CODES, array_merge([], ...array_map(static fn (array $p): array => $p['allergens'], $chosen))));
 
         // Les promotions (bundles, « X achetés = Y », quantité, remises programmées) : celles du réseau (version
         // générale) ou de la boutique de la version, valables pendant que le catalogue circule, cochées.
@@ -2700,6 +2719,10 @@ final class CatalogueService
                 'imageUrl' => $content['template'] === 'A' ? null : $content['imageUrl'],
                 'template' => $content['template'],
             ];
+            if ($slot === 'penultimate') {
+                // La légende des pictogrammes d'allergènes du catalogue (17/11/2026) : ceux de ses produits.
+                $brand[$slot]['allergens'] = $allergensUsed;
+            }
         }
 
         $webshop = self::webshopUrl();

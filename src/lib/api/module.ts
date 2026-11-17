@@ -3057,6 +3057,10 @@ export interface CatalogueDocProduct {
   /** « du 1/12 au 6/12 · sur commande 48 h » ; null : rien à dire (ou éteint). */
   availability?: string | null
   currency: 'EUR'
+  /** Le poids d'une pièce, en grammes (ERP, sinon le nom) ; null : pas saisi. */
+  weightGrams?: number | null
+  /** Les allergènes de la recette (codes de l'annexe II, `allergens.tsx`). */
+  allergens?: string[]
 }
 
 /** Une case d'une page de produits : un produit, ou la vignette d'une promotion. */
@@ -3082,7 +3086,17 @@ export type CatalogueDocPage =
       /** « Sans visuel » choisi : ni photo ni dessin. */
       noVisual?: boolean
     }
-  | { kind: 'brand'; locked: true; slot: 'page2' | 'penultimate'; title: string; text: string; imageUrl: string | null; template?: CatalogueBrandTemplate }
+  | {
+      kind: 'brand'
+      locked: true
+      slot: 'page2' | 'penultimate'
+      title: string
+      text: string
+      imageUrl: string | null
+      template?: CatalogueBrandTemplate
+      /** Avant-dernière page : les allergènes des produits du catalogue, dont elle donne la légende. */
+      allergens?: string[]
+    }
   | {
       kind: 'products'
       locked: false

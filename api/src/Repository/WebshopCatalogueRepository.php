@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Marketing\Repository;
 
+use Marketing\Support\Allergens;
 use Marketing\Support\Config;
 use Marketing\Support\Database;
 use Marketing\Support\Keys;
@@ -228,6 +229,9 @@ final class WebshopCatalogueRepository
                     'shopPrice'      => is_numeric($row['portion_price'] ?? null) ? round((float) $row['portion_price'], 2) : null,
                     'periods'        => array_values($periods),
                     'leadHours'      => $lead,
+                    // Le poids d'une pièce et les allergènes de la recette (17/11/2026, obligatoires au catalogue imprimé).
+                    'weightGrams'    => Allergens::weightGrams($row['single_weight'] ?? null, $name),
+                    'allergens'      => Allergens::fromText(is_string($row['grouped_allergens'] ?? null) ? $row['grouped_allergens'] : null),
                 ];
             }
 

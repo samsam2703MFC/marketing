@@ -17,6 +17,7 @@ import { qrPath } from '../../lib/qr'
 import { fontFaces } from '../brochure/Pages'
 import { familyImage, seasonImage } from '../builder/illustrations'
 import CATALOGUE_CSS from './catalogue-pages.css?inline'
+import { ALLERGEN_NAMES, AllergenIcon, Allergens, type AllergenCode } from './allergens'
 
 /**
  * Les pages d'un catalogue, en millimètres : ce que l'aperçu montre est ce qui part à
@@ -122,6 +123,25 @@ function Price({ product, lang }: { product: CatalogueDocProduct | CatalogueDocO
     <span className="cat-prices">
       {old !== null ? <s className="cat-old">{formatCents(old, lang)}</s> : null}
       <span className={`cat-price${product.priceCents === null ? ' cat-price--none' : ''}${old !== null ? ' cat-price--promo' : ''}`}>{formatCents(product.priceCents, lang)}</span>
+    </span>
+  )
+}
+
+/** Le poids d'une pièce (17/11/2026, obligatoire) : « 85 g », « 1,2 kg » ; rien quand l'ERP ne le dit pas. */
+export function formatWeight(grams: number | null | undefined, lang: CatalogueLang): string | null {
+  if (grams == null || grams <= 0) return null
+  if (grams >= 1000) return (grams / 1000).toLocaleString(lang === 'nl' ? 'nl-BE' : 'fr-BE', { maximumFractionDigits: 2 }).replace(/\u202f/g, '\u00a0') + '\u00a0kg'
+  return String(grams) + '\u00a0g'
+}
+
+/** Sous le nom : le poids et les pictogrammes des allergènes (17/11/2026, obligatoires au catalogue imprimé). */
+function Facts({ product, lang }: { product: CatalogueDocProduct; lang: CatalogueLang }) {
+  const w = formatWeight(product.weightGrams, lang)
+  // Vide, la case reste (dans une ligne de liste, elle tient sa colonne) ; la feuille de style la masque dans une vignette.
+  return (
+    <span className="cat-facts">
+      {w ? <span className="cat-weight">{w}</span> : null}
+      <Allergens codes={product.allergens} lang={lang} />
     </span>
   )
 }
@@ -291,11 +311,38 @@ function Brand({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'brand' 
           ),
         )}
       </div>
+      {page.slot === 'penultimate' && (page.allergens ?? []).length ? <AllergenLegend codes={page.allergens ?? []} lang={doc.version.lang} /> : null}
       {bottom ? (
         <div className="cat-brand__visual cat-brand__visual--bottom">
           <img src={page.imageUrl ?? ''} alt="" />
         </div>
       ) : null}
+    </div>
+  )
+}
+
+/**
+ * La légende des allergènes, à l'avant-dernière page (17/11/2026, Sam : « avec explication sur l'avant-dernière
+ * page ») : le pictogramme et le nom de chaque allergène présent dans les produits du catalogue, et ce qu'ils disent.
+ */
+function AllergenLegend({ codes, lang }: { codes: string[]; lang: CatalogueLang }) {
+  const nl = lang === 'nl'
+  return (
+    <div className="cat-allegend">
+      <div className="cat-allegend__title">{nl ? 'Allergenen' : 'Allergènes'}</div>
+      <div className="cat-allegend__grid">
+        {codes.map((c) => (
+          <span key={c} className="cat-allegend__item">
+            <AllergenIcon code={c} />
+            {ALLERGEN_NAMES[c as AllergenCode]?.[lang] ?? c}
+          </span>
+        ))}
+      </div>
+      <p className="cat-allegend__note">
+        {nl
+          ? 'De pictogrammen naast elk product tonen de allergenen van het recept (verordening EU 1169/2011). Sporen worden niet vermeld: vraag de volledige lijst in de winkel.'
+          : 'Les pictogrammes à côté de chaque produit indiquent les allergènes de sa recette (règlement UE 1169/2011). Les traces ne sont pas indiquées : demandez la liste complète en boutique.'}
+      </p>
     </div>
   )
 }
@@ -308,6 +355,7 @@ function ProductCard({ product, lang, family, big = false }: { product: Catalogu
       <Photo product={product} family={family} />
       <div className="cat-card__text">
         <div className="cat-name">{product.name}</div>
+        <Facts product={product} lang={lang} />
         <Price product={product} lang={lang} />
       </div>
     </div>
@@ -423,6 +471,7 @@ function ProductList({ products, lang, family }: { products: CatalogueDocItem[];
           <div className="cat-row" key={product.id}>
             <Photo product={product} family={family} />
             <span className="cat-name">{product.name}</span>
+            <Facts product={product} lang={lang} />
             <i />
             <Price product={product} lang={lang} />
           </div>
