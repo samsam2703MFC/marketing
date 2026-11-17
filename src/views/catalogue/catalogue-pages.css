@@ -376,11 +376,12 @@
 .cat-full__badge { position: absolute; top: calc(var(--u) * 3.4mm); left: calc(var(--u) * 3.4mm); z-index: 1; font-size: calc(var(--u) * 5mm); padding: calc(var(--u) * 1.6mm) calc(var(--u) * 3.4mm); }
 .cat-full__text { flex: 0 0 auto; display: grid; gap: calc(var(--u) * 1.8mm); justify-items: center; text-align: center; }
 .cat-full__name { font-size: calc(var(--u) * 9mm); line-height: 1; }
-.cat-full .cat-facts { font-size: calc(var(--u) * 3.6mm); gap: calc(var(--u) * 2mm); }
-.cat-full .cat-al { width: calc(var(--u) * 4.6mm); height: calc(var(--u) * 4.6mm); }
-.cat-full .cat-price { font-size: calc(var(--u) * 10mm); }
-.cat-full .cat-old { font-size: calc(var(--u) * 6mm); }
-.cat-full .cat-avail { font-size: calc(var(--u) * 3.4mm); }
+/* Le produit seul : ses faits et son prix en grand (la vignette de l'offre dessous garde les siens). */
+.cat-full__text .cat-facts { font-size: calc(var(--u) * 3.6mm); gap: calc(var(--u) * 2mm); }
+.cat-full__text .cat-al { width: calc(var(--u) * 4.6mm); height: calc(var(--u) * 4.6mm); }
+.cat-full__text .cat-price { font-size: calc(var(--u) * 10mm); }
+.cat-full__text .cat-old { font-size: calc(var(--u) * 6mm); }
+.cat-full__text .cat-avail { font-size: calc(var(--u) * 3.4mm); }
 .cat-full__offer { flex: 0 0 auto; display: grid; gap: calc(var(--u) * 1.6mm); }
 .cat-full__also { font-weight: 500; font-size: calc(var(--u) * 3mm); letter-spacing: 0.16em; text-transform: uppercase; color: var(--p); }
 .cat-t-C .cat-full__text { text-align: left; justify-items: start; }
