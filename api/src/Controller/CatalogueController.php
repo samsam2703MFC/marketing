@@ -170,6 +170,20 @@ final class CatalogueController
         return self::guard(fn (): array => Envelope::ok($this->service->saveCharter($request->body, self::userId())));
     }
 
+    /** `PUT …/catalogue-shops/{id}` `{phone2?, webshopUrl?, logoMediaId?}` : ce que la boutique imprime en plus à la dernière page. */
+    public function saveShop(Request $request): array
+    {
+        if (($denied = self::deny()) !== null) {
+            return $denied;
+        }
+        $id = $request->intParam('id');
+        if ($id === null || $id < 1) {
+            return Envelope::error('RESOURCE_NOT_FOUND', 'Boutique inconnue du Marketing.', 404);
+        }
+
+        return self::guard(fn (): array => Envelope::ok($this->service->saveShopContact($id, is_array($request->body) ? $request->body : [], self::userId() ?? 0)));
+    }
+
     /** `GET …/catalogue-charter/checks` : « Avant de publier », les boutiques à compléter, les catalogues concernés. */
     public function charterChecks(Request $request): array
     {

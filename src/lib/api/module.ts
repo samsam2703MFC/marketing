@@ -3045,6 +3045,10 @@ export interface CatalogueShopInfo {
   address: string
   hours: string
   phone: string
+  /** L'e-mail de la boutique (fiche publique de l'ERP) ; vide : rien n'est imprimé. */
+  email?: string
+  /** Le second téléphone saisi dans la charte ; vide : rien n'est imprimé. */
+  phone2?: string
 }
 
 export interface CatalogueDocProduct {
@@ -3087,6 +3091,11 @@ export type CatalogueDocPage =
       drawingUrl?: string | null
       /** « Sans visuel » choisi : ni photo ni dessin. */
       noVisual?: boolean
+      /** La police (vank · gotham · playwrite) et la couleur (#RRGGBB) du titre et du sous-titre ; null : celles du gabarit. */
+      titleFont?: CatalogueCoverFont | null
+      titleColor?: string | null
+      subtitleFont?: CatalogueCoverFont | null
+      subtitleColor?: string | null
     }
   | {
       kind: 'brand'
@@ -3183,7 +3192,30 @@ export interface CatalogueCover {
   visual: CatalogueCoverVisual | null
   /** Dessin de saison choisi (`img/print/<slug>.png`) ; null : reconnu au titre. */
   illustration: string | null
+  /** La police et la couleur du titre et du sous-titre (design system) ; null ou absent : celles du gabarit. */
+  titleFont?: CatalogueCoverFont | null
+  titleColor?: CatalogueCoverColor | null
+  subtitleFont?: CatalogueCoverFont | null
+  subtitleColor?: CatalogueCoverColor | null
 }
+
+/** Les polices de la marque : Vank (titres), Gotham (texte), Playwrite DEVA (manuscrite). */
+export type CatalogueCoverFont = 'vank' | 'gotham' | 'playwrite'
+/** Les couleurs de la marque, par leur nom (le serveur les rend en #RRGGBB au document). */
+export type CatalogueCoverColor = 'rubis' | 'abricot' | 'or' | 'creme' | 'encre' | 'blanc'
+export const CATALOGUE_COVER_FONTS: { id: CatalogueCoverFont; label: string; css: string }[] = [
+  { id: 'vank', label: 'Vank', css: "'Vank', 'GothamPrint', serif" },
+  { id: 'gotham', label: 'Gotham', css: "'GothamPrint', system-ui, sans-serif" },
+  { id: 'playwrite', label: 'Playwrite DEVA', css: "'Playwrite', cursive" },
+]
+export const CATALOGUE_COVER_COLORS: { id: CatalogueCoverColor; label: string; hex: string }[] = [
+  { id: 'rubis', label: 'Rubis', hex: '#8D1D2C' },
+  { id: 'abricot', label: 'Abricot', hex: '#F2C9A0' },
+  { id: 'or', label: 'Or', hex: '#B0792A' },
+  { id: 'creme', label: 'Crème', hex: '#F5EFE4' },
+  { id: 'encre', label: 'Encre', hex: '#241C1A' },
+  { id: 'blanc', label: 'Blanc', hex: '#FFFFFF' },
+]
 
 export type CatalogueCoverTemplate = 'A' | 'B' | 'C'
 export type CatalogueCoverVisual = 'illustration' | 'media' | 'none'
@@ -3227,6 +3259,13 @@ export interface CatalogueCharterShop {
   hours: string
   hoursNl: string
   phone: string
+  /** L'e-mail de la fiche publique de l'ERP. */
+  email: string
+  /** Saisis ici, par boutique (17/11/2026) : second téléphone, adresse directe de son webshop (le QR), logo. */
+  phone2: string
+  webshopUrl: string
+  logoMediaId: number | null
+  logoUrl: string | null
   qrUrl: string | null
   host: string | null
   /** Ce que TFBuddy ne donne pas : address, hours, phone ; qr (adresse du webshop inconnue). */
@@ -3306,6 +3345,11 @@ export async function saveCatalogueCharter(charter: Omit<CatalogueCharter, 'logo
 }
 
 /** « Avant de publier », les boutiques (ce que la dernière page imprime pour chacune), les catalogues concernés. */
+/** Ce qu'une boutique imprime en plus à la dernière page : second téléphone, webshop direct (QR), logo ; rend la boutique. */
+export async function saveCatalogueShop(id: number, patch: { phone2?: string; webshopUrl?: string; logoMediaId?: number | null }): Promise<CatalogueCharterShop> {
+  return (await request<Envelope<CatalogueCharterShop>>(`${BASE}/catalogue-shops/${id}`, { method: 'PUT', body: patch })).data
+}
+
 export async function getCatalogueCharterChecks(): Promise<CatalogueCharterChecks> {
   return (await request<Envelope<CatalogueCharterChecks>>(`${BASE}/catalogue-charter/checks`)).data
 }

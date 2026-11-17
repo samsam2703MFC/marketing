@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react'
-import { isDocOffer } from '../../lib/api/module'
+import { CATALOGUE_COVER_FONTS, isDocOffer } from '../../lib/api/module'
 import type {
+  CatalogueCoverFont,
   CatalogueDocFiller,
   CatalogueDocItem,
   CatalogueDocOffer,
@@ -217,8 +218,24 @@ const seasonDrawing = (title: string): string | null => absolute(seasonImage(tit
  * couleur principale, dessin au trait blanc ou photo en bas) · B Illustration (papier, dessin au centre, « La gamme »,
  * titre en couleur) · C Photo (visuel en haut, bandeau de couleur avec le titre).
  */
+/**
+ * La police et la couleur choisies pour le titre ou le sous-titre de la couverture (17/11/2026, design system) ; rien
+ * de choisi : celles du gabarit. La manuscrite (Playwrite DEVA) s'écrit sans capitales forcées.
+ */
+function coverStyle(font: CatalogueCoverFont | null | undefined, color: string | null | undefined): CSSProperties | undefined {
+  const css = CATALOGUE_COVER_FONTS.find((f) => f.id === font)?.css
+  if (!css && !color) return undefined
+  return {
+    ...(css ? { fontFamily: css } : {}),
+    ...(font === 'playwrite' ? { textTransform: 'none', letterSpacing: 0, lineHeight: 1.25 } : font === 'gotham' ? { fontWeight: 500, letterSpacing: '0.02em' } : {}),
+    ...(color ? { color } : {}),
+  }
+}
+
 function Cover({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'cover' }>; doc: CatalogueDocument }) {
   const template = page.template ?? 'A'
+  const titleStyle = coverStyle(page.titleFont, page.titleColor)
+  const subStyle = coverStyle(page.subtitleFont, page.subtitleColor)
   // Le dessin choisi (ou reconnu au titre) ; une charte d'avant l'assistant : l'illustration de la gamme reconnue au titre.
   const drawing = page.imageUrl || page.noVisual ? null : (drawingAsset(page.drawing) ?? seasonDrawing(page.title))
   const shop = page.eyebrow ? `L’Atelier By · ${page.eyebrow}` : null
@@ -230,11 +247,11 @@ function Cover({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'cover' 
           {page.imageUrl ? <img className="cat-cover__photoB" src={page.imageUrl} alt="" /> : drawing ? <img className="cat-cover__drawB" src={drawing} alt="" /> : null}
         </div>
         {page.kicker ? <div className="cat-cover__kicker">{page.kicker}</div> : null}
-        <div className="cat-cover__title" data-fit="Titre de couverture">
+        <div className="cat-cover__title" data-fit="Titre de couverture" style={titleStyle}>
           {page.title}
         </div>
         <div className="cat-cover__rule" />
-        {page.subtitle ? <div className="cat-cover__subB">{page.subtitle}</div> : null}
+        {page.subtitle ? <div className="cat-cover__subB" style={subStyle}>{page.subtitle}</div> : null}
         {shop ? <div className="cat-cover__shopB">{shop}</div> : null}
       </div>
     )
@@ -248,10 +265,10 @@ function Cover({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'cover' 
         <div className="cat-cover__band">
           <img className={`cat-logo${doc.charter.logoUrl ? ' cat-logo--custom' : ''}`} src={doc.charter.logoUrl ?? asset('img/logo-white.png')} alt="" />
           {page.kicker ? <div className="cat-cover__kicker">{page.kicker}</div> : null}
-          <div className="cat-cover__title" data-fit="Titre de couverture">
+          <div className="cat-cover__title" data-fit="Titre de couverture" style={titleStyle}>
             {page.title}
           </div>
-          {page.subtitle ? <div className="cat-cover__sub">{page.subtitle}</div> : null}
+          {page.subtitle ? <div className="cat-cover__sub" style={subStyle}>{page.subtitle}</div> : null}
           {shop ? <div className="cat-cover__shop">{shop}</div> : null}
         </div>
       </div>
@@ -261,10 +278,10 @@ function Cover({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'cover' 
   return (
     <div className="cat-cover">
       <img className={`cat-logo${doc.charter.logoUrl ? ' cat-logo--custom' : ''}`} src={logo} alt="" />
-      <div className="cat-cover__title" data-fit="Titre de couverture">
+      <div className="cat-cover__title" data-fit="Titre de couverture" style={titleStyle}>
         {page.title}
       </div>
-      {page.subtitle ? <div className="cat-cover__sub">{page.subtitle}</div> : null}
+      {page.subtitle ? <div className="cat-cover__sub" style={subStyle}>{page.subtitle}</div> : null}
       {page.eyebrow ? <div className="cat-cover__shop">{`L’Atelier By · ${page.eyebrow}`}</div> : null}
       {page.imageUrl ? (
         <div className="cat-cover__visual">
@@ -554,7 +571,9 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
   const lang = doc.version.lang
   const shop = page.shop
   const logo = doc.charter.logoUrl ?? asset('img/logo.png')
-  const lines = shop ? [shop.address, shop.hours ? (lang === 'nl' ? `Open ${shop.hours}` : `Ouvert ${shop.hours}`) : '', shop.phone].filter(Boolean) : []
+  // Les coordonnées : adresse, horaires, téléphone(s), e-mail (17/11/2026 : « rajouter mail, téléphone 2 »).
+  const phones = shop ? [shop.phone, shop.phone2 ?? ''].filter(Boolean).join(' · ') : ''
+  const lines = shop ? [shop.address, shop.hours ? (lang === 'nl' ? `Open ${shop.hours}` : `Ouvert ${shop.hours}`) : '', phones, shop.email ?? ''].filter(Boolean) : []
   if (page.template === 'B') {
     // Boutique en avant (maquette A3, gabarit B) : l'adresse et les horaires en grand, le QR plus petit en bas.
     return (

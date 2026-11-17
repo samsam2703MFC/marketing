@@ -413,7 +413,7 @@ final class WebshopCatalogueRepository
         return ['shop' => null, 'error' => $read['error']];
     }
 
-    /** @return array{erpShopId:int, name:string, address:string, hours:string, hoursNl:string, phone:string} */
+    /** @return array{erpShopId:int, name:string, address:string, hours:string, hoursNl:string, phone:string, email:string} */
     private static function shopRow(array $row): array
     {
         $full  = trim((string) ($row['representative_name'] ?? $row['name'] ?? ''));
@@ -433,6 +433,8 @@ final class WebshopCatalogueRepository
             'hours'     => $hours,
             'hoursNl'   => str_replace('h', 'u', $hours),
             'phone'     => trim((string) ($row['phone'] ?? '')),
+            // L'e-mail de la boutique, sur sa fiche publique de l'ERP (17/11/2026, dernière page du catalogue).
+            'email'     => filter_var(trim((string) ($row['email'] ?? '')), FILTER_VALIDATE_EMAIL) !== false ? trim((string) $row['email']) : '',
         ];
     }
 

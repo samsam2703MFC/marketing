@@ -115,6 +115,17 @@ final class CatalogueService
     /** Le visuel d'une couverture : un dessin de saison, une photo de la médiathèque, rien (null : comme avant l'assistant). */
     public const COVER_VISUALS = ['illustration', 'media', 'none'];
 
+    /**
+     * La police et la couleur du titre et du sous-titre d'une couverture (17/11/2026, Sam : « éditer en fonction du
+     * design system la typo — Gotham, Vank, Deva — et la couleur — abricot, rubis… »). Les polices de la marque : Vank
+     * (titres), Gotham (texte), Playwrite DEVA (manuscrite) ; les couleurs de la marque, par leur nom. null : celles du
+     * gabarit (comme avant).
+     */
+    public const COVER_FONTS = ['vank', 'gotham', 'playwrite'];
+    public const COVER_COLORS = ['rubis' => '#8D1D2C', 'abricot' => '#F2C9A0', 'or' => '#B0792A', 'creme' => '#F5EFE4', 'encre' => '#241C1A', 'blanc' => '#FFFFFF'];
+    /** Les champs de style d'une couverture. */
+    private const COVER_STYLE = ['titleFont', 'titleColor', 'subtitleFont', 'subtitleColor'];
+
     /** Les dessins de saison livrés avec le module (`public/img/print/<slug>.png`). */
     public const SEASON_DRAWINGS = ['noel', 'saint-nicolas', 'epiphanie', 'chandeleur', 'saint-valentin', 'paques', 'fete-des-meres', 'printemps', 'ete', 'automne', 'hiver', 'glace'];
 
@@ -2120,8 +2131,12 @@ final class CatalogueService
     public function charterShops(): array
     {
         $webshop = self::webshopUrl();
+        $contacts = $this->catalogues->shopContacts();
         $out = [];
         foreach ($this->catalogues->shops() as $shop) {
+            $contact = $contacts[$shop['id']] ?? ['phone2' => '', 'webshopUrl' => '', 'logoMediaId' => null];
+            // Le QR : l'adresse directe du webshop de la boutique, saisie ; sinon celle du réseau, la boutique en paramètre.
+            $qr = $contact['webshopUrl'] !== '' ? $contact['webshopUrl'] : ($webshop === null ? null : $webshop . '?shop=' . $shop['erpShopId']);
             $info = $shop['erpShopId'] !== null ? $this->webshop->shop($shop['erpShopId']) : ['shop' => null, 'error' => null];
             $read = $info['shop'];
             $missing = [];
@@ -2134,7 +2149,7 @@ final class CatalogueService
             if ($read === null || $read['phone'] === '') {
                 $missing[] = 'phone';
             }
-            if ($webshop === null) {
+            if ($qr === null) {
                 $missing[] = 'qr';
             }
             $out[] = [
@@ -2145,14 +2160,74 @@ final class CatalogueService
                 'hours'     => $read['hours'] ?? '',
                 'hoursNl'   => $read['hoursNl'] ?? '',
                 'phone'     => $read['phone'] ?? '',
-                'qrUrl'     => $webshop === null ? null : $webshop . '?shop=' . $shop['erpShopId'],
-                'host'      => $webshop === null ? null : (string) preg_replace('#^https?://|/+$#', '', $webshop),
+                'email'     => $read['email'] ?? '',
+                'phone2'    => $contact['phone2'],
+                'webshopUrl' => $contact['webshopUrl'],
+                'logoMediaId' => $contact['logoMediaId'],
+                'logoUrl'   => $this->mediaUrl($contact['logoMediaId']),
+                'qrUrl'     => $qr,
+                'host'      => $qr === null ? null : self::host($qr),
                 'missing'   => $missing,
                 'error'     => $info['error'],
             ];
         }
 
         return $out;
+    }
+
+    /** L'adresse d'un webshop sans le protocole ni la barre finale (« webshop.atelierby.be/halle »), sous le QR. */
+    private static function host(string $url): string
+    {
+        return (string) preg_replace('#^https?://|/+$#', '', $url);
+    }
+
+    /**
+     * Les coordonnées qu'une boutique imprime en plus à la dernière page et que l'ERP ne porte pas (17/11/2026, client :
+     * « rajouter mail, téléphone 2, QR code de l'adresse directe du webshop, un logo différent par magasin ») : second
+     * téléphone, adresse directe de son webshop (le QR), logo (une image de la médiathèque, du réseau ou de la boutique).
+     * Un champ absent du corps garde sa valeur ; une chaîne vide (ou null pour le logo) l'efface.
+     *
+     * @return array<string,mixed> la boutique telle que l'assistant la montre (`charterShops`)
+     */
+    public function saveShopContact(int $shopId, array $input, int $userId): array
+    {
+        $shop = $this->catalogues->shops([$shopId])[0] ?? null;
+        if ($shop === null) {
+            throw new CatalogueError('RESOURCE_NOT_FOUND', 'Boutique inconnue du Marketing.', 404);
+        }
+        $current = $this->catalogues->shopContacts()[$shopId] ?? ['phone2' => '', 'webshopUrl' => '', 'logoMediaId' => null];
+        $errors = self::unknown($input, ['phone2', 'webshopUrl', 'logoMediaId']);
+        $phone2 = array_key_exists('phone2', $input) ? $input['phone2'] : $current['phone2'];
+        if (!is_string($phone2) || mb_strlen(trim($phone2)) > 40 || preg_match('/^[0-9+().\/ -]*$/', trim($phone2)) !== 1) {
+            $errors[] = ['field' => 'phone2', 'message' => 'Téléphone : chiffres, espaces, + . / ( ) -, 40 caractères au plus.'];
+            $phone2 = '';
+        }
+        $url = array_key_exists('webshopUrl', $input) ? $input['webshopUrl'] : $current['webshopUrl'];
+        if (!is_string($url) || mb_strlen(trim($url)) > 300
+            || (trim($url) !== '' && (filter_var(trim($url), FILTER_VALIDATE_URL) === false || preg_match('#^https?://#i', trim($url)) !== 1))) {
+            $errors[] = ['field' => 'webshopUrl', 'message' => 'Adresse du webshop : http:// ou https://, 300 caractères au plus.'];
+            $url = '';
+        }
+        $logo = array_key_exists('logoMediaId', $input) ? $input['logoMediaId'] : $current['logoMediaId'];
+        if ($logo !== null) {
+            $media = is_int($logo) ? $this->media->find($logo) : null;
+            if ($media === null || (string) $media['kind'] !== 'image' || $media['archived_at'] !== null
+                || ($media['shop_id'] !== null && (int) $media['shop_id'] !== $shopId)) {
+                $errors[] = ['field' => 'logoMediaId', 'message' => 'Image de la médiathèque attendue (du réseau ou de cette boutique), ou null.'];
+                $logo = null;
+            }
+        }
+        if ($errors !== []) {
+            throw new CatalogueError('VALIDATION_FAILED', 'Coordonnées invalides.', 422, $errors);
+        }
+        $this->catalogues->saveShopContact($shopId, trim((string) $phone2), trim((string) $url), $logo, $userId);
+        foreach ($this->charterShops() as $row) {
+            if ($row['id'] === $shopId) {
+                return $row;
+            }
+        }
+
+        throw new CatalogueError('RESOURCE_NOT_FOUND', 'Boutique inconnue du Marketing.', 404);
     }
 
     /** @return array{items: list<array<string,mixed>>, total:int} L'historique des versions publiées. */
@@ -2177,7 +2252,7 @@ final class CatalogueService
             'logoMediaId' => null,
             'colors'      => ['primary' => '#8D1D2C', 'secondary' => '#F5EFE4', 'accent' => '#B0792A', 'ink' => '#241C1A'],
             'covers'      => [['gamme' => null, 'titleFr' => 'Notre catalogue', 'titleNl' => 'Onze catalogus', 'subtitleFr' => '', 'subtitleNl' => '', 'mediaId' => null,
-                'template' => 'A', 'visual' => null, 'illustration' => null]],
+                'template' => 'A', 'visual' => null, 'illustration' => null, 'titleFont' => null, 'titleColor' => null, 'subtitleFont' => null, 'subtitleColor' => null]],
             'back'        => [
                 'titleFr' => 'Commandez en ligne',
                 'titleNl' => 'Bestel online',
@@ -2283,6 +2358,15 @@ final class CatalogueService
             $clean['template'] = $template;
             $clean['visual'] = $visual;
             $clean['illustration'] = $drawing;
+            foreach (self::COVER_STYLE as $key) {
+                $value = $cover[$key] ?? null;
+                $allowed = str_ends_with($key, 'Font') ? self::COVER_FONTS : array_keys(self::COVER_COLORS);
+                if ($value !== null && (!is_string($value) || !in_array($value, $allowed, true))) {
+                    $errors[] = ['field' => $field . '.' . $key, 'message' => (str_ends_with($key, 'Font') ? 'Police : ' : 'Couleur : ') . implode(', ', $allowed) . ', ou null (celle du gabarit).'];
+                    $value = null;
+                }
+                $clean[$key] = $value;
+            }
             if ($clean['titleFr'] === '') {
                 $errors[] = ['field' => $field . '.titleFr', 'message' => 'Le titre français est obligatoire.'];
             }
@@ -2807,8 +2891,10 @@ final class CatalogueService
 
         $webshop = self::webshopUrl();
         $shopInfo = null;
+        $contact = $version !== null ? ($this->catalogues->shopContacts()[$version['id']] ?? null) : null;
         if ($version !== null) {
-            $shopInfo = ['id' => $version['id'], 'erpShopId' => $version['erpShopId'], 'name' => $version['name'], 'address' => '', 'hours' => '', 'phone' => ''];
+            $shopInfo = ['id' => $version['id'], 'erpShopId' => $version['erpShopId'], 'name' => $version['name'], 'address' => '', 'hours' => '', 'phone' => '',
+                'email' => '', 'phone2' => $contact['phone2'] ?? ''];
             if ($version['erpShopId'] !== null) {
                 $info = $this->webshop->shop($version['erpShopId']);
                 if ($info['shop'] !== null) {
@@ -2816,16 +2902,21 @@ final class CatalogueService
                     $shopInfo['address'] = $info['shop']['address'];
                     $shopInfo['hours'] = $lang === 'nl' ? $info['shop']['hoursNl'] : $info['shop']['hours'];
                     $shopInfo['phone'] = $info['shop']['phone'];
+                    $shopInfo['email'] = $info['shop']['email'] ?? '';
                 }
                 if ($info['shop'] === null || $info['shop']['address'] === '') {
                     $warnings[] = ['code' => 'SHOP_ADDRESS_MISSING', 'message' => sprintf('Adresse de %s inconnue de TFBuddy%s.', $version['name'], $info['error'] !== null ? ' (' . $info['error'] . ')' : '')];
                 }
             }
         }
-        if ($webshop === null) {
-            $warnings[] = ['code' => 'WEBSHOP_URL_UNKNOWN', 'message' => 'Adresse du webshop inconnue (réglage webshop_url du module Social) : pas de QR code.'];
+        // Le QR : l'adresse directe du webshop de la boutique (saisie dans l'assistant de la charte), sinon celle du réseau.
+        $own = (string) ($contact['webshopUrl'] ?? '');
+        $qrUrl = $own !== '' ? $own : ($webshop === null ? null : ($version !== null && $version['erpShopId'] !== null ? $webshop . '?shop=' . $version['erpShopId'] : $webshop));
+        if ($qrUrl === null) {
+            $warnings[] = ['code' => 'WEBSHOP_URL_UNKNOWN', 'message' => 'Adresse du webshop inconnue (ni celle de la boutique dans la charte, ni le réglage webshop_url du module Social) : pas de QR code.'];
         }
-        $qrUrl = $webshop === null ? null : ($version !== null && $version['erpShopId'] !== null ? $webshop . '?shop=' . $version['erpShopId'] : $webshop);
+        // Le logo de la boutique (charte, « Rempli par chaque boutique ») remplace celui de la charte dans sa version.
+        $logoUrl = $this->mediaUrl($contact['logoMediaId'] ?? null) ?? $charter['logoUrl'];
 
         $pages = array_merge(
             [self::coverPage($cover, $coverTitle, $lang, $version !== null ? $shopInfo['name'] : null, $gammeImage, $cover['gamme'] !== null || $gammeId !== null)],
@@ -2838,7 +2929,7 @@ final class CatalogueService
                 'title'  => $backTitle,
                 'text'   => $backText,
                 'qrUrl'  => $qrUrl,
-                'host'   => $webshop === null ? null : (string) preg_replace('#^https?://|/+$#', '', $webshop),
+                'host'   => $qrUrl === null ? null : ($own !== '' ? self::host($own) : ($webshop === null ? null : self::host($webshop))),
                 'shop'   => $shopInfo,
                 'template' => $charter['back']['template'],
             ]],
@@ -2847,7 +2938,7 @@ final class CatalogueService
         return [
             'catalogue' => ['id' => (int) $row['id'], 'title' => (string) $row['title'], 'format' => (string) $row['format'], 'owner' => (string) $row['owner'], 'pageCount' => $pageCount],
             'version'   => ['shop' => $shopInfo, 'lang' => $lang],
-            'charter'   => ['logoUrl' => $charter['logoUrl'], 'colors' => $charter['colors'], 'version' => $charter['version']],
+            'charter'   => ['logoUrl' => $logoUrl, 'colors' => $charter['colors'], 'version' => $charter['version']],
             'pages'     => $pages,
             'warnings'  => array_values(array_unique($warnings, SORT_REGULAR)),
         ];
@@ -2885,6 +2976,11 @@ final class CatalogueService
             'drawing'    => $drawing,
             'drawingUrl' => $drawing !== null ? MediaService::publicUrl($drawing) : null,
             'noVisual'   => $visual === 'none',
+            // La police (vank · gotham · playwrite) et la couleur (#RRGGBB) choisies ; null : celles du gabarit.
+            'titleFont'     => in_array($cover['titleFont'] ?? null, self::COVER_FONTS, true) ? $cover['titleFont'] : null,
+            'titleColor'    => self::COVER_COLORS[(string) ($cover['titleColor'] ?? '')] ?? null,
+            'subtitleFont'  => in_array($cover['subtitleFont'] ?? null, self::COVER_FONTS, true) ? $cover['subtitleFont'] : null,
+            'subtitleColor' => self::COVER_COLORS[(string) ($cover['subtitleColor'] ?? '')] ?? null,
         ];
     }
 

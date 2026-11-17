@@ -98,6 +98,10 @@ function coverPage(cover: CatalogueCover, lang: CatalogueLang, shop: CatalogueCh
     template: cover.template,
     kicker: cover.gamme !== null ? (lang === 'nl' ? 'Het gamma' : 'La gamme') : null,
     drawing: imageUrl === null && slug ? `img/print/${slug}.png` : null,
+    titleFont: cover.titleFont ?? null,
+    titleColor: api.CATALOGUE_COVER_COLORS.find((c) => c.id === cover.titleColor)?.hex ?? null,
+    subtitleFont: cover.subtitleFont ?? null,
+    subtitleColor: api.CATALOGUE_COVER_COLORS.find((c) => c.id === cover.subtitleColor)?.hex ?? null,
     noVisual: cover.visual === 'none',
   }
 }
@@ -122,7 +126,7 @@ function backPage(charter: CatalogueCharter, lang: CatalogueLang, shop: Catalogu
     text: pick(lang, charter.back.textFr, charter.back.textNl),
     qrUrl: shop?.qrUrl ?? null,
     host: shop?.host ?? null,
-    shop: shop ? { id: shop.id, erpShopId: shop.erpShopId, name: shop.name, address: shop.address, hours: lang === 'nl' ? shop.hoursNl || shop.hours : shop.hours, phone: shop.phone } : null,
+    shop: shop ? { id: shop.id, erpShopId: shop.erpShopId, name: shop.name, address: shop.address, hours: lang === 'nl' ? shop.hoursNl || shop.hours : shop.hours, phone: shop.phone, email: shop.email, phone2: shop.phone2 } : null,
     template: charter.back.template,
   }
 }
@@ -132,7 +136,8 @@ function brandDoc(charter: CatalogueCharter, cover: CatalogueCover, lang: Catalo
   return {
     catalogue: { id: 0, title: '', format, owner: 'marque' },
     version: { shop: null, lang },
-    charter: { logoUrl: charter.logoUrl, colors: charter.colors },
+    // Le logo de la boutique de l'aperçu (charte, « Rempli par chaque boutique ») remplace celui de la charte, comme au document.
+    charter: { logoUrl: shop?.logoUrl ?? charter.logoUrl, colors: charter.colors },
     pages: [coverPage(cover, lang, shop), brandPage('page2', charter.page2, lang), brandPage('penultimate', charter.penultimate, lang), backPage(charter, lang, shop)],
     warnings: [],
   }
@@ -182,6 +187,66 @@ function Choice<T extends string>({ items, value, onChange, kind }: { items: Arr
   )
 }
 
+/**
+ * La police et la couleur d'un texte de la couverture (17/11/2026, Sam : « éditer en fonction du design system la typo
+ * — Gotham, Vank, Deva — et la couleur — abricot, rubis… ») : « Gabarit » garde celles du gabarit.
+ */
+function TextStyle({ label, font, color, onChange }: { label: string; font: api.CatalogueCoverFont | null; color: api.CatalogueCoverColor | null; onChange: (patch: { font?: api.CatalogueCoverFont | null; color?: api.CatalogueCoverColor | null }) => void }) {
+  return (
+    <div className="cha-style">
+      <span className="cha-style__l">{label}</span>
+      <span className="bro-seg cha-style__fonts" role="group" aria-label={`Police — ${label}`}>
+        <button type="button" className={font === null ? 'is-on' : ''} onClick={() => onChange({ font: null })} title="La police du gabarit">
+          Gabarit
+        </button>
+        {api.CATALOGUE_COVER_FONTS.map((f) => (
+          <button key={f.id} type="button" className={font === f.id ? 'is-on' : ''} style={{ fontFamily: f.css }} onClick={() => onChange({ font: f.id })} title={f.label}>
+            {f.label}
+          </button>
+        ))}
+      </span>
+      <span className="cha-swatches" role="group" aria-label={`Couleur — ${label}`}>
+        <button type="button" className={`cha-swatch cha-swatch--auto${color === null ? ' is-on' : ''}`} onClick={() => onChange({ color: null })} title="La couleur du gabarit" aria-label="Couleur du gabarit">
+          A
+        </button>
+        {api.CATALOGUE_COVER_COLORS.map((c) => (
+          <button key={c.id} type="button" className={`cha-swatch${color === c.id ? ' is-on' : ''}`} style={{ background: c.hex }} onClick={() => onChange({ color: c.id })} title={c.label} aria-label={c.label} />
+        ))}
+      </span>
+    </div>
+  )
+}
+
+/** Une ligne du tableau « Rempli par chaque boutique » que l'on saisit : enregistrée en quittant le champ (ou Entrée). */
+function ShopInput({ label, value, placeholder, max, onSave }: { label: string; value: string; placeholder: string; max: number; onSave: (v: string) => void }) {
+  const [draft, setDraft] = useState(value)
+  useEffect(() => setDraft(value), [value])
+  const commit = () => {
+    if (draft.trim() !== value) onSave(draft.trim())
+  }
+  return (
+    <tr>
+      <td>{label}</td>
+      <td>
+        <input
+          className="cha-shopin"
+          value={draft}
+          maxLength={max}
+          placeholder={placeholder}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') (event.target as HTMLInputElement).blur()
+          }}
+        />
+      </td>
+      <td>
+        <span className={`cha-dot${draft.trim() ? '' : ' cha-dot--off'}`} /> Saisi ici · cette boutique
+      </td>
+    </tr>
+  )
+}
+
 function Field({ label, value, onChange, placeholder, area = false, max = 240 }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; area?: boolean; max?: number }) {
   return (
     <label className="cha-field">
@@ -211,7 +276,8 @@ export default function CharterAssistant({ onBack }: { onBack: () => void }) {
   const [format, setFormat] = useState<CatalogueFormat>('A5')
   const [coverIndex, setCoverIndex] = useState(0)
   const [shopId, setShopId] = useState<number | null>(null)
-  const [picking, setPicking] = useState<null | 'cover' | 'page2' | 'penultimate' | 'logo'>(null)
+  const [picking, setPicking] = useState<null | 'cover' | 'page2' | 'penultimate' | 'logo' | 'shopLogo'>(null)
+  const [shopSave, setShopSave] = useState<{ status: 'idle' | 'saving' | 'error'; text?: string }>({ status: 'idle' })
   const [save, setSave] = useState<{ status: 'idle' | 'saving' | 'saved' | 'error'; text?: string }>({ status: 'idle' })
   const [published, setPublished] = useState<string | null>(null)
   const [publishing, setPublishing] = useState(false)
@@ -282,6 +348,18 @@ export default function CharterAssistant({ onBack }: { onBack: () => void }) {
   const gammes = webshop.data?.gammes ?? []
   const shops = checks?.shops ?? []
   const shop = shops.find((s) => s.id === shopId) ?? shops[0] ?? null
+  /** Ce que la boutique imprime en plus à la dernière page (second téléphone, webshop direct, logo) : enregistré tout de suite. */
+  function saveShop(patch: { phone2?: string; webshopUrl?: string; logoMediaId?: number | null }) {
+    if (!shop) return
+    setShopSave({ status: 'saving' })
+    api.saveCatalogueShop(shop.id, patch).then(
+      (row) => {
+        setChecks((current) => (current ? { ...current, shops: current.shops.map((s) => (s.id === row.id ? row : s)) } : current))
+        setShopSave({ status: 'idle' })
+      },
+      (cause: unknown) => setShopSave({ status: 'error', text: message(cause) }),
+    )
+  }
 
   const doc = useMemo(
     () => (charter ? brandDoc(charter, charter.covers[coverIndex] ?? charter.covers[0], lang, shop, format) : null),
@@ -449,7 +527,11 @@ export default function CharterAssistant({ onBack }: { onBack: () => void }) {
           <Field label="Sous-titre FR" value={cover.subtitleFr} onChange={(v) => setCover({ subtitleFr: v })} />
           <Field label="Sous-titre NL" value={cover.subtitleNl} placeholder="À écrire" onChange={(v) => setCover({ subtitleNl: v })} />
         </div>
-        <p className="cha-note">Le nom de la boutique s’ajoute seul en bas de la couverture, dans chaque version.</p>
+        <div className="cha-styles">
+          <TextStyle label="Titre" font={cover.titleFont ?? null} color={cover.titleColor ?? null} onChange={(p) => setCover({ ...('font' in p ? { titleFont: p.font } : {}), ...('color' in p ? { titleColor: p.color } : {}) })} />
+          <TextStyle label="Sous-titre" font={cover.subtitleFont ?? null} color={cover.subtitleColor ?? null} onChange={(p) => setCover({ ...('font' in p ? { subtitleFont: p.font } : {}), ...('color' in p ? { subtitleColor: p.color } : {}) })} />
+        </div>
+        <p className="cha-note">Le nom de la boutique s’ajoute seul en bas de la couverture, dans chaque version. Police et couleur : celles de la marque (design system) ; « Gabarit » et « A » gardent celles du gabarit.</p>
       </section>
 
       <section className="cha-card">
@@ -575,7 +657,8 @@ export default function CharterAssistant({ onBack }: { onBack: () => void }) {
                   ['Adresse', shop.address, 'TFBuddy · boutique', missingFor(shop, 'address')],
                   ['Horaires', lang === 'nl' ? shop.hoursNl || shop.hours : shop.hours, 'TFBuddy · boutique', missingFor(shop, 'hours')],
                   ['Téléphone', shop.phone, 'TFBuddy · boutique', missingFor(shop, 'phone')],
-                  ['QR code', shop.qrUrl ? 'Webshop de la boutique' : '', 'Réglage webshop_url (Social)', missingFor(shop, 'qr')],
+                  ['E-mail', shop.email, 'ERP · fiche de la boutique', !shop.email],
+                  ['QR code', shop.qrUrl ? (shop.host ?? shop.qrUrl) : '', shop.webshopUrl ? 'Webshop direct, saisi ci-dessous' : 'Réglage webshop_url (Social)', missingFor(shop, 'qr')],
                 ] as Array<[string, string, string, boolean]>
               ).map(([what, value, from, missing]) => (
                 <tr key={what}>
@@ -586,12 +669,38 @@ export default function CharterAssistant({ onBack }: { onBack: () => void }) {
                   </td>
                 </tr>
               ))}
+              <ShopInput key={`p2-${shop.id}`} label="Téléphone 2" value={shop.phone2} placeholder="ex. 0470 12 34 56" max={40} onSave={(v) => saveShop({ phone2: v })} />
+              <ShopInput key={`w-${shop.id}`} label="Webshop direct" value={shop.webshopUrl} placeholder="https://… l’adresse de la boutique sur le webshop (le QR y mène)" max={300} onSave={(v) => saveShop({ webshopUrl: v })} />
+              <tr>
+                <td>Logo</td>
+                <td>
+                  <span className="cha-shoplogo">
+                    {shop.logoUrl ? <img src={shop.logoUrl} alt="" /> : <span className="cha-tag">celui de la charte</span>}
+                    <button type="button" className="btn btn--sm" onClick={() => setPicking('shopLogo')}>
+                      {shop.logoUrl ? 'Changer' : 'Choisir dans la médiathèque'}
+                    </button>
+                    {shop.logoUrl ? (
+                      <button type="button" className="linklike" onClick={() => saveShop({ logoMediaId: null })}>
+                        Retirer
+                      </button>
+                    ) : null}
+                  </span>
+                </td>
+                <td>
+                  <span className="cha-dot" /> Saisi ici · ses catalogues seulement
+                </td>
+              </tr>
             </tbody>
           </table>
         ) : (
           <p className="muted">{checks ? 'Aucune boutique reliée à la caisse.' : 'Lecture des boutiques…'}</p>
         )}
-        <p className="cha-note">Changer une adresse ou des horaires se fait dans l’ERP : le prochain PDF les reprend. Rien n’est recopié ici.</p>
+        {shopSave.status === 'error' ? <p className="cha-warn">{shopSave.text}</p> : shopSave.status === 'saving' ? <p className="cha-note">Enregistrement…</p> : null}
+        <p className="cha-note">
+          Changer une adresse, des horaires, le téléphone ou l’e-mail se fait dans l’ERP : le prochain PDF les reprend. Le second téléphone, le webshop direct et le
+          logo, que l’ERP ne porte pas, se saisissent ici, boutique par boutique (vides : rien ne s’imprime, le QR mène au webshop du réseau, le logo est celui
+          de la charte).
+        </p>
       </section>
 
       {toComplete.length || (checks && checks.webshopUrl === null) ? (
@@ -609,8 +718,8 @@ export default function CharterAssistant({ onBack }: { onBack: () => void }) {
           {checks && checks.webshopUrl === null ? (
             <div className="cha-todo">
               <span className="cha-todo__name">Toutes les boutiques</span>
-              <span className="cha-tag cha-tag--warn">Adresse du webshop inconnue : pas de QR code</span>
-              <span className="cha-todo__where">réglage webshop_url du module Social</span>
+              <span className="cha-tag cha-tag--warn">Adresse du webshop du réseau inconnue : pas de QR code sans webshop direct</span>
+              <span className="cha-todo__where">webshop direct de chaque boutique (ci-dessus), ou réglage webshop_url du module Social</span>
             </div>
           ) : null}
         </section>
@@ -880,6 +989,7 @@ export default function CharterAssistant({ onBack }: { onBack: () => void }) {
           onPick={(asset: MediaAsset) => {
             const mediaId = Number(asset.id)
             if (picking === 'logo') change((c) => ({ ...c, logoMediaId: mediaId, logoUrl: asset.url }))
+            else if (picking === 'shopLogo') saveShop({ logoMediaId: mediaId })
             else if (picking === 'cover') setCover({ visual: 'media', mediaId, imageUrl: asset.url })
             else setBrand(picking, { mediaId, imageUrl: asset.url, template: charter[picking].template === 'A' ? 'B' : charter[picking].template })
             setPicking(null)

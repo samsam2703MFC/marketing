@@ -4820,7 +4820,7 @@ $tfbCat = static function (string $url, array $entetes = [], int $delai = 5, str
     }
     if ($p === '/api/v1/public/shops') {
         return [200, (string) json_encode([
-            ['id' => 9104, 'representative_name' => 'Atelier by - Sombreffe', 'street' => 'Rue de la Gare', 'street_num' => '12', 'city' => 'Sombreffe', 'zip' => '5140', 'phone' => '071 00 00 00', 'opening_hours' => '07:00', 'closing_hours' => '18:30'],
+            ['id' => 9104, 'representative_name' => 'Atelier by - Sombreffe', 'street' => 'Rue de la Gare', 'street_num' => '12', 'city' => 'Sombreffe', 'zip' => '5140', 'phone' => '071 00 00 00', 'opening_hours' => '07:00', 'closing_hours' => '18:30', 'email' => 'sombreffe@atelier.test'],
             ['id' => 9105, 'representative_name' => 'Atelier by - Corbais', 'street' => 'Rue de Corbais', 'street_num' => '3', 'city' => 'Corbais', 'zip' => '1435', 'phone' => '010 00 00 00', 'opening_hours' => '07:30', 'closing_hours' => '19:00'],
         ])];
     }
@@ -4867,6 +4867,7 @@ $catRouter->get('/api/v1/marketing/catalogue-products', [$catBrand, 'products'])
 $catRouter->get('/api/v1/marketing/catalogue-charter', [$catBrand, 'charter']);
 $catRouter->put('/api/v1/marketing/catalogue-charter', [$catBrand, 'saveCharter']);
 $catRouter->get('/api/v1/marketing/catalogue-charter/checks', [$catBrand, 'charterChecks']);
+$catRouter->put('/api/v1/marketing/catalogue-shops/{id}', [$catBrand, 'saveShop']);
 $catRouter->get('/api/v1/marketing/catalogue-charter/publications', [$catBrand, 'charterVersions']);
 $catRouter->post('/api/v1/marketing/catalogue-charter/publications', [$catBrand, 'publishCharter']);
 $SB = '/api/v1/integration/marketing/shops/{shopId}';
@@ -5264,7 +5265,8 @@ $gabarits = [
     'colors' => ['primary' => '#8D1D2C', 'secondary' => '#F5EFE4', 'accent' => '#B0792A', 'ink' => '#241C1A'],
     'covers' => [
         ['gamme' => null, 'titleFr' => 'Notre catalogue', 'titleNl' => 'Onze catalogus', 'subtitleFr' => '', 'subtitleNl' => '', 'mediaId' => null],
-        ['gamme' => 14, 'titleFr' => 'Noël', 'titleNl' => 'Kerst', 'subtitleFr' => 'Bûches et cougnous', 'subtitleNl' => 'Stronken en kerstbrood', 'mediaId' => null, 'template' => 'B', 'visual' => 'illustration', 'illustration' => 'noel'],
+        ['gamme' => 14, 'titleFr' => 'Noël', 'titleNl' => 'Kerst', 'subtitleFr' => 'Bûches et cougnous', 'subtitleNl' => 'Stronken en kerstbrood', 'mediaId' => null, 'template' => 'B', 'visual' => 'illustration', 'illustration' => 'noel',
+            'titleFont' => 'playwrite', 'titleColor' => 'abricot', 'subtitleColor' => 'or'],
     ],
     'back' => ['titleFr' => 'Commandez en ligne', 'titleNl' => 'Bestel online', 'textFr' => 'Retrait en boutique ou livraison.', 'textNl' => 'Afhalen of levering.', 'template' => 'B'],
     'page2' => ['titleFr' => 'Le mot de la boulangerie', 'titleNl' => 'Het woord van de bakkerij', 'textFr' => 'Un paragraphe.', 'textNl' => 'Een alinea.', 'mediaId' => null, 'template' => 'C'],
@@ -5281,10 +5283,17 @@ check('charte : gabarits — brouillon enregistré sans effet, puis publié (ver
         && ($ap[0]['template'] ?? '') === 'B' && ($ap[0]['drawing'] ?? '') === 'img/print/noel.png' && ($ap[0]['title'] ?? '') === 'Noël' && ($ap[0]['kicker'] ?? '') === 'La gamme'
         && ($ap[1]['template'] ?? '') === 'C' && (end($ap)['template'] ?? '') === 'B' && ($apresPub['body']['data']['charter']['version'] ?? 0) === 2,
     json_encode([$poseG['body']['error'] ?? null, $pubG['body'], $ap[0] ?? null, $ap[1] ?? null], JSON_UNESCAPED_UNICODE));
+check('charte : la police et la couleur du titre et du sous-titre (design system : Vank, Gotham, Playwrite DEVA ; rubis, abricot, or…) — enregistrées par leur nom, rendues au document en #RRGGBB ; absentes = celles du gabarit',
+    ($poseG['body']['data']['covers'][1]['titleFont'] ?? '') === 'playwrite' && ($poseG['body']['data']['covers'][1]['titleColor'] ?? '') === 'abricot'
+        && array_key_exists('subtitleFont', $poseG['body']['data']['covers'][1] ?? []) && $poseG['body']['data']['covers'][1]['subtitleFont'] === null
+        && ($ap[0]['titleFont'] ?? '') === 'playwrite' && ($ap[0]['titleColor'] ?? '') === '#F2C9A0' && ($ap[0]['subtitleColor'] ?? '') === '#B0792A'
+        && array_key_exists('subtitleFont', $ap[0] ?? []) && $ap[0]['subtitleFont'] === null
+        && array_key_exists('titleColor', $avantPub['body']['data']['pages'][0] ?? []) && $avantPub['body']['data']['pages'][0]['titleColor'] === null,
+    json_encode([$poseG['body']['data']['covers'][1] ?? null, $ap[0] ?? null], JSON_UNESCAPED_UNICODE));
 $etatPub = call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter');
 check('charte : publiée, le brouillon n’a plus de différence ; l’ordre des clés relues est fixe',
     ($etatPub['body']['data']['publication']['version'] ?? 0) === 2 && ($etatPub['body']['data']['publication']['draftChanged'] ?? true) === false
-        && array_keys($etatPub['body']['data']['covers'][1] ?? []) === ['gamme', 'titleFr', 'titleNl', 'subtitleFr', 'subtitleNl', 'mediaId', 'template', 'visual', 'illustration', 'imageUrl']
+        && array_keys($etatPub['body']['data']['covers'][1] ?? []) === ['gamme', 'titleFr', 'titleNl', 'subtitleFr', 'subtitleNl', 'mediaId', 'template', 'visual', 'illustration', 'titleFont', 'titleColor', 'subtitleFont', 'subtitleColor', 'imageUrl']
         && array_keys($etatPub['body']['data']['back'] ?? []) === ['titleFr', 'titleNl', 'textFr', 'textNl', 'template'],
     json_encode($etatPub['body']['data'] ?? null, JSON_UNESCAPED_UNICODE));
 $refusG = [
@@ -5293,10 +5302,12 @@ $refusG = [
     call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['covers' => [['gamme' => 14, 'titleFr' => 'a', 'illustration' => 'licorne']]]),
     call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['back' => ['titleFr' => 'a', 'template' => 'C']]),
     call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['page2' => ['titleFr' => 'a', 'template' => 'D']]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['covers' => [['gamme' => 14, 'titleFr' => 'a', 'titleFont' => 'comic']]]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['covers' => [['gamme' => 14, 'titleFr' => 'a', 'subtitleColor' => '#FF0000']]]),
 ];
 check('charte : gabarits refusés (422, champ nommé) — couverture Z, « médiathèque » sans image, dessin inconnu, dernière page C, page 2 D ; rien d’écrit',
     array_unique(array_column($refusG, 'status')) === [422]
-        && array_map(static fn (array $r): string => (string) ($r['body']['error']['details'][0]['field'] ?? ''), $refusG) === ['covers[0].template', 'covers[0].mediaId', 'covers[0].illustration', 'back.template', 'page2.template']
+        && array_map(static fn (array $r): string => (string) ($r['body']['error']['details'][0]['field'] ?? ''), $refusG) === ['covers[0].template', 'covers[0].mediaId', 'covers[0].illustration', 'back.template', 'page2.template', 'covers[0].titleFont', 'covers[0].subtitleColor']
         && (call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter')['body']['data']['publication']['draftChanged'] ?? true) === false,
     json_encode(array_map(static fn (array $r): mixed => $r['body']['error']['details'] ?? null, $refusG), JSON_UNESCAPED_UNICODE));
 $histo = call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter/publications', ['perPage' => '1']);
@@ -5507,6 +5518,38 @@ check('présentation : deux gammes, répartition automatique — chaque gamme co
         ['layout' => 'grille', 'category' => 600, 'gamme' => 14],
         ['layout' => 'presentation', 'category' => null, 'gamme' => 16],
     ], json_encode([$gammes2['status'], $gammes2['body']['error'] ?? null, $g2['pages'] ?? null]));
+
+// La dernière page (17/11/2026, client : « rajouter mail, téléphone 2, QR code de l'adresse directe du webshop, un logo
+// différent par magasin ») : l'e-mail lu dans l'ERP ; second téléphone, webshop direct et logo saisis par boutique.
+$coordA = call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['phone2' => '0470 12 34 56', 'webshopUrl' => 'https://sombreffe.webshop.test/', 'logoMediaId' => $mediaTest['sombreffe']]);
+$docCoord = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idG2 . '/document', ['shopId' => (string) $catA]);
+$dosA = end($docCoord['body']['data']['pages']) ?: [];
+$docCoordB = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idG2 . '/document', ['shopId' => (string) $catB]);
+check('dernière page : e-mail de l’ERP, second téléphone, QR du webshop direct de la boutique et son logo (à la place de celui de la charte) ; la voisine garde les siens',
+    $coordA['status'] === 200 && ($coordA['body']['data']['phone2'] ?? '') === '0470 12 34 56' && ($coordA['body']['data']['email'] ?? '') === 'sombreffe@atelier.test'
+        && ($coordA['body']['data']['qrUrl'] ?? '') === 'https://sombreffe.webshop.test/' && ($coordA['body']['data']['logoMediaId'] ?? 0) === $mediaTest['sombreffe'] && ($coordA['body']['data']['logoUrl'] ?? '') !== ''
+        && ($dosA['shop']['email'] ?? '') === 'sombreffe@atelier.test' && ($dosA['shop']['phone2'] ?? '') === '0470 12 34 56'
+        && ($dosA['qrUrl'] ?? '') === 'https://sombreffe.webshop.test/' && ($dosA['host'] ?? '') === 'sombreffe.webshop.test'
+        && ($docCoord['body']['data']['charter']['logoUrl'] ?? '') === ($coordA['body']['data']['logoUrl'] ?? 'x')
+        && (end($docCoordB['body']['data']['pages'])['qrUrl'] ?? '') === 'https://webshop.test/?shop=9105' && (end($docCoordB['body']['data']['pages'])['shop']['phone2'] ?? 'x') === ''
+        && ($docCoordB['body']['data']['charter']['logoUrl'] ?? 'x') !== ($coordA['body']['data']['logoUrl'] ?? ''),
+    json_encode([$coordA['body'], $dosA, $docCoord['body']['data']['charter'] ?? null], JSON_UNESCAPED_UNICODE));
+$refusCoord = [
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['phone2' => 'appelez-nous']),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['webshopUrl' => 'ftp://webshop.test']),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['logoMediaId' => $mediaTest['corbais']]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['logoMediaId' => $mediaTest['archivee']]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['fax' => '1']),
+];
+$inconnue = call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/999999999', [], ['phone2' => '1']);
+// Effacées (chaînes vides, logo null) : la boutique revient au webshop du réseau et au logo de la charte — la recette repasse.
+$effaceA = call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['phone2' => '', 'webshopUrl' => '', 'logoMediaId' => null]);
+check('dernière page : refusés (422, champ nommé) — téléphone en lettres, adresse non http, logo d’une autre boutique, archivé, champ inconnu ; boutique inconnue (404) ; effacées, la boutique revient au réseau',
+    array_map(static fn (array $r): int => $r['status'], $refusCoord) === [422, 422, 422, 422, 422]
+        && array_map(static fn (array $r): string => (string) ($r['body']['error']['details'][0]['field'] ?? ''), $refusCoord) === ['phone2', 'webshopUrl', 'logoMediaId', 'logoMediaId', 'fax']
+        && $inconnue['status'] === 404 && $effaceA['status'] === 200 && ($effaceA['body']['data']['qrUrl'] ?? '') === 'https://webshop.test/?shop=9104'
+        && ($effaceA['body']['data']['phone2'] ?? 'x') === '' && array_key_exists('logoMediaId', $effaceA['body']['data'] ?? []) && $effaceA['body']['data']['logoMediaId'] === null,
+    json_encode([array_map(static fn (array $r): mixed => $r['body'], $refusCoord), $effaceA['body']], JSON_UNESCAPED_UNICODE));
 $docG2 = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idG2 . '/document');
 $pg2 = $docG2['body']['data']['pages'] ?? [];
 check('présentation : le document — la page de la gamme porte son nom (charte), sa photo ou son dessin de saison ; ses pages de produits rappellent son dessin',
