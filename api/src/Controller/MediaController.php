@@ -41,7 +41,16 @@ final class MediaController
         'source'      => ['eq'],
         'archived'    => ['eq'],
         'name'        => ['contains'],
+        // Les étiquettes (17/11/2026) : ce que la régie d'affichage demande.
+        'moment'      => ['eq'],
+        'usage'       => ['eq'],
+        'product'     => ['eq'],
+        'tag'         => ['eq'],
+        'format'      => ['eq'],
+        'valid'       => ['eq'],
     ];
+
+    private const FORMATS = ['carre', 'portrait', 'paysage'];
 
     private const KINDS   = ['image', 'video'];
     private const SOURCES = ['marketing', 'social'];
@@ -189,8 +198,9 @@ final class MediaController
         }
 
         $errors = [];
+        $editable = array_merge(self::FIELDS, MediaService::TAG_FIELDS);
         foreach (array_keys($request->body) as $key) {
-            if (!in_array($key, array_merge(self::FIELDS, ['archived']), true)) {
+            if (!in_array($key, array_merge($editable, ['archived']), true)) {
                 $errors[] = ['field' => (string) $key, 'message' => 'Champ inconnu ou non modifiable.'];
             }
         }
@@ -201,13 +211,13 @@ final class MediaController
                 $errors[] = ['field' => 'archived', 'message' => 'Valeur attendue : true ou false.'];
             }
         }
-        $checked = $this->service->validateFields(array_intersect_key($request->body, array_flip(self::FIELDS)), $row);
+        $checked = $this->service->validateFields(array_intersect_key($request->body, array_flip($editable)), $row);
         $errors  = array_merge($errors, $checked['errors']);
         if ($errors !== []) {
             return Envelope::error('VALIDATION_FAILED', 'Modification refusée.', 422, $errors);
         }
 
-        $media = $this->service->update((int) $row['id'], $checked['fields']);
+        $media = $this->service->update((int) $row['id'], $checked['fields'], $checked['tags'], AuthContext::current()?->userId ?? 0);
         if ($archived !== null) {
             $media = $this->service->setArchived((int) $row['id'], $archived);
         }
@@ -256,6 +266,175 @@ final class MediaController
         }
 
         return Envelope::ok($this->service->setArchived((int) $row['id'], true));
+    }
+
+    // --- Étiquettes proposées, à valider ---------------------------------------------
+
+    /**
+     * `GET …/media-tag-proposals?page=&perPage=&filter[media][eq]=` : les fichiers qui ont des propositions en attente,
+     * chacun avec les siennes. `meta.proposals` : le nombre de propositions en attente.
+     */
+    public function proposals(Request $request): array
+    {
+        if (($denied = self::deny()) !== null) {
+            return $denied;
+        }
+        $errors = [];
+        foreach (array_keys($request->query) as $key) {
+            if (!in_array($key, ['page', 'perPage', 'filter'], true)) {
+                $errors[] = ['field' => (string) $key, 'message' => 'Paramètre inconnu.'];
+            }
+        }
+        // Un seul filtre : `filter[media][eq]`, les propositions d'une fiche.
+        $mediaId = null;
+        $filter  = $request->query['filter'] ?? [];
+        if (!is_array($filter) || array_diff(array_keys($filter), ['media']) !== []) {
+            $errors[] = ['field' => 'filter', 'message' => 'Filtre accepté : filter[media][eq].'];
+        } elseif (isset($filter['media'])) {
+            $spec    = is_array($filter['media']) ? $filter['media'] : ['eq' => $filter['media']];
+            $mediaId = array_keys($spec) === ['eq'] ? self::positiveInt($spec['eq']) : null;
+            if ($mediaId === null) {
+                $errors[] = ['field' => 'filter[media][eq]', 'message' => 'Identifiant de fichier attendu.'];
+            }
+        }
+        $page    = self::positiveInt($request->query['page'] ?? '1');
+        $perPage = self::positiveInt($request->query['perPage'] ?? (string) self::PER_PAGE_DEFAULT);
+        if ($page === null) {
+            $errors[] = ['field' => 'page', 'message' => 'Entier positif attendu.'];
+        }
+        if ($perPage === null) {
+            $errors[] = ['field' => 'perPage', 'message' => 'Entier positif attendu.'];
+        }
+        if ($errors !== []) {
+            return Envelope::error('VALIDATION_FAILED', 'Paramètres de la liste invalides.', 422, $errors);
+        }
+        $perPage = min(self::PER_PAGE_MAX, (int) $perPage);
+        $result  = $this->service->proposalPage((int) $page, $perPage, $mediaId);
+
+        return Envelope::ok($result['items'], [
+            'pagination' => Envelope::pagination((int) $page, $perPage, $result['total']),
+            'proposals'  => $result['proposals'],
+        ]);
+    }
+
+    /**
+     * `POST …/media-tag-proposals` `{items: [{mediaId, family, value, label?, reason}]}` : des
+     * propositions tirées du webshop et du fichier. Tout ou rien à la lecture ; ce qui est déjà
+     * appliqué ou déjà proposé est passé (`skipped`). `201` si au moins une est nouvelle, `200` sinon.
+     */
+    public function propose(Request $request): array
+    {
+        if (($denied = self::deny()) !== null) {
+            return $denied;
+        }
+        $errors = [];
+        foreach (array_keys($request->body) as $key) {
+            if ($key !== 'items') {
+                $errors[] = ['field' => (string) $key, 'message' => 'Champ inconnu.'];
+            }
+        }
+        $checked = $this->service->validateProposals($request->body['items'] ?? null);
+        $errors  = array_merge($errors, $checked['errors']);
+        if ($errors !== []) {
+            return Envelope::error('VALIDATION_FAILED', 'Propositions refusées.', 422, $errors);
+        }
+        $result = $this->service->propose($checked['rows'], AuthContext::current()?->userId ?? 0);
+
+        return Envelope::ok($result, [], $result['created'] > 0 ? 201 : 200);
+    }
+
+    /**
+     * `PATCH …/media-tag-proposals/{id}` `{status: accepted | refused}` : ✓ applique la proposition à
+     * la fiche, ✕ la garde refusée. La même décision redonnée : `200` sans effet ; une décision
+     * contraire sur une proposition déjà tranchée : `409`.
+     */
+    public function decide(Request $request): array
+    {
+        if (($denied = self::deny()) !== null) {
+            return $denied;
+        }
+        $id  = $request->intParam('id');
+        $row = $id !== null ? $this->service->findProposal($id) : null;
+        if ($row === null) {
+            return Envelope::error('RESOURCE_NOT_FOUND', 'Proposition introuvable.', 404);
+        }
+        $status = self::decision($request->body, $errors);
+        if ($errors !== []) {
+            return Envelope::error('VALIDATION_FAILED', 'Décision refusée.', 422, $errors);
+        }
+        if ((string) $row['status'] !== 'proposed' && (string) $row['status'] !== $status) {
+            return Envelope::error('RESOURCE_STATE_INVALID', 'Cette proposition est déjà tranchée (' . $row['status'] . ').', 409);
+        }
+        $this->service->decide($row, (string) $status, AuthContext::current()?->userId ?? 0);
+        $after = (array) $this->service->findProposal((int) $id);
+        $media = $this->service->find((int) $after['media_id']);
+
+        return Envelope::ok([
+            'proposal' => $this->service->serializeProposal($after),
+            'media'    => $media !== null ? $this->service->serialize($media) : null,
+        ]);
+    }
+
+    /**
+     * `PATCH …/media-tag-proposals` `{ids: [...], status}` : « Tout accepter », ou le ✓ / ✕ d'une
+     * ligne. Les propositions déjà tranchées sont passées ; `updated` dit combien l'ont été ici.
+     */
+    public function decideMany(Request $request): array
+    {
+        if (($denied = self::deny()) !== null) {
+            return $denied;
+        }
+        $status = self::decision($request->body, $errors, ['ids']);
+        $ids    = $request->body['ids'] ?? null;
+        $list   = [];
+        if (!is_array($ids) || !array_is_list($ids) || $ids === [] || count($ids) > MediaService::PROPOSALS_MAX) {
+            $errors[] = ['field' => 'ids', 'message' => sprintf('Liste de 1 à %d identifiants attendue.', MediaService::PROPOSALS_MAX)];
+        } else {
+            foreach ($ids as $i => $value) {
+                $number = self::positiveInt($value);
+                if ($number === null) {
+                    $errors[] = ['field' => 'ids[' . $i . ']', 'message' => 'Entier positif attendu.'];
+                } else {
+                    $list[$number] = true;
+                }
+            }
+        }
+        if ($errors !== []) {
+            return Envelope::error('VALIDATION_FAILED', 'Décision refusée.', 422, $errors);
+        }
+        $updated = 0;
+        $userId  = AuthContext::current()?->userId ?? 0;
+        foreach (array_keys($list) as $id) {
+            $row = $this->service->findProposal($id);
+            if ($row !== null && (string) $row['status'] === 'proposed' && $this->service->decide($row, (string) $status, $userId)) {
+                $updated++;
+            }
+        }
+
+        return Envelope::ok(['updated' => $updated, 'proposals' => $this->service->proposalCount()]);
+    }
+
+    /**
+     * @param array<string,mixed>                          $body
+     * @param list<array{field:string, message:string}>|null $errors
+     * @param list<string>                                  $extra Autres champs admis.
+     */
+    private static function decision(array $body, ?array &$errors, array $extra = []): ?string
+    {
+        $errors = [];
+        foreach (array_keys($body) as $key) {
+            if (!in_array($key, array_merge(['status'], $extra), true)) {
+                $errors[] = ['field' => (string) $key, 'message' => 'Champ inconnu.'];
+            }
+        }
+        $status = $body['status'] ?? null;
+        if (!in_array($status, ['accepted', 'refused'], true)) {
+            $errors[] = ['field' => 'status', 'message' => 'Valeur acceptée : accepted, refused.'];
+
+            return null;
+        }
+
+        return $status;
     }
 
     /** @return array<string,mixed> La ligne, ou la réponse 404. */
@@ -334,6 +513,31 @@ final class MediaController
                     case 'name:contains':
                         $ok = mb_strlen($value) <= 100;
                         $filters['name'] = $value;
+                        break;
+                    case 'moment:eq':
+                        $ok = isset(MediaService::MOMENTS[$value]);
+                        $filters['moment'] = $value;
+                        break;
+                    case 'usage:eq':
+                        $ok = isset(MediaService::USAGES[$value]);
+                        $filters['usage'] = $value;
+                        break;
+                    case 'product:eq':
+                        $ok = preg_match('/^[1-9][0-9]{0,18}$/', $value) === 1;
+                        $filters['product'] = $value;
+                        break;
+                    case 'tag:eq':
+                        $ok = $value !== '' && mb_strlen($value) <= 40;
+                        $filters['tag'] = mb_strtolower(ltrim(trim($value), '#'));
+                        break;
+                    case 'format:eq':
+                        $ok = in_array($value, self::FORMATS, true);
+                        $filters['format'] = $value;
+                        break;
+                    case 'valid:eq':
+                        $flag = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+                        $ok = $flag !== null;
+                        $filters['valid'] = (bool) $flag;
                         break;
                 }
                 if (!$ok) {

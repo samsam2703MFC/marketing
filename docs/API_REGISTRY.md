@@ -135,6 +135,10 @@ entière, pour attraper une colonne ajoutée plus tard.
 | PATCH | `…/media-assets/{id}` | marque | enveloppe — nom, classements, `archived` |
 | PUT | `…/media-assets/{id}/thumbnail` | marque | enveloppe — couverture d'une vidéo |
 | DELETE | `…/media-assets/{id}` | marque | enveloppe — retrait idempotent, le fichier reste servi |
+| GET | `…/media-tag-proposals?page=&perPage=&filter[media][eq]=` | marque | enveloppe + `data[]` paginé (fichier + ses propositions), `meta.proposals` — §9 |
+| POST | `…/media-tag-proposals` | marque | enveloppe — `{created, skipped, proposals}`, `201` / `200` (idempotent) |
+| PATCH | `…/media-tag-proposals` | marque | enveloppe — `{ids, status}` : « Tout accepter », ✓ / ✕ d'une ligne |
+| PATCH | `…/media-tag-proposals/{id}` | marque | enveloppe — ✓ / ✕ ; décision contraire sur une proposition tranchée : `409 RESOURCE_STATE_INVALID` |
 
 ### 2.5 CRM, prospection, analyse
 
@@ -557,6 +561,30 @@ perdait. Tables `mar_media`, `mar_media_category`, `mar_media_season` (migration
   `meta.duplicate: true`), remise dans la médiathèque si elle en avait été retirée.
 - Retrait (`DELETE`, ou `PATCH {archived: true}`) : la fiche sort de la liste,
   le fichier reste servi — un post publié ou une brochure peut encore pointer dessus.
+- **Étiquettes (17/11/2026, OpenAPI `docs/openapi/media.yaml` v1.1).** Demande : « taguer
+  les images », retenues les idées 1 (sur la fiche) et 2 (proposées, à valider) de la maquette
+  `docs/maquettes/mediatheque/`, « en rectangles au coin arrondi », puis « un assistant d'import
+  en lot avec la proposition des tags ». Pourquoi : la régie d'affichage (`signage`) tire au
+  sort une image du moment courant et d'une saison active, a besoin du produit montré et du sens
+  de l'image. Migration 052 : `mar_media_tag` (moment `matin | midi | apres-midi` — aucun = toute
+  la journée —, usage `ecrans | reseaux | catalogue | webshop | affiche`, produit = id du produit
+  du webshop/ERP et son nom, libre), `mar_media_tag_proposal`, `mar_media.valid_until`. La fiche
+  rend `tags {moments, usages, products, free}`, `validUntil`, `format` (`carre | portrait |
+  paysage`, lu dans la taille à 5 % près, jamais stocké) et `pendingProposals`. `PATCH` accepte
+  `moments`, `usages`, `products` (8 au plus), `freeTags` (12 au plus), `validUntil` : chaque
+  famille envoyée remplace la précédente et tranche ses propositions en attente (acceptées pour
+  les valeurs retenues, refusées pour les autres) ; une saison ou le détourage choisis à la main
+  font de même. Ces champs ne passent pas au dépôt (`POST`, corps brut) : l'assistant d'import
+  dépose, puis pose les étiquettes. Filtres `filter[moment|usage|product|tag|format|valid][eq]`.
+- **Propositions.** Faites par l'écran (règles dans `src/views/media/tagRules.ts`) : le produit
+  d'après le nom du webshop (ou la photo du webshop versée), le moment d'après le rayon ou la
+  catégorie (viennoiserie → matin, traiteur, sandwich, salade, quiche → midi, pâtisserie, tarte,
+  biscuiterie, cookie → après-midi), la saison d'après un nom de fête, le détourage d'après la
+  transparence du fichier. Chacune dit d'après quoi (`reason`). Le serveur valide (fichier, famille,
+  valeur, saison existante, nom du produit), passe ce qui est déjà appliqué ou déjà proposé — un
+  ✕ ne revient pas — et applique un ✓ à la fiche. `media-library` rend `counts.proposals`.
+  Écart : les règles vivent dans l'écran, pas encore dans les réglages de la médiathèque
+  (maquette 6) ; elles y passeront quand l'écran des réglages sera codé.
 - Réservée au réseau : une identité de boutique reçoit `403`. Le module Social y
   accède par son jeton de service (identité réseau), avec `source: social`.
 

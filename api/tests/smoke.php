@@ -3678,6 +3678,147 @@ if (function_exists('imagecreatetruecolor')) {
             && ($media('GET', '/media-assets', ['filter' => ['offerItem' => ['eq' => (string) $idProduit]]])['body']['meta']['pagination']['total'] ?? 0) === 1,
         json_encode($lie['body']));
 
+    // Les étiquettes (17/11/2026) : moment, usage, produit du webshop, libres, fin de validité ; le
+    // format se lit dans la taille. Une famille se remplace d'un bloc.
+    $idTarte = (string) ($brut['body']['data']['id'] ?? '0');
+    $trie = static function (array $values): array {
+        sort($values);
+
+        return $values;
+    };
+    $etiq = $media('PATCH', '/media-assets/' . $idPhoto, [], ['moments' => ['matin'], 'usages' => ['ecrans', 'catalogue'],
+        'products' => [['id' => '4101', 'name' => 'Croissant']], 'freeTags' => ['#Vitrine', 'fait-maison'], 'validUntil' => '2099-12-31']);
+    $tags = $etiq['body']['data']['tags'] ?? [];
+    check('étiquettes : moment, usages, produit du webshop, libres (sans « # », en minuscules), fin de validité ; format lu dans la taille',
+        $etiq['status'] === 200 && ($tags['moments'] ?? null) === ['matin'] && $trie($tags['usages'] ?? []) === ['catalogue', 'ecrans']
+            && ($tags['products'] ?? null) === [['id' => '4101', 'name' => 'Croissant']] && $trie($tags['free'] ?? []) === ['fait-maison', 'vitrine']
+            && ($etiq['body']['data']['validUntil'] ?? null) === '2099-12-31' && ($etiq['body']['data']['format'] ?? null) === 'paysage'
+            && ($media('GET', '/media-assets/' . $idTarte)['body']['data']['format'] ?? null) === 'portrait',
+        json_encode($etiq['body']['data'] ?? $etiq['body']));
+    $parEtiquette = [
+        'moment'          => [['filter' => ['moment' => ['eq' => 'matin']]], 1],
+        'usage'           => [['filter' => ['usage' => ['eq' => 'ecrans']]], 1],
+        'produit'         => [['filter' => ['product' => ['eq' => '4101']]], 1],
+        'libre'           => [['filter' => ['tag' => ['eq' => '#vitrine']]], 1],
+        'format paysage'  => [['filter' => ['format' => ['eq' => 'paysage']]], 1],
+        'format portrait' => [['filter' => ['format' => ['eq' => 'portrait']]], 1],
+        'encore valable'  => [['filter' => ['valid' => ['eq' => 'true']]], 3],
+        'recherche dans les étiquettes' => [['filter' => ['name' => ['contains' => 'fait-maison']]], 1],
+    ];
+    foreach ($parEtiquette as $cas => [$query, $attendu]) {
+        $r = $media('GET', '/media-assets', $query);
+        check('liste filtrée par étiquette (' . $cas . ')', $r['status'] === 200 && ($r['body']['meta']['pagination']['total'] ?? -1) === $attendu,
+            json_encode([$r['status'], $r['body']['meta']['pagination']['total'] ?? $r['body']]));
+    }
+    $vide = $media('PATCH', '/media-assets/' . $idPhoto, [], ['moments' => []]);
+    check('une famille reçue vide s\'efface (toute la journée), les autres restent',
+        $vide['status'] === 200 && ($vide['body']['data']['tags']['moments'] ?? null) === [] && count($vide['body']['data']['tags']['usages'] ?? []) === 2);
+    $refusEtiq = [
+        'moment inconnu'   => ['moments' => ['soir']],
+        'usages sans liste' => ['usages' => 'ecrans'],
+        'produit mal formé' => ['products' => [['id' => 'abc', 'name' => 'Croissant']]],
+        'produit sans nom'  => ['products' => [['id' => '4101']]],
+        'étiquette libre'   => ['freeTags' => ['<script>']],
+        'date impossible'   => ['validUntil' => '2026-02-30'],
+    ];
+    $statutsEtiq = [];
+    foreach ($refusEtiq as $cas => $corps) {
+        $r = $media('PATCH', '/media-assets/' . $idPhoto, [], $corps);
+        $statutsEtiq[$cas] = $r['status'] === 422 && ($r['body']['error']['code'] ?? '') === 'VALIDATION_FAILED' && ($r['body']['error']['details'][0]['field'] ?? '') !== '';
+    }
+    $relue = $media('GET', '/media-assets/' . $idPhoto)['body']['data'] ?? [];
+    check('étiquettes refusées en 422, champ nommé, rien d\'écrit (moment inconnu, liste attendue, produit mal formé ou sans nom, étiquette libre, date impossible)',
+        !in_array(false, $statutsEtiq, true) && count($relue['tags']['usages'] ?? []) === 2 && ($relue['validUntil'] ?? null) === '2099-12-31',
+        json_encode($statutsEtiq));
+
+    // Les étiquettes proposées, à valider : rien ne s'applique sans ✓, un ✕ ne revient pas.
+    $proposer = static fn (array $items): array => $media('POST', '/media-tag-proposals', [], ['items' => $items]);
+    $lot = [
+        ['mediaId' => (int) $idTarte, 'family' => 'produit', 'value' => '4102', 'label' => 'Tarte abricot', 'reason' => 'nom du webshop'],
+        ['mediaId' => (int) $idTarte, 'family' => 'moment', 'value' => 'apres-midi', 'reason' => 'rayon Tartes → après-midi'],
+        ['mediaId' => (int) $idTarte, 'family' => 'saison', 'value' => 'ete', 'reason' => 'nom : été'],
+        ['mediaId' => (int) $idPhoto, 'family' => 'usage', 'value' => 'ecrans', 'reason' => 'déjà posée'],
+        ['mediaId' => (int) $idTarte, 'family' => 'detouree', 'value' => '1', 'reason' => 'fond transparent'],
+    ];
+    $propose  = $proposer($lot);
+    $propose2 = $proposer($lot);
+    check('propositions : 201, trois nouvelles, l\'étiquette déjà posée et le détourage déjà coché passés ; rejouées, 200 et rien de nouveau',
+        $propose['status'] === 201 && ($propose['body']['data']['created'] ?? -1) === 3 && ($propose['body']['data']['skipped'] ?? -1) === 2
+            && $propose2['status'] === 200 && ($propose2['body']['data']['created'] ?? -1) === 0 && ($propose2['body']['data']['proposals'] ?? -1) === 3,
+        json_encode([$propose['status'], $propose['body']['data'] ?? $propose['body'], $propose2['body']['data'] ?? null]));
+    $aValider = $media('GET', '/media-tag-proposals');
+    $ligne = $aValider['body']['data'][0] ?? [];
+    $familles = array_column($ligne['proposals'] ?? [], 'family');
+    check('à valider : le fichier et ses propositions (produit, moment, saison, avec d\'après quoi), compteur dans la médiathèque et sur la fiche',
+        $aValider['status'] === 200 && count($aValider['body']['data'] ?? []) === 1 && ($ligne['media']['id'] ?? '') === $idTarte
+            && $familles === ['produit', 'moment', 'saison'] && ($ligne['proposals'][2]['label'] ?? '') === 'Été'
+            && ($ligne['proposals'][0]['reason'] ?? '') === 'nom du webshop' && ($aValider['body']['meta']['proposals'] ?? -1) === 3
+            && ($aValider['body']['meta']['pagination']['total'] ?? -1) === 1
+            && ($media('GET', '/media-library')['body']['data']['counts']['proposals'] ?? -1) === 3
+            && ($ligne['media']['pendingProposals'] ?? -1) === 3 && ($ligne['media']['tags']['products'] ?? null) === [],
+        json_encode($aValider['body']));
+    $parFiche = $media('GET', '/media-tag-proposals', ['filter' => ['media' => ['eq' => $idPhoto]]]);
+    check('à valider, filtré sur une fiche : rien pour la photo, 422 sur un filtre inconnu',
+        $parFiche['status'] === 200 && ($parFiche['body']['data'] ?? [1]) === [] && ($parFiche['body']['meta']['proposals'] ?? -1) === 3
+            && ($media('GET', '/media-tag-proposals', ['filter' => ['media' => ['eq' => $idTarte]]])['body']['meta']['pagination']['total'] ?? 0) === 1
+            && $media('GET', '/media-tag-proposals', ['filter' => ['family' => ['eq' => 'moment']]])['status'] === 422,
+        json_encode($parFiche['body']));
+    $idProposition = static fn (string $famille): string => (string) (array_values(array_filter($ligne['proposals'] ?? [], static fn (array $p): bool => $p['family'] === $famille))[0]['id'] ?? '0');
+    $oui  = $media('PATCH', '/media-tag-proposals/' . $idProposition('produit'), [], ['status' => 'accepted']);
+    $oui2 = $media('PATCH', '/media-tag-proposals/' . $idProposition('produit'), [], ['status' => 'accepted']);
+    $non  = $media('PATCH', '/media-tag-proposals/' . $idProposition('produit'), [], ['status' => 'refused']);
+    check('✓ applique la proposition à la fiche ; redonné, 200 sans effet ; une décision contraire, 409 RESOURCE_STATE_INVALID',
+        $oui['status'] === 200 && ($oui['body']['data']['media']['tags']['products'] ?? null) === [['id' => '4102', 'name' => 'Tarte abricot']]
+            && ($oui['body']['data']['proposal']['status'] ?? '') === 'accepted' && ($oui['body']['data']['media']['pendingProposals'] ?? -1) === 2
+            && $oui2['status'] === 200 && $non['status'] === 409 && ($non['body']['error']['code'] ?? '') === 'RESOURCE_STATE_INVALID',
+        json_encode([$oui['status'], $oui['body']['data'] ?? $oui['body'], $non['status']]));
+    $tout = $media('PATCH', '/media-tag-proposals', [], ['ids' => [(int) $idProposition('moment'), (int) $idProposition('saison'), (int) $idProposition('produit')], 'status' => 'accepted']);
+    $tarte = $media('GET', '/media-assets/' . $idTarte)['body']['data'] ?? [];
+    check('« Tout accepter » : les deux restantes appliquées (la déjà tranchée passée), la saison posée sur la fiche, plus rien à valider',
+        $tout['status'] === 200 && ($tout['body']['data']['updated'] ?? -1) === 2 && ($tout['body']['data']['proposals'] ?? -1) === 0
+            && ($tarte['tags']['moments'] ?? null) === ['apres-midi'] && ($tarte['season']['code'] ?? '') === 'ete'
+            && count($media('GET', '/media-tag-proposals')['body']['data'] ?? [1]) === 0,
+        json_encode([$tout['body'], $tarte['tags'] ?? null, $tarte['season'] ?? null]));
+    $refusee = $proposer([['mediaId' => (int) $idTarte, 'family' => 'usage', 'value' => 'reseaux', 'reason' => 'essai']]);
+    $idRefusee = (string) ($media('GET', '/media-tag-proposals')['body']['data'][0]['proposals'][0]['id'] ?? '0');
+    $media('PATCH', '/media-tag-proposals/' . $idRefusee, [], ['status' => 'refused']);
+    $revient = $proposer([['mediaId' => (int) $idTarte, 'family' => 'usage', 'value' => 'reseaux', 'reason' => 'essai']]);
+    check('✕ : la proposition refusée ne s\'applique pas et ne revient pas',
+        $refusee['status'] === 201 && $revient['status'] === 200 && ($revient['body']['data']['created'] ?? -1) === 0
+            && ($media('GET', '/media-assets/' . $idTarte)['body']['data']['tags']['usages'] ?? null) === []);
+    $proposer([['mediaId' => (int) $idPhoto, 'family' => 'moment', 'value' => 'midi', 'reason' => 'rayon Traiteur → midi']]);
+    $main = $media('PATCH', '/media-assets/' . $idPhoto, [], ['moments' => ['matin']]);
+    check('choisir un moment à la main tranche les propositions de moment en attente',
+        $main['status'] === 200 && ($main['body']['data']['pendingProposals'] ?? -1) === 0
+            && ($media('GET', '/media-tag-proposals')['body']['meta']['proposals'] ?? -1) === 0
+            && (string) $pdo->query("SELECT status FROM mar_media_tag_proposal WHERE value = 'midi'")->fetchColumn() === 'refused');
+    $avantProp = (int) $pdo->query('SELECT COUNT(*) FROM mar_media_tag_proposal')->fetchColumn();
+    $refusProp = [
+        'liste vide'      => $media('POST', '/media-tag-proposals', [], ['items' => []]),
+        'famille'         => $proposer([['mediaId' => (int) $idTarte, 'family' => 'couleur', 'value' => 'rouge', 'reason' => 'x']]),
+        'fichier inconnu' => $proposer([['mediaId' => 999999, 'family' => 'moment', 'value' => 'matin', 'reason' => 'x']]),
+        'saison inconnue' => $proposer([['mediaId' => (int) $idTarte, 'family' => 'saison', 'value' => 'carnaval', 'reason' => 'x']]),
+        'produit sans nom' => $proposer([['mediaId' => (int) $idTarte, 'family' => 'produit', 'value' => '4103', 'reason' => 'x']]),
+        'sans raison'     => $proposer([['mediaId' => (int) $idTarte, 'family' => 'moment', 'value' => 'midi', 'reason' => '']]),
+        'champ inconnu'   => $proposer([['mediaId' => (int) $idTarte, 'family' => 'moment', 'value' => 'midi', 'reason' => 'x', 'status' => 'accepted']]),
+        'décision'        => $media('PATCH', '/media-tag-proposals/' . $idRefusee, [], ['status' => 'peut-être']),
+        'ids'             => $media('PATCH', '/media-tag-proposals', [], ['ids' => 'tous', 'status' => 'accepted']),
+    ];
+    $statutsProp = array_map(static fn (array $r): int => $r['status'], $refusProp);
+    check('propositions refusées en 422 VALIDATION_FAILED, champ nommé, rien d\'écrit (liste vide, famille, fichier, saison, produit sans nom, sans raison, champ inconnu, décision, ids)',
+        array_unique(array_values($statutsProp)) === [422]
+            && count(array_filter($refusProp, static fn (array $r): bool => ($r['body']['error']['details'][0]['field'] ?? '') !== '')) === count($refusProp)
+            && (int) $pdo->query('SELECT COUNT(*) FROM mar_media_tag_proposal')->fetchColumn() === $avantProp,
+        json_encode($statutsProp));
+    check('proposition inconnue : 404 RESOURCE_NOT_FOUND',
+        $media('PATCH', '/media-tag-proposals/999999', [], ['status' => 'accepted'])['status'] === 404);
+    AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+    check('une identité de boutique ne lit, ne propose ni ne tranche (403)',
+        $media('GET', '/media-tag-proposals')['status'] === 403 && $proposer($lot)['status'] === 403
+            && $media('PATCH', '/media-tag-proposals', [], ['ids' => [1], 'status' => 'accepted'])['status'] === 403
+            && $media('PATCH', '/media-assets/' . $idPhoto, [], ['moments' => []])['status'] === 403);
+    AuthContext::set(1, 'BRAND_ADMIN', 1);
+
     $retrait  = $media('DELETE', '/media-assets/' . $idPhoto);
     $retrait2 = $media('DELETE', '/media-assets/' . $idPhoto);
     $liste    = $media('GET', '/media-assets')['body']['meta']['pagination']['total'] ?? -1;

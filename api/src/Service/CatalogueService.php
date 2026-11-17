@@ -2456,7 +2456,7 @@ final class CatalogueService
         }
         $row = $this->media->find($id);
 
-        return $row === null ? null : (string) $this->media->serialize($row)['url'];
+        return $row === null ? null : (string) $this->media->serialize($row, false)['url'];
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -2600,7 +2600,7 @@ final class CatalogueService
                 if ($media === null || $media['archived_at'] !== null || (string) $media['kind'] !== 'image') {
                     $warnings[] = ['code' => 'OFFER_MEDIA_MISSING', 'message' => sprintf('« %s » : l’image choisie n’est plus dans la médiathèque — les photos des produits sont imprimées.', $out['name'])];
                 } else {
-                    $out['imageUrl'] = (string) $this->media->serialize($media)['webUrl'];
+                    $out['imageUrl'] = (string) $this->media->serialize($media, false)['webUrl'];
                 }
             }
             $gammes = [];
@@ -2709,7 +2709,7 @@ final class CatalogueService
                 if ($media === null || $media['archived_at'] !== null) {
                     $warnings[] = ['code' => 'FILLER_MEDIA_MISSING', 'message' => sprintf('Page %d : la photo choisie pour la place libre n’est plus dans la médiathèque.', $no)];
                 } else {
-                    $filler = ['kind' => 'photo', 'imageUrl' => (string) $this->media->serialize($media)['webUrl'], 'drawing' => null, 'drawingUrl' => null];
+                    $filler = ['kind' => 'photo', 'imageUrl' => (string) $this->media->serialize($media, false)['webUrl'], 'drawing' => null, 'drawingUrl' => null];
                 }
             } elseif ($fillable && ($page['filler'] ?? null) === 'illustration') {
                 $source = $visual ?? (isset($catalogueGammes[0]) ? $this->gammeVisual($catalogueGammes[0], $gammesById, $charter, $lang) : null);

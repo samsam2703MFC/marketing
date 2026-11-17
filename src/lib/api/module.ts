@@ -2259,8 +2259,8 @@ export interface MediaCategory extends MediaRef {
 export interface MediaLibrary {
   categories: MediaCategory[]
   seasons: MediaRef[]
-  /** Fichiers dans la médiathèque, non classés, retirés. */
-  counts: { all: number; uncategorized: number; archived: number }
+  /** Fichiers dans la médiathèque, non classés, retirés ; étiquettes proposées en attente d'un ✓ ou d'un ✕. */
+  counts: { all: number; uncategorized: number; archived: number; proposals: number }
   limits: {
     imageMaxBytes: number
     videoMaxBytes: number
@@ -2292,10 +2292,75 @@ export interface MediaAsset {
   offerItem: { id: string; name: string } | null
   shop: { id: string; name: string } | null
   cutout: boolean
+  /** Lu dans la taille (carré à 5 % près), jamais stocké. */
+  format: MediaFormat | null
+  tags: MediaTags
+  /** Fin de validité (AAAA-MM-JJ) : après, l'image ne sert plus aux écrans. */
+  validUntil: string | null
+  /** Étiquettes proposées qui attendent un ✓ ou un ✕. */
+  pendingProposals: number
   source: 'marketing' | 'social'
   archived: boolean
   createdAt: string
   updatedAt: string
+}
+
+/** Les moments de la régie d'affichage ; aucun = toute la journée. */
+export type MediaMoment = 'matin' | 'midi' | 'apres-midi'
+export type MediaUsage = 'ecrans' | 'reseaux' | 'catalogue' | 'webshop' | 'affiche'
+export type MediaFormat = 'carre' | 'portrait' | 'paysage'
+
+export interface MediaTags {
+  moments: MediaMoment[]
+  usages: MediaUsage[]
+  /** Les produits du webshop (identifiant de l'ERP) que la photo montre. */
+  products: Array<{ id: string; name: string }>
+  /** Étiquettes libres, en minuscules, sans « # ». */
+  free: string[]
+}
+
+export const MEDIA_MOMENTS: Array<{ value: MediaMoment; label: string }> = [
+  { value: 'matin', label: 'Matin' },
+  { value: 'midi', label: 'Midi' },
+  { value: 'apres-midi', label: 'Après-midi' },
+]
+
+export const MEDIA_USAGES: Array<{ value: MediaUsage; label: string }> = [
+  { value: 'ecrans', label: 'Écrans' },
+  { value: 'reseaux', label: 'Réseaux' },
+  { value: 'catalogue', label: 'Catalogue' },
+  { value: 'webshop', label: 'Webshop' },
+  { value: 'affiche', label: 'Affiche · bâche' },
+]
+
+export const MEDIA_FORMATS: Record<MediaFormat, string> = {
+  carre: 'Carré',
+  portrait: 'Portrait',
+  paysage: 'Paysage',
+}
+
+export type MediaProposalFamily = 'produit' | 'moment' | 'saison' | 'usage' | 'detouree'
+
+export interface MediaTagProposal {
+  id: string
+  mediaId: string
+  family: MediaProposalFamily
+  value: string
+  label: string
+  /** D'après quoi : « nom du webshop », « rayon Viennoiserie → matin »… */
+  reason: string
+  status: 'proposed' | 'accepted' | 'refused'
+  createdAt: string | null
+  decidedAt: string | null
+}
+
+export interface MediaProposalInput {
+  mediaId: number
+  family: MediaProposalFamily
+  value: string
+  /** Le nom du produit (famille produit). */
+  label?: string
+  reason: string
 }
 
 export interface MediaPage {
@@ -2319,6 +2384,24 @@ export interface MediaQuery {
   shop?: number
   archived?: boolean
   name?: string
+  moment?: MediaMoment
+  usage?: MediaUsage
+  format?: MediaFormat
+  /** Identifiant du produit du webshop. */
+  product?: string
+  /** Étiquette libre. */
+  tag?: string
+  /** `true` : encore valable aujourd'hui ; `false` : fin de validité passée. */
+  valid?: boolean
+}
+
+/** Les étiquettes d'une fiche : chaque famille envoyée remplace la précédente (modification seulement). */
+export interface MediaTagFields {
+  moments?: MediaMoment[]
+  usages?: MediaUsage[]
+  products?: Array<{ id: string; name: string }>
+  freeTags?: string[]
+  validUntil?: string | null
 }
 
 /** Les champs d'une fiche que l'écran modifie. `null` efface le classement. */
@@ -2335,7 +2418,7 @@ export interface MediaFields {
 interface Envelope<T> {
   success: boolean
   data: T
-  meta: { requestId: string; pagination?: { page: number; perPage: number; total: number; totalPages: number }; duplicate?: boolean }
+  meta: { requestId: string; pagination?: { page: number; perPage: number; total: number; totalPages: number }; duplicate?: boolean; proposals?: number }
 }
 
 export async function getMediaLibrary(): Promise<MediaLibrary> {
@@ -2356,6 +2439,12 @@ export async function listMedia(query: MediaQuery = {}): Promise<MediaPage> {
   if (query.shop) params['filter[shop][eq]'] = query.shop
   if (query.archived) params['filter[archived][eq]'] = 'true'
   if (query.name?.trim()) params['filter[name][contains]'] = query.name.trim()
+  if (query.moment) params['filter[moment][eq]'] = query.moment
+  if (query.usage) params['filter[usage][eq]'] = query.usage
+  if (query.format) params['filter[format][eq]'] = query.format
+  if (query.product) params['filter[product][eq]'] = query.product
+  if (query.tag) params['filter[tag][eq]'] = query.tag
+  if (query.valid !== undefined) params['filter[valid][eq]'] = String(query.valid)
 
   const body = await request<Envelope<MediaAsset[]>>(`${BASE}/media-assets`, { query: params })
   const pagination = body.meta.pagination ?? { page: 1, perPage: body.data.length, total: body.data.length, totalPages: 1 }
@@ -2378,8 +2467,46 @@ export async function uploadMedia(file: Blob, fields: MediaFields = {}): Promise
   return { media: body.data, duplicate: body.meta.duplicate === true }
 }
 
-export async function updateMedia(id: string, fields: MediaFields & { archived?: boolean }): Promise<MediaAsset> {
+export async function getMedia(id: string): Promise<MediaAsset> {
+  return (await request<Envelope<MediaAsset>>(`${BASE}/media-assets/${id}`)).data
+}
+
+export async function updateMedia(id: string, fields: MediaFields & MediaTagFields & { archived?: boolean }): Promise<MediaAsset> {
   return (await request<Envelope<MediaAsset>>(`${BASE}/media-assets/${id}`, { method: 'PATCH', body: fields })).data
+}
+
+export interface MediaProposalPage {
+  items: Array<{ media: MediaAsset; proposals: MediaTagProposal[] }>
+  page: number
+  totalPages: number
+  /** Fichiers qui attendent une décision. */
+  total: number
+  /** Propositions en attente, tous fichiers confondus. */
+  proposals: number
+}
+
+/** Les étiquettes proposées, à valider : les fichiers concernés, chacun avec ses propositions. */
+export async function listMediaProposals(page = 1, perPage = 50, mediaId?: string): Promise<MediaProposalPage> {
+  const query: Record<string, string | number> = { page, perPage }
+  if (mediaId) query['filter[media][eq]'] = mediaId
+  const body = await request<Envelope<Array<{ media: MediaAsset; proposals: MediaTagProposal[] }>>>(`${BASE}/media-tag-proposals`, { query })
+  const pagination = body.meta.pagination ?? { page: 1, perPage, total: body.data.length, totalPages: 1 }
+  return { items: body.data, page: pagination.page, totalPages: pagination.totalPages, total: pagination.total, proposals: body.meta.proposals ?? 0 }
+}
+
+/** Enregistre des propositions ; ce qui est déjà posé ou déjà proposé (même refusé) est passé. */
+export async function proposeMediaTags(items: MediaProposalInput[]): Promise<{ created: number; skipped: number; proposals: number }> {
+  return (await request<Envelope<{ created: number; skipped: number; proposals: number }>>(`${BASE}/media-tag-proposals`, { method: 'POST', body: { items } })).data
+}
+
+/** ✓ (appliquée à la fiche) ou ✕ (refusée, elle ne revient plus). */
+export async function decideMediaProposal(id: string, status: 'accepted' | 'refused'): Promise<{ proposal: MediaTagProposal; media: MediaAsset | null }> {
+  return (await request<Envelope<{ proposal: MediaTagProposal; media: MediaAsset | null }>>(`${BASE}/media-tag-proposals/${id}`, { method: 'PATCH', body: { status } })).data
+}
+
+/** « Tout accepter », ou le ✓ / ✕ d'une ligne entière. */
+export async function decideMediaProposals(ids: string[], status: 'accepted' | 'refused'): Promise<{ updated: number; proposals: number }> {
+  return (await request<Envelope<{ updated: number; proposals: number }>>(`${BASE}/media-tag-proposals`, { method: 'PATCH', body: { ids: ids.map(Number), status } })).data
 }
 
 export async function archiveMedia(id: string): Promise<MediaAsset> {

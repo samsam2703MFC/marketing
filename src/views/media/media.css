@@ -520,3 +520,785 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Étiquettes (17/11/2026) — des rectangles aux coins arrondis, pas des pastilles.
+   Une couleur par famille ; plein quand l'étiquette est posée, en pointillés
+   quand elle n'est que proposée.
+   --------------------------------------------------------------------------- */
+.tagr--moment   { --fam: #b0792a; --fam-bg: #f7ecdc; }
+.tagr--saison   { --fam: #3f7a52; --fam-bg: #e3f0e6; }
+.tagr--produit  { --fam: #8d1d2c; --fam-bg: #f6e3e5; }
+.tagr--format   { --fam: #2f5d8a; --fam-bg: #e2ebf4; }
+.tagr--detouree { --fam: #2f5d8a; --fam-bg: #e2ebf4; }
+.tagr--usage    { --fam: #7a4e8c; --fam-bg: #efe6f3; }
+.tagr--boutique { --fam: #5c5852; --fam-bg: #ece9e4; }
+.tagr--validite { --fam: #a0522d; --fam-bg: #f5e6dc; }
+.tagr--libre    { --fam: #6f6a63; --fam-bg: #efede9; }
+
+.tagr {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--muted-2);
+  font: 400 11.5px/1.2 'Gotham', system-ui, sans-serif;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.tagr:not(:has(.tagr__hit)) {
+  gap: 5px;
+  padding: 3px 7px;
+}
+
+.tagr.is-on {
+  border-color: var(--fam, var(--line));
+  background: var(--fam-bg, #fff);
+  color: var(--ink);
+}
+
+.tagr.is-proposed {
+  border-style: dashed;
+  border-color: var(--fam, var(--muted));
+  background: #fff;
+  color: var(--ink);
+}
+
+.tagr__mark {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--fam, var(--muted));
+}
+
+.tagr__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tagr__hit {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  margin: 0;
+  padding: 3px 7px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tagr.is-button:hover {
+  border-color: var(--fam, var(--muted-2));
+}
+
+.tagr__x {
+  margin: 0 3px 0 -3px;
+  padding: 0 3px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tagr__x:hover {
+  color: var(--accent);
+}
+
+.tagr button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.tagr--none,
+.tagr--more {
+  padding: 3px 7px;
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.tagr--more {
+  border-style: solid;
+}
+
+/* Sur la tuile */
+.media__tagrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 21px;
+  overflow: hidden;
+  max-height: 46px;
+}
+
+.media__tagrow .tagr {
+  font-size: 10.5px;
+}
+
+.media__tagrow .tagr:not(:has(.tagr__hit)) {
+  padding: 2px 6px;
+}
+
+/* Le bouton « N étiquettes proposées » de la barre */
+.media__proposed {
+  height: 34px;
+  padding: 0 11px;
+  border: 1px dashed var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--muted);
+  font: 400 12.5px 'Gotham', system-ui, sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.media__proposed.has-some {
+  border-color: #b0792a;
+  background: #f7ecdc;
+  color: #7a531c;
+}
+
+.media__proposed.is-on {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.media__subhead {
+  margin: 14px 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* La fiche : idée 1 */
+.tagsheet {
+  margin: 4px 0 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fffdfa;
+}
+
+.tagsheet__head {
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12.5px;
+}
+
+.tagrow {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 8px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+}
+
+.tagrow:first-of-type {
+  border-top: 0;
+}
+
+.tagrow__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: start;
+  padding-top: 4px;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.tagrow__name .tagr__mark {
+  background: var(--fam);
+}
+
+.tagrow__values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+  min-width: 0;
+}
+
+.tagrow__hint {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.tagrow__input,
+.tagrow__select,
+.tagrow__date {
+  height: 25px;
+  padding: 0 7px;
+  border: 1px dashed var(--line);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--ink);
+  font: 11.5px 'Gotham', system-ui, sans-serif;
+  min-width: 0;
+}
+
+.tagrow__input {
+  width: 150px;
+}
+
+.tagrow__date.is-on {
+  border-style: solid;
+  border-color: #a0522d;
+  background: #f5e6dc;
+}
+
+.tagrow__form {
+  display: contents;
+}
+
+.tagrow__picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  flex-basis: 100%;
+  font-size: 11.5px;
+}
+
+.tagsheet__proposed {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding: 8px;
+  border: 1px dashed #b0792a;
+  border-radius: 8px;
+  background: #fffaf2;
+}
+
+.tagsheet__proposed-title {
+  font-size: 12px;
+  color: #7a531c;
+}
+
+.tagsheet__proposed-why {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.tagsheet__proposed-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.tagsheet__why {
+  margin: 8px 0 0;
+  padding: 9px 10px;
+  border: 1px solid #ecd9bf;
+  border-radius: 8px;
+  background: #fffaf2;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted-2);
+}
+
+.tagsheet__why b {
+  color: var(--accent);
+  font-weight: 400;
+}
+
+/* Les étiquettes proposées, à valider : idée 2 */
+.proposals {
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+.proposals__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.proposals__title {
+  padding: 6px 12px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+}
+
+.proposals__sub,
+.proposals__note {
+  font-size: 12px;
+}
+
+.proposals__empty {
+  padding: 22px 10px;
+  text-align: center;
+}
+
+.proposals__table {
+  width: 100%;
+  min-width: 0;
+  margin-top: 10px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12.5px;
+}
+
+.proposals__col-thumb {
+  width: 56px;
+}
+
+.proposals__col-name {
+  width: 38%;
+}
+
+.proposals__col-act {
+  width: 78px;
+}
+
+.proposals__table th {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.proposals__table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.proposals__thumb button {
+  display: block;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--paper);
+  cursor: pointer;
+}
+
+.proposals__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.proposals__name {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.proposals__why {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.proposals__table .tagr {
+  white-space: normal;
+}
+
+.proposals__act {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.proposals__ok,
+.proposals__no {
+  width: 28px;
+  height: 28px;
+  margin-left: 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--muted-2);
+  cursor: pointer;
+}
+
+.proposals__ok {
+  border-color: #b9d6c1;
+  background: #e3f0e6;
+  color: #2f6b42;
+}
+
+.proposals__no:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.proposals__foot {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid #ecd9bf;
+  border-radius: 8px;
+  background: #fffaf2;
+  font-size: 12px;
+  color: var(--muted-2);
+}
+
+.proposals__foot b {
+  color: var(--accent);
+  font-weight: 400;
+}
+
+/* L'assistant d'import en lot */
+.imp {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: start center;
+  padding: 3vh 2vw;
+  background: rgba(28, 26, 23, 0.42);
+  overflow: auto;
+}
+
+.imp__box {
+  width: min(1180px, 100%);
+  padding: 18px 20px 20px;
+}
+
+.imp__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.imp__kicker {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.imp__steps {
+  display: flex;
+  gap: 14px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+.imp__steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.imp__steps span {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-size: 11px;
+}
+
+.imp__steps .is-on {
+  color: var(--ink);
+}
+
+.imp__steps .is-on span {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.imp__steps .is-done span {
+  border-color: #3f7a52;
+  color: #3f7a52;
+}
+
+.imp__body {
+  display: grid;
+  gap: 12px;
+}
+
+.imp__drop {
+  display: grid;
+  gap: 4px;
+  place-items: center;
+  padding: 28px 16px;
+  border: 2px dashed var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  text-align: center;
+  cursor: pointer;
+}
+
+.imp__drop.is-dragging,
+.imp__drop:hover {
+  border-color: var(--accent);
+  background: rgba(141, 29, 44, 0.05);
+}
+
+.imp__note {
+  margin: 0;
+  font-size: 12px;
+}
+
+.imp__label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.imp__size {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.imp__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+  max-height: 52vh;
+  overflow: auto;
+}
+
+.imp__card {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  min-width: 0;
+}
+
+.imp__thumb {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+.imp__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.imp__thumb.is-cutout img {
+  object-fit: contain;
+}
+
+.imp__name {
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imp__facts {
+  font-size: 10.5px;
+}
+
+.imp__x {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--muted-2);
+  cursor: pointer;
+}
+
+.imp__batch {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fffdfa;
+}
+
+.imp__batch-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px 12px;
+}
+
+.imp__batch-row label {
+  display: grid;
+  gap: 3px;
+}
+
+.imp__batch-name {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.imp__batch-row > .imp__batch-name {
+  align-self: center;
+  width: 46px;
+}
+
+.imp__batch-row select,
+.imp__batch-row input {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  font: 12.5px 'Gotham', system-ui, sans-serif;
+}
+
+.imp__free input {
+  width: 190px;
+}
+
+.imp__table {
+  width: 100%;
+  min-width: 0;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.imp__table th {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.imp__table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.imp__row-thumb {
+  width: 52px;
+}
+
+.imp__row-thumb img {
+  display: block;
+  width: 44px;
+  height: 44px;
+  border-radius: 7px;
+  object-fit: cover;
+  background: var(--paper);
+}
+
+.imp__row-name input {
+  width: 100%;
+  min-width: 140px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: 12.5px 'Gotham', system-ui, sans-serif;
+}
+
+.imp__why {
+  max-width: 260px;
+  font-size: 11.5px;
+}
+
+.imp__progress {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.imp__bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--paper);
+  overflow: hidden;
+}
+
+.imp__bar span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.imp__results {
+  display: grid;
+  gap: 4px;
+  max-height: 56vh;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.imp__results li {
+  display: grid;
+  grid-template-columns: 36px minmax(120px, 240px) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px;
+  border-radius: 7px;
+  font-size: 12.5px;
+}
+
+.imp__results img {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.imp__results .is-done .imp__state {
+  color: #2f6b42;
+}
+
+.imp__results .is-error .imp__state {
+  color: var(--danger, #a3262e);
+}
+
+.imp__results .is-duplicate .imp__state,
+.imp__results .is-waiting .imp__state {
+  color: var(--muted);
+}
