@@ -135,6 +135,10 @@ return static function (Router $router): void {
     $router->patch('/api/v1/marketing/media-assets/{id}',            [$media, 'update']);
     $router->put('/api/v1/marketing/media-assets/{id}/thumbnail',    [$media, 'thumbnail']);
     $router->delete('/api/v1/marketing/media-assets/{id}',           [$media, 'destroy']);
+    $router->get('/api/v1/marketing/media-tag-proposals',            [$media, 'proposals']);
+    $router->post('/api/v1/marketing/media-tag-proposals',           [$media, 'propose']);
+    $router->patch('/api/v1/marketing/media-tag-proposals',          [$media, 'decideMany']);
+    $router->patch('/api/v1/marketing/media-tag-proposals/{id}',     [$media, 'decide']);
 
     // Catalogues produits (prix du webshop, gammes) — écrits au standard : enveloppe, camelCase,
     // centimes, pagination. Marque seule ; les boutiques passent par les routes d'intégration.

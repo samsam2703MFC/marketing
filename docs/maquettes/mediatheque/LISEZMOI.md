@@ -28,4 +28,8 @@ du Marketing, ses images ne peuvent pas servir aux écrans.
 TFBuddy (Cloudflare R2 public) ; elles entrent dans la médiathèque (copie dans le dossier des envois du serveur, une
 vignette de 480 px et une version web de 2 048 px) seulement quand on les choisit.
 
-Photos : les vraies photos du webshop (`photos.json`). `node generer.cjs` (`SEUL=1-fiche` pour un écran). Rien n'est codé.
+Photos : les vraies photos du webshop (`photos.json`). `node generer.cjs` (`SEUL=1-fiche` pour un écran).
+
+**Codé le 17/11/2026** : les idées 1 (étiquettes sur la fiche) et 2 (proposées, à valider), en rectangles aux coins
+arrondis (« pas des badges »), et l'assistant d'import en lot avec la proposition des étiquettes. Restent à coder :
+l'étiquetage en lot (3), la simulation de l'écran (4), le recadrage par usage (5) et les réglages (6).

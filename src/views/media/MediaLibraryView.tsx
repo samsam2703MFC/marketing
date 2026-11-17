@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
 import * as api from '../../lib/api/module'
-import type { MediaAsset, MediaFields, MediaLibrary, MediaQuery } from '../../lib/api/module'
+import type { MediaAsset, MediaFields, MediaLibrary, MediaQuery, MediaTagFields } from '../../lib/api/module'
 import { useAsync } from '../../lib/useAsync'
 import { SourceBrowser, addToLibrary } from './SourceBrowser'
 import { SOURCE_LABEL, imageSize } from './sources'
 import type { ImageSource, SourceImage } from './sources'
+import { ProposalsPanel, TagEditor, TileTags } from './MediaTags'
+import { ImportAssistant } from './ImportAssistant'
+import { proposeForAssets } from './tagRules'
 import './media.css'
 
 /**
@@ -86,7 +89,11 @@ function ExternalLibrary({ source, onAdded }: { source: 'webshop' | 'design'; on
     setError(null)
     try {
       const { media, duplicate } = await addToLibrary(source, item, library.data ?? null)
-      setMessage(duplicate ? `Déjà dans la médiathèque : « ${media.name} ».` : `Ajoutée à la médiathèque (onglet Fichiers) : « ${media.name} ».`)
+      setMessage(
+        duplicate
+          ? `Déjà dans la médiathèque : « ${media.name} ».`
+          : `Ajoutée à la médiathèque (onglet Fichiers) : « ${media.name} »${source === 'webshop' && item.product ? ' — son produit, son moment et sa saison sont proposés, à valider' : ''}.`,
+      )
       if (!duplicate) onAdded()
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : String(cause))
@@ -166,6 +173,11 @@ function FilesLibrary() {
   const [uploads, setUploads] = useState<Upload[]>([])
   const [dragging, setDragging] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [view, setView] = useState<'grid' | 'proposals'>('grid')
+  const [proposalCount, setProposalCount] = useState<number | null>(null)
+  const [assistant, setAssistant] = useState(false)
+  // Une fiche ouverte depuis les propositions, qui n'est pas forcément dans la page chargée.
+  const [opened, setOpened] = useState<MediaAsset | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
 
   // La recherche part 300 ms après la dernière frappe.
@@ -211,11 +223,20 @@ function FilesLibrary() {
     }
   }
 
-  const selected = list.find((item) => item.id === selectedId) ?? null
+  const selected = list.find((item) => item.id === selectedId) ?? (opened?.id === selectedId ? opened : null)
+  const pending = proposalCount ?? library.data?.counts.proposals ?? 0
 
   const replace = useCallback((asset: MediaAsset) => {
     setList((current) => current.map((item) => (item.id === asset.id ? asset : item)))
+    setOpened((current) => (current?.id === asset.id ? asset : current))
   }, [])
+
+  /** Après un dépôt : le produit, le moment et la saison proposés, à valider. */
+  async function proposeAfter(assets: MediaAsset[]) {
+    if (!assets.length || !library.data) return
+    const done = await proposeForAssets(assets, library.data.seasons).catch(() => null)
+    if (done) setProposalCount(done.proposals)
+  }
 
   /** Dépose les fichiers un par un : une vidéo lourde ne bloque pas les photos qui suivent. */
   async function send(files: File[]) {
@@ -231,6 +252,7 @@ function FilesLibrary() {
     if (query.season) fields.season = query.season
 
     let last: MediaAsset | null = null
+    const added: MediaAsset[] = []
     for (const [i, file] of accepted.entries()) {
       const key = batch[i].key
       const mark = (patch: Partial<Upload>) => setUploads((current) => current.map((u) => (u.key === key ? { ...u, ...patch } : u)))
@@ -256,11 +278,13 @@ function FilesLibrary() {
           if (poster) asset = await api.setMediaThumbnail(media.id, poster).catch(() => media)
         }
         last = asset
+        if (!duplicate) added.push(asset)
         mark({ state: duplicate ? 'duplicate' : 'done', message: duplicate ? `déjà dans la médiathèque (« ${asset.name} »)` : undefined })
       } catch (cause) {
         mark({ state: 'error', message: cause instanceof Error ? cause.message : String(cause) })
       }
     }
+    await proposeAfter(added)
     setRefreshKey((k) => k + 1)
     if (last) setSelectedId(last.id)
   }
@@ -342,11 +366,35 @@ function FilesLibrary() {
               </button>
             ))}
           </div>
+          <select value={query.moment ?? ''} onChange={(e) => setQuery((q) => ({ ...q, moment: (e.target.value || undefined) as MediaQuery['moment'] }))} aria-label="Moment">
+            <option value="">Tous moments</option>
+            {api.MEDIA_MOMENTS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
           <select value={query.season ?? ''} onChange={(e) => setQuery((q) => ({ ...q, season: e.target.value || undefined }))} aria-label="Saison">
             <option value="">Toutes saisons</option>
             {lib?.seasons.map((s) => (
               <option key={s.code} value={s.code}>
                 {s.label}
+              </option>
+            ))}
+          </select>
+          <select value={query.format ?? ''} onChange={(e) => setQuery((q) => ({ ...q, format: (e.target.value || undefined) as MediaQuery['format'] }))} aria-label="Format">
+            <option value="">Tous formats</option>
+            {(Object.keys(api.MEDIA_FORMATS) as Array<keyof typeof api.MEDIA_FORMATS>).map((f) => (
+              <option key={f} value={f}>
+                {api.MEDIA_FORMATS[f]}
+              </option>
+            ))}
+          </select>
+          <select value={query.usage ?? ''} onChange={(e) => setQuery((q) => ({ ...q, usage: (e.target.value || undefined) as MediaQuery['usage'] }))} aria-label="Usage">
+            <option value="">Tous usages</option>
+            {api.MEDIA_USAGES.map((u) => (
+              <option key={u.value} value={u.value}>
+                {u.label}
               </option>
             ))}
           </select>
@@ -358,8 +406,19 @@ function FilesLibrary() {
             ))}
           </select>
           <span className="media__spacer" />
-          <button type="button" className="btn btn--primary" onClick={() => fileInput.current?.click()}>
-            Déposer des fichiers
+          <button
+            type="button"
+            className={`media__proposed${view === 'proposals' ? ' is-on' : ''}${pending ? ' has-some' : ''}`}
+            onClick={() => setView((v) => (v === 'proposals' ? 'grid' : 'proposals'))}
+            aria-pressed={view === 'proposals'}
+          >
+            {pending} étiquette{pending > 1 ? 's' : ''} proposée{pending > 1 ? 's' : ''}
+          </button>
+          <button type="button" className="btn" onClick={() => fileInput.current?.click()} title="Photos et vidéos, sans assistant">
+            Dépôt rapide
+          </button>
+          <button type="button" className="btn btn--primary" onClick={() => setAssistant(true)}>
+            Importer des photos
           </button>
           <input ref={fileInput} type="file" accept="image/*,video/*" multiple hidden onChange={onPick} />
         </div>
@@ -383,6 +442,19 @@ function FilesLibrary() {
 
         {error ? <p className="error">{error}</p> : null}
 
+        {view === 'proposals' && lib ? (
+          <ProposalsPanel
+            library={lib}
+            onCount={setProposalCount}
+            onDecided={() => setRefreshKey((k) => k + 1)}
+            onOpen={(asset) => {
+              setOpened(asset)
+              setSelectedId(asset.id)
+            }}
+          />
+        ) : null}
+
+        <div hidden={view === 'proposals'}>
         <p className="muted media__count">
           {loading && !list.length ? 'Chargement…' : `${total} fichier${total > 1 ? 's' : ''}${query.archived ? ' retiré' + (total > 1 ? 's' : '') : ''}`}
           {' · '}glissez des photos ou des vidéos n’importe où sur cet écran pour les déposer.
@@ -407,7 +479,7 @@ function FilesLibrary() {
                 {item.kind === 'image' && printClass(item) ? <span className={`media__badge media__badge--${printClass(item)}`}>{PRINT_LABEL[printClass(item)!]}</span> : null}
               </span>
               <span className="media__name">{item.name}</span>
-              <span className="media__tags">{[item.category?.label ?? 'Non classée', item.subcategory?.label, item.season?.label].filter(Boolean).join(' · ')}</span>
+              <TileTags asset={item} />
             </button>
           ))}
         </div>
@@ -419,7 +491,22 @@ function FilesLibrary() {
             </button>
           </div>
         ) : null}
+        </div>
       </section>
+
+      {assistant && lib ? (
+        <ImportAssistant
+          library={lib}
+          shops={shops.data ?? []}
+          onClose={(imported) => {
+            setAssistant(false)
+            if (imported) {
+              setRefreshKey((k) => k + 1)
+              setView('grid')
+            }
+          }}
+        />
+      ) : null}
 
       {selected && lib ? (
         <MediaSheet
@@ -431,6 +518,11 @@ function FilesLibrary() {
           onSaved={(asset, reclassed) => {
             replace(asset)
             if (reclassed) setLibraryKey((k) => k + 1)
+          }}
+          onDecided={(asset) => {
+            replace(asset)
+            setProposalCount(null)
+            setLibraryKey((k) => k + 1)
           }}
           onRemoved={(asset) => {
             replace(asset)
@@ -460,11 +552,13 @@ interface SheetProps {
   /** `reclassed` : la catégorie a changé, les compteurs sont à relire. */
   onSaved: (asset: MediaAsset, reclassed: boolean) => void
   onRemoved: (asset: MediaAsset) => void
+  /** Une proposition tranchée depuis la fiche. */
+  onDecided: (asset: MediaAsset) => void
   onClose: () => void
 }
 
 /** La fiche d'un fichier : aperçu, classements, tailles d'impression, lien. */
-function MediaSheet({ asset, library, shops, items, onSaved, onRemoved, onClose }: SheetProps) {
+function MediaSheet({ asset, library, shops, items, onSaved, onRemoved, onDecided, onClose }: SheetProps) {
   const [name, setName] = useState(asset.name)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -480,7 +574,7 @@ function MediaSheet({ asset, library, shops, items, onSaved, onRemoved, onClose 
       .slice(0, 50)
   }, [items, itemSearch])
 
-  async function save(fields: MediaFields & { archived?: boolean }) {
+  async function save(fields: MediaFields & MediaTagFields & { archived?: boolean }) {
     setBusy(true)
     setError(null)
     try {
@@ -522,6 +616,10 @@ function MediaSheet({ asset, library, shops, items, onSaved, onRemoved, onClose 
         Nom
         <input value={name} maxLength={200} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && name.trim() !== asset.name && void save({ name: name.trim() })} />
       </label>
+
+      <TagEditor asset={asset} library={library} shops={shops} busy={busy} save={save} onDecided={onDecided} />
+
+      <div className="media__subhead">Classement</div>
       <div className="media__row">
         <label className="media__field">
           Catégorie
@@ -546,32 +644,8 @@ function MediaSheet({ asset, library, shops, items, onSaved, onRemoved, onClose 
           </select>
         </label>
       </div>
-      <div className="media__row">
-        <label className="media__field">
-          Saison
-          <select value={asset.season?.code ?? ''} disabled={busy} onChange={(e) => void save({ season: e.target.value || null })}>
-            <option value="">—</option>
-            {library.seasons.map((s) => (
-              <option key={s.code} value={s.code}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="media__field">
-          Boutique montrée
-          <select value={asset.shop?.id ?? ''} disabled={busy} onChange={(e) => void save({ shopId: e.target.value ? Number(e.target.value) : null })}>
-            <option value="">Tout le réseau</option>
-            {shops.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
       <label className="media__field">
-        Produit du catalogue
+        Article de l’offre (catalogue marketing)
         {asset.offerItem ? (
           <span className="media__linked">
             {asset.offerItem.name}

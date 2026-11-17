@@ -3,6 +3,7 @@ import * as api from '../../lib/api/module'
 import type { MediaAsset, MediaLibrary } from '../../lib/api/module'
 import { designImages, fetchSourceImage, webshopImages } from './sources'
 import type { SourceImage } from './sources'
+import { proposeForAssets } from './tagRules'
 
 const STEP = 60
 
@@ -139,12 +140,18 @@ export async function addToLibrary(
   const category = library?.categories.find((c) => fold(c.label) === fold(item.group)) ?? null
   const subcategory = category?.subcategories.find((s) => fold(s.label) === fold(item.detail)) ?? null
 
-  return api.uploadMedia(blob, {
+  const result = await api.uploadMedia(blob, {
     name: item.name,
     cutout: item.cutout,
     category: category?.code ?? undefined,
     subcategory: subcategory?.code ?? undefined,
   })
+  // La photo d'un produit : son produit, son moment (d'après le rayon) et sa saison sont proposés,
+  // à valider dans la médiathèque. Une proposition qui échoue n'empêche pas le versement.
+  if (!result.duplicate && source === 'webshop') {
+    await proposeForAssets([result.media], library?.seasons ?? [], () => item.product ?? null).catch(() => null)
+  }
+  return result
 }
 
 function fold(text: string): string {

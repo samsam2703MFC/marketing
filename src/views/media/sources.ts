@@ -35,6 +35,17 @@ export interface SourceImage {
   /** La précision montrée sous le nom : catégorie du produit, sous-catégorie du design system. */
   detail: string
   cutout: boolean
+  /** La photo d'un produit du webshop : le produit, pour proposer ses étiquettes. */
+  product?: WebshopProduct
+}
+
+/** Un produit du webshop, avec son rayon et sa catégorie (pour proposer moment et saison). */
+export interface WebshopProduct {
+  id: number
+  name: string
+  rayon: string | null
+  categorie: string | null
+  image: string | null
 }
 
 export const SOURCE_LABEL: Record<ImageSource, string> = {
@@ -43,20 +54,44 @@ export const SOURCE_LABEL: Record<ImageSource, string> = {
   design: 'Illustrations',
 }
 
+let catalogue: Promise<api.WebshopCatalogue> | null = null
+
+/** Le catalogue du webshop, lu une fois par session d'écran (Social garde 30 min de cache). */
+function webshopCatalogue(): Promise<api.WebshopCatalogue> {
+  catalogue ??= api.getWebshopCatalogue().catch((cause: unknown) => {
+    catalogue = null
+    throw cause
+  })
+  return catalogue
+}
+
+/** Les produits du webshop, avec leur rayon et leur catégorie. */
+export function webshopProducts(): Promise<WebshopProduct[]> {
+  return webshopCatalogue().then((c) => {
+    const catName = new Map(c.categories.map((k) => [k.id, k.name]))
+    const groupName = new Map(c.groupes.map((g) => [g.id, g.name]))
+    return c.produits.map((p) => ({
+      id: p.id,
+      name: p.name,
+      rayon: p.groupe !== null ? groupName.get(p.groupe) ?? null : null,
+      categorie: p.cat !== null ? catName.get(p.cat) ?? null : null,
+      image: p.image,
+    }))
+  })
+}
+
 let webshop: Promise<SourceImage[]> | null = null
 
-/** Les images du catalogue du webshop (une lecture par session d'écran ; Social garde 30 min de cache). */
+/** Les images du catalogue du webshop. */
 export function webshopImages(): Promise<SourceImage[]> {
-  webshop ??= api
-    .getWebshopCatalogue()
-    .then((c) => {
-      const catName = new Map(c.categories.map((k) => [k.id, k.name]))
+  webshop ??= Promise.all([webshopCatalogue(), webshopProducts()])
+    .then(([c, products]) => {
       const groupName = new Map(c.groupes.map((g) => [g.id, g.name]))
       const out: SourceImage[] = []
-      for (const p of c.produits) {
+      for (const p of products) {
         if (!p.image) continue
-        const where = [p.groupe !== null ? groupName.get(p.groupe) : null, p.cat !== null ? catName.get(p.cat) : null].filter(Boolean)
-        out.push({ key: `p${p.id}`, name: p.name, url: p.image, group: 'Produits', detail: where.join(' › '), cutout: false })
+        const where = [p.rayon, p.categorie].filter(Boolean)
+        out.push({ key: `p${p.id}`, name: p.name, url: p.image, group: 'Produits', detail: where.join(' › '), cutout: false, product: p })
       }
       for (const g of c.groupes) {
         if (g.image) out.push({ key: `g${g.id}`, name: g.name, url: g.image, group: 'Rayons', detail: `${g.n} produit${g.n > 1 ? 's' : ''}`, cutout: false })
