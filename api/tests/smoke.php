@@ -4801,7 +4801,7 @@ $tfbCat = static function (string $url, array $entetes = [], int $delai = 5, str
         'portion_price' => $comptoir, 'webshop' => ['price_gross' => $web], 'webshop_image' => $img('p' . $id), 'availability_periods' => [['id' => 14, 'name' => 'Gamme Noël']]];
     if ($p === '/api/v1/shops/9104/products/available' && str_contains($url, 'alias_type=webshop')) {
         return [200, (string) json_encode([
-            $produit(11, 'Bûche praliné', 'Pralinéstronk', $buches, '32.90', '32.90'),
+            array_replace($produit(11, 'Bûche praliné', 'Pralinéstronk', $buches, '32.90', '32.90'), ['grouped_allergens' => 'Céréales contenant du gluten, Œufs, Lait, Fruits à coque', 'single_weight' => 650]),
             $produit(12, 'Bûche glacée vanille', 'IJsstronk vanille', $buches, '29.90', '31.50'),
             $produit(13, 'Cougnou 500 g', 'Kerstbrood 500 g', $fete, '6.80', '6.80'),
             ['id' => 15, 'name' => 'Carton pro', 'is_active' => 1, 'id_category' => 700, 'category_name' => 'B.2.B - Cartons', 'portion_price' => '39.60', 'webshop' => ['price_gross' => 39.6]],
@@ -4827,6 +4827,14 @@ $tfbCat = static function (string $url, array $entetes = [], int $delai = 5, str
     if ($p === '/api/v1/shops') { return [403, '{"message":"Forbidden"}']; }
     return [404, '{"status":"error","description":"NOT_FOUND"}'];
 };
+// Le poids et les allergènes au catalogue imprimé (17/11/2026) : lus dans `grouped_allergens` et `single_weight` de l'ERP.
+check('catalogues : les allergènes de la recette, en codes de l’annexe II, sans les traces',
+    \Marketing\Support\Allergens::fromText('Céréales contenant du gluten, Œufs, Lait') === ['gluten', 'oeufs', 'lait']
+    && \Marketing\Support\Allergens::fromText('Anhydride sulfureux et sulfites, Fruits à coque, Graines de sésame, Peut contenir des traces d’arachides') === ['fruits_coque', 'sesame', 'sulfites']
+    && \Marketing\Support\Allergens::fromText('') === [] && \Marketing\Support\Allergens::fromText('Noix de coco') === []);
+check('catalogues : le poids d’une pièce, celui de l’ERP sinon celui du nom',
+    \Marketing\Support\Allergens::weightGrams(85, 'Croissant') === 85 && \Marketing\Support\Allergens::weightGrams(0, 'Cougnou Nature - 400 g.') === 400
+    && \Marketing\Support\Allergens::weightGrams(null, 'Baguette 1 kg') === 1000 && \Marketing\Support\Allergens::weightGrams(0, 'Tarte Ø 28 cm') === null);
 $catService = new \Marketing\Service\CatalogueService(
     new \Marketing\Repository\CatalogueRepository(),
     new \Marketing\Repository\WebshopCatalogueRepository(new \Marketing\Support\ErpClient($tfbCat))
@@ -4894,6 +4902,10 @@ check('catalogues : un prix par boutique, en centimes ; le prix général et les
     ($prods[13]['priceCents'] ?? null) !== null && count($prods[13]['prices']) === 2 && count($prods[13]['priceDiffers']) === 1
         && ($prods[12]['prices'] ?? []) === [['shopId' => $catA, 'webPriceCents' => 2990, 'shopPriceCents' => 3150]] && $prods[11]['priceDiffers'] === [],
     json_encode([$prods[13] ?? null, $prods[12] ?? null]));
+check('catalogues : le poids d’une pièce et les allergènes de la recette, lus au webshop',
+    ($prods[11]['weightGrams'] ?? null) === 650 && ($prods[11]['allergens'] ?? null) === ['gluten', 'oeufs', 'lait', 'fruits_coque']
+        && ($prods[13]['weightGrams'] ?? null) === 500 && ($prods[12]['allergens'] ?? null) === [] && ($prods[12]['weightGrams'] ?? 'x') === null,
+    json_encode([$prods[11] ?? null, $prods[13]['weightGrams'] ?? null]));
 check('catalogues : paramètre illisible (422)', call($catRouter, 'GET', '/api/v1/marketing/catalogue-products', ['shopIds' => 'a'])['status'] === 422
     && call($catRouter, 'GET', '/api/v1/marketing/catalogue-products', ['pirate' => '1'])['status'] === 422);
 

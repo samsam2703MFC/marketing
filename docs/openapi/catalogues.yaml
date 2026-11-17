@@ -66,6 +66,14 @@ info:
     (`status=ACTIVE`, liste puis fiche) et `/api/v1/shops/{id}/scheduled-product-discounts/active`
     pour la version d'une boutique ; gardées 15 minutes (`mar_catalogue_cache`).
 
+    v1.7 (17 novembre 2026, client : « ajouter le poids, ajouter les allergènes — obligatoire », avec leur
+    explication sur l'avant-dernière page) : un `DocProduct` (et un produit de `catalogue-products`) porte
+    `weightGrams` (single_weight de l'ERP, sinon le poids du nom) et `allergens` (codes de l'annexe II du règlement
+    UE 1169/2011, lus dans `grouped_allergens` de `/api/v1/shops/{id}/products/available`, sans les traces) ; la page
+    `brand` de l'avant-dernière porte `allergens`, ceux des produits du catalogue, dont elle imprime la légende ;
+    alerte `PRODUCT_NO_WEIGHT` pour les produits sans poids. Le rendu (`CataloguePages.tsx`) imprime le poids et les
+    pictogrammes sous le nom de chaque produit (vignette et liste).
+
     v1.5 (15 novembre 2026, client : « les deux, garde les 3 gabarits, code-le » — assistant des pages de la
     marque, maquettes A1-A4 ; assistant du franchisé, maquettes B1-B4) :
     - la charte a un BROUILLON (`GET|PUT …/catalogue-charter`, que l'assistant enregistre tout seul) et des
@@ -1084,6 +1092,11 @@ components:
         promo: { type: [object, 'null'], properties: { label: { type: string }, period: { type: [string, 'null'] } } }
         availability: { type: [string, 'null'], description: '« du 1/12 au 6/12 · sur commande 48 h » (NL : « van 1/12 tot 6/12 · op bestelling 48 u ») ; null : rien de connu, ou showAvailability éteint.' }
         currency: { type: string, const: EUR }
+        weightGrams: { type: [integer, 'null'], description: "v1.7 — Poids d'une pièce (single_weight de l'ERP, sinon celui du nom « 400 g ») ; null : pas saisi (alerte PRODUCT_NO_WEIGHT)." }
+        allergens: { type: array, items: { $ref: '#/components/schemas/Allergen' }, description: "v1.7 — Les allergènes de la recette (grouped_allergens de l'ERP), dans l'ordre de l'annexe II du règlement UE 1169/2011 ; les traces ne sont pas reprises." }
+    Allergen:
+      type: string
+      enum: [gluten, crustaces, oeufs, poisson, arachides, soja, lait, fruits_coque, celeri, moutarde, sesame, sulfites, lupin, mollusques]
     DocOffer:
       description: La vignette d'une promotion, une case d'une page de produits.
       allOf:
@@ -1112,7 +1125,7 @@ components:
                 properties: { kind: { const: cover }, locked: { const: true }, title: { type: string }, subtitle: { type: string }, eyebrow: { type: [string, 'null'] }, imageUrl: { type: [string, 'null'] } }
               - type: object
                 description: Page 2 (`slot` page2) ou avant-dernière page (`slot` penultimate) — charte, verrouillées.
-                properties: { kind: { const: brand }, locked: { const: true }, slot: { type: string, enum: [page2, penultimate] }, title: { type: string }, text: { type: string, description: Paragraphes séparés par une ligne vide ; lignes par un saut de ligne. }, imageUrl: { type: [string, 'null'] } }
+                properties: { kind: { const: brand }, locked: { const: true }, slot: { type: string, enum: [page2, penultimate] }, title: { type: string }, text: { type: string, description: Paragraphes séparés par une ligne vide ; lignes par un saut de ligne. }, imageUrl: { type: [string, 'null'] }, allergens: { type: array, items: { $ref: '#/components/schemas/Allergen' }, description: "v1.7 — avant-dernière page : les allergènes des produits du catalogue, dont elle imprime la légende." } }
               - type: object
                 description: Page intérieure (une page sans produit a `products` vide).
                 properties:

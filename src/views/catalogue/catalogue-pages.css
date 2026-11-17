@@ -85,7 +85,7 @@
 .cat-grid--2x2 { grid-template-rows: repeat(2, minmax(0, 1fr)); }
 
 .cat-list { display: grid; gap: calc(var(--u) * 2.6mm); }
-.cat-row { display: grid; grid-template-columns: calc(var(--u) * 11mm) auto 1fr auto; gap: calc(var(--u) * 2.4mm); align-items: center; }
+.cat-row { display: grid; grid-template-columns: calc(var(--u) * 11mm) auto auto 1fr auto; gap: calc(var(--u) * 2.4mm); align-items: center; }
 .cat-row .cat-photo { width: calc(var(--u) * 13mm); height: calc(var(--u) * 11mm); border-radius: calc(var(--u) * 1.5mm); }
 .cat-row .cat-name { font-size: calc(var(--u) * 4.2mm); max-width: calc(var(--u) * 78mm); }
 .cat-row i { align-self: end; margin-bottom: calc(var(--u) * 1.6mm); border-bottom: 0.3mm dotted currentColor; opacity: 0.4; }
@@ -177,7 +177,7 @@
 .cat-pres--liste .cat-pres__title { margin-top: calc(var(--u) * 2mm); font-size: calc(var(--u) * 10mm); max-height: calc(var(--u) * 21mm); }
 .cat-pres--liste .cat-pres__rule { margin-top: calc(var(--u) * 3.5mm); }
 .cat-pres--liste .cat-pres__text { margin-top: calc(var(--u) * 3.5mm); max-height: calc(var(--u) * 13mm); font-size: calc(var(--u) * 3.8mm); }
-.cat-pres--liste .cat-row { grid-template-columns: calc(var(--u) * 10mm) auto 1fr auto; }
+.cat-pres--liste .cat-row { grid-template-columns: calc(var(--u) * 10mm) auto auto 1fr auto; }
 .cat-pres--liste .cat-row .cat-photo { width: calc(var(--u) * 10mm); height: calc(var(--u) * 8.5mm); }
 .cat-pres--liste .cat-row .cat-name { font-size: calc(var(--u) * 3.9mm); }
 .cat-pres--liste .cat-row .cat-price { font-size: calc(var(--u) * 3.8mm); }
@@ -351,3 +351,18 @@
 .cat-back__shopB .cat-back__who { font-size: calc(var(--u) * 8mm); color: var(--p); }
 .cat-back__shopB p { margin-top: calc(var(--u) * 2.4mm); font-size: calc(var(--u) * 4.8mm); line-height: 1.4; }
 .cat-back__qr--small { margin-top: auto; }
+
+/* Le poids et les allergènes de chaque produit (17/11/2026, obligatoires) ; leur légende à l'avant-dernière page. */
+.cat-facts { display: inline-flex; align-items: center; justify-content: center; gap: calc(var(--u) * 1.4mm); font-size: calc(var(--u) * 2.9mm); line-height: 1; color: var(--i); }
+.cat-card__text .cat-facts:empty { display: none; }
+.cat-card--big .cat-facts, .cat-row .cat-facts { justify-content: flex-start; }
+.cat-weight { letter-spacing: 0.02em; opacity: 0.8; white-space: nowrap; }
+.cat-als { display: inline-flex; gap: calc(var(--u) * 0.7mm); }
+.cat-al { width: calc(var(--u) * 3.4mm); height: calc(var(--u) * 3.4mm); color: var(--p); flex: none; }
+.cat-row .cat-facts { font-size: calc(var(--u) * 2.7mm); }
+.cat-allegend { flex: 0 0 auto; margin-top: auto; padding-top: calc(var(--u) * 4mm); border-top: 0.3mm solid color-mix(in srgb, var(--i) 18%, transparent); }
+.cat-allegend__title { font-family: 'Vank', 'GothamPrint', serif; font-size: calc(var(--u) * 4.2mm); letter-spacing: 0.04em; text-transform: uppercase; color: var(--p); }
+.cat-allegend__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: calc(var(--u) * 1.8mm) calc(var(--u) * 4mm); margin-top: calc(var(--u) * 2.6mm); }
+.cat-allegend__item { display: flex; align-items: center; gap: calc(var(--u) * 2mm); font-size: calc(var(--u) * 3.3mm); color: var(--i); }
+.cat-allegend__item .cat-al { width: calc(var(--u) * 5mm); height: calc(var(--u) * 5mm); }
+.cat-allegend__note { margin: calc(var(--u) * 3mm) 0 0; font-size: calc(var(--u) * 2.8mm); line-height: 1.4; color: var(--i); opacity: 0.75; }
