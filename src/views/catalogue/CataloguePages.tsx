@@ -225,11 +225,13 @@ const seasonDrawing = (title: string): string | null => absolute(seasonImage(tit
 function coverStyle(font: CatalogueCoverFont | null | undefined, color: string | null | undefined): CSSProperties | undefined {
   const css = CATALOGUE_COVER_FONTS.find((f) => f.id === font)?.css
   if (!css && !color) return undefined
+  // --fs : la taille du titre selon la police (le gabarit est réglé pour la Vank, étroite) — Gotham est plus large,
+  // Playwrite DEVA plus large et plus haute ; sans effet sur le sous-titre.
   return {
     ...(css ? { fontFamily: css } : {}),
-    ...(font === 'playwrite' ? { textTransform: 'none', letterSpacing: 0, lineHeight: 1.25 } : font === 'gotham' ? { fontWeight: 500, letterSpacing: '0.02em' } : {}),
+    ...(font === 'playwrite' ? { textTransform: 'none', letterSpacing: 0, lineHeight: 1.5, ['--fs' as string]: 0.55 } : font === 'gotham' ? { fontWeight: 500, letterSpacing: '0.02em', lineHeight: 1.08, ['--fs' as string]: 0.6 } : {}),
     ...(color ? { color } : {}),
-  }
+  } as CSSProperties
 }
 
 function Cover({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'cover' }>; doc: CatalogueDocument }) {

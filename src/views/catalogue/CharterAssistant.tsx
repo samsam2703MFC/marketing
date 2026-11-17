@@ -217,6 +217,59 @@ function TextStyle({ label, font, color, onChange }: { label: string; font: api.
   )
 }
 
+/** La luminance relative d'une couleur #RRGGBB (WCAG), pour le contraste du texte sur le fond des pages. */
+function luminance(hex: string): number {
+  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+}
+const contrast = (a: string, b: string): number => {
+  const [x, y] = [luminance(a), luminance(b)].sort((m, n) => n - m)
+  return (x + 0.05) / (y + 0.05)
+}
+
+/**
+ * Les couleurs de tous les catalogues, choisies parmi celles de la marque (17/11/2026, Sam : « je dois pouvoir choisir le
+ * fond de couleur des pages via les couleurs de la marque ») : le fond des pages (papier), la principale (bandeaux,
+ * titres), l'accent (filets), le texte. « + » garde une autre couleur. Un texte peu lisible sur le fond est dit.
+ */
+function ColorsCard({ colors, onChange }: { colors: CatalogueCharter['colors']; onChange: (key: keyof CatalogueCharter['colors'], hex: string) => void }) {
+  const roles: Array<[keyof CatalogueCharter['colors'], string, string]> = [
+    ['secondary', 'Fond des pages', 'le papier de toutes les pages'],
+    ['primary', 'Principale', 'bandeaux, titres, prix'],
+    ['accent', 'Accent', 'filets, « La gamme »'],
+    ['ink', 'Texte', 'noms, textes'],
+  ]
+  const ratio = contrast(colors.secondary, colors.ink)
+  return (
+    <section className="cha-card">
+      <div className="cha-lab">Couleurs de tous les catalogues</div>
+      <div className="cha-styles cha-styles--flat">
+        {roles.map(([key, label, hint]) => {
+          const inPalette = api.CATALOGUE_COVER_COLORS.some((c) => c.hex === colors[key].toUpperCase())
+          return (
+            <div key={key} className="cha-style">
+              <span className="cha-style__l" title={hint}>
+                {label}
+              </span>
+              <span className="cha-swatches cha-swatches--left" role="group" aria-label={label}>
+                {api.CATALOGUE_COVER_COLORS.map((c) => (
+                  <button key={c.id} type="button" className={`cha-swatch${colors[key].toUpperCase() === c.hex ? ' is-on' : ''}`} style={{ background: c.hex }} onClick={() => onChange(key, c.hex)} title={c.label} aria-label={c.label} />
+                ))}
+                <label className={`cha-swatch cha-swatch--other${inPalette ? '' : ' is-on'}`} title="Une autre couleur" style={inPalette ? undefined : { background: colors[key] }}>
+                  {inPalette ? '+' : ''}
+                  <input type="color" value={colors[key]} onChange={(event) => onChange(key, event.target.value.toUpperCase())} />
+                </label>
+              </span>
+              <span className="cha-style__hint">{hint}</span>
+            </div>
+          )
+        })}
+      </div>
+      {ratio < 4.5 ? <p className="cha-note cha-note--warn">Le texte se lit mal sur ce fond (contraste {ratio.toFixed(1)} : 1, 4,5 au moins) : choisissez un fond clair, ou un texte plus foncé ou plus clair.</p> : null}
+    </section>
+  )
+}
+
 /** Une ligne du tableau « Rempli par chaque boutique » que l'on saisit : enregistrée en quittant le champ (ou Entrée). */
 function ShopInput({ label, value, placeholder, max, onSave }: { label: string; value: string; placeholder: string; max: number; onSave: (v: string) => void }) {
   const [draft, setDraft] = useState(value)
@@ -856,22 +909,8 @@ export default function CharterAssistant({ onBack }: { onBack: () => void }) {
               </button>
             ) : null}
           </div>
-          <div className="cha-colors">
-            {(
-              [
-                ['primary', 'Principale'],
-                ['secondary', 'Papier'],
-                ['accent', 'Accent'],
-                ['ink', 'Encre'],
-              ] as const
-            ).map(([key, label]) => (
-              <label key={key}>
-                <input type="color" value={charter.colors[key]} onChange={(event) => change((c) => ({ ...c, colors: { ...c.colors, [key]: event.target.value.toUpperCase() } }))} />
-                {label}
-              </label>
-            ))}
-          </div>
         </section>
+        <ColorsCard colors={charter.colors} onChange={(key, hex) => change((c) => ({ ...c, colors: { ...c.colors, [key]: hex } }))} />
       </div>
     </>
   )
@@ -925,6 +964,7 @@ export default function CharterAssistant({ onBack }: { onBack: () => void }) {
           </p>
         ) : null}
       </section>
+      <ColorsCard colors={charter.colors} onChange={(key, hex) => change((c) => ({ ...c, colors: { ...c.colors, [key]: hex } }))} />
     </aside>
   )
 

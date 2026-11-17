@@ -180,3 +180,10 @@
 .cha-shoplogo { display: inline-flex; align-items: center; gap: 10px; }
 .cha-shoplogo img { height: 28px; max-width: 110px; object-fit: contain; }
 .cha-dot--off { background: var(--chip); }
+
+/* Les couleurs de tous les catalogues, parmi celles de la marque (17/11/2026) */
+.cha-styles--flat { margin-top: 0; padding-top: 0; border-top: 0; }
+.cha-swatches--left { margin-left: 0; }
+.cha-style__hint { font-size: 11px; color: var(--muted); }
+.cha-swatch--other { position: relative; display: inline-grid; place-items: center; background: #fff; font-size: 14px; color: var(--muted); overflow: hidden; }
+.cha-swatch--other input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
