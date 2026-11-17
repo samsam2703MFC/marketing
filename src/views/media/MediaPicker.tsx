@@ -30,7 +30,8 @@ export default function MediaPicker({
   title?: string
   /** La recherche posée à l'ouverture, dans chaque source (le nom du produit, par exemple). */
   initialSearch?: string
-  onPick: (image: PickedImage, note: string | null) => void
+  /** `asset` : la fiche de la médiathèque de l'image choisie (versée au besoin) ; null si le versement a échoué. */
+  onPick: (image: PickedImage, note: string | null, asset: MediaAsset | null) => void
   onClose: () => void
 }) {
   const [source, setSource] = useState<ImageSource>('mediatheque')
@@ -50,13 +51,14 @@ export default function MediaPicker({
     setError(null)
     try {
       const { media } = await addToLibrary(source, item, library.data ?? null)
-      onPick(pickedFromAsset(media), null)
+      onPick(pickedFromAsset(media), null, media)
     } catch (cause: unknown) {
       const size = await imageSize(item.url)
       const reason = cause instanceof Error ? cause.message : String(cause)
       onPick(
         { url: item.url, name: item.name, source, width: size.width, height: size.height, cutout: item.cutout },
         `Pas versée dans la médiathèque (${reason}) : l’image garde son adresse d’origine.`,
+        null,
       )
     } finally {
       setBusy(null)
@@ -84,7 +86,7 @@ export default function MediaPicker({
         {busy ? <p className="muted">Versement dans la médiathèque…</p> : null}
         <div className="mpick__body">
           {source === 'mediatheque' ? (
-            <LibraryFiles library={library.data ?? null} initialSearch={initialSearch} onPick={(asset) => onPick(pickedFromAsset(asset), null)} onError={setError} />
+            <LibraryFiles library={library.data ?? null} initialSearch={initialSearch} onPick={(asset) => onPick(pickedFromAsset(asset), null, asset)} onError={setError} />
           ) : (
             <SourceBrowser source={source} initialSearch={initialSearch} selectedKey={busy} onSelect={(item) => void pickExternal(item)} />
           )}
