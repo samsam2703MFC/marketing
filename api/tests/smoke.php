@@ -4904,8 +4904,8 @@ check('catalogues : un prix par boutique, en centimes ; le prix général et les
     json_encode([$prods[13] ?? null, $prods[12] ?? null]));
 check('catalogues : le poids d’une pièce et les allergènes de la recette, lus au webshop',
     ($prods[11]['weightGrams'] ?? null) === 650 && ($prods[11]['allergens'] ?? null) === ['gluten', 'oeufs', 'lait', 'fruits_coque']
-        && ($prods[13]['weightGrams'] ?? null) === 500 && ($prods[12]['allergens'] ?? null) === [] && ($prods[12]['weightGrams'] ?? 'x') === null,
-    json_encode([$prods[11] ?? null, $prods[13]['weightGrams'] ?? null]));
+        && ($prods[13]['weightGrams'] ?? null) === 500 && ($prods[12]['allergens'] ?? null) === [] && array_key_exists('weightGrams', $prods[12] ?? []) && $prods[12]['weightGrams'] === null,
+    json_encode([$prods[11] ?? null, $prods[13]['weightGrams'] ?? null, $prods[12] ?? null]));
 check('catalogues : paramètre illisible (422)', call($catRouter, 'GET', '/api/v1/marketing/catalogue-products', ['shopIds' => 'a'])['status'] === 422
     && call($catRouter, 'GET', '/api/v1/marketing/catalogue-products', ['pirate' => '1'])['status'] === 422);
 
