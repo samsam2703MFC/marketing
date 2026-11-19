@@ -40,9 +40,9 @@ function relinkByName(oldCats, newCats) {
   const ids = new Set(newCats.map((c) => c.id));
   const oldName = new Map(oldCats.map((c) => [c.id, (c.name || '').trim().toLowerCase()]));
   const newByName = new Map(newCats.filter((c) => c.active !== false).map((c) => [(c.name || '').trim().toLowerCase(), c.id]));
-  const upd = db.prepare('UPDATE sig_modules SET cat_ref = ? WHERE id = ?');
+  const upd = db.prepare('UPDATE mar_sig_modules SET cat_ref = ? WHERE id = ?');
   let n = 0;
-  for (const m of db.prepare("SELECT id, cat_ref FROM sig_modules WHERE cat_ref != ''").all()) {
+  for (const m of db.prepare("SELECT id, cat_ref FROM mar_sig_modules WHERE cat_ref != ''").all()) {
     if (ids.has(m.cat_ref)) continue;
     const target = newByName.get(oldName.get(m.cat_ref) || '');
     if (target) { upd.run(target, m.id); n++; }
@@ -59,7 +59,7 @@ export async function importTfbCatalog() {
   const db = getDb();
   const manualMap = {};
   for (const [storeId, extId] of Object.entries(pwaConfig().shopMap || {})) manualMap[String(extId)] = storeId;
-  const sigStores = db.prepare('SELECT id, name FROM sig_stores').all();
+  const sigStores = db.prepare('SELECT id, name FROM mar_sig_stores').all();
   const byExt = new Map(data.shops.map((s) => [s.id, s]));
   const storeOf = (ext) => manualMap[ext] || (byExt.has(ext) ? ((matchStore(byExt.get(ext), sigStores).match || {}).id || '') : '');
 

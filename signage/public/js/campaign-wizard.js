@@ -436,7 +436,7 @@ async function saveFilm(app, M) {
   return built;
 }
 
-// État des traductions NL du titre et de l'accroche (circuit sig_translations).
+// État des traductions NL du titre et de l'accroche (circuit mar_sig_translations).
 async function loadTr(app, mainId) {
   try {
     const r = await api('GET', '/translations?lang=nl');

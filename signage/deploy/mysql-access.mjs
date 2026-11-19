@@ -16,7 +16,7 @@ const file = process.argv[2];
 const lines = [];
 if (file && existsSync(file)) {
   const db = new DatabaseSync(file, { readOnly: true });
-  const get = (k) => (db.prepare('SELECT value FROM sig_settings WHERE key = ?').get(k) || {}).value || '';
+  const get = (k) => (db.prepare('SELECT value FROM mar_sig_settings WHERE key = ?').get(k) || {}).value || '';
   let cfg = {};
   try { cfg = JSON.parse(get('pwa_import') || '{}') || {}; } catch { /* réglage illisible : défauts */ }
   lines.push(`mode ${cfg.user ? 'compte' : 'socket'}`);
@@ -24,7 +24,7 @@ if (file && existsSync(file)) {
   const mirror = get('mirror_db');
   if (mirror) lines.push(`miroir ${mirror}`);
   if (get('mirror_off') !== '1') {
-    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'sig\\_%' ESCAPE '\\' ORDER BY name").all();
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'mar\\_sig\\_%' ESCAPE '\\' ORDER BY name").all();
     for (const { name } of tables) if (!MIRROR_SKIP.has(name)) lines.push(`table ${name}`);
   }
   db.close();

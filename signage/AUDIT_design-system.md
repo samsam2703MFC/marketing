@@ -222,7 +222,7 @@ renvoyant à `renderer.js` comme source.
   animations `.json` importées échappent donc structurellement à toute règle de charte.
 - **Les gabarits HTML collés par l'utilisateur** — `html-templates.js:9` contient des hex
   (`#F5EFE4`…) dans des préréglages, mais le HTML réellement diffusé est saisi en régie et stocké
-  en base (`sig_modules.html`). **Je n'ai pas audité le contenu en base** : il n'est pas dans le repo.
+  en base (`mar_sig_modules.html`). **Je n'ai pas audité le contenu en base** : il n'est pas dans le repo.
 - **Contraste et accessibilité** — aucun ratio WCAG n'a été calculé. Hors sujet de la RÈGLE posée.
 - **Rendu réel** — audit statique uniquement. Je n'ai pas comparé le rendu à l'écran à une charte de
   référence : aucun document de charte n'existe dans le repo.

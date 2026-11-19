@@ -5,7 +5,7 @@
 //   1. la médiathèque COMMUNE du Marketing (`GET …/media-library`,
 //      `GET …/media-assets`, lues avec les cookies du navigateur comme le
 //      reste de l'assistant — server/campaign-video.js) ;
-//   2. la médiathèque de la régie (sig_media, déjà servie par /media) ;
+//   2. la médiathèque de la régie (mar_sig_media, déjà servie par /media) ;
 //   3. les photos du webshop, lues par le module Social du Marketing
 //      (`GET /catalogue/nav`, la même lecture que « Créer un post ») ;
 //   4. un import (envoi en flux, POST /media/upload).
@@ -13,7 +13,7 @@
 // régie (server/media-store.js, disque ou bucket OVH) au moment de l'ajout :
 // les écrans des magasins n'ont jamais à joindre le Marketing, et le fichier
 // voyage dans le cache hors ligne comme toute la médiathèque. Une copie déjà
-// faite est reprise (sig_media_sources).
+// faite est reprise (mar_sig_media_sources).
 //
 // Détourage : le module Social sait détourer (remove.bg, `POST /media/detourer`,
 // clé gardée par le Social). La régie lui envoie la photo et range le PNG
@@ -38,7 +38,7 @@ export function socialApiBase() {
 }
 
 export function ensureMediaSources() {
-  getDb().exec(`CREATE TABLE IF NOT EXISTS sig_media_sources (
+  getDb().exec(`CREATE TABLE IF NOT EXISTS mar_sig_media_sources (
     source     TEXT NOT NULL,
     ext_id     TEXT NOT NULL,
     media_id   TEXT NOT NULL,
@@ -193,11 +193,11 @@ async function keep(mediaDir, { source, extId, buf, name, productId = '', season
   const stored = await storeMediaFile(mediaDir, filename, buf);
   const id = 'md' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   addMediaRow({ id, filename, kind: t.kind, moment: 'all', productId, seasonId, size: stored.size, storage: stored.storage, ctype: stored.ctype });
-  if (source) getDb().prepare('INSERT OR REPLACE INTO sig_media_sources(source, ext_id, media_id) VALUES (?, ?, ?)').run(source, String(extId), id);
+  if (source) getDb().prepare('INSERT OR REPLACE INTO mar_sig_media_sources(source, ext_id, media_id) VALUES (?, ?, ?)').run(source, String(extId), id);
   return getMediaRow(id);
 }
 const already = (source, extId) => {
-  const r = getDb().prepare('SELECT media_id FROM sig_media_sources WHERE source = ? AND ext_id = ?').get(source, String(extId));
+  const r = getDb().prepare('SELECT media_id FROM mar_sig_media_sources WHERE source = ? AND ext_id = ?').get(source, String(extId));
   const row = r ? getMediaRow(r.media_id) : null;
   return row || null;
 };

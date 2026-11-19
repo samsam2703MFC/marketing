@@ -118,7 +118,7 @@ const SLOTS = [
   { label: 'Toute la journée', from: '00:00', to: '23:59' },
 ];
 // Catégories de bibliothèque — chaque tag a sa couleur.
-// Les catégories de la bibliothèque vivent en base (table sig_lib_categories,
+// Les catégories de la bibliothèque vivent en base (table mar_sig_lib_categories,
 // éditable dans les Paramètres) : voir App.libCatList() / App.libCatOf().
 
 // Catégories de films — chaque catégorie a sa couleur (bibliothèque de films).
@@ -527,7 +527,7 @@ class App extends Component {
   // produits — noms, prix (y compris par magasin côté serveur) et actif/inactif
   // suivent instantanément, sans dépendre de l'instantané pris au moment du lien.
   // Badge de promotion résolu pour l'aperçu (icône · couleur · libellé du
-  // sous-type), depuis la liste dynamique sig_promo_types.
+  // sous-type), depuis la liste dynamique mar_sig_promo_types.
   // Famille TFBuddy d'une promotion — miroir de tfbFamilyOf (serveur) : une
   // remise programmée sur créneaux (jours et heures) est la famille « happy hour ».
   tfbFamilyOf(p) {
@@ -996,7 +996,7 @@ class App extends Component {
     this.setView('composer');
     this.addElement(t, { tfbRef: promoId });
   }
-  // Campagne résolue pour l'aperçu, depuis la liste sig_campaigns.
+  // Campagne résolue pour l'aperçu, depuis la liste mar_sig_campaigns.
   campaignInfo(m) {
     if (!m || m.type !== 'campagne') return undefined;
     const c = (this.state.campaigns || []).find((x) => x.id === m.campaignRef);
@@ -1487,7 +1487,7 @@ class App extends Component {
   }
   // Un nouveau module rejoint directement la playlist (retirable avec ✕) :
   // sinon il n'apparaîtrait pas dans le film publié et c'est trop facile à rater.
-  // « + Élément » : le type est choisi parmi ceux de la table sig_element_types.
+  // « + Élément » : le type est choisi parmi ceux de la table mar_sig_element_types.
   addElement(t, extra = {}) {
     const id = uid();
     const lib = this.cloneLib();
@@ -3016,7 +3016,7 @@ class App extends Component {
       };
     });
 
-    // Mises en page : celles du TYPE de l'élément (table sig_element_types).
+    // Mises en page : celles du TYPE de l'élément (table mar_sig_element_types).
     const layoutList = (selType && selType.layouts && selType.layouts.length) ? selType.layouts : LAYOUTS;
     const layoutOptions = layoutList.map((o) => ({
       icon: o.icon, label: o.label,

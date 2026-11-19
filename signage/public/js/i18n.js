@@ -2,7 +2,7 @@
 // Quatre langues : français (source), néerlandais (magasins flamands),
 // anglais, italien. Cela ne change QUE la
 // langue de l'INTERFACE ; la langue affichée à l'écran par magasin reste réglée
-// dans Réseau (sig_stores.lang). Choix persisté par navigateur (localStorage).
+// dans Réseau (mar_sig_stores.lang). Choix persisté par navigateur (localStorage).
 
 export const UI_LANGS = [
   { id: 'fr', label: 'Français', short: 'FR' },

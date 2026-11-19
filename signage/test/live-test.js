@@ -110,7 +110,7 @@ async function main() {
   await step('GET /api/v1/health', async () => {
     const h = await call('GET', '/api/v1/health');
     if (!h.ok) throw new Error('health.ok = false');
-    if (h.tablePrefix !== 'sig_') throw new Error('préfixe de tables inattendu');
+    if (h.tablePrefix !== 'mar_sig_') throw new Error('préfixe de tables inattendu');
     return `v${h.version} · d${h.dataVer} · tables ${h.tablePrefix}*`;
   });
   await step('API protégée sans session → 401 attendu', async () => {
@@ -175,7 +175,7 @@ async function main() {
   });
   await step('GET /api/v1/element-types — types depuis la table', async () => {
     const t = await call('GET', '/api/v1/element-types');
-    if (!Array.isArray(t.types) || t.types.length < 5) throw new Error('types manquants (sig_element_types)');
+    if (!Array.isArray(t.types) || t.types.length < 5) throw new Error('types manquants (mar_sig_element_types)');
     for (const x of t.types) if (!Array.isArray(x.layouts) || !x.layouts.length) throw new Error(`type ${x.id} sans mises en page`);
     if (!t.types.some((x) => x.id === 'promotion')) throw new Error('type « promotion » manquant');
     if (!t.types.some((x) => x.id === 'campagne')) throw new Error('type « campagne » manquant');
@@ -184,7 +184,7 @@ async function main() {
   });
   await step('GET /api/v1/promo-types — sous-types de promotion (dynamiques)', async () => {
     const p = await call('GET', '/api/v1/promo-types');
-    if (!Array.isArray(p.promoTypes) || p.promoTypes.length < 3) throw new Error('sous-types de promotion manquants (sig_promo_types)');
+    if (!Array.isArray(p.promoTypes) || p.promoTypes.length < 3) throw new Error('sous-types de promotion manquants (mar_sig_promo_types)');
     for (const x of p.promoTypes) if (!x.id || !x.name || !x.icon) throw new Error(`sous-type ${x.id} incomplet`);
     return p.promoTypes.map((x) => `${x.icon} ${x.name}`).join(' · ');
   });
@@ -218,7 +218,7 @@ async function main() {
   });
   await step('GET /api/v1/campaigns — campagnes marketing (liste)', async () => {
     const c = await call('GET', '/api/v1/campaigns');
-    if (!Array.isArray(c.campaigns)) throw new Error('campagnes illisibles (sig_campaigns)');
+    if (!Array.isArray(c.campaigns)) throw new Error('campagnes illisibles (mar_sig_campaigns)');
     for (const x of c.campaigns) if (!x.id || !x.name || !x.scope) throw new Error(`campagne ${x.id} incomplète`);
     return c.campaigns.length ? c.campaigns.map((x) => `${x.name} (${x.scope})`).join(' · ') : 'liste vide (prod démarre vide)';
   });
@@ -229,7 +229,7 @@ async function main() {
   });
   await step('GET /api/v1/langs — langues depuis la table', async () => {
     const l = await call('GET', '/api/v1/langs');
-    if (!Array.isArray(l.langs) || !l.langs.some((x) => x.id === 'fr')) throw new Error('langues manquantes (sig_langs)');
+    if (!Array.isArray(l.langs) || !l.langs.some((x) => x.id === 'fr')) throw new Error('langues manquantes (mar_sig_langs)');
     return l.langs.map((x) => x.id).join(' · ');
   });
   await step('GET /api/v1/pwa-config — connexion base PWA', async () => {
@@ -496,11 +496,11 @@ async function main() {
     });
     await step('Miroir MySQL — mots de passe et jetons masqués', async () => {
       const { mirrorRow } = await import('../server/mirror.js');
-      const pw = mirrorRow('sig_settings', { key: 'pwa_import', value: JSON.stringify({ host: 'h', password: 'secret-pwa' }) });
+      const pw = mirrorRow('mar_sig_settings', { key: 'pwa_import', value: JSON.stringify({ host: 'h', password: 'secret-pwa' }) });
       if (/secret-pwa/.test(pw.value) || JSON.parse(pw.value).host !== 'h') throw new Error(`mot de passe PWA : ${pw.value}`);
-      for (const k of ['hd_pass', 'srv_token']) if (mirrorRow('sig_settings', { key: k, value: 'x1' }).value !== '(masqué)') throw new Error(`${k} recopié en clair`);
-      if (mirrorRow('sig_settings', { key: 'loop', value: '1' }).value !== '1') throw new Error('réglage ordinaire altéré');
-      if (mirrorRow('sig_media', { key: 'hd_pass', value: 'x' }).value !== 'x') throw new Error('autre table altérée');
+      for (const k of ['hd_pass', 'srv_token']) if (mirrorRow('mar_sig_settings', { key: k, value: 'x1' }).value !== '(masqué)') throw new Error(`${k} recopié en clair`);
+      if (mirrorRow('mar_sig_settings', { key: 'loop', value: '1' }).value !== '1') throw new Error('réglage ordinaire altéré');
+      if (mirrorRow('mar_sig_media', { key: 'hd_pass', value: 'x' }).value !== 'x') throw new Error('autre table altérée');
       return 'mot de passe PWA, hd_pass, srv_token → « (masqué) » · réglages ordinaires intacts';
     });
     await step('Médiathèque — envoi en flux (19 Mo, sans base64), nom avec espace, lecture par morceaux, ETag', async () => {
@@ -1357,7 +1357,7 @@ async function main() {
       const found = mid.products.find((p) => p.id === 'prLIVETEST');
       if (!found) throw new Error('produit test absent après enregistrement');
       if (found.prices[store.id] !== '7,77') throw new Error('prix par magasin perdu');
-      if ((found.aliases || {}).nl !== 'Levend testproduct') throw new Error('alias de langue perdu (sig_aliases)');
+      if ((found.aliases || {}).nl !== 'Levend testproduct') throw new Error('alias de langue perdu (mar_sig_aliases)');
       if (found.unavailable !== true) throw new Error('état « rupture » (unavailable) non persisté');
       // restauration
       await call('PUT', '/api/v1/catalog', { categories: before.categories.length ? before.categories : [], products: before.products });

@@ -6,9 +6,9 @@ avec CMS, base de données, player d'écran et **tests live exécutés à chaque
 - **Une seule dépendance** : Node.js ≥ 22.5 (`node:http` + `node:sqlite`) et le SDK Anthropic
   (`npm ci`), chargé seulement pour proposer des traductions — sans lui, la régie démarre et
   tourne normalement.
-- **Base SQLite** : toutes les tables sont préfixées **`sig_`** (`sig_modules`, `sig_module_items`,
-  `sig_playlist`, `sig_stores`, `sig_players`, `sig_snapshots`, `sig_publications`,
-  `sig_heartbeats`, `sig_settings`, `sig_users`, `sig_sessions`).
+- **Base SQLite** : toutes les tables sont préfixées **`sig_`** (`mar_sig_modules`, `mar_sig_module_items`,
+  `mar_sig_playlist`, `mar_sig_stores`, `mar_sig_players`, `mar_sig_snapshots`, `mar_sig_publications`,
+  `mar_sig_heartbeats`, `mar_sig_settings`, `mar_sig_users`, `mar_sig_sessions`).
 - **Front** : Preact + HTM embarqués (`public/js/vendor/`), aucun build.
 - **Accès protégé** : le back office demande une connexion (`admin` / mot de passe
   `SIG_ADMIN_PASSWORD`, défaut `signage`) ; l'espace agence a son propre compte (`agence`),
@@ -147,10 +147,10 @@ reverse proxy expose l'application.
   PWA → Réglages avancés, ils passent par la socket MariaDB locale. La livraison y déclare
   le compte **`signage`@`localhost`**, authentifié par la socket (aucun mot de passe), avec
   la seule **lecture** de la base PWA et, pour le miroir, l'écriture de **ses** tables
-  `sig_*` recopiées (jamais `sig_users` ni `sig_sessions`). Il ne peut ni modifier ni
+  `sig_*` recopiées (jamais `mar_sig_users` ni `mar_sig_sessions`). Il ne peut ni modifier ni
   effacer une table de l'ERP, ni créer de base, ni s'attribuer de droits. Un utilisateur
   MySQL réglé en régie reste prioritaire : la livraison n'ouvre alors rien.
-- Players : token `plyr_…` par écran (`sig_players.token`). Un player inconnu muni d'un
+- Players : token `plyr_…` par écran (`mar_sig_players.token`). Un player inconnu muni d'un
   token `plyr_…` s'auto-enregistre dans « Nouveaux écrans ».
 - **Comptes magasin** : un compte par magasin, créé dans **Réseau → magasin → Compte magasin**.
   Le mot de passe est généré par le serveur et montré **une seule fois** ; « Nouveau mot de
@@ -257,7 +257,7 @@ Un compte par magasin (voir « Comptes & sécurité »), utilisable sur tablette
   d'eux-mêmes (empreinte des ruptures du magasin, `storeStamp`). La régie voit les ruptures
   déclarées dans **Réseau**.
 
-> À ne pas confondre avec la **langue diffusée à l'écran** par magasin (`sig_stores.lang`, réglée
+> À ne pas confondre avec la **langue diffusée à l'écran** par magasin (`mar_sig_stores.lang`, réglée
 > dans Réseau), qui traduit le *contenu* (noms de produits…) affiché au client, pas l'interface.
 
 ### Compositeur — flow en 3 étapes
@@ -287,20 +287,20 @@ Code : `public/js/campaign-wizard.js` (écran), `server/campaign-video.js` (serv
    c'est dit, la vidéo libre reste possible. Un film déjà créé pour la campagne est proposé à la reprise.
 2. **Produits** — ceux de l'offre, cochés d'office : rattachés par l'identifiant de l'ERP (référence
    `erp-<id>` du catalogue du module → produit `pwp<id>` de la régie), à défaut par le nom. Prix de
-   **chaque** magasin (`sig_product_prices`), moments de vente (`sig_product_moments`), « pas vendu »
+   **chaque** magasin (`mar_sig_product_prices`), moments de vente (`mar_sig_product_moments`), « pas vendu »
    signalé, produits de la même catégorie suggérés, « + Ajouter un produit ». **Promotions et
-   bundles** de la caisse (`sig_bundles`, `sig_tfb_promos`) actifs pendant la période et portant sur ces
+   bundles** de la caisse (`mar_sig_bundles`, `mar_sig_tfb_promos`) actifs pendant la période et portant sur ces
    produits ; ceux de l'offre (même nom qu'une promotion du Marketing rattachée à la campagne, même
    code de bon) cochés d'office ; ceux que le Marketing connaît mais pas la caisse sont nommés.
 3. **Quand** — période de la campagne, semaine type A–E, type (continu : la campagne une fois toutes
    les 1/3, 1/6, 1/10 fiches de la boucle — une *suite* ; film fixe : la séquence seule), grille jours ×
    moments (un moment où aucun produit retenu ne se vend est grisé, avec la raison).
-4. **Où** — chaque écran des magasins (`sig_players`, zones `sig_screen_groups`) : taille,
+4. **Où** — chaque écran des magasins (`mar_sig_players`, zones `mar_sig_screen_groups`) : taille,
    orientation, zone, en ligne ou non ; hors campagne décochés. Les boutiques du Marketing se
    rattachent par leur identifiant ERP s'il est fourni (correspondance de l'import), sinon par le nom ;
    une boutique non rattachée est nommée.
 5. **Catégorie et tags** — proposés d'après la campagne, les produits et la période, modifiables
-   (`sig_playlists.cat`, `sig_playlists.tags`).
+   (`mar_sig_playlists.cat`, `mar_sig_playlists.tags`).
 6. **Film** — l'**éditeur du film** (maquette validée « editeur.html ») : un film est fait de
    **scènes** (durée, fond) et chaque scène de **calques**, sur une frise de calques (bloc du début à la
    fin, partie hachurée = l'entrée, glisser = changer le début). Calques : **photo** (Remplir · Ajuster ·
@@ -319,7 +319,7 @@ Code : `public/js/campaign-wizard.js` (écran), `server/campaign-video.js` (serv
      campagne », catégories, saison, moment, photos / vidéos / illustrations (= fiches détourées du
      Marketing, PNG de la régie). Un fichier pris au Marketing ou au webshop est **copié** dans le
      stockage de la régie (`server/film-media.js` → `media-store.js`, disque ou OVH) au moment de l'ajout,
-     une seule fois (`sig_media_sources`) : les écrans ne joignent jamais le Marketing. Vignettes
+     une seule fois (`mar_sig_media_sources`) : les écrans ne joignent jamais le Marketing. Vignettes
      relayées par la régie (seuls les fichiers du module passent : même origine que son API, ou son chemin
      `/marketing/…`, ou `SIG_MARKETING_MEDIA_ORIGINS`).
    - **Détourage** : par le module Social du Marketing (`POST /media/detourer`, remove.bg, clé gardée chez
@@ -332,9 +332,9 @@ Code : `public/js/campaign-wizard.js` (écran), `server/campaign-video.js` (serv
      dans la médiathèque de la régie, téléchargeable). L'écriture à la main : le texte est tracé hors
      écran puis un masque ne garde que ce que la plume a parcouru, à vitesse constante (chaque lettre le
      temps de sa largeur), bord d'encre fondu et plume visible au bout du trait.
-   - Données : élément de type `scenes` (`sig_modules.scenes`, JSON normalisé par `normScenes`, photos
+   - Données : élément de type `scenes` (`mar_sig_modules.scenes`, JSON normalisé par `normScenes`, photos
      de la régie seulement), ses lignes de produits = les produits des calques prix (`product_refs`) ; les
-     choix de l'éditeur (scènes, NL saisis) dans `sig_playlists.wizard`. Traductions : clés
+     choix de l'éditeur (scènes, NL saisis) dans `mar_sig_playlists.wizard`. Traductions : clés
      `scene:<élément>.<calque>:text|promo`.
    - Nom du film, « Proposer avec Claude » (textes des scènes compris) et vidéo d'ouverture proposée sous
      l'éditeur.
@@ -343,12 +343,12 @@ Code : `public/js/campaign-wizard.js` (écran), `server/campaign-video.js` (serv
    brouillon », « Voir le film », « Diffuser sur N écrans ».
 
 Ce qui est écrit : des éléments de la bibliothèque (liste de produits choisis un à un :
-`sig_modules.product_refs`, prix et vente de chaque magasin à la diffusion), le film
-(`sig_playlists.campaign_id`, `origin = 'assistant'`, choix de l'assistant dans `wizard`), la suite de
+`mar_sig_modules.product_refs`, prix et vente de chaque magasin à la diffusion), le film
+(`mar_sig_playlists.campaign_id`, `origin = 'assistant'`, choix de l'assistant dans `wizard`), la suite de
 la boucle. La diffusion passe par le **même** chemin que « Publier » (snapshot, tests live,
-`sig_publications`, rapport), restreint aux **écrans cochés** (les autres écrans d'un magasin gardent
+`mar_sig_publications`, rapport), restreint aux **écrans cochés** (les autres écrans d'un magasin gardent
 leur version), départ programmé si la campagne commence plus tard, cases de la semaine type, puis
-**fin automatique** à la date de fin (`sig_campaign_runs`, passe chaque minute) : chaque écran reprend
+**fin automatique** à la date de fin (`mar_sig_campaign_runs`, passe chaque minute) : chaque écran reprend
 sa version d'avant, le film quitte la semaine type. Après la diffusion, la section « Écrans des
 magasins » du fil de production de la campagne passe à « prête » — s'il n'y en a pas, c'est dit.
 
@@ -360,19 +360,19 @@ Réglage : `SIG_MARKETING_API_URL` (base des routes du module ; défaut : `SIG_M
 ### Publication (versionnée, atomique) + tests live
 « Publier sur le réseau » crée un **snapshot** en base :
 
-- **Playlist complète** → `sig_snapshots(kind='playlist', version=N)`, `assigned_ver = N`
+- **Playlist complète** → `mar_sig_snapshots(kind='playlist', version=N)`, `assigned_ver = N`
   sur les players ciblés (activation immédiate ou `activate_at` planifié).
-- **Données prix seules** (ou bouton « ⚡ Pousser les prix ») → `sig_snapshots(kind='data', version=D)` :
+- **Données prix seules** (ou bouton « ⚡ Pousser les prix ») → `mar_sig_snapshots(kind='data', version=D)` :
   sync incrémentale légère, aucun média re-téléchargé.
 
 Juste après l'écriture, le CMS **exécute des tests live en HTTP réel contre lui-même** :
 intégrité du snapshot (JSON + présence des médias), `GET /players/{id}/assignment` pour chaque
 player ciblé (la bonne version doit être servie), `GET /datasets/latest`, heartbeat dry-run.
 Le résultat s'affiche dans le toast (« tests live 7/7 OK ») et le détail dans
-**Paramètres → Serveur & connexion** ; il est archivé dans `sig_publications.tests`.
+**Paramètres → Serveur & connexion** ; il est archivé dans `mar_sig_publications.tests`.
 
 ### Player (`/player.html`)
-S'authentifie par token (`sig_players.token`), envoie un **heartbeat toutes les 5 s**
+S'authentifie par token (`mar_sig_players.token`), envoie un **heartbeat toutes les 5 s**
 (état, cache réel, média en cours, version jouée, disque). Quand une nouvelle version lui est
 assignée : téléchargement du snapshot, **téléchargement réel de chacun de ses fichiers**
 (progression = cache %), puis **bascule atomique** — l'ancienne playlist tourne jusqu'à ce que
@@ -421,10 +421,10 @@ Un seul gabarit s'adapte à chaque point de vente, **résolu par magasin à la d
   (matin / midi / après-midi). Ex. « Bienvenue à {{magasin}} ». Le lien `?store=<id>` — et chaque
   écran — affiche les valeurs **résolues** ; l'aperçu générique laisse le jeton visible ; un jeton
   inconnu reste littéral (pour repérer une faute de frappe).
-- **Coordonnées du magasin** — `sig_stores.address / hours / phone`, éditées en régie dans
+- **Coordonnées du magasin** — `mar_sig_stores.address / hours / phone`, éditées en régie dans
   **Réseau** (`POST /api/v1/stores/{id}`), alimentent les jetons ci-dessus.
 - **Rupture / indisponibilité** — bouton **⦸** par produit (onglet **Produits**,
-  `sig_products.unavailable`) : le produit est **retiré des boucles en mode Continu** (le reste
+  `mar_sig_products.unavailable`) : le produit est **retiré des boucles en mode Continu** (le reste
   du catalogue continue) et signalé en régie. Prévu pour brancher un futur signal de stock ERP.
 
 ### Secteurs d'écrans — gestion par secteur (grands magasins)
@@ -440,7 +440,7 @@ ni sur le magasin :
 - **Configuration totalement indépendante** : modifier un secteur ne touche ni les autres
   secteurs ni le format du magasin (couvert par un test dédié dans `test/live-test.js`).
 
-Chaque secteur (`sig_screen_groups`) dit **explicitement ce qu'il filtre**, avec deux bascules :
+Chaque secteur (`mar_sig_screen_groups`) dit **explicitement ce qu'il filtre**, avec deux bascules :
 
 - **Les périodes** (`filter_moments`, défaut non) : ne montrer que ce qui se vend au moment
   courant (matin / midi / après-midi), d'après les tags de période.
@@ -449,7 +449,7 @@ Chaque secteur (`sig_screen_groups`) dit **explicitement ce qu'il filtre**, avec
 
 Un secteur qui **ne filtre rien** suit le film du magasin (comportement d'origine).
 
-- Un **écran** (`sig_players.group_id`) rattaché à un secteur prend **son contenu et son format**
+- Un **écran** (`mar_sig_players.group_id`) rattaché à un secteur prend **son contenu et son format**
   (menu par écran, dans la fiche magasin) ; un écran sans secteur suit le film du magasin (défaut,
   rétro-compatible).
 - Contenu résolu à l'assignation du player, avec les prix, la langue et les jetons du magasin
@@ -475,7 +475,7 @@ il vaut « actif si n > 0 »). Un élément tagué par moment ne passe qu'à ces
 
 ### Suites — le montage à la main dans un film automatique
 Le film se compose tout seul, mais certains passages se **montent à la main** : une **intro**,
-un **outro**, une **présentation de gamme**… C'est le rôle des **suites** (`sig_sequences`),
+un **outro**, une **présentation de gamme**… C'est le rôle des **suites** (`mar_sig_sequences`),
 éditées dans un mini éditeur au bas du panneau de la boucle.
 
 Une suite est une liste **ordonnée** d'éléments de la bibliothèque (↑ / ↓ pour l'ordre, ✎ pour
@@ -494,7 +494,7 @@ pour le film en cours d'édition. Les slots générés sont préfixés `k-seq-�
 ### Tags de période — la régie est la seule source
 **Tous les paramètres de tag se font dans le back office de la régie.** Quatre familles sont
 taguables sur les périodes de la journée (matin / midi / après-midi), avec les mêmes règles et
-la même table (`sig_product_moments`, colonne `kind`) :
+la même table (`mar_sig_product_moments`, colonne `kind`) :
 
 | Famille | Où se pose le tag | Effet |
 | --- | --- | --- |
@@ -520,12 +520,12 @@ produit de l'ERP : la régie règle, l'ERP affiche. Le même résumé s'ouvre en
 **👁** de la ligne produit (onglet Produits), pour vérifier d'un coup d'œil ce que l'ERP verra.
 
 ### Promotions (offres commerciales)
-Une **promotion** est un **type d'élément** à part entière (`sig_element_types` → `promotion`),
+Une **promotion** est un **type d'élément** à part entière (`mar_sig_element_types` → `promotion`),
 au même niveau que produit, liaison, animation… Dans le Compositeur : **＋ Élément →
 « Promotion — offre » 🏷️**. On y saisit l'accroche (titre), le détail (sous-titre) et on choisit
 un **sous-type**.
 
-- Les **sous-types** (`sig_promo_types`) sont **dynamiques, pilotés par la base** — rien en dur :
+- Les **sous-types** (`mar_sig_promo_types`) sont **dynamiques, pilotés par la base** — rien en dur :
   amorcés avec *happy hour, vente flash, bundle de produits, achetez X obtenez Y, remise planifiée,
   bon d'achat*, puis **gérables en régie** dans **Promotions → Styles de badge** (icône, couleur,
   libellé, ordre, actif/inactif). Chaque sous-type compose le **badge** affiché à l'écran : il
@@ -549,7 +549,7 @@ Une vidéo n'a presque jamais le format exact du mur d'écrans. Le volet **Vidé
 
 Un **pavé de flèches** (← ↑ ↓ →, pas de 120 px sur le canevas 6480 × 3840) choisit la partie
 visible, un **zoom** de 0,5× à 4× règle la taille, et **⌖** recentre. Stocké dans
-`sig_modules.pos` (`vidX`, `vidY`, `vidZoom`) — aucune migration. La vignette de l'éditeur
+`mar_sig_modules.pos` (`vidX`, `vidY`, `vidZoom`) — aucune migration. La vignette de l'éditeur
 applique le même cadrage que l'écran, pour ne pas donner une fausse idée du rendu.
 
 La **couleur de fond** — ce qu'on voit autour de la vidéo quand elle ne remplit pas l'écran — se
@@ -557,7 +557,7 @@ choisit dans une liste alimentée par la **palette de la marque** (`BRAND_COLORS
 `public/js/renderer.js` : rubis, encre, terre, caramel, or, vert, gris, lin, sable, crème,
 blanc). Ajouter une teinte à cette constante la rend disponible partout d'un coup. Un nuancier
 « libre » reste là pour un cas particulier ; toute valeur qui n'est pas une couleur est refusée
-à l'enregistrement et retombe sur le noir. Champ `sig_modules.bg_color`, appliqué aussi au mode
+à l'enregistrement et retombe sur le noir. Champ `mar_sig_modules.bg_color`, appliqué aussi au mode
 « fichier » de l'élément Animation, qui a le même besoin.
 
 ### Animation — texte animé **ou** fichier importé
@@ -584,7 +584,7 @@ Type d'élément **`html`** : dans la bibliothèque, **＋ Élément → « Gaba
 code »**. On y colle du HTML (document complet avec `<head><style>` ou simple fragment) ; il est
 **mis à l'échelle** sur le canevas 6480 × 3840.
 
-- **Format source** de la maquette (`sig_modules.html_w/html_h`) avec préréglages **16:9 paysage ·
+- **Format source** de la maquette (`mar_sig_modules.html_w/html_h`) avec préréglages **16:9 paysage ·
   9:16 portrait · A1 portrait · A1 paysage**, ou dimensions libres. Trois mises en page :
   *Adapter* (tout visible), *Remplir* (recadre), *Étirer*.
 - **Variables** : les mêmes jetons que les titres — `{{magasin}}`, `{{adresse}}`, `{{horaires}}`,
@@ -596,15 +596,15 @@ code »**. On y colle du HTML (document complet avec `<head><style>` ou simple f
   gestionnaires `on*` et les URL `javascript:` (le code vient de la régie, admin authentifiée).
 
 ### Règle photo / illustration
-Un **produit** porte une **photo** (`sig_products.img`) ; une **catégorie** porte une
-**illustration** (`sig_product_categories.img`, saisie dans l'onglet Produits en sélectionnant la
+Un **produit** porte une **photo** (`mar_sig_products.img`) ; une **catégorie** porte une
+**illustration** (`mar_sig_product_categories.img`, saisie dans l'onglet Produits en sélectionnant la
 catégorie). L'écran « catégorie » affiche l'**illustration de la catégorie** quand elle est
 renseignée, et retombe sinon sur la photo du produit courant (comportement d'origine, donc
 rétro-compatible). Les deux sont exposées séparément aux variables d'un gabarit HTML.
 
 ### Format des items (16:9 / 9:16) — filtre de montage
 Un écran est **soit paysage, soit portrait** : chaque élément porte donc un **format de diffusion**
-(`sig_modules.orient`) valant **`paysage`** (16:9, défaut) ou **`portrait`** (9:16) — il n'y a pas
+(`mar_sig_modules.orient`) valant **`paysage`** (16:9, défaut) ou **`portrait`** (9:16) — il n'y a pas
 d'entre-deux. Ce format sert de **filtre des items disponibles** au montage : la bibliothèque et la
 ligne du temps ne proposent que les éléments du format visé (les deux vues sont **disjointes**).
 Sur un **gabarit HTML**, choisir un préréglage 16:9 / 9:16 fixe directement le format de l'item.
@@ -638,16 +638,16 @@ en dernier l'emportant sur un `transform` existant.
 
 Une variable **laissée non liée** retombe sur les jetons standards (`{{magasin}}`, `{{date}}`…) ou
 reste visible telle quelle — rien n'est inventé. Une variable d'image non liée est neutralisée à
-l'affichage (pas d'image cassée). Liaisons et placements sont stockés dans `sig_modules.html_vars`
+l'affichage (pas d'image cassée). Liaisons et placements sont stockés dans `mar_sig_modules.html_vars`
 (JSON). L'**aperçu du compositeur** applique les liaisons en direct (`resolveHtmlPreview`) ; les
 champs propres à un magasin s'y affichent en repère `‹Nom du magasin›` tant qu'aucun magasin n'est
 choisi.
 
 ### Campagnes marketing
-Une **campagne** est aussi un **type d'élément** (`sig_element_types` → `campagne`), mais son
+Une **campagne** est aussi un **type d'élément** (`mar_sig_element_types` → `campagne`), mais son
 contenu vient d'une **liste d'entités** — on n'a qu'à en **déposer une comme item**.
 
-- Les campagnes (`sig_campaigns`) se gèrent dans l'onglet **Campagnes** : nom, **portée**
+- Les campagnes (`mar_sig_campaigns`) se gèrent dans l'onglet **Campagnes** : nom, **portée**
   (*produit* → photo + prix du produit lié du catalogue, ou *gamme thématique* → libellé de thème),
   **visuel** (URL, sinon la photo du produit), **accroche**, **période** (du → au), couleur,
   actif/inactif, ordre. Liste **importable depuis l'ERP** ensuite.
@@ -710,7 +710,7 @@ semaine (jour ISO 1 = lundi … 7, heure de début incluse, de fin exclue), stat
   puis celui qui a marché passe en premier. Identifiants refusés : la synchro automatique attend
   6 h (pas de blocage du compte) ; le bouton de la régie, non.
 - **Synchro** : au démarrage, puis toutes les **30 min**, ou **Promotions → Promotions TFBuddy →
-  Synchroniser**. La table `sig_bundles` est un **reflet** remplacé à chaque synchro (seul le
+  Synchroniser**. La table `mar_sig_bundles` est un **reflet** remplacé à chaque synchro (seul le
   visuel choisi en régie est gardé). Produits TFBuddy `N` = produits de l'import PWA `pwpN` ;
   magasins reliés par la correspondance de l'import PWA, sinon par slug/nom (`GET /shops`). Ce qui
   ne se relie pas est **signalé** dans la régie (magasin TFBuddy non relié, produit absent du
@@ -751,10 +751,10 @@ n'empêche pas les autres, et son erreur est dite dans la régie.
   planifiée*, bons → *Bon d'achat* ; les bundles gardent la puce maison « 🎁 Bundle » rubis tant
   qu'aucun style n'est choisi. Une promotion reliée prend le badge de **sa famille** (le sous-type
   posé sur l'élément ne sert plus que de repli si la famille n'a pas de style). Rangé dans
-  `sig_settings` (`tfb_badges`) ; un changement change l'empreinte du magasin (`|g:`), les écrans
+  `mar_sig_settings` (`tfb_badges`) ; un changement change l'empreinte du magasin (`|g:`), les écrans
   suivent **sans republier**. Supprimer un sous-type qui habille une famille la remet sur son repli.
 - **À l'écran** : un élément « promotion » peut **suivre une promotion TFBuddy**
-  (`sig_modules.tfb_ref` → `sig_tfb_promos`). Elle passe à ses jours et heures, dans ses magasins,
+  (`mar_sig_modules.tfb_ref` → `mar_sig_tfb_promos`). Elle passe à ses jours et heures, dans ses magasins,
   entre ses dates, et tombe si elle n'est pas `ACTIVE` ou si tous ses produits sont épuisés au
   magasin (`finishSnapshot` → `applyTfbPromos`). Sa mécanique s'affiche en sous-titre dans la
   langue du magasin (FR / NL / EN), et une remise programmée montre le **prix remisé** « au lieu
@@ -780,12 +780,12 @@ description). **Claude propose, la régie valide** : onglet **Traductions** →
 - **Clé** : secret `ANTHROPIC_API_KEY`, écrit par la livraison dans `/etc/signage/signage.env`
   (jamais en base, jamais renvoyée par l'API). Sans clé, l'onglet le dit et les traductions se
   saisissent à la main. Clé refusée, modèle inconnu, limite de débit : message clair, rien d'écrit.
-- **Une traduction vaut pour un texte** : `sig_translations` garde le texte français traduit
+- **Une traduction vaut pour un texte** : `mar_sig_translations` garde le texte français traduit
   dans sa clé. Un texte modifié redevient **à retraduire** (l'ancienne traduction est montrée) ;
   la traduction de l'ancien texte sert encore aux écrans tant que le film publié le montre.
   Saisir ou corriger un texte dans l'onglet le valide d'office ; l'effacer remet le français.
 - **Noms de l'ERP prioritaires** : un produit ou une catégorie qui a déjà un nom néerlandais dans
-  l'ERP (`sig_aliases`) le garde ; l'onglet le montre sans rien proposer.
+  l'ERP (`mar_sig_aliases`) le garde ; l'onglet le montre sans rien proposer.
 - **À l'écran** : `finishSnapshot` → `applyTranslations` (avant les noms ERP), par magasin. Une
   validation change l'empreinte du magasin (`storeStamp`) : ses écrans se resynchronisent sans
   republier. Les magasins francophones ne changent pas.
@@ -798,7 +798,7 @@ URL du CMS, IP / hôte player, token — persistés en base. **« Tester la conn
 exécute côté serveur : ping TCP de l'hôte, `GET assignment`, `GET dataset prix`,
 `POST heartbeat` (dry-run), avec latences réelles.
 
-**Matières premières** (`sig_ingredients`) : chaque ingrédient peut être **lié à une animation**
+**Matières premières** (`mar_sig_ingredients`) : chaque ingrédient peut être **lié à une animation**
 de la bibliothèque — c'est ce lien que le module produit du franchiseur (Produit → Ingrédient)
 vient lire (`GET /api/v1/ingredients`). Le réglage se fait ici : la régie est la seule source.
 La **référence ERP** est optionnelle et rapproche les deux mondes sans dépendre du nom ; une
@@ -806,7 +806,7 @@ animation supprimée de la bibliothèque laisse un lien signalé « animation su
 Le bouton **🔎 Diagnostic ERP** cherche la table des ingrédients dans la base de l'ERP
 (`POST /api/v1/ingredients/inspect`, lecture seule — rien n'est importé).
 
-**Catégories de la bibliothèque** (`sig_lib_categories`) : le classement des éléments s'édite ici
+**Catégories de la bibliothèque** (`mar_sig_lib_categories`) : le classement des éléments s'édite ici
 — nom, couleur, ordre, actif/inactif, et la **table de la régie** qui alimente la catégorie
 (produits, catégories produit, promotions, campagnes, périodes, médiathèque). Rien n'est écrit en
 dur dans l'interface. Une catégorie inactive n'est plus proposée au classement, mais les éléments
@@ -867,7 +867,7 @@ token player   : GET  /api/v1/players/{id}/assignment?token=…
 
 ## Notes
 
-- Les photos importées sont stockées en dataURL dans `sig_module_items.img` (simple et
+- Les photos importées sont stockées en dataURL dans `mar_sig_module_items.img` (simple et
   autonome ; migrer vers un stockage fichier si les volumes grossissent).
 - Polices : sous-ensemble Gotham (300/400/500·600/700+) + Vank, servies depuis `public/fonts/`.
 - Base : SQLite embarquée (fichier `data/signage.db`, tables `sig_*`). Si les tables doivent

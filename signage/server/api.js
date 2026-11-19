@@ -195,7 +195,7 @@ function appearanceOf(productId, date = new Date()) {
   const modules = loadModules();
   const shows = (m) => m.productRef === p.id || (m.items || []).some((it) => it.productId === p.id);
   const tagOk = momentTagFilters(date);
-  const stores = getDb().prepare('SELECT id, name FROM sig_stores ORDER BY name').all();
+  const stores = getDb().prepare('SELECT id, name FROM mar_sig_stores ORDER BY name').all();
   const sectors = stores.flatMap((s) => loadScreenGroups(s.id).map((g) => ({
     storeId: s.id, store: s.name, sectorId: g.id, sector: g.name,
     filtreCategories: g.filterCats !== false && g.cats.length > 0,
@@ -244,8 +244,8 @@ function applyBundles(snap, storeId, date) {
   const db = getDb();
   const bundles = new Map(loadBundles().map((b) => [b.id, b]));
   const off = new Set(storeId ? storeUnavailable(storeId, date).map((r) => r.productId) : []);
-  const prods = new Map(db.prepare('SELECT id, name, price, img, src FROM sig_products').all().map((p) => [p.id, p]));
-  const lang = (storeId && (db.prepare('SELECT lang FROM sig_stores WHERE id = ?').get(storeId) || {}).lang) || 'fr';
+  const prods = new Map(db.prepare('SELECT id, name, price, img, src FROM mar_sig_products').all().map((p) => [p.id, p]));
+  const lang = (storeId && (db.prepare('SELECT lang FROM mar_sig_stores WHERE id = ?').get(storeId) || {}).lang) || 'fr';
   const today = brusselsDay(date);
   // Style de badge choisi pour la famille « bundle » (sinon la puce maison).
   const badge = tfbBadgeFor('bundle');
@@ -284,13 +284,13 @@ function applyTfbPromos(snap, storeId, date) {
   const db = getDb();
   const promos = new Map(loadTfbPromos().map((p) => [p.id, p]));
   const off = new Set(storeId ? storeUnavailable(storeId, date).map((r) => r.productId) : []);
-  const prods = new Map(db.prepare('SELECT id, name, price, img, src, category_id, active FROM sig_products').all().map((p) => [p.id, p]));
-  const lang = (storeId && (db.prepare('SELECT lang FROM sig_stores WHERE id = ?').get(storeId) || {}).lang) || 'fr';
+  const prods = new Map(db.prepare('SELECT id, name, price, img, src, category_id, active FROM mar_sig_products').all().map((p) => [p.id, p]));
+  const lang = (storeId && (db.prepare('SELECT lang FROM mar_sig_stores WHERE id = ?').get(storeId) || {}).lang) || 'fr';
   const today = brusselsDay(date);
   // Badge : le style choisi pour la famille de la promotion (Promotions →
   // « Style des badges ») ; à défaut, le sous-type propre à l'élément.
   const badges = loadTfbBadges();
-  const types = new Map(db.prepare('SELECT * FROM sig_promo_types').all().map((t) => [t.id, t]));
+  const types = new Map(db.prepare('SELECT * FROM mar_sig_promo_types').all().map((t) => [t.id, t]));
   const keep = [];
   for (const m of snap.modules) {
     if (!m.tfbRef) { keep.push(m); continue; }
@@ -321,7 +321,7 @@ function applyTfbPromos(snap, storeId, date) {
 
 // ---- Synchro des bundles TFBuddy -------------------------------------------
 // Toutes les 30 min (et à la demande en régie). Le résultat — ou l'erreur,
-// dite telle quelle — reste dans sig_settings (tfbuddy_bundles).
+// dite telle quelle — reste dans mar_sig_settings (tfbuddy_bundles).
 export function bundleSyncStatus() {
   try { return JSON.parse(getSetting('tfbuddy_bundles', '{}')) || {}; } catch { return {}; }
 }
@@ -362,7 +362,7 @@ export function syncBundles({ manual = false } = {}) {
         try { shops = await fetchShops(); } catch (e) { shopsError = String(e.message || e); }
       }
       const byExt = new Map(shops.map((x) => [x.id, x]));
-      const sigStores = getDb().prepare('SELECT id, name FROM sig_stores').all();
+      const sigStores = getDb().prepare('SELECT id, name FROM mar_sig_stores').all();
       const storeOf = (ext) => manualMap[ext] || (byExt.has(ext) ? ((matchStore(byExt.get(ext), sigStores).match || {}).id || '') : '');
       const kinds = {};
       for (const kind of ['bundle', ...TFB_PROMO_KINDS]) {
@@ -407,7 +407,7 @@ const bundlesJson = () => ({
   // Style des badges : famille TFBuddy → sous-type qui l'habille ('' = maison).
   badges: loadTfbBadges(),
   // Noms des magasins : la page Promotions les montre sans charger le réseau.
-  stores: getDb().prepare('SELECT id, name FROM sig_stores ORDER BY name').all(),
+  stores: getDb().prepare('SELECT id, name FROM mar_sig_stores ORDER BY name').all(),
 });
 
 // ---- Traductions (voir server/translate.js) --------------------------------
@@ -423,7 +423,7 @@ function translationsJson(lang) {
   return {
     lang, items,
     langs: loadLangs().filter((l) => l.id !== 'fr'),
-    stores: getDb().prepare('SELECT id, name FROM sig_stores WHERE lang = ? ORDER BY name').all(lang),
+    stores: getDb().prepare('SELECT id, name FROM mar_sig_stores WHERE lang = ? ORDER BY name').all(lang),
     counts: {
       total: items.length,
       erp: n((s) => s.fromErp),
@@ -478,7 +478,7 @@ function finishSnapshot(snap, storeId, date = new Date()) {
 // Révision continue du film actuellement assigné à un player (ou null).
 function continuousRevisionForVer(ver) {
   if (!ver) return null;
-  const row = getDb().prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' AND version = ?`).get(ver);
+  const row = getDb().prepare(`SELECT payload FROM mar_sig_snapshots WHERE kind = 'playlist' AND version = ?`).get(ver);
   const pid = row ? (JSON.parse(row.payload).playlistId || null) : null;
   if (!pid) return null;
   const film = loadPlaylists().find((p) => p.id === pid);
@@ -490,7 +490,7 @@ const parseDetail = (raw) => { try { return raw ? JSON.parse(raw) : null; } catc
 const secsSince = (iso) => (iso ? Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 1000)) : null);
 
 function playerRow(id) {
-  return getDb().prepare('SELECT * FROM sig_players WHERE id = ?').get(id);
+  return getDb().prepare('SELECT * FROM mar_sig_players WHERE id = ?').get(id);
 }
 function authPlayer(id, token) {
   const p = playerRow(id);
@@ -524,8 +524,8 @@ export function stateJson() {
 
 export function fleetJson() {
   const db = getDb();
-  const stores = db.prepare('SELECT * FROM sig_stores ORDER BY id').all();
-  const players = db.prepare('SELECT * FROM sig_players ORDER BY store_id, id').all();
+  const stores = db.prepare('SELECT * FROM mar_sig_stores ORDER BY id').all();
+  const players = db.prepare('SELECT * FROM mar_sig_players ORDER BY store_id, id').all();
   const byStore = new Map(stores.map((s) => [s.id, { id: s.id, store: s.name, group: s.grp, conn: s.conn, format: storeFormat(s), lang: s.lang || 'fr', address: s.address || '', hours: s.hours || '', phone: s.phone || '', groups: loadScreenGroups(s.id), active: s.active == null ? true : !!s.active, players: [] }]));
   for (const p of players) {
     const seen = secsSince(p.last_seen);
@@ -570,7 +570,7 @@ export function fleetJson() {
 // partageable, sans connexion (comme /film).
 export function reportJson() {
   const db = getDb();
-  const stores = db.prepare('SELECT * FROM sig_stores ORDER BY id').all()
+  const stores = db.prepare('SELECT * FROM mar_sig_stores ORDER BY id').all()
     .filter((s) => s.id !== 'st-new')
     .map((s) => ({
       id: s.id, name: s.name, group: s.grp,
@@ -632,14 +632,14 @@ async function publish({ mode, targets, slot, when, activateAt, playlistId, sche
   const playlist = film.items;
 
   // Cibles : explicites, sinon les magasins du film, sinon tout le réseau.
-  const allStores = db.prepare('SELECT id FROM sig_stores').all().map((s) => s.id);
+  const allStores = db.prepare('SELECT id FROM mar_sig_stores').all().map((s) => s.id);
   const filmStores = Array.isArray(film.stores) ? film.stores : [];
   const wanted = (targets && targets.length) ? targets
     : (mode !== 'data' && filmStores.length ? filmStores : allStores);
   const targetIds = wanted.filter((t) => allStores.includes(t));
   const qMarks = targetIds.map(() => '?').join(',');
   const targetedPlayers = targetIds.length
-    ? db.prepare(`SELECT * FROM sig_players WHERE store_id IN (${qMarks})`).all(...targetIds)
+    ? db.prepare(`SELECT * FROM mar_sig_players WHERE store_id IN (${qMarks})`).all(...targetIds)
     : [];
 
   let version;
@@ -670,12 +670,12 @@ async function publish({ mode, targets, slot, when, activateAt, playlistId, sche
     setSetting('version', version);
   }
 
-  db.prepare('INSERT INTO sig_snapshots(kind, version, payload) VALUES (?, ?, ?)')
+  db.prepare('INSERT INTO mar_sig_snapshots(kind, version, payload) VALUES (?, ?, ?)')
     .run(mode === 'data' ? 'data' : 'playlist', version, JSON.stringify(payload));
 
   if (mode !== 'data') {
     const act = when === 'scheduled' && activateAt ? activateAt : null;
-    const upd = db.prepare('UPDATE sig_players SET assigned_ver = ?, activate_at = ? WHERE store_id = ?');
+    const upd = db.prepare('UPDATE mar_sig_players SET assigned_ver = ?, activate_at = ? WHERE store_id = ?');
     for (const st of targetIds) upd.run(version, act, st);
   }
 
@@ -693,7 +693,7 @@ async function publish({ mode, targets, slot, when, activateAt, playlistId, sche
     },
   });
 
-  const pub = db.prepare(`INSERT INTO sig_publications(mode, version, targets, slot, activate_at, tests)
+  const pub = db.prepare(`INSERT INTO mar_sig_publications(mode, version, targets, slot, activate_at, tests)
     VALUES (?, ?, ?, ?, ?, ?)`).run(
     mode === 'data' ? 'data' : 'full', version, JSON.stringify(targetIds),
     slot || 'Toute la journée', when === 'scheduled' ? (activateAt || null) : null, JSON.stringify(tests)
@@ -734,8 +734,8 @@ function heartbeat(id, body, url) {
   if (!p) {
     // Auto-enregistrement d'un nouveau player (utile pour tester en live).
     if (!/^plyr_[A-Za-z0-9_-]{4,}$/.test(token)) return { status: 401, json: { error: 'unknown player / bad token' } };
-    db.prepare(`INSERT OR IGNORE INTO sig_stores(id, name, grp, conn) VALUES ('st-new', 'Nouveaux écrans', 'Auto-enregistrés', 'fibre')`).run();
-    db.prepare(`INSERT INTO sig_players(id, store_id, name, hw, kiosk, orient, token, state, played_ver, assigned_ver, data_ver, cache_pct, media, disk, temp)
+    db.prepare(`INSERT OR IGNORE INTO mar_sig_stores(id, name, grp, conn) VALUES ('st-new', 'Nouveaux écrans', 'Auto-enregistrés', 'fibre')`).run();
+    db.prepare(`INSERT INTO mar_sig_players(id, store_id, name, hw, kiosk, orient, token, state, played_ver, assigned_ver, data_ver, cache_pct, media, disk, temp)
       VALUES (?, 'st-new', ?, ?, 1, ?, ?, 'idle', 0, ?, 0, 0, '—', '—', '—')`).run(
       id, String(body.name || `Player ${id}`), String(body.hw || 'Player web'),
       String(body.orient || 'Paysage'), token, getIntSetting('version', 1)
@@ -747,7 +747,7 @@ function heartbeat(id, body, url) {
   if (!body.probe) {
     const state = ['playing', 'syncing', 'error', 'idle'].includes(body.state) ? body.state : 'playing';
     const dataVer = Number.isFinite(+body.dataVer) ? +body.dataVer : p.data_ver;
-    db.prepare(`UPDATE sig_players SET state = ?, cache_pct = ?, media = ?, disk = ?, temp = ?,
+    db.prepare(`UPDATE mar_sig_players SET state = ?, cache_pct = ?, media = ?, disk = ?, temp = ?,
       played_ver = ?, data_ver = ?, last_seen = ?, data_at = CASE WHEN ? != data_ver THEN ? ELSE COALESCE(data_at, ?) END
       WHERE id = ?`).run(
       state,
@@ -757,8 +757,8 @@ function heartbeat(id, body, url) {
       dataVer, nowIso(), dataVer, nowIso(), nowIso(), id
     );
     const detail = cleanDetail(body.detail);
-    if (detail) db.prepare('UPDATE sig_players SET detail = ? WHERE id = ?').run(JSON.stringify(detail), id);
-    db.prepare('INSERT INTO sig_heartbeats(player_id, state, cache_pct, media, disk, temp) VALUES (?, ?, ?, ?, ?, ?)')
+    if (detail) db.prepare('UPDATE mar_sig_players SET detail = ? WHERE id = ?').run(JSON.stringify(detail), id);
+    db.prepare('INSERT INTO mar_sig_heartbeats(player_id, state, cache_pct, media, disk, temp) VALUES (?, ?, ?, ?, ?, ?)')
       .run(id, String(body.state || ''), Math.round(+body.cachePct || 0), String(body.media || ''), String(body.disk || ''), String(body.temp || ''));
   }
 
@@ -784,7 +784,7 @@ function assignment(id, url) {
   const p = authPlayer(id, url.searchParams.get('token'));
   if (!p) return { status: 401, json: { error: 'unauthorized' } };
   const date = new Date();
-  const snap = getDb().prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' AND version = ?`).get(p.assigned_ver);
+  const snap = getDb().prepare(`SELECT payload FROM mar_sig_snapshots WHERE kind = 'playlist' AND version = ?`).get(p.assigned_ver);
   const snapshot = snap ? JSON.parse(snap.payload) : currentDraftSnapshot();
   // Groupe d'écrans : un player rattaché à un groupe prend SON contenu et SON
   // format. Groupe avec catégories → boucle continue de ces catégories TOUTE LA
@@ -839,7 +839,7 @@ function filmJson(storeId, filmId, groupId) {
     // Une publication peut exister pour ce film même s'il a été renommé/supprimé
     // depuis (snapshot orphelin) : on la sert quand même. On ne renvoie 404 que
     // si NI film courant NI publication ne correspondent à cet id.
-    const rows = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' ORDER BY version DESC LIMIT 200`).all();
+    const rows = db.prepare(`SELECT payload FROM mar_sig_snapshots WHERE kind = 'playlist' ORDER BY version DESC LIMIT 200`).all();
     for (const r of rows) {
       const p = JSON.parse(r.payload);
       if ((p.playlistId || 'pl1') === filmId) { snap = p; break; }
@@ -851,7 +851,7 @@ function filmJson(storeId, filmId, groupId) {
       snap.playlistName = film.name;
     }
   } else if (storeId) {
-    const store = db.prepare('SELECT * FROM sig_stores WHERE id = ?').get(storeId);
+    const store = db.prepare('SELECT * FROM mar_sig_stores WHERE id = ?').get(storeId);
     if (!store) return { status: 404, json: { error: `magasin inconnu : ${storeId}` } };
     storeName = store.name;
     storeFmt = storeFormat(store);
@@ -863,7 +863,7 @@ function filmJson(storeId, filmId, groupId) {
       const snapOf = (fid) => {
         const pf = pls.find((p) => p.id === fid);
         if (!pf) return null;
-        const rows = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' ORDER BY version DESC LIMIT 200`).all();
+        const rows = db.prepare(`SELECT payload FROM mar_sig_snapshots WHERE kind = 'playlist' ORDER BY version DESC LIMIT 200`).all();
         for (const r of rows) { const p = JSON.parse(r.payload); if ((p.playlistId || 'pl1') === pf.id) return p; }
         return { ...currentDraftSnapshot(), playlistId: pf.id, playlistName: pf.name, playlist: pf.items, draft: true };
       };
@@ -885,9 +885,9 @@ function filmJson(storeId, filmId, groupId) {
       if (snap) snap.plan = { moment: planned.label, window: planned.window, films: snaps.length, week: planned.week, day: planned.day };
     }
     if (!snap) {
-      const row = db.prepare('SELECT MAX(assigned_ver) AS v FROM sig_players WHERE store_id = ?').get(storeId);
+      const row = db.prepare('SELECT MAX(assigned_ver) AS v FROM mar_sig_players WHERE store_id = ?').get(storeId);
       if (row && row.v) {
-        const s = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' AND version <= ? ORDER BY version DESC LIMIT 1`).get(row.v);
+        const s = db.prepare(`SELECT payload FROM mar_sig_snapshots WHERE kind = 'playlist' AND version <= ? ORDER BY version DESC LIMIT 1`).get(row.v);
         if (s) snap = JSON.parse(s.payload);
       }
     }
@@ -906,7 +906,7 @@ function filmJson(storeId, filmId, groupId) {
     }
   }
   if (!snap) {
-    const snapRow = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' ORDER BY version DESC LIMIT 1`).get();
+    const snapRow = db.prepare(`SELECT payload FROM mar_sig_snapshots WHERE kind = 'playlist' ORDER BY version DESC LIMIT 1`).get();
     snap = snapRow ? JSON.parse(snapRow.payload) : currentDraftSnapshot();
   }
   // Mode continu : régénère la boucle en direct (avant prix/langue/résolutions).
@@ -919,7 +919,7 @@ function filmJson(storeId, filmId, groupId) {
     snap.groupId = group.id; snap.groupName = group.name; snap.playlistName = group.name;
   }
   const dv = getIntSetting('data_ver', 1);
-  const dataRow = db.prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'data' AND version = ?`).get(dv);
+  const dataRow = db.prepare(`SELECT payload FROM mar_sig_snapshots WHERE kind = 'data' AND version = ?`).get(dv);
   if (dataRow) {
     const prices = JSON.parse(dataRow.payload).prices || [];
     const byId = new Map(prices.map((p) => [p.moduleId, p.items]));
@@ -962,10 +962,10 @@ function currentDraftSnapshot() {
 
 function latestDataset(url) {
   const token = url.searchParams.get('token') || '';
-  const known = getDb().prepare('SELECT 1 AS ok FROM sig_players WHERE token = ?').get(token);
+  const known = getDb().prepare('SELECT 1 AS ok FROM mar_sig_players WHERE token = ?').get(token);
   if (!known) return { status: 401, json: { error: 'unauthorized' } };
   const dv = getIntSetting('data_ver', 1);
-  const snap = getDb().prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'data' AND version = ?`).get(dv);
+  const snap = getDb().prepare(`SELECT payload FROM mar_sig_snapshots WHERE kind = 'data' AND version = ?`).get(dv);
   if (snap) return { status: 200, json: { dataVer: dv, ...JSON.parse(snap.payload) } };
   return {
     status: 200,
@@ -982,7 +982,7 @@ function latestDataset(url) {
 // ---------------------------------------------------------------------------
 // Espace magasin
 function storeRow(id) {
-  return id ? getDb().prepare('SELECT * FROM sig_stores WHERE id = ?').get(String(id)) : null;
+  return id ? getDb().prepare('SELECT * FROM mar_sig_stores WHERE id = ?').get(String(id)) : null;
 }
 // Mot de passe lisible (ni 0/O ni 1/l) : xxxx-xxxx-xxxx, 60 bits d'aléa.
 function newStorePassword() {
@@ -996,7 +996,7 @@ function newStorePassword() {
 function suggestStoreLogin(st) {
   const base = String(st.name || st.id).replace(/^\s*(l['’]\s*)?atelier\s+by\s*/i, '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 36) || 'magasin';
-  const taken = (u) => !!getDb().prepare('SELECT 1 AS x FROM sig_users WHERE username = ?').get(u);
+  const taken = (u) => !!getDb().prepare('SELECT 1 AS x FROM mar_sig_users WHERE username = ?').get(u);
   let login = base.length >= 3 ? base : `magasin-${base}`;
   for (let i = 2; taken(login); i++) login = `${base}-${i}`;
   return login;
@@ -1056,7 +1056,7 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       return send(dbOk ? 200 : 500, {
         ok: dbOk, service: 'signage-cms', now: nowIso(),
         version: getIntSetting('version', 1), dataVer: getIntSetting('data_ver', 1),
-        tablePrefix: 'sig_',
+        tablePrefix: 'mar_sig_',
         // Adresse https de la régie si le serveur en a une (null sinon).
         https: httpsStatus(ctx.basePath) || null,
       });
@@ -1121,9 +1121,9 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
     }
     if (req.method === 'GET' && (mm = m(/^\/snapshots\/(\d+)$/))) {
       const token = url.searchParams.get('token') || '';
-      const known = getDb().prepare('SELECT 1 AS ok FROM sig_players WHERE token = ?').get(token);
+      const known = getDb().prepare('SELECT 1 AS ok FROM mar_sig_players WHERE token = ?').get(token);
       if (!known) return send(401, { error: 'unauthorized' });
-      const snap = getDb().prepare(`SELECT payload FROM sig_snapshots WHERE kind = 'playlist' AND version = ?`).get(+mm[1]);
+      const snap = getDb().prepare(`SELECT payload FROM mar_sig_snapshots WHERE kind = 'playlist' AND version = ?`).get(+mm[1]);
       if (!snap) return send(404, { error: 'snapshot introuvable' });
       return send(200, JSON.parse(snap.payload));
     }
@@ -1638,7 +1638,7 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
       const mSt = path.match(/^\/stores\/([A-Za-z0-9_-]+)$/);
       if (req.method === 'POST' && mSt) {
         const db = getDb();
-        const store = db.prepare('SELECT * FROM sig_stores WHERE id = ?').get(mSt[1]);
+        const store = db.prepare('SELECT * FROM mar_sig_stores WHERE id = ?').get(mSt[1]);
         if (!store) return send(404, { error: `magasin inconnu : ${mSt[1]}` });
         const body = await readBody();
         const name = body.name != null && String(body.name).trim() ? String(body.name).trim().slice(0, 120) : store.name;
@@ -1650,9 +1650,9 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
         const address = body.address != null ? String(body.address).slice(0, 200) : (store.address || '');
         const hours = body.hours != null ? String(body.hours).slice(0, 200) : (store.hours || '');
         const phone = body.phone != null ? String(body.phone).slice(0, 40) : (store.phone || '');
-        db.prepare('UPDATE sig_stores SET name = ?, screens = ?, screen_size = ?, screen_orient = ?, lang = ?, address = ?, hours = ?, phone = ? WHERE id = ?')
+        db.prepare('UPDATE mar_sig_stores SET name = ?, screens = ?, screen_size = ?, screen_orient = ?, lang = ?, address = ?, hours = ?, phone = ? WHERE id = ?')
           .run(name, screens, size, orient, lang, address, hours, phone, store.id);
-        const updated = db.prepare('SELECT * FROM sig_stores WHERE id = ?').get(store.id);
+        const updated = db.prepare('SELECT * FROM mar_sig_stores WHERE id = ?').get(store.id);
         scheduleMirror();
         return send(200, { ok: true, id: store.id, name: updated.name, lang: updated.lang, address: updated.address, hours: updated.hours, phone: updated.phone, format: storeFormat(updated) });
       }
@@ -1662,7 +1662,7 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
     {
       const mGrpNew = path.match(/^\/stores\/([A-Za-z0-9_-]+)\/groups$/);
       if (req.method === 'POST' && mGrpNew) {
-        const store = getDb().prepare('SELECT id FROM sig_stores WHERE id = ?').get(mGrpNew[1]);
+        const store = getDb().prepare('SELECT id FROM mar_sig_stores WHERE id = ?').get(mGrpNew[1]);
         if (!store) return send(404, { error: `magasin inconnu : ${mGrpNew[1]}` });
         const body = await readBody();
         const out = saveScreenGroup(store.id, body);
@@ -1773,7 +1773,7 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
     if (req.method === 'POST' && path === '/test') {
       const body = await readBody();
       const token = String(body.token || '');
-      const p = getDb().prepare('SELECT id FROM sig_players WHERE token = ?').get(token);
+      const p = getDb().prepare('SELECT id FROM mar_sig_players WHERE token = ?').get(token);
       const rows = await runConnectionTest({
         baseUrl: body.url || `${ctx.selfBase(req)}/api/v1`,
         ip: String(body.ip || ''),
@@ -1784,7 +1784,7 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
     }
 
     if (req.method === 'GET' && path === '/publications') {
-      const rows = getDb().prepare('SELECT * FROM sig_publications ORDER BY id DESC LIMIT 20').all()
+      const rows = getDb().prepare('SELECT * FROM mar_sig_publications ORDER BY id DESC LIMIT 20').all()
         .map((r) => ({ ...r, targets: JSON.parse(r.targets), tests: JSON.parse(r.tests) }));
       return send(200, { publications: rows });
     }

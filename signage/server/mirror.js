@@ -8,10 +8,10 @@ import { spawn } from 'node:child_process';
 import { getDb, getSetting, setSetting } from './db.js';
 import { pwaConfig, pwaBaseName } from './pwadb.js';
 
-// Non répliquées : volumineuses / sans intérêt / sensibles (sig_users contient
+// Non répliquées : volumineuses / sans intérêt / sensibles (mar_sig_users contient
 // les empreintes de mots de passe — jamais dans la base PWA). Exporté pour la
 // livraison, qui n'ouvre au compte MariaDB « signage » que les tables recopiées.
-export const MIRROR_SKIP = new Set(['sig_sessions', 'sig_heartbeats', 'sig_snapshots', 'sig_users']);
+export const MIRROR_SKIP = new Set(['mar_sig_sessions', 'mar_sig_heartbeats', 'mar_sig_snapshots', 'mar_sig_users']);
 const qid = (x) => '`' + String(x).replace(/`/g, '') + '`';
 
 function myType(sqliteType) {
@@ -36,7 +36,7 @@ function esc(v) {
 // sont masqués dans le miroir ; le SQLite de la régie, lui, ne change pas.
 const SECRET_SETTING = /(pass|password|secret|token|key)$/i;
 export function mirrorRow(table, row) {
-  if (table !== 'sig_settings' || !row || typeof row.key !== 'string') return row;
+  if (table !== 'mar_sig_settings' || !row || typeof row.key !== 'string') return row;
   if (SECRET_SETTING.test(row.key) && row.value) return { ...row, value: '(masqué)' };
   if (row.key === 'pwa_import' && row.value) {
     try {
@@ -94,7 +94,7 @@ export async function syncMirror() {
     if (!target) return { ok: false, error: 'aucune base MySQL cible (lance d’abord ⚙ Rafraîchir)' };
     const cfg = { ...pwaConfig(), db: '' };
 
-    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'sig\\_%' ESCAPE '\\'")
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'mar\\_sig\\_%' ESCAPE '\\'")
       .all().map((r) => r.name).filter((n) => !MIRROR_SKIP.has(n));
 
     // La base cible existe toujours (c'est la base PWA, détectée ou réglée) :

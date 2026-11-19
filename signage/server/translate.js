@@ -8,10 +8,10 @@
 // (jamais en base : le miroir MySQL la recopierait).
 //
 // Ce qui se traduit, et d'où vient le texte français :
-//   product/name           sig_products.name        (sauf nom déjà donné par l'ERP)
-//   category/name          sig_product_categories   (idem)
+//   product/name           mar_sig_products.name        (sauf nom déjà donné par l'ERP)
+//   category/name          mar_sig_product_categories   (idem)
 //   module/name, /sub      titres et accroches des éléments affichés à l'écran
-//   campaign/name, /message, /theme                  sig_campaigns
+//   campaign/name, /message, /theme                  mar_sig_campaigns
 //   promo_type/name        le libellé du badge de promotion
 //   bundle/name, /descr    les bundles TFBuddy
 import { translationSources, saveTranslationProposals } from './db.js';

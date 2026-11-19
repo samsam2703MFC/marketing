@@ -1,5 +1,5 @@
 // Base de données du module signage — node:sqlite (zéro dépendance).
-// Toutes les tables sont préfixées `sig_`.
+// Toutes les tables sont préfixées `mar_sig_` (`sig_` avant le 20/11/2026 : voir server/prefixe.js).
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -13,11 +13,13 @@ import { wrapHtmlVarPos, applyHtmlVarPositions } from '../public/js/html-templat
 // Fichiers d'un snapshot (liste partagée avec le cache des écrans).
 import { snapshotAssets } from '../public/js/assets.js';
 import { normScenes, scenePriceProducts } from '../public/js/scenes.js';
+// Ancien préfixe `sig_` → `mar_sig_` : renommé au démarrage, avant toute création de table.
+import { renommerPrefixe } from './prefixe.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const DB_PATH = process.env.SIG_DB || join(ROOT, 'data', 'signage.db');
 
-export const TABLE_PREFIX = 'sig_';
+export const TABLE_PREFIX = 'mar_sig_';
 
 let db;
 
@@ -27,6 +29,9 @@ export function getDb() {
   db = new DatabaseSync(DB_PATH);
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec('PRAGMA foreign_keys = ON;');
+  // Le signage est entré dans le Marketing (20/11/2026) : ses tables passent de `sig_` à `mar_sig_`. Renommage
+  // seul, tout ou rien, lignes comptées ; une table sous les deux noms = refus (le service ne démarre pas).
+  const prefixe = renommerPrefixe(db);
   migrate(db);
   seed(db);
   clearDemoSeed(db);
@@ -39,39 +44,44 @@ export function getDb() {
   // Migration ponctuelle : l'ancien créneau par défaut (08:00–20:00) éteignait
   // les écrans le soir sans que ce soit un choix — passage en 24h/24.
   if (!getSetting('mig_sched_24h')) {
-    db.prepare(`UPDATE sig_modules SET sched_from = '00:00', sched_to = '23:59' WHERE sched_from = '08:00' AND sched_to = '20:00'`).run();
+    db.prepare(`UPDATE mar_sig_modules SET sched_from = '00:00', sched_to = '23:59' WHERE sched_from = '08:00' AND sched_to = '20:00'`).run();
     setSetting('mig_sched_24h', '1');
   }
-  db.prepare(`DELETE FROM sig_sessions WHERE expires_at < datetime('now')`).run();
+  db.prepare(`DELETE FROM mar_sig_sessions WHERE expires_at < datetime('now')`).run();
+  if (!prefixe.deja) {
+    const lignes = prefixe.tables.reduce((a, t) => a + t.lignes, 0);
+    setSetting('prefixe_mar_sig', JSON.stringify({ le: new Date().toISOString(), tables: prefixe.tables }));
+    console.log(`[signage] tables renommées sig_ → mar_sig_ : ${prefixe.tables.length} table(s), ${lignes} ligne(s), identiques avant et après`);
+  }
   return db;
 }
 
 // Migration : les bases existantes n'avaient qu'une playlist anonyme
-// (sig_playlist) — on la promeut en premier film nommé.
+// (mar_sig_playlist) — on la promeut en premier film nommé.
 function ensurePlaylists(db) {
-  const n = db.prepare('SELECT COUNT(*) AS n FROM sig_playlists').get().n;
+  const n = db.prepare('SELECT COUNT(*) AS n FROM mar_sig_playlists').get().n;
   if (n === 0) {
-    db.prepare(`INSERT INTO sig_playlists(id, name, sort_order) VALUES ('pl1', 'Film principal', 0)`).run();
-    const legacy = db.prepare('SELECT module_id FROM sig_playlist ORDER BY position').all();
-    const ins = db.prepare('INSERT INTO sig_playlist_items(playlist_id, position, module_id) VALUES (?, ?, ?)');
+    db.prepare(`INSERT INTO mar_sig_playlists(id, name, sort_order) VALUES ('pl1', 'Film principal', 0)`).run();
+    const legacy = db.prepare('SELECT module_id FROM mar_sig_playlist ORDER BY position').all();
+    const ins = db.prepare('INSERT INTO mar_sig_playlist_items(playlist_id, position, module_id) VALUES (?, ?, ?)');
     legacy.forEach((r, i) => ins.run('pl1', i, r.module_id));
   }
   const act = getSetting('active_playlist');
-  const exists = act && db.prepare('SELECT 1 AS ok FROM sig_playlists WHERE id = ?').get(act);
+  const exists = act && db.prepare('SELECT 1 AS ok FROM mar_sig_playlists WHERE id = ?').get(act);
   if (!exists) {
-    const first = db.prepare('SELECT id FROM sig_playlists ORDER BY sort_order, created_at').get();
+    const first = db.prepare('SELECT id FROM mar_sig_playlists ORDER BY sort_order, created_at').get();
     if (first) setSetting('active_playlist', first.id);
   }
 }
 
 function migrate(db) {
   db.exec(`
-  CREATE TABLE IF NOT EXISTS sig_settings (
+  CREATE TABLE IF NOT EXISTS mar_sig_settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
 
-  CREATE TABLE IF NOT EXISTS sig_modules (
+  CREATE TABLE IF NOT EXISTS mar_sig_modules (
     id           TEXT PRIMARY KEY,
     type         TEXT NOT NULL,
     name         TEXT NOT NULL DEFAULT '',
@@ -93,9 +103,9 @@ function migrate(db) {
     updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
-  CREATE TABLE IF NOT EXISTS sig_module_items (
+  CREATE TABLE IF NOT EXISTS mar_sig_module_items (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    module_id TEXT NOT NULL REFERENCES sig_modules(id) ON DELETE CASCADE,
+    module_id TEXT NOT NULL REFERENCES mar_sig_modules(id) ON DELETE CASCADE,
     position  INTEGER NOT NULL DEFAULT 0,
     name      TEXT NOT NULL DEFAULT '',
     price     TEXT NOT NULL DEFAULT '0,00',
@@ -103,14 +113,14 @@ function migrate(db) {
     src       TEXT NOT NULL DEFAULT 'illus',
     active    INTEGER NOT NULL DEFAULT 1
   );
-  CREATE INDEX IF NOT EXISTS sig_module_items_module ON sig_module_items(module_id, position);
+  CREATE INDEX IF NOT EXISTS sig_module_items_module ON mar_sig_module_items(module_id, position);
 
-  CREATE TABLE IF NOT EXISTS sig_playlist (
+  CREATE TABLE IF NOT EXISTS mar_sig_playlist (
     position  INTEGER PRIMARY KEY,
-    module_id TEXT NOT NULL REFERENCES sig_modules(id) ON DELETE CASCADE
+    module_id TEXT NOT NULL REFERENCES mar_sig_modules(id) ON DELETE CASCADE
   );
 
-  CREATE TABLE IF NOT EXISTS sig_playlists (
+  CREATE TABLE IF NOT EXISTS mar_sig_playlists (
     id         TEXT PRIMARY KEY,
     name       TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
@@ -118,23 +128,23 @@ function migrate(db) {
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
-  CREATE TABLE IF NOT EXISTS sig_playlist_items (
-    playlist_id TEXT NOT NULL REFERENCES sig_playlists(id) ON DELETE CASCADE,
+  CREATE TABLE IF NOT EXISTS mar_sig_playlist_items (
+    playlist_id TEXT NOT NULL REFERENCES mar_sig_playlists(id) ON DELETE CASCADE,
     position    INTEGER NOT NULL,
-    module_id   TEXT NOT NULL REFERENCES sig_modules(id) ON DELETE CASCADE,
+    module_id   TEXT NOT NULL REFERENCES mar_sig_modules(id) ON DELETE CASCADE,
     PRIMARY KEY (playlist_id, position)
   );
 
-  CREATE TABLE IF NOT EXISTS sig_stores (
+  CREATE TABLE IF NOT EXISTS mar_sig_stores (
     id   TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     grp  TEXT NOT NULL DEFAULT '',
     conn TEXT NOT NULL DEFAULT 'fibre'
   );
 
-  CREATE TABLE IF NOT EXISTS sig_players (
+  CREATE TABLE IF NOT EXISTS mar_sig_players (
     id           TEXT PRIMARY KEY,
-    store_id     TEXT NOT NULL REFERENCES sig_stores(id) ON DELETE CASCADE,
+    store_id     TEXT NOT NULL REFERENCES mar_sig_stores(id) ON DELETE CASCADE,
     name         TEXT NOT NULL,
     hw           TEXT NOT NULL DEFAULT 'Android · MediaBox 4K',
     kiosk        INTEGER NOT NULL DEFAULT 1,
@@ -152,17 +162,17 @@ function migrate(db) {
     last_seen    TEXT,
     data_at      TEXT
   );
-  CREATE UNIQUE INDEX IF NOT EXISTS sig_players_token ON sig_players(token);
+  CREATE UNIQUE INDEX IF NOT EXISTS sig_players_token ON mar_sig_players(token);
 
   -- Groupes d'écrans d'un magasin (grands points de vente) : chaque groupe a son
   -- combo de dalles (taille/orientation propre) et un filtre de catégories. Un
   -- groupe avec des catégories diffuse une boucle continue de ces catégories
   -- TOUTE LA JOURNÉE (sans moment ni saison) ; sans catégorie il suit le film du
-  -- magasin. Les players rattachés à un groupe (sig_players.group_id) prennent
+  -- magasin. Les players rattachés à un groupe (mar_sig_players.group_id) prennent
   -- son contenu et son format ; un player sans groupe suit le magasin (défaut).
-  CREATE TABLE IF NOT EXISTS sig_screen_groups (
+  CREATE TABLE IF NOT EXISTS mar_sig_screen_groups (
     id            TEXT PRIMARY KEY,
-    store_id      TEXT NOT NULL REFERENCES sig_stores(id) ON DELETE CASCADE,
+    store_id      TEXT NOT NULL REFERENCES mar_sig_stores(id) ON DELETE CASCADE,
     name          TEXT NOT NULL DEFAULT 'Zone',
     screens       INTEGER NOT NULL DEFAULT 1,
     screen_size   INTEGER NOT NULL DEFAULT 55,
@@ -170,18 +180,18 @@ function migrate(db) {
     cats          TEXT NOT NULL DEFAULT '[]',
     sort_order    INTEGER NOT NULL DEFAULT 0
   );
-  CREATE INDEX IF NOT EXISTS sig_screen_groups_store ON sig_screen_groups(store_id, sort_order);
+  CREATE INDEX IF NOT EXISTS sig_screen_groups_store ON mar_sig_screen_groups(store_id, sort_order);
 
-  CREATE TABLE IF NOT EXISTS sig_snapshots (
+  CREATE TABLE IF NOT EXISTS mar_sig_snapshots (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     kind       TEXT NOT NULL CHECK (kind IN ('playlist','data')),
     version    INTEGER NOT NULL,
     payload    TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
-  CREATE UNIQUE INDEX IF NOT EXISTS sig_snapshots_kv ON sig_snapshots(kind, version);
+  CREATE UNIQUE INDEX IF NOT EXISTS sig_snapshots_kv ON mar_sig_snapshots(kind, version);
 
-  CREATE TABLE IF NOT EXISTS sig_publications (
+  CREATE TABLE IF NOT EXISTS mar_sig_publications (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     mode        TEXT NOT NULL,
     version     INTEGER NOT NULL,
@@ -192,7 +202,7 @@ function migrate(db) {
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
-  CREATE TABLE IF NOT EXISTS sig_heartbeats (
+  CREATE TABLE IF NOT EXISTS mar_sig_heartbeats (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     player_id TEXT NOT NULL,
     at        TEXT NOT NULL DEFAULT (datetime('now')),
@@ -202,9 +212,9 @@ function migrate(db) {
     disk      TEXT,
     temp      TEXT
   );
-  CREATE INDEX IF NOT EXISTS sig_heartbeats_player ON sig_heartbeats(player_id, at);
+  CREATE INDEX IF NOT EXISTS sig_heartbeats_player ON mar_sig_heartbeats(player_id, at);
 
-  CREATE TABLE IF NOT EXISTS sig_users (
+  CREATE TABLE IF NOT EXISTS mar_sig_users (
     username   TEXT PRIMARY KEY,
     pass_salt  TEXT NOT NULL,
     pass_hash  TEXT NOT NULL,
@@ -212,76 +222,76 @@ function migrate(db) {
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
-  CREATE TABLE IF NOT EXISTS sig_sessions (
+  CREATE TABLE IF NOT EXISTS mar_sig_sessions (
     token      TEXT PRIMARY KEY,
-    username   TEXT NOT NULL REFERENCES sig_users(username) ON DELETE CASCADE,
+    username   TEXT NOT NULL REFERENCES mar_sig_users(username) ON DELETE CASCADE,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     expires_at TEXT NOT NULL,
     last_used  TEXT
   );
-  CREATE INDEX IF NOT EXISTS sig_sessions_user ON sig_sessions(username);
+  CREATE INDEX IF NOT EXISTS sig_sessions_user ON mar_sig_sessions(username);
   `);
   // Tag de bibliothèque (Produit / Fêtes / Promo / Liaison…) porté par l'élément.
-  const modCols = db.prepare('PRAGMA table_info(sig_modules)').all().map((c) => c.name);
-  if (!modCols.includes('lib_tag')) db.exec(`ALTER TABLE sig_modules ADD COLUMN lib_tag TEXT NOT NULL DEFAULT ''`);
+  const modCols = db.prepare('PRAGMA table_info(mar_sig_modules)').all().map((c) => c.name);
+  if (!modCols.includes('lib_tag')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN lib_tag TEXT NOT NULL DEFAULT ''`);
   // Le film porte sa programmation (jours + fenêtre) et ses magasins cibles.
-  const plCols = db.prepare('PRAGMA table_info(sig_playlists)').all().map((c) => c.name);
-  if (!plCols.includes('sched_days')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN sched_days TEXT NOT NULL DEFAULT '[1,1,1,1,1,1,1]'`);
-  if (!plCols.includes('sched_from')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN sched_from TEXT NOT NULL DEFAULT '00:00'`);
-  if (!plCols.includes('sched_to')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN sched_to TEXT NOT NULL DEFAULT '23:59'`);
-  if (!plCols.includes('stores')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN stores TEXT NOT NULL DEFAULT '[]'`);
+  const plCols = db.prepare('PRAGMA table_info(mar_sig_playlists)').all().map((c) => c.name);
+  if (!plCols.includes('sched_days')) db.exec(`ALTER TABLE mar_sig_playlists ADD COLUMN sched_days TEXT NOT NULL DEFAULT '[1,1,1,1,1,1,1]'`);
+  if (!plCols.includes('sched_from')) db.exec(`ALTER TABLE mar_sig_playlists ADD COLUMN sched_from TEXT NOT NULL DEFAULT '00:00'`);
+  if (!plCols.includes('sched_to')) db.exec(`ALTER TABLE mar_sig_playlists ADD COLUMN sched_to TEXT NOT NULL DEFAULT '23:59'`);
+  if (!plCols.includes('stores')) db.exec(`ALTER TABLE mar_sig_playlists ADD COLUMN stores TEXT NOT NULL DEFAULT '[]'`);
   // Le film est rangé dans une catégorie colorée + porte des tags libres.
-  if (!plCols.includes('cat')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN cat TEXT NOT NULL DEFAULT ''`);
-  if (!plCols.includes('tags')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'`);
+  if (!plCols.includes('cat')) db.exec(`ALTER TABLE mar_sig_playlists ADD COLUMN cat TEXT NOT NULL DEFAULT ''`);
+  if (!plCols.includes('tags')) db.exec(`ALTER TABLE mar_sig_playlists ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'`);
   // Jours de planning dédiés (indépendants des jours de diffusion) : filtrent
   // les films proposés quand on remplit un jour du planning hebdo (ex. crêpes = mercredi).
-  if (!plCols.includes('plan_days')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN plan_days TEXT NOT NULL DEFAULT '[1,1,1,1,1,1,1]'`);
+  if (!plCols.includes('plan_days')) db.exec(`ALTER TABLE mar_sig_playlists ADD COLUMN plan_days TEXT NOT NULL DEFAULT '[1,1,1,1,1,1,1]'`);
   // Mode du film : 'playlist' (séquence montée à la main) ou 'continu' (boucle
   // composée en direct depuis le catalogue + saisons + moments + tags).
-  if (!plCols.includes('mode')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN mode TEXT NOT NULL DEFAULT 'playlist'`);
-  if (!plCols.includes('continuous')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN continuous TEXT NOT NULL DEFAULT '{}'`);
+  if (!plCols.includes('mode')) db.exec(`ALTER TABLE mar_sig_playlists ADD COLUMN mode TEXT NOT NULL DEFAULT 'playlist'`);
+  if (!plCols.includes('continuous')) db.exec(`ALTER TABLE mar_sig_playlists ADD COLUMN continuous TEXT NOT NULL DEFAULT '{}'`);
   // Assistant vidéo de campagne : le film garde le lien de sa campagne du
   // module Marketing (son id), son origine et les choix de l'assistant (pour
   // le reprendre plutôt que d'en créer un second).
-  if (!plCols.includes('campaign_id')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN campaign_id TEXT NOT NULL DEFAULT ''`);
-  if (!plCols.includes('origin')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN origin TEXT NOT NULL DEFAULT ''`);
-  if (!plCols.includes('wizard')) db.exec(`ALTER TABLE sig_playlists ADD COLUMN wizard TEXT NOT NULL DEFAULT '{}'`);
+  if (!plCols.includes('campaign_id')) db.exec(`ALTER TABLE mar_sig_playlists ADD COLUMN campaign_id TEXT NOT NULL DEFAULT ''`);
+  if (!plCols.includes('origin')) db.exec(`ALTER TABLE mar_sig_playlists ADD COLUMN origin TEXT NOT NULL DEFAULT ''`);
+  if (!plCols.includes('wizard')) db.exec(`ALTER TABLE mar_sig_playlists ADD COLUMN wizard TEXT NOT NULL DEFAULT '{}'`);
   // Vocabulaire des moments unifié (matin/midi/aprem) : on réaligne les médias
   // historiquement tagués « soir » sur « aprem » (même créneau). No-op ensuite.
-  try { db.exec(`UPDATE sig_media SET moment = 'aprem' WHERE moment = 'soir'`); } catch { /* table absente */ }
+  try { db.exec(`UPDATE mar_sig_media SET moment = 'aprem' WHERE moment = 'soir'`); } catch { /* table absente */ }
   // Combo d'écrans du magasin (ex. 3 × 55″ portrait) → taille du film en px.
-  const stCols = db.prepare('PRAGMA table_info(sig_stores)').all().map((c) => c.name);
-  if (!stCols.includes('screens')) db.exec(`ALTER TABLE sig_stores ADD COLUMN screens INTEGER NOT NULL DEFAULT 1`);
-  if (!stCols.includes('screen_size')) db.exec(`ALTER TABLE sig_stores ADD COLUMN screen_size INTEGER NOT NULL DEFAULT 55`);
-  if (!stCols.includes('screen_orient')) db.exec(`ALTER TABLE sig_stores ADD COLUMN screen_orient TEXT NOT NULL DEFAULT 'paysage'`);
-  if (!stCols.includes('active')) db.exec(`ALTER TABLE sig_stores ADD COLUMN active INTEGER NOT NULL DEFAULT 1`);
+  const stCols = db.prepare('PRAGMA table_info(mar_sig_stores)').all().map((c) => c.name);
+  if (!stCols.includes('screens')) db.exec(`ALTER TABLE mar_sig_stores ADD COLUMN screens INTEGER NOT NULL DEFAULT 1`);
+  if (!stCols.includes('screen_size')) db.exec(`ALTER TABLE mar_sig_stores ADD COLUMN screen_size INTEGER NOT NULL DEFAULT 55`);
+  if (!stCols.includes('screen_orient')) db.exec(`ALTER TABLE mar_sig_stores ADD COLUMN screen_orient TEXT NOT NULL DEFAULT 'paysage'`);
+  if (!stCols.includes('active')) db.exec(`ALTER TABLE mar_sig_stores ADD COLUMN active INTEGER NOT NULL DEFAULT 1`);
   // Coordonnées du magasin : alimentent les champs dynamiques {{adresse}},
   // {{horaires}}, {{tel}} des gabarits, résolus par magasin à la diffusion.
-  if (!stCols.includes('address')) db.exec(`ALTER TABLE sig_stores ADD COLUMN address TEXT NOT NULL DEFAULT ''`);
-  if (!stCols.includes('hours')) db.exec(`ALTER TABLE sig_stores ADD COLUMN hours TEXT NOT NULL DEFAULT ''`);
-  if (!stCols.includes('phone')) db.exec(`ALTER TABLE sig_stores ADD COLUMN phone TEXT NOT NULL DEFAULT ''`);
+  if (!stCols.includes('address')) db.exec(`ALTER TABLE mar_sig_stores ADD COLUMN address TEXT NOT NULL DEFAULT ''`);
+  if (!stCols.includes('hours')) db.exec(`ALTER TABLE mar_sig_stores ADD COLUMN hours TEXT NOT NULL DEFAULT ''`);
+  if (!stCols.includes('phone')) db.exec(`ALTER TABLE mar_sig_stores ADD COLUMN phone TEXT NOT NULL DEFAULT ''`);
   // Produit en rupture / indisponible : masqué des boucles continues et signalé
   // en régie (toggle manuel, ou futur signal de stock ERP).
-  const prodCols0 = db.prepare('PRAGMA table_info(sig_products)').all().map((c) => c.name);
-  if (prodCols0.length && !prodCols0.includes('unavailable')) db.exec(`ALTER TABLE sig_products ADD COLUMN unavailable INTEGER NOT NULL DEFAULT 0`);
+  const prodCols0 = db.prepare('PRAGMA table_info(mar_sig_products)').all().map((c) => c.name);
+  if (prodCols0.length && !prodCols0.includes('unavailable')) db.exec(`ALTER TABLE mar_sig_products ADD COLUMN unavailable INTEGER NOT NULL DEFAULT 0`);
   // Rattachement d'un player à un groupe d'écrans (vide = niveau magasin, défaut).
-  const plColsG = db.prepare('PRAGMA table_info(sig_players)').all().map((c) => c.name);
-  if (plColsG.length && !plColsG.includes('group_id')) db.exec(`ALTER TABLE sig_players ADD COLUMN group_id TEXT NOT NULL DEFAULT ''`);
+  const plColsG = db.prepare('PRAGMA table_info(mar_sig_players)').all().map((c) => c.name);
+  if (plColsG.length && !plColsG.includes('group_id')) db.exec(`ALTER TABLE mar_sig_players ADD COLUMN group_id TEXT NOT NULL DEFAULT ''`);
   // État réel du cache hors ligne remonté par l'écran (JSON : fichiers en
   // cache / absents, stockage persistant, service worker, durée hors ligne).
-  if (plColsG.length && !plColsG.includes('detail')) db.exec(`ALTER TABLE sig_players ADD COLUMN detail TEXT NOT NULL DEFAULT ''`);
+  if (plColsG.length && !plColsG.includes('detail')) db.exec(`ALTER TABLE mar_sig_players ADD COLUMN detail TEXT NOT NULL DEFAULT ''`);
   // Comptes : un vrai rôle (admin | agence | magasin) et, pour un compte
   // magasin, SON magasin — la portée est décidée ici, côté serveur, jamais
   // par ce que le navigateur envoie.
-  const userCols = db.prepare('PRAGMA table_info(sig_users)').all().map((c) => c.name);
+  const userCols = db.prepare('PRAGMA table_info(mar_sig_users)').all().map((c) => c.name);
   if (!userCols.includes('role')) {
-    db.exec(`ALTER TABLE sig_users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'`);
-    db.exec(`UPDATE sig_users SET role = 'agence' WHERE username = 'agence'`);
+    db.exec(`ALTER TABLE mar_sig_users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'`);
+    db.exec(`UPDATE mar_sig_users SET role = 'agence' WHERE username = 'agence'`);
   }
-  if (!userCols.includes('store_id')) db.exec(`ALTER TABLE sig_users ADD COLUMN store_id TEXT NOT NULL DEFAULT ''`);
+  if (!userCols.includes('store_id')) db.exec(`ALTER TABLE mar_sig_users ADD COLUMN store_id TEXT NOT NULL DEFAULT ''`);
   // Rupture déclarée PAR UN MAGASIN : le produit disparaît de SES écrans
   // seulement, jusqu'à until (fin de journée) ou jusqu'à réactivation (NULL).
-  db.exec(`CREATE TABLE IF NOT EXISTS sig_store_unavailable (
+  db.exec(`CREATE TABLE IF NOT EXISTS mar_sig_store_unavailable (
     store_id   TEXT NOT NULL,
     product_id TEXT NOT NULL,
     until      TEXT,
@@ -294,105 +304,105 @@ function migrate(db) {
   // midi / après-midi) et les catégories. Historiquement, un secteur avec des
   // catégories les filtrait et ignorait toujours les périodes → filter_cats
   // vaut 1 et filter_moments 0 par défaut, l'existant ne bouge pas.
-  const sgCols = db.prepare('PRAGMA table_info(sig_screen_groups)').all().map((c) => c.name);
-  if (sgCols.length && !sgCols.includes('filter_moments')) db.exec(`ALTER TABLE sig_screen_groups ADD COLUMN filter_moments INTEGER NOT NULL DEFAULT 0`);
-  if (sgCols.length && !sgCols.includes('filter_cats')) db.exec(`ALTER TABLE sig_screen_groups ADD COLUMN filter_cats INTEGER NOT NULL DEFAULT 1`);
+  const sgCols = db.prepare('PRAGMA table_info(mar_sig_screen_groups)').all().map((c) => c.name);
+  if (sgCols.length && !sgCols.includes('filter_moments')) db.exec(`ALTER TABLE mar_sig_screen_groups ADD COLUMN filter_moments INTEGER NOT NULL DEFAULT 0`);
+  if (sgCols.length && !sgCols.includes('filter_cats')) db.exec(`ALTER TABLE mar_sig_screen_groups ADD COLUMN filter_cats INTEGER NOT NULL DEFAULT 1`);
 
   // Illustration de période (importable depuis ws_season si la table l'expose,
   // ou saisie à la main) : URL/chemin de l'image affichée dans l'onglet Périodes.
-  const seasonCols = db.prepare('PRAGMA table_info(sig_seasons)').all().map((c) => c.name);
-  if (seasonCols.length && !seasonCols.includes('image')) db.exec(`ALTER TABLE sig_seasons ADD COLUMN image TEXT NOT NULL DEFAULT ''`);
+  const seasonCols = db.prepare('PRAGMA table_info(mar_sig_seasons)').all().map((c) => c.name);
+  if (seasonCols.length && !seasonCols.includes('image')) db.exec(`ALTER TABLE mar_sig_seasons ADD COLUMN image TEXT NOT NULL DEFAULT ''`);
 
   // Planning : passage à plusieurs films par moment (ajout de la colonne
   // position → reconstruction de la table dont la PK interdisait les doublons).
-  const dpCols = db.prepare('PRAGMA table_info(sig_dayplans)').all().map((c) => c.name);
+  const dpCols = db.prepare('PRAGMA table_info(mar_sig_dayplans)').all().map((c) => c.name);
   if (dpCols.length && !dpCols.includes('position')) {
     db.exec(`
       BEGIN;
-      CREATE TABLE sig_dayplans_new (
+      CREATE TABLE mar_sig_dayplans_new (
         store_id TEXT NOT NULL, moment TEXT NOT NULL,
         position INTEGER NOT NULL DEFAULT 0, film_id TEXT NOT NULL,
         PRIMARY KEY (store_id, moment, position)
       );
-      INSERT INTO sig_dayplans_new (store_id, moment, position, film_id)
-        SELECT store_id, moment, 0, film_id FROM sig_dayplans;
-      DROP TABLE sig_dayplans;
-      ALTER TABLE sig_dayplans_new RENAME TO sig_dayplans;
+      INSERT INTO mar_sig_dayplans_new (store_id, moment, position, film_id)
+        SELECT store_id, moment, 0, film_id FROM mar_sig_dayplans;
+      DROP TABLE mar_sig_dayplans;
+      ALTER TABLE mar_sig_dayplans_new RENAME TO mar_sig_dayplans;
       COMMIT;
     `);
   }
 
   // Éléments typés : produit, film (vidéo), animation… + liens vers le catalogue.
-  const modCols2 = db.prepare('PRAGMA table_info(sig_modules)').all().map((c) => c.name);
-  if (!modCols2.includes('cat_ref')) db.exec(`ALTER TABLE sig_modules ADD COLUMN cat_ref TEXT NOT NULL DEFAULT ''`);
-  if (!modCols2.includes('product_ref')) db.exec(`ALTER TABLE sig_modules ADD COLUMN product_ref TEXT NOT NULL DEFAULT ''`);
-  if (!modCols2.includes('video')) db.exec(`ALTER TABLE sig_modules ADD COLUMN video TEXT NOT NULL DEFAULT ''`);
-  if (!modCols2.includes('dur')) db.exec(`ALTER TABLE sig_modules ADD COLUMN dur REAL NOT NULL DEFAULT 0`);
+  const modCols2 = db.prepare('PRAGMA table_info(mar_sig_modules)').all().map((c) => c.name);
+  if (!modCols2.includes('cat_ref')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN cat_ref TEXT NOT NULL DEFAULT ''`);
+  if (!modCols2.includes('product_ref')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN product_ref TEXT NOT NULL DEFAULT ''`);
+  if (!modCols2.includes('video')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN video TEXT NOT NULL DEFAULT ''`);
+  if (!modCols2.includes('dur')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN dur REAL NOT NULL DEFAULT 0`);
   // Élément film en mode « surprise » : pioche une vidéo au hasard dans le dossier serveur.
-  if (!modCols2.includes('surprise')) db.exec(`ALTER TABLE sig_modules ADD COLUMN surprise INTEGER NOT NULL DEFAULT 0`);
+  if (!modCols2.includes('surprise')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN surprise INTEGER NOT NULL DEFAULT 0`);
   // Filtre « filigrane / logo » superposé (surtout sur les photos) : none|filigrane|logo|nouveau.
-  if (!modCols2.includes('watermark')) db.exec(`ALTER TABLE sig_modules ADD COLUMN watermark TEXT NOT NULL DEFAULT 'none'`);
-  // Élément « promotion » : sous-type d'offre (référence sig_promo_types, dynamique).
-  if (!modCols2.includes('promo_type')) db.exec(`ALTER TABLE sig_modules ADD COLUMN promo_type TEXT NOT NULL DEFAULT ''`);
-  // Élément « campagne » : référence une campagne marketing (sig_campaigns).
-  if (!modCols2.includes('campaign_ref')) db.exec(`ALTER TABLE sig_modules ADD COLUMN campaign_ref TEXT NOT NULL DEFAULT ''`);
-  // Élément « bundle » : référence un bundle TFBuddy (sig_bundles).
-  if (!modCols2.includes('bundle_ref')) db.exec(`ALTER TABLE sig_modules ADD COLUMN bundle_ref TEXT NOT NULL DEFAULT ''`);
-  // Élément « promotion » relié à une promotion TFBuddy (sig_tfb_promos) : ses
+  if (!modCols2.includes('watermark')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN watermark TEXT NOT NULL DEFAULT 'none'`);
+  // Élément « promotion » : sous-type d'offre (référence mar_sig_promo_types, dynamique).
+  if (!modCols2.includes('promo_type')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN promo_type TEXT NOT NULL DEFAULT ''`);
+  // Élément « campagne » : référence une campagne marketing (mar_sig_campaigns).
+  if (!modCols2.includes('campaign_ref')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN campaign_ref TEXT NOT NULL DEFAULT ''`);
+  // Élément « bundle » : référence un bundle TFBuddy (mar_sig_bundles).
+  if (!modCols2.includes('bundle_ref')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN bundle_ref TEXT NOT NULL DEFAULT ''`);
+  // Élément « promotion » relié à une promotion TFBuddy (mar_sig_tfb_promos) : ses
   // jours, heures, magasins et dates s'appliquent à la diffusion.
-  if (!modCols2.includes('tfb_ref')) db.exec(`ALTER TABLE sig_modules ADD COLUMN tfb_ref TEXT NOT NULL DEFAULT ''`);
+  if (!modCols2.includes('tfb_ref')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN tfb_ref TEXT NOT NULL DEFAULT ''`);
   // Élément « gabarit HTML » : code collé par la régie + taille de sa maquette
   // source (ex. 1920 × 1080 pour du 16:9, 840 × 1189 pour une affiche A1).
   // Orientation de l'élément : 'paysage' (16:9) ou 'portrait' (9:16) — un écran
   // est l'un ou l'autre. Sert de filtre des items disponibles au montage.
-  if (!modCols2.includes('orient')) db.exec(`ALTER TABLE sig_modules ADD COLUMN orient TEXT NOT NULL DEFAULT 'paysage'`);
+  if (!modCols2.includes('orient')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN orient TEXT NOT NULL DEFAULT 'paysage'`);
   // Moments de la journée où l'item peut passer (JSON). Vide = tous les moments.
-  if (!modCols2.includes('moments')) db.exec(`ALTER TABLE sig_modules ADD COLUMN moments TEXT NOT NULL DEFAULT '[]'`);
-  if (!modCols2.includes('html')) db.exec(`ALTER TABLE sig_modules ADD COLUMN html TEXT NOT NULL DEFAULT ''`);
+  if (!modCols2.includes('moments')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN moments TEXT NOT NULL DEFAULT '[]'`);
+  if (!modCols2.includes('html')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN html TEXT NOT NULL DEFAULT ''`);
   // Liaisons des variables du gabarit HTML vers les données (JSON) :
   // { nomVariable: { src: 'literal|magasin|produit|promotion|campagne', field, value } }
-  if (!modCols2.includes('html_vars')) db.exec(`ALTER TABLE sig_modules ADD COLUMN html_vars TEXT NOT NULL DEFAULT '{}'`);
-  if (!modCols2.includes('html_w')) db.exec(`ALTER TABLE sig_modules ADD COLUMN html_w INTEGER NOT NULL DEFAULT 1920`);
-  if (!modCols2.includes('html_h')) db.exec(`ALTER TABLE sig_modules ADD COLUMN html_h INTEGER NOT NULL DEFAULT 1080`);
+  if (!modCols2.includes('html_vars')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN html_vars TEXT NOT NULL DEFAULT '{}'`);
+  if (!modCols2.includes('html_w')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN html_w INTEGER NOT NULL DEFAULT 1920`);
+  if (!modCols2.includes('html_h')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN html_h INTEGER NOT NULL DEFAULT 1080`);
   // Élément « animation » : deux façons de travailler.
   //  · anim_mode = 'texte'   → titre + accroche générés, avec un VISUEL DE FOND
   //    facultatif (image ou vidéo) et un voile qui garde le texte lisible ;
   //  · anim_mode = 'fichier' → un FICHIER D'ANIMATION autonome (GIF, vidéo, SVG
   //    animé, Lottie .json) remplace entièrement le rendu généré.
-  if (!modCols2.includes('anim_mode')) db.exec(`ALTER TABLE sig_modules ADD COLUMN anim_mode TEXT NOT NULL DEFAULT 'texte'`);
-  if (!modCols2.includes('anim_bg')) db.exec(`ALTER TABLE sig_modules ADD COLUMN anim_bg TEXT NOT NULL DEFAULT ''`);
-  if (!modCols2.includes('anim_dim')) db.exec(`ALTER TABLE sig_modules ADD COLUMN anim_dim INTEGER NOT NULL DEFAULT 45`);
-  if (!modCols2.includes('anim_file')) db.exec(`ALTER TABLE sig_modules ADD COLUMN anim_file TEXT NOT NULL DEFAULT ''`);
-  if (!modCols2.includes('anim_fit')) db.exec(`ALTER TABLE sig_modules ADD COLUMN anim_fit TEXT NOT NULL DEFAULT 'cover'`);
+  if (!modCols2.includes('anim_mode')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN anim_mode TEXT NOT NULL DEFAULT 'texte'`);
+  if (!modCols2.includes('anim_bg')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN anim_bg TEXT NOT NULL DEFAULT ''`);
+  if (!modCols2.includes('anim_dim')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN anim_dim INTEGER NOT NULL DEFAULT 45`);
+  if (!modCols2.includes('anim_file')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN anim_file TEXT NOT NULL DEFAULT ''`);
+  if (!modCols2.includes('anim_fit')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN anim_fit TEXT NOT NULL DEFAULT 'cover'`);
   // Couleur de fond d'un élément (vidéo, fichier d'animation) : ce qu'on voit
   // autour du média quand il ne remplit pas l'écran. Vide = noir.
-  if (!modCols2.includes('bg_color')) db.exec(`ALTER TABLE sig_modules ADD COLUMN bg_color TEXT NOT NULL DEFAULT ''`);
+  if (!modCols2.includes('bg_color')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN bg_color TEXT NOT NULL DEFAULT ''`);
   // Liste de produits choisis un à un (assistant vidéo de campagne) : les
   // lignes viennent du catalogue, donc du prix de CHAQUE magasin.
-  if (!modCols2.includes('product_refs')) db.exec(`ALTER TABLE sig_modules ADD COLUMN product_refs TEXT NOT NULL DEFAULT '[]'`);
+  if (!modCols2.includes('product_refs')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN product_refs TEXT NOT NULL DEFAULT '[]'`);
   // Film en scènes (éditeur du film de l'assistant vidéo) : scènes et calques
   // en JSON, normalisés par public/js/scenes.js. Vide = l'élément n'en a pas.
-  if (!modCols2.includes('scenes')) db.exec(`ALTER TABLE sig_modules ADD COLUMN scenes TEXT NOT NULL DEFAULT '[]'`);
+  if (!modCols2.includes('scenes')) db.exec(`ALTER TABLE mar_sig_modules ADD COLUMN scenes TEXT NOT NULL DEFAULT '[]'`);
   // Reprise unique de l'ancien état « auto » (tous formats) : un écran est
   // portrait OU paysage. Un gabarit HTML retombe sur la forme de sa maquette,
   // le reste sur paysage (16:9, le format d'écran courant).
   if (!getSetting('mig_orient_binaire')) {
-    db.prepare(`UPDATE sig_modules SET orient = 'portrait' WHERE orient NOT IN ('paysage', 'portrait') AND type = 'html' AND html_h > html_w`).run();
-    db.prepare(`UPDATE sig_modules SET orient = 'paysage' WHERE orient NOT IN ('paysage', 'portrait')`).run();
+    db.prepare(`UPDATE mar_sig_modules SET orient = 'portrait' WHERE orient NOT IN ('paysage', 'portrait') AND type = 'html' AND html_h > html_w`).run();
+    db.prepare(`UPDATE mar_sig_modules SET orient = 'paysage' WHERE orient NOT IN ('paysage', 'portrait')`).run();
     setSetting('mig_orient_binaire', '1');
   }
 
 
   // Les anciennes bases limitaient le type par un CHECK (category|liaison) —
-  // les types vivent désormais dans sig_element_types : on reconstruit la
+  // les types vivent désormais dans mar_sig_element_types : on reconstruit la
   // table sans la contrainte (SQLite ne sait pas la retirer autrement).
-  const modDef = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'sig_modules'`).get();
+  const modDef = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'mar_sig_modules'`).get();
   if (modDef && /CHECK/i.test(modDef.sql)) {
-    const cols = db.prepare('PRAGMA table_info(sig_modules)').all().map((c) => c.name).join(', ');
+    const cols = db.prepare('PRAGMA table_info(mar_sig_modules)').all().map((c) => c.name).join(', ');
     db.exec(`
       PRAGMA foreign_keys = OFF;
       BEGIN;
-      CREATE TABLE sig_modules_new (
+      CREATE TABLE mar_sig_modules_new (
         id           TEXT PRIMARY KEY,
         type         TEXT NOT NULL,
         name         TEXT NOT NULL DEFAULT '',
@@ -436,16 +446,16 @@ function migrate(db) {
         anim_fit     TEXT NOT NULL DEFAULT 'cover',
         bg_color     TEXT NOT NULL DEFAULT ''
       );
-      INSERT INTO sig_modules_new (${cols}) SELECT ${cols} FROM sig_modules;
-      DROP TABLE sig_modules;
-      ALTER TABLE sig_modules_new RENAME TO sig_modules;
+      INSERT INTO mar_sig_modules_new (${cols}) SELECT ${cols} FROM mar_sig_modules;
+      DROP TABLE mar_sig_modules;
+      ALTER TABLE mar_sig_modules_new RENAME TO mar_sig_modules;
       COMMIT;
       PRAGMA foreign_keys = ON;
     `);
   }
 
   db.exec(`
-  CREATE TABLE IF NOT EXISTS sig_element_types (
+  CREATE TABLE IF NOT EXISTS mar_sig_element_types (
     id         TEXT PRIMARY KEY,
     label      TEXT NOT NULL,
     icon       TEXT NOT NULL DEFAULT '▤',
@@ -456,14 +466,14 @@ function migrate(db) {
     enabled    INTEGER NOT NULL DEFAULT 1
   );
 
-  CREATE TABLE IF NOT EXISTS sig_product_categories (
+  CREATE TABLE IF NOT EXISTS mar_sig_product_categories (
     id         TEXT PRIMARY KEY,
     name       TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
     active     INTEGER NOT NULL DEFAULT 1
   );
 
-  CREATE TABLE IF NOT EXISTS sig_products (
+  CREATE TABLE IF NOT EXISTS mar_sig_products (
     id          TEXT PRIMARY KEY,
     category_id TEXT NOT NULL DEFAULT '',
     name        TEXT NOT NULL,
@@ -474,9 +484,9 @@ function migrate(db) {
     unavailable INTEGER NOT NULL DEFAULT 0,
     sort_order  INTEGER NOT NULL DEFAULT 0
   );
-  CREATE INDEX IF NOT EXISTS sig_products_cat ON sig_products(category_id, sort_order);
+  CREATE INDEX IF NOT EXISTS sig_products_cat ON mar_sig_products(category_id, sort_order);
 
-  CREATE TABLE IF NOT EXISTS sig_product_prices (
+  CREATE TABLE IF NOT EXISTS mar_sig_product_prices (
     product_id TEXT NOT NULL,
     store_id   TEXT NOT NULL,
     price      TEXT NOT NULL,
@@ -485,7 +495,7 @@ function migrate(db) {
 
   -- Périodes de l'année (saisons) : nom + du → au + produits liés. Sert à
   -- cibler les vidéos/animations de saison. Peut être importé depuis ws_season.
-  CREATE TABLE IF NOT EXISTS sig_seasons (
+  CREATE TABLE IF NOT EXISTS mar_sig_seasons (
     id         TEXT PRIMARY KEY,
     name       TEXT NOT NULL DEFAULT '',
     date_from  TEXT NOT NULL DEFAULT '',
@@ -500,8 +510,8 @@ function migrate(db) {
   -- Sous-types de promotion (dynamiques, pilotés par la base — rien en dur côté
   -- interface). Happy hour, vente flash, bundle… Gérable en régie et importable
   -- depuis l'ERP (menu « Promotions ») ensuite. Un élément « promotion » pointe
-  -- vers l'un de ces sous-types via sig_modules.promo_type.
-  CREATE TABLE IF NOT EXISTS sig_promo_types (
+  -- vers l'un de ces sous-types via mar_sig_modules.promo_type.
+  CREATE TABLE IF NOT EXISTS mar_sig_promo_types (
     id         TEXT PRIMARY KEY,
     name       TEXT NOT NULL DEFAULT '',
     icon       TEXT NOT NULL DEFAULT '🏷️',
@@ -516,14 +526,14 @@ function migrate(db) {
   -- promotion. « src » dit à quelle TABLE de la régie la catégorie est liée
   -- (produits, catégories produit, promotions, campagnes, périodes, médias) —
   -- c'est ce qui alimente ses éléments. Un élément pointe vers sa catégorie via
-  -- sig_modules.lib_tag.
+  -- mar_sig_modules.lib_tag.
   -- Suites (séquences) montées à la main : une intro, un outro, une
   -- présentation de gamme… Une suite est une liste ORDONNÉE d'éléments de la
   -- bibliothèque, avec sa place dans la boucle :
   --   'debut'  → jouée en ouverture de chaque boucle ;
   --   'fin'    → jouée en clôture ;
   --   'boucle' → insérée périodiquement, un passage tous les "ratio" slots.
-  CREATE TABLE IF NOT EXISTS sig_sequences (
+  CREATE TABLE IF NOT EXISTS mar_sig_sequences (
     id         TEXT PRIMARY KEY,
     name       TEXT NOT NULL DEFAULT '',
     placement  TEXT NOT NULL DEFAULT 'debut',
@@ -532,8 +542,8 @@ function migrate(db) {
     sort_order INTEGER NOT NULL DEFAULT 0,
     active     INTEGER NOT NULL DEFAULT 1
   );
-  CREATE TABLE IF NOT EXISTS sig_sequence_items (
-    sequence_id TEXT NOT NULL REFERENCES sig_sequences(id) ON DELETE CASCADE,
+  CREATE TABLE IF NOT EXISTS mar_sig_sequence_items (
+    sequence_id TEXT NOT NULL REFERENCES mar_sig_sequences(id) ON DELETE CASCADE,
     position    INTEGER NOT NULL,
     module_id   TEXT NOT NULL,
     PRIMARY KEY (sequence_id, position)
@@ -544,7 +554,7 @@ function migrate(db) {
   -- lien se règle en régie ; le module produit du franchiseur ne fait que le
   -- lire. « ext_ref » garde l'identifiant de l'ingrédient côté ERP quand il
   -- existe, pour rapprocher les deux mondes sans dépendre du nom.
-  CREATE TABLE IF NOT EXISTS sig_ingredients (
+  CREATE TABLE IF NOT EXISTS mar_sig_ingredients (
     id         TEXT PRIMARY KEY,
     name       TEXT NOT NULL DEFAULT '',
     ext_ref    TEXT NOT NULL DEFAULT '',
@@ -553,7 +563,7 @@ function migrate(db) {
     active     INTEGER NOT NULL DEFAULT 1
   );
 
-  CREATE TABLE IF NOT EXISTS sig_lib_categories (
+  CREATE TABLE IF NOT EXISTS mar_sig_lib_categories (
     id         TEXT PRIMARY KEY,
     name       TEXT NOT NULL DEFAULT '',
     color      TEXT NOT NULL DEFAULT '#8D1D2C',
@@ -565,9 +575,9 @@ function migrate(db) {
   -- Campagnes marketing : entités listées (nom, portée produit/gamme, visuel,
   -- accroche, période). Gérable en régie et importable depuis l'ERP ensuite.
   -- L'utilisateur n'a qu'à les DÉPOSER comme item : un élément « campagne »
-  -- pointe vers l'une d'elles via sig_modules.campaign_ref, et son contenu
+  -- pointe vers l'une d'elles via mar_sig_modules.campaign_ref, et son contenu
   -- (nom, visuel, produit lié, dates) est résolu à l'affichage.
-  CREATE TABLE IF NOT EXISTS sig_campaigns (
+  CREATE TABLE IF NOT EXISTS mar_sig_campaigns (
     id          TEXT PRIMARY KEY,
     name        TEXT NOT NULL DEFAULT '',
     scope       TEXT NOT NULL DEFAULT 'produit',
@@ -587,9 +597,9 @@ function migrate(db) {
   -- VALIDÉES avant d'atteindre un écran. « source » est le texte français
   -- traduit, dans la clé : un texte modifié redevient à traduire, et la
   -- traduction de l'ancien texte sert encore aux écrans tant que le film
-  -- publié le montre. Table à part : sig_aliases (noms de l'ERP) est réécrite
+  -- publié le montre. Table à part : mar_sig_aliases (noms de l'ERP) est réécrite
   -- à chaque import.
-  CREATE TABLE IF NOT EXISTS sig_translations (
+  CREATE TABLE IF NOT EXISTS mar_sig_translations (
     kind       TEXT NOT NULL,
     ref_id     TEXT NOT NULL,
     field      TEXT NOT NULL,
@@ -607,8 +617,8 @@ function migrate(db) {
   -- (server/tfbuddy.js) — nom, prix du bundle, produits et quantités,
   -- magasins, créneaux de la semaine. Chaque synchro remplace la table, sauf
   -- le visuel choisi en régie (img). Un élément « bundle » pointe vers l'un
-  -- d'eux via sig_modules.bundle_ref.
-  CREATE TABLE IF NOT EXISTS sig_bundles (
+  -- d'eux via mar_sig_modules.bundle_ref.
+  CREATE TABLE IF NOT EXISTS mar_sig_bundles (
     id         TEXT PRIMARY KEY,
     ext_id     TEXT NOT NULL DEFAULT '',
     name       TEXT NOT NULL DEFAULT '',
@@ -631,11 +641,11 @@ function migrate(db) {
   -- Autres promotions TFBuddy : « X achetés = Y offert » (buy_x_get_y),
   -- promotions de quantité (quantity), remises programmées
   -- (scheduled_discount) et campagnes de bons d'achat (voucher). Même
-  -- principe que sig_bundles : un reflet remplacé à chaque synchro, famille
+  -- principe que mar_sig_bundles : un reflet remplacé à chaque synchro, famille
   -- par famille, sauf le visuel choisi en régie. « mechanic » garde la
   -- mécanique lue (quantités, type et valeur de remise, code…) ; « products »
   -- et « categories » ses cibles, reliées au catalogue de la régie.
-  CREATE TABLE IF NOT EXISTS sig_tfb_promos (
+  CREATE TABLE IF NOT EXISTS mar_sig_tfb_promos (
     id         TEXT PRIMARY KEY,
     kind       TEXT NOT NULL,
     ext_id     TEXT NOT NULL DEFAULT '',
@@ -661,7 +671,7 @@ function migrate(db) {
   -- Dit à quels moments un produit est vendu (matin/midi/aprem). « exception »
   -- = 1 inverse la règle (produit exclu à ce moment). Sert au mode « continu »
   -- pour ne montrer que les produits pertinents à l'heure courante.
-  CREATE TABLE IF NOT EXISTS sig_product_moments (
+  CREATE TABLE IF NOT EXISTS mar_sig_product_moments (
     product_id TEXT NOT NULL,
     moment     TEXT NOT NULL,
     exception  INTEGER NOT NULL DEFAULT 0,
@@ -670,7 +680,7 @@ function migrate(db) {
 
   -- Médiathèque agence : vidéos/photos uploadées par les agences, taguées
   -- (moment de la journée · produit · saison) pour une diffusion ciblée.
-  CREATE TABLE IF NOT EXISTS sig_media (
+  CREATE TABLE IF NOT EXISTS mar_sig_media (
     id         TEXT PRIMARY KEY,
     filename   TEXT NOT NULL,
     kind       TEXT NOT NULL DEFAULT 'film',
@@ -683,7 +693,7 @@ function migrate(db) {
 
   -- Planning journalier : un ou plusieurs films par moment, par magasin
   -- (joués l'un après l'autre pendant le créneau).
-  CREATE TABLE IF NOT EXISTS sig_dayplans (
+  CREATE TABLE IF NOT EXISTS mar_sig_dayplans (
     store_id TEXT NOT NULL,
     moment   TEXT NOT NULL,
     position INTEGER NOT NULL DEFAULT 0,
@@ -693,7 +703,7 @@ function migrate(db) {
 
   -- Planning hebdomadaire : 5 modèles de semaine réutilisables (A–E),
   -- 7 jours × 3 moments, un ou plusieurs films par cellule, par magasin.
-  CREATE TABLE IF NOT EXISTS sig_weekplans (
+  CREATE TABLE IF NOT EXISTS mar_sig_weekplans (
     store_id TEXT NOT NULL,
     week     TEXT NOT NULL,
     day      INTEGER NOT NULL,
@@ -703,14 +713,14 @@ function migrate(db) {
     PRIMARY KEY (store_id, week, day, moment, position)
   );
 
-  CREATE TABLE IF NOT EXISTS sig_langs (
+  CREATE TABLE IF NOT EXISTS mar_sig_langs (
     id         TEXT PRIMARY KEY,
     label      TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
     enabled    INTEGER NOT NULL DEFAULT 1
   );
 
-  CREATE TABLE IF NOT EXISTS sig_aliases (
+  CREATE TABLE IF NOT EXISTS mar_sig_aliases (
     kind   TEXT NOT NULL,
     ref_id TEXT NOT NULL,
     lang   TEXT NOT NULL,
@@ -721,27 +731,27 @@ function migrate(db) {
 
   // Les périodes de vente taguent aussi les CATÉGORIES : même table, un champ
   // « kind » distingue produit et catégorie (les ids ne se recoupent pas).
-  const pmCols = db.prepare('PRAGMA table_info(sig_product_moments)').all().map((c) => c.name);
-  if (!pmCols.includes('kind')) db.exec(`ALTER TABLE sig_product_moments ADD COLUMN kind TEXT NOT NULL DEFAULT 'produit'`);
+  const pmCols = db.prepare('PRAGMA table_info(mar_sig_product_moments)').all().map((c) => c.name);
+  if (!pmCols.includes('kind')) db.exec(`ALTER TABLE mar_sig_product_moments ADD COLUMN kind TEXT NOT NULL DEFAULT 'produit'`);
 
-  // Règle : un PRODUIT porte une photo (sig_products.img), une CATÉGORIE porte
-  // une illustration (sig_product_categories.img).
-  const catCols = db.prepare('PRAGMA table_info(sig_product_categories)').all().map((c) => c.name);
-  if (!catCols.includes('img')) db.exec(`ALTER TABLE sig_product_categories ADD COLUMN img TEXT NOT NULL DEFAULT ''`);
+  // Règle : un PRODUIT porte une photo (mar_sig_products.img), une CATÉGORIE porte
+  // une illustration (mar_sig_product_categories.img).
+  const catCols = db.prepare('PRAGMA table_info(mar_sig_product_categories)').all().map((c) => c.name);
+  if (!catCols.includes('img')) db.exec(`ALTER TABLE mar_sig_product_categories ADD COLUMN img TEXT NOT NULL DEFAULT ''`);
 
   // Médiathèque : où vit le fichier — « local » (public/media du serveur) ou
   // « s3 » (OVHcloud Object Storage) — et son type, pour le servir tel quel.
-  const mdCols = db.prepare('PRAGMA table_info(sig_media)').all().map((c) => c.name);
-  if (!mdCols.includes('storage')) db.exec(`ALTER TABLE sig_media ADD COLUMN storage TEXT NOT NULL DEFAULT 'local'`);
-  if (!mdCols.includes('ctype')) db.exec(`ALTER TABLE sig_media ADD COLUMN ctype TEXT NOT NULL DEFAULT ''`);
+  const mdCols = db.prepare('PRAGMA table_info(mar_sig_media)').all().map((c) => c.name);
+  if (!mdCols.includes('storage')) db.exec(`ALTER TABLE mar_sig_media ADD COLUMN storage TEXT NOT NULL DEFAULT 'local'`);
+  if (!mdCols.includes('ctype')) db.exec(`ALTER TABLE mar_sig_media ADD COLUMN ctype TEXT NOT NULL DEFAULT ''`);
 
   // Langue d'affichage du magasin (les alias produits/catégories la suivent).
-  const stCols2 = db.prepare('PRAGMA table_info(sig_stores)').all().map((c) => c.name);
-  if (!stCols2.includes('lang')) db.exec(`ALTER TABLE sig_stores ADD COLUMN lang TEXT NOT NULL DEFAULT 'fr'`);
+  const stCols2 = db.prepare('PRAGMA table_info(mar_sig_stores)').all().map((c) => c.name);
+  if (!stCols2.includes('lang')) db.exec(`ALTER TABLE mar_sig_stores ADD COLUMN lang TEXT NOT NULL DEFAULT 'fr'`);
 
-  const nLangs = db.prepare('SELECT COUNT(*) AS n FROM sig_langs').get().n;
+  const nLangs = db.prepare('SELECT COUNT(*) AS n FROM mar_sig_langs').get().n;
   if (nLangs === 0) {
-    const insL = db.prepare('INSERT INTO sig_langs(id, label, sort_order, enabled) VALUES (?, ?, ?, 1)');
+    const insL = db.prepare('INSERT INTO mar_sig_langs(id, label, sort_order, enabled) VALUES (?, ?, ?, 1)');
     insL.run('fr', 'Français', 0);
     insL.run('nl', 'Nederlands', 1);
     insL.run('en', 'English', 2);
@@ -751,9 +761,9 @@ function migrate(db) {
   // Planning hebdo : reprise unique de l'ancien planning journalier dans la
   // semaine A (appliqué aux 7 jours), et semaine active par défaut = A.
   if (!getSetting('mig_weekplans')) {
-    const old = db.prepare('SELECT store_id, moment, position, film_id FROM sig_dayplans').all();
+    const old = db.prepare('SELECT store_id, moment, position, film_id FROM mar_sig_dayplans').all();
     if (old.length) {
-      const insW = db.prepare('INSERT OR IGNORE INTO sig_weekplans(store_id, week, day, moment, position, film_id) VALUES (?, ?, ?, ?, ?, ?)');
+      const insW = db.prepare('INSERT OR IGNORE INTO mar_sig_weekplans(store_id, week, day, moment, position, film_id) VALUES (?, ?, ?, ?, ?, ?)');
       for (const r of old) for (let d = 0; d < 7; d++) insW.run(r.store_id, 'A', d, r.moment, r.position, r.film_id);
     }
     setSetting('mig_weekplans', '1');
@@ -762,15 +772,15 @@ function migrate(db) {
 }
 
 export function loadLangs() {
-  return getDb().prepare('SELECT * FROM sig_langs WHERE enabled = 1 ORDER BY sort_order').all()
+  return getDb().prepare('SELECT * FROM mar_sig_langs WHERE enabled = 1 ORDER BY sort_order').all()
     .map((l) => ({ id: l.id, label: l.label }));
 }
 
 // ---------------------------------------------------------------------------
-// Types d'éléments — pilotés par la table sig_element_types (rien en dur côté
+// Types d'éléments — pilotés par la table mar_sig_element_types (rien en dur côté
 // interface) : le « + Élément » et les mises en page par type en découlent.
 function ensureElementTypes(db) {
-  const insType = db.prepare('INSERT INTO sig_element_types(id, label, icon, descr, layouts, has_items, sort_order, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, 1)');
+  const insType = db.prepare('INSERT INTO mar_sig_element_types(id, label, icon, descr, layouts, has_items, sort_order, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, 1)');
   const mediaLayouts = JSON.stringify([
     { id: 'cover', icon: '◼', label: 'Plein écran (remplir)' },
     { id: 'contain', icon: '▭', label: 'Adapter (letterbox)' },
@@ -789,26 +799,26 @@ function ensureElementTypes(db) {
   ]);
   // Type « média ciblé » : ajouté même sur une base existante (hors seed initial).
   const ensureMedia = () => {
-    if (!db.prepare('SELECT 1 FROM sig_element_types WHERE id = ?').get('media')) {
+    if (!db.prepare('SELECT 1 FROM mar_sig_element_types WHERE id = ?').get('media')) {
       insType.run('media', 'Média ciblé — agence', '🎯',
         'Diffuse une vidéo/photo de la médiathèque agence, tirée au sort selon le moment (matin/midi/après-midi) et la saison active.',
         mediaLayouts, 0, 5);
     }
   };
   // Type « promotion » : ajouté même sur une base existante (hors seed initial).
-  // Le sous-type (happy hour, flash, bundle…) vient de la table sig_promo_types.
+  // Le sous-type (happy hour, flash, bundle…) vient de la table mar_sig_promo_types.
   const ensurePromotion = () => {
-    if (!db.prepare('SELECT 1 FROM sig_element_types WHERE id = ?').get('promotion')) {
+    if (!db.prepare('SELECT 1 FROM mar_sig_element_types WHERE id = ?').get('promotion')) {
       insType.run('promotion', 'Promotion — offre', '🏷️',
         'Met en avant une offre commerciale (happy hour, vente flash, bundle, achetez X obtenez Y, remise planifiée, bon d\'achat…). Le sous-type est piloté par la base (menu Promotions).',
         promoLayouts, 0, 6);
     }
   };
   // Type « campagne marketing » : ajouté même sur une base existante. Le contenu
-  // vient d'une campagne listée dans la table sig_campaigns (menu Campagnes) —
+  // vient d'une campagne listée dans la table mar_sig_campaigns (menu Campagnes) —
   // il suffit de choisir la campagne à diffuser.
   const ensureCampaign = () => {
-    if (!db.prepare('SELECT 1 FROM sig_element_types WHERE id = ?').get('campagne')) {
+    if (!db.prepare('SELECT 1 FROM mar_sig_element_types WHERE id = ?').get('campagne')) {
       insType.run('campagne', 'Campagne marketing', '📣',
         'Diffuse une campagne marketing (produit ou gamme thématique) choisie dans la liste des campagnes (menu Campagnes). Visuel, accroche, produit lié et période sont portés par la campagne.',
         campaignLayouts, 0, 7);
@@ -822,7 +832,7 @@ function ensureElementTypes(db) {
     { id: 'cover', icon: '◼', label: 'Visuel plein écran + prix' },
   ]);
   const ensureBundle = () => {
-    if (!db.prepare('SELECT 1 FROM sig_element_types WHERE id = ?').get('bundle')) {
+    if (!db.prepare('SELECT 1 FROM mar_sig_element_types WHERE id = ?').get('bundle')) {
       insType.run('bundle', 'Bundle — TFBuddy', '🎁',
         'Diffuse un bundle de TFBuddy : son prix, ses produits (photos et prix du magasin) et ses créneaux. Il ne passe qu\'aux jours et heures du bundle, dans ses magasins, et disparaît si un de ses produits est épuisé.',
         bundleLayouts, 0, 9);
@@ -836,7 +846,7 @@ function ensureElementTypes(db) {
     { id: 'stretch', icon: '⤢', label: 'Étirer aux dimensions de l\'écran' },
   ]);
   const ensureHtml = () => {
-    if (!db.prepare('SELECT 1 FROM sig_element_types WHERE id = ?').get('html')) {
+    if (!db.prepare('SELECT 1 FROM mar_sig_element_types WHERE id = ?').get('html')) {
       insType.run('html', 'Gabarit HTML — coller du code', '⟨⟩',
         'Colle du HTML (maquette, affiche, gabarit généré) : il est mis à l\'échelle sur l\'écran. Les variables {{magasin}}, {{adresse}}, {{date}}, {{saison}}… y sont remplacées par magasin à la diffusion.',
         htmlLayouts, 0, 8);
@@ -846,20 +856,20 @@ function ensureElementTypes(db) {
   // sur une base existante, son libellé date d'avant. On le remet à jour sans
   // toucher aux bases déjà renommées (idempotent).
   const ensureAnimFile = () => {
-    db.prepare(`UPDATE sig_element_types SET label = ?, descr = ? WHERE id = 'animation' AND label = 'Animation — texte animé'`)
+    db.prepare(`UPDATE mar_sig_element_types SET label = ?, descr = ? WHERE id = 'animation' AND label = 'Animation — texte animé'`)
       .run('Animation — texte animé ou fichier',
         'Titre + accroche animés (avec un visuel de fond au besoin), ou un fichier d\'animation importé : GIF, vidéo, SVG animé, Lottie.');
   };
   // Type « film en scènes » : écrit par l'éditeur du film (assistant vidéo de
   // campagne) — scènes, photos de la médiathèque, textes animés, prix.
   const ensureScenes = () => {
-    if (!db.prepare('SELECT 1 FROM sig_element_types WHERE id = ?').get('scenes')) {
+    if (!db.prepare('SELECT 1 FROM mar_sig_element_types WHERE id = ?').get('scenes')) {
       insType.run('scenes', 'Film en scènes — éditeur du film', '🎞',
         'Scènes composées dans l\'assistant vidéo de campagne : photos de la médiathèque cadrées, textes (écriture à la main, machine à écrire, fondu, glissé), prix du magasin.',
         JSON.stringify([{ id: 'scenes', icon: '🎞', label: 'Scènes de l\'éditeur du film' }]), 0, 10);
     }
   };
-  const n = db.prepare('SELECT COUNT(*) AS n FROM sig_element_types').get().n;
+  const n = db.prepare('SELECT COUNT(*) AS n FROM mar_sig_element_types').get().n;
   if (n > 0) { ensureMedia(); ensurePromotion(); ensureCampaign(); ensureHtml(); ensureAnimFile(); ensureBundle(); ensureScenes(); return; }
   const catLayouts = [
     { id: 'illo-right', icon: '▤', label: 'Texte à gauche · illustration à droite' },
@@ -903,9 +913,9 @@ function ensureElementTypes(db) {
 // flash, bundle, achetez X obtenez Y, remise planifiée, bon d'achat) ; la régie
 // peut ensuite les modifier, et l'ERP (menu « Promotions ») les alimenter.
 function ensurePromoTypes(db) {
-  const n = db.prepare('SELECT COUNT(*) AS n FROM sig_promo_types').get().n;
+  const n = db.prepare('SELECT COUNT(*) AS n FROM mar_sig_promo_types').get().n;
   if (n > 0) return;
-  const ins = db.prepare('INSERT INTO sig_promo_types(id, name, icon, color, descr, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, 1)');
+  const ins = db.prepare('INSERT INTO mar_sig_promo_types(id, name, icon, color, descr, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, 1)');
   const seed = [
     ['happy-hour', 'Happy hour', '🕒', '#8E44AD', 'Réduction sur un créneau horaire précis (ex. 16h–18h).'],
     ['flash', 'Vente flash', '⚡', '#E67E22', 'Offre à durée très limitée, forte remise.'],
@@ -918,7 +928,7 @@ function ensurePromoTypes(db) {
 }
 
 export function loadPromoTypes() {
-  return getDb().prepare('SELECT * FROM sig_promo_types ORDER BY sort_order, name').all().map((t) => ({
+  return getDb().prepare('SELECT * FROM mar_sig_promo_types ORDER BY sort_order, name').all().map((t) => ({
     id: t.id, name: t.name, icon: t.icon, color: t.color, descr: t.descr,
     active: !!t.active,
   }));
@@ -926,7 +936,7 @@ export function loadPromoTypes() {
 
 export function promoTypeById(id) {
   if (!id) return null;
-  const t = getDb().prepare('SELECT * FROM sig_promo_types WHERE id = ?').get(id);
+  const t = getDb().prepare('SELECT * FROM mar_sig_promo_types WHERE id = ?').get(id);
   return t ? { id: t.id, name: t.name, icon: t.icon, color: t.color, descr: t.descr, active: !!t.active } : null;
 }
 
@@ -947,8 +957,8 @@ export function savePromoTypes(list) {
     .filter((t) => t.id && t.name);
   db.exec('BEGIN');
   try {
-    db.exec('DELETE FROM sig_promo_types');
-    const ins = db.prepare('INSERT OR REPLACE INTO sig_promo_types(id, name, icon, color, descr, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    db.exec('DELETE FROM mar_sig_promo_types');
+    const ins = db.prepare('INSERT OR REPLACE INTO mar_sig_promo_types(id, name, icon, color, descr, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, ?)');
     rows.forEach((t, i) => ins.run(t.id, t.name, t.icon, t.color, t.descr, i, t.active));
     db.exec('COMMIT');
   } catch (e) {
@@ -965,7 +975,7 @@ export function savePromoTypes(list) {
 // programmée sur créneaux (jours et heures) est une famille à part (« happy
 // hour ») de la remise programmée sur dates. '' = badge maison : pour un
 // bundle, la puce « 🎁 Bundle » rubis ; pour une promotion, son propre
-// sous-type. Rangé dans sig_settings (tfb_badges), une ligne par famille.
+// sous-type. Rangé dans mar_sig_settings (tfb_badges), une ligne par famille.
 export const TFB_FAMILIES = ['bundle', 'buy_x_get_y', 'quantity', 'happy_hour', 'scheduled_discount', 'voucher'];
 const TFB_BADGE_DEFAULTS = { bundle: '', buy_x_get_y: 'bxgy', quantity: 'bxgy', happy_hour: 'happy-hour', scheduled_discount: 'scheduled', voucher: 'voucher' };
 export function tfbFamilyOf(p) {
@@ -994,7 +1004,7 @@ export function saveTfbBadges(map) {
 export function tfbBadgeFor(family, badges = loadTfbBadges(), types = null) {
   const id = badges[family];
   if (!id) return null;
-  const t = types ? types.get(id) : getDb().prepare('SELECT * FROM sig_promo_types WHERE id = ?').get(id);
+  const t = types ? types.get(id) : getDb().prepare('SELECT * FROM mar_sig_promo_types WHERE id = ?').get(id);
   return t ? { type: t.id, name: t.name, icon: t.icon, color: t.color } : null;
 }
 // Empreinte des badges : les écrans rechargent leur film quand un style
@@ -1003,7 +1013,7 @@ function refreshBadgesStamp() {
   const badges = loadTfbBadges();
   const ids = [...new Set(Object.values(badges).filter(Boolean))].sort();
   const db = getDb();
-  const one = db.prepare('SELECT id, name, icon, color FROM sig_promo_types WHERE id = ?');
+  const one = db.prepare('SELECT id, name, icon, color FROM mar_sig_promo_types WHERE id = ?');
   const body = JSON.stringify([badges, ids.map((id) => one.get(id) || null)]);
   setSetting('tfb_badges_stamp', createHash('sha1').update(body).digest('hex').slice(0, 12));
 }
@@ -1015,13 +1025,13 @@ function refreshBadgesStamp() {
 export const SEQ_PLACEMENTS = ['debut', 'fin', 'boucle'];
 export function loadSequences() {
   const db = getDb();
-  const items = db.prepare('SELECT sequence_id, module_id FROM sig_sequence_items ORDER BY sequence_id, position').all();
+  const items = db.prepare('SELECT sequence_id, module_id FROM mar_sig_sequence_items ORDER BY sequence_id, position').all();
   const by = new Map();
   for (const it of items) {
     if (!by.has(it.sequence_id)) by.set(it.sequence_id, []);
     by.get(it.sequence_id).push(it.module_id);
   }
-  return db.prepare('SELECT * FROM sig_sequences ORDER BY sort_order, name').all().map((s) => ({
+  return db.prepare('SELECT * FROM mar_sig_sequences ORDER BY sort_order, name').all().map((s) => ({
     id: s.id, name: s.name,
     placement: SEQ_PLACEMENTS.includes(s.placement) ? s.placement : 'debut',
     ratio: s.ratio, orient: s.orient === 'portrait' ? 'portrait' : 'paysage',
@@ -1043,10 +1053,10 @@ export function saveSequences(list) {
     .filter((s) => s.id && s.name);
   db.exec('BEGIN');
   try {
-    db.exec('DELETE FROM sig_sequence_items');
-    db.exec('DELETE FROM sig_sequences');
-    const insSeq = db.prepare('INSERT OR REPLACE INTO sig_sequences(id, name, placement, ratio, orient, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, ?)');
-    const insIt = db.prepare('INSERT OR REPLACE INTO sig_sequence_items(sequence_id, position, module_id) VALUES (?, ?, ?)');
+    db.exec('DELETE FROM mar_sig_sequence_items');
+    db.exec('DELETE FROM mar_sig_sequences');
+    const insSeq = db.prepare('INSERT OR REPLACE INTO mar_sig_sequences(id, name, placement, ratio, orient, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    const insIt = db.prepare('INSERT OR REPLACE INTO mar_sig_sequence_items(sequence_id, position, module_id) VALUES (?, ?, ?)');
     rows.forEach((s, i) => {
       insSeq.run(s.id, s.name, s.placement, s.ratio, s.orient, i, s.active);
       s.items.forEach((mid, j) => insIt.run(s.id, j, mid));
@@ -1061,7 +1071,7 @@ export function saveSequences(list) {
 // bibliothèque. Le lien se règle en régie ; le module produit du franchiseur ne
 // fait que le lire (GET /api/v1/ingredients).
 export function loadIngredients() {
-  return getDb().prepare('SELECT * FROM sig_ingredients ORDER BY sort_order, name').all().map((r) => ({
+  return getDb().prepare('SELECT * FROM mar_sig_ingredients ORDER BY sort_order, name').all().map((r) => ({
     id: r.id, name: r.name, extRef: r.ext_ref, moduleId: r.module_id, active: !!r.active,
   }));
 }
@@ -1078,8 +1088,8 @@ export function saveIngredients(list) {
     .filter((r) => r.id && r.name);
   db.exec('BEGIN');
   try {
-    db.exec('DELETE FROM sig_ingredients');
-    const ins = db.prepare('INSERT OR REPLACE INTO sig_ingredients(id, name, ext_ref, module_id, sort_order, active) VALUES (?, ?, ?, ?, ?, ?)');
+    db.exec('DELETE FROM mar_sig_ingredients');
+    const ins = db.prepare('INSERT OR REPLACE INTO mar_sig_ingredients(id, name, ext_ref, module_id, sort_order, active) VALUES (?, ?, ?, ?, ?, ?)');
     rows.forEach((r, i) => ins.run(r.id, r.name, r.extRef, r.moduleId, i, r.active));
     db.exec('COMMIT');
   } catch (e) { db.exec('ROLLBACK'); throw e; }
@@ -1102,9 +1112,9 @@ export const LIB_SOURCES = [
 const LIB_SRC_IDS = new Set(LIB_SOURCES.map((s) => s.id));
 
 function ensureLibCategories(db) {
-  const n = db.prepare('SELECT COUNT(*) AS n FROM sig_lib_categories').get().n;
+  const n = db.prepare('SELECT COUNT(*) AS n FROM mar_sig_lib_categories').get().n;
   if (n > 0) return;
-  const ins = db.prepare('INSERT INTO sig_lib_categories(id, name, color, src, sort_order, active) VALUES (?, ?, ?, ?, ?, 1)');
+  const ins = db.prepare('INSERT INTO mar_sig_lib_categories(id, name, color, src, sort_order, active) VALUES (?, ?, ?, ?, ?, 1)');
   // Les quatre catégories historiques, avec la table qui les alimente.
   const seed = [
     ['produit', 'Produit', '#8D1D2C', 'produits'],
@@ -1116,7 +1126,7 @@ function ensureLibCategories(db) {
 }
 
 export function loadLibCategories() {
-  return getDb().prepare('SELECT * FROM sig_lib_categories ORDER BY sort_order, name').all().map((c) => ({
+  return getDb().prepare('SELECT * FROM mar_sig_lib_categories ORDER BY sort_order, name').all().map((c) => ({
     id: c.id, name: c.name, color: c.color, src: c.src, active: !!c.active,
   }));
 }
@@ -1138,8 +1148,8 @@ export function saveLibCategories(list) {
   if (!rows.length) return loadLibCategories(); // jamais de bibliothèque sans classement
   db.exec('BEGIN');
   try {
-    db.exec('DELETE FROM sig_lib_categories');
-    const ins = db.prepare('INSERT OR REPLACE INTO sig_lib_categories(id, name, color, src, sort_order, active) VALUES (?, ?, ?, ?, ?, ?)');
+    db.exec('DELETE FROM mar_sig_lib_categories');
+    const ins = db.prepare('INSERT OR REPLACE INTO mar_sig_lib_categories(id, name, color, src, sort_order, active) VALUES (?, ?, ?, ?, ?, ?)');
     rows.forEach((c, i) => ins.run(c.id, c.name, c.color, c.src, i, c.active));
     db.exec('COMMIT');
   } catch (e) {
@@ -1165,12 +1175,12 @@ function campaignRow(c) {
 }
 
 export function loadCampaigns() {
-  return getDb().prepare('SELECT * FROM sig_campaigns ORDER BY sort_order, name').all().map(campaignRow);
+  return getDb().prepare('SELECT * FROM mar_sig_campaigns ORDER BY sort_order, name').all().map(campaignRow);
 }
 
 export function campaignById(id) {
   if (!id) return null;
-  const c = getDb().prepare('SELECT * FROM sig_campaigns WHERE id = ?').get(id);
+  const c = getDb().prepare('SELECT * FROM mar_sig_campaigns WHERE id = ?').get(id);
   return c ? campaignRow(c) : null;
 }
 
@@ -1196,8 +1206,8 @@ export function saveCampaigns(list) {
     .filter((c) => c.id && c.name);
   db.exec('BEGIN');
   try {
-    db.exec('DELETE FROM sig_campaigns');
-    const ins = db.prepare(`INSERT OR REPLACE INTO sig_campaigns
+    db.exec('DELETE FROM mar_sig_campaigns');
+    const ins = db.prepare(`INSERT OR REPLACE INTO mar_sig_campaigns
       (id, name, scope, product_ref, theme, image, message, date_from, date_to, color, sort_order, active)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     rows.forEach((c, i) => ins.run(c.id, c.name, c.scope, c.productRef, c.theme, c.image, c.message, c.dateFrom, c.dateTo, c.color, i, c.active));
@@ -1210,7 +1220,7 @@ export function saveCampaigns(list) {
 }
 
 export function loadElementTypes() {
-  return getDb().prepare('SELECT * FROM sig_element_types WHERE enabled = 1 ORDER BY sort_order').all().map((t) => ({
+  return getDb().prepare('SELECT * FROM mar_sig_element_types WHERE enabled = 1 ORDER BY sort_order').all().map((t) => ({
     id: t.id, label: t.label, icon: t.icon, descr: t.descr,
     layouts: JSON.parse(t.layouts || '[]'), hasItems: !!t.has_items,
   }));
@@ -1221,17 +1231,17 @@ export function loadElementTypes() {
 // magasin). Au premier lancement sur une base existante, il est construit à
 // partir des éléments « catégorie » déjà présents.
 function ensureCatalog(db) {
-  const nCat = db.prepare('SELECT COUNT(*) AS n FROM sig_product_categories').get().n;
-  const nProd = db.prepare('SELECT COUNT(*) AS n FROM sig_products').get().n;
+  const nCat = db.prepare('SELECT COUNT(*) AS n FROM mar_sig_product_categories').get().n;
+  const nProd = db.prepare('SELECT COUNT(*) AS n FROM mar_sig_products').get().n;
   if (nCat > 0 || nProd > 0) return;
-  const mods = db.prepare(`SELECT * FROM sig_modules WHERE type = 'category' ORDER BY sort_order`).all();
-  const insCat = db.prepare('INSERT INTO sig_product_categories(id, name, sort_order, active) VALUES (?, ?, ?, 1)');
-  const insProd = db.prepare('INSERT INTO sig_products(id, category_id, name, price, img, src, active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+  const mods = db.prepare(`SELECT * FROM mar_sig_modules WHERE type = 'category' ORDER BY sort_order`).all();
+  const insCat = db.prepare('INSERT INTO mar_sig_product_categories(id, name, sort_order, active) VALUES (?, ?, ?, 1)');
+  const insProd = db.prepare('INSERT INTO mar_sig_products(id, category_id, name, price, img, src, active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
   let pn = 0;
   mods.forEach((m, i) => {
     const catId = 'pc_' + m.id;
     insCat.run(catId, m.name || `Catégorie ${i + 1}`, i);
-    const items = db.prepare('SELECT * FROM sig_module_items WHERE module_id = ? ORDER BY position').all(m.id);
+    const items = db.prepare('SELECT * FROM mar_sig_module_items WHERE module_id = ? ORDER BY position').all(m.id);
     items.forEach((it, j) => insProd.run('pr' + (++pn), catId, it.name, it.price, it.img, it.src, it.active ? 1 : 0, j));
   });
 }
@@ -1239,21 +1249,21 @@ function ensureCatalog(db) {
 export function loadCatalog() {
   const db = getDb();
   // Alias par langue (nom du produit / de la catégorie dans chaque langue).
-  const aliasRows = db.prepare('SELECT * FROM sig_aliases').all();
+  const aliasRows = db.prepare('SELECT * FROM mar_sig_aliases').all();
   const aliasesOf = (kind, id) => {
     const out = {};
     for (const a of aliasRows) if (a.kind === kind && a.ref_id === id) out[a.lang] = a.name;
     return out;
   };
-  const categories = db.prepare('SELECT * FROM sig_product_categories ORDER BY sort_order').all()
+  const categories = db.prepare('SELECT * FROM mar_sig_product_categories ORDER BY sort_order').all()
     .map((c) => ({ id: c.id, name: c.name, img: c.img || '', active: !!c.active, aliases: aliasesOf('category', c.id) }));
-  const priceRows = db.prepare('SELECT * FROM sig_product_prices').all();
+  const priceRows = db.prepare('SELECT * FROM mar_sig_product_prices').all();
   const pricesByProduct = new Map();
   for (const r of priceRows) {
     if (!pricesByProduct.has(r.product_id)) pricesByProduct.set(r.product_id, {});
     pricesByProduct.get(r.product_id)[r.store_id] = r.price;
   }
-  const products = db.prepare('SELECT * FROM sig_products ORDER BY category_id, sort_order').all().map((p) => ({
+  const products = db.prepare('SELECT * FROM mar_sig_products ORDER BY category_id, sort_order').all().map((p) => ({
     id: p.id, categoryId: p.category_id, name: p.name, price: p.price,
     img: p.img, src: p.src, active: !!p.active, unavailable: !!p.unavailable,
     prices: pricesByProduct.get(p.id) || {},
@@ -1266,14 +1276,14 @@ export function saveCatalog({ categories, products }) {
   const db = getDb();
   db.exec('BEGIN');
   try {
-    db.exec('DELETE FROM sig_product_prices');
-    db.exec('DELETE FROM sig_aliases');
-    db.exec('DELETE FROM sig_products');
-    db.exec('DELETE FROM sig_product_categories');
-    const insCat = db.prepare('INSERT OR REPLACE INTO sig_product_categories(id, name, img, sort_order, active) VALUES (?, ?, ?, ?, ?)');
-    const insProd = db.prepare('INSERT OR REPLACE INTO sig_products(id, category_id, name, price, img, src, active, unavailable, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    const insPrice = db.prepare('INSERT OR REPLACE INTO sig_product_prices(product_id, store_id, price) VALUES (?, ?, ?)');
-    const insAlias = db.prepare('INSERT OR REPLACE INTO sig_aliases(kind, ref_id, lang, name) VALUES (?, ?, ?, ?)');
+    db.exec('DELETE FROM mar_sig_product_prices');
+    db.exec('DELETE FROM mar_sig_aliases');
+    db.exec('DELETE FROM mar_sig_products');
+    db.exec('DELETE FROM mar_sig_product_categories');
+    const insCat = db.prepare('INSERT OR REPLACE INTO mar_sig_product_categories(id, name, img, sort_order, active) VALUES (?, ?, ?, ?, ?)');
+    const insProd = db.prepare('INSERT OR REPLACE INTO mar_sig_products(id, category_id, name, price, img, src, active, unavailable, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    const insPrice = db.prepare('INSERT OR REPLACE INTO mar_sig_product_prices(product_id, store_id, price) VALUES (?, ?, ?)');
+    const insAlias = db.prepare('INSERT OR REPLACE INTO mar_sig_aliases(kind, ref_id, lang, name) VALUES (?, ?, ?, ?)');
     const putAliases = (kind, id, aliases) => {
       for (const [lang, name] of Object.entries(aliases || {})) {
         if (String(name).trim()) insAlias.run(kind, String(id), String(lang), String(name).trim());
@@ -1303,7 +1313,7 @@ export function saveCatalog({ categories, products }) {
 // ---------------------------------------------------------------------------
 // Périodes de l'année (saisons) — nom + du → au + produits liés.
 export function loadSeasons() {
-  return getDb().prepare('SELECT * FROM sig_seasons ORDER BY sort_order, name').all().map((s) => ({
+  return getDb().prepare('SELECT * FROM mar_sig_seasons ORDER BY sort_order, name').all().map((s) => ({
     id: s.id, name: s.name, from: s.date_from, to: s.date_to,
     products: (() => { try { return JSON.parse(s.products || '[]'); } catch { return []; } })(),
     color: s.color || '#C97B4A', image: s.image || '', active: !!s.active,
@@ -1314,8 +1324,8 @@ export function saveSeasons(seasons) {
   const db = getDb();
   db.exec('BEGIN');
   try {
-    db.exec('DELETE FROM sig_seasons');
-    const ins = db.prepare('INSERT INTO sig_seasons(id, name, date_from, date_to, products, color, image, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    db.exec('DELETE FROM mar_sig_seasons');
+    const ins = db.prepare('INSERT INTO mar_sig_seasons(id, name, date_from, date_to, products, color, image, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     (Array.isArray(seasons) ? seasons : []).forEach((s, i) => {
       ins.run(String(s.id || 'se' + i), String(s.name || ''), String(s.from || ''), String(s.to || ''),
         JSON.stringify(Array.isArray(s.products) ? s.products.map(String) : []),
@@ -1358,7 +1368,7 @@ export const SALE_MOMENTS = ['matin', 'midi', 'aprem'];
 // Les QUATRE familles taguables partagent cette table et les mêmes règles.
 export const MOMENT_KINDS = ['produit', 'categorie', 'promotion', 'campagne'];
 export function loadProductMoments() {
-  return getDb().prepare('SELECT product_id, moment, exception, kind FROM sig_product_moments ORDER BY kind, product_id, moment').all()
+  return getDb().prepare('SELECT product_id, moment, exception, kind FROM mar_sig_product_moments ORDER BY kind, product_id, moment').all()
     .map((r) => ({ productId: r.product_id, moment: r.moment, exception: !!r.exception, kind: normMomentKind(r.kind) }));
 }
 // Les quatre familles taguées vivent dans la même table (les identifiants ne se
@@ -1368,8 +1378,8 @@ export function saveProductMoments(rows) {
   const db = getDb();
   db.exec('BEGIN');
   try {
-    db.exec('DELETE FROM sig_product_moments');
-    const ins = db.prepare('INSERT OR REPLACE INTO sig_product_moments(product_id, moment, exception, kind) VALUES (?, ?, ?, ?)');
+    db.exec('DELETE FROM mar_sig_product_moments');
+    const ins = db.prepare('INSERT OR REPLACE INTO mar_sig_product_moments(product_id, moment, exception, kind) VALUES (?, ?, ?, ?)');
     for (const r of (Array.isArray(rows) ? rows : [])) {
       if (!r || !r.productId || !SALE_MOMENTS.includes(r.moment)) continue;
       ins.run(String(r.productId), String(r.moment), r.exception ? 1 : 0, normMomentKind(r.kind));
@@ -1589,10 +1599,10 @@ const mediaRow = (r) => ({
   storage: r.storage === 's3' ? 's3' : 'local', ctype: r.ctype || '',
 });
 export function loadMedia() {
-  return getDb().prepare('SELECT * FROM sig_media ORDER BY created_at DESC').all().map(mediaRow);
+  return getDb().prepare('SELECT * FROM mar_sig_media ORDER BY created_at DESC').all().map(mediaRow);
 }
 export function addMediaRow(m) {
-  getDb().prepare('INSERT INTO sig_media(id, filename, kind, moment, product_id, season_id, size, storage, ctype) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+  getDb().prepare('INSERT INTO mar_sig_media(id, filename, kind, moment, product_id, season_id, size, storage, ctype) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .run(String(m.id), String(m.filename), m.kind === 'photo' ? 'photo' : 'film',
       ['matin', 'midi', 'aprem'].includes(m.moment) ? m.moment : 'all',
       String(m.productId || ''), String(m.seasonId || ''), parseInt(m.size, 10) || 0,
@@ -1600,28 +1610,28 @@ export function addMediaRow(m) {
   return loadMedia();
 }
 export function getMediaRow(id) {
-  const r = getDb().prepare('SELECT * FROM sig_media WHERE id = ?').get(String(id));
+  const r = getDb().prepare('SELECT * FROM mar_sig_media WHERE id = ?').get(String(id));
   return r ? mediaRow(r) : null;
 }
 // Le média servi à l'adresse media/<fichier> (le plus récent si doublon ancien).
 export function mediaByFilename(filename) {
-  const r = getDb().prepare('SELECT * FROM sig_media WHERE filename = ? ORDER BY created_at DESC LIMIT 1').get(String(filename));
+  const r = getDb().prepare('SELECT * FROM mar_sig_media WHERE filename = ? ORDER BY created_at DESC LIMIT 1').get(String(filename));
   return r ? mediaRow(r) : null;
 }
 export function setMediaStorage(id, storage, ctype) {
-  getDb().prepare('UPDATE sig_media SET storage = ?, ctype = COALESCE(NULLIF(?, \'\'), ctype) WHERE id = ?')
+  getDb().prepare('UPDATE mar_sig_media SET storage = ?, ctype = COALESCE(NULLIF(?, \'\'), ctype) WHERE id = ?')
     .run(storage === 's3' ? 's3' : 'local', String(ctype || ''), String(id));
 }
-export function delMediaRow(id) { getDb().prepare('DELETE FROM sig_media WHERE id = ?').run(String(id)); }
+export function delMediaRow(id) { getDb().prepare('DELETE FROM mar_sig_media WHERE id = ?').run(String(id)); }
 // Retouche des tags d'un média (moment, produit, période). Le fichier garde son
 // nom : le préfixe 1_/2_/3_ n'est qu'une convention de dépôt des agences.
 export function updateMediaTags(id, tags) {
-  const r = getDb().prepare('SELECT * FROM sig_media WHERE id = ?').get(String(id));
+  const r = getDb().prepare('SELECT * FROM mar_sig_media WHERE id = ?').get(String(id));
   if (!r) return false;
   const moment = tags.moment === undefined ? r.moment : (['matin', 'midi', 'aprem'].includes(tags.moment) ? tags.moment : 'all');
   const productId = tags.productId === undefined ? r.product_id : String(tags.productId || '');
   const seasonId = tags.seasonId === undefined ? r.season_id : String(tags.seasonId || '');
-  getDb().prepare('UPDATE sig_media SET moment = ?, product_id = ?, season_id = ? WHERE id = ?').run(moment, productId, seasonId, String(id));
+  getDb().prepare('UPDATE mar_sig_media SET moment = ?, product_id = ?, season_id = ? WHERE id = ?').run(moment, productId, seasonId, String(id));
   return true;
 }
 
@@ -1630,7 +1640,7 @@ export function updateMediaTags(id, tags) {
 // ici n'est pas vendu dans ce magasin, il est retiré de SES écrans.
 export function applyNotSoldHere(modules, storeId) {
   if (!storeId) return;
-  const rows = getDb().prepare('SELECT product_id, store_id FROM sig_product_prices').all();
+  const rows = getDb().prepare('SELECT product_id, store_id FROM mar_sig_product_prices').all();
   if (!rows.length) return;
   const priced = new Map();
   for (const r of rows) {
@@ -1646,7 +1656,7 @@ export function applyNotSoldHere(modules, storeId) {
 // Prix par magasin : remplace le prix par défaut des items liés au catalogue.
 export function applyStorePrices(modules, storeId) {
   if (!storeId) return;
-  const rows = getDb().prepare('SELECT product_id, price FROM sig_product_prices WHERE store_id = ?').all(storeId);
+  const rows = getDb().prepare('SELECT product_id, price FROM mar_sig_product_prices WHERE store_id = ?').all(storeId);
   if (!rows.length) return;
   const by = new Map(rows.map((r) => [r.product_id, r.price]));
   for (const m of modules || []) {
@@ -1661,14 +1671,14 @@ export function applyStorePrices(modules, storeId) {
 export function applyStoreLang(modules, storeId) {
   if (!storeId) return;
   const db = getDb();
-  const store = db.prepare('SELECT lang FROM sig_stores WHERE id = ?').get(storeId);
+  const store = db.prepare('SELECT lang FROM mar_sig_stores WHERE id = ?').get(storeId);
   const lang = store && store.lang;
   if (!lang || lang === 'fr') return;
-  const rows = db.prepare('SELECT kind, ref_id, name FROM sig_aliases WHERE lang = ?').all(lang);
+  const rows = db.prepare('SELECT kind, ref_id, name FROM mar_sig_aliases WHERE lang = ?').all(lang);
   if (!rows.length) return;
   const prodAlias = new Map(rows.filter((r) => r.kind === 'product').map((r) => [r.ref_id, r.name]));
   const catAlias = new Map(rows.filter((r) => r.kind === 'category').map((r) => [r.ref_id, r.name]));
-  const catNames = new Map(db.prepare('SELECT id, name FROM sig_product_categories').all().map((c) => [c.id, c.name]));
+  const catNames = new Map(db.prepare('SELECT id, name FROM mar_sig_product_categories').all().map((c) => [c.id, c.name]));
   for (const m of modules || []) {
     for (const it of m.items || []) {
       if (it.productId && prodAlias.has(it.productId)) it.name = prodAlias.get(it.productId);
@@ -1764,11 +1774,11 @@ export function applyHtmlVars(modules, storeId, date = new Date()) {
   const list = (modules || []).filter((m) => m && m.type === 'html' && typeof m.html === 'string' && m.html.indexOf('{{') !== -1);
   if (!list.length) return;
   const db = getDb();
-  const store = storeId ? db.prepare('SELECT name, address, hours, phone FROM sig_stores WHERE id = ?').get(storeId) : null;
-  const oneProd = db.prepare('SELECT * FROM sig_products WHERE id = ?');
-  const oneCat = db.prepare('SELECT name FROM sig_product_categories WHERE id = ?');
-  const onePromo = db.prepare('SELECT * FROM sig_promo_types WHERE id = ?');
-  const oneCamp = db.prepare('SELECT * FROM sig_campaigns WHERE id = ?');
+  const store = storeId ? db.prepare('SELECT name, address, hours, phone FROM mar_sig_stores WHERE id = ?').get(storeId) : null;
+  const oneProd = db.prepare('SELECT * FROM mar_sig_products WHERE id = ?');
+  const oneCat = db.prepare('SELECT name FROM mar_sig_product_categories WHERE id = ?');
+  const onePromo = db.prepare('SELECT * FROM mar_sig_promo_types WHERE id = ?');
+  const oneCamp = db.prepare('SELECT * FROM mar_sig_campaigns WHERE id = ?');
   const seasonNames = currentSeasons(date).map((s) => s.name).filter(Boolean).join(', ');
   const momentLabel = { matin: 'matin', midi: 'midi', aprem: 'après-midi' }[currentMoment(date)] || '';
   let dateLabel = '';
@@ -1777,7 +1787,7 @@ export function applyHtmlVars(modules, storeId, date = new Date()) {
   const priceOf = (p) => {
     if (!p) return '';
     if (storeId) {
-      const r = db.prepare('SELECT price FROM sig_product_prices WHERE product_id = ? AND store_id = ?').get(p.id, storeId);
+      const r = db.prepare('SELECT price FROM mar_sig_product_prices WHERE product_id = ? AND store_id = ?').get(p.id, storeId);
       if (r && r.price) return r.price;
     }
     return p.price || '';
@@ -1798,7 +1808,7 @@ export function applyHtmlVars(modules, storeId, date = new Date()) {
         return p.name || '';
       }
       case 'categorie': {
-        const c = val ? db.prepare('SELECT * FROM sig_product_categories WHERE id = ?').get(val) : null;
+        const c = val ? db.prepare('SELECT * FROM mar_sig_product_categories WHERE id = ?').get(val) : null;
         if (!c) return '';
         if (field === 'illustration') return c.img || '';
         return c.name || '';
@@ -1853,7 +1863,7 @@ export function applyHtmlVars(modules, storeId, date = new Date()) {
 }
 export function applyStoreTokens(modules, storeId, date = new Date()) {
   const db = getDb();
-  const store = storeId ? db.prepare('SELECT name, address, hours, phone FROM sig_stores WHERE id = ?').get(storeId) : null;
+  const store = storeId ? db.prepare('SELECT name, address, hours, phone FROM mar_sig_stores WHERE id = ?').get(storeId) : null;
   const seasonNames = currentSeasons(date).map((s) => s.name).filter(Boolean).join(', ');
   const momentLabel = { matin: 'matin', midi: 'midi', aprem: 'après-midi' }[currentMoment(date)] || '';
   let dateLabel = '';
@@ -1928,7 +1938,7 @@ export function currentMoment(date = new Date()) {
 // Planning hebdomadaire complet : byStore[store][week][day][moment] = [films].
 export function loadPlan() {
   const db = getDb();
-  const rows = db.prepare('SELECT store_id, week, day, moment, film_id FROM sig_weekplans ORDER BY store_id, week, day, moment, position').all();
+  const rows = db.prepare('SELECT store_id, week, day, moment, film_id FROM mar_sig_weekplans ORDER BY store_id, week, day, moment, position').all();
   const byStore = {};
   for (const r of rows) {
     const s = (byStore[r.store_id] ||= {});
@@ -1958,11 +1968,11 @@ export function savePlan({ stores, week, day, slots, windows }) {
   const wk = okWeek(week);
   const dy = okDay(day);
   if (!targets.length) return loadPlan();
-  const validFilms = new Set(db.prepare('SELECT id FROM sig_playlists').all().map((p) => p.id));
+  const validFilms = new Set(db.prepare('SELECT id FROM mar_sig_playlists').all().map((p) => p.id));
   db.exec('BEGIN');
   try {
-    const del = db.prepare('DELETE FROM sig_weekplans WHERE store_id = ? AND week = ? AND day = ? AND moment = ?');
-    const ins = db.prepare('INSERT INTO sig_weekplans(store_id, week, day, moment, position, film_id) VALUES (?, ?, ?, ?, ?, ?)');
+    const del = db.prepare('DELETE FROM mar_sig_weekplans WHERE store_id = ? AND week = ? AND day = ? AND moment = ?');
+    const ins = db.prepare('INSERT INTO mar_sig_weekplans(store_id, week, day, moment, position, film_id) VALUES (?, ?, ?, ?, ?, ?)');
     for (const sid of targets) {
       for (const m of PLAN_MOMENTS) {
         del.run(sid, wk, dy, m.id);
@@ -1994,9 +2004,9 @@ export function duplicateWeek({ stores, from, to }) {
   if (!targets.length || src === dst) return loadPlan();
   db.exec('BEGIN');
   try {
-    const del = db.prepare('DELETE FROM sig_weekplans WHERE store_id = ? AND week = ?');
-    const rows = db.prepare('SELECT day, moment, position, film_id FROM sig_weekplans WHERE store_id = ? AND week = ?');
-    const ins = db.prepare('INSERT INTO sig_weekplans(store_id, week, day, moment, position, film_id) VALUES (?, ?, ?, ?, ?, ?)');
+    const del = db.prepare('DELETE FROM mar_sig_weekplans WHERE store_id = ? AND week = ?');
+    const rows = db.prepare('SELECT day, moment, position, film_id FROM mar_sig_weekplans WHERE store_id = ? AND week = ?');
+    const ins = db.prepare('INSERT INTO mar_sig_weekplans(store_id, week, day, moment, position, film_id) VALUES (?, ?, ?, ?, ?, ?)');
     for (const sid of targets) {
       del.run(sid, dst);
       for (const r of rows.all(sid, src)) ins.run(sid, dst, r.day, r.moment, r.position, r.film_id);
@@ -2016,7 +2026,7 @@ export function planFilmAt(storeId, date) {
   const db = getDb();
   const wk = activeWeek();
   const day = (date.getDay() + 6) % 7; // 0 = lundi
-  const rows = db.prepare('SELECT moment, film_id FROM sig_weekplans WHERE store_id = ? AND week = ? AND day = ? ORDER BY moment, position').all(storeId, wk, day);
+  const rows = db.prepare('SELECT moment, film_id FROM mar_sig_weekplans WHERE store_id = ? AND week = ? AND day = ? ORDER BY moment, position').all(storeId, wk, day);
   if (!rows.length) return null;
   const byMoment = new Map();
   for (const r of rows) { if (!byMoment.has(r.moment)) byMoment.set(r.moment, []); byMoment.get(r.moment).push(r.film_id); }
@@ -2052,7 +2062,7 @@ export function storeFormat(s) {
 // Un groupe partage les champs de format d'un magasin (screens/screen_size/
 // screen_orient) → storeFormat s'applique directement.
 export function loadScreenGroups(storeId) {
-  const rows = getDb().prepare('SELECT * FROM sig_screen_groups WHERE store_id = ? ORDER BY sort_order, name').all(storeId);
+  const rows = getDb().prepare('SELECT * FROM mar_sig_screen_groups WHERE store_id = ? ORDER BY sort_order, name').all(storeId);
   return rows.map((g) => ({
     id: g.id, storeId: g.store_id, name: g.name,
     screens: g.screens, size: g.screen_size, orient: g.screen_orient,
@@ -2064,11 +2074,11 @@ export function loadScreenGroups(storeId) {
   }));
 }
 export function screenGroupById(id) {
-  return getDb().prepare('SELECT * FROM sig_screen_groups WHERE id = ?').get(id) || null;
+  return getDb().prepare('SELECT * FROM mar_sig_screen_groups WHERE id = ?').get(id) || null;
 }
 export function saveScreenGroup(storeId, patch) {
   const db = getDb();
-  const cur = patch.id ? db.prepare('SELECT * FROM sig_screen_groups WHERE id = ?').get(patch.id) : null;
+  const cur = patch.id ? db.prepare('SELECT * FROM mar_sig_screen_groups WHERE id = ?').get(patch.id) : null;
   const id = (cur && cur.id) || String(patch.id || ('grp' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36)));
   const name = (String(patch.name != null ? patch.name : (cur ? cur.name : 'Zone')).trim() || 'Zone').slice(0, 80);
   const screens = Math.min(6, Math.max(1, parseInt(patch.screens != null ? patch.screens : (cur ? cur.screens : 1), 10) || 1));
@@ -2078,26 +2088,26 @@ export function saveScreenGroup(storeId, patch) {
   const cats = JSON.stringify(Array.isArray(patch.cats) ? patch.cats.map(String) : curCats);
   const fMom = patch.filterMoments != null ? (patch.filterMoments ? 1 : 0) : (cur ? (cur.filter_moments === 1 ? 1 : 0) : 0);
   const fCat = patch.filterCats != null ? (patch.filterCats ? 1 : 0) : (cur ? (cur.filter_cats === 0 ? 0 : 1) : 1);
-  const sort = cur ? cur.sort_order : (db.prepare('SELECT COUNT(*) AS n FROM sig_screen_groups WHERE store_id = ?').get(storeId).n);
-  db.prepare('INSERT OR REPLACE INTO sig_screen_groups(id, store_id, name, screens, screen_size, screen_orient, cats, filter_moments, filter_cats, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+  const sort = cur ? cur.sort_order : (db.prepare('SELECT COUNT(*) AS n FROM mar_sig_screen_groups WHERE store_id = ?').get(storeId).n);
+  db.prepare('INSERT OR REPLACE INTO mar_sig_screen_groups(id, store_id, name, screens, screen_size, screen_orient, cats, filter_moments, filter_cats, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .run(id, storeId, name, screens, size, orient, cats, fMom, fCat, sort);
   return loadScreenGroups(storeId).find((x) => x.id === id) || null;
 }
 export function deleteScreenGroup(id) {
   const db = getDb();
-  db.prepare("UPDATE sig_players SET group_id = '' WHERE group_id = ?").run(id); // détacher les écrans
-  db.prepare('DELETE FROM sig_screen_groups WHERE id = ?').run(id);
+  db.prepare("UPDATE mar_sig_players SET group_id = '' WHERE group_id = ?").run(id); // détacher les écrans
+  db.prepare('DELETE FROM mar_sig_screen_groups WHERE id = ?').run(id);
 }
 export function setPlayerGroup(playerId, groupId) {
   const db = getDb();
   const gid = String(groupId || '');
   // on ne rattache qu'à un groupe du MÊME magasin que le player (cohérence)
   if (gid) {
-    const p = db.prepare('SELECT store_id FROM sig_players WHERE id = ?').get(playerId);
-    const g = db.prepare('SELECT store_id FROM sig_screen_groups WHERE id = ?').get(gid);
+    const p = db.prepare('SELECT store_id FROM mar_sig_players WHERE id = ?').get(playerId);
+    const g = db.prepare('SELECT store_id FROM mar_sig_screen_groups WHERE id = ?').get(gid);
     if (!p || !g || p.store_id !== g.store_id) return false;
   }
-  db.prepare('UPDATE sig_players SET group_id = ? WHERE id = ?').run(gid, playerId);
+  db.prepare('UPDATE mar_sig_players SET group_id = ? WHERE id = ?').run(gid, playerId);
   return true;
 }
 
@@ -2116,9 +2126,9 @@ function ensureAdmin(db) {
   if (agencyAccountEnabled()) {
     ensureUser(db, 'agence', process.env.SIG_AGENCY_PASSWORD, 'agence', 'agence');
   } else {
-    const had = db.prepare(`SELECT 1 AS x FROM sig_users WHERE username = 'agence'`).get();
-    db.prepare(`DELETE FROM sig_sessions WHERE username = 'agence'`).run();
-    db.prepare(`DELETE FROM sig_users WHERE username = 'agence'`).run();
+    const had = db.prepare(`SELECT 1 AS x FROM mar_sig_users WHERE username = 'agence'`).get();
+    db.prepare(`DELETE FROM mar_sig_sessions WHERE username = 'agence'`).run();
+    db.prepare(`DELETE FROM mar_sig_users WHERE username = 'agence'`).run();
     if (had) console.warn('[signage] compte « agence » désactivé : SIG_AGENCY_PASSWORD absent (le mot de passe par défaut est refusé en production)');
   }
 }
@@ -2128,20 +2138,20 @@ export function agencyAccountEnabled() {
   return !!process.env.SIG_AGENCY_PASSWORD || process.env.SIG_DEMO === '1';
 }
 function ensureUser(db, username, envPw, fallback, role) {
-  const row = db.prepare('SELECT pass_salt, pass_hash FROM sig_users WHERE username = ?').get(username);
+  const row = db.prepare('SELECT pass_salt, pass_hash FROM mar_sig_users WHERE username = ?').get(username);
   if (!row) {
     const { salt, hash } = hashPassword(envPw || fallback);
-    db.prepare('INSERT INTO sig_users(username, pass_salt, pass_hash, role) VALUES (?, ?, ?, ?)').run(username, salt, hash, role);
+    db.prepare('INSERT INTO mar_sig_users(username, pass_salt, pass_hash, role) VALUES (?, ?, ?, ?)').run(username, salt, hash, role);
   } else if (envPw && !verifyPassword(envPw, row.pass_salt, row.pass_hash)) {
     const { salt, hash } = hashPassword(envPw);
-    db.prepare(`UPDATE sig_users SET pass_salt = ?, pass_hash = ?, updated_at = datetime('now') WHERE username = ?`).run(salt, hash, username);
-    db.prepare(`DELETE FROM sig_sessions WHERE username = ?`).run(username);
+    db.prepare(`UPDATE mar_sig_users SET pass_salt = ?, pass_hash = ?, updated_at = datetime('now') WHERE username = ?`).run(salt, hash, username);
+    db.prepare(`DELETE FROM mar_sig_sessions WHERE username = ?`).run(username);
   }
 }
 
 // Rôle et magasin d'un compte connecté (null si le compte n'existe plus).
 export function userInfo(username) {
-  const r = getDb().prepare('SELECT username, role, store_id FROM sig_users WHERE username = ?').get(String(username || ''));
+  const r = getDb().prepare('SELECT username, role, store_id FROM mar_sig_users WHERE username = ?').get(String(username || ''));
   if (!r) return null;
   const role = ['admin', 'agence', 'magasin'].includes(r.role) ? r.role : (r.username === 'agence' ? 'agence' : 'admin');
   return { username: r.username, role, storeId: role === 'magasin' ? r.store_id : '' };
@@ -2150,32 +2160,32 @@ export function userInfo(username) {
 // ---- comptes magasin ------------------------------------------------------
 export const STORE_LOGIN_RE = /^[a-z0-9][a-z0-9-]{2,39}$/;
 export function listStoreAccounts() {
-  return getDb().prepare(`SELECT username, store_id, created_at, updated_at FROM sig_users WHERE role = 'magasin' ORDER BY store_id`).all()
+  return getDb().prepare(`SELECT username, store_id, created_at, updated_at FROM mar_sig_users WHERE role = 'magasin' ORDER BY store_id`).all()
     .map((r) => ({ username: r.username, storeId: r.store_id, createdAt: r.created_at, updatedAt: r.updated_at }));
 }
 // Crée le compte d'un magasin, ou lui donne un nouveau mot de passe (les
 // sessions ouvertes sont alors coupées). Un magasin = un compte.
 export function setStoreAccount(storeId, username, password) {
   const db = getDb();
-  const cur = db.prepare(`SELECT username FROM sig_users WHERE role = 'magasin' AND store_id = ?`).get(storeId);
+  const cur = db.prepare(`SELECT username FROM mar_sig_users WHERE role = 'magasin' AND store_id = ?`).get(storeId);
   const login = cur ? cur.username : username;
-  const clash = db.prepare('SELECT role, store_id FROM sig_users WHERE username = ?').get(login);
+  const clash = db.prepare('SELECT role, store_id FROM mar_sig_users WHERE username = ?').get(login);
   if (!cur && clash) throw new Error(`l'identifiant « ${login} » est déjà pris`);
   const { salt, hash } = hashPassword(password);
   if (cur) {
-    db.prepare(`UPDATE sig_users SET pass_salt = ?, pass_hash = ?, updated_at = datetime('now') WHERE username = ?`).run(salt, hash, login);
-    db.prepare('DELETE FROM sig_sessions WHERE username = ?').run(login);
+    db.prepare(`UPDATE mar_sig_users SET pass_salt = ?, pass_hash = ?, updated_at = datetime('now') WHERE username = ?`).run(salt, hash, login);
+    db.prepare('DELETE FROM mar_sig_sessions WHERE username = ?').run(login);
   } else {
-    db.prepare(`INSERT INTO sig_users(username, pass_salt, pass_hash, role, store_id) VALUES (?, ?, ?, 'magasin', ?)`).run(login, salt, hash, storeId);
+    db.prepare(`INSERT INTO mar_sig_users(username, pass_salt, pass_hash, role, store_id) VALUES (?, ?, ?, 'magasin', ?)`).run(login, salt, hash, storeId);
   }
   return { username: login, created: !cur };
 }
 export function deleteStoreAccount(storeId) {
   const db = getDb();
-  const cur = db.prepare(`SELECT username FROM sig_users WHERE role = 'magasin' AND store_id = ?`).get(storeId);
+  const cur = db.prepare(`SELECT username FROM mar_sig_users WHERE role = 'magasin' AND store_id = ?`).get(storeId);
   if (!cur) return false;
-  db.prepare('DELETE FROM sig_sessions WHERE username = ?').run(cur.username);
-  db.prepare('DELETE FROM sig_users WHERE username = ?').run(cur.username);
+  db.prepare('DELETE FROM mar_sig_sessions WHERE username = ?').run(cur.username);
+  db.prepare('DELETE FROM mar_sig_users WHERE username = ?').run(cur.username);
   return true;
 }
 
@@ -2196,18 +2206,18 @@ export function endOfDayBrussels(now = new Date()) {
 }
 export function storeUnavailable(storeId, now = new Date()) {
   const iso = now.toISOString();
-  return getDb().prepare(`SELECT product_id, until, by_user, created_at FROM sig_store_unavailable
+  return getDb().prepare(`SELECT product_id, until, by_user, created_at FROM mar_sig_store_unavailable
     WHERE store_id = ? AND (until IS NULL OR until > ?) ORDER BY created_at`).all(String(storeId || ''), iso)
     .map((r) => ({ productId: r.product_id, until: r.until, by: r.by_user, at: r.created_at }));
 }
 export function setStoreUnavailable(storeId, productId, on, { until = null, by = '' } = {}) {
   const db = getDb();
   if (on) {
-    db.prepare(`INSERT INTO sig_store_unavailable(store_id, product_id, until, by_user) VALUES (?, ?, ?, ?)
+    db.prepare(`INSERT INTO mar_sig_store_unavailable(store_id, product_id, until, by_user) VALUES (?, ?, ?, ?)
       ON CONFLICT(store_id, product_id) DO UPDATE SET until = excluded.until, by_user = excluded.by_user, created_at = datetime('now')`)
       .run(storeId, productId, until, by);
   } else {
-    db.prepare('DELETE FROM sig_store_unavailable WHERE store_id = ? AND product_id = ?').run(storeId, productId);
+    db.prepare('DELETE FROM mar_sig_store_unavailable WHERE store_id = ? AND product_id = ?').run(storeId, productId);
   }
   return storeUnavailable(storeId);
 }
@@ -2244,7 +2254,7 @@ function bundleRow(r) {
   };
 }
 export function loadBundles() {
-  return getDb().prepare('SELECT * FROM sig_bundles ORDER BY priority DESC, name').all().map(bundleRow);
+  return getDb().prepare('SELECT * FROM mar_sig_bundles ORDER BY priority DESC, name').all().map(bundleRow);
 }
 function refreshBundlesStamp() {
   const body = JSON.stringify(loadBundles().map(({ syncedAt, ...b }) => b));
@@ -2254,15 +2264,15 @@ function refreshBundlesStamp() {
 // rend le magasin de la régie, ou '' s'il n'est relié à aucun.
 export function saveSyncedBundles(list, storeOf) {
   const db = getDb();
-  const known = new Set(db.prepare('SELECT id FROM sig_products').all().map((r) => r.id));
-  const imgs = new Map(db.prepare('SELECT id, img FROM sig_bundles').all().map((r) => [r.id, r.img]));
+  const known = new Set(db.prepare('SELECT id FROM mar_sig_products').all().map((r) => r.id));
+  const imgs = new Map(db.prepare('SELECT id, img FROM mar_sig_bundles').all().map((r) => [r.id, r.img]));
   const now = new Date().toISOString();
   const unmapped = new Set();
   const unknown = new Set();
   db.exec('BEGIN');
   try {
-    db.exec('DELETE FROM sig_bundles');
-    const ins = db.prepare(`INSERT OR REPLACE INTO sig_bundles(id, ext_id, name, descr, status, activation, priority, price,
+    db.exec('DELETE FROM mar_sig_bundles');
+    const ins = db.prepare(`INSERT OR REPLACE INTO mar_sig_bundles(id, ext_id, name, descr, status, activation, priority, price,
       items, scope, shop_ids, store_ids, schedule, date_from, date_to, img, synced_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const b of list) {
@@ -2293,7 +2303,7 @@ export function saveSyncedBundles(list, storeOf) {
 }
 // Visuel d'un bundle, choisi en régie (TFBuddy n'en donne pas).
 export function setBundleImg(id, img) {
-  const r = getDb().prepare('UPDATE sig_bundles SET img = ? WHERE id = ?').run(String(img || '').slice(0, 2000), String(id));
+  const r = getDb().prepare('UPDATE mar_sig_bundles SET img = ? WHERE id = ?').run(String(img || '').slice(0, 2000), String(id));
   if (r.changes) refreshBundlesStamp();
   return r.changes > 0;
 }
@@ -2313,7 +2323,7 @@ function tfbPromoRow(r) {
   };
 }
 export function loadTfbPromos() {
-  return getDb().prepare(`SELECT * FROM sig_tfb_promos ORDER BY
+  return getDb().prepare(`SELECT * FROM mar_sig_tfb_promos ORDER BY
     CASE kind WHEN 'buy_x_get_y' THEN 0 WHEN 'quantity' THEN 1 WHEN 'scheduled_discount' THEN 2 ELSE 3 END,
     priority DESC, name`).all().map(tfbPromoRow);
 }
@@ -2327,16 +2337,16 @@ function refreshTfbPromosStamp() {
 export function saveSyncedTfbPromos(kind, list, storeOf) {
   if (!TFB_PREFIX[kind]) throw new Error(`famille inconnue : ${kind}`);
   const db = getDb();
-  const knownP = new Set(db.prepare('SELECT id FROM sig_products').all().map((r) => r.id));
-  const knownC = new Set(db.prepare('SELECT id FROM sig_product_categories').all().map((r) => r.id));
-  const imgs = new Map(db.prepare('SELECT id, img FROM sig_tfb_promos WHERE kind = ?').all(kind).map((r) => [r.id, r.img]));
+  const knownP = new Set(db.prepare('SELECT id FROM mar_sig_products').all().map((r) => r.id));
+  const knownC = new Set(db.prepare('SELECT id FROM mar_sig_product_categories').all().map((r) => r.id));
+  const imgs = new Map(db.prepare('SELECT id, img FROM mar_sig_tfb_promos WHERE kind = ?').all(kind).map((r) => [r.id, r.img]));
   const now = new Date().toISOString();
   const unmapped = new Set();
   const unknown = new Set();
   db.exec('BEGIN');
   try {
-    db.prepare('DELETE FROM sig_tfb_promos WHERE kind = ?').run(kind);
-    const ins = db.prepare(`INSERT OR REPLACE INTO sig_tfb_promos(id, kind, ext_id, name, descr, status, activation, priority,
+    db.prepare('DELETE FROM mar_sig_tfb_promos WHERE kind = ?').run(kind);
+    const ins = db.prepare(`INSERT OR REPLACE INTO mar_sig_tfb_promos(id, kind, ext_id, name, descr, status, activation, priority,
       scope, shop_ids, store_ids, schedule, date_from, date_to, mechanic, products, categories, img, synced_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const p of list) {
@@ -2367,7 +2377,7 @@ export function saveSyncedTfbPromos(kind, list, storeOf) {
 }
 // Visuel d'une promotion, choisi en régie (TFBuddy n'en donne pas).
 export function setTfbPromoImg(id, img) {
-  const r = getDb().prepare('UPDATE sig_tfb_promos SET img = ? WHERE id = ?').run(String(img || '').slice(0, 2000), String(id));
+  const r = getDb().prepare('UPDATE mar_sig_tfb_promos SET img = ? WHERE id = ?').run(String(img || '').slice(0, 2000), String(id));
   if (r.changes) refreshTfbPromosStamp();
   return r.changes > 0;
 }
@@ -2393,12 +2403,12 @@ const TR_MODULE_TYPES = { category: ['name', 'tag'], liaison: ['name', 'sub'], p
 
 export function translationSources(lang) {
   const db = getDb();
-  const erp = new Map(db.prepare('SELECT kind, ref_id, name FROM sig_aliases WHERE lang = ?').all(lang).map((r) => [`${r.kind}:${r.ref_id}`, r.name]));
+  const erp = new Map(db.prepare('SELECT kind, ref_id, name FROM mar_sig_aliases WHERE lang = ?').all(lang).map((r) => [`${r.kind}:${r.ref_id}`, r.name]));
   // Par clé : la traduction de chaque version du texte français, et la
   // dernière validée (« avant », montrée quand le texte a changé).
   const tr = new Map();
   const last = new Map();
-  for (const r of db.prepare('SELECT * FROM sig_translations WHERE lang = ? ORDER BY updated_at, rowid').all(lang)) {
+  for (const r of db.prepare('SELECT * FROM mar_sig_translations WHERE lang = ? ORDER BY updated_at, rowid').all(lang)) {
     const k = `${r.kind}:${r.ref_id}:${r.field}`;
     tr.set(`${k}\u0000${r.source}`, r);
     if (r.status === 'valide') last.set(k, r);
@@ -2426,13 +2436,13 @@ export function translationSources(lang) {
       missing: !fromErp && !fresh,
     });
   };
-  const cats = new Map(db.prepare('SELECT id, name FROM sig_product_categories').all().map((c) => [c.id, c.name]));
-  for (const c of db.prepare('SELECT id, name FROM sig_product_categories WHERE active = 1 ORDER BY sort_order, name').all()) add('category', c.id, 'name', c.name);
-  for (const p of db.prepare('SELECT id, name, category_id FROM sig_products WHERE active = 1 ORDER BY sort_order, name').all()) {
+  const cats = new Map(db.prepare('SELECT id, name FROM mar_sig_product_categories').all().map((c) => [c.id, c.name]));
+  for (const c of db.prepare('SELECT id, name FROM mar_sig_product_categories WHERE active = 1 ORDER BY sort_order, name').all()) add('category', c.id, 'name', c.name);
+  for (const p of db.prepare('SELECT id, name, category_id FROM mar_sig_products WHERE active = 1 ORDER BY sort_order, name').all()) {
     add('product', p.id, 'name', p.name, { context: cats.get(p.category_id) ? `catégorie « ${cats.get(p.category_id)} »` : '' });
   }
-  const ownItems = db.prepare('SELECT name FROM sig_module_items WHERE module_id = ? ORDER BY position');
-  for (const m of db.prepare('SELECT id, type, name, sub, cat_ref, product_ref, product_refs, tag_enabled, tag_label, scenes FROM sig_modules ORDER BY sort_order').all()) {
+  const ownItems = db.prepare('SELECT name FROM mar_sig_module_items WHERE module_id = ? ORDER BY position');
+  for (const m of db.prepare('SELECT id, type, name, sub, cat_ref, product_ref, product_refs, tag_enabled, tag_label, scenes FROM mar_sig_modules ORDER BY sort_order').all()) {
     // Film en scènes : chaque texte et chaque promotion de ses calques.
     if (m.type === 'scenes') {
       let scenes = [];
@@ -2458,17 +2468,17 @@ export function translationSources(lang) {
       for (const it of ownItems.all(m.id)) add('item', itemRef(it.name), 'name', it.name, { where: `liste « ${m.name || m.type} »` });
     }
   }
-  for (const c of db.prepare('SELECT id, name, message, theme FROM sig_campaigns WHERE active = 1 ORDER BY sort_order').all()) {
+  for (const c of db.prepare('SELECT id, name, message, theme FROM mar_sig_campaigns WHERE active = 1 ORDER BY sort_order').all()) {
     add('campaign', c.id, 'name', c.name);
     add('campaign', c.id, 'message', c.message, { where: `campagne « ${c.name} »` });
     add('campaign', c.id, 'theme', c.theme, { where: `campagne « ${c.name} »` });
   }
   // Sous-types actifs, et ceux qui habillent une famille TFBuddy (même inactifs).
   const dressing = new Set(Object.values(loadTfbBadges()).filter(Boolean));
-  for (const t of db.prepare('SELECT id, name, active FROM sig_promo_types ORDER BY sort_order').all()) {
+  for (const t of db.prepare('SELECT id, name, active FROM mar_sig_promo_types ORDER BY sort_order').all()) {
     if (t.active || dressing.has(t.id)) add('promo_type', t.id, 'name', t.name);
   }
-  for (const b of db.prepare("SELECT id, name, descr FROM sig_bundles WHERE status = 'ACTIVE' ORDER BY name").all()) {
+  for (const b of db.prepare("SELECT id, name, descr FROM mar_sig_bundles WHERE status = 'ACTIVE' ORDER BY name").all()) {
     add('bundle', b.id, 'name', b.name);
     add('bundle', b.id, 'descr', b.descr, { where: `bundle « ${b.name} »` });
   }
@@ -2476,28 +2486,28 @@ export function translationSources(lang) {
 }
 
 function refreshTranslationsStamp() {
-  const rows = getDb().prepare("SELECT kind, ref_id, field, lang, source, text FROM sig_translations WHERE status = 'valide' ORDER BY kind, ref_id, field, lang, source").all();
+  const rows = getDb().prepare("SELECT kind, ref_id, field, lang, source, text FROM mar_sig_translations WHERE status = 'valide' ORDER BY kind, ref_id, field, lang, source").all();
   setSetting('translations_stamp', rows.length ? createHash('sha1').update(JSON.stringify(rows)).digest('hex').slice(0, 12) : '');
 }
 
 // Anciennes versions : les 3 dernières traductions validées d'un texte restent
 // (un écran peut montrer un film publié avant la modification) ; au-delà, elles partent.
 function pruneTranslations(db, lang) {
-  db.prepare(`DELETE FROM sig_translations WHERE lang = ? AND status = 'valide' AND rowid NOT IN (
+  db.prepare(`DELETE FROM mar_sig_translations WHERE lang = ? AND status = 'valide' AND rowid NOT IN (
       SELECT rowid FROM (SELECT rowid, ROW_NUMBER() OVER (PARTITION BY kind, ref_id, field ORDER BY updated_at DESC, rowid DESC) AS rn
-        FROM sig_translations WHERE lang = ? AND status = 'valide') WHERE rn <= 3)`).run(lang, lang);
+        FROM mar_sig_translations WHERE lang = ? AND status = 'valide') WHERE rn <= 3)`).run(lang, lang);
 }
 
 // Propositions de Claude : elles n'écrasent jamais une traduction validée du
 // même texte ; une proposition faite pour un ancien texte part.
 export function saveTranslationProposals(lang, rows, model) {
   const db = getDb();
-  const up = db.prepare(`INSERT INTO sig_translations(kind, ref_id, field, lang, source, text, status, origin, model, updated_at)
+  const up = db.prepare(`INSERT INTO mar_sig_translations(kind, ref_id, field, lang, source, text, status, origin, model, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, 'propose', 'ia', ?, datetime('now'))
     ON CONFLICT(kind, ref_id, field, lang, source) DO UPDATE SET text = excluded.text,
       status = 'propose', origin = 'ia', model = excluded.model, updated_at = excluded.updated_at
-    WHERE sig_translations.status != 'valide'`);
-  const oldProposals = db.prepare("DELETE FROM sig_translations WHERE kind = ? AND ref_id = ? AND field = ? AND lang = ? AND status = 'propose' AND source != ?");
+    WHERE mar_sig_translations.status != 'valide'`);
+  const oldProposals = db.prepare("DELETE FROM mar_sig_translations WHERE kind = ? AND ref_id = ? AND field = ? AND lang = ? AND status = 'propose' AND source != ?");
   db.exec('BEGIN');
   try {
     for (const r of rows) {
@@ -2518,8 +2528,8 @@ const splitKey = (key) => {
 export function validateTranslations(lang, { keys = null, edits = {} } = {}) {
   const db = getDb();
   const sources = new Map(translationSources(lang).map((s) => [s.key, s]));
-  const rows = db.prepare("SELECT * FROM sig_translations WHERE lang = ? AND status = 'propose'").all(lang);
-  const set = db.prepare("UPDATE sig_translations SET status = 'valide', text = ?, origin = ?, updated_at = datetime('now') WHERE kind = ? AND ref_id = ? AND field = ? AND lang = ? AND source = ?");
+  const rows = db.prepare("SELECT * FROM mar_sig_translations WHERE lang = ? AND status = 'propose'").all(lang);
+  const set = db.prepare("UPDATE mar_sig_translations SET status = 'valide', text = ?, origin = ?, updated_at = datetime('now') WHERE kind = ? AND ref_id = ? AND field = ? AND lang = ? AND source = ?");
   let n = 0;
   db.exec('BEGIN');
   try {
@@ -2548,14 +2558,14 @@ export function setTranslation(lang, key, text) {
   const db = getDb();
   if (!value) {
     // Effacer : ce texte-ci repasse en français à l'écran.
-    db.prepare('DELETE FROM sig_translations WHERE kind = ? AND ref_id = ? AND field = ? AND lang = ? AND source = ?').run(k.kind, k.refId, k.field, lang, src.source);
+    db.prepare('DELETE FROM mar_sig_translations WHERE kind = ? AND ref_id = ? AND field = ? AND lang = ? AND source = ?').run(k.kind, k.refId, k.field, lang, src.source);
   } else {
-    db.prepare(`INSERT INTO sig_translations(kind, ref_id, field, lang, source, text, status, origin, model, updated_at)
+    db.prepare(`INSERT INTO mar_sig_translations(kind, ref_id, field, lang, source, text, status, origin, model, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, 'valide', 'regie', '', datetime('now'))
       ON CONFLICT(kind, ref_id, field, lang, source) DO UPDATE SET text = excluded.text,
         status = 'valide', origin = 'regie', model = '', updated_at = excluded.updated_at`)
       .run(k.kind, k.refId, k.field, lang, src.source, value.slice(0, 2000));
-    db.prepare("DELETE FROM sig_translations WHERE kind = ? AND ref_id = ? AND field = ? AND lang = ? AND status = 'propose'").run(k.kind, k.refId, k.field, lang);
+    db.prepare("DELETE FROM mar_sig_translations WHERE kind = ? AND ref_id = ? AND field = ? AND lang = ? AND status = 'propose'").run(k.kind, k.refId, k.field, lang);
     pruneTranslations(db, lang);
   }
   refreshTranslationsStamp();
@@ -2564,7 +2574,7 @@ export function setTranslation(lang, key, text) {
 
 export function rejectTranslations(lang, keys) {
   const db = getDb();
-  const del = db.prepare('DELETE FROM sig_translations WHERE kind = ? AND ref_id = ? AND field = ? AND lang = ? AND status = \'propose\'');
+  const del = db.prepare('DELETE FROM mar_sig_translations WHERE kind = ? AND ref_id = ? AND field = ? AND lang = ? AND status = \'propose\'');
   let n = 0;
   for (const key of keys || []) { const k = splitKey(key); if (k) n += del.run(k.kind, k.refId, k.field, lang).changes; }
   return n;
@@ -2572,19 +2582,19 @@ export function rejectTranslations(lang, keys) {
 
 // À l'écran d'un magasin dont la langue n'est pas le français : les textes
 // traduits ET validés remplacent les textes français — la traduction de CE
-// texte-là (celui du film publié). Les noms de l'ERP (sig_aliases), posés
+// texte-là (celui du film publié). Les noms de l'ERP (mar_sig_aliases), posés
 // ensuite par applyStoreLang, gardent la main.
 export function applyTranslations(modules, storeId) {
   if (!storeId) return;
   const db = getDb();
-  const lang = (db.prepare('SELECT lang FROM sig_stores WHERE id = ?').get(storeId) || {}).lang;
+  const lang = (db.prepare('SELECT lang FROM mar_sig_stores WHERE id = ?').get(storeId) || {}).lang;
   if (!lang || lang === 'fr') return;
-  const rows = db.prepare("SELECT kind, ref_id, field, source, text FROM sig_translations WHERE lang = ? AND status = 'valide'").all(lang);
+  const rows = db.prepare("SELECT kind, ref_id, field, source, text FROM mar_sig_translations WHERE lang = ? AND status = 'valide'").all(lang);
   if (!rows.length) return;
   const tr = new Map(rows.map((r) => [`${r.kind}:${r.ref_id}:${r.field}\u0000${r.source}`, r.text]));
   const pick = (kind, id, field, current) => tr.get(`${kind}:${id}:${field}\u0000${String(current || '').trim()}`) || null;
-  const catNames = new Map(db.prepare('SELECT id, name FROM sig_product_categories').all().map((c) => [c.id, c.name]));
-  const erpCats = new Set(db.prepare("SELECT ref_id FROM sig_aliases WHERE kind = 'category' AND lang = ?").all(lang).map((r) => r.ref_id));
+  const catNames = new Map(db.prepare('SELECT id, name FROM mar_sig_product_categories').all().map((c) => [c.id, c.name]));
+  const erpCats = new Set(db.prepare("SELECT ref_id FROM mar_sig_aliases WHERE kind = 'category' AND lang = ?").all(lang).map((r) => r.ref_id));
   for (const m of modules || []) {
     for (const it of m.items || []) {
       if (!it) continue;
@@ -2625,38 +2635,38 @@ export function applyTranslations(modules, storeId) {
 }
 
 export function checkLogin(username, password) {
-  const row = getDb().prepare('SELECT pass_salt, pass_hash FROM sig_users WHERE username = ?').get(String(username || ''));
+  const row = getDb().prepare('SELECT pass_salt, pass_hash FROM mar_sig_users WHERE username = ?').get(String(username || ''));
   return !!row && verifyPassword(password, row.pass_salt, row.pass_hash);
 }
 
 export function createSession(username) {
   const token = newSessionToken();
-  getDb().prepare(`INSERT INTO sig_sessions(token, username, expires_at) VALUES (?, ?, datetime('now', '+30 days'))`)
+  getDb().prepare(`INSERT INTO mar_sig_sessions(token, username, expires_at) VALUES (?, ?, datetime('now', '+30 days'))`)
     .run(token, String(username));
   return token;
 }
 
 export function sessionUser(token) {
   if (!token) return null;
-  const row = getDb().prepare(`SELECT username FROM sig_sessions WHERE token = ? AND expires_at > datetime('now')`).get(String(token));
+  const row = getDb().prepare(`SELECT username FROM mar_sig_sessions WHERE token = ? AND expires_at > datetime('now')`).get(String(token));
   if (!row) return null;
-  getDb().prepare(`UPDATE sig_sessions SET last_used = datetime('now') WHERE token = ?`).run(String(token));
+  getDb().prepare(`UPDATE mar_sig_sessions SET last_used = datetime('now') WHERE token = ?`).run(String(token));
   return row.username;
 }
 
 export function destroySession(token) {
-  if (token) getDb().prepare('DELETE FROM sig_sessions WHERE token = ?').run(String(token));
+  if (token) getDb().prepare('DELETE FROM mar_sig_sessions WHERE token = ?').run(String(token));
 }
 
 // ---------------------------------------------------------------------------
 // Settings helpers
 export function getSetting(key, fallback = null) {
-  const row = getDb().prepare('SELECT value FROM sig_settings WHERE key = ?').get(key);
+  const row = getDb().prepare('SELECT value FROM mar_sig_settings WHERE key = ?').get(key);
   return row ? row.value : fallback;
 }
 export function setSetting(key, value) {
   getDb().prepare(
-    'INSERT INTO sig_settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+    'INSERT INTO mar_sig_settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
   ).run(key, String(value));
 }
 export function getIntSetting(key, fallback = 0) {
@@ -2681,14 +2691,14 @@ function ensureDefaults() {
 function seed(db) {
   ensureDefaults();
   if (process.env.SIG_DEMO !== '1') return;
-  const count = db.prepare('SELECT COUNT(*) AS n FROM sig_modules').get().n;
+  const count = db.prepare('SELECT COUNT(*) AS n FROM mar_sig_modules').get().n;
   if (count > 0) return;
 
   const now = new Date().toISOString();
-  const insMod = db.prepare(`INSERT INTO sig_modules
+  const insMod = db.prepare(`INSERT INTO mar_sig_modules
     (id, type, name, sub, layout, motion, tag_enabled, tag_label, tag_img, sched_days, sched_from, sched_to, pos, sort_order)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-  const insItem = db.prepare(`INSERT INTO sig_module_items
+  const insItem = db.prepare(`INSERT INTO mar_sig_module_items
     (module_id, position, name, price, img, src, active) VALUES (?, ?, ?, ?, ?, ?, 1)`);
 
   insMod.run('c1', 'category', 'Tartes', '', 'illo-right', 'm1', 0, 'Nouveauté', 'assets/cherry.png',
@@ -2708,14 +2718,14 @@ function seed(db) {
   insMod.run('l1', 'liaison', 'Fait maison', 'faites maison chaque matin', 'illo-right', 'm1', 0, 'Nouveauté',
     'assets/cherry.png', '[1,1,1,1,1,1,1]', '00:00', '23:59', '{}', 1);
 
-  db.prepare('INSERT INTO sig_playlist(position, module_id) VALUES (0, ?), (1, ?)').run('c1', 'l1');
+  db.prepare('INSERT INTO mar_sig_playlist(position, module_id) VALUES (0, ?), (1, ?)').run('c1', 'l1');
 
-  const insStore = db.prepare('INSERT INTO sig_stores(id, name, grp, conn, screens, screen_size, screen_orient) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  const insStore = db.prepare('INSERT INTO mar_sig_stores(id, name, grp, conn, screens, screen_size, screen_orient) VALUES (?, ?, ?, ?, ?, ?, ?)');
   insStore.run('st1', 'Magasin Centre-Ville', 'Groupe Ville', 'fibre', 3, 55, 'portrait');
   insStore.run('st2', 'Magasin Gare', 'Groupe Ville', '4G', 1, 55, 'paysage');
   insStore.run('st3', 'Magasin Nord', 'Groupe Périphérie', 'fibre', 1, 55, 'paysage');
 
-  const insPlayer = db.prepare(`INSERT INTO sig_players
+  const insPlayer = db.prepare(`INSERT INTO mar_sig_players
     (id, store_id, name, hw, kiosk, orient, token, state, played_ver, assigned_ver, data_ver, cache_pct, media, disk, temp, last_seen, data_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, 'offline', ?, ?, ?, ?, ?, ?, ?, NULL, ?)`);
   insPlayer.run('p1', 'st1', 'Vitrine — 3× portrait', 'Android · MediaBox 4K', 1, 'Portrait', 'plyr_9F3A2C7E', 7, 7, 23, 100, 'Tartes · Brookie', '62 Go libres', '41°C', now);
@@ -2725,7 +2735,7 @@ function seed(db) {
   insPlayer.run('p5', 'st3', 'Comptoir — 43″', 'Android · MediaBox 4K', 0, 'Paysage', 'plyr_C4019BB7', 6, 7, 22, 38, '—', '0,4 Go libres', '58°C', now);
 
   // Deux campagnes marketing d'exemple (démo) : une gamme thématique, un produit.
-  const insCamp = db.prepare(`INSERT INTO sig_campaigns
+  const insCamp = db.prepare(`INSERT INTO mar_sig_campaigns
     (id, name, scope, product_ref, theme, image, message, date_from, date_to, color, sort_order, active)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`);
   insCamp.run('cmp1', 'Rentrée gourmande', 'gamme', '', 'Viennoiseries', '', 'La rentrée en douceur', '01/09', '30/09', '#C97B4A', 0);
@@ -2747,19 +2757,19 @@ function clearDemoSeed(db) {
   const q = (arr) => arr.map(() => '?').join(',');
   db.exec('BEGIN');
   try {
-    db.prepare(`DELETE FROM sig_players WHERE id IN (${q(demoPlayers)})`).run(...demoPlayers);
-    db.prepare(`DELETE FROM sig_stores WHERE id IN (${q(demoStores)})`).run(...demoStores);
+    db.prepare(`DELETE FROM mar_sig_players WHERE id IN (${q(demoPlayers)})`).run(...demoPlayers);
+    db.prepare(`DELETE FROM mar_sig_stores WHERE id IN (${q(demoStores)})`).run(...demoStores);
     // Catalogue démo issu de la catégorie c1 (ids pc_c1 / pr1…).
-    db.prepare(`DELETE FROM sig_product_prices WHERE product_id IN (SELECT id FROM sig_products WHERE category_id = 'pc_c1')`).run();
-    db.prepare(`DELETE FROM sig_products WHERE category_id = 'pc_c1'`).run();
-    db.prepare(`DELETE FROM sig_product_categories WHERE id = 'pc_c1'`).run();
+    db.prepare(`DELETE FROM mar_sig_product_prices WHERE product_id IN (SELECT id FROM mar_sig_products WHERE category_id = 'pc_c1')`).run();
+    db.prepare(`DELETE FROM mar_sig_products WHERE category_id = 'pc_c1'`).run();
+    db.prepare(`DELETE FROM mar_sig_product_categories WHERE id = 'pc_c1'`).run();
     // Modules démo + leurs références (items, playlist plate, films).
-    db.prepare(`DELETE FROM sig_module_items WHERE module_id IN (${q(demoModules)})`).run(...demoModules);
-    db.prepare(`DELETE FROM sig_playlist_items WHERE module_id IN (${q(demoModules)})`).run(...demoModules);
-    db.prepare(`DELETE FROM sig_playlist WHERE module_id IN (${q(demoModules)})`).run(...demoModules);
-    db.prepare(`DELETE FROM sig_modules WHERE id IN (${q(demoModules)})`).run(...demoModules);
+    db.prepare(`DELETE FROM mar_sig_module_items WHERE module_id IN (${q(demoModules)})`).run(...demoModules);
+    db.prepare(`DELETE FROM mar_sig_playlist_items WHERE module_id IN (${q(demoModules)})`).run(...demoModules);
+    db.prepare(`DELETE FROM mar_sig_playlist WHERE module_id IN (${q(demoModules)})`).run(...demoModules);
+    db.prepare(`DELETE FROM mar_sig_modules WHERE id IN (${q(demoModules)})`).run(...demoModules);
     // Campagnes marketing de démonstration.
-    db.prepare(`DELETE FROM sig_campaigns WHERE id IN ('cmp1', 'cmp2')`).run();
+    db.prepare(`DELETE FROM mar_sig_campaigns WHERE id IN ('cmp1', 'cmp2')`).run();
     // Le srv_token pointait sur un player démo : on le neutralise s'il l'était.
     if (getSetting('srv_token') === 'plyr_9F3A2C7E') setSetting('srv_token', '');
     setSetting('mig_clear_demo', '1');
@@ -2774,15 +2784,15 @@ function clearDemoSeed(db) {
 // Lectures composées
 export function loadModules() {
   const db = getDb();
-  const mods = db.prepare('SELECT * FROM sig_modules ORDER BY sort_order, created_at').all();
-  const itemsStmt = db.prepare('SELECT * FROM sig_module_items WHERE module_id = ? ORDER BY position');
-  const catProds = db.prepare('SELECT * FROM sig_products WHERE category_id = ? ORDER BY sort_order');
-  const oneProd = db.prepare('SELECT * FROM sig_products WHERE id = ?');
+  const mods = db.prepare('SELECT * FROM mar_sig_modules ORDER BY sort_order, created_at').all();
+  const itemsStmt = db.prepare('SELECT * FROM mar_sig_module_items WHERE module_id = ? ORDER BY position');
+  const catProds = db.prepare('SELECT * FROM mar_sig_products WHERE category_id = ? ORDER BY sort_order');
+  const oneProd = db.prepare('SELECT * FROM mar_sig_products WHERE id = ?');
   const prodItem = (p) => ({ name: p.name, price: p.price, img: p.img, src: p.src, active: !!p.active, productId: p.id });
   // Sous-types de promotion résolus une fois (badge : icône · couleur · libellé).
-  const promoTypes = new Map(db.prepare('SELECT * FROM sig_promo_types').all().map((t) => [t.id, t]));
+  const promoTypes = new Map(db.prepare('SELECT * FROM mar_sig_promo_types').all().map((t) => [t.id, t]));
   // Campagnes marketing résolues une fois (contenu déposé comme item).
-  const campaigns = new Map(db.prepare('SELECT * FROM sig_campaigns').all().map((c) => [c.id, campaignRow(c)]));
+  const campaigns = new Map(db.prepare('SELECT * FROM mar_sig_campaigns').all().map((c) => [c.id, campaignRow(c)]));
   const refsOf = (m) => { try { return cleanProductRefs(JSON.parse(m.product_refs || '[]')); } catch { return []; } };
   return mods.map((m) => {
     // Campagne : contenu porté par la campagne référencée (produit lié éventuel).
@@ -2818,7 +2828,7 @@ export function loadModules() {
       motionList: m.motion_list || undefined,
       motionIllo: m.motion_illo || undefined,
       catRef: m.cat_ref || '',
-      catImg: m.cat_ref ? ((db.prepare('SELECT img FROM sig_product_categories WHERE id = ?').get(m.cat_ref) || {}).img || '') : '',
+      catImg: m.cat_ref ? ((db.prepare('SELECT img FROM mar_sig_product_categories WHERE id = ?').get(m.cat_ref) || {}).img || '') : '',
       productRef: m.product_ref || '',
       productRefs: refsOf(m),
       video: m.video || '',
@@ -2865,8 +2875,8 @@ export function loadModules() {
 
 export function loadPlaylists() {
   const db = getDb();
-  const pls = db.prepare('SELECT * FROM sig_playlists ORDER BY sort_order, created_at').all();
-  const it = db.prepare('SELECT module_id FROM sig_playlist_items WHERE playlist_id = ? ORDER BY position');
+  const pls = db.prepare('SELECT * FROM mar_sig_playlists ORDER BY sort_order, created_at').all();
+  const it = db.prepare('SELECT module_id FROM mar_sig_playlist_items WHERE playlist_id = ? ORDER BY position');
   return pls.map((p) => ({
     id: p.id,
     name: p.name,
@@ -2917,22 +2927,22 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
   }
   db.exec('BEGIN');
   try {
-    db.exec('DELETE FROM sig_module_items');
-    db.exec('DELETE FROM sig_playlist');
-    db.exec('DELETE FROM sig_playlist_items');
-    db.exec('DELETE FROM sig_playlists');
-    db.exec('DELETE FROM sig_modules');
-    const insMod = db.prepare(`INSERT INTO sig_modules
+    db.exec('DELETE FROM mar_sig_module_items');
+    db.exec('DELETE FROM mar_sig_playlist');
+    db.exec('DELETE FROM mar_sig_playlist_items');
+    db.exec('DELETE FROM mar_sig_playlists');
+    db.exec('DELETE FROM mar_sig_modules');
+    const insMod = db.prepare(`INSERT INTO mar_sig_modules
       (id, type, name, sub, layout, motion, motion_title, motion_list, motion_illo,
        tag_enabled, tag_label, tag_img, sched_days, sched_from, sched_to, pos, sort_order, lib_tag,
        cat_ref, product_ref, video, surprise, watermark, dur, promo_type, campaign_ref, bundle_ref, tfb_ref,
        orient, moments, html, html_vars, html_w, html_h,
        anim_mode, anim_bg, anim_dim, anim_file, anim_fit, bg_color, product_refs, scenes, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`);
-    const insItem = db.prepare(`INSERT INTO sig_module_items
+    const insItem = db.prepare(`INSERT INTO mar_sig_module_items
       (module_id, position, name, price, img, src, active) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-    // Les types valides viennent de la table sig_element_types (rien en dur).
-    const validTypes = new Set(db.prepare('SELECT id FROM sig_element_types').all().map((r) => r.id));
+    // Les types valides viennent de la table mar_sig_element_types (rien en dur).
+    const validTypes = new Set(db.prepare('SELECT id FROM mar_sig_element_types').all().map((r) => r.id));
     modules.forEach((m, i) => {
       const tag = m.tag || {};
       // Film en scènes : ses lignes de produits = les produits des calques
@@ -2978,8 +2988,8 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
       }
     });
     const validIds = new Set(modules.map((m) => m.id));
-    const insPls = db.prepare('INSERT INTO sig_playlists(id, name, sort_order, sched_days, sched_from, sched_to, stores, cat, tags, plan_days, mode, continuous, campaign_id, origin, wizard) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    const insIt = db.prepare('INSERT INTO sig_playlist_items(playlist_id, position, module_id) VALUES (?, ?, ?)');
+    const insPls = db.prepare('INSERT INTO mar_sig_playlists(id, name, sort_order, sched_days, sched_from, sched_to, stores, cat, tags, plan_days, mode, continuous, campaign_id, origin, wizard) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    const insIt = db.prepare('INSERT INTO mar_sig_playlist_items(playlist_id, position, module_id) VALUES (?, ?, ?)');
     playlists.forEach((pl, i) => {
       const sched = pl.schedule || {};
       insPls.run(
@@ -3001,7 +3011,7 @@ export function saveDraft({ modules, playlist, playlists, activePlaylistId: acti
     const act = playlists.some((p) => p.id === activeId) ? activeId : playlists[0].id;
     setSetting('active_playlist', String(act));
     // Table historique maintenue en miroir du film actif (compat).
-    const insPl = db.prepare('INSERT INTO sig_playlist(position, module_id) VALUES (?, ?)');
+    const insPl = db.prepare('INSERT INTO mar_sig_playlist(position, module_id) VALUES (?, ?)');
     const actItems = (playlists.find((p) => p.id === act) || playlists[0]).items || [];
     actItems.filter((id) => validIds.has(id)).forEach((id, i) => insPl.run(i, id));
     if (secPerLine != null) setSetting('sec_per_line', String(secPerLine));

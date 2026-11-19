@@ -618,7 +618,7 @@ async function doImport(cfg, queries) {
   //    magasins signage, et CRÉATION du magasin s'il n'existe pas encore ;
   // 3. sinon (pas de table shops) : boutiques triées par id, dans l'ordre.
   const db0 = getDb();
-  const sigStores = db0.prepare('SELECT id, name FROM sig_stores ORDER BY id').all();
+  const sigStores = db0.prepare('SELECT id, name FROM mar_sig_stores ORDER BY id').all();
   const extToStore = {};
   const extLabel = {};
   const created = [];
@@ -633,10 +633,10 @@ async function doImport(cfg, queries) {
     inactiveShops = det.inactive;
     langFound = det.langFound;
     if (shops.length) {
-      const insStore = db0.prepare(`INSERT OR IGNORE INTO sig_stores(id, name, grp, conn, screens, screen_size, screen_orient, lang)
+      const insStore = db0.prepare(`INSERT OR IGNORE INTO mar_sig_stores(id, name, grp, conn, screens, screen_size, screen_orient, lang)
         VALUES (?, ?, 'Boutiques PWA', 'fibre', 1, 55, 'paysage', ?)`);
-      const setActive = db0.prepare('UPDATE sig_stores SET active = ? WHERE id = ?');
-      const setLang = db0.prepare('UPDATE sig_stores SET lang = ? WHERE id = ?');
+      const setActive = db0.prepare('UPDATE mar_sig_stores SET active = ? WHERE id = ?');
+      const setLang = db0.prepare('UPDATE mar_sig_stores SET lang = ? WHERE id = ?');
       const findMatch = (sh) => matchStore(sh, sigStores);
       // Boutiques inactives : on désactive le magasin correspondant s'il
       // existe (sans le créer) — il disparaît de la grille produits / planning.
@@ -691,8 +691,8 @@ async function doImport(cfg, queries) {
   saveCatalog({ categories, products });
 
   let relinked = 0;
-  const linked = db.prepare(`SELECT id, cat_ref FROM sig_modules WHERE cat_ref != ''`).all();
-  const upd = db.prepare('UPDATE sig_modules SET cat_ref = ? WHERE id = ?');
+  const linked = db.prepare(`SELECT id, cat_ref FROM mar_sig_modules WHERE cat_ref != ''`).all();
+  const upd = db.prepare('UPDATE mar_sig_modules SET cat_ref = ? WHERE id = ?');
   for (const m of linked) {
     if (catIds.has(m.cat_ref)) continue;
     const target = newByName.get(oldName.get(m.cat_ref) || '');

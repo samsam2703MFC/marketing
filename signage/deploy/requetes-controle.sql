@@ -57,7 +57,7 @@ FROM shops s
 LEFT JOIN language l ON l.id = s.preferred_language_id
 ORDER BY s.id;
 --   → boutique active = 0 : le magasin est marqué inactif (masqué de la grille
---     produits et du Planning). langue_pref : appliquée à sig_stores.lang.
+--     produits et du Planning). langue_pref : appliquée à mar_sig_stores.lang.
 
 -- A7. Prix par boutique (shop_product) — mappés sur les magasins par slug
 SELECT sp.shop_id, s.slug, sp.product_id, p.name AS produit, sp.price AS prix_boutique
@@ -82,47 +82,47 @@ SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'sig_%' ORDER BY
 
 -- B1. Magasins : actif + langue + combo d'écrans (taille du film)
 SELECT id, name, active, lang, screens, screen_size, screen_orient
-FROM sig_stores ORDER BY id;
+FROM mar_sig_stores ORDER BY id;
 
 -- B2. Catégories produits
-SELECT id, name, active, sort_order FROM sig_product_categories ORDER BY sort_order;
+SELECT id, name, active, sort_order FROM mar_sig_product_categories ORDER BY sort_order;
 
 -- B3. Produits + nombre de prix par magasin
 SELECT p.id, p.category_id, p.name, p.price, p.active,
-       (SELECT COUNT(*) FROM sig_product_prices pp WHERE pp.product_id = p.id) AS prix_magasin
-FROM sig_products p ORDER BY category_id, sort_order;
+       (SELECT COUNT(*) FROM mar_sig_product_prices pp WHERE pp.product_id = p.id) AS prix_magasin
+FROM mar_sig_products p ORDER BY category_id, sort_order;
 
 -- B4. Catégories réellement affichées (≥ 1 produit actif)
 SELECT c.id, c.name,
        COUNT(CASE WHEN p.active = 1 THEN 1 END) AS produits_actifs
-FROM sig_product_categories c
-LEFT JOIN sig_products p ON p.category_id = c.id
+FROM mar_sig_product_categories c
+LEFT JOIN mar_sig_products p ON p.category_id = c.id
 GROUP BY c.id, c.name
 HAVING produits_actifs > 0
 ORDER BY c.sort_order;
 
 -- B5. Prix par magasin
-SELECT product_id, store_id, price FROM sig_product_prices ORDER BY store_id, product_id;
+SELECT product_id, store_id, price FROM mar_sig_product_prices ORDER BY store_id, product_id;
 
 -- B6. Alias de langue (nom d'un produit / d'une catégorie par langue)
-SELECT kind, ref_id, lang, name FROM sig_aliases ORDER BY kind, ref_id, lang;
+SELECT kind, ref_id, lang, name FROM mar_sig_aliases ORDER BY kind, ref_id, lang;
 
 -- B7. Éléments (modules) et leur lien vers le catalogue
 --     cat_ref : lié à une catégorie ; product_ref : produit à la une ; video : film
 SELECT id, type, name, lib_tag, cat_ref, product_ref,
        CASE WHEN video <> '' THEN 'oui' ELSE '' END AS video, dur
-FROM sig_modules ORDER BY sort_order;
+FROM mar_sig_modules ORDER BY sort_order;
 
 -- B8. Films (playlists) : catégorie, tags, magasins ciblés, programmation
 SELECT id, name, cat, tags, stores, sched_days, sched_from, sched_to
-FROM sig_playlists ORDER BY sort_order;
+FROM mar_sig_playlists ORDER BY sort_order;
 
 -- B9. Planning journalier : film(s) par magasin et par moment (dans l'ordre)
 SELECT store_id, moment, position, film_id
-FROM sig_dayplans ORDER BY store_id, moment, position;
+FROM mar_sig_dayplans ORDER BY store_id, moment, position;
 
 -- B10. Réglages clés (version publiée, données prix, import PWA, migrations)
-SELECT key, value FROM sig_settings
+SELECT key, value FROM mar_sig_settings
 WHERE key IN ('version','data_ver','mig_clear_demo','plan_windows','pwa_import');
 
 

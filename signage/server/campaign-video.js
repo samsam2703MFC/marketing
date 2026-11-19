@@ -92,7 +92,7 @@ export async function marketingCampaigns(req) {
 // ---- rattachements ---------------------------------------------------------
 function storeMatcher() {
   const db = getDb();
-  const sig = db.prepare("SELECT id, name FROM sig_stores WHERE id != 'st-new'").all();
+  const sig = db.prepare("SELECT id, name FROM mar_sig_stores WHERE id != 'st-new'").all();
   const byExt = {};
   for (const [storeId, extId] of Object.entries(pwaConfig().shopMap || {})) byExt[String(extId)] = storeId;
   return {
@@ -211,7 +211,7 @@ export async function markScreensReady(req, id) {
 
 // ---- diffusion et fin automatique -------------------------------------------
 export function ensureCampaignRuns() {
-  getDb().exec(`CREATE TABLE IF NOT EXISTS sig_campaign_runs (
+  getDb().exec(`CREATE TABLE IF NOT EXISTS mar_sig_campaign_runs (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     film_id     TEXT NOT NULL,
     campaign_id TEXT NOT NULL DEFAULT '',
@@ -235,14 +235,14 @@ export async function diffuseFilm({ filmId, players, stores: linkStores, startsO
   const film = loadPlaylists().find((p) => p.id === filmId);
   if (!film) return { status: 404, json: { error: `film inconnu : ${filmId} — enregistre le brouillon d'abord` } };
   const rows = (Array.isArray(players) ? players : []).map(String)
-    .map((id) => db.prepare('SELECT id, store_id, assigned_ver FROM sig_players WHERE id = ?').get(id)).filter(Boolean);
+    .map((id) => db.prepare('SELECT id, store_id, assigned_ver FROM mar_sig_players WHERE id = ?').get(id)).filter(Boolean);
   // Magasins sans écran jumelé : ils diffusent par le lien de leur écran (film?store=…).
-  const sansEcran = db.prepare("SELECT s.id FROM sig_stores s WHERE s.id = ? AND s.id != 'st-new' AND NOT EXISTS (SELECT 1 FROM sig_players p WHERE p.store_id = s.id)");
+  const sansEcran = db.prepare("SELECT s.id FROM mar_sig_stores s WHERE s.id = ? AND s.id != 'st-new' AND NOT EXISTS (SELECT 1 FROM mar_sig_players p WHERE p.store_id = s.id)");
   const links = [...new Set((Array.isArray(linkStores) ? linkStores : []).map(String))].filter((id) => sansEcran.get(id));
   if (!rows.length && !links.length) return { status: 400, json: { error: 'aucun écran ni magasin coché' } };
   const stores = [...new Set([...rows.map((p) => p.store_id), ...links])];
   const chosen = new Set(rows.map((p) => p.id));
-  const prev = new Map(db.prepare(`SELECT id, assigned_ver FROM sig_players WHERE store_id IN (${stores.map(() => '?').join(',')})`).all(...stores).map((p) => [p.id, p.assigned_ver]));
+  const prev = new Map(db.prepare(`SELECT id, assigned_ver FROM mar_sig_players WHERE store_id IN (${stores.map(() => '?').join(',')})`).all(...stores).map((p) => [p.id, p.assigned_ver]));
   const now = today();
   const from = day(startsOn);
   const to = day(endsOn);
@@ -250,16 +250,16 @@ export async function diffuseFilm({ filmId, players, stores: linkStores, startsO
   const scheduled = !!(from && from > now);
   const out = await publish({ mode: 'full', targets: stores, playlistId: filmId, when: scheduled ? 'scheduled' : 'now', activateAt: scheduled ? brusselsStart(from) : null, schedule: film.schedule, slot: `Vidéo de campagne · ${film.name}` });
   // Les écrans NON cochés d'un magasin ciblé gardent ce qu'ils jouaient.
-  const keep = db.prepare('UPDATE sig_players SET assigned_ver = ?, activate_at = NULL WHERE id = ?');
+  const keep = db.prepare('UPDATE mar_sig_players SET assigned_ver = ?, activate_at = NULL WHERE id = ?');
   for (const [pid, ver] of prev) if (!chosen.has(pid)) keep.run(ver, pid);
   // Semaine type : le film rejoint les cases cochées (jour × moment) de chaque
   // magasin, après les films qui y sont déjà (au plus MAX_PLAN_FILMS).
   const wk = PLAN_WEEKS.includes(String(week)) ? String(week) : '';
   const added = [];
   if (wk && Array.isArray(cells)) {
-    const exists = db.prepare('SELECT 1 FROM sig_weekplans WHERE store_id = ? AND week = ? AND day = ? AND moment = ? AND film_id = ?');
-    const count = db.prepare('SELECT COUNT(*) AS n, COALESCE(MAX(position), -1) AS mx FROM sig_weekplans WHERE store_id = ? AND week = ? AND day = ? AND moment = ?');
-    const ins = db.prepare('INSERT INTO sig_weekplans(store_id, week, day, moment, position, film_id) VALUES (?, ?, ?, ?, ?, ?)');
+    const exists = db.prepare('SELECT 1 FROM mar_sig_weekplans WHERE store_id = ? AND week = ? AND day = ? AND moment = ? AND film_id = ?');
+    const count = db.prepare('SELECT COUNT(*) AS n, COALESCE(MAX(position), -1) AS mx FROM mar_sig_weekplans WHERE store_id = ? AND week = ? AND day = ? AND moment = ?');
+    const ins = db.prepare('INSERT INTO mar_sig_weekplans(store_id, week, day, moment, position, film_id) VALUES (?, ?, ?, ?, ?, ?)');
     for (const st of stores) {
       for (const c of cells) {
         const d = parseInt(c && c.day, 10);
@@ -276,7 +276,7 @@ export async function diffuseFilm({ filmId, players, stores: linkStores, startsO
   // Fin automatique : à la fin du dernier jour (heure de Bruxelles), chaque
   // écran revient à ce qu'il jouait avant, et le film quitte la semaine type.
   const endsAt = to ? endOfDayBrussels(new Date(Date.parse(`${to}T12:00:00Z`))) : '';
-  const insRun = db.prepare('INSERT INTO sig_campaign_runs(film_id, campaign_id, player_id, version, prev_ver, ends_at, plan) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  const insRun = db.prepare('INSERT INTO mar_sig_campaign_runs(film_id, campaign_id, player_id, version, prev_ver, ends_at, plan) VALUES (?, ?, ?, ?, ?, ?, ?)');
   const planJson = JSON.stringify(added);
   rows.forEach((p, i) => insRun.run(filmId, String(campaignId || ''), p.id, out.version, prev.get(p.id) || 0, endsAt, i === 0 ? planJson : '[]'));
   // Sans écran jumelé, une ligne par magasin (sans écran) porte la fin de la semaine type.
@@ -288,11 +288,11 @@ export async function diffuseFilm({ filmId, players, stores: linkStores, startsO
 export function sweepCampaignRuns(now = new Date()) {
   ensureCampaignRuns();
   const db = getDb();
-  const due = db.prepare("SELECT * FROM sig_campaign_runs WHERE done_at IS NULL AND ends_at != '' AND ends_at <= ?").all(now.toISOString());
+  const due = db.prepare("SELECT * FROM mar_sig_campaign_runs WHERE done_at IS NULL AND ends_at != '' AND ends_at <= ?").all(now.toISOString());
   if (!due.length) return 0;
-  const back = db.prepare('UPDATE sig_players SET assigned_ver = ?, activate_at = NULL WHERE id = ? AND assigned_ver = ?');
-  const del = db.prepare('DELETE FROM sig_weekplans WHERE store_id = ? AND week = ? AND day = ? AND moment = ? AND film_id = ?');
-  const done = db.prepare("UPDATE sig_campaign_runs SET done_at = datetime('now') WHERE id = ?");
+  const back = db.prepare('UPDATE mar_sig_players SET assigned_ver = ?, activate_at = NULL WHERE id = ? AND assigned_ver = ?');
+  const del = db.prepare('DELETE FROM mar_sig_weekplans WHERE store_id = ? AND week = ? AND day = ? AND moment = ? AND film_id = ?');
+  const done = db.prepare("UPDATE mar_sig_campaign_runs SET done_at = datetime('now') WHERE id = ?");
   for (const r of due) {
     // Seulement si l'écran joue encore CETTE diffusion : une publication
     // faite depuis garde la main.
@@ -307,6 +307,6 @@ export function sweepCampaignRuns(now = new Date()) {
 
 export function campaignRunsOf(filmId) {
   ensureCampaignRuns();
-  return getDb().prepare('SELECT player_id, version, prev_ver, ends_at, done_at, created_at FROM sig_campaign_runs WHERE film_id = ? ORDER BY id DESC').all(String(filmId))
+  return getDb().prepare('SELECT player_id, version, prev_ver, ends_at, done_at, created_at FROM mar_sig_campaign_runs WHERE film_id = ? ORDER BY id DESC').all(String(filmId))
     .map((r) => ({ playerId: r.player_id, version: r.version, prevVer: r.prev_ver, endsAt: r.ends_at, doneAt: r.done_at, at: r.created_at }));
 }

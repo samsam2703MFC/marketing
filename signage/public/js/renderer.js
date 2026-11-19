@@ -445,7 +445,7 @@ function renderModuleInner(h, m, lt, opts) {
   }
 
   // ---- Promotion : offre commerciale (badge du sous-type + accroche) --------
-  // Le sous-type (happy hour, flash, bundle…) vient de la base (sig_promo_types)
+  // Le sous-type (happy hour, flash, bundle…) vient de la base (mar_sig_promo_types)
   // et est résolu en amont dans m.promo { name, icon, color }. Sur les mises en
   // page « hero », la photo du produit lié (productRef) accompagne l'offre.
   if (m.type === 'promotion') {
