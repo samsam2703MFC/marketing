@@ -1,0 +1,627 @@
+# Déploiement automatique du CMS signage sur le serveur, puis tests live.
+#
+# Secrets requis (Settings → Secrets and variables → Actions) :
+#   SERVER_HOST          → 185.180.206.46
+#   SERVER_USER          → root (le provisionnement installe le service, écrit
+#                          /etc/signage, crée le compte système « signage » et
+#                          son accès MariaDB)
+#   SERVER_SSH_KEY       → clé privée SSH (ed25519) dédiée au déploiement
+#   SIG_ADMIN_PASSWORD   → mot de passe du compte admin du back office
+#   SIG_AGENCY_PASSWORD  → mot de passe du compte agence ; sans lui, l'espace
+#                          agence est FERMÉ (le défaut « agence » est refusé)
+#   TFBUDDY_PHONE        → (facultatif) compte TFBuddy de la régie : numéro…
+#   TFBUDDY_PASSWORD     → …et mot de passe. Il lit les bundles (GET
+#                          /admin/promotions/bundles) : il lui faut le droit
+#                          MENU.BUNDLE.MANAGE. Sans eux, pas de bundles.
+#   ANTHROPIC_API_KEY    → (facultatif) clé de l'API Claude : la régie propose
+#                          les traductions néerlandaises des écrans (validées
+#                          en régie avant diffusion). Sans elle, saisie à la main.
+#   OVH_S3_ENDPOINT      → (facultatif) médiathèque sur OVHcloud Object Storage :
+#                          adresse S3 de la région, ex. https://s3.gra.io.cloud.ovh.net
+#   OVH_S3_BUCKET        → …nom du bucket,
+#   OVH_S3_ACCESS_KEY    → …clé d'accès et
+#   OVH_S3_SECRET_KEY    → …clé secrète de l'utilisateur S3 (les quatre, ou rien).
+#   OVH_S3_REGION        → (facultatif) région S3, sinon lue dans l'adresse (gra…).
+#                          Sans eux, les médias restent dans public/media du serveur.
+#
+# Le provisionnement (étape « Provisionner ») refait le reste à chaque
+# livraison : Node ≥ 22, mots de passe dans /etc/signage/signage.env (root,
+# 0600), service systemd sous le compte « signage » (jamais root), accès
+# MariaDB de ce compte pour l'import ERP, reverse proxy Apache.
+name: Déploiement signage
+
+on:
+  push:
+    branches: [claude/back-office-signage-uqnpca]
+  workflow_dispatch:
+    inputs:
+      mutate:
+        description: "Cycle complet de tests (publie réellement une version sur le réseau)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-signage
+  cancel-in-progress: false
+
+env:
+  DEPLOY_PATH: /var/www/signage
+  PUBLIC_URL: http://185.180.206.46/signage
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Préparer et valider la clé SSH
+        env:
+          KEY_RAW: ${{ secrets.SERVER_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          if printf '%s' "$KEY_RAW" | grep -q 'BEGIN .*PRIVATE KEY'; then
+            # Clé collée telle quelle (multi-lignes)
+            printf '%s\n' "$KEY_RAW" | tr -d '\r' > ~/.ssh/id_deploy
+          else
+            # Clé fournie encodée en base64 sur UNE seule ligne (recommandé, copie fiable) :
+            #   base64 -w0 /root/signage_deploy
+            printf '%s' "$KEY_RAW" | tr -d ' \t\r\n' | base64 -d > ~/.ssh/id_deploy 2>/dev/null || true
+          fi
+          chmod 600 ~/.ssh/id_deploy
+          if ! ssh-keygen -y -P "" -f ~/.ssh/id_deploy > /dev/null 2>&1; then
+            echo "::error::Secret SERVER_SSH_KEY invalide."
+            echo "La clé privée est illisible : passphrase, lignes perdues au collage, ou base64 tronqué."
+            echo "Méthode fiable : sur le serveur, générer puis encoder la clé en UNE ligne :"
+            echo "    ssh-keygen -t ed25519 -N \"\" -f /root/signage_deploy"
+            echo "    cat /root/signage_deploy.pub >> /root/.ssh/authorized_keys"
+            echo "    base64 -w0 /root/signage_deploy ; echo"
+            echo "et coller cette unique longue ligne dans le secret SERVER_SSH_KEY."
+            exit 1
+          fi
+          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Vérifier l'accès SSH au serveur
+        run: |
+          if ! ssh -i ~/.ssh/id_deploy -o BatchMode=yes -o ConnectTimeout=10 \
+              "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" 'echo "SSH OK — $(hostname)"'; then
+            echo "::error::Connexion SSH refusée (clé valide mais non autorisée ?)."
+            echo "Vérifier que la clé publique correspondante est dans ~/.ssh/authorized_keys"
+            echo "de l'utilisateur SERVER_USER sur le serveur, et que SERVER_USER/SERVER_HOST sont corrects."
+            exit 1
+          fi
+
+      # Les contenus uploadés vivent DANS le dossier déployé — médiathèque
+      # agence, vidéos surprise, fichiers d'animation — et ne sont pas dans
+      # git. L'ancien « rsync --delete » les effaçait donc à chaque livraison.
+      # Comme dans les autres dépôts du réseau, le transfert n'efface plus rien
+      # sur le serveur, et ces dossiers ne sont même plus touchés. On compte
+      # leurs fichiers avant et après : une baisse fait échouer la livraison.
+      - name: Compter les fichiers uploadés (avant transfert)
+        id: uploads_before
+        run: |
+          n=$(ssh -i ~/.ssh/id_deploy "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            "cd ${DEPLOY_PATH} 2>/dev/null && find public/media public/surprise public/anim -type f 2>/dev/null | wc -l || echo 0" | tr -dc '0-9')
+          echo "n=${n:-0}" >> "$GITHUB_OUTPUT"
+          echo "Fichiers uploadés sur le serveur avant transfert : ${n:-0}"
+
+      # Dépendances (le SDK Anthropic des traductions) : installées ici, à
+      # l'identique du package-lock.json, puis copiées — le serveur n'a besoin
+      # ni de npm ni d'accès au registre.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Installer les dépendances (npm ci, sans outils de développement)
+        run: npm ci --omit=dev --no-audit --no-fund
+
+      - name: Copier le code (rsync sans --delete — rien n'est effacé sur le serveur)
+        run: |
+          # --no-owner/--no-group : le code arrive à root, pas à l'utilisateur
+          # du runner GitHub (uid 1001), qui pourrait exister sur le serveur.
+          rsync -az --no-owner --no-group \
+            --exclude '.git' --exclude '.github' --exclude 'data' --exclude '/node_modules/' \
+            --exclude '/public/media/' --exclude '/public/surprise/' --exclude '/public/anim/' \
+            -e "ssh -i ~/.ssh/id_deploy" \
+            ./ "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${DEPLOY_PATH}/"
+          # node_modules : copie EXACTE (--delete limité à ce dossier, qui ne
+          # contient que des dépendances) pour ne pas garder d'anciennes versions.
+          rsync -az --delete --no-owner --no-group \
+            -e "ssh -i ~/.ssh/id_deploy" \
+            ./node_modules/ "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${DEPLOY_PATH}/node_modules/"
+
+      - name: Provisionner le serveur (si besoin) et redémarrer le service
+        # Aucune expression ${{ }} dans ce « run » : GitHub refuse le fichier
+        # entier si un run qui en contient dépasse 21 000 caractères.
+        env:
+          SIG_PW: ${{ secrets.SIG_ADMIN_PASSWORD }}
+          SIG_AG_PW: ${{ secrets.SIG_AGENCY_PASSWORD }}
+          TFB_PHONE: ${{ secrets.TFBUDDY_PHONE }}
+          TFB_PW: ${{ secrets.TFBUDDY_PASSWORD }}
+          AI_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          S3_EP: ${{ secrets.OVH_S3_ENDPOINT }}
+          S3_BK: ${{ secrets.OVH_S3_BUCKET }}
+          S3_AK: ${{ secrets.OVH_S3_ACCESS_KEY }}
+          S3_SK: ${{ secrets.OVH_S3_SECRET_KEY }}
+          S3_RG: ${{ secrets.OVH_S3_REGION }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          # Les mots de passe voyagent encodés en base64 : une apostrophe, un
+          # espace ou un « % » dans un secret ne cassent plus la commande.
+          B64_ADMIN=$(printf '%s' "$SIG_PW" | base64 -w0)
+          B64_AGENCY=$(printf '%s' "$SIG_AG_PW" | base64 -w0)
+          B64_TFB_PHONE=$(printf '%s' "$TFB_PHONE" | base64 -w0)
+          B64_TFB_PW=$(printf '%s' "$TFB_PW" | base64 -w0)
+          B64_AI_KEY=$(printf '%s' "$AI_KEY" | base64 -w0)
+          # Stockage OVH de la médiathèque : une seule valeur encodée (lignes clé=valeur).
+          B64_S3=$(printf 'SIG_S3_ENDPOINT=%s\nSIG_S3_BUCKET=%s\nSIG_S3_ACCESS_KEY=%s\nSIG_S3_SECRET_KEY=%s\nSIG_S3_REGION=%s\n' "$S3_EP" "$S3_BK" "$S3_AK" "$S3_SK" "$S3_RG" | base64 -w0)
+          for v in "$B64_ADMIN" "$B64_AGENCY" "$B64_TFB_PHONE" "$B64_TFB_PW" "$B64_AI_KEY" "$B64_S3"; do
+            if [ -n "$v" ]; then echo "::add-mask::$v"; fi
+          done
+          ssh -i ~/.ssh/id_deploy "$SERVER_USER@$SERVER_HOST" \
+            "B64_ADMIN='$B64_ADMIN' B64_AGENCY='$B64_AGENCY' B64_TFB_PHONE='$B64_TFB_PHONE' B64_TFB_PW='$B64_TFB_PW' B64_AI_KEY='$B64_AI_KEY' B64_S3='$B64_S3' PUBLIC_HOST='$SERVER_HOST' bash -s" <<'PROVISION'
+          set -e
+          cd /var/www/signage
+          SIG_PW=$(printf '%s' "$B64_ADMIN" | base64 -d)
+          SIG_AG_PW=$(printf '%s' "$B64_AGENCY" | base64 -d)
+          TFB_PHONE=$(printf '%s' "$B64_TFB_PHONE" | base64 -d)
+          TFB_PW=$(printf '%s' "$B64_TFB_PW" | base64 -d)
+          AI_KEY=$(printf '%s' "$B64_AI_KEY" | base64 -d)
+          S3_LINES=$(printf '%s' "$B64_S3" | base64 -d)
+          s3v() { printf '%s\n' "$S3_LINES" | sed -n "s/^$1=//p" | head -n 1; }
+
+          echo "— Node.js"
+          if ! command -v node >/dev/null 2>&1 || ! node -e 'process.exit(+process.versions.node.split(".")[0] >= 22 ? 0 : 1)'; then
+            echo "Node ≥ 22 absent → installation via NodeSource…"
+            export DEBIAN_FRONTEND=noninteractive
+            curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+            apt-get install -y nodejs mariadb-client
+          fi
+          node --version
+
+          echo "— Mots de passe : /etc/signage/signage.env (root, 0600)"
+          # Format EnvironmentFile de systemd : valeur entre guillemets doubles,
+          # « \\ » et « \" » échappés. Aucun secret n'est écrit dans l'unité.
+          envq() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+          install -d -m 0700 /etc/signage
+          install -m 0600 /dev/null /etc/signage/signage.env.new
+          if [ -n "$SIG_PW" ]; then printf 'SIG_ADMIN_PASSWORD="%s"\n' "$(envq "$SIG_PW")" >> /etc/signage/signage.env.new; fi
+          if [ -n "$SIG_AG_PW" ]; then printf 'SIG_AGENCY_PASSWORD="%s"\n' "$(envq "$SIG_AG_PW")" >> /etc/signage/signage.env.new; fi
+          # Compte TFBuddy (bundles) : les deux, ou rien.
+          if [ -n "$TFB_PHONE" ] && [ -n "$TFB_PW" ]; then
+            printf 'TFBUDDY_PHONE="%s"\nTFBUDDY_PASSWORD="%s"\n' "$(envq "$TFB_PHONE")" "$(envq "$TFB_PW")" >> /etc/signage/signage.env.new
+          fi
+          # Clé de l'API Claude (traductions proposées) : jamais en base, jamais dans le dépôt.
+          if [ -n "$AI_KEY" ]; then printf 'ANTHROPIC_API_KEY="%s"\n' "$(envq "$AI_KEY")" >> /etc/signage/signage.env.new; fi
+          # Médiathèque sur OVHcloud Object Storage : adresse, bucket et clés — les quatre, ou rien.
+          S3_ON=''
+          if [ -n "$(s3v SIG_S3_ENDPOINT)" ] && [ -n "$(s3v SIG_S3_BUCKET)" ] && [ -n "$(s3v SIG_S3_ACCESS_KEY)" ] && [ -n "$(s3v SIG_S3_SECRET_KEY)" ]; then
+            for k in SIG_S3_ENDPOINT SIG_S3_BUCKET SIG_S3_ACCESS_KEY SIG_S3_SECRET_KEY SIG_S3_REGION; do
+              v=$(s3v "$k")
+              if [ -n "$v" ]; then printf '%s="%s"\n' "$k" "$(envq "$v")" >> /etc/signage/signage.env.new; fi
+            done
+            S3_ON=1
+          fi
+          mv -f /etc/signage/signage.env.new /etc/signage/signage.env
+          if [ -n "$SIG_AG_PW" ]; then echo "compte agence : ouvert"; else echo "compte agence : FERMÉ (secret SIG_AGENCY_PASSWORD absent)"; fi
+          if [ -n "$TFB_PHONE" ] && [ -n "$TFB_PW" ]; then echo "TFBuddy : compte configuré — bundles lus toutes les 30 min"
+          else echo "TFBuddy : pas de compte (secrets TFBUDDY_PHONE / TFBUDDY_PASSWORD) — pas de bundles"; fi
+          if [ -n "$AI_KEY" ]; then echo "Claude : clé configurée — traductions proposées en régie"
+          else echo "Claude : pas de clé (secret ANTHROPIC_API_KEY) — traductions saisies à la main"; fi
+          if [ -n "$S3_ON" ]; then echo "Médiathèque : OVHcloud Object Storage — bucket « $(s3v SIG_S3_BUCKET) » ($(s3v SIG_S3_ENDPOINT))"
+          else echo "Médiathèque : dossier public/media du serveur (secrets OVH_S3_* absents ou incomplets)"; fi
+          # L'ancien drop-in portait le mot de passe admin en clair, lisible par tous.
+          rm -f /etc/systemd/system/signage.service.d/override.conf
+          rmdir /etc/systemd/system/signage.service.d 2>/dev/null || true
+
+          echo "— Compte du service : « signage » (plus root)"
+          if ! id -u signage >/dev/null 2>&1; then
+            useradd --system --user-group --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin signage
+          fi
+          # Si la bascule échoue, le service repasse en root — la régie et
+          # l'import ERP restent en marche — et la livraison échoue, pour
+          # qu'on le voie dans Actions.
+          back_to_root() {
+            echo "::error::$1 — le service repasse en root le temps de corriger"
+            sed -i -e 's/^User=signage$/User=root/' -e 's/^Group=signage$/Group=root/' /etc/systemd/system/signage.service
+            systemctl daemon-reload || true
+            systemctl restart signage || true
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              if curl -fsS http://127.0.0.1:8080/api/v1/health >/dev/null 2>&1; then echo "régie de nouveau en ligne (en root)"; exit 1; fi
+              sleep 2
+            done
+            echo "::error::la régie ne répond plus, même en root — journaux du service :"
+            journalctl -u signage -n 25 --no-pager || true
+            exit 1
+          }
+
+          echo "— Service systemd (arrêt → droits → démarrage)"
+          if [ -z "$SIG_PW" ]; then
+            echo "::warning::secret SIG_ADMIN_PASSWORD absent : le compte admin garde son mot de passe actuel"
+          fi
+          cp deploy/signage.service /etc/systemd/system/signage.service
+          systemctl daemon-reload
+          systemctl enable signage >/dev/null 2>&1 || true
+          # Droits refaits service ARRÊTÉ (l'ancien processus root ne crée plus
+          # rien derrière nous) : le code appartient à root, en lecture seule
+          # pour le service ; seuls data/ et les trois dossiers d'upload sont à
+          # lui, et data/ (base, sessions, réglages d'import) n'est lisible que
+          # par lui. D'ici au redémarrage, toute erreur passe par back_to_root,
+          # qui relance le service : jamais de régie laissée à l'arrêt.
+          systemctl stop signage 2>/dev/null || true
+          # Dossiers d'upload : jamais transférés (cf. rsync), créés ici sur un serveur neuf.
+          { mkdir -p data public/media public/surprise public/anim \
+            && chown -hR root:root . \
+            && chmod -R go-w . \
+            && chown -hR signage:signage data public/media public/surprise public/anim \
+            && chmod 0750 data; } || back_to_root "droits des dossiers impossibles à poser"
+          for d in data public/media public/surprise public/anim; do
+            runuser -u signage -- test -w "$d" || back_to_root "$d n'est pas inscriptible par le compte signage"
+          done
+          if runuser -u signage -- test -w server; then back_to_root "le code est inscriptible par le compte signage"; fi
+          echo "droits : code à root (lecture seule) · data/ et dossiers d'upload au compte signage ✓"
+          systemctl start signage || true
+
+          echo "— Santé locale (127.0.0.1:8080)"
+          ok=""
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS http://127.0.0.1:8080/api/v1/health >/dev/null 2>&1; then ok=1; echo "CMS local OK ✓"; break; fi
+            sleep 2
+          done
+          if [ -z "$ok" ]; then
+            echo "CMS local injoignable — journaux du service :"
+            journalctl -u signage -n 25 --no-pager || true
+            back_to_root "le service ne démarre pas sous le compte signage"
+          fi
+          u=$(ps -o user= -p "$(systemctl show -p MainPID --value signage)" 2>/dev/null | tr -d ' ')
+          echo "processus du service : ${u:-?}"
+          if [ "$u" != "signage" ]; then back_to_root "le service ne tourne pas sous le compte signage (${u:-inconnu})"; fi
+
+          echo "— Base PWA : accès MariaDB du compte « signage »"
+          # Sans utilisateur MySQL réglé en régie, l'import ERP et le miroir
+          # passent par la socket locale, où MariaDB reconnaît le compte
+          # système : root y entrait d'office. Le compte « signage » y reçoit
+          # le même type d'accès (socket, sans mot de passe), limité à la
+          # LECTURE de la base PWA et, pour le miroir, à ses propres tables
+          # sig_* — jamais le droit de toucher une table de l'ERP.
+          SQLC=$(command -v mariadb || command -v mysql || true)
+          # Même binaire que le service (ExecStart), sous le même compte.
+          INFO=$(runuser -u signage -- /usr/bin/node deploy/mysql-access.mjs "$PWD/data/signage.db" 2>/dev/null || true)
+          if [ -z "$SQLC" ]; then
+            echo "client MySQL absent — import ERP non utilisé ici, rien à ouvrir"
+          elif ! printf '%s\n' "$INFO" | grep -q '^mode '; then
+            back_to_root "réglages d'import de la régie illisibles (deploy/mysql-access.mjs)"
+          elif printf '%s\n' "$INFO" | grep -qx 'mode compte'; then
+            echo "l'import se connecte avec le compte MySQL réglé en régie — rien à ouvrir"
+          elif ! "$SQLC" -N -e 'SELECT 1' >/dev/null 2>&1; then
+            echo "MariaDB locale fermée à root par la socket — rien à ouvrir (l'import ERP utilisera un compte réglé en régie)"
+          else
+            sqlid() { printf '`%s`' "$(printf '%s' "$1" | sed 's/`/``/g')"; }
+            PWADB=$(printf '%s\n' "$INFO" | sed -n 's/^base //p' | head -n 1)
+            if [ -z "$PWADB" ]; then
+              # Même détection que la régie (server/pwadb.js) : la base qui a
+              # les trois tables du catalogue.
+              PWADB=$("$SQLC" -N -e "SELECT table_schema FROM information_schema.tables WHERE table_name IN ('product', 'product_category', 'shop_product') AND table_schema NOT IN ('mysql', 'sys', 'information_schema', 'performance_schema') GROUP BY table_schema HAVING COUNT(DISTINCT table_name) = 3 ORDER BY table_schema LIMIT 1")
+            fi
+            MIRDB=$(printf '%s\n' "$INFO" | sed -n 's/^miroir //p' | head -n 1)
+            MIRDB=${MIRDB:-$PWADB}
+            if [ -z "$PWADB" ]; then
+              echo "aucune base PWA locale (product / product_category / shop_product) — rien à ouvrir"
+            elif ! "$SQLC" -N -e "SELECT COUNT(*) FROM $(sqlid "$PWADB").$(sqlid product)" >/dev/null 2>&1; then
+              echo "::warning::base PWA « $PWADB » illisible, même par root : l'import ERP est déjà en panne, rien à préserver"
+            else
+              "$SQLC" -e "CREATE USER IF NOT EXISTS 'signage'@'localhost' IDENTIFIED VIA unix_socket" 2>/dev/null \
+                || "$SQLC" -e "CREATE USER IF NOT EXISTS 'signage'@'localhost' IDENTIFIED WITH auth_socket" 2>/dev/null \
+                || back_to_root "compte MariaDB 'signage'@'localhost' impossible à créer (authentification par socket indisponible)"
+              GRANTS="GRANT SELECT ON $(sqlid "$PWADB").* TO 'signage'@'localhost';"
+              ntab=0
+              for t in $(printf '%s\n' "$INFO" | sed -n 's/^table //p'); do
+                GRANTS="$GRANTS GRANT SELECT, INSERT, CREATE, DROP ON $(sqlid "$MIRDB").$(sqlid "$t") TO 'signage'@'localhost';"
+                ntab=$((ntab + 1))
+              done
+              "$SQLC" -e "$GRANTS" || back_to_root "droits MariaDB du compte signage impossibles à poser"
+              if runuser -u signage -- "$SQLC" -N -e "SELECT COUNT(*) FROM $(sqlid "$PWADB").$(sqlid product)" >/dev/null 2>&1; then
+                echo "compte MariaDB signage (socket) : lecture de « $PWADB » ✓ · miroir : $ntab table(s) sig_* dans « $MIRDB »"
+              else
+                back_to_root "le compte signage ne lit pas la base PWA « $PWADB » par la socket — l'import ERP échouerait"
+              fi
+            fi
+          fi
+
+          echo "— Reverse proxy public (/signage/) — ancien /pwa_consultant/signage/ redirigé"
+          if command -v apache2ctl >/dev/null 2>&1 && [ -d /etc/apache2/conf-available ]; then
+            echo "Apache détecté → (ré)installation de la conf signage.conf sur /signage/…"
+            a2enmod proxy proxy_http headers >/dev/null
+            PREV_CONF=$(cat /etc/apache2/conf-available/signage.conf 2>/dev/null || true)
+            cat > /etc/apache2/conf-available/signage.conf <<'ACONF'
+          # Nouveau montage : /signage/ (l'ancien /pwa_consultant/signage/ y est redirigé)
+          RedirectMatch 301 ^/pwa_consultant/signage(/.*)?$ /signage$1
+          RedirectMatch 301 ^/signage$ /signage/
+          ProxyPreserveHost On
+          ProxyPass        /signage/ http://127.0.0.1:8080/
+          ProxyPassReverse /signage/ http://127.0.0.1:8080/
+          # Le CMS doit savoir si la page est en https (cookie de session
+          # « Secure »), quel que soit l'hôte 443 du serveur qui la sert.
+          <IfModule mod_headers.c>
+            <Location /signage/>
+              RequestHeader set X-Forwarded-Proto "http"
+              RequestHeader set X-Forwarded-Proto "https" env=HTTPS
+            </Location>
+          </IfModule>
+          # Médiathèque : les vidéos s'envoient en flux (le serveur borne la taille,
+          # 4 Go par défaut) — la limite d'Apache (1 Go) ne vaut pas pour cette route.
+          <Location /signage/api/v1/media/upload>
+            LimitRequestBody 0
+          </Location>
+          ACONF
+            a2enconf signage >/dev/null
+            if ! apache2ctl configtest >/dev/null 2>&1 && [ -n "$PREV_CONF" ]; then
+              apache2ctl configtest 2>&1 | tail -3
+              printf '%s\n' "$PREV_CONF" > /etc/apache2/conf-available/signage.conf
+              echo "::warning::nouvelle conf Apache signage.conf refusée — version précédente remise"
+            fi
+            systemctl reload apache2
+            sleep 1
+            curl -fsS http://127.0.0.1/signage/api/v1/health >/dev/null 2>&1 && echo "proxy Apache OK ✓ (/signage/)" || echo "⚠ proxy Apache configuré mais la santé locale via port 80 ne répond pas encore"
+          else
+            echo "⚠ Apache non détecté — configurer le reverse proxy manuellement (voir deploy/nginx-signage.conf)"
+          fi
+          echo "— HTTPS : la régie sur l'adresse publique en https"
+          # Sans https, le navigateur refuse le service worker : un écran ne
+          # peut pas redémarrer sans réseau. Le serveur est DÉJÀ servi en https
+          # sur son IP : certificat Let's Encrypt d'adresse IP, géré et
+          # renouvelé par le certbot du serveur, hors de ce dépôt (comme pour le
+          # cockpit consultant) ; /signage/ y répond par le proxy global. La
+          # livraison n'y touche pas : elle vérifie, et dit qui renouvelle.
+          # Seulement sur un serveur sans aucun https (ni port 443, ni
+          # certificat pour son adresse), elle pose le sien : Certbot ≥ 5.4
+          # isolé dans /opt/signage-certbot, profil « shortlived » (6 jours),
+          # défi webroot, minuterie de renouvellement.
+          # Tout échec ici est un AVERTISSEMENT : http reste intact.
+          https_up() {
+            curl -fsS --noproxy '*' --max-time 10 --connect-to "$PUBLIC_HOST:443:127.0.0.1:443" "https://$PUBLIC_HOST/signage/api/v1/health" >/dev/null 2>&1 \
+              || curl -fsS --noproxy '*' --max-time 10 "https://$PUBLIC_HOST/signage/api/v1/health" >/dev/null 2>&1
+          }
+          # Retire ce qu'un essai précédent de la livraison a pu laisser alors
+          # que le https n'est pas le sien : surtout l'Alias global du défi
+          # ACME, qui masquerait le chemin du certbot du serveur et ferait
+          # échouer son renouvellement.
+          https_forget_own() {
+            local changed=0
+            if [ -e /etc/apache2/conf-available/signage-acme.conf ] || [ -e /etc/apache2/conf-enabled/signage-acme.conf ]; then
+              a2disconf signage-acme >/dev/null 2>&1 || true
+              rm -f /etc/apache2/conf-available/signage-acme.conf /etc/apache2/conf-enabled/signage-acme.conf
+              echo "défi ACME de la livraison retiré — le certbot du serveur garde son propre chemin"
+              changed=1
+            fi
+            if [ -e /etc/apache2/sites-available/000-signage-ssl.conf ]; then
+              a2dissite 000-signage-ssl >/dev/null 2>&1 || true
+              rm -f /etc/apache2/sites-available/000-signage-ssl.conf
+              echo "hôte https inachevé de la livraison retiré"
+              changed=1
+            fi
+            if [ "$changed" = 1 ] && apache2ctl configtest >/dev/null 2>&1; then systemctl reload apache2 || true; sleep 1; fi
+            if [ -e /etc/systemd/system/signage-certbot.timer ] || [ -e /etc/systemd/system/signage-certbot.service ]; then
+              systemctl disable --now signage-certbot.timer >/dev/null 2>&1 || true
+              rm -f /etc/systemd/system/signage-certbot.timer /etc/systemd/system/signage-certbot.service
+              systemctl daemon-reload || true
+            fi
+            # Dossier du défi : retiré s'il est vide et qu'aucune conf de renouvellement ne s'en sert.
+            if ! grep -rqs '/var/www/letsencrypt' /etc/letsencrypt/renewal/; then
+              rmdir /var/www/letsencrypt/.well-known/acme-challenge /var/www/letsencrypt/.well-known /var/www/letsencrypt 2>/dev/null || true
+            fi
+          }
+          # Constat en lecture seule : le certificat servi, et qui le renouvelle.
+          https_report() {
+            local crt r wr d n got made p c auth
+            crt=$(echo | timeout 10 openssl s_client -connect 127.0.0.1:443 2>/dev/null | openssl x509 2>/dev/null || true)
+            if [ -n "$crt" ]; then
+              echo "certificat servi : $(printf '%s\n' "$crt" | openssl x509 -noout -ext subjectAltName 2>/dev/null | tail -n +2 | tr -d ' ') · $(printf '%s\n' "$crt" | openssl x509 -noout -issuer | sed 's/^issuer= *//') · valable jusqu'au $(printf '%s\n' "$crt" | openssl x509 -noout -enddate | cut -d= -f2)"
+            fi
+            for c in $(command -v certbot 2>/dev/null) /snap/bin/certbot /usr/bin/certbot /usr/local/bin/certbot /opt/certbot/bin/certbot; do
+              [ -x "$c" ] && echo "$c"
+            done | awk '!seen[$0]++' | while read -r c; do echo "certbot du serveur : $c ($("$c" --version 2>&1 | tail -1))"; done
+            systemctl list-timers --all --no-legend 2>/dev/null | grep -i -E 'certbot|letsencrypt|acme' | sed -E 's/[[:space:]]+/ /g; s/^/minuterie : /'
+            grep -l -s -i -E 'certbot|letsencrypt' /etc/crontab /etc/cron.d/* /var/spool/cron/crontabs/* 2>/dev/null | sed 's/^/tâche cron : /'
+            r="/etc/letsencrypt/renewal/$PUBLIC_HOST.conf"
+            if [ ! -r "$r" ]; then
+              echo "aucune conf de renouvellement pour $PUBLIC_HOST (présentes : $(ls /etc/letsencrypt/renewal 2>/dev/null | tr '\n' ' '))"
+              return 0
+            fi
+            echo "renouvellement : $r"
+            grep -E '^[[:space:]]*(authenticator|installer|webroot_path|preferred_profile|renew_before_expiry|pre_hook|post_hook|deploy_hook|renew_hook)[[:space:]]*=' "$r" | sed -E 's/^[[:space:]]*/  /'
+            auth=$(sed -n -E 's/^[[:space:]]*authenticator[[:space:]]*=[[:space:]]*([^[:space:]]+).*/\1/p' "$r" | head -1)
+            if [ "$auth" = standalone ] && ! grep -Eq '^[[:space:]]*pre_hook[[:space:]]*=' "$r"; then
+              echo "::warning::le certbot du serveur renouvelle en « standalone » sans arrêter Apache : le port 80 étant pris, son renouvellement échouera"
+            fi
+            [ "$auth" = webroot ] || return 0
+            # Défi webroot : un fichier témoin, posé là où certbot posera le
+            # sien, doit être servi sur http://<adresse>/.well-known/acme-challenge/.
+            wr=$(sed -n '/^\[\[webroot_map\]\]/,/^\[/p' "$r" | awk -F= -v h="$PUBLIC_HOST" '{ k = $1; gsub(/[[:space:]]/, "", k); if (k == h) { v = $2; gsub(/^[[:space:]]+|[[:space:]]+$/, "", v); print v; exit } }')
+            [ -n "$wr" ] || wr=$(sed -n -E 's/^[[:space:]]*webroot_path[[:space:]]*=[[:space:]]*([^,]*).*/\1/p' "$r" | head -1 | sed -E 's/[[:space:]]+$//')
+            [ -n "$wr" ] && [ -d "$wr" ] || { echo "dossier du défi webroot introuvable (${wr:-?})"; return 0; }
+            d="$wr/.well-known/acme-challenge"; n="signage-temoin-$(date +%s)-$$"; made=""
+            for p in "$wr/.well-known" "$d"; do [ -d "$p" ] || { mkdir -m 0755 "$p" && made="$p $made"; }; done
+            if printf 'ok %s\n' "$n" > "${d:?}/${n:?}" 2>/dev/null; then
+              chmod 0644 "${d:?}/${n:?}"
+              got=$(curl -fsS --noproxy '*' --max-time 10 "http://$PUBLIC_HOST/.well-known/acme-challenge/$n" 2>/dev/null \
+                || curl -fsS --noproxy '*' --max-time 10 --connect-to "$PUBLIC_HOST:80:127.0.0.1:80" "http://$PUBLIC_HOST/.well-known/acme-challenge/$n" 2>/dev/null || true)
+              rm -f -- "${d:?}/${n:?}"
+              if [ "$got" = "ok $n" ]; then
+                echo "défi webroot ($wr) servi sur le port 80 ✓ — le renouvellement du serveur peut passer"
+              else
+                echo "::warning::le défi webroot du certbot du serveur ($wr) n'est pas servi sur http://$PUBLIC_HOST/.well-known/acme-challenge/ — son renouvellement échouera"
+              fi
+            fi
+            for p in $made; do rmdir "$p" 2>/dev/null || true; done
+          }
+          https_setup() {
+            [ -n "$PUBLIC_HOST" ] || { echo "adresse publique inconnue — https ignoré"; return 1; }
+            command -v apache2ctl >/dev/null 2>&1 || { echo "Apache absent — https ignoré"; return 1; }
+            OWN=/etc/signage/https-own   # témoin : certificat obtenu par la livraison elle-même
+            if [ ! -e "$OWN" ]; then
+              # La livraison n'a jamais obtenu son certificat : un https présent
+              # est celui du serveur, qu'on vérifie sans y toucher.
+              https_forget_own
+              if https_up; then
+                echo "https déjà fourni par le serveur (certificat géré hors de ce dépôt) — rien installé ✓"
+                https_report
+                return 0
+              fi
+              if [ -e "/etc/letsencrypt/live/$PUBLIC_HOST/fullchain.pem" ] || ss -ltn 2>/dev/null | grep -Eq '[:.]443[[:space:]]'; then
+                echo "::warning::le serveur a son propre https (port 443 ou certificat de $PUBLIC_HOST) mais /signage/ n'y répond pas — à régler côté serveur ; la livraison n'y touche pas"
+                https_report
+                return 1
+              fi
+              echo "aucun https sur ce serveur → la livraison pose le sien"
+            fi
+            if ss -ltnp 2>/dev/null | grep -E '[:.]443[[:space:]]' | grep -vq apache2; then
+              echo "::warning::port 443 déjà pris par un autre service — https ignoré"; return 1
+            fi
+            if printf '%s' "$PUBLIC_HOST" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then IDENT="--ip-address $PUBLIC_HOST"; else IDENT="-d $PUBLIC_HOST"; fi
+            # Certbot isolé dans /opt/signage-certbot (les paquets des
+            # distributions sont trop anciens ; /opt/certbot reste à qui l'a).
+            CB=/opt/signage-certbot/bin/certbot
+            cb_ok() { [ -x "$CB" ] && "$CB" --version 2>/dev/null | awk '{ split($2, v, "."); ok = (v[1] > 5 || (v[1] == 5 && v[2] >= 4)) } END { exit !ok }'; }
+            if ! cb_ok; then
+              echo "installation de Certbot ≥ 5.4 dans /opt/signage-certbot…"
+              python3 -m venv --help >/dev/null 2>&1 && python3 -c 'import ensurepip' 2>/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y python3-venv >/dev/null 2>&1 || true
+              { rm -rf /opt/signage-certbot && python3 -m venv /opt/signage-certbot && /opt/signage-certbot/bin/pip install -q --upgrade pip && /opt/signage-certbot/bin/pip install -q 'certbot>=5.4,<6'; } \
+                || { echo "::warning::installation de Certbot impossible — https ignoré"; return 1; }
+              cb_ok || { echo "::warning::Certbot installé mais inutilisable — https ignoré"; return 1; }
+            fi
+            "$CB" --version
+            # Défi ACME sur le port 80 : /.well-known/acme-challenge/ servi depuis /var/www/letsencrypt.
+            install -d -m 0755 /var/www/letsencrypt/.well-known/acme-challenge
+            cat > /etc/apache2/conf-available/signage-acme.conf <<'ACME'
+          # Défi Let's Encrypt (webroot) du certificat https de la régie signage
+          Alias /.well-known/acme-challenge/ /var/www/letsencrypt/.well-known/acme-challenge/
+          <Directory /var/www/letsencrypt/.well-known/acme-challenge/>
+            Require all granted
+          </Directory>
+          ACME
+            a2enconf signage-acme >/dev/null
+            if ! apache2ctl configtest >/dev/null 2>&1; then a2disconf signage-acme >/dev/null; echo "::warning::conf du défi ACME refusée par Apache — https ignoré"; return 1; fi
+            systemctl reload apache2
+            CBARGS="--non-interactive --agree-tos --register-unsafely-without-email --preferred-profile shortlived --webroot --webroot-path /var/www/letsencrypt $IDENT"
+            if [ ! -e "/etc/letsencrypt/live/$PUBLIC_HOST/fullchain.pem" ]; then
+              # Essai à blanc d'abord : un échec ne compte pas dans les limites de Let's Encrypt.
+              "$CB" certonly --dry-run $CBARGS >/dev/null 2>&1 \
+                || { https_forget_own; echo "::warning::essai à blanc Let's Encrypt refusé (port 80 injoignable depuis Internet ?) — https ignoré"; return 1; }
+            fi
+            "$CB" certonly -q --keep-until-expiring $CBARGS --deploy-hook "systemctl reload apache2" \
+              || { [ -e "$OWN" ] || https_forget_own; echo "::warning::certificat Let's Encrypt non obtenu — https ignoré"; return 1; }
+            install -d -m 0755 /etc/signage && echo "$PUBLIC_HOST" > "$OWN"
+            # Hôte https : /signage/ seulement. Nommé 000-… pour répondre aux
+            # requêtes par adresse IP (sans SNI), même si un autre site 443 existe.
+            SSL_BEFORE=$(apache2ctl -M 2>/dev/null | grep -c 'ssl_module' || true)
+            a2enmod ssl headers >/dev/null
+            cat > /etc/apache2/sites-available/000-signage-ssl.conf <<SSL
+          # Régie signage en https (certificat Let's Encrypt de l'adresse publique)
+          <VirtualHost *:443>
+            ServerName $PUBLIC_HOST
+            SSLEngine on
+            SSLCertificateFile /etc/letsencrypt/live/$PUBLIC_HOST/fullchain.pem
+            SSLCertificateKeyFile /etc/letsencrypt/live/$PUBLIC_HOST/privkey.pem
+            RequestHeader set X-Forwarded-Proto "https"
+            ProxyPreserveHost On
+            RedirectMatch 301 ^/signage$ /signage/
+            ProxyPass        /signage/ http://127.0.0.1:8080/
+            ProxyPassReverse /signage/ http://127.0.0.1:8080/
+          </VirtualHost>
+          SSL
+            a2ensite 000-signage-ssl >/dev/null
+            if ! apache2ctl configtest >/dev/null 2>&1; then
+              a2dissite 000-signage-ssl >/dev/null; systemctl reload apache2
+              echo "::warning::hôte https refusé par Apache — retiré, http intact"; return 1
+            fi
+            systemctl reload apache2 || true
+            sleep 1
+            # Garde-fou : si Apache n'a pas survécu à l'ouverture du port 443,
+            # on retire l'hôte https (et le module SSL s'il vient de nous), et
+            # on le relance tel qu'avant — http d'abord, pour tout le serveur.
+            if ! curl -fsS --noproxy '*' http://127.0.0.1/signage/api/v1/health >/dev/null 2>&1; then
+              a2dissite 000-signage-ssl >/dev/null 2>&1 || true
+              [ "${SSL_BEFORE:-0}" = "0" ] && a2dismod -f ssl >/dev/null 2>&1 || true
+              systemctl restart apache2 || true
+              echo "::warning::Apache n'a pas accepté le port 443 — https retiré, http rétabli"; return 1
+            fi
+            # Renouvellement : deux passages par jour (Certbot renouvelle à
+            # mi-vie), de CE certificat seulement — jamais ceux d'autres outils.
+            cat > /etc/systemd/system/signage-certbot.service <<UNIT
+          [Unit]
+          Description=Renouvellement du certificat https de la régie signage (Let's Encrypt)
+          [Service]
+          Type=oneshot
+          ExecStart=/opt/signage-certbot/bin/certbot renew -q --cert-name $PUBLIC_HOST
+          UNIT
+            cat > /etc/systemd/system/signage-certbot.timer <<'UNIT'
+          [Unit]
+          Description=Renouvellement du certificat https de la régie signage, deux fois par jour
+          [Timer]
+          OnCalendar=*-*-* 03,15:00:00
+          RandomizedDelaySec=1h
+          Persistent=true
+          [Install]
+          WantedBy=timers.target
+          UNIT
+            systemctl daemon-reload
+            systemctl enable --now signage-certbot.timer >/dev/null 2>&1 || true
+            for i in 1 2 3 4 5; do
+              if curl -fsS --noproxy '*' --connect-to "$PUBLIC_HOST:443:127.0.0.1:443" "https://$PUBLIC_HOST/signage/api/v1/health" >/dev/null 2>&1; then
+                echo "https OK ✓ — certificat valable jusqu'au $(openssl x509 -enddate -noout -in "/etc/letsencrypt/live/$PUBLIC_HOST/fullchain.pem" | cut -d= -f2)"
+                return 0
+              fi
+              sleep 2
+            done
+            echo "::warning::https configuré mais la santé en https ne répond pas en local"; return 1
+          }
+          https_setup || echo "https : non disponible pour cette livraison — la régie reste servie en http"
+          PROVISION
+
+      - name: Vérifier qu'aucun fichier uploadé n'a disparu
+        env:
+          BEFORE: ${{ steps.uploads_before.outputs.n }}
+        run: |
+          after=$(ssh -i ~/.ssh/id_deploy "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            "cd ${DEPLOY_PATH} && find public/media public/surprise public/anim -type f 2>/dev/null | wc -l" | tr -dc '0-9')
+          echo "Fichiers uploadés : avant ${BEFORE:-0} · après ${after:-0}"
+          if [ "${after:-0}" -lt "${BEFORE:-0}" ]; then
+            echo "::error::Des fichiers uploadés ont disparu pendant la livraison (${BEFORE} → ${after})."
+            exit 1
+          fi
+
+      - name: Attendre que le CMS réponde (URL publique)
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fsS "$PUBLIC_URL/api/v1/health" >/dev/null 2>&1; then
+              echo "CMS en ligne ✓"; exit 0
+            fi
+            sleep 3
+          done
+          echo "::error::Le service tourne mais $PUBLIC_URL/api/v1/health ne répond pas — reverse proxy à vérifier (deploy/apache-signage.conf ou nginx-signage.conf)." >&2
+          exit 1
+
+      - name: Vérifier https depuis Internet (avertissement seulement)
+        run: |
+          H="${{ secrets.SERVER_HOST }}"
+          if curl -fsS --max-time 15 "https://$H/signage/api/v1/health" >/dev/null 2>&1; then
+            END=$(echo | openssl s_client -connect "$H:443" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+            echo "https public OK ✓ — certificat valable jusqu'au ${END:-?}"
+            # Certificat de 6 jours renouvelé à mi-vie : moins de 2 jours
+            # restants, c'est que son renouvellement ne passe plus.
+            LEFT=$(( ( $(date -d "$END" +%s 2>/dev/null || date +%s) - $(date +%s) ) / 3600 ))
+            if [ -n "$END" ] && [ "$LEFT" -lt 48 ]; then
+              echo "::warning::le certificat https expire dans ${LEFT} h — son renouvellement ne passe plus (voir l'étape HTTPS de la livraison : qui renouvelle, et le défi sur le port 80)"
+            fi
+          else
+            echo "::warning::https injoignable depuis Internet (port 443 fermé par le pare-feu de l'hébergeur ?) — http reste en service"
+          fi
+
+      - name: Tests live post-déploiement
+        env:
+          SIG_ADMIN_PASSWORD: ${{ secrets.SIG_ADMIN_PASSWORD }}
+        run: |
+          EXTRA=""
+          if [ "${{ inputs.mutate }}" = "true" ]; then EXTRA="--mutate"; fi
+          node test/live-test.js "$PUBLIC_URL" $EXTRA

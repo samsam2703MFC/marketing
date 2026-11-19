@@ -1,0 +1,92 @@
+{
+  "key": "signage",
+  "slug": "signage",
+  "group": "Marketing",
+  "icon": "panels-top-left",
+  "isNew": true,
+  "sortOrder": 5,
+  "name": {
+    "fr": "Régie d'affichage",
+    "en": "Digital signage",
+    "ar": "إدارة شاشات العرض"
+  },
+  "description": {
+    "fr": "Les écrans du magasin pilotés depuis un seul back office, jusqu'au player.",
+    "en": "In-store screens driven from one back office, player included.",
+    "ar": "شاشات الفرع تُدار من لوحة واحدة، حتى المشغّل."
+  },
+  "overview": {
+    "fr": "Un magasin affiche des prix, des promos et des menus sur ses écrans. La régie remplace le montage vidéo et la clé USB : on construit un film à partir de la base produits, on le planifie par période, on le pousse sur les écrans du réseau, et chaque écran remonte son état. Les tarifs affichés viennent de la table produits, donc un changement de prix ne se ressaisit pas à l'écran.",
+    "en": "A store shows prices, offers and menus on its screens. This module replaces video editing and the USB stick: build a film from the product table, schedule it by period, push it to the network's screens, and let each screen report back. Displayed prices come from the product table, so a price change is never retyped on a screen."
+  },
+  "metric": {
+    "value": "0",
+    "label": { "fr": "clé USB en magasin", "en": "USB stick in store" }
+  },
+  "screenshots": [
+    { "file": "docs/landing/signage-accueil.png", "alt": { "fr": "Accueil de la régie : les étapes restantes avant diffusion", "en": "Signage home: what is left before going live" } },
+    { "file": "docs/landing/signage-login.png", "alt": { "fr": "Connexion au back office de la régie", "en": "Signage back-office sign-in" } }
+  ],
+  "features": [
+    {
+      "key": "compositeur",
+      "icon": "layers",
+      "name": { "fr": "Compositeur de film", "en": "Film composer" },
+      "description": {
+        "fr": "La bibliothèque d'éléments (catégories, liaisons, promos) et la playlist qui en fait un film. Mise en page, mouvement, filigrane et jetons dynamiques — {{magasin}}, {{date}}, {{saison}} — se règlent élément par élément, avec l'aperçu au format réel de l'écran.",
+        "en": "A library of elements (categories, links, offers) and the playlist that turns them into a film. Layout, motion, watermark and dynamic tokens — {{magasin}}, {{date}}, {{saison}} — are set per element, previewed at the screen's real resolution."
+      },
+      "screenshots": [{ "file": "docs/landing/signage-compositeur.png", "alt": { "fr": "Compositeur : bibliothèque, réglages de l'élément et aperçu", "en": "Composer: library, element settings and preview" } }]
+    },
+    {
+      "key": "produits",
+      "icon": "tag",
+      "name": { "fr": "Produits et tarifs affichés", "en": "Products and displayed prices" },
+      "description": {
+        "fr": "Les listes de prix à l'écran sont liées à la table produits, pas retapées. Le catalogue s'importe, chaque élément choisit les produits qu'il montre, et un changement de prix se propage au prochain film sans repasser par le graphiste.",
+        "en": "On-screen price lists are bound to the product table, not retyped. Import the catalogue, let each element pick the products it shows, and a price change flows into the next film without going back to a designer."
+      },
+      "screenshots": [{ "file": "docs/landing/signage-produits.png", "alt": { "fr": "Bibliothèque produits et liste de prix", "en": "Product library and price list" } }]
+    },
+    {
+      "key": "campagnes",
+      "icon": "megaphone",
+      "name": { "fr": "Campagnes et promotions", "en": "Campaigns and offers" },
+      "description": {
+        "fr": "Les opérations commerciales sont taguées en campagne : on active une campagne et tous les éléments qui la portent basculent d'un coup, sur les écrans choisis.",
+        "en": "Commercial pushes are tagged as campaigns: switch a campaign on and every element carrying it flips at once, on the screens you picked."
+      },
+      "screenshots": [{ "file": "docs/landing/signage-campagnes.png", "alt": { "fr": "Écran des campagnes", "en": "Campaigns screen" } }]
+    },
+    {
+      "key": "planning",
+      "icon": "calendar",
+      "name": { "fr": "Périodes et planning de diffusion", "en": "Periods and broadcast schedule" },
+      "description": {
+        "fr": "Le petit-déjeuner, le service du midi et le goûter n'affichent pas la même chose. Les périodes décrivent ces plages, le planning dit quel film passe quand, et la diffusion suit l'horloge du magasin.",
+        "en": "Breakfast, lunch service and afternoon don't show the same thing. Periods describe those windows, the schedule says which film runs when, and playback follows the store's clock."
+      },
+      "screenshots": [{ "file": "docs/landing/signage-planning.png", "alt": { "fr": "Planning de diffusion par période", "en": "Broadcast schedule by period" } }]
+    },
+    {
+      "key": "reseau",
+      "icon": "layout-dashboard",
+      "name": { "fr": "Réseau et supervision des écrans", "en": "Screen fleet supervision" },
+      "description": {
+        "fr": "Chaque écran est un player authentifié par jeton qui envoie un battement de cœur et une capture. La supervision montre magasin par magasin ce qui est réellement affiché, et signale l'écran qui a décroché.",
+        "en": "Every screen is a token-authenticated player that sends a heartbeat and a snapshot. Supervision shows what is really on air, store by store, and flags the screen that dropped off."
+      },
+      "screenshots": [{ "file": "docs/landing/signage-reseau.png", "alt": { "fr": "Supervision du réseau d'écrans", "en": "Screen network supervision" } }]
+    },
+    {
+      "key": "film",
+      "icon": "play",
+      "name": { "fr": "Visionneuse publique", "en": "Public viewer" },
+      "description": {
+        "fr": "La dernière playlist publiée est consultable en plein écran sans connexion, à l'adresse /film : c'est ce que voit le client en magasin, et c'est ce que le responsable peut vérifier depuis son téléphone.",
+        "en": "The latest published playlist plays full-screen without signing in, at /film: it is what the customer sees in store, and what a manager can check from their phone."
+      },
+      "screenshots": [{ "file": "docs/landing/signage-film.png", "alt": { "fr": "Visionneuse publique du film", "en": "Public film viewer" } }]
+    }
+  ]
+}
