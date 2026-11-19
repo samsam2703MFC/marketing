@@ -1,4 +1,11 @@
-# Déploiement automatique du CMS signage sur le serveur, puis tests live.
+# Déploiement automatique du CMS signage (marketing/signage/) sur le serveur, puis tests live.
+#
+# Le signage est entré dans le dépôt marketing le 20/11/2026 (il avait son propre dépôt, samsam2703MFC/signage) :
+# ce workflow ne se déclenche que pour signage/** ; cible, service et adresses publiques inchangés.
+# Accès SSH : les secrets SERVER_* du signage s'ils sont posés ici, sinon ceux du Marketing (SSH_* / DEPLOY_*),
+# par clé ou par mot de passe. Le compte doit être root (vérifié avant toute copie).
+# Un secret SIG_* / TFBUDDY_* / ANTHROPIC_* / OVH_S3_* absent ici ne retire plus rien : la valeur déjà sur le
+# serveur (/etc/signage/signage.env) est gardée.
 #
 # Secrets requis (Settings → Secrets and variables → Actions) :
 #   SERVER_HOST          → 185.180.206.46
@@ -32,7 +39,8 @@ name: Déploiement signage
 
 on:
   push:
-    branches: [claude/back-office-signage-uqnpca]
+    branches: [main]
+    paths: ['signage/**', '.github/workflows/deploy-signage.yml']
   workflow_dispatch:
     inputs:
       mutate:
@@ -51,44 +59,52 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: signage
+    env:
+      SRV_HOST: ${{ secrets.SERVER_HOST || secrets.SSH_HOST || secrets.DEPLOY_HOST }}
+      SRV_USER: ${{ secrets.SERVER_USER || secrets.SSH_USER || secrets.DEPLOY_USER }}
+      SRV_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.SSH_KEY || secrets.DEPLOY_SSH_KEY }}
+      SSHPASS: ${{ secrets.SSH_PASSWORD || secrets.DEPLOY_PASSWORD || secrets.DEPLOY_SSH_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Préparer et valider la clé SSH
-        env:
-          KEY_RAW: ${{ secrets.SERVER_SSH_KEY }}
+      - name: Préparer l'accès SSH (clé, sinon mot de passe) et vérifier le compte root
         run: |
           mkdir -p ~/.ssh
-          if printf '%s' "$KEY_RAW" | grep -q 'BEGIN .*PRIVATE KEY'; then
-            # Clé collée telle quelle (multi-lignes)
-            printf '%s\n' "$KEY_RAW" | tr -d '\r' > ~/.ssh/id_deploy
-          else
-            # Clé fournie encodée en base64 sur UNE seule ligne (recommandé, copie fiable) :
-            #   base64 -w0 /root/signage_deploy
-            printf '%s' "$KEY_RAW" | tr -d ' \t\r\n' | base64 -d > ~/.ssh/id_deploy 2>/dev/null || true
-          fi
-          chmod 600 ~/.ssh/id_deploy
-          if ! ssh-keygen -y -P "" -f ~/.ssh/id_deploy > /dev/null 2>&1; then
-            echo "::error::Secret SERVER_SSH_KEY invalide."
-            echo "La clé privée est illisible : passphrase, lignes perdues au collage, ou base64 tronqué."
-            echo "Méthode fiable : sur le serveur, générer puis encoder la clé en UNE ligne :"
-            echo "    ssh-keygen -t ed25519 -N \"\" -f /root/signage_deploy"
-            echo "    cat /root/signage_deploy.pub >> /root/.ssh/authorized_keys"
-            echo "    base64 -w0 /root/signage_deploy ; echo"
-            echo "et coller cette unique longue ligne dans le secret SERVER_SSH_KEY."
+          if [ -z "$SRV_HOST" ] || [ -z "$SRV_USER" ]; then
+            echo "::error::Hôte ou utilisateur SSH absent (secrets SERVER_HOST/SERVER_USER, ou SSH_HOST/SSH_USER du Marketing)."
             exit 1
           fi
-          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
-
-      - name: Vérifier l'accès SSH au serveur
-        run: |
-          if ! ssh -i ~/.ssh/id_deploy -o BatchMode=yes -o ConnectTimeout=10 \
-              "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" 'echo "SSH OK — $(hostname)"'; then
-            echo "::error::Connexion SSH refusée (clé valide mais non autorisée ?)."
-            echo "Vérifier que la clé publique correspondante est dans ~/.ssh/authorized_keys"
-            echo "de l'utilisateur SERVER_USER sur le serveur, et que SERVER_USER/SERVER_HOST sont corrects."
+          ssh-keyscan -H "$SRV_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          SSH=""
+          if [ -n "$SRV_KEY" ]; then
+            if printf '%s' "$SRV_KEY" | grep -q 'BEGIN .*PRIVATE KEY'; then
+              printf '%s\n' "$SRV_KEY" | tr -d '\r' > ~/.ssh/id_deploy
+            else
+              printf '%s' "$SRV_KEY" | tr -d ' \t\r\n' | base64 -d > ~/.ssh/id_deploy 2>/dev/null || true
+            fi
+            chmod 600 ~/.ssh/id_deploy
+            if ssh-keygen -y -P "" -f ~/.ssh/id_deploy > /dev/null 2>&1 \
+              && ssh -i ~/.ssh/id_deploy -o BatchMode=yes -o ConnectTimeout=10 "$SRV_USER@$SRV_HOST" true 2>/dev/null; then
+              SSH="ssh -i $HOME/.ssh/id_deploy -o BatchMode=yes"; echo "Authentification par clé."
+            else
+              echo "::warning::clé SSH inutilisable, repli sur le mot de passe"
+            fi
+          fi
+          if [ -z "$SSH" ]; then
+            [ -n "$SSHPASS" ] || { echo "::error::ni clé SSH utilisable ni mot de passe (secrets SERVER_SSH_KEY, ou SSH_KEY / SSH_PASSWORD du Marketing)"; exit 1; }
+            sudo apt-get install -y -qq sshpass >/dev/null 2>&1 || { sudo apt-get update -qq && sudo apt-get install -y -qq sshpass; }
+            SSH="sshpass -e ssh -o PubkeyAuthentication=no"; echo "Authentification par mot de passe."
+          fi
+          echo "SSH=$SSH" >> "$GITHUB_ENV"
+          u=$($SSH -o ConnectTimeout=10 "$SRV_USER@$SRV_HOST" 'id -u; hostname' | head -n 1)
+          if [ "$u" != "0" ]; then
+            echo "::error::le compte SSH « $SRV_USER » n'est pas root (uid ${u:-?}) : la livraison du signage installe un service — rien n'est copié."
             exit 1
           fi
+          echo "SSH OK — compte root ✓"
 
       # Les contenus uploadés vivent DANS le dossier déployé — médiathèque
       # agence, vidéos surprise, fichiers d'animation — et ne sont pas dans
@@ -96,10 +112,31 @@ jobs:
       # Comme dans les autres dépôts du réseau, le transfert n'efface plus rien
       # sur le serveur, et ces dossiers ne sont même plus touchés. On compte
       # leurs fichiers avant et après : une baisse fait échouer la livraison.
+      - name: Sauvegarder la base de la régie (avant toute copie, tant que l'ancien préfixe sig_ est là)
+        run: |
+          # Service arrêté quelques secondes (les écrans jouent leur cache) : la copie et la base ont alors exactement
+          # les mêmes lignes, table par table. Rien n'est copié ni renommé si la sauvegarde échoue.
+          $SSH "$SRV_USER@$SRV_HOST" 'bash -s' <<'SAUVE'
+          set -e
+          cd /var/www/signage
+          [ -f data/signage.db ] || { echo "pas encore de base : rien à sauvegarder"; exit 0; }
+          compter='const {DatabaseSync}=require("node:sqlite");const d=new DatabaseSync(process.argv[1],{readOnly:true});for(const {name} of d.prepare("SELECT name FROM sqlite_master WHERE type=\x27table\x27 ORDER BY name").all())console.log(name, d.prepare("SELECT COUNT(*) n FROM \""+name+"\"").get().n)'
+          if ! node -e "$compter" data/signage.db 2>/dev/null | grep -q '^sig_'; then echo "tables déjà en mar_sig_ : pas de nouvelle sauvegarde"; exit 0; fi
+          mkdir -p /var/backups/signage && chmod 0700 /var/backups/signage
+          F="/var/backups/signage/signage-avant-mar-sig-$(date +%Y%m%d-%H%M%S).db"
+          systemctl stop signage
+          trap 'systemctl start signage' EXIT
+          node -e 'const {DatabaseSync}=require("node:sqlite");const d=new DatabaseSync(process.argv[1]);d.prepare("VACUUM INTO ?").run(process.argv[2]);d.close()' data/signage.db "$F"
+          chmod 0600 "$F"
+          A=$(node -e "$compter" data/signage.db 2>/dev/null); B=$(node -e "$compter" "$F" 2>/dev/null)
+          if [ -z "$A" ] || [ "$A" != "$B" ]; then echo "::error::sauvegarde $F différente de la base — rien n'est copié"; exit 1; fi
+          echo "sauvegarde vérifiée : $F — $(printf '%s\n' "$A" | wc -l) tables, $(printf '%s\n' "$A" | awk '{s+=$2} END {print s}') lignes, identiques"
+          SAUVE
+
       - name: Compter les fichiers uploadés (avant transfert)
         id: uploads_before
         run: |
-          n=$(ssh -i ~/.ssh/id_deploy "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+          n=$($SSH "$SRV_USER@$SRV_HOST" \
             "cd ${DEPLOY_PATH} 2>/dev/null && find public/media public/surprise public/anim -type f 2>/dev/null | wc -l || echo 0" | tr -dc '0-9')
           echo "n=${n:-0}" >> "$GITHUB_OUTPUT"
           echo "Fichiers uploadés sur le serveur avant transfert : ${n:-0}"
@@ -121,13 +158,13 @@ jobs:
           rsync -az --no-owner --no-group \
             --exclude '.git' --exclude '.github' --exclude 'data' --exclude '/node_modules/' \
             --exclude '/public/media/' --exclude '/public/surprise/' --exclude '/public/anim/' \
-            -e "ssh -i ~/.ssh/id_deploy" \
-            ./ "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${DEPLOY_PATH}/"
+            -e "$SSH" \
+            ./ "$SRV_USER@$SRV_HOST:${DEPLOY_PATH}/"
           # node_modules : copie EXACTE (--delete limité à ce dossier, qui ne
           # contient que des dépendances) pour ne pas garder d'anciennes versions.
           rsync -az --delete --no-owner --no-group \
-            -e "ssh -i ~/.ssh/id_deploy" \
-            ./node_modules/ "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${DEPLOY_PATH}/node_modules/"
+            -e "$SSH" \
+            ./node_modules/ "$SRV_USER@$SRV_HOST:${DEPLOY_PATH}/node_modules/"
 
       - name: Provisionner le serveur (si besoin) et redémarrer le service
         # Aucune expression ${{ }} dans ce « run » : GitHub refuse le fichier
@@ -143,8 +180,8 @@ jobs:
           S3_AK: ${{ secrets.OVH_S3_ACCESS_KEY }}
           S3_SK: ${{ secrets.OVH_S3_SECRET_KEY }}
           S3_RG: ${{ secrets.OVH_S3_REGION }}
-          SERVER_USER: ${{ secrets.SERVER_USER }}
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ env.SRV_USER }}
+          SERVER_HOST: ${{ env.SRV_HOST }}
         run: |
           # Les mots de passe voyagent encodés en base64 : une apostrophe, un
           # espace ou un « % » dans un secret ne cassent plus la commande.
@@ -158,7 +195,7 @@ jobs:
           for v in "$B64_ADMIN" "$B64_AGENCY" "$B64_TFB_PHONE" "$B64_TFB_PW" "$B64_AI_KEY" "$B64_S3"; do
             if [ -n "$v" ]; then echo "::add-mask::$v"; fi
           done
-          ssh -i ~/.ssh/id_deploy "$SERVER_USER@$SERVER_HOST" \
+          $SSH "$SERVER_USER@$SERVER_HOST" \
             "B64_ADMIN='$B64_ADMIN' B64_AGENCY='$B64_AGENCY' B64_TFB_PHONE='$B64_TFB_PHONE' B64_TFB_PW='$B64_TFB_PW' B64_AI_KEY='$B64_AI_KEY' B64_S3='$B64_S3' PUBLIC_HOST='$SERVER_HOST' bash -s" <<'PROVISION'
           set -e
           cd /var/www/signage
@@ -202,13 +239,28 @@ jobs:
             done
             S3_ON=1
           fi
+          # Un secret absent ici ne retire rien : la valeur déjà sur le serveur est gardée (le signage est livré par
+          # le dépôt marketing depuis le 20/11/2026 ; ses secrets n'y sont pas forcément tous recopiés).
+          GARDE=""
+          if [ -f /etc/signage/signage.env ]; then
+            for k in SIG_ADMIN_PASSWORD SIG_AGENCY_PASSWORD TFBUDDY_PHONE TFBUDDY_PASSWORD ANTHROPIC_API_KEY SIG_S3_ENDPOINT SIG_S3_BUCKET SIG_S3_ACCESS_KEY SIG_S3_SECRET_KEY SIG_S3_REGION; do
+              if ! grep -q "^$k=" /etc/signage/signage.env.new && grep -q "^$k=" /etc/signage/signage.env; then
+                grep "^$k=" /etc/signage/signage.env | head -n 1 >> /etc/signage/signage.env.new
+                GARDE="$GARDE $k"
+              fi
+            done
+          fi
+          if [ -n "$GARDE" ]; then echo "gardés du serveur (secret absent ici) :$GARDE"; fi
           mv -f /etc/signage/signage.env.new /etc/signage/signage.env
-          if [ -n "$SIG_AG_PW" ]; then echo "compte agence : ouvert"; else echo "compte agence : FERMÉ (secret SIG_AGENCY_PASSWORD absent)"; fi
-          if [ -n "$TFB_PHONE" ] && [ -n "$TFB_PW" ]; then echo "TFBuddy : compte configuré — bundles lus toutes les 30 min"
+          has() { grep -q "^$1=" /etc/signage/signage.env; }
+          if has SIG_S3_ENDPOINT && has SIG_S3_BUCKET && has SIG_S3_ACCESS_KEY && has SIG_S3_SECRET_KEY; then S3_ON=1; fi
+          S3V() { sed -n "s/^$1=\"\(.*\)\"$/\1/p" /etc/signage/signage.env | head -n 1; }
+          if has SIG_AGENCY_PASSWORD; then echo "compte agence : ouvert"; else echo "compte agence : FERMÉ (secret SIG_AGENCY_PASSWORD absent)"; fi
+          if has TFBUDDY_PHONE && has TFBUDDY_PASSWORD; then echo "TFBuddy : compte configuré — bundles lus toutes les 30 min"
           else echo "TFBuddy : pas de compte (secrets TFBUDDY_PHONE / TFBUDDY_PASSWORD) — pas de bundles"; fi
-          if [ -n "$AI_KEY" ]; then echo "Claude : clé configurée — traductions proposées en régie"
+          if has ANTHROPIC_API_KEY; then echo "Claude : clé configurée — traductions proposées en régie"
           else echo "Claude : pas de clé (secret ANTHROPIC_API_KEY) — traductions saisies à la main"; fi
-          if [ -n "$S3_ON" ]; then echo "Médiathèque : OVHcloud Object Storage — bucket « $(s3v SIG_S3_BUCKET) » ($(s3v SIG_S3_ENDPOINT))"
+          if [ -n "$S3_ON" ]; then echo "Médiathèque : OVHcloud Object Storage — bucket « $(S3V SIG_S3_BUCKET) » ($(S3V SIG_S3_ENDPOINT))"
           else echo "Médiathèque : dossier public/media du serveur (secrets OVH_S3_* absents ou incomplets)"; fi
           # L'ancien drop-in portait le mot de passe admin en clair, lisible par tous.
           rm -f /etc/systemd/system/signage.service.d/override.conf
@@ -236,7 +288,7 @@ jobs:
           }
 
           echo "— Service systemd (arrêt → droits → démarrage)"
-          if [ -z "$SIG_PW" ]; then
+          if ! has SIG_ADMIN_PASSWORD; then
             echo "::warning::secret SIG_ADMIN_PASSWORD absent : le compte admin garde son mot de passe actuel"
           fi
           cp deploy/signage.service /etc/systemd/system/signage.service
@@ -249,6 +301,42 @@ jobs:
           # par lui. D'ici au redémarrage, toute erreur passe par back_to_root,
           # qui relance le service : jamais de régie laissée à l'arrêt.
           systemctl stop signage 2>/dev/null || true
+
+          # Tables sig_ → mar_sig_ (20/11/2026). Service ARRÊTÉ : rien n'écrit pendant la sauvegarde ni le renommage.
+          # La base SQLite est sauvegardée AVANT la copie du code (étape « Sauvegarder la base ») ; elle est renommée
+          # au démarrage (server/prefixe.js). Ici, le miroir MariaDB (copie lisible dans phpMyAdmin, lue par la landing) : RENAME TABLE de ses tables
+          #    sig_* qui sont des tables de la régie, en une seule instruction, lignes comptées avant et après.
+          if [ -f data/signage.db ] && node deploy/prefixe.mjs data/signage.db etat 2>/dev/null | grep -q '^table sig_'; then
+            A=$(node deploy/prefixe.mjs data/signage.db etat 2>/dev/null | grep '^table ' | sort)
+            SIGT=$(printf '%s\n' "$A" | sed -n 's/^table sig_\([a-z0-9_]*\) .*/\1/p')
+            SQLR=$(command -v mariadb || command -v mysql || true)
+            if [ -n "$SQLR" ] && "$SQLR" -N -e 'SELECT 1' >/dev/null 2>&1; then
+              for SCH in $("$SQLR" -N -e "SELECT DISTINCT table_schema FROM information_schema.tables WHERE table_name LIKE 'sig\\_%' AND table_schema NOT IN ('mysql','sys','information_schema','performance_schema')"); do
+                REN=""; AVANT=""; APRES=""; CONFLIT=""
+                for t in $SIGT; do
+                  ex=$("$SQLR" -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$SCH' AND table_name IN ('sig_$t','mar_sig_$t') GROUP BY table_schema" 2>/dev/null)
+                  [ -z "$ex" ] && continue
+                  if [ "$ex" = "2" ]; then CONFLIT="$CONFLIT sig_$t"; continue; fi
+                  if [ "$("$SQLR" -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$SCH' AND table_name='sig_$t'")" = "1" ]; then
+                    n=$("$SQLR" -N -e "SELECT COUNT(*) FROM \`$SCH\`.\`sig_$t\`")
+                    REN="$REN, \`$SCH\`.\`sig_$t\` TO \`$SCH\`.\`mar_sig_$t\`"; AVANT="$AVANT mar_sig_$t=$n"
+                  fi
+                done
+                if [ -n "$CONFLIT" ]; then echo "::warning::miroir « $SCH » : tables sous les deux noms, laissées telles quelles :$CONFLIT"; fi
+                if [ -n "$REN" ]; then
+                  "$SQLR" -e "RENAME TABLE ${REN#, }" || back_to_root "miroir « $SCH » : renommage MariaDB refusé (rien n'a changé)"
+                  for kv in $AVANT; do
+                    k=${kv%%=*}; v=${kv#*=}
+                    m=$("$SQLR" -N -e "SELECT COUNT(*) FROM \`$SCH\`.\`$k\`")
+                    if [ "$m" != "$v" ]; then back_to_root "miroir « $SCH » : $k a $m ligne(s), $v avant"; fi
+                  done
+                  echo "miroir « $SCH » : $(printf '%s\n' $AVANT | wc -l) table(s) sig_ → mar_sig_, lignes identiques"
+                fi
+              done
+            else
+              echo "MariaDB fermée à root par la socket : miroir non renommé (la régie le refait sous les nouveaux noms)"
+            fi
+          fi
           # Dossiers d'upload : jamais transférés (cf. rsync), créés ici sur un serveur neuf.
           { mkdir -p data public/media public/surprise public/anim \
             && chown -hR root:root . \
@@ -283,7 +371,7 @@ jobs:
           # système : root y entrait d'office. Le compte « signage » y reçoit
           # le même type d'accès (socket, sans mot de passe), limité à la
           # LECTURE de la base PWA et, pour le miroir, à ses propres tables
-          # sig_* — jamais le droit de toucher une table de l'ERP.
+          # mar_sig_* — jamais le droit de toucher une table de l'ERP.
           SQLC=$(command -v mariadb || command -v mysql || true)
           # Même binaire que le service (ExecStart), sous le même compte.
           INFO=$(runuser -u signage -- /usr/bin/node deploy/mysql-access.mjs "$PWD/data/signage.db" 2>/dev/null || true)
@@ -321,7 +409,7 @@ jobs:
               done
               "$SQLC" -e "$GRANTS" || back_to_root "droits MariaDB du compte signage impossibles à poser"
               if runuser -u signage -- "$SQLC" -N -e "SELECT COUNT(*) FROM $(sqlid "$PWADB").$(sqlid product)" >/dev/null 2>&1; then
-                echo "compte MariaDB signage (socket) : lecture de « $PWADB » ✓ · miroir : $ntab table(s) sig_* dans « $MIRDB »"
+                echo "compte MariaDB signage (socket) : lecture de « $PWADB » ✓ · miroir : $ntab table(s) mar_sig_* dans « $MIRDB »"
               else
                 back_to_root "le compte signage ne lit pas la base PWA « $PWADB » par la socket — l'import ERP échouerait"
               fi
@@ -583,7 +671,7 @@ jobs:
         env:
           BEFORE: ${{ steps.uploads_before.outputs.n }}
         run: |
-          after=$(ssh -i ~/.ssh/id_deploy "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+          after=$($SSH "$SRV_USER@$SRV_HOST" \
             "cd ${DEPLOY_PATH} && find public/media public/surprise public/anim -type f 2>/dev/null | wc -l" | tr -dc '0-9')
           echo "Fichiers uploadés : avant ${BEFORE:-0} · après ${after:-0}"
           if [ "${after:-0}" -lt "${BEFORE:-0}" ]; then
@@ -604,7 +692,7 @@ jobs:
 
       - name: Vérifier https depuis Internet (avertissement seulement)
         run: |
-          H="${{ secrets.SERVER_HOST }}"
+          H="$SRV_HOST"
           if curl -fsS --max-time 15 "https://$H/signage/api/v1/health" >/dev/null 2>&1; then
             END=$(echo | openssl s_client -connect "$H:443" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
             echo "https public OK ✓ — certificat valable jusqu'au ${END:-?}"
@@ -622,6 +710,15 @@ jobs:
         env:
           SIG_ADMIN_PASSWORD: ${{ secrets.SIG_ADMIN_PASSWORD }}
         run: |
+          if [ -z "$SIG_ADMIN_PASSWORD" ]; then
+            # Secret pas (encore) recopié dans le dépôt marketing : le compte admin garde son mot de passe du serveur,
+            # que ce runner ne connaît pas. Contrôles publics seulement, dits.
+            echo "::warning::secret SIG_ADMIN_PASSWORD absent du dépôt marketing : tests live réduits aux contrôles publics"
+            curl -fsS "$PUBLIC_URL/api/v1/health" | tee /tmp/sante.json; echo
+            grep -q '"tablePrefix":"mar_sig_"' /tmp/sante.json || { echo "::error::la régie n'annonce pas le préfixe mar_sig_"; exit 1; }
+            curl -fsS -o /dev/null -w 'film : HTTP %{http_code}\n' "$PUBLIC_URL/film"
+            exit 0
+          fi
           EXTRA=""
           if [ "${{ inputs.mutate }}" = "true" ]; then EXTRA="--mutate"; fi
           node test/live-test.js "$PUBLIC_URL" $EXTRA
