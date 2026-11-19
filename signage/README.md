@@ -1,4 +1,8 @@
-# Régie d'affichage — L'Atelier By (module signage)
+# Régie d'affichage — L'Atelier By (module signage du Marketing)
+
+> Depuis le 20/11/2026 ce code vit dans le dépôt **marketing**, dossier `signage/` (il avait son dépôt
+> `signage`) ; il est livré par `.github/workflows/deploy-signage.yml` du dépôt marketing. Tables : `mar_sig_`
+> (`sig_` avant ; `server/prefixe.js`, `deploy/prefixe.mjs`).
 
 Back office de pilotage du signage (implémentation de la maquette **Back Office.dc.html**),
 avec CMS, base de données, player d'écran et **tests live exécutés à chaque déploiement**.

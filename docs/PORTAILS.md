@@ -67,7 +67,10 @@ Chaque étape est mise en ligne séparément, après accord.
 1. Ce registre.
 2. **Marketing** : Social versé dans le dépôt (servi à la même adresse `/marketing/social/`) ; les
    tables `mar_` du cockpit reprises par Marketing (un seul propriétaire) ; design system sur Social ;
-   signage versé (`mar_sig_`, SQLite → MySQL).
+   signage versé (`mar_sig_`, SQLite → MySQL). **Fait le 20/11/2026** pour le code et les noms : `signage/`
+   (historique gardé), livraison `.github/workflows/deploy-signage.yml`, tables `sig_` → `mar_sig_` renommées dans
+   la base SQLite de la régie (au démarrage, `signage/server/prefixe.js`) et dans sa copie MariaDB ; la régie
+   reste en SQLite (le passage à MySQL est un autre chantier).
 3. **Formations** : module extrait du cockpit, `crm_mo_` / `crm_fmt_` repris du CRM.
 4. **Pilotage** : `ceo_` / `con_` / `pla_` / `mot_` / `mac_` → `pil_` (vues de bascule), PWA consultant
    versée.
@@ -395,43 +398,43 @@ propriétaire. `ceo_app_setting` et `crm_settings` du CRM se fondent dans `rec_v
 | marketing | `mar_voucher` | = |  |
 | marketing | `mar_voucher_channel` | = |  |
 | marketing | `mar_voucher_redemption` | = |  |
-| signage | `sig_aliases` | `mar_sig_aliases` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_bundles` | `mar_sig_bundles` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_campaigns` | `mar_sig_campaigns` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_dayplans` | `mar_sig_dayplans` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_dayplans_new` | `mar_sig_dayplans_new` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_element_types` | `mar_sig_element_types` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_heartbeats` | `mar_sig_heartbeats` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_ingredients` | `mar_sig_ingredients` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_langs` | `mar_sig_langs` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_lib_categories` | `mar_sig_lib_categories` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_media` | `mar_sig_media` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_module_items` | `mar_sig_module_items` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_modules` | `mar_sig_modules` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_modules_new` | `mar_sig_modules_new` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_players` | `mar_sig_players` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_playlist` | `mar_sig_playlist` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_playlist_items` | `mar_sig_playlist_items` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_playlists` | `mar_sig_playlists` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_product_categories` | `mar_sig_product_categories` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_product_moments` | `mar_sig_product_moments` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_product_prices` | `mar_sig_product_prices` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_products` | `mar_sig_products` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_promo_types` | `mar_sig_promo_types` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_publications` | `mar_sig_publications` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_screen_groups` | `mar_sig_screen_groups` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_seasons` | `mar_sig_seasons` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_sequence_items` | `mar_sig_sequence_items` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_sequences` | `mar_sig_sequences` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_sessions` | `mar_sig_sessions` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_settings` | `mar_sig_settings` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_snapshots` | `mar_sig_snapshots` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_store_unavailable` | `mar_sig_store_unavailable` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_stores` | `mar_sig_stores` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_tfb_promos` | `mar_sig_tfb_promos` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_translations` | `mar_sig_translations` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_users` | `mar_sig_users` | régie d’affichage ; SQLite → MySQL |
-| signage | `sig_weekplans` | `mar_sig_weekplans` | régie d’affichage ; SQLite → MySQL |
+| signage | `sig_aliases` | `mar_sig_aliases` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_bundles` | `mar_sig_bundles` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_campaigns` | `mar_sig_campaigns` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_dayplans` | `mar_sig_dayplans` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_dayplans_new` | `mar_sig_dayplans_new` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_element_types` | `mar_sig_element_types` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_heartbeats` | `mar_sig_heartbeats` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_ingredients` | `mar_sig_ingredients` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_langs` | `mar_sig_langs` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_lib_categories` | `mar_sig_lib_categories` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_media` | `mar_sig_media` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_module_items` | `mar_sig_module_items` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_modules` | `mar_sig_modules` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_modules_new` | `mar_sig_modules_new` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_players` | `mar_sig_players` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_playlist` | `mar_sig_playlist` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_playlist_items` | `mar_sig_playlist_items` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_playlists` | `mar_sig_playlists` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_product_categories` | `mar_sig_product_categories` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_product_moments` | `mar_sig_product_moments` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_product_prices` | `mar_sig_product_prices` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_products` | `mar_sig_products` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_promo_types` | `mar_sig_promo_types` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_publications` | `mar_sig_publications` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_screen_groups` | `mar_sig_screen_groups` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_seasons` | `mar_sig_seasons` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_sequence_items` | `mar_sig_sequence_items` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_sequences` | `mar_sig_sequences` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_sessions` | `mar_sig_sessions` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_settings` | `mar_sig_settings` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_snapshots` | `mar_sig_snapshots` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_store_unavailable` | `mar_sig_store_unavailable` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_stores` | `mar_sig_stores` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_tfb_promos` | `mar_sig_tfb_promos` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_translations` | `mar_sig_translations` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_users` | `mar_sig_users` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
+| signage | `sig_weekplans` | `mar_sig_weekplans` | régie d’affichage ; renommée le 20/11/2026 (SQLite + copie MariaDB) |
 | social | `mar_keys` | = |  |
 | social | `mar_sa_activite` | = |  |
 | social | `mar_sa_api_audit` | = |  |
