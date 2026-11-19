@@ -27,6 +27,11 @@ Vite 7 + React 19 + TypeScript strict côté écran. Interface en français.
   Les anciennes adresses (`/social`, `/social_franchisee`, `SA ….dc.html`) restent servies en renvois : Meta,
   les QR codes et l'ERP les appellent encore.
   La réorganisation en quatre portails et le registre des tables : `docs/PORTAILS.md`.
+- **Le signage (régie d'affichage) est dans le Marketing** (20/11/2026, il avait son dépôt `signage`) : `signage/`
+  (Node.js ≥ 22.5, base SQLite, lire `signage/README.md`), tables **`mar_sig_`** (`sig_` avant : renommées au
+  démarrage par `signage/server/prefixe.js`, retour possible par `signage/deploy/prefixe.mjs`), livraison
+  `.github/workflows/deploy-signage.yml` (sur `signage/**` seulement ; `/var/www/signage`, service `signage`,
+  adresses `/signage`, `/film` et celles des écrans inchangées). Tests : `cd signage && npm ci && npm test`.
 - La suite `api/tests/smoke.php` doit passer deux fois de suite sur la même
   base : un test qui laisse une trace n'est vrai qu'une fois.
 
