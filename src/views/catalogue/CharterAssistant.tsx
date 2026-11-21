@@ -382,11 +382,13 @@ const SLOT_OF_STEP: Record<number, CatalogueBrandSlot> = { 1: 'cover', 2: 'page2
  * l'étape de la page cliquée, `gammes` celles du catalogue — la couverture ouverte est la sienne, par la règle de l'API
  * (la première de ses gammes qui a une couverture, sinon la générique) — et `backLabel` le lien de retour.
  */
-export default function CharterAssistant({ onBack, step: initialStep, gammes: catalogueGammes, backLabel = '‹ Catalogues', catalogue }: {
+export default function CharterAssistant({ onBack, step: initialStep, gammes: catalogueGammes, backLabel = '‹ Catalogues', doneLabel = 'Enregistrer et revenir au catalogue', catalogue }: {
   onBack: () => void
   step?: Step
   gammes?: number[]
   backLabel?: string
+  /** Mode « ce catalogue », dernière étape : le bouton qui enregistre et repart (au catalogue, ou à la liste). */
+  doneLabel?: string
   /**
    * Mode « ce catalogue » (21/11/2026, Sam : « je ne dois pas modifier tout, mais chaque catalogue créé par la
    * marque ») : les 4 pages de CE catalogue de la marque. Une page modifiée devient la sienne ; les autres suivent la
@@ -1191,7 +1193,7 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
         </button>
         {catalogue && step === 4 ? (
           <button type="button" className="btn" onClick={() => void leave()}>
-            Enregistrer et revenir au catalogue
+            {doneLabel}
           </button>
         ) : step < 5 ? (
           <button type="button" className="btn" onClick={() => void go((step + 1) as Step)}>
