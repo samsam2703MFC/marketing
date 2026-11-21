@@ -5960,7 +5960,7 @@ check('pages propres : chaque élément — logo masqué, « La gamme » renomm�
         && ($docLook[$nL - 1]['look']['shop']['font'] ?? '') === 'vank'
         && ($docAutreLook[0]['look']['logo']['show'] ?? false) === true && ($docAutreLook[0]['kicker'] ?? '') === 'La gamme' && ($docAutreLook[count($docAutreLook) - 1]['qrUrl'] ?? null) !== null
         && $poseLook2['status'] === 200 && $poseLook2['body']['data'] === $poseLook['body']['data']
-        && array_keys($poseLook['body']['data']['own']['back']['look'] ?? []) === ['logo', 'title', 'text', 'qr', 'shop', 'address', 'hours', 'phone', 'email'],
+        && array_keys($poseLook['body']['data']['own']['back']['look'] ?? []) === ['logo', 'title', 'text', 'qr', 'shop', 'address', 'hours', 'holidays', 'phone', 'email'],
     json_encode([$poseLook['status'], $poseLook['body']['error'] ?? null, $docLook[0]['look'] ?? null, $docLook[0]['kicker'] ?? null, $docLook[$nL - 1]['shop'] ?? null], JSON_UNESCAPED_UNICODE));
 $refusLook = [
     call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['cover' => array_replace($couvP, ['look' => ['pirate' => ['show' => false]]])]),
@@ -5974,6 +5974,39 @@ check('pages propres : éléments refusés (422, champ nommé) — élément inc
     array_unique(array_column($refusLook, 'status')) === [422]
         && array_map(static fn (array $r): string => $r['body']['error']['details'][0]['field'] ?? '', $refusLook) === ['cover.look.pirate', 'cover.look.logo.show', 'page2.look.title.font', 'back.look.shop.color', 'back.look', 'page2.look.legend'],
     json_encode(array_map(static fn (array $r): array => [$r['status'], $r['body']['error']['details'] ?? null], $refusLook), JSON_UNESCAPED_UNICODE));
+call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], $corpsP);
+
+// Les horaires des fêtes de chaque boutique (migration 054) et le texte de la dernière page sur plusieurs lignes
+// (21/11/2026, catalogue « Fêtes de fin d'année » : « 24/12 : [horaire] · 25/12 : [horaire]… »).
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$horairesFr = "24/12 : 7h – 16h · 25/12 : fermé\n31/12 : 7h – 16h · 01/01 : fermé";
+$fetes = call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['holidayHoursFr' => $horairesFr, 'holidayHoursNl' => '']);
+$texteDos = "Scannez le code pour commander et retrouver nos horaires de fêtes.\n\nToute l'équipe vous souhaite de très belles fêtes.";
+$poseDos = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], array_replace($corpsP, ['back' => array_replace($dosP, ['textFr' => $texteDos])]));
+$pagesA = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document', ['shopId' => (string) $catA])['body']['data']['pages'] ?? [];
+$dosA = $pagesA !== [] ? end($pagesA) : [];
+$pagesNl = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document', ['shopId' => (string) $catA, 'lang' => 'nl'])['body']['data']['pages'] ?? [];
+$pagesB = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document', ['shopId' => (string) $catB])['body']['data']['pages'] ?? [];
+$boutiqueA = array_column(call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter/checks')['body']['data']['shops'] ?? [], null, 'id')[$catA] ?? [];
+$masqueF = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], array_replace($corpsP, ['back' => array_replace($dosP, ['look' => ['holidays' => ['show' => false]]])]));
+$pagesMasque = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document', ['shopId' => (string) $catA])['body']['data']['pages'] ?? [];
+check('dernière page : les horaires des fêtes de la boutique (saisis par boutique, NL vide = FR), sous les horaires ; la voisine n’a rien ; masqués par l’élément « holidays » ; le texte garde ses lignes',
+    $fetes['status'] === 200 && ($fetes['body']['data']['holidayHoursFr'] ?? '') === $horairesFr && ($boutiqueA['holidayHoursFr'] ?? '') === $horairesFr
+        && $poseDos['status'] === 200 && ($dosA['shop']['holidayHours'] ?? '') === $horairesFr && ($dosA['text'] ?? '') === $texteDos
+        && (end($pagesNl)['shop']['holidayHours'] ?? '') === $horairesFr && (end($pagesB)['shop']['holidayHours'] ?? 'x') === ''
+        && $masqueF['status'] === 200 && (end($pagesMasque)['shop']['holidayHours'] ?? 'x') === '' && (end($pagesMasque)['look']['holidays']['show'] ?? true) === false,
+    json_encode([$fetes['status'], $fetes['body']['error'] ?? null, $poseDos['body']['error'] ?? null, $dosA['shop'] ?? null, end($pagesB)['shop'] ?? null], JSON_UNESCAPED_UNICODE));
+$refusF = [
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['holidayHoursFr' => str_repeat('a', 601)]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['holidayHoursNl' => 5]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['back' => array_replace($dosP, ['textFr' => str_repeat('a', 601)])]),
+];
+$dos600 = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['back' => array_replace($dosP, ['textFr' => str_repeat('a', 600)])]);
+check('dernière page : horaires des fêtes et texte refusés (422 nommé) au-delà de 600 caractères ou s’ils ne sont pas du texte ; un texte de 600 caractères passe',
+    array_column($refusF, 'status') === [422, 422, 422] && $dos600['status'] === 200
+        && array_map(static fn (array $r): string => $r['body']['error']['details'][0]['field'] ?? '', $refusF) === ['holidayHoursFr', 'holidayHoursNl', 'back.textFr'],
+    json_encode(array_map(static fn (array $r): array => [$r['status'], $r['body']['error']['details'] ?? null], $refusF), JSON_UNESCAPED_UNICODE));
+call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['holidayHoursFr' => '', 'holidayHoursNl' => '']);
 call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], $corpsP);
 
 // La boutique reçoit le catalogue avec ses pages ; sa copie adaptée les garde, et la marque n'en pose pas sur un catalogue de boutique.

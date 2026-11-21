@@ -101,6 +101,10 @@ final class CatalogueService
     private const PRODUCTS_MAX = 400;
     private const TEXT_MAX     = 240;
     private const PAGE_TEXT_MAX = 1200;
+    /** Le texte de la dernière page (21/11/2026 : plusieurs lignes, « Scannez le code… », « Toute l'équipe… »). */
+    private const BACK_TEXT_MAX = 600;
+    /** Les horaires des fêtes d'une boutique (21/11/2026, migration 054). */
+    private const HOLIDAY_HOURS_MAX = 600;
     private const SHOPS_MAX    = 100;
 
     /** Validité d'un lien d'impression, en secondes. */
@@ -155,7 +159,7 @@ final class CatalogueService
         'cover'       => ['logo' => 'show', 'kicker' => 'text', 'title' => 'show', 'subtitle' => 'show', 'shop' => 'style'],
         'page2'       => ['logo' => 'show', 'title' => 'text', 'text' => 'text'],
         'penultimate' => ['logo' => 'show', 'title' => 'text', 'text' => 'text', 'legend' => 'show'],
-        'back'        => ['logo' => 'show', 'title' => 'text', 'text' => 'text', 'qr' => 'show', 'shop' => 'text', 'address' => 'show', 'hours' => 'show', 'phone' => 'show', 'email' => 'show'],
+        'back'        => ['logo' => 'show', 'title' => 'text', 'text' => 'text', 'qr' => 'show', 'shop' => 'text', 'address' => 'show', 'hours' => 'show', 'holidays' => 'show', 'phone' => 'show', 'email' => 'show'],
     ];
 
     public function __construct(
@@ -2162,7 +2166,7 @@ final class CatalogueService
         $contacts = $this->catalogues->shopContacts();
         $out = [];
         foreach ($this->catalogues->shops() as $shop) {
-            $contact = $contacts[$shop['id']] ?? ['phone2' => '', 'webshopUrl' => '', 'logoMediaId' => null];
+            $contact = $contacts[$shop['id']] ?? ['phone2' => '', 'webshopUrl' => '', 'logoMediaId' => null, 'holidayHoursFr' => '', 'holidayHoursNl' => ''];
             // Le QR : l'adresse directe du webshop de la boutique, saisie ; sinon celle du réseau, la boutique en paramètre.
             $qr = $contact['webshopUrl'] !== '' ? $contact['webshopUrl'] : ($webshop === null ? null : $webshop . '?shop=' . $shop['erpShopId']);
             $info = $shop['erpShopId'] !== null ? $this->webshop->shop($shop['erpShopId']) : ['shop' => null, 'error' => null];
@@ -2193,6 +2197,8 @@ final class CatalogueService
                 'webshopUrl' => $contact['webshopUrl'],
                 'logoMediaId' => $contact['logoMediaId'],
                 'logoUrl'   => $this->mediaUrl($contact['logoMediaId']),
+                'holidayHoursFr' => $contact['holidayHoursFr'] ?? '',
+                'holidayHoursNl' => $contact['holidayHoursNl'] ?? '',
                 'qrUrl'     => $qr,
                 'host'      => $qr === null ? null : self::host($qr),
                 'missing'   => $missing,
@@ -2223,8 +2229,18 @@ final class CatalogueService
         if ($shop === null) {
             throw new CatalogueError('RESOURCE_NOT_FOUND', 'Boutique inconnue du Marketing.', 404);
         }
-        $current = $this->catalogues->shopContacts()[$shopId] ?? ['phone2' => '', 'webshopUrl' => '', 'logoMediaId' => null];
-        $errors = self::unknown($input, ['phone2', 'webshopUrl', 'logoMediaId']);
+        $current = $this->catalogues->shopContacts()[$shopId] ?? ['phone2' => '', 'webshopUrl' => '', 'logoMediaId' => null, 'holidayHoursFr' => '', 'holidayHoursNl' => ''];
+        $errors = self::unknown($input, ['phone2', 'webshopUrl', 'logoMediaId', 'holidayHoursFr', 'holidayHoursNl']);
+        // Les horaires des fêtes (21/11/2026) : un texte libre, plusieurs lignes, FR et NL (vide : le français).
+        $holidays = [];
+        foreach (['holidayHoursFr', 'holidayHoursNl'] as $key) {
+            $value = array_key_exists($key, $input) ? $input[$key] : ($current[$key] ?? '');
+            if (!is_string($value) || mb_strlen(trim($value)) > self::HOLIDAY_HOURS_MAX) {
+                $errors[] = ['field' => $key, 'message' => 'Horaires des fêtes : un texte de ' . self::HOLIDAY_HOURS_MAX . ' caractères au plus.'];
+                $value = '';
+            }
+            $holidays[$key] = trim((string) $value);
+        }
         $phone2 = array_key_exists('phone2', $input) ? $input['phone2'] : $current['phone2'];
         if (!is_string($phone2) || mb_strlen(trim($phone2)) > 40 || preg_match('/^[0-9+().\/ -]*$/', trim($phone2)) !== 1) {
             $errors[] = ['field' => 'phone2', 'message' => 'Téléphone : chiffres, espaces, + . / ( ) -, 40 caractères au plus.'];
@@ -2248,7 +2264,7 @@ final class CatalogueService
         if ($errors !== []) {
             throw new CatalogueError('VALIDATION_FAILED', 'Coordonnées invalides.', 422, $errors);
         }
-        $this->catalogues->saveShopContact($shopId, trim((string) $phone2), trim((string) $url), $logo, $userId);
+        $this->catalogues->saveShopContact($shopId, trim((string) $phone2), trim((string) $url), $logo, $userId, $holidays['holidayHoursFr'], $holidays['holidayHoursNl']);
         foreach ($this->charterShops() as $row) {
             if ($row['id'] === $shopId) {
                 return $row;
@@ -2478,8 +2494,12 @@ final class CatalogueService
     private static function backFields(array $back, string $field, array &$errors): array
     {
         $clean = [];
-        foreach (['titleFr', 'titleNl', 'textFr', 'textNl'] as $text) {
+        foreach (['titleFr', 'titleNl'] as $text) {
             $clean[$text] = self::text($back[$text] ?? '', $field . '.' . $text, $errors);
+        }
+        // Le texte : plusieurs lignes, 600 caractères (21/11/2026).
+        foreach (['textFr', 'textNl'] as $text) {
+            $clean[$text] = self::text($back[$text] ?? '', $field . '.' . $text, $errors, self::BACK_TEXT_MAX);
         }
         $clean['template'] = $back['template'] ?? 'A';
         if (!in_array($clean['template'], self::BACK_TEMPLATES, true)) {
@@ -3242,7 +3262,9 @@ final class CatalogueService
         $contact = $version !== null ? ($this->catalogues->shopContacts()[$version['id']] ?? null) : null;
         if ($version !== null) {
             $shopInfo = ['id' => $version['id'], 'erpShopId' => $version['erpShopId'], 'name' => $version['name'], 'address' => '', 'hours' => '', 'phone' => '',
-                'email' => '', 'phone2' => $contact['phone2'] ?? ''];
+                'email' => '', 'phone2' => $contact['phone2'] ?? '',
+                // Les horaires des fêtes saisis pour la boutique (21/11/2026) ; NL vide : le français.
+                'holidayHours' => $lang === 'nl' ? (($contact['holidayHoursNl'] ?? '') ?: ($contact['holidayHoursFr'] ?? '')) : ($contact['holidayHoursFr'] ?? '')];
             if ($version['erpShopId'] !== null) {
                 $info = $this->webshop->shop($version['erpShopId']);
                 if ($info['shop'] !== null) {
@@ -3353,7 +3375,7 @@ final class CatalogueService
             $page['host'] = null;
         }
         if (is_array($page['shop'] ?? null)) {
-            foreach (['address' => ['address'], 'hours' => ['hours'], 'phone' => ['phone', 'phone2'], 'email' => ['email']] as $element => $keys) {
+            foreach (['address' => ['address'], 'hours' => ['hours'], 'holidays' => ['holidayHours'], 'phone' => ['phone', 'phone2'], 'email' => ['email']] as $element => $keys) {
                 if (!$page['look'][$element]['show']) {
                     foreach ($keys as $key) {
                         $page['shop'][$key] = '';
