@@ -26,6 +26,11 @@ final class ReferenceRepository
     {
         return [
             'levers'          => $this->levers(),
+            // Tous les leviers, inactifs compris, dans l'ordre du réseau : les KPI par levier du cockpit en ont besoin
+            // pour les campagnes passées (21/11/2026).
+            'allLevers'       => $this->fetch(
+                'SELECT id, code, label, color_hex, sort_order, is_active FROM mar_lever ORDER BY sort_order, id'
+            ),
             'campaignStatuses'=> $this->campaignStatuses(),
             'campaignTypes'   => $this->campaignTypes(),
             'leadStatuses'    => $this->leadStatuses(),
