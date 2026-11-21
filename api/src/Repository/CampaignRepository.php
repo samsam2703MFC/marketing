@@ -131,6 +131,11 @@ final class CampaignRepository
         $statement = Database::connection()->prepare(sprintf(
             'SELECT c.*, b.name AS brand_name, t.label AS type_label,
                     tl.code AS type_lever_code,
+                    -- Ce que la note de campagne du cockpit montre du type et de son levier (21/11/2026).
+                    t.icon_path AS type_icon_path, t.color_hex AS type_color_hex,
+                    t.default_kpi_label AS type_default_kpi_label, t.lever_id AS type_lever_id,
+                    t.lever_badge_label AS type_lever_badge_label,
+                    tl.label AS type_lever_label, tl.color_hex AS type_lever_color_hex,
                     st.label AS status_label, st.text_hex AS status_text_hex, st.bg_rgba AS status_bg_rgba,
                     ta.code AS tracking_action_code, ta.label AS tracking_action_label,
                     ta.unit_label AS tracking_unit_label, ta.source_label AS tracking_source_label,
@@ -185,8 +190,37 @@ final class CampaignRepository
         $row['channels']     = $this->campaignChannels($id);
         $row['pos_questions'] = $this->posQuestions($id);
         $row['assets']       = $this->assets($id);
+        $row['render_formats'] = $this->renderFormats($id);
 
         return $row;
+    }
+
+    /**
+     * Les formats dans lesquels les visuels de la campagne sont déclinés (« Post Facebook », « Story »…), une fois
+     * chacun. La note de campagne du cockpit les montre au franchisé (21/11/2026).
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function renderFormats(int $campaignId): array
+    {
+        $statement = Database::connection()->prepare(
+            'SELECT DISTINCT f.id, f.name, f.width_px, f.height_px, f.note, f.sort_order
+               FROM mar_asset_render ar
+               JOIN mar_campaign_asset ca ON ca.id = ar.campaign_asset_id
+               JOIN mar_format f ON f.id = ar.format_id
+              WHERE ca.campaign_id = :id
+              ORDER BY f.sort_order, f.id'
+        );
+        $statement->execute(['id' => $campaignId]);
+
+        $rows = array_map([$this, 'castRow'], $statement->fetchAll());
+        foreach ($rows as &$row) {
+            $row['width_px']   = (int) $row['width_px'];
+            $row['height_px']  = (int) $row['height_px'];
+            $row['sort_order'] = (int) $row['sort_order'];
+        }
+
+        return $rows;
     }
 
     /**
@@ -2137,7 +2171,7 @@ final class CampaignRepository
     private function campaignChannels(int $campaignId): array
     {
         $statement = Database::connection()->prepare(
-            'SELECT ch.label, ch.family, cc.budget_amount, cc.is_enabled, a.name AS agency_name
+            'SELECT ch.label, ch.family, cc.budget_amount, cc.is_enabled, cc.agency_id, a.name AS agency_name
                FROM mar_campaign_channel cc
                JOIN mar_channel ch     ON ch.id = cc.channel_id
                LEFT JOIN mar_agency a  ON a.id = cc.agency_id
