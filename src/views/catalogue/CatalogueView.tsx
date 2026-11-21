@@ -197,7 +197,7 @@ function CatalogueList({ onOpen, onCharter }: { onOpen: (id: number) => void; on
                   <th>Pages</th>
                   <th>Boutiques</th>
                   <th>État</th>
-                  <th aria-label="Ouvrir ou supprimer" />
+                  <th aria-label="Supprimer ou modifier" />
                 </tr>
               </thead>
               <tbody>
@@ -237,8 +237,8 @@ function CatalogueList({ onOpen, onCharter }: { onOpen: (id: number) => void; on
                       >
                         {deleting === cat.id ? 'Suppression…' : 'Supprimer'}
                       </button>
-                      <button type="button" className="btn btn--sm" disabled={deleting === cat.id} onClick={() => onOpen(cat.id)}>
-                        Ouvrir ›
+                      <button type="button" className="btn btn--sm catv-edit" disabled={deleting === cat.id} aria-label={`Modifier le catalogue « ${cat.title} »`} onClick={() => onOpen(cat.id)}>
+                        ✎ Modifier
                       </button>
                     </td>
                   </tr>
@@ -498,17 +498,40 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
 
   // --- enregistrement : chaque modification part tout de suite, la composition suit ---
   const queue = useRef<Promise<unknown>>(Promise.resolve())
+  /** La dernière erreur d'enregistrement (null : tout est passé) et le dernier titre enregistré. */
+  const failed = useRef<string | null>(null)
+  const savedTitle = useRef(initial.title)
   function change(patch: api.CatalogueUpdate) {
     setCat((current) => ({ ...current, ...patch }))
     setSave({ status: 'saving' })
     queue.current = queue.current
       .then(() => api.updateCatalogue(cat.id, patch))
       .then((saved) => {
+        failed.current = null
+        savedTitle.current = saved.title
         setCat(saved)
         setSave({ status: 'saved' })
         setRevision((value) => value + 1)
       })
-      .catch((cause: unknown) => setSave({ status: 'error', text: message(cause) }))
+      .catch((cause: unknown) => {
+        failed.current = message(cause)
+        setSave({ status: 'error', text: message(cause) })
+      })
+  }
+
+  /**
+   * « Enregistrer » (21/11/2026, Sam : « quand je modifie je ne sais pas enregistrer ») : chaque modification part déjà
+   * toute seule ; le bouton envoie le titre en cours de frappe, attend la fin des envois et le dit, avec l'heure.
+   */
+  const [saving, setSaving] = useState(false)
+  async function saveAll() {
+    setSaving(true)
+    const typed = cat.title.trim()
+    if (typed !== '' && typed !== savedTitle.current) change({ title: typed })
+    await queue.current
+    setSaving(false)
+    if (failed.current !== null) setSave({ status: 'error', text: `Non enregistré : ${failed.current}` })
+    else setSave({ status: 'saved', text: `✓ Enregistré à ${new Date().toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' })}` })
   }
 
   const products = webshop.data?.products ?? []
@@ -776,9 +799,17 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
         <button type="button" className="btn" onClick={() => void print('proof', false)}>
           Aperçu imprimable
         </button>
-        <button type="button" className="btn btn--primary" onClick={() => void print('printer', cat.owner === 'marque')}>
+        <button type="button" className="btn" onClick={() => void print('printer', cat.owner === 'marque')}>
           PDF pour l’imprimeur
         </button>
+        <span className="catv-savebox">
+          {/* Jamais désactivé par un envoi automatique : quitter le titre en cliquant ici en lance un, le clic doit passer. */}
+          <button type="button" className="btn btn--primary" aria-busy={saving} onClick={() => void saveAll()}>
+            {saving ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+          {save.status === 'saved' && save.text ? <span className="catv-savebox__ok">{save.text}</span> : null}
+          {save.status === 'error' ? <span className="error catv-savebox__ko">{save.text}</span> : null}
+        </span>
       </div>
       {printError ? <p className="error">{printError}</p> : null}
 

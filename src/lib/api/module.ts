@@ -3326,6 +3326,8 @@ export interface CatalogueCover {
   titleColor?: CatalogueCoverColor | null
   subtitleFont?: CatalogueCoverFont | null
   subtitleColor?: CatalogueCoverColor | null
+  /** Le nom de la boutique sous le titre, dans la version d'une boutique (21/11/2026) ; absent : vrai. */
+  showShop?: boolean
 }
 
 /** Les polices de la marque : Vank (titres), Gotham (texte), Playwrite DEVA (manuscrite). */
@@ -3502,6 +3504,7 @@ const coverBody = (cover: CatalogueOwnCover) => ({
   titleFr: cover.titleFr, titleNl: cover.titleNl, subtitleFr: cover.subtitleFr, subtitleNl: cover.subtitleNl, mediaId: cover.mediaId,
   template: cover.template, visual: cover.visual, illustration: cover.illustration,
   titleFont: cover.titleFont ?? null, titleColor: cover.titleColor ?? null, subtitleFont: cover.subtitleFont ?? null, subtitleColor: cover.subtitleColor ?? null,
+  showShop: cover.showShop ?? true,
 })
 
 const backBody = (back: CatalogueBackPage) => ({ titleFr: back.titleFr, titleNl: back.titleNl, textFr: back.textFr, textNl: back.textNl, template: back.template })

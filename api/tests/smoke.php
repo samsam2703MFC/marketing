@@ -5474,7 +5474,7 @@ check('charte : la police et la couleur du titre et du sous-titre (design system
 $etatPub = call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter');
 check('charte : publiée, le brouillon n’a plus de différence ; l’ordre des clés relues est fixe',
     ($etatPub['body']['data']['publication']['version'] ?? 0) === 2 && ($etatPub['body']['data']['publication']['draftChanged'] ?? true) === false
-        && array_keys($etatPub['body']['data']['covers'][1] ?? []) === ['gamme', 'titleFr', 'titleNl', 'subtitleFr', 'subtitleNl', 'mediaId', 'template', 'visual', 'illustration', 'titleFont', 'titleColor', 'subtitleFont', 'subtitleColor', 'imageUrl']
+        && array_keys($etatPub['body']['data']['covers'][1] ?? []) === ['gamme', 'titleFr', 'titleNl', 'subtitleFr', 'subtitleNl', 'mediaId', 'template', 'visual', 'illustration', 'titleFont', 'titleColor', 'subtitleFont', 'subtitleColor', 'showShop', 'imageUrl']
         && array_keys($etatPub['body']['data']['back'] ?? []) === ['titleFr', 'titleNl', 'textFr', 'textNl', 'template'],
     json_encode($etatPub['body']['data'] ?? null, JSON_UNESCAPED_UNICODE));
 $refusG = [
@@ -5743,6 +5743,27 @@ check('pages propres : 401 sans identité (routeur réel), 403 pour un compte de
     call($router, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages')['status'] === 401
         && call($router, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], [])['status'] === 401
         && $refusFr === [403, 403], json_encode($refusFr));
+
+// Le nom de la boutique sous le titre de la couverture (21/11/2026, Sam : « je dois pouvoir effacer le Atelier by Halle
+// qui est sur la première page ») : `showShop` faux le masque dans chaque version de boutique ; vrai par défaut.
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$avecNom = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document', ['shopId' => (string) $catA])['body']['data']['pages'][0] ?? [];
+$sansNom = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], array_replace($corpsP, ['cover' => array_replace($couvP, ['showShop' => false])]));
+$docSansNom = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document', ['shopId' => (string) $catA])['body']['data']['pages'][0] ?? [];
+$docAutreNom = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idAutre . '/document', ['shopId' => (string) $catA])['body']['data']['pages'][0] ?? [];
+$refusNom = [
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['cover' => array_replace($couvP, ['showShop' => 'non'])]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['covers' => [['gamme' => 14, 'titleFr' => 'a', 'showShop' => 1]]]),
+];
+check('pages propres : le nom de la boutique sous le titre — vrai par défaut, masqué (showShop faux) dans la version de la boutique, l’autre catalogue le garde ; non booléen refusé (422 nommé)',
+    ($avecNom['eyebrow'] ?? null) !== null && ($communes['cover']['showShop'] ?? null) === true
+        && $sansNom['status'] === 200 && ($sansNom['body']['data']['own']['cover']['showShop'] ?? null) === false
+        && array_key_exists('eyebrow', $docSansNom) && $docSansNom['eyebrow'] === null && ($docSansNom['title'] ?? '') === 'Noël du réseau'
+        && ($docAutreNom['eyebrow'] ?? null) === ($avecNom['eyebrow'] ?? '?')
+        && array_column($refusNom, 'status') === [422, 422]
+        && ($refusNom[0]['body']['error']['details'][0]['field'] ?? '') === 'cover.showShop' && ($refusNom[1]['body']['error']['details'][0]['field'] ?? '') === 'covers[0].showShop',
+    json_encode([$avecNom['eyebrow'] ?? null, $sansNom['status'], $sansNom['body']['error'] ?? null, $docSansNom['eyebrow'] ?? 'absent', $docAutreNom['eyebrow'] ?? null, array_column($refusNom, 'status')], JSON_UNESCAPED_UNICODE));
+call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], $corpsP);
 
 // La boutique reçoit le catalogue avec ses pages ; sa copie adaptée les garde, et la marque n'en pose pas sur un catalogue de boutique.
 AuthContext::set(1, 'BRAND_ADMIN', 1);
