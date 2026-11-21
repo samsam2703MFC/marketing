@@ -720,7 +720,6 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
                       <Qr url={qr} size={22} />
                       <div className="cat-back__qrtext">
                         <div className="cat-back__qrlabel" style={qrStyle}>{nl ? 'Bestel online' : 'Commander en ligne'}</div>
-                        {page.host ? <div className="cat-back__hint" style={qrStyle}>{page.host}</div> : null}
                       </div>
                     </div>
                   ) : null}
