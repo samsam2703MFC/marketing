@@ -105,18 +105,25 @@ export default function CatalogueView() {
         gammes={screen.gammes}
         catalogue={screen.catalogue}
         backLabel={returnTo !== undefined ? '‹ Retour au catalogue' : undefined}
+        doneLabel={returnTo !== undefined ? 'Enregistrer et revenir au catalogue' : 'Enregistrer et revenir à la liste'}
         onBack={() => setScreen(returnTo !== undefined ? { kind: 'editor', id: returnTo } : { kind: 'list' })}
       />
     )
   }
-  return <CatalogueList onOpen={(id) => setScreen({ kind: 'editor', id })} onCharter={() => setScreen({ kind: 'charter' })} />
+  return (
+    <CatalogueList
+      onOpen={(id) => setScreen({ kind: 'editor', id })}
+      onCharter={() => setScreen({ kind: 'charter' })}
+      onBrandPages={(cat) => setScreen({ kind: 'charter', step: 1, catalogue: { id: cat.id, title: cat.title } })}
+    />
+  )
 }
 
 // =================================================================================================
 // Liste et création
 // =================================================================================================
 
-function CatalogueList({ onOpen, onCharter }: { onOpen: (id: number) => void; onCharter: () => void }) {
+function CatalogueList({ onOpen, onCharter, onBrandPages }: { onOpen: (id: number) => void; onCharter: () => void; onBrandPages: (cat: Catalogue) => void }) {
   const [owner, setOwner] = useState<'' | api.CatalogueOwner>('')
   const [revision, setRevision] = useState(0)
   const list = useAsync(() => api.listCatalogues(owner ? { owner } : {}), [owner, revision])
@@ -237,8 +244,29 @@ function CatalogueList({ onOpen, onCharter }: { onOpen: (id: number) => void; on
                       >
                         {deleting === cat.id ? 'Suppression…' : 'Supprimer'}
                       </button>
-                      <button type="button" className="btn btn--sm catv-edit" disabled={deleting === cat.id} aria-label={`Modifier le catalogue « ${cat.title} »`} onClick={() => onOpen(cat.id)}>
-                        ✎ Modifier
+                      {/* Deux boutons (21/11/2026, Sam) : les 4 pages de la marque de CE catalogue, puis son contenu. Un
+                          catalogue de franchisé garde les pages communes : il n'a que son contenu. */}
+                      {cat.owner === 'marque' ? (
+                        <button
+                          type="button"
+                          className="btn btn--sm catv-edit"
+                          disabled={deleting === cat.id}
+                          aria-label={`Modifier les pages de la marque du catalogue « ${cat.title} »`}
+                          title="Couverture, page 2, avant-dernière et dernière page de ce catalogue seulement"
+                          onClick={() => onBrandPages(cat)}
+                        >
+                          ✎ Pages de la marque
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="btn btn--sm catv-edit"
+                        disabled={deleting === cat.id}
+                        aria-label={`Modifier le contenu du catalogue « ${cat.title} »`}
+                        title="Les produits et les pages intérieures du catalogue"
+                        onClick={() => onOpen(cat.id)}
+                      >
+                        ✎ Contenu
                       </button>
                     </td>
                   </tr>
