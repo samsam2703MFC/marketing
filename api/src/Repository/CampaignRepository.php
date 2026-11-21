@@ -130,6 +130,7 @@ final class CampaignRepository
 
         $statement = Database::connection()->prepare(sprintf(
             'SELECT c.*, b.name AS brand_name, t.label AS type_label,
+                    tl.code AS type_lever_code,
                     st.label AS status_label, st.text_hex AS status_text_hex, st.bg_rgba AS status_bg_rgba,
                     ta.code AS tracking_action_code, ta.label AS tracking_action_label,
                     ta.unit_label AS tracking_unit_label, ta.source_label AS tracking_source_label,
@@ -138,6 +139,8 @@ final class CampaignRepository
                JOIN mar_brand b            ON b.id = c.brand_id
                JOIN mar_campaign_status st ON st.code = c.status_code
                LEFT JOIN mar_campaign_type t ON t.id = c.type_id
+               -- Le levier du type : la mesure du cockpit en tire son effet attendu (21/11/2026).
+               LEFT JOIN mar_lever tl ON tl.id = t.lever_id
                LEFT JOIN mar_tracking_action ta ON ta.id = c.tracking_action_id
               WHERE c.id = :id AND %s',
             $scopeSql
@@ -2256,7 +2259,10 @@ final class CampaignRepository
                     ci.mechanic_type, ci.discount_pct, ci.fixed_price,
                     ci.buy_qty, ci.get_qty, ci.baseline_price, ci.margin_pct,
                     ci.target_pieces, ci.show_photo, ci.image_url,
-                    oi.category, oi.image_url AS catalog_image_url
+                    oi.category, oi.image_url AS catalog_image_url,
+                    -- La référence et le nom du catalogue : la mesure du cockpit suit les ventes des produits promus
+                    -- par leur référence (21/11/2026).
+                    oi.sku_ref, oi.name AS catalog_name
                FROM mar_campaign_offer_item ci
                LEFT JOIN mar_offer_item oi ON oi.id = ci.offer_item_id
               WHERE ci.campaign_offer_id = :id
