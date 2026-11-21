@@ -4707,3 +4707,15 @@ table.erpv__table th:nth-child(5) { width: 12%; }
 .vouchers__printed-row .field input { width: 120px; }
 .vouchers__printed-details input { width: 280px !important; max-width: 100%; }
 .vouchers__printed-row .vouchers__hint { flex-basis: 100%; margin: 0; }
+
+/* Fusion des imprimés, étape 3 (21/11/2026) : l'ancien générateur renvoie vers « Imprimés » ; les brochures à reprendre. */
+.bro-moved { display: grid; gap: 8px; background: #FBF3E6; border-color: #EBD3AE; }
+.bro-moved p { margin: 0; font-size: 13px; line-height: 1.5; }
+.bro-moved ul { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.5; color: #7A5207; }
+.bro-moved__actions { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.bro-moved__actions .btn { margin-top: 0; }
+.bro-moved__actions small { color: var(--muted); font-size: 12px; }
+.catv-import { margin-bottom: 18px; }
+.catv-imported { display: grid; gap: 6px; justify-items: start; margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: #EAF3EC; color: #2f5f3f; font-size: 13px; }
+.catv-imported ul { margin: 0; padding-left: 18px; color: #7A5207; line-height: 1.5; }
+.catv-imported .btn { margin-top: 2px; }

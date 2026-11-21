@@ -27,6 +27,8 @@ import { HeaderIcon, LayoutIcon, TemplateIcon } from './CatalogueIcons'
 import CatalogueWizard from './CatalogueWizard'
 import type { WizardProps, WizardStep } from './CatalogueWizard'
 import LeafletWizard from './LeafletWizard'
+import { importBrochure } from './brochureImport'
+import { TEMPLATES } from '../../lib/brochure'
 import { SUPPORT_LABELS, SUPPORT_NOUNS, isLeaflet, leafletBlocked, leafletChecks, leafletDoc, supportOf } from './leaflet'
 import { Sheet as BrochureSheet, fontFaces, pageSize as brochurePageSize } from '../brochure/Pages'
 import type { Side } from '../brochure/Pages'
@@ -89,12 +91,15 @@ function PageCountChoice({ value, onChange, disabled = false }: { value: Catalog
   )
 }
 
-/** Un leaflet ou un dépliant : ouvert dans l'onglet « Leaflets & dépliants » des imprimés (21/11/2026). */
+/** Un leaflet ou un dépliant de campagne : ouvert dans l'onglet « Ancien générateur » des imprimés (21/11/2026). */
 export type BrochureKind = 'leaflet-a5' | 'depliant-a4'
 
-export default function CatalogueView({ onBrochure }: { onBrochure?: (format: BrochureKind) => void } = {}) {
-  // `?pages-marque` ouvre l'assistant des pages de la marque (lien direct, captures).
-  const [screen, setScreen] = useState<Screen>(() => (new URLSearchParams(window.location.search).has('pages-marque') ? { kind: 'charter' } : { kind: 'list' }))
+export default function CatalogueView({ onBrochure, initialCatalogue = null }: { onBrochure?: (format: BrochureKind) => void; initialCatalogue?: number | null } = {}) {
+  // `?pages-marque` ouvre l'assistant des pages de la marque (lien direct, captures) ; `initialCatalogue`, un imprimé repris
+  // d'une brochure depuis l'ancien générateur.
+  const [screen, setScreen] = useState<Screen>(() =>
+    initialCatalogue !== null ? { kind: 'editor', id: initialCatalogue } : new URLSearchParams(window.location.search).has('pages-marque') ? { kind: 'charter' } : { kind: 'list' },
+  )
 
   if (screen.kind === 'editor') {
     const id = screen.id
@@ -219,6 +224,8 @@ function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen
         <NewCatalogue open={creating !== null} support={creating ?? 'catalogue'} onSupport={setCreating} onOpen={() => setCreating((current) => current ?? 'catalogue')} onCreated={onOpen} onBrochure={onBrochure} />
       </div>
 
+      <BrochuresToImport onOpen={onOpen} revision={revision} onImported={() => setRevision((n) => n + 1)} />
+
       <section className="card catv-recent">
         <h2>Imprimés récents</h2>
         {list.error ? <p className="error">{list.error}</p> : null}
@@ -310,6 +317,109 @@ function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen
         ) : null}
       </section>
     </div>
+  )
+}
+
+/**
+ * Les brochures du générateur d'avant (21/11/2026, fusion des imprimés, étape 3) : les leaflets et dépliants réglés dans
+ * une campagne, à reprendre ici. « Reprendre » en fait un leaflet ou un dépliant des Imprimés (modèle, textes, produits,
+ * boutiques) et dit ce qui ne passe pas ; une brochure reprise s'ouvre. L'ancien réglage reste lisible dans l'onglet
+ * « Ancien générateur ».
+ */
+function BrochuresToImport({ onOpen, revision, onImported }: { onOpen: (id: number) => void; revision: number; onImported: () => void }) {
+  const list = useAsync(() => api.listCatalogueBrochures(), [revision])
+  const [busy, setBusy] = useState<string | null>(null)
+  const [done, setDone] = useState<{ id: number; title: string; existing: boolean; notes: string[] } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const rows = list.data ?? []
+  if (!rows.length && !done) return null
+  const waiting = rows.filter((row) => row.catalogueId === null).length
+
+  async function reprendre(row: api.CatalogueBrochure) {
+    const key = `${row.campaignId}|${row.format}`
+    setBusy(key)
+    setError(null)
+    try {
+      const result = await importBrochure(row.campaignId, row.format)
+      setDone({ id: result.catalogue.id, title: result.catalogue.title, existing: result.existing, notes: result.notes })
+      onImported()
+    } catch (cause) {
+      setError(`« ${row.campaignName} » n’a pas été repris : ${message(cause)}`)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <section className="card catv-import">
+      <h2>Leaflets et dépliants des campagnes · {waiting ? `${waiting} à reprendre` : 'tous repris'}</h2>
+      <p className="catv-newnote">
+        Réglés avec l’ancien générateur, dans une campagne. « Reprendre » en fait un leaflet ou un dépliant d’ici : son modèle, ses textes, ses produits et
+        ses boutiques ; les prix viennent du webshop de chaque boutique. L’ancien réglage ne change pas.
+      </p>
+      {done ? (
+        <div className="catv-imported">
+          <b>
+            {done.existing ? 'Déjà repris' : 'Repris'} : « {done.title} »
+          </b>
+          {done.notes.length ? (
+            <ul>
+              {done.notes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          ) : (
+            <span> Tout est passé.</span>
+          )}
+          <button type="button" className="btn btn--primary btn--sm" onClick={() => onOpen(done.id)}>
+            Ouvrir ›
+          </button>
+        </div>
+      ) : null}
+      {error ? <p className="error">{error}</p> : null}
+      {list.error ? <p className="error">{list.error}</p> : null}
+      <div className="table-scroll">
+        <table className="catv-table">
+          <thead>
+            <tr>
+              <th>Campagne</th>
+              <th>Format</th>
+              <th>Modèle</th>
+              <th>Produits</th>
+              <th>Réglé le</th>
+              <th aria-label="Reprendre ou ouvrir" />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const key = `${row.campaignId}|${row.format}`
+              return (
+                <tr key={key}>
+                  <td>{row.campaignName}</td>
+                  <td>
+                    <span className="bro-tag">{row.support ? SUPPORT_LABELS[row.support] : row.format}</span>
+                  </td>
+                  <td>{TEMPLATES.find((t) => t.id === row.template)?.name ?? row.template ?? '—'}</td>
+                  <td>{row.productCount}</td>
+                  <td>{new Date(row.updatedAt).toLocaleDateString('fr-BE')}</td>
+                  <td className="catv-right">
+                    {row.catalogueId !== null ? (
+                      <button type="button" className="btn btn--sm catv-edit" onClick={() => onOpen(row.catalogueId as number)}>
+                        Ouvrir le repris
+                      </button>
+                    ) : (
+                      <button type="button" className="btn btn--sm" disabled={busy !== null} onClick={() => void reprendre(row)}>
+                        {busy === key ? 'Reprise…' : 'Reprendre'}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }
 

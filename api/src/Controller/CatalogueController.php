@@ -51,14 +51,52 @@ final class CatalogueController
         return Envelope::ok($result['items'], ['pagination' => Envelope::pagination($query['page'], $query['perPage'], $result['total'])]);
     }
 
-    /** `POST …/catalogues` */
+    /**
+     * `POST …/catalogues` — 201. Une création qui reprend une brochure déjà reprise (`fromBrochure`, 21/11/2026) rend le
+     * catalogue qui en est déjà fait, en 200 : rejouer l'envoi n'en fait pas un second.
+     */
     public function store(Request $request): array
     {
         if (($denied = self::deny()) !== null) {
             return $denied;
         }
 
-        return self::guard(fn (): array => Envelope::ok($this->service->create($request->body, null, self::userId()), [], 201));
+        return self::guard(function () use ($request): array {
+            $existing = $this->service->existingFromBrochure($request->body);
+
+            return $existing !== null
+                ? Envelope::ok($existing)
+                : Envelope::ok($this->service->create($request->body, null, self::userId()), [], 201);
+        });
+    }
+
+    /**
+     * `GET …/catalogue-brochures` (21/11/2026, fusion des imprimés, étape 3) : les brochures enregistrées des campagnes (le
+     * générateur d'avant), avec le leaflet ou le dépliant qu'on en a repris (`catalogueId`, null : pas encore). Paginée.
+     */
+    public function brochures(Request $request): array
+    {
+        if (($denied = self::deny()) !== null) {
+            return $denied;
+        }
+        $errors = [];
+        foreach (array_keys($request->query) as $key) {
+            if (!in_array($key, ['page', 'perPage'], true)) {
+                $errors[] = ['field' => (string) $key, 'message' => 'Paramètre inconnu.'];
+            }
+        }
+        $page = (string) ($request->query['page'] ?? '1');
+        $perPage = (string) ($request->query['perPage'] ?? (string) self::PER_PAGE_DEFAULT);
+        if (!ctype_digit($page) || (int) $page < 1 || !ctype_digit($perPage) || (int) $perPage < 1) {
+            $errors[] = ['field' => 'page', 'message' => 'page et perPage : entiers positifs.'];
+        }
+        if ($errors !== []) {
+            return Envelope::error('VALIDATION_FAILED', 'Paramètres invalides.', 422, $errors);
+        }
+        $per = min(self::PER_PAGE_MAX, (int) $perPage);
+        $result = $this->service->brochures((int) $page, $per);
+
+        return Envelope::ok($result['items'], ['pagination' => Envelope::pagination((int) $page, $per, $result['total'])]);
     }
 
     /** `GET …/catalogues/{id}` */

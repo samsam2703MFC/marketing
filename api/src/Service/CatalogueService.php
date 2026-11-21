@@ -92,6 +92,11 @@ final class CatalogueService
      */
     public const BROCHURE_TEXT_KEYS = ['eyebrow', 'title', 'phrase', 'cta', 'ctaSub', 'innerTitle', 'innerSub', 'flapTitle', 'flapText', 'conditions'];
     private const BROCHURE_TEXT_MAX = 400;
+    /**
+     * Les brochures du générateur d'avant (21/11/2026, fusion des imprimés, étape 3) : le support que chaque format devient
+     * quand on la reprend en catalogue (`fromBrochure`).
+     */
+    public const BROCHURE_FORMATS = ['leaflet-a5' => 'leaflet', 'depliant-a4' => 'depliant'];
     /** La page unique d'un leaflet ou d'un dépliant : tous les produits cochés, dans l'ordre (une liste en tient 12). */
     private const SUPPORT_PAGE = ['layout' => 'liste', 'category' => null];
 
@@ -886,6 +891,10 @@ final class CatalogueService
             'support'      => (string) ($settings['support'] ?? 'catalogue'),
             'brochureTemplate' => ($settings['support'] ?? 'catalogue') === 'catalogue' ? null : (string) ($settings['brochureTemplate'] ?? 'papier'),
             'brochureTexts' => ($settings['support'] ?? 'catalogue') === 'catalogue' ? null : self::brochureTextsOut($settings['brochureTexts'] ?? []),
+            // Repris d'une brochure du générateur d'avant (21/11/2026) : sa campagne et son format ; null sinon.
+            'fromBrochure' => is_array($settings['fromBrochure'] ?? null)
+                ? ['campaignId' => (int) ($settings['fromBrochure']['campaignId'] ?? 0), 'format' => (string) ($settings['fromBrochure']['format'] ?? '')]
+                : null,
             'status'       => (string) $row['status'],
             'printQty'     => $row['print_qty'] !== null ? (int) $row['print_qty'] : null,
             'charterVersion' => isset($row['charter_version']) ? (int) $row['charter_version'] : null,
@@ -1009,6 +1018,50 @@ final class CatalogueService
         return (object) $out;
     }
 
+    /**
+     * Les brochures enregistrées des campagnes (le générateur d'avant), avec le catalogue qu'on en a fait (`catalogueId`,
+     * null : pas encore repris).
+     *
+     * @return array{items: list<array<string,mixed>>, total: int}
+     */
+    public function brochures(int $page, int $perPage): array
+    {
+        $read = $this->catalogues->brochures($page, $perPage);
+        $made = $this->catalogues->cataloguesFromBrochures();
+
+        return [
+            'items' => array_map(static fn (array $row): array => [
+                'campaignId'   => $row['campaign_id'],
+                'campaignName' => $row['campaign_name'],
+                'format'       => $row['format'],
+                'support'      => self::BROCHURE_FORMATS[$row['format']] ?? null,
+                'template'     => is_string($row['settings']['template'] ?? null) ? $row['settings']['template'] : null,
+                'productCount' => count(array_filter(is_array($row['settings']['products'] ?? null) ? $row['settings']['products'] : [], static fn ($p): bool => is_array($p) && ($p['on'] ?? false) === true)),
+                'updatedAt'    => self::iso($row['updated_at']),
+                'catalogueId'  => $made[$row['campaign_id'] . '|' . $row['format']] ?? null,
+            ], $read['items']),
+            'total' => $read['total'],
+        ];
+    }
+
+    /**
+     * Le catalogue déjà repris de la brochure qu'une création nomme (`fromBrochure`) : la création rejouée le rend au lieu
+     * d'en faire un second. Null : pas encore repris (ou pas de `fromBrochure` lisible).
+     *
+     * @return array<string,mixed>|null
+     */
+    public function existingFromBrochure(array $input): ?array
+    {
+        $from = $input['fromBrochure'] ?? null;
+        if (!is_array($from) || !is_int($from['campaignId'] ?? null) || !is_string($from['format'] ?? null)) {
+            return null;
+        }
+        $id = $this->catalogues->cataloguesFromBrochures()[$from['campaignId'] . '|' . $from['format']] ?? null;
+        $row = $id !== null ? $this->find($id) : null;
+
+        return $row !== null ? $this->serialize($row) : null;
+    }
+
     /** Le modèle d'un leaflet ou d'un dépliant : ceux des brochures (`BrochureRepository::TEMPLATES`). */
     private static function brochureTemplate(mixed $value, array &$errors): string
     {
@@ -1051,9 +1104,10 @@ final class CatalogueService
     public function create(array $input, ?array $shop, ?int $userId): array
     {
         $owner = $shop === null ? 'marque' : 'boutique';
-        $allowed = ['title', 'source', 'format', 'pageCount', 'langs', 'products', 'pages', 'offers', 'showAvailability', 'support', 'brochureTemplate'];
+        $allowed = ['title', 'source', 'format', 'pageCount', 'langs', 'products', 'pages', 'offers', 'showAvailability', 'support', 'brochureTemplate', 'brochureTexts'];
         if ($owner === 'marque') {
             $allowed[] = 'shopIds';
+            $allowed[] = 'fromBrochure';
         }
         $errors = self::unknown($input, $allowed);
 
@@ -1067,6 +1121,14 @@ final class CatalogueService
             $errors[] = ['field' => 'support', 'message' => 'Une boutique crée un catalogue ; les leaflets et dépliants sont faits par la marque.'];
         }
         $template = self::brochureTemplate($input['brochureTemplate'] ?? 'papier', $errors);
+        $texts = null;
+        if (array_key_exists('brochureTexts', $input)) {
+            if ($support === 'catalogue') {
+                $errors[] = ['field' => 'brochureTexts', 'message' => 'Les textes récrits sont ceux d’un leaflet ou d’un dépliant.'];
+            } else {
+                $texts = self::brochureTexts($input['brochureTexts'], $errors);
+            }
+        }
 
         $title = self::title($input['title'] ?? null, $errors);
         $source = is_array($input['source'] ?? null) ? $input['source'] : null;
@@ -1098,6 +1160,25 @@ final class CatalogueService
         }
         $pageCount = self::pageCountInput($input['pageCount'] ?? self::PAGE_COUNTS[0], $errors);
         $langs = self::langs($input['langs'] ?? ['fr'], $errors);
+        // Repris d'une brochure du générateur d'avant (21/11/2026) : la campagne de la brochure est la source, son format
+        // fixe le support, et la brochure doit avoir des réglages enregistrés.
+        $fromBrochure = null;
+        if (array_key_exists('fromBrochure', $input)) {
+            $from = $input['fromBrochure'];
+            $fromFormat = is_array($from) && is_string($from['format'] ?? null) ? $from['format'] : '';
+            $fromCampaign = is_array($from) && is_int($from['campaignId'] ?? null) && $from['campaignId'] > 0 ? $from['campaignId'] : null;
+            if (!is_array($from) || array_diff(array_keys($from), ['campaignId', 'format']) !== [] || $fromCampaign === null || !isset(self::BROCHURE_FORMATS[$fromFormat])) {
+                $errors[] = ['field' => 'fromBrochure', 'message' => 'Forme attendue : {campaignId: entier, format: leaflet-a5 | depliant-a4}.'];
+            } elseif (self::BROCHURE_FORMATS[$fromFormat] !== $support) {
+                $errors[] = ['field' => 'fromBrochure', 'message' => sprintf('Une brochure %s se reprend en %s (`support`).', $fromFormat, self::BROCHURE_FORMATS[$fromFormat])];
+            } elseif ($kind !== 'campagne' || !$estId($ref) || (int) $ref !== $fromCampaign) {
+                $errors[] = ['field' => 'fromBrochure', 'message' => 'La source est la campagne de la brochure : {kind: campagne, ref: ' . $fromCampaign . '}.'];
+            } elseif ($this->catalogues->brochure($fromCampaign, $fromFormat) === null) {
+                $errors[] = ['field' => 'fromBrochure', 'message' => sprintf('La campagne %d n’a pas de %s enregistré.', $fromCampaign, $fromFormat)];
+            } else {
+                $fromBrochure = ['campaignId' => $fromCampaign, 'format' => $fromFormat];
+            }
+        }
         $shopIds = $owner === 'marque' ? $this->shopIds($input['shopIds'] ?? [], $errors) : [];
         if (array_key_exists('showAvailability', $input) && !is_bool($input['showAvailability'])) {
             $errors[] = ['field' => 'showAvailability', 'message' => 'Booléen attendu.'];
@@ -1132,7 +1213,9 @@ final class CatalogueService
             'status'       => 'brouillon',
             'print_qty'    => null,
             'settings'     => ['langs' => $langs, 'shopIds' => $shopIds, 'pageCount' => $pageCount, 'products' => [], 'pages' => []]
-                + ($support !== 'catalogue' ? ['support' => $support, 'brochureTemplate' => $template] : []),
+                + ($support !== 'catalogue' ? ['support' => $support, 'brochureTemplate' => $template] : [])
+                + ($texts !== null ? ['brochureTexts' => $texts] : [])
+                + ($fromBrochure !== null ? ['fromBrochure' => $fromBrochure] : []),
         ];
         $data = $this->webshopProducts($this->shopsOf($row));
         $known = array_column($data['products'], null, 'id');

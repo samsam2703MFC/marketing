@@ -296,8 +296,10 @@ export interface Tab {
 const TABS: Record<Role, Tab[][]> = {
   BRAND_ADMIN: [
     [
-      { route: 'catalogues', label: 'Catalogues' },
-      { route: 'brochures', label: 'Leaflets & dépliants' },
+      // 21/11/2026 (fusion des imprimés, étape 3) : catalogues, leaflets et dépliants se font au même endroit ; l'ancien
+      // générateur des brochures de campagne reste ouvert, pour relire et reprendre ce qui y a été réglé.
+      { route: 'catalogues', label: 'Catalogues, leaflets, dépliants' },
+      { route: 'brochures', label: 'Ancien générateur' },
     ],
     [
       { route: 'promotions', label: 'Promotions' },
