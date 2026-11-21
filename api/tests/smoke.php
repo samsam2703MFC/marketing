@@ -5712,6 +5712,51 @@ echo "\nCatalogues : assistant du franchisé\n";
 $seulA = call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Pour Sombreffe seule', 'source' => ['kind' => 'gamme', 'ref' => 14], 'shopIds' => [$catA]]);
 $idSeulA = (int) ($seulA['body']['data']['id'] ?? 0);
 call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idSeulA, [], ['status' => 'pret']);
+// Les imprimés (21/11/2026, fusion, étape 2 — Sam : « fusionner leaflet, brochure et catalogue ») : un leaflet A5 et un
+// dépliant A4 sont des catalogues d'un autre support, au format fixe, avec un modèle de brochure ; ils ne vont pas au
+// dashboard franchisé (qui n'imprime que des catalogues).
+$leaflet = call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Leaflet de Noël', 'source' => ['kind' => 'gamme', 'ref' => 14], 'shopIds' => [$catA], 'support' => 'leaflet']);
+$idLeaflet = (int) ($leaflet['body']['data']['id'] ?? 0);
+$depliant = call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Dépliant de Noël', 'source' => ['kind' => 'gamme', 'ref' => 14], 'support' => 'depliant', 'brochureTemplate' => 'ruby']);
+$idDepliant = (int) ($depliant['body']['data']['id'] ?? 0);
+$refusSupports = [
+    call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'x', 'source' => ['kind' => 'choix'], 'support' => 'flyer']),
+    call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'x', 'source' => ['kind' => 'choix'], 'support' => 'depliant', 'format' => 'A5']),
+    call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'x', 'source' => ['kind' => 'choix'], 'support' => 'leaflet', 'brochureTemplate' => 'fluo']),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['brochureTemplate' => 'papier']),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idLeaflet, [], ['format' => 'A4']),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCat, [], ['brochureTexts' => ['fr' => ['title' => 'x']]]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idLeaflet, [], ['brochureTexts' => ['fr' => ['slogan' => 'x']]]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idLeaflet, [], ['brochureTexts' => ['fr' => ['title' => str_repeat('a', 401)]]]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idLeaflet, [], ['brochureTexts' => ['de' => ['title' => 'x']]]),
+];
+$modeleLeaflet = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idLeaflet, [], ['brochureTemplate' => 'epure', 'status' => 'pret']);
+// Les textes récrits d'un leaflet : par langue, une langue envoyée remplace la sienne, l'autre reste ; vide = rien d'imprimé.
+call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idLeaflet, [], ['brochureTexts' => ['fr' => ['title' => 'Joyeux Noël', 'cta' => 'Commandez vite'], 'nl' => ['title' => 'Vrolijk Kerstfeest']]]);
+$textesLeaflet = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idLeaflet, [], ['brochureTexts' => ['fr' => ['title' => '  Noël gourmand ', 'innerSub' => '']]]);
+$docLeaflet = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idLeaflet . '/document', ['shopId' => (string) $catA]);
+$listeImprimes = array_column(call($catRouter, 'GET', '/api/v1/marketing/catalogues', ['perPage' => '100'])['body']['data'] ?? [], null, 'id');
+AuthContext::clear();
+$jetonAvant = $_SERVER['HTTP_X_SERVICE_TOKEN'] ?? null;
+$_SERVER['HTTP_X_SERVICE_TOKEN'] = 'JETON-SERVICE-CATALOGUES-TEST';
+$recusLeaflet = array_column(call($catRouter, 'GET', $SA . '/brand-catalogues', ['perPage' => '100'])['body']['data'] ?? [], null, 'id');
+$leafletChezA = call($catRouter, 'GET', $SA . '/brand-catalogues/' . $idLeaflet);
+if ($jetonAvant === null) { unset($_SERVER['HTTP_X_SERVICE_TOKEN']); } else { $_SERVER['HTTP_X_SERVICE_TOKEN'] = $jetonAvant; }
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+check('imprimés : un leaflet A5 et un dépliant A4 (support, format fixe, modèle de brochure) ; refus nommés ; pas envoyés au dashboard franchisé',
+    $leaflet['status'] === 201 && ($leaflet['body']['data']['support'] ?? '') === 'leaflet' && ($leaflet['body']['data']['format'] ?? '') === 'A5' && ($leaflet['body']['data']['brochureTemplate'] ?? '') === 'papier'
+        && $depliant['status'] === 201 && ($depliant['body']['data']['support'] ?? '') === 'depliant' && ($depliant['body']['data']['format'] ?? '') === 'A4' && ($depliant['body']['data']['brochureTemplate'] ?? '') === 'ruby'
+        && array_unique(array_column($refusSupports, 'status')) === [422]
+        && array_map(static fn (array $r): string => $r['body']['error']['details'][0]['field'] ?? '', $refusSupports) === ['support', 'format', 'brochureTemplate', 'brochureTemplate', 'format', 'brochureTexts', 'brochureTexts.fr.slogan', 'brochureTexts.fr.title', 'brochureTexts']
+        && $modeleLeaflet['status'] === 200 && ($modeleLeaflet['body']['data']['brochureTemplate'] ?? '') === 'epure'
+        && $textesLeaflet['status'] === 200 && json_decode((string) json_encode($textesLeaflet['body']['data']['brochureTexts'] ?? null), true) == ['fr' => ['title' => 'Noël gourmand', 'innerSub' => ''], 'nl' => ['title' => 'Vrolijk Kerstfeest']]
+        && $docLeaflet['status'] === 200 && array_column($docLeaflet['body']['data']['pages'] ?? [], 'kind') === ['cover', 'brand', 'products', 'brand', 'back']
+        && !in_array('CATEGORY_NO_PAGE', array_column($docLeaflet['body']['data']['warnings'] ?? [], 'code'), true)
+        && ($listeImprimes[$idLeaflet]['support'] ?? '') === 'leaflet' && ($listeImprimes[$idCat]['support'] ?? '') === 'catalogue' && array_key_exists('brochureTemplate', $listeImprimes[$idCat] ?? []) && $listeImprimes[$idCat]['brochureTemplate'] === null && array_key_exists('brochureTexts', $listeImprimes[$idCat]) && $listeImprimes[$idCat]['brochureTexts'] === null
+        && !isset($recusLeaflet[$idLeaflet]) && isset($recusLeaflet[$idCat]) && $leafletChezA['status'] === 404,
+    json_encode([$leaflet['status'], $leaflet['body']['error'] ?? null, $depliant['body']['error'] ?? null, $textesLeaflet['status'], $textesLeaflet['body']['data']['brochureTexts'] ?? null, array_column($docLeaflet['body']['data']['pages'] ?? [], 'kind'), array_column($docLeaflet['body']['data']['warnings'] ?? [], 'code'), $leafletChezA['status']], JSON_UNESCAPED_UNICODE));
+call($catRouter, 'DELETE', '/api/v1/marketing/catalogues/' . $idLeaflet);
+call($catRouter, 'DELETE', '/api/v1/marketing/catalogues/' . $idDepliant);
 $brouillonM = call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Brouillon de la marque', 'source' => ['kind' => 'gamme', 'ref' => 14], 'shopIds' => [$catA, $catB]]);
 $idBrouillonM = (int) ($brouillonM['body']['data']['id'] ?? 0);
 AuthContext::clear();

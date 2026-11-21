@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Marketing — catalogues produits
-  version: 1.17.0
+  version: 1.18.0
   description: |
     Les catalogues produits du Marketing (prix du webshop, gammes) : un imprimé A5 (A4 en option)
     de **8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16). Quatre pages viennent de la Charte des catalogues de la
@@ -159,6 +159,24 @@ info:
       défaut ; absente d'un PUT : le défaut) ;
     - le dessin `bureau` (« Office Delivery ») rejoint les dessins de couverture (`illustration`), reconnu aussi dans
       un nom de gamme qui contient « bureau » ou « entreprise ».
+
+    v1.18 (21 novembre 2026, fusion des imprimés, étape 2 — client : « fusionner leaflet, brochure et catalogue ») : un
+    leaflet A5 recto-verso et un dépliant A4 trois volets sont des catalogues d'un autre support :
+    - `support` à la création (`catalogue` défaut, `leaflet`, `depliant` ; autre valeur : 422 `support`) ; le format est
+      fixe (leaflet A5, dépliant A4 ; un autre : 422 `format`, à la création comme en `PUT`) ; la marque seule (un
+      catalogue de boutique : 422 `support`). Lu sur chaque catalogue (`support`, `catalogue` pour les anciens) ;
+    - `brochureTemplate` : le modèle d'impression, l'un de ceux des brochures (`papier` défaut, `fetes`, `epure`, `ruby`,
+      `abricot`, `noir`, `duo`, `carte` ; autre : 422) ; `brochureTexts` : les textes récrits par langue
+      (`{ fr: { title: "…" }, nl: { … } }`, clés `eyebrow`, `title`, `phrase`, `cta`, `ctaSub`, `innerTitle`, `innerSub`,
+      `flapTitle`, `flapText`, `conditions`, 400 caractères ; une langue envoyée remplace la sienne ; vide = rien
+      d'imprimé ; clé absente = le texte du document). Les deux en `PUT` d'un leaflet ou d'un dépliant seulement (un
+      catalogue : 422 « champ inconnu ») ; null sur un catalogue ;
+    - le document d'un leaflet ou d'un dépliant : couverture, page 2, UNE page de produits (tous les produits cochés, dans
+      l'ordre des catégories ; ses `pages` de catalogue ne servent pas), avant-dernière, dernière ; pas de
+      `CATEGORY_NO_PAGE` ; `PRODUCTS_OVERFLOW` et `PAGES_EMPTY` dits pour le support. L'écran l'imprime au format de la
+      brochure (6 produits au plus sur un leaflet, 9 sur un dépliant) ;
+    - le dashboard franchisé (`…/brand-catalogues`) ne reçoit que des catalogues : un leaflet ou un dépliant n'y va pas
+      (404 sur le sien).
 
     v1.5 (15 novembre 2026, client : « les deux, garde les 3 gabarits, code-le » — assistant des pages de la
     marque, maquettes A1-A4 ; assistant du franchisé, maquettes B1-B4) :
@@ -1097,6 +1115,8 @@ components:
       required: [title, source]
       properties:
         title: { type: string, maxLength: 160 }
+        support: { $ref: '#/components/schemas/Support' }
+        brochureTemplate: { $ref: '#/components/schemas/BrochureTemplate' }
         source:
           type: object
           additionalProperties: false
@@ -1106,7 +1126,7 @@ components:
             ref:
               description: Campagne (Marketing) ; gamme(s) TFBuddy — un identifiant, ou une liste de 1 à 8 gammes dont les produits se cumulent.
               oneOf: [{ type: integer }, { type: array, minItems: 1, maxItems: 8, items: { type: integer } }]
-        format: { type: string, enum: [A5, A4], default: A5 }
+        format: { type: string, enum: [A5, A4], default: A5, description: 'v1.18 — fixe pour un leaflet (A5) et un dépliant (A4) : un autre, 422 `format`.' }
         pageCount: { allOf: [{ $ref: '#/components/schemas/PageCount' }], default: 8 }
         langs: { type: array, items: { type: string, enum: [fr, nl] }, default: [fr] }
         shopIds: { type: array, items: { type: integer }, description: 'Une version par boutique (mar_shop.id).' }
@@ -1129,6 +1149,31 @@ components:
         printQty: { type: [integer, 'null'], minimum: 1 }
         offers: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/OfferRow' } }
         showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) en pied de page (`availabilityFooter`) ; vrai par défaut.' }
+        brochureTemplate: { allOf: [{ $ref: '#/components/schemas/BrochureTemplate' }], description: 'v1.18 — leaflet ou dépliant seulement (un catalogue : 422 « champ inconnu »).' }
+        brochureTexts: { allOf: [{ $ref: '#/components/schemas/BrochureTexts' }], description: 'v1.18 — leaflet ou dépliant seulement ; une langue envoyée remplace la sienne, l''autre reste.' }
+    Support: { type: string, enum: [catalogue, leaflet, depliant], default: catalogue, description: 'v1.18 — L''imprimé : un catalogue (8 à 16 pages), un leaflet A5 recto-verso, un dépliant A4 trois volets. Fixé à la création.' }
+    BrochureTemplate: { type: string, enum: [papier, fetes, epure, ruby, abricot, noir, duo, carte], default: papier, description: 'v1.18 — Le modèle d''impression d''un leaflet ou d''un dépliant (ceux des brochures).' }
+    BrochureTexts:
+      type: object
+      additionalProperties: false
+      description: 'v1.18 — Les textes récrits d''un leaflet ou d''un dépliant, par langue. Vide : rien n''est imprimé ; absent : le texte du document (couverture, dernière page, disponibilité), sinon celui du modèle.'
+      properties:
+        fr: { $ref: '#/components/schemas/BrochureTextSet' }
+        nl: { $ref: '#/components/schemas/BrochureTextSet' }
+    BrochureTextSet:
+      type: object
+      additionalProperties: false
+      properties:
+        eyebrow: { type: string, maxLength: 400 }
+        title: { type: string, maxLength: 400 }
+        phrase: { type: string, maxLength: 400 }
+        cta: { type: string, maxLength: 400 }
+        ctaSub: { type: string, maxLength: 400 }
+        innerTitle: { type: string, maxLength: 400 }
+        innerSub: { type: string, maxLength: 400 }
+        flapTitle: { type: string, maxLength: 400 }
+        flapText: { type: string, maxLength: 400 }
+        conditions: { type: string, maxLength: 400 }
     ShopCatalogueCreate:
       type: object
       additionalProperties: false
@@ -1174,6 +1219,9 @@ components:
         shop: { type: [object, 'null'], properties: { id: { type: integer }, erpShopId: { type: [integer, 'null'] }, name: { type: string } } }
         source: { type: object, properties: { kind: { type: string }, ref: { type: [string, 'null'], description: Première gamme (compatibilité) }, refs: { type: array, items: { type: string }, description: Toutes les gammes du catalogue }, label: { type: [string, 'null'] } } }
         format: { type: string, enum: [A5, A4] }
+        support: { $ref: '#/components/schemas/Support' }
+        brochureTemplate: { type: [string, 'null'], description: 'v1.18 — Le modèle d''un leaflet ou d''un dépliant ; null pour un catalogue.' }
+        brochureTexts: { oneOf: [{ $ref: '#/components/schemas/BrochureTexts' }, { type: 'null' }], description: 'v1.18 — null pour un catalogue.' }
         status: { $ref: '#/components/schemas/Status' }
         printQty: { type: [integer, 'null'] }
         langs: { type: array, items: { type: string } }

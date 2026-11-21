@@ -219,3 +219,47 @@
 .wz-dl { grid-template-columns: 78px minmax(0, 1fr); }
 .wz-dl dd { overflow-wrap: anywhere; }
 .wz-wide { max-width: 100%; }
+
+/* ---- Leaflet A5 et dépliant A4 tirés d'un catalogue (21/11/2026, fusion des imprimés, étape 2) ---- */
+.lf-thumb { display: block; position: relative; overflow: hidden; flex: 0 0 auto; background: #fff; box-shadow: 0 1px 2px rgba(36, 28, 26, 0.12), 0 6px 18px rgba(36, 28, 26, 0.10); border-radius: 2px; }
+.lf-thumb > span { display: block; transform-origin: 0 0; }
+.lf-faces { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+.lf-faces figure { margin: 0; display: grid; gap: 6px; justify-items: center; }
+.lf-faces figcaption { font-size: 11.5px; color: var(--muted); }
+.lf-faces--stack { flex-direction: column; align-items: center; }
+.lf-faces--small { justify-content: center; padding-top: 6px; border-top: 1px solid var(--line); }
+.lf-brand { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.lf-tpls { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 12px; }
+.lf-tpls--wide { grid-template-columns: repeat(auto-fill, minmax(206px, 1fr)); }
+.lf .lf-tpl { display: grid; gap: 4px; justify-items: center; padding: 10px 8px 8px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; cursor: pointer; text-align: center; }
+.lf .lf-tpl:hover { border-color: #d9cdbd; }
+.lf .lf-tpl.is-on { border-color: var(--accent, #8D1D2C); box-shadow: 0 0 0 2px rgba(141, 29, 44, 0.12); }
+.lf .lf-tpl b { font-weight: 500; font-size: 13px; margin-top: 4px; }
+.lf .lf-tpl i { font-style: normal; font-size: 11px; color: var(--muted); line-height: 1.3; }
+.lf-texts { display: grid; gap: 10px; }
+.lf-text { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; gap: 10px; align-items: start; }
+.lf-text__l { font-size: 12.5px; color: var(--muted); padding-top: 7px; display: grid; gap: 2px; }
+.lf-text__l small { color: var(--accent, #8D1D2C); font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; }
+.lf-text input, .lf-text textarea { width: 100%; margin: 0; font: inherit; font-size: 13px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: #fff; resize: vertical; }
+.lf-text.is-own input, .lf-text.is-own textarea { border-color: #d9b98a; background: #FFFBF4; }
+.lf-text.is-hidden input, .lf-text.is-hidden textarea { background: #f4f1ec; }
+.lf-text__a { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; padding-top: 6px; font-size: 12px; white-space: nowrap; }
+.lf-order { margin: 0; padding-left: 22px; display: grid; gap: 5px; font-size: 13px; }
+.lf-order li { display: flex; gap: 8px; align-items: baseline; }
+.lf-order li.is-out { color: var(--faint, #B8B2A8); text-decoration: line-through; }
+.lf-order li small { color: #8D1D2C; text-decoration: none; font-size: 11px; }
+.lf-over { color: #8D1D2C; font-weight: 500; }
+.lf-verdict { margin: 0; padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.45; }
+.lf-verdict.is-ok { background: #EAF3EC; color: #2f5f3f; }
+.lf-verdict.is-stop { background: #F8E6E6; color: #8D1D2C; }
+.wz-check.is-stop .wz-check__ic { background: #8D1D2C; color: #fff; }
+.lf-preview { position: sticky; top: 12px; }
+.lf-flipbox { display: grid; gap: 12px; justify-items: center; padding: 8px 0 4px; }
+.lf .lf-flip { position: relative; display: block; padding: 0; border: 0; background: none; perspective: 2200px; cursor: pointer; }
+.lf-flip__in { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform 0.7s cubic-bezier(0.3, 0.7, 0.2, 1); }
+.lf-flip.is-back .lf-flip__in { transform: rotateY(180deg); }
+.lf-flip__face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.lf-flip__face--back { transform: rotateY(180deg); }
+.lf-flipbar { display: flex; gap: 12px; align-items: center; }
+.lf-flipbar small { color: var(--muted); font-size: 12px; }
+@media (max-width: 900px) { .lf-text { grid-template-columns: 1fr; } .lf-text__a { flex-direction: row; } }

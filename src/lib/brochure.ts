@@ -296,6 +296,9 @@ export function mechanicText(mechanic: PrintMechanic | null, lang: Lang): string
     case 'CROSSED_PRICE':
     case 'BUNDLE_FIXED':
       return mechanic.value === null ? null : formatPrice(mechanic.value, 'nl')
+    // Un libellé déjà dans la langue du document (promotion de TFBuddy d'un leaflet tiré d'un catalogue, 21/11/2026).
+    case 'LABEL':
+      return mechanic.text
     default:
       return null
   }
@@ -401,6 +404,8 @@ export function missingDutch(file: PrintFile, settings: BrochureSettings, format
 export function hoursText(shop: BrochureShop, lang: Lang): string {
   const raw = lang === 'nl' ? shop.hoursNl || shop.hours : shop.hours
   if (!raw) return ''
+  // Des horaires déjà rédigés (jour par jour, ceux d'un catalogue) passent tels quels.
+  if (/\n|:\s/u.test(raw)) return raw
   const match = /^(.+?)\s*[–—-]\s*(.+)$/u.exec(raw)
   if (!match) return lang === 'nl' ? `Openingsuren: ${raw}` : `Horaires : ${raw}`
   return lang === 'nl' ? `Open van ${match[1]} tot ${match[2]}` : `Ouvert de ${match[1]} à ${match[2]}`

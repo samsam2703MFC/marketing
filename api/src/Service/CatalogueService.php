@@ -77,6 +77,24 @@ final class CatalogueService
     /** Tout nombre PAIR de 8 à 16 (client, 14/11/2026 : « rajouter une page, c'est toujours par 2 »). */
     public const PAGE_COUNTS = [8, 10, 12, 14, 16];
 
+    /**
+     * Le support d'un imprimé (21/11/2026, fusion des imprimés, étape 2 — Sam : « fusionner leaflet, brochure et
+     * catalogue ») : un catalogue (8 à 16 pages), un leaflet A5 recto-verso, un dépliant A4 trois volets. Le leaflet et
+     * le dépliant ont le même modèle qu'un catalogue (source, produits, prix par boutique, versions, pages de la marque,
+     * QR) ; ils s'impriment au format de la brochure, dans un de ses modèles (`brochureTemplate`).
+     */
+    public const SUPPORTS = ['catalogue', 'leaflet', 'depliant'];
+    /** Le format fixe d'un leaflet et d'un dépliant. */
+    public const SUPPORT_FORMATS = ['leaflet' => 'A5', 'depliant' => 'A4'];
+    /**
+     * Les textes d'un leaflet ou d'un dépliant qu'on récrit (ceux du générateur de brochures) ; absents : ceux que donne
+     * le document (couverture, dernière page, disponibilité), sinon ceux du modèle.
+     */
+    public const BROCHURE_TEXT_KEYS = ['eyebrow', 'title', 'phrase', 'cta', 'ctaSub', 'innerTitle', 'innerSub', 'flapTitle', 'flapText', 'conditions'];
+    private const BROCHURE_TEXT_MAX = 400;
+    /** La page unique d'un leaflet ou d'un dépliant : tous les produits cochés, dans l'ordre (une liste en tient 12). */
+    private const SUPPORT_PAGE = ['layout' => 'liste', 'category' => null];
+
     /** Pages de la charte : couverture, page 2, avant-dernière, dernière. */
     public const BRAND_PAGES = 4;
 
@@ -864,6 +882,10 @@ final class CatalogueService
             ] : null,
             'source'       => ['kind' => (string) $row['source_kind'], 'ref' => $row['source_ref'] === null ? null : explode(',', (string) $row['source_ref'])[0], 'refs' => $row['source_ref'] === null ? [] : explode(',', (string) $row['source_ref']), 'label' => $row['source_label']],
             'format'       => (string) $row['format'],
+            // Le support (21/11/2026) : catalogue, leaflet A5 ou dépliant A4 ; le modèle d'impression d'un leaflet ou d'un dépliant.
+            'support'      => (string) ($settings['support'] ?? 'catalogue'),
+            'brochureTemplate' => ($settings['support'] ?? 'catalogue') === 'catalogue' ? null : (string) ($settings['brochureTemplate'] ?? 'papier'),
+            'brochureTexts' => ($settings['support'] ?? 'catalogue') === 'catalogue' ? null : self::brochureTextsOut($settings['brochureTexts'] ?? []),
             'status'       => (string) $row['status'],
             'printQty'     => $row['print_qty'] !== null ? (int) $row['print_qty'] : null,
             'charterVersion' => isset($row['charter_version']) ? (int) $row['charter_version'] : null,
@@ -932,6 +954,73 @@ final class CatalogueService
         return $pages;
     }
 
+    /**
+     * Les textes récrits d'un leaflet ou d'un dépliant, par langue : `{ "fr": { "title": "…" }, "nl": { … } }`. Une chaîne
+     * vide efface le texte du document (rien n'est imprimé) ; une clé absente le laisse.
+     *
+     * @return array<string,array<string,string>>
+     */
+    private static function brochureTexts(mixed $value, array &$errors): array
+    {
+        if (!is_array($value) || ($value !== [] && array_is_list($value))) {
+            $errors[] = ['field' => 'brochureTexts', 'message' => 'Objet attendu : { "fr": { "title": "…" }, "nl": { … } }.'];
+
+            return [];
+        }
+        $out = [];
+        foreach ($value as $lang => $texts) {
+            if (!in_array($lang, self::LANGS, true) || !is_array($texts) || ($texts !== [] && array_is_list($texts))) {
+                $errors[] = ['field' => 'brochureTexts', 'message' => 'Langues : fr, nl ; chacune un objet de textes.'];
+                continue;
+            }
+            foreach ($texts as $key => $text) {
+                if (!in_array($key, self::BROCHURE_TEXT_KEYS, true)) {
+                    $errors[] = ['field' => 'brochureTexts.' . $lang . '.' . $key, 'message' => 'Textes : ' . implode(', ', self::BROCHURE_TEXT_KEYS) . '.'];
+                    continue;
+                }
+                if (!is_string($text) || mb_strlen($text) > self::BROCHURE_TEXT_MAX) {
+                    $errors[] = ['field' => 'brochureTexts.' . $lang . '.' . $key, 'message' => sprintf('Texte de %d caractères au plus.', self::BROCHURE_TEXT_MAX)];
+                    continue;
+                }
+                $out[$lang][$key] = trim($text);
+            }
+        }
+
+        return $out;
+    }
+
+    /** Les textes récrits, en objets (jamais `[]`), dans l'ordre des langues et des clés. */
+    private static function brochureTextsOut(mixed $saved): object
+    {
+        $out = [];
+        foreach (self::LANGS as $lang) {
+            $texts = is_array($saved[$lang] ?? null) ? $saved[$lang] : [];
+            $kept = [];
+            foreach (self::BROCHURE_TEXT_KEYS as $key) {
+                if (is_string($texts[$key] ?? null)) {
+                    $kept[$key] = $texts[$key];
+                }
+            }
+            if ($kept !== []) {
+                $out[$lang] = (object) $kept;
+            }
+        }
+
+        return (object) $out;
+    }
+
+    /** Le modèle d'un leaflet ou d'un dépliant : ceux des brochures (`BrochureRepository::TEMPLATES`). */
+    private static function brochureTemplate(mixed $value, array &$errors): string
+    {
+        if (!is_string($value) || !in_array($value, \Marketing\Repository\BrochureRepository::TEMPLATES, true)) {
+            $errors[] = ['field' => 'brochureTemplate', 'message' => 'Modèle : ' . implode(', ', \Marketing\Repository\BrochureRepository::TEMPLATES) . '.'];
+
+            return 'papier';
+        }
+
+        return $value;
+    }
+
     private static function pageCountInput(mixed $value, array &$errors): int
     {
         if (!is_int($value) || !in_array($value, self::PAGE_COUNTS, true)) {
@@ -962,11 +1051,22 @@ final class CatalogueService
     public function create(array $input, ?array $shop, ?int $userId): array
     {
         $owner = $shop === null ? 'marque' : 'boutique';
-        $allowed = ['title', 'source', 'format', 'pageCount', 'langs', 'products', 'pages', 'offers', 'showAvailability'];
+        $allowed = ['title', 'source', 'format', 'pageCount', 'langs', 'products', 'pages', 'offers', 'showAvailability', 'support', 'brochureTemplate'];
         if ($owner === 'marque') {
             $allowed[] = 'shopIds';
         }
         $errors = self::unknown($input, $allowed);
+
+        $support = $input['support'] ?? 'catalogue';
+        if (!is_string($support) || !in_array($support, self::SUPPORTS, true)) {
+            $errors[] = ['field' => 'support', 'message' => 'Support : ' . implode(', ', self::SUPPORTS) . '.'];
+            $support = 'catalogue';
+        }
+        // Un leaflet et un dépliant de boutique viendront avec le dashboard franchisé : la marque seule, pour l'instant.
+        if ($support !== 'catalogue' && $owner === 'boutique') {
+            $errors[] = ['field' => 'support', 'message' => 'Une boutique crée un catalogue ; les leaflets et dépliants sont faits par la marque.'];
+        }
+        $template = self::brochureTemplate($input['brochureTemplate'] ?? 'papier', $errors);
 
         $title = self::title($input['title'] ?? null, $errors);
         $source = is_array($input['source'] ?? null) ? $input['source'] : null;
@@ -992,7 +1092,10 @@ final class CatalogueService
         } elseif ($kind === 'campagne' && !$estId($ref)) {
             $errors[] = ['field' => 'source.ref', 'message' => 'Identifiant de la campagne attendu.'];
         }
-        $format = self::format($input['format'] ?? 'A5', $errors);
+        $format = self::format($input['format'] ?? (self::SUPPORT_FORMATS[$support] ?? 'A5'), $errors);
+        if (isset(self::SUPPORT_FORMATS[$support]) && $format !== self::SUPPORT_FORMATS[$support]) {
+            $errors[] = ['field' => 'format', 'message' => sprintf('Un %s est en %s.', $support === 'leaflet' ? 'leaflet' : 'dépliant', self::SUPPORT_FORMATS[$support])];
+        }
         $pageCount = self::pageCountInput($input['pageCount'] ?? self::PAGE_COUNTS[0], $errors);
         $langs = self::langs($input['langs'] ?? ['fr'], $errors);
         $shopIds = $owner === 'marque' ? $this->shopIds($input['shopIds'] ?? [], $errors) : [];
@@ -1028,7 +1131,8 @@ final class CatalogueService
             'format'       => $format,
             'status'       => 'brouillon',
             'print_qty'    => null,
-            'settings'     => ['langs' => $langs, 'shopIds' => $shopIds, 'pageCount' => $pageCount, 'products' => [], 'pages' => []],
+            'settings'     => ['langs' => $langs, 'shopIds' => $shopIds, 'pageCount' => $pageCount, 'products' => [], 'pages' => []]
+                + ($support !== 'catalogue' ? ['support' => $support, 'brochureTemplate' => $template] : []),
         ];
         $data = $this->webshopProducts($this->shopsOf($row));
         $known = array_column($data['products'], null, 'id');
@@ -1092,6 +1196,11 @@ final class CatalogueService
         if (!$boutique) {
             $allowed[] = 'shopIds';
         }
+        $supportOf = (string) ($current['settings']['support'] ?? 'catalogue');
+        if ($supportOf !== 'catalogue') {
+            $allowed[] = 'brochureTemplate';
+            $allowed[] = 'brochureTexts';
+        }
         $errors = self::unknown($input, $allowed);
         $row = $current;
         $settings = $current['settings'];
@@ -1101,6 +1210,16 @@ final class CatalogueService
         }
         if (array_key_exists('format', $input)) {
             $row['format'] = self::format($input['format'], $errors);
+            if (isset(self::SUPPORT_FORMATS[$supportOf]) && $row['format'] !== self::SUPPORT_FORMATS[$supportOf]) {
+                $errors[] = ['field' => 'format', 'message' => sprintf('Un %s est en %s.', $supportOf === 'leaflet' ? 'leaflet' : 'dépliant', self::SUPPORT_FORMATS[$supportOf])];
+            }
+        }
+        if (array_key_exists('brochureTemplate', $input)) {
+            $settings['brochureTemplate'] = self::brochureTemplate($input['brochureTemplate'], $errors);
+        }
+        if (array_key_exists('brochureTexts', $input)) {
+            // Les langues envoyées remplacent les leurs ; les autres restent.
+            $settings['brochureTexts'] = array_replace(is_array($settings['brochureTexts'] ?? null) ? $settings['brochureTexts'] : [], self::brochureTexts($input['brochureTexts'], $errors));
         }
         if (array_key_exists('langs', $input)) {
             $settings['langs'] = self::langs($input['langs'], $errors);
@@ -3096,7 +3215,9 @@ final class CatalogueService
         $ownPages = $this->ownBrandPages($row);
         $gammesById = array_column($data['gammes'], null, 'id');
         $catalogueGammes = self::gammeIdsOf($row);
-        $innerRows = self::innerPages($row['settings']);
+        // Un leaflet ou un dépliant (21/11/2026) : une page, tous les produits cochés ; ses pages de catalogue ne servent pas.
+        $leaflet = ($row['settings']['support'] ?? 'catalogue') !== 'catalogue';
+        $innerRows = $leaflet ? [self::SUPPORT_PAGE] : self::innerPages($row['settings']);
         $filled = self::fill($innerRows, $chosen);
         $inner = [];
         $empty = 0;
@@ -3266,18 +3387,23 @@ final class CatalogueService
         foreach ($innerRows as $page) {
             $selection = $selection || (!in_array($page['layout'], self::PRESENTATIONS, true) && ($page['category'] ?? null) === null && ($page['gamme'] ?? null) === null);
         }
-        foreach (array_keys($homeless) as $cid) {
+        foreach ($leaflet ? [] : array_keys($homeless) as $cid) {
             $c = $categories[$cid] ?? null;
             $warnings[] = ['code' => 'CATEGORY_NO_PAGE', 'message' => sprintf('« %s » n’a pas de page à elle : %s%s.',
                 $c !== null ? $c['name'] : (string) $cid,
                 $selection ? 'ses produits vont en « Notre sélection »' : 'ses produits n’ont pas de place',
                 $pageCount >= self::PAGE_COUNTS[count(self::PAGE_COUNTS) - 1] ? ' — plus de place : 16 pages' : ' — ajoutez 2 pages ou donnez-lui une page (« Catégorie de la page »)')];
         }
-        if ($left > 0) {
+        if ($left > 0 && $leaflet) {
+            $warnings[] = ['code' => 'PRODUCTS_OVERFLOW', 'message' => sprintf('%d produit(s) sans place sur le %s : retirez-en.', $left,
+                ($row['settings']['support'] ?? '') === 'leaflet' ? 'leaflet' : 'dépliant')];
+        } elseif ($left > 0) {
             $warnings[] = ['code' => 'PRODUCTS_OVERFLOW', 'message' => sprintf('%d produit(s) sans place : %schoisissez une mise en page plus dense (liste) ou retirez des produits.',
                 $left, $pageCount < 16 ? 'ajoutez 2 pages (' . ($pageCount + 2) . ' pages), ' : '')];
         }
-        if ($empty > 0) {
+        if ($empty > 0 && $leaflet) {
+            $warnings[] = ['code' => 'PAGES_EMPTY', 'message' => 'Aucun produit coché : cochez les produits que montre l’imprimé.'];
+        } elseif ($empty > 0) {
             $warnings[] = ['code' => 'PAGES_EMPTY', 'message' => sprintf('%d page(s) intérieure(s) sans produit : ajoutez des produits, changez la catégorie de la page ou passez à un catalogue plus court.', $empty)];
         }
         if (count($innerRows) > $pageCount - self::BRAND_PAGES) {

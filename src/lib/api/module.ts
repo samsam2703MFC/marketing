@@ -3041,6 +3041,12 @@ export interface Catalogue {
   shop: { id: number; erpShopId: number | null; name: string } | null
   source: { kind: CatalogueSourceKind; ref: string | null; refs?: string[]; label: string | null }
   format: CatalogueFormat
+  /** Le support (v1.18, fusion des imprimés) : catalogue, leaflet A5 recto-verso, dépliant A4 trois volets. */
+  support?: CatalogueSupport
+  /** Le modèle d'impression d'un leaflet ou d'un dépliant (ceux des brochures) ; null pour un catalogue. */
+  brochureTemplate?: string | null
+  /** Les textes récrits d'un leaflet ou d'un dépliant, par langue ; null pour un catalogue. */
+  brochureTexts?: CatalogueBrochureTexts | null
   status: CatalogueStatus
   printQty: number | null
   langs: CatalogueLang[]
@@ -3066,8 +3072,16 @@ export interface Catalogue {
   updatedAt: string
 }
 
+/** Un imprimé : catalogue (8 à 16 pages), leaflet A5 recto-verso, dépliant A4 trois volets (v1.18). */
+export type CatalogueSupport = 'catalogue' | 'leaflet' | 'depliant'
+
+/** Les textes d'un leaflet qu'on récrit (clés du générateur de brochures) ; vide : rien d'imprimé ; absent : celui du document. */
+export type CatalogueBrochureTexts = Partial<Record<CatalogueLang, Partial<Record<string, string>>>>
+
 export interface CatalogueCreate {
   title: string
+  support?: CatalogueSupport
+  brochureTemplate?: string
   /** `ref` : une gamme, ou plusieurs (liste d'identifiants, 8 au plus). */
   source: { kind: CatalogueSourceKind; ref?: number | number[] }
   format?: CatalogueFormat
@@ -3080,7 +3094,12 @@ export interface CatalogueCreate {
   showAvailability?: boolean
 }
 
-export type CatalogueUpdate = Partial<Pick<Catalogue, 'title' | 'format' | 'pageCount' | 'langs' | 'shopIds' | 'products' | 'pages' | 'status' | 'printQty' | 'offers' | 'showAvailability'>>
+export type CatalogueUpdate = Partial<Pick<Catalogue, 'title' | 'format' | 'pageCount' | 'langs' | 'shopIds' | 'products' | 'pages' | 'status' | 'printQty' | 'offers' | 'showAvailability'>> & {
+  /** Le modèle d'un leaflet ou d'un dépliant (v1.18). */
+  brochureTemplate?: string
+  /** Ses textes récrits : une langue envoyée remplace la sienne (v1.18). */
+  brochureTexts?: CatalogueBrochureTexts
+}
 
 /** Les promotions de TFBuddy qu'un catalogue montre. */
 export type CatalogueOfferType = 'bundle' | 'buyXGetY' | 'quantity' | 'scheduledDiscount'
