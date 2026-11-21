@@ -145,6 +145,19 @@ final class CatalogueService
      */
     public const BRAND_PAGE_SLOTS = ['cover', 'page2', 'penultimate', 'back'];
 
+    /**
+     * Les éléments de chaque page de la marque (21/11/2026, Sam : « toutes les données du catalogue doivent être
+     * éditables — visibles ou pas — + la typo et les couleurs ») : `show` s'affiche ou se masque ; `text` aussi, avec sa
+     * police et sa couleur ; `style` : police et couleur seulement. Le titre et le sous-titre de la couverture gardent
+     * leur police et leur couleur à part (`titleFont`…, v1.9), le nom de la boutique son `showShop` (v1.11).
+     */
+    public const LOOK = [
+        'cover'       => ['logo' => 'show', 'kicker' => 'text', 'title' => 'show', 'subtitle' => 'show', 'shop' => 'style'],
+        'page2'       => ['logo' => 'show', 'title' => 'text', 'text' => 'text'],
+        'penultimate' => ['logo' => 'show', 'title' => 'text', 'text' => 'text', 'legend' => 'show'],
+        'back'        => ['logo' => 'show', 'title' => 'text', 'text' => 'text', 'qr' => 'show', 'shop' => 'text', 'address' => 'show', 'hours' => 'show', 'phone' => 'show', 'email' => 'show'],
+    ];
+
     public function __construct(
         private readonly CatalogueRepository $catalogues = new CatalogueRepository(),
         private readonly WebshopCatalogueRepository $webshop = new WebshopCatalogueRepository(),
@@ -1954,10 +1967,15 @@ final class CatalogueService
             $cover['visual'] = in_array($cover['visual'], self::COVER_VISUALS, true) ? $cover['visual'] : null;
             $cover['illustration'] = in_array($cover['illustration'], self::SEASON_DRAWINGS, true) ? $cover['illustration'] : null;
             $cover['showShop'] = $cover['showShop'] !== false;
+            $cover['kickerFr'] = is_string($cover['kickerFr']) ? $cover['kickerFr'] : '';
+            $cover['kickerNl'] = is_string($cover['kickerNl']) ? $cover['kickerNl'] : '';
+            $cover['look'] = self::lookNormalize('cover', $cover['look']);
             $cover['imageUrl'] = $this->mediaUrl($cover['mediaId']);
         }
         unset($cover);
+        $out['back']['look'] = self::lookNormalize('back', $out['back']['look']);
         foreach (['page2', 'penultimate'] as $slot) {
+            $out[$slot]['look'] = self::lookNormalize($slot, $out[$slot]['look']);
             $out[$slot]['mediaId'] = is_int($out[$slot]['mediaId']) ? $out[$slot]['mediaId'] : null;
             // Sans gabarit choisi (charte d'avant l'assistant) : image en haut s'il y a une image, texte seul sinon.
             $out[$slot]['template'] = in_array($out[$slot]['template'], self::BRAND_TEMPLATES, true) ? $out[$slot]['template'] : ($out[$slot]['mediaId'] !== null ? 'B' : 'A');
@@ -2264,13 +2282,16 @@ final class CatalogueService
             'covers'      => [['gamme' => null, 'titleFr' => 'Notre catalogue', 'titleNl' => 'Onze catalogus', 'subtitleFr' => '', 'subtitleNl' => '', 'mediaId' => null,
                 'template' => 'A', 'visual' => null, 'illustration' => null, 'titleFont' => null, 'titleColor' => null, 'subtitleFont' => null, 'subtitleColor' => null,
                 // Le nom de la boutique sous le titre, dans la version d'une boutique (21/11/2026 : « pouvoir l'effacer »).
-                'showShop' => true]],
+                'showShop' => true,
+                // « La gamme » au-dessus du titre : son texte (vide : « La gamme » / « Het gamma »), et chaque élément (v1.12).
+                'kickerFr' => '', 'kickerNl' => '', 'look' => self::lookDefault('cover')]],
             'back'        => [
                 'titleFr' => 'Commandez en ligne',
                 'titleNl' => 'Bestel online',
                 'textFr'  => 'Retrait en boutique ou livraison.',
                 'textNl'  => 'Afhalen in de winkel of levering.',
                 'template' => 'A',
+                'look'    => self::lookDefault('back'),
             ],
             // Page 2 et avant-dernière : des textes à adapter par la marque, sans prix ni promesse chiffrée.
             'page2'       => [
@@ -2280,6 +2301,7 @@ final class CatalogueService
                 'textNl'  => "Elke dag bereiden onze bakkers en patissiers in ons atelier de broden, de viennoiserie en het gebak die u in de winkel terugvindt.\n\nHier is onze selectie van het moment: veel ontdekplezier!",
                 'mediaId' => null,
                 'template' => null,
+                'look'    => self::lookDefault('page2'),
             ],
             'penultimate' => [
                 'titleFr' => 'Nos services',
@@ -2288,6 +2310,7 @@ final class CatalogueService
                 'textNl'  => "Online bestellen via onze webshop\nAfhalen in de winkel\nLevering\nTaarten op bestelling voor uw feesten en evenementen",
                 'mediaId' => null,
                 'template' => null,
+                'look'    => self::lookDefault('penultimate'),
             ],
         ];
     }
@@ -2435,6 +2458,10 @@ final class CatalogueService
             $showShop = true;
         }
         $clean['showShop'] = $showShop;
+        foreach (['kickerFr', 'kickerNl'] as $text) {
+            $clean[$text] = self::text($cover[$text] ?? '', $field . '.' . $text, $errors);
+        }
+        $clean['look'] = self::lookFields($cover['look'] ?? null, 'cover', $field . '.look', $errors);
         if ($clean['titleFr'] === '') {
             $errors[] = ['field' => $field . '.titleFr', 'message' => 'Le titre français est obligatoire.'];
         }
@@ -2458,6 +2485,7 @@ final class CatalogueService
         if (!in_array($clean['template'], self::BACK_TEMPLATES, true)) {
             $errors[] = ['field' => $field . '.template', 'message' => 'Gabarit : A (QR et boutique) ou B (boutique en avant).'];
         }
+        $clean['look'] = self::lookFields($back['look'] ?? null, 'back', $field . '.look', $errors);
 
         return $clean;
     }
@@ -2491,8 +2519,89 @@ final class CatalogueService
             $errors[] = ['field' => $slot . '.template', 'message' => 'Gabarit : A (texte seul), B (image en haut) ou C (image en bas).'];
         }
         $clean['template'] = $template;
+        $clean['look'] = self::lookFields($raw['look'] ?? null, $slot, $slot . '.look', $errors);
 
         return $clean;
+    }
+
+    /** Chaque élément d'une page de la marque affiché, dans la police et la couleur du gabarit. @return array<string,array{show:bool,font:?string,color:?string}> */
+    public static function lookDefault(string $kind): array
+    {
+        return array_map(static fn (): array => ['show' => true, 'font' => null, 'color' => null], self::LOOK[$kind]);
+    }
+
+    /**
+     * Les éléments d'une page tels qu'enregistrés, complétés des défauts, clés dans un ordre FIXE ; une valeur illisible
+     * reprend le défaut. Un élément « show » n'a ni police ni couleur ; un élément « style » est toujours affiché.
+     *
+     * @return array<string,array{show:bool,font:?string,color:?string}>
+     */
+    private static function lookNormalize(string $kind, mixed $saved): array
+    {
+        $out = self::lookDefault($kind);
+        $saved = is_array($saved) ? $saved : [];
+        foreach (self::LOOK[$kind] as $element => $type) {
+            $entry = is_array($saved[$element] ?? null) ? $saved[$element] : [];
+            $out[$element] = [
+                'show'  => $type === 'style' ? true : ($entry['show'] ?? true) !== false,
+                'font'  => $type !== 'show' && in_array($entry['font'] ?? null, self::COVER_FONTS, true) ? $entry['font'] : null,
+                'color' => $type !== 'show' && isset(self::COVER_COLORS[(string) ($entry['color'] ?? '')]) ? $entry['color'] : null,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Les éléments d'une page validés (`{élément: {show, font, color}}`, chacun facultatif) : élément inconnu, `show` non
+     * booléen, police ou couleur hors de celles de la marque → 422 au champ nommé. Absent : tout affiché, polices et
+     * couleurs du gabarit.
+     *
+     * @return array<string,array{show:bool,font:?string,color:?string}>
+     */
+    private static function lookFields(mixed $look, string $kind, string $field, array &$errors): array
+    {
+        if ($look === null) {
+            return self::lookDefault($kind);
+        }
+        if (!is_array($look) || (array_is_list($look) && $look !== [])) {
+            $errors[] = ['field' => $field, 'message' => 'Objet {élément: {show, font, color}} attendu.'];
+
+            return self::lookDefault($kind);
+        }
+        $errors = array_merge($errors, self::unknown($look, array_keys(self::LOOK[$kind]), $field . '.'));
+        foreach (self::LOOK[$kind] as $element => $type) {
+            $entry = $look[$element] ?? null;
+            if ($entry === null) {
+                continue;
+            }
+            $at = $field . '.' . $element;
+            if (!is_array($entry)) {
+                $errors[] = ['field' => $at, 'message' => 'Objet {show, font, color} attendu.'];
+                continue;
+            }
+            $errors = array_merge($errors, self::unknown($entry, ['show', 'font', 'color'], $at . '.'));
+            if (array_key_exists('show', $entry) && !is_bool($entry['show'])) {
+                $errors[] = ['field' => $at . '.show', 'message' => 'Booléen attendu : affiché (vrai) ou masqué (faux).'];
+            }
+            if (($entry['font'] ?? null) !== null && !in_array($entry['font'], self::COVER_FONTS, true)) {
+                $errors[] = ['field' => $at . '.font', 'message' => 'Police : ' . implode(', ', self::COVER_FONTS) . ', ou null (celle du gabarit).'];
+            }
+            if (($entry['color'] ?? null) !== null && (!is_string($entry['color']) || !isset(self::COVER_COLORS[$entry['color']]))) {
+                $errors[] = ['field' => $at . '.color', 'message' => 'Couleur : ' . implode(', ', array_keys(self::COVER_COLORS)) . ', ou null (celle du gabarit).'];
+            }
+        }
+
+        return self::lookNormalize($kind, $look);
+    }
+
+    /** Les éléments au document : la couleur en #RRGGBB. @return array<string,array{show:bool,font:?string,color:?string}> */
+    private static function lookOut(string $kind, mixed $saved): array
+    {
+        return array_map(
+            static fn (array $e): array => ['show' => $e['show'], 'font' => $e['font'], 'color' => $e['color'] !== null ? self::COVER_COLORS[$e['color']] : null],
+            self::lookNormalize($kind, $saved),
+        );
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -2612,11 +2721,16 @@ final class CatalogueService
                 $clean['visual'] = in_array($clean['visual'], self::COVER_VISUALS, true) ? $clean['visual'] : null;
                 $clean['illustration'] = in_array($clean['illustration'], self::SEASON_DRAWINGS, true) ? $clean['illustration'] : null;
                 $clean['showShop'] = $clean['showShop'] !== false;
+                $clean['kickerFr'] = is_string($clean['kickerFr']) ? $clean['kickerFr'] : '';
+                $clean['kickerNl'] = is_string($clean['kickerNl']) ? $clean['kickerNl'] : '';
+                $clean['look'] = self::lookNormalize('cover', $clean['look']);
             } elseif ($slot === 'back') {
                 $clean = array_replace($default['back'], array_intersect_key($page, $default['back']));
                 $clean['template'] = in_array($clean['template'], self::BACK_TEMPLATES, true) ? $clean['template'] : 'A';
+                $clean['look'] = self::lookNormalize('back', $clean['look']);
             } else {
                 $clean = array_replace($default[$slot], array_intersect_key($page, $default[$slot]));
+                $clean['look'] = self::lookNormalize($slot, $clean['look']);
                 $clean['mediaId'] = is_int($clean['mediaId']) ? $clean['mediaId'] : null;
                 $clean['template'] = in_array($clean['template'], self::BRAND_TEMPLATES, true) ? $clean['template'] : ($clean['mediaId'] !== null ? 'B' : 'A');
             }
@@ -3114,10 +3228,12 @@ final class CatalogueService
                 // Texte seul : pas d'image, même si la charte en garde une.
                 'imageUrl' => $content['template'] === 'A' ? null : $content['imageUrl'],
                 'template' => $content['template'],
+                // Chaque élément : affiché ou masqué, sa police, sa couleur (v1.12).
+                'look'     => self::lookOut($slot, $content['look'] ?? null),
             ];
             if ($slot === 'penultimate') {
-                // La légende des pictogrammes d'allergènes du catalogue (17/11/2026) : ceux de ses produits.
-                $brand[$slot]['allergens'] = $allergensUsed;
+                // La légende des pictogrammes d'allergènes du catalogue (17/11/2026) : ceux de ses produits ; masquée : aucun.
+                $brand[$slot]['allergens'] = $brand[$slot]['look']['legend']['show'] ? $allergensUsed : [];
             }
         }
 
@@ -3155,7 +3271,7 @@ final class CatalogueService
             [$brand['page2']],
             $inner,
             [$brand['penultimate']],
-            [[
+            [self::backPage([
                 'kind'   => 'back',
                 'locked' => true,
                 'title'  => $backTitle,
@@ -3164,7 +3280,7 @@ final class CatalogueService
                 'host'   => $qrUrl === null ? null : ($own !== '' ? self::host($own) : ($webshop === null ? null : self::host($webshop))),
                 'shop'   => $shopInfo,
                 'template' => $back['template'],
-            ]],
+            ], $back['look'] ?? null)],
         );
 
         return [
@@ -3195,6 +3311,8 @@ final class CatalogueService
         };
         $slug = $visual === 'none' ? null : ($cover['illustration'] ?? null) ?? self::seasonSlug($title) ?? self::seasonSlug((string) ($cover['titleFr'] ?? ''));
         $drawing = $imageUrl === null && $slug !== null ? 'img/print/' . $slug . '.png' : null;
+        $look = self::lookOut('cover', $cover['look'] ?? null);
+        $kicker = $lang === 'nl' ? ((string) ($cover['kickerNl'] ?? '') ?: (string) ($cover['kickerFr'] ?? '')) : (string) ($cover['kickerFr'] ?? '');
 
         return [
             'kind'       => 'cover',
@@ -3205,7 +3323,8 @@ final class CatalogueService
             'eyebrow'    => ($cover['showShop'] ?? true) === false ? null : $shopName,
             'imageUrl'   => $imageUrl,
             'template'   => in_array($cover['template'] ?? 'A', self::COVER_TEMPLATES, true) ? ($cover['template'] ?? 'A') : 'A',
-            'kicker'     => $isGamme ? ($lang === 'nl' ? 'Het gamma' : 'La gamme') : null,
+            // « La gamme » : le texte choisi (sinon celui d'une gamme), masqué si la couverture le masque.
+            'kicker'     => $look['kicker']['show'] ? ($kicker !== '' ? $kicker : ($isGamme ? ($lang === 'nl' ? 'Het gamma' : 'La gamme') : null)) : null,
             'drawing'    => $drawing,
             'drawingUrl' => $drawing !== null ? MediaService::publicUrl($drawing) : null,
             'noVisual'   => $visual === 'none',
@@ -3214,7 +3333,36 @@ final class CatalogueService
             'titleColor'    => self::COVER_COLORS[(string) ($cover['titleColor'] ?? '')] ?? null,
             'subtitleFont'  => in_array($cover['subtitleFont'] ?? null, self::COVER_FONTS, true) ? $cover['subtitleFont'] : null,
             'subtitleColor' => self::COVER_COLORS[(string) ($cover['subtitleColor'] ?? '')] ?? null,
+            // Chaque élément : logo, « La gamme », titre, sous-titre, nom de la boutique (v1.12).
+            'look'          => $look,
         ];
+    }
+
+    /**
+     * La dernière page telle qu'elle s'imprime : un QR ou une ligne des coordonnées masqués ne partent pas au document
+     * (v1.12) ; le reste (logo, titre, texte, bloc de la boutique) est dit par `look`.
+     *
+     * @param array<string,mixed> $page
+     * @return array<string,mixed>
+     */
+    public static function backPage(array $page, mixed $look): array
+    {
+        $page['look'] = self::lookOut('back', $look);
+        if (!$page['look']['qr']['show']) {
+            $page['qrUrl'] = null;
+            $page['host'] = null;
+        }
+        if (is_array($page['shop'] ?? null)) {
+            foreach (['address' => ['address'], 'hours' => ['hours'], 'phone' => ['phone', 'phone2'], 'email' => ['email']] as $element => $keys) {
+                if (!$page['look'][$element]['show']) {
+                    foreach ($keys as $key) {
+                        $page['shop'][$key] = '';
+                    }
+                }
+            }
+        }
+
+        return $page;
     }
 
     /**

@@ -193,6 +193,11 @@
 .cha-own.is-own { border-color: rgba(63, 122, 82, 0.45); }
 .cha-own__t { flex: 1 1 260px; font-size: 12.5px; color: var(--muted-2); }
 
-/* Le nom de la boutique sous le titre de la couverture : afficher ou masquer (21/11/2026). */
-.cha-shopname { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; }
-.cha-shopname small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--muted); }
+/* Chaque élément d'une page (v1.12) : afficher/masquer, police, couleur ; masqué, ses réglages s'estompent. */
+.cha-style__l small { display: block; margin-top: 1px; font-size: 10.5px; color: var(--muted); }
+.cha-style__l { width: 104px; }
+.cha-styles--flat .cha-style { gap: 8px; }
+.cha-styles--flat .cha-style__fonts button { padding-left: 9px; padding-right: 9px; }
+.cha-styles--flat .cha-swatches { gap: 4px; }
+.cha-style.is-hidden .cha-style__fonts, .cha-style.is-hidden .cha-swatches { opacity: 0.35; }
+.cha-style + .cha-style { padding-top: 8px; border-top: 1px dashed var(--line); }

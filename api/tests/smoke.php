@@ -5641,8 +5641,8 @@ check('charte : la police et la couleur du titre et du sous-titre (design system
 $etatPub = call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter');
 check('charte : publiée, le brouillon n’a plus de différence ; l’ordre des clés relues est fixe',
     ($etatPub['body']['data']['publication']['version'] ?? 0) === 2 && ($etatPub['body']['data']['publication']['draftChanged'] ?? true) === false
-        && array_keys($etatPub['body']['data']['covers'][1] ?? []) === ['gamme', 'titleFr', 'titleNl', 'subtitleFr', 'subtitleNl', 'mediaId', 'template', 'visual', 'illustration', 'titleFont', 'titleColor', 'subtitleFont', 'subtitleColor', 'showShop', 'imageUrl']
-        && array_keys($etatPub['body']['data']['back'] ?? []) === ['titleFr', 'titleNl', 'textFr', 'textNl', 'template'],
+        && array_keys($etatPub['body']['data']['covers'][1] ?? []) === ['gamme', 'titleFr', 'titleNl', 'subtitleFr', 'subtitleNl', 'mediaId', 'template', 'visual', 'illustration', 'titleFont', 'titleColor', 'subtitleFont', 'subtitleColor', 'showShop', 'kickerFr', 'kickerNl', 'look', 'imageUrl']
+        && array_keys($etatPub['body']['data']['back'] ?? []) === ['titleFr', 'titleNl', 'textFr', 'textNl', 'template', 'look'],
     json_encode($etatPub['body']['data'] ?? null, JSON_UNESCAPED_UNICODE));
 $refusG = [
     call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['covers' => [['gamme' => 14, 'titleFr' => 'a', 'template' => 'Z']]]),
@@ -5930,6 +5930,50 @@ check('pages propres : le nom de la boutique sous le titre — vrai par défaut,
         && array_column($refusNom, 'status') === [422, 422]
         && ($refusNom[0]['body']['error']['details'][0]['field'] ?? '') === 'cover.showShop' && ($refusNom[1]['body']['error']['details'][0]['field'] ?? '') === 'covers[0].showShop',
     json_encode([$avecNom['eyebrow'] ?? null, $sansNom['status'], $sansNom['body']['error'] ?? null, $docSansNom['eyebrow'] ?? 'absent', $docAutreNom['eyebrow'] ?? null, array_column($refusNom, 'status')], JSON_UNESCAPED_UNICODE));
+call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], $corpsP);
+
+// Chaque élément des pages de la marque (21/11/2026, Sam : « toutes les données du catalogue doivent être éditables —
+// visibles ou pas — + la typo et les couleurs ») : `look` {élément: {show, font, color}}, et le texte de « La gamme ».
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$lookP = array_replace($corpsP, [
+    'cover' => array_replace($couvP, ['kickerFr' => 'Notre sélection', 'kickerNl' => 'Onze selectie',
+        'look' => ['logo' => ['show' => false], 'kicker' => ['font' => 'playwrite', 'color' => 'or'], 'shop' => ['color' => 'rubis']]]),
+    'page2' => array_replace($page2P, ['look' => ['title' => ['font' => 'gotham', 'color' => 'abricot'], 'text' => ['show' => false]]]),
+    'penultimate' => array_replace($sansAdresse($communes['penultimate'] ?? []), ['look' => ['legend' => ['show' => false]]]),
+    'back' => array_replace($dosP, ['look' => ['qr' => ['show' => false], 'hours' => ['show' => false], 'shop' => ['font' => 'vank']]]),
+]);
+$poseLook = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], $lookP);
+// Ce que la lecture rend, renvoyé tel quel (sans les adresses calculées `imageUrl`) : la même chose (idempotent).
+$poseLook2 = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [],
+    array_map(static fn (?array $page): ?array => $page === null ? null : array_diff_key($page, ['imageUrl' => true]), $poseLook['body']['data']['own'] ?? []));
+$docLook = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document', ['shopId' => (string) $catA])['body']['data']['pages'] ?? [];
+$docLookNl = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document', ['shopId' => (string) $catA, 'lang' => 'nl'])['body']['data']['pages'][0] ?? [];
+$nL = count($docLook);
+$docAutreLook = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idAutre . '/document', ['shopId' => (string) $catA])['body']['data']['pages'] ?? [];
+check('pages propres : chaque élément — logo masqué, « La gamme » renommé (FR, NL) en Playwrite or, titre de la page 2 en Gotham abricot, texte masqué, légende des allergènes, QR et horaires masqués ; l’autre catalogue garde tout',
+    $poseLook['status'] === 200 && ($docLook[0]['look']['logo']['show'] ?? true) === false && ($docLook[0]['kicker'] ?? '') === 'Notre sélection'
+        && ($docLook[0]['look']['kicker'] ?? null) === ['show' => true, 'font' => 'playwrite', 'color' => '#B0792A'] && ($docLook[0]['look']['shop']['color'] ?? '') === '#8D1D2C'
+        && ($docLookNl['kicker'] ?? '') === 'Onze selectie'
+        && ($docLook[1]['look']['title'] ?? null) === ['show' => true, 'font' => 'gotham', 'color' => '#F2C9A0'] && ($docLook[1]['look']['text']['show'] ?? true) === false
+        && ($docLook[$nL - 2]['allergens'] ?? ['x']) === [] && ($docLook[$nL - 2]['look']['legend']['show'] ?? true) === false
+        && array_key_exists('qrUrl', $docLook[$nL - 1] ?? []) && $docLook[$nL - 1]['qrUrl'] === null && ($docLook[$nL - 1]['shop']['hours'] ?? 'x') === '' && ($docLook[$nL - 1]['shop']['address'] ?? '') !== ''
+        && ($docLook[$nL - 1]['look']['shop']['font'] ?? '') === 'vank'
+        && ($docAutreLook[0]['look']['logo']['show'] ?? false) === true && ($docAutreLook[0]['kicker'] ?? '') === 'La gamme' && ($docAutreLook[count($docAutreLook) - 1]['qrUrl'] ?? null) !== null
+        && $poseLook2['status'] === 200 && $poseLook2['body']['data'] === $poseLook['body']['data']
+        && array_keys($poseLook['body']['data']['own']['back']['look'] ?? []) === ['logo', 'title', 'text', 'qr', 'shop', 'address', 'hours', 'phone', 'email'],
+    json_encode([$poseLook['status'], $poseLook['body']['error'] ?? null, $docLook[0]['look'] ?? null, $docLook[0]['kicker'] ?? null, $docLook[$nL - 1]['shop'] ?? null], JSON_UNESCAPED_UNICODE));
+$refusLook = [
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['cover' => array_replace($couvP, ['look' => ['pirate' => ['show' => false]]])]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['cover' => array_replace($couvP, ['look' => ['logo' => ['show' => 'non']]])]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['page2' => array_replace($page2P, ['look' => ['title' => ['font' => 'comic']]])]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['back' => array_replace($dosP, ['look' => ['shop' => ['color' => '#FF0000']]])]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['back' => array_replace($dosP, ['look' => 'tout'])]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['page2' => ['titleFr' => 'x', 'look' => ['legend' => ['show' => false]]]]),
+];
+check('pages propres : éléments refusés (422, champ nommé) — élément inconnu, show non booléen, police, couleur hors de la marque, look qui n’est pas un objet ; la légende n’existe qu’à l’avant-dernière',
+    array_unique(array_column($refusLook, 'status')) === [422]
+        && array_map(static fn (array $r): string => $r['body']['error']['details'][0]['field'] ?? '', $refusLook) === ['cover.look.pirate', 'cover.look.logo.show', 'page2.look.title.font', 'back.look.shop.color', 'back.look', 'page2.look.legend'],
+    json_encode(array_map(static fn (array $r): array => [$r['status'], $r['body']['error']['details'] ?? null], $refusLook), JSON_UNESCAPED_UNICODE));
 call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], $corpsP);
 
 // La boutique reçoit le catalogue avec ses pages ; sa copie adaptée les garde, et la marque n'en pose pas sur un catalogue de boutique.

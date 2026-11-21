@@ -3207,6 +3207,8 @@ export type CatalogueDocPage =
   | {
       kind: 'cover'
       locked: true
+      /** Chaque élément : logo, kicker (« La gamme »), titre, sous-titre, nom de la boutique (v1.12). */
+      look?: CatalogueDocLook
       title: string
       subtitle: string
       eyebrow: string | null
@@ -3230,6 +3232,8 @@ export type CatalogueDocPage =
       kind: 'brand'
       locked: true
       slot: 'page2' | 'penultimate'
+      /** Chaque élément : logo, titre, texte, légende des allergènes (avant-dernière) (v1.12). */
+      look?: CatalogueDocLook
       title: string
       text: string
       imageUrl: string | null
@@ -3280,7 +3284,18 @@ export type CatalogueDocPage =
       products: CatalogueDocProduct[]
       availabilityFooter?: string | null
     }
-  | { kind: 'back'; locked: true; title: string; text: string; qrUrl: string | null; host: string | null; shop: CatalogueShopInfo | null; template?: CatalogueBackTemplate }
+  | {
+      kind: 'back'
+      locked: true
+      title: string
+      text: string
+      qrUrl: string | null
+      host: string | null
+      shop: CatalogueShopInfo | null
+      template?: CatalogueBackTemplate
+      /** Chaque élément : logo, titre, texte, QR, coordonnées et chacune de leurs lignes (v1.12). */
+      look?: CatalogueDocLook
+    }
 
 export interface CatalogueDocFiller {
   kind: CatalogueFiller
@@ -3328,6 +3343,11 @@ export interface CatalogueCover {
   subtitleColor?: CatalogueCoverColor | null
   /** Le nom de la boutique sous le titre, dans la version d'une boutique (21/11/2026) ; absent : vrai. */
   showShop?: boolean
+  /** « La gamme » au-dessus du titre : son texte (vide : « La gamme » / « Het gamma ») (v1.12). */
+  kickerFr?: string
+  kickerNl?: string
+  /** Chaque élément : logo, « La gamme », titre, sous-titre, nom de la boutique (v1.12). */
+  look?: CatalogueLook
 }
 
 /** Les polices de la marque : Vank (titres), Gotham (texte), Playwrite DEVA (manuscrite). */
@@ -3367,6 +3387,50 @@ export interface CatalogueBrandPage {
   mediaId: number | null
   imageUrl?: string | null
   template: CatalogueBrandTemplate
+  /** Chaque élément : affiché ou masqué, sa police, sa couleur (v1.12). */
+  look?: CatalogueLook
+}
+
+/**
+ * Les éléments de chaque page de la marque (21/11/2026, Sam : « toutes les données du catalogue doivent être éditables —
+ * visibles ou pas — + la typo et les couleurs ») : `show` s'affiche ou se masque ; `text` aussi, avec sa police et sa
+ * couleur ; `style` : police et couleur seulement. La règle de l'API (CatalogueService::LOOK).
+ */
+export type CatalogueLookKind = 'cover' | 'page2' | 'penultimate' | 'back'
+export type CatalogueLookType = 'show' | 'text' | 'style'
+export const CATALOGUE_LOOK: Record<CatalogueLookKind, Record<string, CatalogueLookType>> = {
+  cover: { logo: 'show', kicker: 'text', title: 'show', subtitle: 'show', shop: 'style' },
+  page2: { logo: 'show', title: 'text', text: 'text' },
+  penultimate: { logo: 'show', title: 'text', text: 'text', legend: 'show' },
+  back: { logo: 'show', title: 'text', text: 'text', qr: 'show', shop: 'text', address: 'show', hours: 'show', phone: 'show', email: 'show' },
+}
+export interface CatalogueLookEntry {
+  show: boolean
+  font: CatalogueCoverFont | null
+  color: CatalogueCoverColor | null
+}
+export type CatalogueLook = Record<string, CatalogueLookEntry>
+/** Au document : la couleur en #RRGGBB. */
+export type CatalogueDocLook = Record<string, { show: boolean; font: CatalogueCoverFont | null; color: string | null }>
+
+/** Les éléments d'une page, complétés : tout affiché, polices et couleurs du gabarit (comme l'API). */
+export function fullLook(kind: CatalogueLookKind, look?: CatalogueLook | null): CatalogueLook {
+  const out: CatalogueLook = {}
+  for (const [element, type] of Object.entries(CATALOGUE_LOOK[kind])) {
+    const e = look?.[element]
+    out[element] = { show: type === 'style' ? true : e?.show !== false, font: type === 'show' ? null : e?.font ?? null, color: type === 'show' ? null : e?.color ?? null }
+  }
+  return out
+}
+
+/** Les éléments tels que le document les porte (couleur en #RRGGBB), pour l'aperçu de l'assistant. */
+export function docLook(kind: CatalogueLookKind, look?: CatalogueLook | null): CatalogueDocLook {
+  const full = fullLook(kind, look)
+  const out: CatalogueDocLook = {}
+  for (const [element, e] of Object.entries(full)) {
+    out[element] = { show: e.show, font: e.font, color: CATALOGUE_COVER_COLORS.find((c) => c.id === e.color)?.hex ?? null }
+  }
+  return out
 }
 
 /** La dernière page (« commandez en ligne ») : textes et gabarit. */
@@ -3376,6 +3440,8 @@ export interface CatalogueBackPage {
   textFr: string
   textNl: string
   template: CatalogueBackTemplate
+  /** Chaque élément : logo, titre, texte, QR, coordonnées et leurs lignes (v1.12). */
+  look?: CatalogueLook
 }
 
 /** Une couverture propre à un catalogue : comme celle de la charte, sans sa gamme. */
@@ -3497,7 +3563,7 @@ export async function getCatalogueCharter(): Promise<CatalogueCharter> {
   return (await request<Envelope<CatalogueCharter>>(`${BASE}/catalogue-charter`)).data
 }
 
-const brandPage = (page: CatalogueBrandPage) => ({ titleFr: page.titleFr, titleNl: page.titleNl, textFr: page.textFr, textNl: page.textNl, mediaId: page.mediaId, template: page.template })
+const brandPage = (page: CatalogueBrandPage) => ({ titleFr: page.titleFr, titleNl: page.titleNl, textFr: page.textFr, textNl: page.textNl, mediaId: page.mediaId, template: page.template, look: page.look ?? null })
 
 /** Ce qu'on écrit d'une couverture (sans sa gamme ni l'adresse de son image), police et couleur comprises. */
 const coverBody = (cover: CatalogueOwnCover) => ({
@@ -3505,9 +3571,10 @@ const coverBody = (cover: CatalogueOwnCover) => ({
   template: cover.template, visual: cover.visual, illustration: cover.illustration,
   titleFont: cover.titleFont ?? null, titleColor: cover.titleColor ?? null, subtitleFont: cover.subtitleFont ?? null, subtitleColor: cover.subtitleColor ?? null,
   showShop: cover.showShop ?? true,
+  kickerFr: cover.kickerFr ?? '', kickerNl: cover.kickerNl ?? '', look: cover.look ?? null,
 })
 
-const backBody = (back: CatalogueBackPage) => ({ titleFr: back.titleFr, titleNl: back.titleNl, textFr: back.textFr, textNl: back.textNl, template: back.template })
+const backBody = (back: CatalogueBackPage) => ({ titleFr: back.titleFr, titleNl: back.titleNl, textFr: back.textFr, textNl: back.textNl, template: back.template, look: back.look ?? null })
 
 export async function saveCatalogueCharter(charter: Omit<CatalogueCharter, 'logoUrl' | 'updatedAt' | 'covers' | 'publication'> & { covers: CatalogueCover[] }): Promise<CatalogueCharter> {
   // La police et la couleur du titre et du sous-titre (v1.9) partent aussi : sans elles, le serveur les effaçait.
