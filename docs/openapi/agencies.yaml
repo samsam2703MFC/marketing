@@ -1,0 +1,144 @@
+openapi: 3.1.0
+info:
+  title: Marketing — référentiel des agences (écriture)
+  version: 1.0.0
+  description: |
+    Créer, modifier et retirer une agence du réseau (21 novembre 2026). Le cockpit (dépôt `consultant_BO`, écran
+    « Agences » et note de campagne, qui signe avec l'agence de la campagne ou celle par défaut) écrivait `mar_agency`
+    en SQL ; il passe par ces routes avec son jeton de service. Réservé au réseau : une identité de boutique reçoit
+    `403`. Contrat détaillé et écarts : `docs/API_REGISTRY.md` §15.
+
+    La lecture reste `GET …/agencies` (forme d'avant : tableau, snake_case), qui porte désormais aussi `email`,
+    `site`, `logo_uri`, `is_default` et `channel_campaigns` (les campagnes dont un canal désigne l'agence).
+
+    Une seule agence par défaut : en désigner une (`isDefault: true`) retire ce rôle aux autres.
+servers:
+  - url: /api/v1/marketing
+security:
+  - session: []
+  - serviceToken: []
+
+paths:
+  /agencies:
+    post:
+      summary: Créer une agence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/AgencyInput'
+                - required: [name]
+      responses:
+        '201': { $ref: '#/components/responses/Agency' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /agencies/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    patch:
+      summary: Modifier une agence — les champs envoyés, et eux seuls
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AgencyInput' }
+      responses:
+        '200': { $ref: '#/components/responses/Agency' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+    delete:
+      summary: Retirer une agence
+      description: |
+        Refusé (`409 RESOURCE_STATE_INVALID`, `details` : `channels`, `interventions`) tant qu'un canal de campagne ou
+        une intervention enregistrée la désigne : les campagnes passées perdraient qui les a faites.
+      responses:
+        '204': { description: Retirée. Un second appel répond 404. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: mar_session
+      description: Session ouverte par les identifiants de l'ERP (réseau seul).
+    serviceToken:
+      type: apiKey
+      in: header
+      name: X-Marketing-Service
+      description: Jeton de service des autres modules du serveur (le cockpit).
+
+  parameters:
+    id: { name: id, in: path, required: true, schema: { type: integer } }
+
+  responses:
+    Unauthenticated:
+      description: Sans identité (forme commune du routeur du module, §3.2 du registre).
+      content:
+        application/json:
+          schema: { type: object, properties: { status: { type: string }, description: { type: string } } }
+    Error:
+      description: Erreur au format du standard.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/EnvelopeError' }
+    Agency:
+      description: L'agence, après l'écriture.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/EnvelopeOk'
+              - properties: { data: { $ref: '#/components/schemas/Agency' } }
+
+  schemas:
+    AgencyInput:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 160, description: Nettoyé des espaces de bord ; vide refusé. }
+        email: { type: [string, 'null'], format: email, maxLength: 190, description: Vide ou null → aucune adresse. }
+        site: { type: [string, 'null'], maxLength: 190, description: Vide ou null → aucun site. }
+        logoUri:
+          type: [string, 'null']
+          maxLength: 700000
+          pattern: '^data:image/(png|jpeg|gif|webp|svg\+xml);base64,'
+          description: Une image embarquée (une adresse ferait un cadre vide à l'impression). Vide ou null → aucun logo.
+        isDefault: { type: boolean }
+    Agency:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: [string, 'null'] }
+        site: { type: [string, 'null'] }
+        logoUri: { type: [string, 'null'] }
+        isDefault: { type: boolean }
+        campaigns: { type: integer, description: Les campagnes dont un canal désigne l'agence. }
+    EnvelopeOk:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: {}
+        meta: { type: object, properties: { requestId: { type: string } } }
+    EnvelopeError:
+      type: object
+      required: [success, error, meta]
+      properties:
+        success: { type: boolean, const: false }
+        error:
+          type: object
+          properties:
+            code: { type: string, enum: [VALIDATION_FAILED, PERM_ROLE_REQUIRED, RESOURCE_NOT_FOUND, RESOURCE_STATE_INVALID] }
+            message: { type: string }
+            details: { type: array, items: { type: object, properties: { field: { type: string }, message: { type: string } } } }
+        meta: { type: object, properties: { requestId: { type: string } } }

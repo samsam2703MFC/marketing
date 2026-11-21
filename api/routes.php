@@ -14,6 +14,7 @@ declare(strict_types=1);
  * l'application ; seuls les contrôleurs sont à reprendre.
  */
 
+use Marketing\Controller\AgencyController;
 use Marketing\Controller\BrochureController;
 use Marketing\Controller\CampaignController;
 use Marketing\Controller\CampaignVoucherController;
@@ -41,6 +42,7 @@ return static function (Router $router): void {
     $references = new ReferenceController();
     $campaigns  = new CampaignController();
     $funds      = new FundController();
+    $agencies   = new AgencyController();
     $leads      = new LeadController();
     $session    = new SessionController();
     $catalog    = new CatalogController();
@@ -247,6 +249,10 @@ return static function (Router $router): void {
     // Agences et performance
     $router->get('/api/v1/marketing/agencies',            [$network, 'agencies']);
     $router->get('/api/v1/marketing/agencies/{id}/campaigns', [$network, 'interventions']);
+    // Le référentiel en écriture (21/11/2026 : le cockpit l'écrivait en SQL) — au standard : enveloppe, camelCase.
+    $router->post('/api/v1/marketing/agencies',           [$agencies, 'store']);
+    $router->patch('/api/v1/marketing/agencies/{id}',     [$agencies, 'update']);
+    $router->delete('/api/v1/marketing/agencies/{id}',    [$agencies, 'destroy']);
     $router->get('/api/v1/marketing/analysis',            [$network, 'analysis']);
     $router->get('/api/v1/marketing/roi',                 [$network, 'roi']);
 
