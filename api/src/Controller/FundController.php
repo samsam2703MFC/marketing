@@ -83,6 +83,10 @@ final class FundController
             'direction', 'shop_id', 'campaign_id', 'lever_id', 'movement_date',
             'period_from', 'period_to',
             'label', 'amount', 'source', 'supplier_name', 'document_ref',
+            // Écartés jusqu'au 21/11/2026 : la visibilité, que l'écran du fonds envoie, et
+            // l'investissement, que le cockpit envoie. Sans eux, « réservé à la marque » ne
+            // tenait pas, et un four passait pour un frais courant.
+            'is_public', 'is_investment',
         ]));
 
         return Response::created('Mouvement enregistré.', $id);
@@ -111,6 +115,10 @@ final class FundController
             'direction', 'shop_id', 'campaign_id', 'lever_id', 'movement_date',
             'period_from', 'period_to',
             'label', 'amount', 'source', 'supplier_name', 'document_ref',
+            // Écartés jusqu'au 21/11/2026 : la visibilité, que l'écran du fonds envoie, et
+            // l'investissement, que le cockpit envoie. Sans eux, « réservé à la marque » ne
+            // tenait pas, et un four passait pour un frais courant.
+            'is_public', 'is_investment',
         ]))
             ? Response::mutated('Mouvement corrigé.')
             : Response::notFound('Mouvement introuvable.');

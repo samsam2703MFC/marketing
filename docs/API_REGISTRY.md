@@ -112,6 +112,13 @@ entière, pour attraper une colonne ajoutée plus tard.
 | GET | `…/roi` | marque | objet |
 | GET | `…/roi/quarterly` | marque | tableau |
 
+**21/11/2026 — visibilité et investissement.** `POST` et `PATCH …/funds/movements` acceptent `is_public` (booléen,
+`true` par défaut à la création) et `is_investment` (booléen, retenu sur une sortie seulement, `false` par défaut) ; le
+grand livre les rend sur chaque ligne. Une correction qui ne les porte pas garde les valeurs en place (jusqu'ici, le
+contrôleur écartait `is_public` et toute correction rendait la ligne publique). La colonne `is_investment` vient de la
+migration 053. Le cockpit (dépôt `consultant_BO`) écrit désormais le fonds, ses frais récurrents et les types de
+campagne par ces routes, avec le jeton de service (`X-Marketing-Service`), et plus jamais dans les tables.
+
 ### 2.4 Outils de campagne et diffusion
 
 | Méthode | Chemin | Périmètre | Réponse |
