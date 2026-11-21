@@ -83,7 +83,10 @@ function PageCountChoice({ value, onChange, disabled = false }: { value: Catalog
   )
 }
 
-export default function CatalogueView() {
+/** Un leaflet ou un dépliant : ouvert dans l'onglet « Leaflets & dépliants » des imprimés (21/11/2026). */
+export type BrochureKind = 'leaflet-a5' | 'depliant-a4'
+
+export default function CatalogueView({ onBrochure }: { onBrochure?: (format: BrochureKind) => void } = {}) {
   // `?pages-marque` ouvre l'assistant des pages de la marque (lien direct, captures).
   const [screen, setScreen] = useState<Screen>(() => (new URLSearchParams(window.location.search).has('pages-marque') ? { kind: 'charter' } : { kind: 'list' }))
 
@@ -115,6 +118,7 @@ export default function CatalogueView() {
   }
   return (
     <CatalogueList
+      onBrochure={onBrochure}
       onOpen={(id) => setScreen({ kind: 'editor', id })}
       onCharter={() => setScreen({ kind: 'charter' })}
       onBrandPages={(cat) => setScreen({ kind: 'charter', step: 1, catalogue: { id: cat.id, title: cat.title } })}
@@ -126,7 +130,7 @@ export default function CatalogueView() {
 // Liste et création
 // =================================================================================================
 
-function CatalogueList({ onOpen, onCharter, onBrandPages }: { onOpen: (id: number) => void; onCharter: () => void; onBrandPages: (cat: Catalogue) => void }) {
+function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen: (id: number) => void; onCharter: () => void; onBrandPages: (cat: Catalogue) => void; onBrochure?: (format: BrochureKind) => void }) {
   const [owner, setOwner] = useState<'' | api.CatalogueOwner>('')
   const [revision, setRevision] = useState(0)
   const list = useAsync(() => api.listCatalogues(owner ? { owner } : {}), [owner, revision])
@@ -184,6 +188,17 @@ function CatalogueList({ onOpen, onCharter, onBrandPages }: { onOpen: (id: numbe
         >
           ＋ Nouveau catalogue
         </button>
+        {onBrochure ? (
+          <>
+            {/* Les trois formats d'un imprimé (21/11/2026) : le leaflet et le dépliant partent d'une campagne. */}
+            <button type="button" className="btn" onClick={() => onBrochure('leaflet-a5')} title="Un leaflet A5 recto-verso, tiré d’une campagne">
+              ＋ Leaflet A5
+            </button>
+            <button type="button" className="btn" onClick={() => onBrochure('depliant-a4')} title="Un dépliant A4 trois volets, tiré d’une campagne">
+              ＋ Dépliant A4
+            </button>
+          </>
+        ) : null}
       </div>
 
       <div ref={createRef}>

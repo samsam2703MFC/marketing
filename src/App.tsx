@@ -223,6 +223,8 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
   const role = ROLE
   const [route, setRoute] = useState<Route>(() => campaignFromUrl()?.route ?? 'dashboard')
   const [campaignId, setCampaignId] = useState<number | null>(() => campaignFromUrl()?.campaignId ?? null)
+  // Le format d'un nouvel imprimé demandé depuis « Imprimés » (leaflet A5 ou dépliant A4), pour l'onglet des brochures.
+  const [brochureFormat, setBrochureFormat] = useState<'leaflet-a5' | 'depliant-a4' | null>(null)
   const [postFor, setPostFor] = useState<number | null>(postFromUrl)
   // L'étape où rouvrir l'assistant, quand « Compléter les campagnes » y renvoie.
   const [builderStep, setBuilderStep] = useState<string | null>(null)
@@ -442,8 +444,15 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
           {route === 'crm' ? <CrmView /> : null}
           {route === 'campaign-types' ? <CampaignTypesView /> : null}
           {route === 'addresses' ? <AddressesView /> : null}
-          {route === 'brochures' && role === 'BRAND_ADMIN' ? <BrochureView campaignId={campaignId} onOpenCampaign={openCampaign} /> : null}
-          {route === 'catalogues' && role === 'BRAND_ADMIN' ? <CatalogueView /> : null}
+          {route === 'brochures' && role === 'BRAND_ADMIN' ? <BrochureView campaignId={campaignId} onOpenCampaign={openCampaign} initialFormat={brochureFormat} /> : null}
+          {route === 'catalogues' && role === 'BRAND_ADMIN' ? (
+            <CatalogueView
+              onBrochure={(format) => {
+                setBrochureFormat(format)
+                setRoute('brochures')
+              }}
+            />
+          ) : null}
           {route === 'media' && role === 'BRAND_ADMIN' ? <MediaLibraryView /> : null}
           {route === 'settings' && role === 'BRAND_ADMIN' ? <SettingsView /> : null}
 

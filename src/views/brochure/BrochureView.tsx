@@ -47,6 +47,8 @@ import { openPrintWindow } from '../../lib/print'
 interface Props {
   campaignId: number | null
   onOpenCampaign?: (id: number) => void
+  /** Le format demandé depuis « Imprimés » (« ＋ Leaflet A5 », « ＋ Dépliant A4 »). */
+  initialFormat?: BrochureFormat | null
 }
 
 const OTHER: Record<BrochureFormat, BrochureFormat> = { 'leaflet-a5': 'depliant-a4', 'depliant-a4': 'leaflet-a5' }
@@ -86,7 +88,7 @@ interface Editing {
   left: number
 }
 
-export default function BrochureView({ campaignId: initialId, onOpenCampaign }: Props) {
+export default function BrochureView({ campaignId: initialId, onOpenCampaign, initialFormat = null }: Props) {
   const today = localToday()
   const campaigns = useAsync(() => api.listCampaigns(), [])
   const shops = useAsync(() => api.listShops(), [])
@@ -161,6 +163,7 @@ export default function BrochureView({ campaignId: initialId, onOpenCampaign }: 
           brandLangs={brandLangsOf(social.data?.brand?.langs)}
           webshopUrl={social.data?.webshopUrl ?? ''}
           today={today}
+          initialFormat={initialFormat}
         />
       ) : null}
     </div>
@@ -174,12 +177,13 @@ interface GeneratorProps {
   brandLangs: Lang[]
   webshopUrl: string
   today: string
+  initialFormat: BrochureFormat | null
 }
 
-function Generator({ bundle, shops, socialShops, brandLangs, webshopUrl, today }: GeneratorProps) {
+function Generator({ bundle, shops, socialShops, brandLangs, webshopUrl, today, initialFormat }: GeneratorProps) {
   const { file, detail } = bundle
   const [format, setFormat] = useState<BrochureFormat>(() =>
-    bundle.saved.some((row) => row.format === 'leaflet-a5') || !bundle.saved.length ? 'leaflet-a5' : 'depliant-a4',
+    initialFormat ?? (bundle.saved.some((row) => row.format === 'leaflet-a5') || !bundle.saved.length ? 'leaflet-a5' : 'depliant-a4'),
   )
   const [store, setStore] = useState<Store>(() => {
     const out: Store = {}

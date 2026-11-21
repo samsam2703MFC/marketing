@@ -90,6 +90,8 @@ export interface TemplateDef {
 }
 
 export const TEMPLATES: TemplateDef[] = [
+  // Le style des catalogues de la refonte (21/11/2026, Sam : « adapte ce style à Brochures & leaflets ») : le modèle par défaut.
+  { id: 'papier', name: 'Papier', hint: 'le style des catalogues' },
   { id: 'fetes', name: 'Fêtes', hint: 'illustration de la gamme' },
   { id: 'epure', name: 'Épuré', hint: 'un produit, son prix' },
   { id: 'ruby', name: 'Ruby', hint: 'fond plein, couleur de la campagne' },
@@ -430,7 +432,7 @@ export function webshopLink(base: string, shop: BrochureShop | null, qr: Brochur
 
 export function defaultSettings(file: PrintFile): BrochureSettings {
   return {
-    template: 'fetes',
+    template: 'papier',
     texts: {},
     products: file.products.map((product) => ({ key: productKey(product), on: true, price: null })),
     qr: { mode: 'webshop', category: null, group: null },

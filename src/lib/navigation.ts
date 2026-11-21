@@ -203,10 +203,10 @@ const NETWORK: NavGroup[] = [
     items: [
       item('campaigns', 'Campagnes'),
       item('promotions', 'Offres'),
-      // Les imprimés de la campagne (leaflet, dépliant) : une version par boutique, son QR code vers son webshop.
-      item('brochures', 'Brochures & leaflets'),
-      // Les catalogues produits : prix du webshop, gammes ; couverture et dernière page fixées par la charte.
-      item('catalogues', 'Catalogues'),
+      // Les imprimés (21/11/2026, Sam : « fusionner leaflet, brochure et catalogue ») : une seule entrée, deux onglets —
+      // les catalogues produits (prix du webshop, gammes, pages de la marque) et les leaflets et dépliants de la
+      // campagne (une version par boutique, son QR code vers son webshop).
+      item('catalogues', 'Imprimés'),
       item('instore', 'Marketing en magasin'),
     ],
   },
@@ -295,6 +295,10 @@ export interface Tab {
  */
 const TABS: Record<Role, Tab[][]> = {
   BRAND_ADMIN: [
+    [
+      { route: 'catalogues', label: 'Catalogues' },
+      { route: 'brochures', label: 'Leaflets & dépliants' },
+    ],
     [
       { route: 'promotions', label: 'Promotions' },
       { route: 'bundles', label: 'Bundles & menus' },

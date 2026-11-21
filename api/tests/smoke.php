@@ -1400,6 +1400,12 @@ foreach ([
     check('brochure refusée (' . $cas . ') : 422, rien d\'écrit', $refus['status'] === 422 && count($apres) === 1
         && ($apres[0]['settings']['template'] ?? '') === 'ruby', 'statut ' . $refus['status']);
 }
+// Le modèle « papier » (21/11/2026) : le style des catalogues de la refonte, accepté au dépliant ; le leaflet garde le sien.
+$papier = call($router, 'PUT', $brochures . '/depliant-a4', [], ['settings' => ['template' => 'papier'] + $reglages]);
+$apresPapier = array_column(call($router, 'GET', $brochures)['body'], null, 'format');
+check('brochure : le modèle « papier » s’enregistre (dépliant), le leaflet garde le sien',
+    $papier['status'] === 200 && ($apresPapier['depliant-a4']['settings']['template'] ?? '') === 'papier' && ($apresPapier['leaflet-a5']['settings']['template'] ?? '') === 'ruby',
+    json_encode([$papier['status'], $papier['body']], JSON_UNESCAPED_UNICODE));
 check('brochures d\'une campagne inconnue : 404 en lecture comme en écriture',
     call($router, 'GET', '/api/v1/marketing/campaigns/999999/brochures')['status'] === 404
         && call($router, 'PUT', '/api/v1/marketing/campaigns/999999/brochures/leaflet-a5', [], ['settings' => $reglages])['status'] === 404);
@@ -1409,7 +1415,7 @@ AuthContext::clear();
 $anonyme = call($router, 'GET', $brochures);
 AuthContext::set(1, 'BRAND_ADMIN', 1);
 check('la brochure d\'une campagne réseau ne se règle ni par un franchisé, ni sans identité',
-    in_array($franchise['status'], [403, 404, 422], true) && $anonyme['status'] === 401 && count(call($router, 'GET', $brochures)['body']) === 1,
+    in_array($franchise['status'], [403, 404, 422], true) && $anonyme['status'] === 401 && count(call($router, 'GET', $brochures)['body']) === 2,
     json_encode([$franchise['status'], $anonyme['status']]));
 call($router, 'DELETE', sprintf('/api/v1/marketing/campaigns/%d', $idSuivi));
 

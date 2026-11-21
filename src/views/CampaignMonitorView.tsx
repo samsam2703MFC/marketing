@@ -92,7 +92,7 @@ export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, 
         ) : null}
         {onBrochures ? (
           <button type="button" className="filter is-on back" onClick={onBrochures}>
-            Brochures &amp; leaflets →
+            Leaflets &amp; dépliants →
           </button>
         ) : null}
       </div>

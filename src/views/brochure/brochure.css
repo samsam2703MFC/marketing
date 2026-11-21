@@ -221,3 +221,75 @@
 
 /* Carte : façon menu. */
 .bro-t-carte .bro-p-cover .bro-title { font-size: calc(var(--u) * 13mm); }
+
+/* ---------- Papier : le style des catalogues de la refonte (21/11/2026, Sam : « adapte ce style à Brochures &
+   leaflets ») — papier crème, cadre et filets abricot, « surtitre » manuscrit, titres Vank, produits sur cartes
+   blanches, la boutique et le QR sur un pied rubis. Les couleurs de la campagne restent celles des titres et des prix. */
+.bro-t-papier { --rule: #F2C9A0; }
+.bro-t-papier .bro-panel__bg { background: #F5EFE4; }
+.bro-t-papier .bro-p-spine .bro-panel__bg { background: var(--p); }
+/* La couverture : le cadre abricot à 6 mm du bord, le texte à 11 mm. */
+.bro-t-papier .bro-p-cover .bro-panel__in::before {
+  content: ''; position: absolute; inset: calc(var(--u) * 6mm); pointer-events: none; z-index: 1;
+  border: 0.3mm solid var(--rule); border-radius: calc(var(--u) * 1.5mm);
+}
+.bro-t-papier .bro-cover { padding: calc(var(--u) * 12mm) calc(var(--u) * 12mm) 0; }
+.bro-t-papier .bro-cover .bro-logo { height: calc(var(--u) * 13mm); max-width: 70%; }
+.bro-t-papier .bro-eyebrow {
+  margin-top: calc(var(--u) * 5mm); font-family: 'Playwrite', cursive; font-weight: 400; font-size: calc(var(--u) * 5mm);
+  letter-spacing: 0; text-transform: none; color: var(--a); line-height: 1.8;
+}
+.bro-t-papier .bro-eyebrow::before, .bro-t-papier .bro-eyebrow::after { display: none; }
+.bro-t-papier .bro-titlebox { margin-top: calc(var(--u) * 1mm); }
+.bro-t-papier .bro-title { font-size: calc(var(--u) * 16mm); line-height: 1.04; text-wrap: balance; }
+.bro-t-papier .bro-phrase {
+  margin-top: 0; font-family: 'GothamPrint', system-ui, sans-serif; font-weight: 300; font-size: calc(var(--u) * 4mm); line-height: 1.45;
+  color: var(--i); max-width: calc(var(--u) * 100mm); text-wrap: balance;
+}
+.bro-t-papier .bro-phrase::before {
+  content: ''; display: block; width: calc(var(--u) * 12mm); margin: calc(var(--u) * 4.5mm) auto calc(var(--u) * 4mm);
+  border-top: 0.5mm solid var(--rule);
+}
+.bro-t-papier .bro-illus { margin: calc(var(--u) * 4mm) 0 calc(var(--u) * 30mm); }
+/* L'appel à l'action : dans le cadre, sans bandeau. */
+.bro-t-papier .bro-band {
+  left: 0; right: 0; bottom: calc(var(--u) * 9mm); height: auto; padding: 0 calc(var(--u) * 14mm); background: none; color: var(--p); z-index: 2;
+}
+.bro-t-papier .bro-band .bro-cta { font-size: calc(var(--u) * 3.6mm); letter-spacing: 0.18em; }
+.bro-t-papier .bro-band .bro-ctasub { color: var(--i); opacity: 0.8; }
+/* Le verso et l'intérieur : titre Vank, filet abricot, produits sur cartes blanches. */
+.bro-t-papier .bro-back .bro-h, .bro-t-papier .bro-inside__head .bro-h { text-wrap: balance; }
+.bro-t-papier .bro-sub { font-size: calc(var(--u) * 4.4mm); }
+.bro-t-papier .bro-back .bro-sub::after, .bro-t-papier .bro-inside__head .bro-sub::after {
+  content: ''; display: block; width: calc(var(--u) * 14mm); margin-top: calc(var(--u) * 3mm); border-top: 0.5mm solid var(--rule);
+}
+.bro-t-papier .bro-item { background: #fff; border-radius: calc(var(--u) * 2.5mm); padding: calc(var(--u) * 2.4mm) calc(var(--u) * 3.5mm); }
+.bro-t-papier .bro-items { gap: calc(var(--u) * 3mm); }
+.bro-t-papier .bro-items--dense { gap: calc(var(--u) * 2mm); }
+.bro-t-papier .bro-items--dense .bro-item { padding: calc(var(--u) * 1.6mm) calc(var(--u) * 3mm); }
+.bro-t-papier .bro-dot { background: #F5EFE4; }
+.bro-t-papier .bro-name { font-family: 'Vank', 'GothamPrint', serif; font-weight: 400; font-size: calc(var(--u) * 4.4mm); letter-spacing: 0.02em; line-height: 1.05; }
+.bro-t-papier .bro-items--dense .bro-name { font-size: calc(var(--u) * 3.8mm); }
+.bro-t-papier .bro-item__text small { font-weight: 300; }
+.bro-t-papier .bro-solo { background: #fff; border-radius: calc(var(--u) * 3mm); padding: calc(var(--u) * 5mm); }
+/* La boutique et le QR : le pied rubis, le QR sur sa carte blanche. */
+.bro-t-papier .bro-shop { background: var(--p); color: #F5EFE4; }
+.bro-t-papier .bro-qrbox { padding: calc(var(--u) * 2.5mm); border-radius: calc(var(--u) * 2.5mm); }
+.bro-t-papier .bro-legal { font-weight: 300; }
+/* Le rabat du dépliant : le QR sur une carte blanche, le titre Vank. */
+.bro-t-papier .bro-flap__text { font-weight: 300; }
+/* La couverture dans l'ordre des catalogues : le logo, l'illustration, puis le surtitre, le titre et l'accroche. */
+.bro-t-papier .bro-cover .bro-logo { order: 0; }
+.bro-t-papier .bro-cover .bro-illus, .bro-t-papier .bro-cover .bro-grow, .bro-t-papier .bro-cover .bro-hero, .bro-t-papier .bro-cover .bro-dots { order: 1; }
+.bro-t-papier .bro-cover .bro-illus { margin: calc(var(--u) * 6mm) 0 calc(var(--u) * 3mm); }
+.bro-t-papier .bro-cover .bro-eyebrow { order: 2; margin-top: calc(var(--u) * 2mm); }
+.bro-t-papier .bro-cover .bro-titlebox { order: 3; }
+.bro-t-papier .bro-cover .bro-phrase { order: 4; margin-bottom: calc(var(--u) * 27mm); }
+/* Les accents des capitales (Ê, É) ne sont pas rognés par la boîte du titre. */
+.bro-t-papier .bro-title { padding-top: 0.12em; padding-bottom: 0.1em; }
+/* Les cartes des produits : plus serrées que les ronds d'origine, pour tenir autant de produits. */
+.bro-t-papier .bro-item .bro-dot { width: calc(var(--u) * 16mm); height: calc(var(--u) * 16mm); }
+.bro-t-papier .bro-items--dense .bro-item .bro-dot { width: calc(var(--u) * 12mm); height: calc(var(--u) * 12mm); }
+.bro-t-papier .bro-item { padding: calc(var(--u) * 2mm) calc(var(--u) * 3.5mm) calc(var(--u) * 2mm) calc(var(--u) * 2mm); gap: calc(var(--u) * 3mm); }
+.bro-t-papier .bro-items { gap: calc(var(--u) * 2.4mm); }
+.bro-t-papier .bro-price b { font-size: calc(var(--u) * 5.2mm); }
