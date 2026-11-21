@@ -978,7 +978,7 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
           {lookRow('back', charter.back.look, 'photo', 'Photo du magasin', 'gotham', 'gabarit C · saisie par boutique')}
           {lookRow('back', charter.back.look, 'title', 'Titre', 'vank')}
           {lookRow('back', charter.back.look, 'text', 'Texte', 'gotham')}
-          {lookRow('back', charter.back.look, 'qr', 'QR code', 'gotham', 'et l’adresse du webshop')}
+          {lookRow('back', charter.back.look, 'qr', 'QR code', 'gotham', 'et l’adresse du webshop (gabarits A et B)')}
           {lookRow('back', charter.back.look, 'maps', 'QR Google Maps', 'gotham', 'gabarit C · l’adresse du magasin')}
           {lookRow('back', charter.back.look, 'shop', 'Coordonnées', 'gotham', 'le bloc de la boutique')}
           {lookRow('back', charter.back.look, 'name', 'Nom de la boutique', 'vank', '« L’Atelier By — … »')}

@@ -557,3 +557,7 @@
 
 /* Les filtres de couleur des logos (v1.16) : posés une fois par page, sans place dans la mise en page. */
 .cat-tint { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
+
+/* Les cartes QR du gabarit C (21/11/2026, Sam : « retirer webshop.atelierby.be/?shop=4, centrer Bestel online ») :
+   le libellé seul, centré dans la place à côté du QR ; l'adresse du webshop ne s'imprime plus sous le QR. */
+.cat-back--C .cat-back__qrtext { flex: 1 1 auto; justify-items: center; text-align: center; }
