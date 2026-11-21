@@ -92,6 +92,9 @@
 }
 .catv-page.is-locked:hover .catv-lock { background: #fff; color: var(--accent); box-shadow: 0 1px 3px rgba(34, 34, 34, 0.25); }
 .catv-brand-edit { margin-top: 10px; }
+.catv-brand-common { display: block; margin-top: 8px; font-size: 12px; }
+.catv-lock.is-own { background: rgba(63, 122, 82, 0.9); }
+.catv-owntag { margin-left: 6px; }
 .catv-stagefoot { display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 
 .catv-side { display: grid; gap: 14px; }

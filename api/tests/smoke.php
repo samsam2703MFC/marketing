@@ -5042,6 +5042,8 @@ $catRouter->get('/api/v1/marketing/catalogues/{id}', [$catBrand, 'show']);
 $catRouter->put('/api/v1/marketing/catalogues/{id}', [$catBrand, 'update']);
 $catRouter->delete('/api/v1/marketing/catalogues/{id}', [$catBrand, 'destroy']);
 $catRouter->get('/api/v1/marketing/catalogues/{id}/document', [$catBrand, 'document']);
+$catRouter->get('/api/v1/marketing/catalogues/{id}/brand-pages', [$catBrand, 'brandPages']);
+$catRouter->put('/api/v1/marketing/catalogues/{id}/brand-pages', [$catBrand, 'saveBrandPages']);
 $catRouter->get('/api/v1/marketing/catalogue-products', [$catBrand, 'products']);
 $catRouter->get('/api/v1/marketing/catalogue-charter', [$catBrand, 'charter']);
 $catRouter->put('/api/v1/marketing/catalogue-charter', [$catBrand, 'saveCharter']);
@@ -5671,6 +5673,103 @@ check('catalogues : les lectures du webshop sont gardées (pas de nouvel appel �
 $e1 = call($catRouter, 'DELETE', '/api/v1/marketing/catalogues/' . $idCat);
 $e2 = call($catRouter, 'DELETE', '/api/v1/marketing/catalogues/' . $idCat);
 check('catalogues : supprimé (204), puis introuvable (404)', $e1['status'] === 204 && $e2['status'] === 404);
+$pdo->exec('DELETE FROM mar_catalogue');
+
+// --- Pages de la marque propres à un catalogue (21/11/2026, Sam : « je ne dois pas modifier tout, mais chaque
+// catalogue créé par la marque ») : un catalogue de la marque peut avoir sa couverture, sa page 2, son avant-dernière
+// et sa dernière page à lui ; les autres catalogues gardent celles de la charte publiée.
+echo "\nCatalogues : pages de la marque propres à un catalogue\n";
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$persoC = call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Noël — ses pages à lui', 'source' => ['kind' => 'gamme', 'ref' => 14], 'shopIds' => [$catA, $catB], 'langs' => ['fr', 'nl']]);
+$idPerso = (int) ($persoC['body']['data']['id'] ?? 0);
+$autreC = call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Noël — les pages de la charte', 'source' => ['kind' => 'gamme', 'ref' => 14], 'shopIds' => [$catA, $catB]]);
+$idAutre = (int) ($autreC['body']['data']['id'] ?? 0);
+$bpP = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages');
+$docAvantP = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document')['body']['data']['pages'] ?? [];
+$communes = $bpP['body']['data']['common'] ?? [];
+check('pages propres : lues — celles de la charte publiée (celles du document), aucune à lui',
+    $bpP['status'] === 200 && ($bpP['body']['data']['own'] ?? null) === ['cover' => null, 'page2' => null, 'penultimate' => null, 'back' => null]
+        && ($communes['cover']['titleFr'] ?? '') === ($docAvantP[0]['title'] ?? '?') && ($communes['page2']['titleFr'] ?? '') === ($docAvantP[1]['title'] ?? '?')
+        && ($communes['back']['titleFr'] ?? '') === ($docAvantP[count($docAvantP) - 1]['title'] ?? '?') && ($bpP['body']['data']['gamme'] ?? null) === 14
+        && !array_key_exists('gamme', $communes['cover'] ?? ['gamme' => 1]) && ($persoC['body']['data']['brandPagesOwn'] ?? null) === [],
+    json_encode([$bpP['status'], $bpP['body'], $docAvantP[0] ?? null], JSON_UNESCAPED_UNICODE));
+$sansAdresse = static fn (array $page): array => array_diff_key($page, ['imageUrl' => true]);
+$couvP = array_replace($sansAdresse($communes['cover'] ?? []), ['titleFr' => 'Noël du réseau', 'titleNl' => 'Kerst van het netwerk', 'template' => 'C']);
+$page2P = array_replace($sansAdresse($communes['page2'] ?? []), ['titleFr' => 'Le mot de ce catalogue', 'titleNl' => '', 'template' => 'A']);
+$dosP = array_replace($communes['back'] ?? [], ['titleFr' => 'Commandez vos bûches', 'template' => 'B']);
+$corpsP = ['cover' => $couvP, 'page2' => $page2P, 'penultimate' => null, 'back' => $dosP];
+$poseP = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], $corpsP);
+$poseP2 = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], $corpsP);
+$docP = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document')['body']['data']['pages'] ?? [];
+$docPnl = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document', ['lang' => 'nl'])['body']['data'] ?? [];
+$docA = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idAutre . '/document')['body']['data']['pages'] ?? [];
+$nP = count($docP);
+check('pages propres : couverture, page 2 et dernière page à lui — son document les prend tout de suite (sans publication), l’avant-dernière suit la charte ; l’autre catalogue ne bouge pas',
+    $poseP['status'] === 200 && ($poseP['body']['data']['own']['cover']['titleFr'] ?? '') === 'Noël du réseau' && array_key_exists('penultimate', $poseP['body']['data']['own'] ?? [])
+        && $poseP['body']['data']['own']['penultimate'] === null && ($poseP['body']['data']['common']['cover']['titleFr'] ?? '') === ($communes['cover']['titleFr'] ?? '?')
+        && ($docP[0]['title'] ?? '') === 'Noël du réseau' && ($docP[0]['template'] ?? '') === 'C' && ($docP[0]['kicker'] ?? '') === 'La gamme'
+        && ($docP[1]['title'] ?? '') === 'Le mot de ce catalogue' && ($docP[1]['template'] ?? '') === 'A'
+        && ($docP[$nP - 2]['title'] ?? '') === ($communes['penultimate']['titleFr'] ?? '?')
+        && ($docP[$nP - 1]['title'] ?? '') === 'Commandez vos bûches' && ($docP[$nP - 1]['template'] ?? '') === 'B'
+        && ($docPnl['pages'][0]['title'] ?? '') === 'Kerst van het netwerk'
+        && in_array('Page 2 néerlandaise à écrire dans les pages de la marque de ce catalogue : le français est imprimé.', array_column($docPnl['warnings'] ?? [], 'message'), true)
+        && ($docA[0]['title'] ?? '') === ($docAvantP[0]['title'] ?? '?') && ($docA[1]['title'] ?? '') === ($docAvantP[1]['title'] ?? '?')
+        && (call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso)['body']['data']['brandPagesOwn'] ?? null) === ['cover', 'page2', 'back']
+        && (call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idAutre)['body']['data']['brandPagesOwn'] ?? null) === [],
+    json_encode([$poseP['status'], $poseP['body']['error'] ?? null, array_slice($docP, 0, 2), $docA[0] ?? null, $docPnl['warnings'] ?? null], JSON_UNESCAPED_UNICODE));
+check('pages propres : le même corps deux fois donne la même chose (idempotent)', $poseP2['status'] === 200 && $poseP2['body']['data'] === $poseP['body']['data']);
+$refusP = [
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['pirate' => 1]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['cover' => array_replace($couvP, ['titleFr' => ''])]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['cover' => array_replace($couvP, ['gamme' => 14])]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['page2' => array_replace($page2P, ['template' => 'D'])]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['back' => ['titleFr' => 'a', 'template' => 'C']]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['penultimate' => ['titleFr' => 'x', 'mediaId' => 999999]]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['cover' => 'texte']),
+];
+check('pages propres : refusées (422, champ nommé) — champ inconnu, titre vide, gamme, gabarits, image inconnue, page qui n’est pas un objet ; rien d’écrit',
+    array_unique(array_column($refusP, 'status')) === [422]
+        && array_map(static fn (array $r): string => $r['body']['error']['details'][0]['field'] ?? '', $refusP) === ['pirate', 'cover.titleFr', 'cover.gamme', 'page2.template', 'back.template', 'penultimate.mediaId', 'cover']
+        && (call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages')['body']['data']['own']['cover']['titleFr'] ?? '') === 'Noël du réseau',
+    json_encode(array_map(static fn (array $r): array => [$r['status'], $r['body']['error']['details'] ?? null], $refusP), JSON_UNESCAPED_UNICODE));
+check('pages propres : catalogue inconnu (404), paramètre inconnu (422)',
+    call($catRouter, 'GET', '/api/v1/marketing/catalogues/999999/brand-pages')['status'] === 404
+        && call($catRouter, 'PUT', '/api/v1/marketing/catalogues/999999/brand-pages', [], [])['status'] === 404
+        && call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', ['x' => '1'])['status'] === 422);
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+$refusFr = [call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages')['status'], call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], [])['status']];
+AuthContext::clear();
+check('pages propres : 401 sans identité (routeur réel), 403 pour un compte de boutique',
+    call($router, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages')['status'] === 401
+        && call($router, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], [])['status'] === 401
+        && $refusFr === [403, 403], json_encode($refusFr));
+
+// La boutique reçoit le catalogue avec ses pages ; sa copie adaptée les garde, et la marque n'en pose pas sur un catalogue de boutique.
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso, [], ['status' => 'pret']);
+AuthContext::clear();
+$_SERVER['HTTP_X_SERVICE_TOKEN'] = 'JETON-SERVICE-CATALOGUES-TEST';
+$recuP = call($catRouter, 'GET', $SA . '/brand-catalogues/' . $idPerso . '/document', ['lang' => 'fr'])['body']['data']['pages'] ?? [];
+$adP = call($catRouter, 'POST', $SBo . '/brand-catalogues/' . $idPerso . '/adaptations');
+$idCopieP = (int) ($adP['body']['data']['id'] ?? 0);
+$copieP = call($catRouter, 'GET', $SBo . '/catalogues/' . $idCopieP . '/document', ['lang' => 'fr'])['body']['data']['pages'] ?? [];
+unset($_SERVER['HTTP_X_SERVICE_TOKEN']);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$surCopie = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idCopieP . '/brand-pages', [], ['cover' => $couvP]);
+check('pages propres : la boutique reçoit le catalogue avec ses pages, sa copie adaptée les garde ; refusées sur un catalogue de boutique (422)',
+    ($recuP[0]['title'] ?? '') === 'Noël du réseau' && $adP['status'] === 201 && ($copieP[0]['title'] ?? '') === 'Noël du réseau' && ($copieP[1]['title'] ?? '') === 'Le mot de ce catalogue'
+        && $surCopie['status'] === 422 && ($surCopie['body']['error']['details'][0]['field'] ?? '') === 'owner',
+    json_encode([$recuP[0] ?? null, $adP['status'], $adP['body']['error'] ?? null, $copieP[0] ?? null, $surCopie['body'] ?? null], JSON_UNESCAPED_UNICODE));
+
+// « Revenir aux pages de la charte » : un corps vide (ou tout à null), et le catalogue suit à nouveau la charte.
+$retourP = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['cover' => null, 'page2' => null]);
+$docRetour = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document')['body']['data']['pages'] ?? [];
+check('pages propres : remises à null — le catalogue suit de nouveau la charte publiée',
+    $retourP['status'] === 200 && ($retourP['body']['data']['own'] ?? null) === ['cover' => null, 'page2' => null, 'penultimate' => null, 'back' => null]
+        && ($docRetour[0]['title'] ?? '') === ($docAvantP[0]['title'] ?? '?') && ($docRetour[1]['title'] ?? '') === ($docAvantP[1]['title'] ?? '?')
+        && ($docRetour[count($docRetour) - 1]['title'] ?? '') === ($docAvantP[count($docAvantP) - 1]['title'] ?? '?')
+        && (call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso)['body']['data']['brandPagesOwn'] ?? null) === [],
+    json_encode([$retourP['body'], $docRetour[0] ?? null], JSON_UNESCAPED_UNICODE));
 $pdo->exec('DELETE FROM mar_catalogue');
 
 // Pages de présentation, gabarits et place libre (14/11/2026 : « une page de présentation, seule ou avec

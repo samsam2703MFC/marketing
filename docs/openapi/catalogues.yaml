@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Marketing — catalogues produits
-  version: 1.9.0
+  version: 1.10.0
   description: |
     Les catalogues produits du Marketing (prix du webshop, gammes) : un imprimé A5 (A4 en option)
     de **8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16). Quatre pages viennent de la Charte des catalogues de la
@@ -91,6 +91,14 @@ info:
     l'ERP ne porte pas, saisi par boutique (`PUT …/catalogue-shops/{id}` `{phone2, webshopUrl, logoMediaId}`, table
     `mar_catalogue_shop_contact`) : `DocShop.phone2` ; le QR mène au webshop direct de la boutique quand il est saisi
     (sinon celui du réseau, `?shop=`) ; son logo remplace celui de la charte dans ses catalogues (`charter.logoUrl`).
+
+    v1.10 (21 novembre 2026, client : « si je crée un catalogue, je dois pouvoir le modifier ; je ne dois pas modifier
+    tout, mais chaque catalogue créé par la marque ») : un catalogue de la marque peut avoir SES pages de la marque
+    (`GET / PUT …/catalogues/{id}/brand-pages`) — couverture, page 2, avant-dernière, dernière page — rangées dans ses
+    réglages (`settings.brandPages`, sans migration). Une page absente ou null suit la charte publiée ; le document du
+    catalogue prend les siennes tout de suite, sans publication, et les autres catalogues ne bougent pas. La copie
+    adaptée par une boutique les garde ; un catalogue de boutique n'en a pas à lui (`422`, champ `owner`).
+    `Catalogue.brandPagesOwn` : les pages qu'il a à lui.
 
     v1.5 (15 novembre 2026, client : « les deux, garde les 3 gabarits, code-le » — assistant des pages de la
     marque, maquettes A1-A4 ; assistant du franchisé, maquettes B1-B4) :
@@ -226,6 +234,45 @@ paths:
         - { name: lang, in: query, schema: { type: string, enum: [fr, nl], default: fr } }
       responses:
         '200': { $ref: '#/components/responses/Document' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/marketing/catalogues/{id}/brand-pages:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      tags: [Catalogues (marque)]
+      summary: v1.10 — Les 4 pages de la marque du catalogue (celles de la charte qu'il lit, et les siennes)
+      description: |
+        `common` : les pages de la charte PUBLIÉE que le catalogue lit (la version figée s'il est imprimé ; sa
+        couverture par la règle du document : la première de ses gammes qui en a une, sinon la générique, titrée du nom
+        de la gamme). `own` : les siennes, ou null page par page quand il suit la charte. `gamme` : la gamme de sa
+        couverture.
+      security: [{ session: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/BrandPages' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+    put:
+      tags: [Catalogues (marque)]
+      summary: v1.10 — Les pages de la marque propres à ce catalogue de la marque
+      description: |
+        Remplace les pages propres du catalogue : chaque clé porte la page entière, ou null (ou absente) pour suivre
+        la charte publiée ; `{}` le remet entièrement sur la charte. Validé comme la charte (mêmes champs, mêmes
+        gabarits, `422` au champ nommé, ex. `cover.titleFr`). Pas de publication : le document du catalogue les prend
+        tout de suite ; les autres catalogues ne bougent pas. Un catalogue de boutique : `422` (champ `owner`).
+        Idempotent. Réponse : comme le GET.
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BrandPagesWrite' }
+      responses:
+        '200': { $ref: '#/components/responses/BrandPages' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
@@ -894,6 +941,14 @@ components:
                       headers: { type: array, items: { $ref: '#/components/schemas/Header' } }
                       fillers: { type: array, items: { type: string, enum: [photo, illustration] } }
                       pageCounts: { type: array, items: { $ref: '#/components/schemas/PageCount' } }
+    BrandPages:
+      description: v1.10 — Les 4 pages de la marque d'un catalogue.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/EnvelopeOk'
+              - { type: object, properties: { data: { $ref: '#/components/schemas/BrandPages' } } }
     Charter:
       description: La Charte des catalogues.
       content:
@@ -1061,6 +1116,7 @@ components:
         showAvailability: { type: boolean }
         pageCount: { $ref: '#/components/schemas/PageCount' }
         innerPageCount: { type: integer, enum: [4, 8, 12], description: 'pageCount − 4.' }
+        brandPagesOwn: { type: array, items: { type: string, enum: [cover, page2, penultimate, back] }, description: 'v1.10 — Les pages de la marque que ce catalogue a à lui ; les autres suivent la charte publiée.' }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     Category: { type: object, properties: { id: { type: integer }, name: { type: string }, nameNl: { type: string } } }
@@ -1255,6 +1311,60 @@ components:
           properties: { titleFr: { type: string }, titleNl: { type: string }, textFr: { type: string }, textNl: { type: string } }
         page2: { $ref: '#/components/schemas/BrandPage' }
         penultimate: { $ref: '#/components/schemas/BrandPage' }
+    OwnCover:
+      description: 'v1.10 — Une couverture propre à un catalogue : comme `Cover`, sans `gamme`.'
+      type: object
+      additionalProperties: false
+      required: [titleFr]
+      properties:
+        titleFr: { type: string, maxLength: 240 }
+        titleNl: { type: string, maxLength: 240 }
+        subtitleFr: { type: string, maxLength: 240 }
+        subtitleNl: { type: string, maxLength: 240 }
+        mediaId: { type: [integer, 'null'] }
+        template: { type: string, enum: [A, B, C] }
+        visual: { type: [string, 'null'], enum: [illustration, media, none, null] }
+        illustration: { type: [string, 'null'] }
+        titleFont: { $ref: '#/components/schemas/CoverFont' }
+        titleColor: { $ref: '#/components/schemas/CoverColor' }
+        subtitleFont: { $ref: '#/components/schemas/CoverFont' }
+        subtitleColor: { $ref: '#/components/schemas/CoverColor' }
+    OwnBack:
+      type: object
+      additionalProperties: false
+      properties: { titleFr: { type: string }, titleNl: { type: string }, textFr: { type: string }, textNl: { type: string }, template: { type: string, enum: [A, B] } }
+    BrandPagesWrite:
+      description: 'v1.10 — Chaque page : entière, ou null (absente) pour suivre la charte publiée.'
+      type: object
+      additionalProperties: false
+      properties:
+        cover: { oneOf: [{ $ref: '#/components/schemas/OwnCover' }, { type: 'null' }] }
+        page2: { oneOf: [{ $ref: '#/components/schemas/BrandPage' }, { type: 'null' }] }
+        penultimate: { oneOf: [{ $ref: '#/components/schemas/BrandPage' }, { type: 'null' }] }
+        back: { oneOf: [{ $ref: '#/components/schemas/OwnBack' }, { type: 'null' }] }
+    BrandPages:
+      type: object
+      properties:
+        common:
+          type: object
+          description: Les pages de la charte publiée que le catalogue lit (images résolues en `imageUrl`).
+          properties:
+            cover: { $ref: '#/components/schemas/OwnCover' }
+            page2: { $ref: '#/components/schemas/BrandPage' }
+            penultimate: { $ref: '#/components/schemas/BrandPage' }
+            back: { $ref: '#/components/schemas/OwnBack' }
+        own:
+          type: object
+          description: Les siennes ; null page par page quand il suit la charte.
+          properties:
+            cover: { oneOf: [{ $ref: '#/components/schemas/OwnCover' }, { type: 'null' }] }
+            page2: { oneOf: [{ $ref: '#/components/schemas/BrandPage' }, { type: 'null' }] }
+            penultimate: { oneOf: [{ $ref: '#/components/schemas/BrandPage' }, { type: 'null' }] }
+            back: { oneOf: [{ $ref: '#/components/schemas/OwnBack' }, { type: 'null' }] }
+        gamme: { type: [integer, 'null'], description: La gamme de sa couverture. }
+        logoUrl: { type: [string, 'null'] }
+        colors: { $ref: '#/components/schemas/Colors' }
+        charterVersion: { type: [integer, 'null'], description: La version publiée de la charte lue. }
     BrandPage:
       type: object
       additionalProperties: false

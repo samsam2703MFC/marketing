@@ -42,7 +42,10 @@ import { MediaPicker } from './MediaPicker'
  * cliquant une de ses 4 pages de la marque (`step` : son étape ; `gammes` : celles du catalogue, pour ouvrir sa
  * couverture ; `returnTo` : le catalogue où revenir).
  */
-type Screen = { kind: 'list' } | { kind: 'editor'; id: number } | { kind: 'charter'; step?: CharterStep; gammes?: number[]; returnTo?: number }
+type Screen =
+  | { kind: 'list' }
+  | { kind: 'editor'; id: number }
+  | { kind: 'charter'; step?: CharterStep; gammes?: number[]; returnTo?: number; catalogue?: { id: number; title: string } }
 
 const MM = 96 / 25.4
 
@@ -83,7 +86,16 @@ export default function CatalogueView() {
 
   if (screen.kind === 'editor') {
     const id = screen.id
-    return <Editor id={id} onBack={() => setScreen({ kind: 'list' })} onCharter={(step, gammes) => setScreen({ kind: 'charter', step, gammes, returnTo: id })} />
+    return (
+      <Editor
+        id={id}
+        onBack={() => setScreen({ kind: 'list' })}
+        onCharter={(step, cat, scope) =>
+          setScreen(scope === 'catalogue'
+            ? { kind: 'charter', step, returnTo: id, catalogue: { id: cat.id, title: cat.title } }
+            : { kind: 'charter', step, returnTo: id, gammes: catalogueGammes(cat) })}
+      />
+    )
   }
   if (screen.kind === 'charter') {
     const returnTo = screen.returnTo
@@ -91,6 +103,7 @@ export default function CatalogueView() {
       <CharterAssistant
         step={screen.step}
         gammes={screen.gammes}
+        catalogue={screen.catalogue}
         backLabel={returnTo !== undefined ? '‹ Retour au catalogue' : undefined}
         onBack={() => setScreen(returnTo !== undefined ? { kind: 'editor', id: returnTo } : { kind: 'list' })}
       />
@@ -419,8 +432,13 @@ function LockIcon() {
   )
 }
 
-/** Ouvrir l'assistant des pages de la marque à une étape, avec les gammes du catalogue (sa couverture). */
-type OpenCharter = (step: CharterStep, gammes: number[]) => void
+/**
+ * Ouvrir l'assistant des pages de la marque à une étape : `catalogue`, les pages de CE catalogue de la marque (une page
+ * modifiée devient la sienne) ; `common`, celles de tous les catalogues (la charte), sur la couverture du catalogue.
+ */
+type OpenCharter = (step: CharterStep, cat: Catalogue, scope: 'catalogue' | 'common') => void
+
+const SLOT_OF_STEP: Record<CharterStep, api.CatalogueBrandSlot | null> = { 1: 'cover', 2: 'page2', 3: 'penultimate', 4: 'back', 5: null }
 
 /** L'étape de l'assistant qui règle une page de la marque. */
 function charterStepOf(page: CatalogueDocument['pages'][number]): CharterStep | null {
@@ -457,6 +475,15 @@ function Editor({ id, onBack, onCharter }: { id: number; onBack: () => void; onC
 
 function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue; shops: api.Shop[]; onBack: () => void; onCharter: OpenCharter }) {
   const [cat, setCat] = useState<Catalogue>(initial)
+  // Un catalogue de la marque a ses pages de la marque à lui (21/11/2026) ; un catalogue de boutique garde celles de la charte.
+  const brandOwned = initial.owner === 'marque'
+  const ownSlots = new Set(initial.brandPagesOwn ?? [])
+  const isOwn = (page: CatalogueDocument['pages'][number]): boolean => {
+    const step = charterStepOf(page)
+    const slot = step !== null ? SLOT_OF_STEP[step] : null
+    return slot !== null && ownSlots.has(slot)
+  }
+  const ownTag = (slot: api.CatalogueBrandSlot) => (ownSlots.has(slot) ? <span className="bro-tag catv-owntag">à lui</span> : null)
   const [lang, setLang] = useState<CatalogueLang>(initial.langs[0] ?? 'fr')
   const [versionShop, setVersionShop] = useState<number | null>(initial.owner === 'boutique' ? null : null)
   const [selected, setSelected] = useState<number | null>(null)
@@ -907,17 +934,22 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
                   }}
                   onClick={() => {
                     const step = charterStepOf(page)
-                    if (step !== null) onCharter(step, catalogueGammes(cat))
+                    // Un catalogue de la marque : SES pages ; un catalogue de boutique : celles de tous (la charte).
+                    if (step !== null) onCharter(step, cat, brandOwned ? 'catalogue' : 'common')
                     else setSelected(inner)
                   }}
-                  title={page.locked ? 'Page de la marque : cliquer pour la modifier (pour tous les catalogues)' : undefined}
+                  title={page.locked
+                    ? brandOwned
+                      ? 'Page de la marque : cliquer pour la modifier pour ce catalogue seulement'
+                      : 'Page de la marque : cliquer pour la modifier (pour tous les catalogues)'
+                    : undefined}
                 >
                   <span style={{ zoom }}>
                     <CatalogueSheet doc={doc.data as CatalogueDocument} index={index} mode="preview" />
                   </span>
                   {page.locked ? (
-                    <span className="catv-lock">
-                      <LockIcon /> Marque · ✎ modifier
+                    <span className={`catv-lock${isOwn(page) ? ' is-own' : ''}`}>
+                      <LockIcon /> {isOwn(page) ? 'Ce catalogue' : 'Marque'} · ✎ modifier
                     </span>
                   ) : null}
                   <span className="catv-page__no">{index + 1}</span>
@@ -1146,27 +1178,41 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
           />
 
           <section className="card">
-            <h2>Fixé par la marque</h2>
+            <h2>{brandOwned ? 'Pages de la marque' : 'Fixé par la marque'}</h2>
             <dl className="catv-dl">
               <dt>Logo</dt>
               <dd>{doc.data?.charter.logoUrl ? 'logo de la charte' : 'logo officiel'}</dd>
               <dt>Page 1</dt>
-              <dd>Couverture « {docPages[0]?.kind === 'cover' ? docPages[0].title : '…'} »</dd>
+              <dd>Couverture « {docPages[0]?.kind === 'cover' ? docPages[0].title : '…'} »{ownTag('cover')}</dd>
               <dt>Page 2</dt>
-              <dd>« {docPages[1]?.kind === 'brand' ? docPages[1].title : '…'} »</dd>
+              <dd>« {docPages[1]?.kind === 'brand' ? docPages[1].title : '…'} »{ownTag('page2')}</dd>
               <dt>Page {cat.pageCount - 1}</dt>
-              <dd>« {docPages[docPages.length - 2]?.kind === 'brand' ? (docPages[docPages.length - 2] as { title: string }).title : '…'} »</dd>
+              <dd>« {docPages[docPages.length - 2]?.kind === 'brand' ? (docPages[docPages.length - 2] as { title: string }).title : '…'} »{ownTag('penultimate')}</dd>
               <dt>Page {cat.pageCount}</dt>
-              <dd>Commande en ligne + boutique</dd>
+              <dd>Commande en ligne + boutique{ownTag('back')}</dd>
               <dt>Couleurs, polices</dt>
               <dd>charte</dd>
             </dl>
             <p className="catv-note">
-              <LockIcon /> Réglés dans les pages de la marque, pour tous les catalogues : les franchisés ne peuvent pas les modifier.
+              <LockIcon />{' '}
+              {brandOwned
+                ? 'Les pages communes à tous les catalogues, sauf celles que ce catalogue a à lui. Les franchisés ne peuvent pas les modifier.'
+                : 'Réglés dans les pages de la marque, pour tous les catalogues : les franchisés ne peuvent pas les modifier.'}
             </p>
-            <button type="button" className="btn btn--sm catv-brand-edit" onClick={() => onCharter(1, catalogueGammes(cat))}>
-              ✎ Modifier les pages de la marque
-            </button>
+            {brandOwned ? (
+              <>
+                <button type="button" className="btn btn--sm catv-brand-edit" onClick={() => onCharter(1, cat, 'catalogue')}>
+                  ✎ Modifier les pages de ce catalogue
+                </button>
+                <button type="button" className="linklike catv-brand-common" onClick={() => onCharter(1, cat, 'common')}>
+                  Pages communes à tous les catalogues
+                </button>
+              </>
+            ) : (
+              <button type="button" className="btn btn--sm catv-brand-edit" onClick={() => onCharter(1, cat, 'common')}>
+                ✎ Modifier les pages de la marque
+              </button>
+            )}
           </section>
 
           <section className="card">

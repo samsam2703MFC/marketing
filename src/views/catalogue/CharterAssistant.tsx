@@ -3,6 +3,8 @@ import * as api from '../../lib/api/module'
 import type {
   CatalogueBackTemplate,
   CatalogueBrandPage,
+  CatalogueBrandPages,
+  CatalogueBrandSlot,
   CatalogueBrandTemplate,
   CatalogueCharter,
   CatalogueCharterChecks,
@@ -14,6 +16,7 @@ import type {
   CatalogueDocument,
   CatalogueFormat,
   CatalogueLang,
+  CatalogueOwnBrandPages,
   MediaAsset,
 } from '../../lib/api/module'
 import { useAsync } from '../../lib/useAsync'
@@ -337,18 +340,70 @@ function Field({ label, value, onChange, placeholder, area = false, max = 240 }:
   )
 }
 
+// --- Mode « ce catalogue » (21/11/2026) ---------------------------------------------------------------
+
+/** Ses 4 pages (les siennes, sinon celles de la charte publiée) sous la forme d'une charte à une seule couverture. */
+function charterOf(read: CatalogueBrandPages): CatalogueCharter {
+  return {
+    logoMediaId: null,
+    logoUrl: read.logoUrl,
+    colors: read.colors,
+    covers: [{ ...(read.own.cover ?? read.common.cover), gamme: read.gamme }],
+    back: read.own.back ?? read.common.back,
+    page2: read.own.page2 ?? read.common.page2,
+    penultimate: read.own.penultimate ?? read.common.penultimate,
+    updatedAt: null,
+  }
+}
+
+const COVER_KEYS = ['titleFr', 'titleNl', 'subtitleFr', 'subtitleNl', 'mediaId', 'template', 'visual', 'illustration', 'titleFont', 'titleColor', 'subtitleFont', 'subtitleColor']
+const PAGE_KEYS = ['titleFr', 'titleNl', 'textFr', 'textNl', 'mediaId', 'template']
+const BACK_KEYS = ['titleFr', 'titleNl', 'textFr', 'textNl', 'template']
+
+const same = (a: object, b: object, keys: string[]): boolean =>
+  keys.every((k) => ((a as Record<string, unknown>)[k] ?? null) === ((b as Record<string, unknown>)[k] ?? null))
+
+/** Les pages qui diffèrent de celles de la charte publiée sont à lui ; les autres la suivent (null). */
+function ownOf(charter: CatalogueCharter, common: CatalogueBrandPages['common']): CatalogueOwnBrandPages {
+  const cover = charter.covers[0]
+  return {
+    cover: same(cover, common.cover, COVER_KEYS) ? null : cover,
+    page2: same(charter.page2, common.page2, PAGE_KEYS) ? null : charter.page2,
+    penultimate: same(charter.penultimate, common.penultimate, PAGE_KEYS) ? null : charter.penultimate,
+    back: same(charter.back, common.back, BACK_KEYS) ? null : charter.back,
+  }
+}
+
+const SLOT_OF_STEP: Record<number, CatalogueBrandSlot> = { 1: 'cover', 2: 'page2', 3: 'penultimate', 4: 'back' }
+
 /**
  * Ouvert depuis un catalogue (21/11/2026, Sam : « je dois pouvoir aussi éditer les templates de marque ») : `step` est
  * l'étape de la page cliquée, `gammes` celles du catalogue — la couverture ouverte est la sienne, par la règle de l'API
  * (la première de ses gammes qui a une couverture, sinon la générique) — et `backLabel` le lien de retour.
  */
-export default function CharterAssistant({ onBack, step: initialStep, gammes: catalogueGammes, backLabel = '‹ Catalogues' }: {
+export default function CharterAssistant({ onBack, step: initialStep, gammes: catalogueGammes, backLabel = '‹ Catalogues', catalogue }: {
   onBack: () => void
   step?: Step
   gammes?: number[]
   backLabel?: string
+  /**
+   * Mode « ce catalogue » (21/11/2026, Sam : « je ne dois pas modifier tout, mais chaque catalogue créé par la
+   * marque ») : les 4 pages de CE catalogue de la marque. Une page modifiée devient la sienne ; les autres suivent la
+   * charte publiée. Enregistré tout seul, sans publication ; ni gammes, ni logo, ni couleurs (communs à tous).
+   */
+  catalogue?: { id: number; title: string }
 }) {
-  const loaded = useAsync(() => api.getCatalogueCharter(), [])
+  /** Mode « ce catalogue » : les pages de la charte qu'il lit, pour savoir lesquelles sont à lui et y revenir. */
+  const common = useRef<CatalogueBrandPages['common'] | null>(null)
+  const loaded = useAsync<CatalogueCharter>(
+    () => (catalogue
+      ? api.getCatalogueBrandPages(catalogue.id).then((read) => {
+        common.current = read.common
+        return charterOf(read)
+      })
+      : api.getCatalogueCharter()),
+    [],
+  )
   const webshop = useAsync(() => api.getWebshopProducts([]), [])
   const recent = useAsync(() => api.listMedia({ kind: 'image', perPage: 3 }), [])
   const [checks, setChecks] = useState<CatalogueCharterChecks | null>(null)
@@ -379,7 +434,9 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
     if (loaded.data && !charter) {
       setCharter(loaded.data)
       const covers = loaded.data.covers
-      if (catalogueGammes) {
+      if (catalogue) {
+        setCoverIndex(0)
+      } else if (catalogueGammes) {
         // Ouvert depuis un catalogue : sa couverture.
         const own = catalogueGammes.map((g) => covers.findIndex((c) => c.gamme === g)).find((i) => i >= 0)
         setCoverIndex(own ?? Math.max(0, covers.findIndex((c) => c.gamme === null)))
@@ -409,7 +466,7 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
   function change(update: (current: CatalogueCharter) => CatalogueCharter) {
     setCharter((current) => (current ? update(current) : current))
     dirty.current = true
-    unpublished.current = true
+    if (!catalogue) unpublished.current = true
     setSave({ status: 'idle' })
     if (timer.current !== null) window.clearTimeout(timer.current)
     timer.current = window.setTimeout(() => void flush(), 800)
@@ -425,8 +482,14 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
     dirty.current = false
     setSave({ status: 'saving' })
     try {
-      const saved = await api.saveCatalogueCharter(current)
-      setCharter((now) => (now ? { ...now, publication: saved.publication, updatedAt: saved.updatedAt } : saved))
+      if (catalogue) {
+        if (!common.current) return false
+        const read = await api.saveCatalogueBrandPages(catalogue.id, ownOf(current, common.current))
+        common.current = read.common
+      } else {
+        const saved = await api.saveCatalogueCharter(current)
+        setCharter((now) => (now ? { ...now, publication: saved.publication, updatedAt: saved.updatedAt } : saved))
+      }
       setSave({ status: 'saved' })
       return true
     } catch (cause) {
@@ -501,6 +564,12 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
   function setBrand(slot: 'page2' | 'penultimate', patch: Partial<CatalogueBrandPage>) {
     change((c) => ({ ...c, [slot]: { ...c[slot], ...patch } }))
   }
+  /** Mode « ce catalogue » : la page reprend celle de la charte publiée (et la suit de nouveau). */
+  function backToCommon(slot: CatalogueBrandSlot) {
+    const base = common.current
+    if (!base) return
+    change((c) => (slot === 'cover' ? { ...c, covers: [{ ...base.cover, gamme: c.covers[0]?.gamme ?? null }] } : { ...c, [slot]: base[slot] }))
+  }
 
   async function publish(fromVersion?: number) {
     if (!(await flush())) return
@@ -539,7 +608,7 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
 
   const coverStep = (
     <>
-      <section className="cha-card">
+      {catalogue ? null : <section className="cha-card">
         <div className="cha-lab">
           Couverture de quelle gamme ? <span className="cha-tag">une couverture par gamme du webshop</span>
         </div>
@@ -586,7 +655,7 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
             Retirer la couverture de cette gamme (la générique la remplace)
           </button>
         ) : null}
-      </section>
+      </section>}
 
       <section className="cha-card">
         <div className="cha-lab">
@@ -979,7 +1048,7 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
 
   // --- l'aperçu de droite ---------------------------------------------------------------------------
   const previewIndex = step === 1 ? 0 : step === 2 ? 1 : step === 3 ? 2 : 3
-  const previewTitle = step === 1 ? `Couverture « ${gammeName(cover.gamme)} »` : step === 2 ? 'Page 2' : step === 3 ? 'Avant-dernière' : 'Dernière page'
+  const previewTitle = step === 1 ? (catalogue ? 'Couverture de ce catalogue' : `Couverture « ${gammeName(cover.gamme)} »`) : step === 2 ? 'Page 2' : step === 3 ? 'Avant-dernière' : 'Dernière page'
   const preview = (
     <aside className="cha-preview">
       <section className="cha-card">
@@ -1019,16 +1088,43 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
             ))}
           </div>
         ) : null}
-        {step === 2 || step === 3 ? <p className="cha-note">La même page dans tous les catalogues : ceux de la marque et ceux que les franchisés font dans leur dashboard.</p> : null}
+        {(step === 2 || step === 3) && !catalogue ? <p className="cha-note">La même page dans tous les catalogues : ceux de la marque et ceux que les franchisés font dans leur dashboard.</p> : null}
         {step === 4 ? (
           <p className="cha-note">
             <span className="cha-green">● Rempli par la boutique :</span> nom, adresse, horaires, téléphone et QR (le webshop de chaque boutique).
           </p>
         ) : null}
       </section>
-      <ColorsCard colors={charter.colors} onChange={(key, hex) => change((c) => ({ ...c, colors: { ...c.colors, [key]: hex } }))} />
+      {catalogue ? (
+        <p className="cha-note">Logo et couleurs : communs à tous les catalogues (« Modifier les pages de la marque », depuis la liste).</p>
+      ) : (
+        <ColorsCard colors={charter.colors} onChange={(key, hex) => change((c) => ({ ...c, colors: { ...c.colors, [key]: hex } }))} />
+      )}
     </aside>
   )
+
+  // Mode « ce catalogue » : la page de l'étape est-elle à lui, ou celle de la charte ?
+  const slot = SLOT_OF_STEP[step] ?? null
+  const ownNow = catalogue && common.current ? ownOf(charter, common.current) : null
+  const banner = catalogue && slot && ownNow ? (
+    <section className={`cha-card cha-own${ownNow[slot] ? ' is-own' : ''}`}>
+      {ownNow[slot] ? (
+        <>
+          <span className="cha-tag cha-tag--ok">Propre à ce catalogue</span>
+          <span className="cha-own__t">{`Cette page n’est que dans « ${catalogue.title} » : les autres catalogues gardent la page commune.`}</span>
+          <button type="button" className="linklike" onClick={() => backToCommon(slot)}>
+            Revenir à la page commune
+          </button>
+        </>
+      ) : (
+        <>
+          <span className="cha-tag">Page commune</span>
+          <span className="cha-own__t">{`La même que dans les autres catalogues. Modifiez-la ici : le changement ne vaudra que pour « ${catalogue.title} ».`}</span>
+        </>
+      )}
+    </section>
+  ) : null
+  const steps = catalogue ? STEPS.filter((s) => s.n <= 4).map((s) => (s.n === 1 ? { ...s, hint: 'page 1 de ce catalogue' } : s)) : STEPS
 
   const current = STEPS[step - 1]
   return (
@@ -1039,8 +1135,8 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
           <button type="button" className="linklike catv-back" onClick={() => void leave()}>
             {backLabel}
           </button>
-          <p className="catv-kicker">Catalogues · réglage de la marque</p>
-          <h2 className="catv-h1">Assistant des pages de la marque</h2>
+          <p className="catv-kicker">{catalogue ? `Catalogue « ${catalogue.title} » · ses pages de la marque` : 'Catalogues · réglage de la marque'}</p>
+          <h2 className="catv-h1">{catalogue ? 'Pages de la marque de ce catalogue' : 'Assistant des pages de la marque'}</h2>
         </div>
         <span className="cha-grow" />
         <span className="bro-seg" role="group" aria-label="Langue de l’aperçu">
@@ -1051,12 +1147,16 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
           ))}
         </span>
         <span className={`cha-save${save.status === 'error' ? ' is-error' : ''}`}>
-          {save.status === 'saving' ? 'Enregistrement…' : save.status === 'error' ? `Non enregistré : ${save.text ?? ''}` : 'Brouillon enregistré'}
+          {save.status === 'saving' ? 'Enregistrement…' : save.status === 'error' ? `Non enregistré : ${save.text ?? ''}` : catalogue ? 'Enregistré' : 'Brouillon enregistré'}
         </span>
         <button type="button" className="btn" disabled={step === 1} onClick={() => void go((step - 1) as Step)}>
           ‹ Précédent
         </button>
-        {step < 5 ? (
+        {catalogue && step === 4 ? (
+          <button type="button" className="btn btn--primary" onClick={() => void leave()}>
+            Terminé · retour au catalogue
+          </button>
+        ) : step < 5 ? (
           <button type="button" className="btn btn--primary" onClick={() => void go((step + 1) as Step)}>
             {`Suivant · ${current.next} ›`}
           </button>
@@ -1067,7 +1167,7 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
         )}
       </div>
       <nav className="cha-steps" aria-label="Étapes">
-        {STEPS.map((s) => (
+        {steps.map((s) => (
           <button key={s.n} type="button" className={`cha-step${s.n === step ? ' is-on' : ''}${stepDone(s.n) ? ' is-done' : ''}`} onClick={() => void go(s.n)}>
             <span className="cha-step__no">{stepDone(s.n) ? '✓' : s.n}</span>
             <span>
@@ -1081,7 +1181,10 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
         recap
       ) : (
         <div className="cha-body">
-          <div className="cha-main">{step === 1 ? coverStep : step === 2 ? brandStep('page2') : step === 3 ? brandStep('penultimate') : backStep}</div>
+          <div className="cha-main">
+            {banner}
+            {step === 1 ? coverStep : step === 2 ? brandStep('page2') : step === 3 ? brandStep('penultimate') : backStep}
+          </div>
           {preview}
         </div>
       )}

@@ -168,6 +168,10 @@ final class CatalogueShopService
                 'adaptedFrom'      => (int) $row['id'],
             ],
         ];
+        // Les pages de la marque propres au catalogue copié le suivent : la boutique ne les modifie pas.
+        if (is_array($settings['brandPages'] ?? null) && $settings['brandPages'] !== []) {
+            $copy['settings']['brandPages'] = $settings['brandPages'];
+        }
         $id = $this->rows->insert($copy, null);
         $this->repo->putState((int) $row['id'], $shop['id'], ['reception' => 'adapte', 'adapted_id' => $id]);
 
