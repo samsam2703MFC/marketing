@@ -97,8 +97,12 @@ final class CampaignRepository
                 c.budget_amount, c.spent_amount, c.image_url, c.approval_status,
                 c.create_crm_leads, c.parent_campaign_id,
                 b.name  AS brand_name,
+                c.type_id,
                 t.label AS type_label,
                 t.code  AS type_code,
+                -- La couleur du type : le calendrier et le budget du cockpit rangent les bandes par type et les
+                -- colorent ; ils lisaient la table, ils lisent cette liste (21/11/2026).
+                t.color_hex AS type_color_hex,
                 st.label    AS status_label,
                 st.text_hex AS status_text_hex,
                 st.bg_rgba  AS status_bg_rgba,
