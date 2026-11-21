@@ -3060,6 +3060,8 @@ export interface Catalogue {
   /** 8, 10, 12, 14 ou 16, les 4 pages de la marque comprises. */
   pageCount: CataloguePageCount
   innerPageCount: number
+  /** Les pages de la marque que ce catalogue a à lui (v1.10) ; les autres suivent la charte publiée. */
+  brandPagesOwn?: CatalogueBrandSlot[]
   createdAt: string
   updatedAt: string
 }
@@ -3365,13 +3367,48 @@ export interface CatalogueBrandPage {
   template: CatalogueBrandTemplate
 }
 
+/** La dernière page (« commandez en ligne ») : textes et gabarit. */
+export interface CatalogueBackPage {
+  titleFr: string
+  titleNl: string
+  textFr: string
+  textNl: string
+  template: CatalogueBackTemplate
+}
+
+/** Une couverture propre à un catalogue : comme celle de la charte, sans sa gamme. */
+export type CatalogueOwnCover = Omit<CatalogueCover, 'gamme'>
+
+/** Les 4 pages de la marque d'un catalogue, une par place. */
+export type CatalogueBrandSlot = 'cover' | 'page2' | 'penultimate' | 'back'
+
+/** Les pages propres d'un catalogue : null = la page de la charte publiée. */
+export interface CatalogueOwnBrandPages {
+  cover: CatalogueOwnCover | null
+  page2: CatalogueBrandPage | null
+  penultimate: CatalogueBrandPage | null
+  back: CatalogueBackPage | null
+}
+
+/** `GET …/catalogues/{id}/brand-pages` (v1.10). */
+export interface CatalogueBrandPages {
+  /** Celles de la charte publiée que le catalogue lit (sa couverture par la règle du document). */
+  common: { cover: CatalogueOwnCover; page2: CatalogueBrandPage; penultimate: CatalogueBrandPage; back: CatalogueBackPage }
+  own: CatalogueOwnBrandPages
+  /** La gamme de sa couverture. */
+  gamme: number | null
+  logoUrl: string | null
+  colors: CatalogueColors
+  charterVersion: number | null
+}
+
 /** Le BROUILLON de la charte (l'assistant des pages de la marque) et l'état de sa publication. */
 export interface CatalogueCharter {
   logoMediaId: number | null
   logoUrl: string | null
   colors: CatalogueColors
   covers: CatalogueCover[]
-  back: { titleFr: string; titleNl: string; textFr: string; textNl: string; template: CatalogueBackTemplate }
+  back: CatalogueBackPage
   page2: CatalogueBrandPage
   penultimate: CatalogueBrandPage
   updatedAt: string | null
@@ -3460,14 +3497,39 @@ export async function getCatalogueCharter(): Promise<CatalogueCharter> {
 
 const brandPage = (page: CatalogueBrandPage) => ({ titleFr: page.titleFr, titleNl: page.titleNl, textFr: page.textFr, textNl: page.textNl, mediaId: page.mediaId, template: page.template })
 
+/** Ce qu'on écrit d'une couverture (sans sa gamme ni l'adresse de son image), police et couleur comprises. */
+const coverBody = (cover: CatalogueOwnCover) => ({
+  titleFr: cover.titleFr, titleNl: cover.titleNl, subtitleFr: cover.subtitleFr, subtitleNl: cover.subtitleNl, mediaId: cover.mediaId,
+  template: cover.template, visual: cover.visual, illustration: cover.illustration,
+  titleFont: cover.titleFont ?? null, titleColor: cover.titleColor ?? null, subtitleFont: cover.subtitleFont ?? null, subtitleColor: cover.subtitleColor ?? null,
+})
+
+const backBody = (back: CatalogueBackPage) => ({ titleFr: back.titleFr, titleNl: back.titleNl, textFr: back.textFr, textNl: back.textNl, template: back.template })
+
 export async function saveCatalogueCharter(charter: Omit<CatalogueCharter, 'logoUrl' | 'updatedAt' | 'covers' | 'publication'> & { covers: CatalogueCover[] }): Promise<CatalogueCharter> {
-  const covers = charter.covers.map((cover) => ({
-    gamme: cover.gamme, titleFr: cover.titleFr, titleNl: cover.titleNl, subtitleFr: cover.subtitleFr, subtitleNl: cover.subtitleNl, mediaId: cover.mediaId,
-    template: cover.template, visual: cover.visual, illustration: cover.illustration,
-  }))
+  // La police et la couleur du titre et du sous-titre (v1.9) partent aussi : sans elles, le serveur les effaçait.
+  const covers = charter.covers.map((cover) => ({ gamme: cover.gamme, ...coverBody(cover) }))
   return (await request<Envelope<CatalogueCharter>>(`${BASE}/catalogue-charter`, {
     method: 'PUT',
-    body: { logoMediaId: charter.logoMediaId, colors: charter.colors, covers, back: charter.back, page2: brandPage(charter.page2), penultimate: brandPage(charter.penultimate) },
+    body: { logoMediaId: charter.logoMediaId, colors: charter.colors, covers, back: backBody(charter.back), page2: brandPage(charter.page2), penultimate: brandPage(charter.penultimate) },
+  })).data
+}
+
+/** Les 4 pages de la marque d'un catalogue (v1.10, 21/11/2026) : celles de la charte publiée qu'il lit, et les siennes. */
+export async function getCatalogueBrandPages(id: number): Promise<CatalogueBrandPages> {
+  return (await request<Envelope<CatalogueBrandPages>>(`${BASE}/catalogues/${id}/brand-pages`)).data
+}
+
+/** Les pages propres à un catalogue de la marque : chaque page entière, ou null pour suivre la charte publiée. */
+export async function saveCatalogueBrandPages(id: number, own: CatalogueOwnBrandPages): Promise<CatalogueBrandPages> {
+  return (await request<Envelope<CatalogueBrandPages>>(`${BASE}/catalogues/${id}/brand-pages`, {
+    method: 'PUT',
+    body: {
+      cover: own.cover ? coverBody(own.cover) : null,
+      page2: own.page2 ? brandPage(own.page2) : null,
+      penultimate: own.penultimate ? brandPage(own.penultimate) : null,
+      back: own.back ? backBody(own.back) : null,
+    },
   })).data
 }
 

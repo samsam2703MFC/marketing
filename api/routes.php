@@ -148,6 +148,8 @@ return static function (Router $router): void {
     $router->put('/api/v1/marketing/catalogues/{id}',            [$catalogues, 'update']);
     $router->delete('/api/v1/marketing/catalogues/{id}',         [$catalogues, 'destroy']);
     $router->get('/api/v1/marketing/catalogues/{id}/document',   [$catalogues, 'document']);
+    $router->get('/api/v1/marketing/catalogues/{id}/brand-pages', [$catalogues, 'brandPages']);
+    $router->put('/api/v1/marketing/catalogues/{id}/brand-pages', [$catalogues, 'saveBrandPages']);
     $router->get('/api/v1/marketing/catalogue-products',         [$catalogues, 'products']);
     $router->get('/api/v1/marketing/catalogue-charter',          [$catalogues, 'charter']);
     $router->put('/api/v1/marketing/catalogue-charter',          [$catalogues, 'saveCharter']);

@@ -160,6 +160,44 @@ final class CatalogueController
         return Envelope::ok($this->service->charter());
     }
 
+    /**
+     * `GET …/catalogues/{id}/brand-pages` : les 4 pages de la marque du catalogue — `common`, celles de la charte
+     * publiée qu'il lit, et `own`, les siennes (null : il suit la charte).
+     */
+    public function brandPages(Request $request): array
+    {
+        if (($denied = self::deny()) !== null) {
+            return $denied;
+        }
+        if ($request->query !== []) {
+            return Envelope::error('VALIDATION_FAILED', 'Paramètres invalides.', 422, [['field' => (string) array_key_first($request->query), 'message' => 'Paramètre inconnu.']]);
+        }
+        $row = $this->found($request);
+        if (isset($row['body'])) {
+            return $row;
+        }
+
+        return Envelope::ok($this->service->brandPages($row));
+    }
+
+    /**
+     * `PUT …/catalogues/{id}/brand-pages` `{cover, page2, penultimate, back}` : les pages de la marque propres à ce
+     * catalogue de la marque (chacune : la page entière, ou null pour suivre la charte). Les autres catalogues ne
+     * bougent pas.
+     */
+    public function saveBrandPages(Request $request): array
+    {
+        if (($denied = self::deny()) !== null) {
+            return $denied;
+        }
+        $row = $this->found($request);
+        if (isset($row['body'])) {
+            return $row;
+        }
+
+        return self::guard(fn (): array => Envelope::ok($this->service->saveBrandPages($row, $request->body, self::userId())));
+    }
+
     /** `PUT …/catalogue-charter` */
     public function saveCharter(Request $request): array
     {

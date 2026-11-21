@@ -138,6 +138,13 @@ final class CatalogueService
     /** Caractères qu'un texte de la page 2 / avant-dernière peut porter sans déborder, par gabarit (A5 ; l'A4 est à l'échelle). */
     public const BRAND_TEXT_FIT = ['A' => 1000, 'B' => 520, 'C' => 520];
 
+    /**
+     * Les 4 pages de la marque qu'un catalogue de la marque peut avoir À LUI (21/11/2026, Sam : « je ne dois pas
+     * modifier tout, mais chaque catalogue créé par la marque ») : `settings.brandPages`, une page par clé ; une page
+     * absente suit la charte publiée.
+     */
+    public const BRAND_PAGE_SLOTS = ['cover', 'page2', 'penultimate', 'back'];
+
     public function __construct(
         private readonly CatalogueRepository $catalogues = new CatalogueRepository(),
         private readonly WebshopCatalogueRepository $webshop = new WebshopCatalogueRepository(),
@@ -830,6 +837,8 @@ final class CatalogueService
             'offers'       => array_map(static fn ($o): array => ['type' => $o['type'] ?? null, 'id' => $o['id'] ?? null, 'on' => $o['on'] ?? null, 'mediaId' => isset($o['mediaId']) ? (int) $o['mediaId'] : null], array_values($settings['offers'] ?? [])), // ordre fixe : MySQL 8 réordonne les clés JSON
             'showAvailability' => (bool) ($settings['showAvailability'] ?? true),
             'pages'        => self::innerPages($settings),
+            // Les pages de la marque que ce catalogue a à lui (21/11/2026) ; les autres suivent la charte publiée.
+            'brandPagesOwn' => self::ownSlots($settings),
             'productCount' => count(array_filter($settings['products'] ?? [], static fn (array $p): bool => (bool) ($p['on'] ?? false))),
             'pageCount'    => self::pageCountOf($settings),
             'innerPageCount' => self::pageCountOf($settings) - self::BRAND_PAGES,
@@ -2331,46 +2340,7 @@ final class CatalogueService
                 $errors[] = ['field' => $field . '.gamme', 'message' => 'Une seule couverture par gamme.'];
             }
             $seen[$key] = true;
-            $media = $cover['mediaId'] ?? null;
-            if ($media !== null && (!is_int($media) || $this->media->find($media) === null)) {
-                $errors[] = ['field' => $field . '.mediaId', 'message' => 'Fichier inconnu de la médiathèque.'];
-            }
-            $clean = ['gamme' => $gamme];
-            foreach (['titleFr', 'titleNl', 'subtitleFr', 'subtitleNl'] as $text) {
-                $clean[$text] = self::text($cover[$text] ?? '', $field . '.' . $text, $errors);
-            }
-            $clean['mediaId'] = $media;
-            $template = $cover['template'] ?? 'A';
-            if (!in_array($template, self::COVER_TEMPLATES, true)) {
-                $errors[] = ['field' => $field . '.template', 'message' => 'Gabarit : A (pleine couleur), B (illustration) ou C (photo).'];
-            }
-            $visual = $cover['visual'] ?? null;
-            if ($visual !== null && !in_array($visual, self::COVER_VISUALS, true)) {
-                $errors[] = ['field' => $field . '.visual', 'message' => 'Visuel : illustration, media ou none.'];
-            }
-            if ($visual === 'media' && $media === null) {
-                $errors[] = ['field' => $field . '.mediaId', 'message' => 'Visuel « médiathèque » : choisissez une image.'];
-            }
-            $drawing = $cover['illustration'] ?? null;
-            if ($drawing !== null && !in_array($drawing, self::SEASON_DRAWINGS, true)) {
-                $errors[] = ['field' => $field . '.illustration', 'message' => 'Dessin de saison : ' . implode(', ', self::SEASON_DRAWINGS) . '.'];
-            }
-            $clean['template'] = $template;
-            $clean['visual'] = $visual;
-            $clean['illustration'] = $drawing;
-            foreach (self::COVER_STYLE as $key) {
-                $value = $cover[$key] ?? null;
-                $allowed = str_ends_with($key, 'Font') ? self::COVER_FONTS : array_keys(self::COVER_COLORS);
-                if ($value !== null && (!is_string($value) || !in_array($value, $allowed, true))) {
-                    $errors[] = ['field' => $field . '.' . $key, 'message' => (str_ends_with($key, 'Font') ? 'Police : ' : 'Couleur : ') . implode(', ', $allowed) . ', ou null (celle du gabarit).'];
-                    $value = null;
-                }
-                $clean[$key] = $value;
-            }
-            if ($clean['titleFr'] === '') {
-                $errors[] = ['field' => $field . '.titleFr', 'message' => 'Le titre français est obligatoire.'];
-            }
-            $covers[] = $clean;
+            $covers[] = ['gamme' => $gamme] + $this->coverFields($cover, $field, $errors);
         }
 
         $back = $input['back'] ?? $default['back'];
@@ -2379,14 +2349,7 @@ final class CatalogueService
             $back = $default['back'];
         }
         $errors = array_merge($errors, self::unknown($back, array_keys($default['back']), 'back.'));
-        $cleanBack = [];
-        foreach (['titleFr', 'titleNl', 'textFr', 'textNl'] as $text) {
-            $cleanBack[$text] = self::text($back[$text] ?? '', 'back.' . $text, $errors);
-        }
-        $cleanBack['template'] = $back['template'] ?? 'A';
-        if (!in_array($cleanBack['template'], self::BACK_TEMPLATES, true)) {
-            $errors[] = ['field' => 'back.template', 'message' => 'Gabarit : A (QR et boutique) ou B (boutique en avant).'];
-        }
+        $cleanBack = self::backFields($back, 'back', $errors);
 
         // Page 2 et avant-dernière : un titre, un texte (paragraphes), une image de la médiathèque.
         // Absentes du corps : celles déjà enregistrées (ou les défauts) restent.
@@ -2399,27 +2362,7 @@ final class CatalogueService
                 $raw = $default[$slot];
             }
             $errors = array_merge($errors, self::unknown($raw, array_keys($default[$slot]), $slot . '.'));
-            $media = $raw['mediaId'] ?? null;
-            if ($media !== null && (!is_int($media) || $this->media->find($media) === null)) {
-                $errors[] = ['field' => $slot . '.mediaId', 'message' => 'Fichier inconnu de la médiathèque.'];
-            }
-            $clean = [];
-            foreach (['titleFr', 'titleNl'] as $text) {
-                $clean[$text] = self::text($raw[$text] ?? '', $slot . '.' . $text, $errors);
-            }
-            foreach (['textFr', 'textNl'] as $text) {
-                $clean[$text] = self::text($raw[$text] ?? '', $slot . '.' . $text, $errors, self::PAGE_TEXT_MAX);
-            }
-            if ($clean['titleFr'] === '' && $clean['textFr'] === '') {
-                $errors[] = ['field' => $slot . '.titleFr', 'message' => 'Un titre ou un texte français est obligatoire : la page s’imprime dans chaque catalogue.'];
-            }
-            $clean['mediaId'] = $media;
-            $template = $raw['template'] ?? null;
-            if ($template !== null && !in_array($template, self::BRAND_TEMPLATES, true)) {
-                $errors[] = ['field' => $slot . '.template', 'message' => 'Gabarit : A (texte seul), B (image en haut) ou C (image en bas).'];
-            }
-            $clean['template'] = $template;
-            $brandPages[$slot] = $clean;
+            $brandPages[$slot] = $this->brandPageFields($raw, $slot, $errors);
         }
 
         if ($errors !== []) {
@@ -2436,6 +2379,292 @@ final class CatalogueService
         ], 'marketing', $userId, 'Charte des catalogues (brouillon de l’assistant des pages de la marque ; les catalogues lisent la version publiée).');
 
         return $this->charter();
+    }
+
+    /**
+     * Une couverture validée (charte ou page propre à un catalogue), sans sa gamme : textes, image, gabarit, visuel,
+     * dessin de saison, police et couleur du titre et du sous-titre. Les clés inconnues sont vérifiées par l'appelant.
+     *
+     * @param array<string,mixed> $cover
+     * @return array<string,mixed>
+     */
+    private function coverFields(array $cover, string $field, array &$errors): array
+    {
+        $media = $cover['mediaId'] ?? null;
+        if ($media !== null && (!is_int($media) || $this->media->find($media) === null)) {
+            $errors[] = ['field' => $field . '.mediaId', 'message' => 'Fichier inconnu de la médiathèque.'];
+        }
+        $clean = [];
+        foreach (['titleFr', 'titleNl', 'subtitleFr', 'subtitleNl'] as $text) {
+            $clean[$text] = self::text($cover[$text] ?? '', $field . '.' . $text, $errors);
+        }
+        $clean['mediaId'] = $media;
+        $template = $cover['template'] ?? 'A';
+        if (!in_array($template, self::COVER_TEMPLATES, true)) {
+            $errors[] = ['field' => $field . '.template', 'message' => 'Gabarit : A (pleine couleur), B (illustration) ou C (photo).'];
+        }
+        $visual = $cover['visual'] ?? null;
+        if ($visual !== null && !in_array($visual, self::COVER_VISUALS, true)) {
+            $errors[] = ['field' => $field . '.visual', 'message' => 'Visuel : illustration, media ou none.'];
+        }
+        if ($visual === 'media' && $media === null) {
+            $errors[] = ['field' => $field . '.mediaId', 'message' => 'Visuel « médiathèque » : choisissez une image.'];
+        }
+        $drawing = $cover['illustration'] ?? null;
+        if ($drawing !== null && !in_array($drawing, self::SEASON_DRAWINGS, true)) {
+            $errors[] = ['field' => $field . '.illustration', 'message' => 'Dessin de saison : ' . implode(', ', self::SEASON_DRAWINGS) . '.'];
+        }
+        $clean['template'] = $template;
+        $clean['visual'] = $visual;
+        $clean['illustration'] = $drawing;
+        foreach (self::COVER_STYLE as $key) {
+            $value = $cover[$key] ?? null;
+            $allowed = str_ends_with($key, 'Font') ? self::COVER_FONTS : array_keys(self::COVER_COLORS);
+            if ($value !== null && (!is_string($value) || !in_array($value, $allowed, true))) {
+                $errors[] = ['field' => $field . '.' . $key, 'message' => (str_ends_with($key, 'Font') ? 'Police : ' : 'Couleur : ') . implode(', ', $allowed) . ', ou null (celle du gabarit).'];
+                $value = null;
+            }
+            $clean[$key] = $value;
+        }
+        if ($clean['titleFr'] === '') {
+            $errors[] = ['field' => $field . '.titleFr', 'message' => 'Le titre français est obligatoire.'];
+        }
+
+        return $clean;
+    }
+
+    /**
+     * Une dernière page validée (charte ou page propre à un catalogue) : titre, texte, gabarit A ou B.
+     *
+     * @param array<string,mixed> $back
+     * @return array<string,mixed>
+     */
+    private static function backFields(array $back, string $field, array &$errors): array
+    {
+        $clean = [];
+        foreach (['titleFr', 'titleNl', 'textFr', 'textNl'] as $text) {
+            $clean[$text] = self::text($back[$text] ?? '', $field . '.' . $text, $errors);
+        }
+        $clean['template'] = $back['template'] ?? 'A';
+        if (!in_array($clean['template'], self::BACK_TEMPLATES, true)) {
+            $errors[] = ['field' => $field . '.template', 'message' => 'Gabarit : A (QR et boutique) ou B (boutique en avant).'];
+        }
+
+        return $clean;
+    }
+
+    /**
+     * Une page 2 ou avant-dernière validée (charte ou page propre à un catalogue) : un titre, un texte (paragraphes),
+     * une image de la médiathèque, un gabarit (null : image en haut s'il y a une image, texte seul sinon).
+     *
+     * @param array<string,mixed> $raw
+     * @return array<string,mixed>
+     */
+    private function brandPageFields(array $raw, string $slot, array &$errors): array
+    {
+        $media = $raw['mediaId'] ?? null;
+        if ($media !== null && (!is_int($media) || $this->media->find($media) === null)) {
+            $errors[] = ['field' => $slot . '.mediaId', 'message' => 'Fichier inconnu de la médiathèque.'];
+        }
+        $clean = [];
+        foreach (['titleFr', 'titleNl'] as $text) {
+            $clean[$text] = self::text($raw[$text] ?? '', $slot . '.' . $text, $errors);
+        }
+        foreach (['textFr', 'textNl'] as $text) {
+            $clean[$text] = self::text($raw[$text] ?? '', $slot . '.' . $text, $errors, self::PAGE_TEXT_MAX);
+        }
+        if ($clean['titleFr'] === '' && $clean['textFr'] === '') {
+            $errors[] = ['field' => $slot . '.titleFr', 'message' => 'Un titre ou un texte français est obligatoire : la page s’imprime dans chaque catalogue.'];
+        }
+        $clean['mediaId'] = $media;
+        $template = $raw['template'] ?? null;
+        if ($template !== null && !in_array($template, self::BRAND_TEMPLATES, true)) {
+            $errors[] = ['field' => $slot . '.template', 'message' => 'Gabarit : A (texte seul), B (image en haut) ou C (image en bas).'];
+        }
+        $clean['template'] = $template;
+
+        return $clean;
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Les pages de la marque propres à un catalogue (21/11/2026)
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * Les 4 pages de la marque d'un catalogue : `common`, celles de la charte publiée qu'il lit (la version figée s'il
+     * est imprimé ; sa couverture par la règle du document), et `own`, les siennes (null : il suit la charte).
+     *
+     * @return array<string,mixed>
+     */
+    public function brandPages(array $row): array
+    {
+        $charter = $this->publishedCharter(self::frozenVersion($row, null));
+        $picked = self::charterCover($row, $charter);
+        $cover = array_diff_key($picked['cover'], ['gamme' => true]);
+        if ($picked['generic'] && $picked['gammeId'] !== null && $row['source_label']) {
+            // Pas de couverture pour sa gamme dans la charte : le document imprime le nom de la gamme sur la générique.
+            $cover['titleFr'] = (string) $row['source_label'];
+            $cover['titleNl'] = (string) $row['source_label'];
+        }
+        $own = $this->ownBrandPages($row);
+        $common = [
+            'cover'       => $cover,
+            'page2'       => $charter['page2'],
+            'penultimate' => $charter['penultimate'],
+            'back'        => $charter['back'],
+        ];
+
+        return [
+            'common'         => $common,
+            'own'            => $own,
+            'gamme'          => $picked['gammeId'],
+            'logoUrl'        => $charter['logoUrl'],
+            'colors'         => $charter['colors'],
+            'charterVersion' => $charter['version'],
+        ];
+    }
+
+    /**
+     * Enregistre les pages de la marque PROPRES à un catalogue de la marque : chaque clé (`cover`, `page2`,
+     * `penultimate`, `back`) porte la page entière, ou null (ou absente) pour suivre la charte publiée. Le corps
+     * remplace les pages propres d'avant. Rien ne change pour les autres catalogues, et pas de publication : le
+     * document de ce catalogue les prend tout de suite. Un catalogue de boutique garde les pages de la charte.
+     *
+     * @param array<string,mixed> $input
+     * @return array<string,mixed>
+     */
+    public function saveBrandPages(array $row, array $input, ?int $userId): array
+    {
+        if ($row['owner'] !== 'marque') {
+            throw new CatalogueError('VALIDATION_FAILED', 'Seuls les catalogues de la marque ont leurs propres pages de la marque : un catalogue de boutique garde celles de la charte.', 422,
+                [['field' => 'owner', 'message' => 'Catalogue d’une boutique.']]);
+        }
+        $errors = self::unknown($input, self::BRAND_PAGE_SLOTS);
+        $default = self::defaultCharter();
+        $own = [];
+        foreach (self::BRAND_PAGE_SLOTS as $slot) {
+            $raw = $input[$slot] ?? null;
+            if ($raw === null) {
+                continue;
+            }
+            if (!is_array($raw)) {
+                $errors[] = ['field' => $slot, 'message' => 'Objet attendu, ou null (la page de la charte).'];
+                continue;
+            }
+            $allowed = match ($slot) {
+                'cover' => array_values(array_diff(array_keys($default['covers'][0]), ['gamme'])),
+                'back'  => array_keys($default['back']),
+                default => array_keys($default[$slot]),
+            };
+            $errors = array_merge($errors, self::unknown($raw, $allowed, $slot . '.'));
+            $own[$slot] = match ($slot) {
+                'cover' => $this->coverFields($raw, $slot, $errors),
+                'back'  => self::backFields($raw, $slot, $errors),
+                default => $this->brandPageFields($raw, $slot, $errors),
+            };
+        }
+        if ($errors !== []) {
+            throw new CatalogueError('VALIDATION_FAILED', 'Pages de la marque du catalogue invalides.', 422, $errors);
+        }
+
+        $settings = $row['settings'];
+        unset($settings['brandPages']);
+        if ($own !== []) {
+            $settings['brandPages'] = $own;
+        }
+        $row['settings'] = $settings;
+        $this->catalogues->update((int) $row['id'], $row, $userId);
+
+        return $this->brandPages((array) $this->catalogues->find((int) $row['id']));
+    }
+
+    /**
+     * Les pages propres d'un catalogue, complétées des défauts, clés dans un ordre FIXE, images résolues en adresses ;
+     * null pour une page qui suit la charte. Une copie adaptée par une boutique garde celles du catalogue copié.
+     *
+     * @return array{cover: ?array<string,mixed>, page2: ?array<string,mixed>, penultimate: ?array<string,mixed>, back: ?array<string,mixed>}
+     */
+    private function ownBrandPages(array $row): array
+    {
+        $default = self::defaultCharter();
+        $saved = is_array($row['settings']['brandPages'] ?? null) ? $row['settings']['brandPages'] : [];
+        $out = [];
+        foreach (self::BRAND_PAGE_SLOTS as $slot) {
+            $page = $saved[$slot] ?? null;
+            if (!is_array($page)) {
+                $out[$slot] = null;
+                continue;
+            }
+            if ($slot === 'cover') {
+                $base = array_diff_key($default['covers'][0], ['gamme' => true]);
+                $clean = array_replace($base, array_intersect_key($page, $base));
+                $clean['mediaId'] = is_int($clean['mediaId']) ? $clean['mediaId'] : null;
+                $clean['template'] = in_array($clean['template'], self::COVER_TEMPLATES, true) ? $clean['template'] : 'A';
+                $clean['visual'] = in_array($clean['visual'], self::COVER_VISUALS, true) ? $clean['visual'] : null;
+                $clean['illustration'] = in_array($clean['illustration'], self::SEASON_DRAWINGS, true) ? $clean['illustration'] : null;
+            } elseif ($slot === 'back') {
+                $clean = array_replace($default['back'], array_intersect_key($page, $default['back']));
+                $clean['template'] = in_array($clean['template'], self::BACK_TEMPLATES, true) ? $clean['template'] : 'A';
+            } else {
+                $clean = array_replace($default[$slot], array_intersect_key($page, $default[$slot]));
+                $clean['mediaId'] = is_int($clean['mediaId']) ? $clean['mediaId'] : null;
+                $clean['template'] = in_array($clean['template'], self::BRAND_TEMPLATES, true) ? $clean['template'] : ($clean['mediaId'] !== null ? 'B' : 'A');
+            }
+            if ($slot !== 'back') {
+                $clean['imageUrl'] = $this->mediaUrl($clean['mediaId']);
+            }
+            $out[$slot] = $clean;
+        }
+
+        return $out;
+    }
+
+    /** Les pages qu'un catalogue a à lui (pour sa fiche) : @return list<string> */
+    private static function ownSlots(array $settings): array
+    {
+        $saved = is_array($settings['brandPages'] ?? null) ? $settings['brandPages'] : [];
+
+        return array_values(array_filter(self::BRAND_PAGE_SLOTS, static fn (string $slot): bool => is_array($saved[$slot] ?? null)));
+    }
+
+    /** La version de la charte que lit un catalogue : celle passée, sinon celle figée à l'impression, sinon null (la dernière). */
+    private static function frozenVersion(array $row, ?int $charterVersion): ?int
+    {
+        return $charterVersion ?? (($row['status'] ?? '') === 'imprime' && isset($row['charter_version']) ? (int) $row['charter_version'] : null);
+    }
+
+    /**
+     * La couverture de la charte que prend un catalogue. Plusieurs gammes : celle de la première qui en a une dans la
+     * charte, sinon la générique.
+     *
+     * @return array{cover: array<string,mixed>, generic: bool, gammeId: ?int}
+     */
+    private static function charterCover(array $row, array $charter): array
+    {
+        $gammeIds = $row['source_kind'] === 'gamme' ? array_map('intval', explode(',', (string) $row['source_ref'])) : [];
+        $gammeId = $gammeIds[0] ?? null;
+        foreach ($gammeIds as $gid) {
+            if (in_array($gid, array_column($charter['covers'] ?? [], 'gamme'), true)) {
+                $gammeId = $gid;
+                break;
+            }
+        }
+        $generic = $charter['covers'][0];
+        foreach ($charter['covers'] as $candidate) {
+            if ($candidate['gamme'] === null) {
+                $generic = $candidate;
+            }
+        }
+        $cover = $generic;
+        if ($gammeId !== null) {
+            foreach ($charter['covers'] as $candidate) {
+                if ($candidate['gamme'] === $gammeId) {
+                    $cover = $candidate;
+                }
+            }
+        }
+
+        return ['cover' => $cover, 'generic' => $cover === $generic, 'gammeId' => $gammeId];
     }
 
     private static function text(mixed $value, string $field, array &$errors, int $max = self::TEXT_MAX): string
@@ -2627,8 +2856,9 @@ final class CatalogueService
         // l'ordre ; une page de présentation montre sa gamme, son illustration et, au choix, sa liste.
         // La charte PUBLIÉE ; un catalogue marqué imprimé garde celle de son impression (la boutique qui imprime un
         // catalogue de la marque passe la sienne, `$charterVersion`).
-        $frozen = $charterVersion ?? (($row['status'] ?? '') === 'imprime' && isset($row['charter_version']) ? (int) $row['charter_version'] : null);
-        $charter = $this->publishedCharter($frozen);
+        $charter = $this->publishedCharter(self::frozenVersion($row, $charterVersion));
+        // Les pages de la marque propres à ce catalogue (null : celle de la charte).
+        $ownPages = $this->ownBrandPages($row);
         $gammesById = array_column($data['gammes'], null, 'id');
         $catalogueGammes = self::gammeIdsOf($row);
         $innerRows = self::innerPages($row['settings']);
@@ -2819,59 +3049,51 @@ final class CatalogueService
             $warnings[] = ['code' => 'PAGES_OVER_FORMAT', 'message' => sprintf('Catalogue d’avant les formats : %d pages intérieures pour %d pages. Répartissez à nouveau pour revenir au format.', count($innerRows), $pageCount)];
         }
 
-        // Couverture et dernière page : la charte, verrouillées.
+        // Couverture et dernière page : la charte (ou les pages propres du catalogue), verrouillées.
         // Plusieurs gammes : la couverture de la première qui en a une dans la charte, sinon la générique.
-        $gammeIds = $row['source_kind'] === 'gamme' ? array_map('intval', explode(',', (string) $row['source_ref'])) : [];
-        $gammeId = $gammeIds[0] ?? null;
-        foreach ($gammeIds as $gid) {
-            if (in_array($gid, array_column($charter['covers'] ?? [], 'gamme'), true)) {
-                $gammeId = $gid;
-                break;
-            }
-        }
-        $generic = $charter['covers'][0];
-        $cover = $generic;
-        foreach ($charter['covers'] as $candidate) {
-            if ($candidate['gamme'] === null) {
-                $generic = $candidate;
-            }
-        }
-        $cover = $generic;
+        $picked = self::charterCover($row, $charter);
+        $cover = $picked['cover'];
+        $gammeId = $picked['gammeId'];
         $gammeImage = null;
         if ($gammeId !== null) {
-            foreach ($charter['covers'] as $candidate) {
-                if ($candidate['gamme'] === $gammeId) {
-                    $cover = $candidate;
-                }
-            }
             foreach ($data['gammes'] as $gamme) {
                 if ((int) $gamme['id'] === $gammeId) {
                     $gammeImage = $gamme['image'];
                 }
             }
         }
-        $coverTitle = $lang === 'nl' ? ($cover['titleNl'] ?: $cover['titleFr']) : $cover['titleFr'];
-        if ($cover === $generic && $gammeId !== null && $row['source_label']) {
-            $coverTitle = (string) $row['source_label'];
-            if ($lang === 'nl') {
-                $warnings[] = ['code' => 'NL_TEXT_MISSING', 'message' => sprintf('Pas de couverture « %s » dans la Charte des catalogues : le nom français de la gamme est imprimé.', $coverTitle)];
+        $where = static fn (string $slot): string => $ownPages[$slot] !== null ? 'dans les pages de la marque de ce catalogue' : 'dans la Charte des catalogues';
+        if ($ownPages['cover'] !== null) {
+            $cover = ['gamme' => $cover['gamme']] + $ownPages['cover'];
+            $coverTitle = $lang === 'nl' ? ($cover['titleNl'] ?: $cover['titleFr']) : $cover['titleFr'];
+            if ($lang === 'nl' && $cover['titleNl'] === '') {
+                $warnings[] = ['code' => 'NL_TEXT_MISSING', 'message' => 'Titre néerlandais de la couverture à écrire ' . $where('cover') . ' : le français est imprimé.'];
+            }
+        } else {
+            $coverTitle = $lang === 'nl' ? ($cover['titleNl'] ?: $cover['titleFr']) : $cover['titleFr'];
+            if ($picked['generic'] && $gammeId !== null && $row['source_label']) {
+                $coverTitle = (string) $row['source_label'];
+                if ($lang === 'nl') {
+                    $warnings[] = ['code' => 'NL_TEXT_MISSING', 'message' => sprintf('Pas de couverture « %s » dans la Charte des catalogues : le nom français de la gamme est imprimé.', $coverTitle)];
+                }
+            }
+            if ($lang === 'nl' && $cover['titleNl'] === '' && !($picked['generic'] && $gammeId !== null)) {
+                $warnings[] = ['code' => 'NL_TEXT_MISSING', 'message' => 'Titre néerlandais de la couverture à écrire dans la Charte des catalogues : le français est imprimé.'];
             }
         }
-        if ($lang === 'nl' && $cover['titleNl'] === '' && !($cover === $generic && $gammeId !== null)) {
-            $warnings[] = ['code' => 'NL_TEXT_MISSING', 'message' => 'Titre néerlandais de la couverture à écrire dans la Charte des catalogues : le français est imprimé.'];
-        }
-        $backTitle = $lang === 'nl' ? ($charter['back']['titleNl'] ?: $charter['back']['titleFr']) : $charter['back']['titleFr'];
-        $backText = $lang === 'nl' ? ($charter['back']['textNl'] ?: $charter['back']['textFr']) : $charter['back']['textFr'];
-        if ($lang === 'nl' && ($charter['back']['titleNl'] === '' || $charter['back']['textNl'] === '')) {
-            $warnings[] = ['code' => 'NL_TEXT_MISSING', 'message' => 'Dernière page néerlandaise à écrire dans la Charte des catalogues : le français est imprimé.'];
+        $back = $ownPages['back'] ?? $charter['back'];
+        $backTitle = $lang === 'nl' ? ($back['titleNl'] ?: $back['titleFr']) : $back['titleFr'];
+        $backText = $lang === 'nl' ? ($back['textNl'] ?: $back['textFr']) : $back['textFr'];
+        if ($lang === 'nl' && ($back['titleNl'] === '' || $back['textNl'] === '')) {
+            $warnings[] = ['code' => 'NL_TEXT_MISSING', 'message' => 'Dernière page néerlandaise à écrire ' . $where('back') . ' : le français est imprimé.'];
         }
 
-        // Page 2 et avant-dernière : la charte, verrouillées.
+        // Page 2 et avant-dernière : la charte (ou les pages propres du catalogue), verrouillées.
         $brand = [];
         foreach (['page2', 'penultimate'] as $slot) {
-            $content = $charter[$slot];
+            $content = $ownPages[$slot] ?? $charter[$slot];
             if ($lang === 'nl' && (($content['titleNl'] === '' && $content['titleFr'] !== '') || ($content['textNl'] === '' && $content['textFr'] !== ''))) {
-                $warnings[] = ['code' => 'NL_TEXT_MISSING', 'message' => sprintf('%s néerlandaise à écrire dans la Charte des catalogues : le français est imprimé.', $slot === 'page2' ? 'Page 2' : 'Avant-dernière page')];
+                $warnings[] = ['code' => 'NL_TEXT_MISSING', 'message' => sprintf('%s néerlandaise à écrire %s : le français est imprimé.', $slot === 'page2' ? 'Page 2' : 'Avant-dernière page', $where($slot))];
             }
             $brand[$slot] = [
                 'kind'     => 'brand',
@@ -2931,7 +3153,7 @@ final class CatalogueService
                 'qrUrl'  => $qrUrl,
                 'host'   => $qrUrl === null ? null : ($own !== '' ? self::host($own) : ($webshop === null ? null : self::host($webshop))),
                 'shop'   => $shopInfo,
-                'template' => $charter['back']['template'],
+                'template' => $back['template'],
             ]],
         );
 

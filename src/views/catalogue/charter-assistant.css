@@ -187,3 +187,8 @@
 .cha-style__hint { font-size: 11px; color: var(--muted); }
 .cha-swatch--other { position: relative; display: inline-grid; place-items: center; background: #fff; font-size: 14px; color: var(--muted); overflow: hidden; }
 .cha-swatch--other input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+/* Mode « ce catalogue » (21/11/2026) : la page de l'étape est-elle à lui, ou la page commune ? */
+.cha-own { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.cha-own.is-own { border-color: rgba(63, 122, 82, 0.45); }
+.cha-own__t { flex: 1 1 260px; font-size: 12.5px; color: var(--muted-2); }
