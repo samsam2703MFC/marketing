@@ -3178,6 +3178,8 @@ export interface CatalogueShopInfo {
   email?: string
   /** Le second téléphone saisi dans la charte ; vide : rien n'est imprimé. */
   phone2?: string
+  /** Les horaires des fêtes saisis pour la boutique (21/11/2026), dans la langue du document ; vide : rien. */
+  holidayHours?: string
 }
 
 export interface CatalogueDocProduct {
@@ -3402,7 +3404,7 @@ export const CATALOGUE_LOOK: Record<CatalogueLookKind, Record<string, CatalogueL
   cover: { logo: 'show', kicker: 'text', title: 'show', subtitle: 'show', shop: 'style' },
   page2: { logo: 'show', title: 'text', text: 'text' },
   penultimate: { logo: 'show', title: 'text', text: 'text', legend: 'show' },
-  back: { logo: 'show', title: 'text', text: 'text', qr: 'show', shop: 'text', address: 'show', hours: 'show', phone: 'show', email: 'show' },
+  back: { logo: 'show', title: 'text', text: 'text', qr: 'show', shop: 'text', address: 'show', hours: 'show', holidays: 'show', phone: 'show', email: 'show' },
 }
 export interface CatalogueLookEntry {
   show: boolean
@@ -3498,6 +3500,9 @@ export interface CatalogueCharterShop {
   webshopUrl: string
   logoMediaId: number | null
   logoUrl: string | null
+  /** Les horaires des fêtes, saisis ici par boutique (21/11/2026, migration 054) ; NL vide : le français. */
+  holidayHoursFr?: string
+  holidayHoursNl?: string
   qrUrl: string | null
   host: string | null
   /** Ce que TFBuddy ne donne pas : address, hours, phone ; qr (adresse du webshop inconnue). */
@@ -3605,7 +3610,7 @@ export async function saveCatalogueBrandPages(id: number, own: CatalogueOwnBrand
 
 /** « Avant de publier », les boutiques (ce que la dernière page imprime pour chacune), les catalogues concernés. */
 /** Ce qu'une boutique imprime en plus à la dernière page : second téléphone, webshop direct (QR), logo ; rend la boutique. */
-export async function saveCatalogueShop(id: number, patch: { phone2?: string; webshopUrl?: string; logoMediaId?: number | null }): Promise<CatalogueCharterShop> {
+export async function saveCatalogueShop(id: number, patch: { phone2?: string; webshopUrl?: string; logoMediaId?: number | null; holidayHoursFr?: string; holidayHoursNl?: string }): Promise<CatalogueCharterShop> {
   return (await request<Envelope<CatalogueCharterShop>>(`${BASE}/catalogue-shops/${id}`, { method: 'PUT', body: patch })).data
 }
 

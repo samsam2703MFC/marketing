@@ -387,3 +387,7 @@
 .cat-full__offer { flex: 0 0 auto; display: grid; gap: calc(var(--u) * 1.6mm); }
 .cat-full__also { font-weight: 500; font-size: calc(var(--u) * 3mm); letter-spacing: 0.16em; text-transform: uppercase; color: var(--p); }
 .cat-t-C .cat-full__text { text-align: left; justify-items: start; }
+
+/* La dernière page (21/11/2026) : le texte et les horaires des fêtes gardent leurs retours à la ligne. */
+.cat-back__text, .cat-back__holidays { white-space: pre-line; }
+.cat-back__holidays { font-weight: 600; }

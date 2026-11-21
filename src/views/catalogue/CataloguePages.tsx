@@ -615,7 +615,9 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
   // Les coordonnées : adresse, horaires, téléphone(s), e-mail (17/11/2026 : « rajouter mail, téléphone 2 »).
   const phones = shop ? [line('phone', shop.phone), line('phone', shop.phone2)].filter(Boolean).join(' · ') : ''
   const hours = shop ? line('hours', shop.hours) : ''
-  const lines = shop ? [line('address', shop.address), hours ? (lang === 'nl' ? `Open ${hours}` : `Ouvert ${hours}`) : '', phones, line('email', shop.email)].filter(Boolean) : []
+  // Les horaires des fêtes de la boutique (21/11/2026), sous les horaires ; leurs retours à la ligne sont gardés.
+  const holidays = shop ? line('holidays', shop.holidayHours) : ''
+  const lines = shop ? [line('address', shop.address), hours ? (lang === 'nl' ? `Open ${hours}` : `Ouvert ${hours}`) : '', holidays, phones, line('email', shop.email)].filter(Boolean) : []
   const logoTag = shown(look, 'logo') ? <img className="cat-logo cat-logo--dark" src={logo} alt="" /> : null
   const titleTag = shown(look, 'title') ? <div className="cat-back__title" style={textStyle(look, 'title')}>{page.title}</div> : null
   const textTag = page.text && shown(look, 'text') ? <div className="cat-back__text" style={textStyle(look, 'text')}>{page.text}</div> : null
@@ -633,7 +635,7 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
           <div className="cat-back__shopB">
             <div className="cat-back__who" style={shopStyle}>{shop ? `L’Atelier By — ${shop.name}` : 'L’Atelier By'}</div>
             {lines.map((text, index) => (
-              <p key={index} style={shopStyle}>{text}</p>
+              <p key={index} style={shopStyle} className={text === holidays ? 'cat-back__holidays' : undefined}>{text}</p>
             ))}
           </div>
         ) : null}
@@ -670,8 +672,8 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
           <div className="cat-back__who" style={shopStyle}>{shop ? `L’Atelier By — ${shop.name}` : 'L’Atelier By'}</div>
           {shop ? (
             <p style={shopStyle}>
-              {[line('address', shop.address), hours ? (lang === 'nl' ? `Open ${hours}` : `Ouvert ${hours}`) : '', line('phone', shop.phone)].filter(Boolean).map((text, index) => (
-                <span key={index}>
+              {[line('address', shop.address), hours ? (lang === 'nl' ? `Open ${hours}` : `Ouvert ${hours}`) : '', holidays, line('phone', shop.phone)].filter(Boolean).map((text, index) => (
+                <span key={index} className={text === holidays ? 'cat-back__holidays' : undefined}>
                   {index > 0 ? <br /> : null}
                   {text}
                 </span>

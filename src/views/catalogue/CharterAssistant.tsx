@@ -139,7 +139,12 @@ function backPage(charter: CatalogueCharter, lang: CatalogueLang, shop: Catalogu
     text: pick(lang, charter.back.textFr, charter.back.textNl),
     qrUrl: shop?.qrUrl ?? null,
     host: shop?.host ?? null,
-    shop: shop ? { id: shop.id, erpShopId: shop.erpShopId, name: shop.name, address: shop.address, hours: lang === 'nl' ? shop.hoursNl || shop.hours : shop.hours, phone: shop.phone, email: shop.email, phone2: shop.phone2 } : null,
+    shop: shop
+      ? {
+          id: shop.id, erpShopId: shop.erpShopId, name: shop.name, address: shop.address, hours: lang === 'nl' ? shop.hoursNl || shop.hours : shop.hours, phone: shop.phone, email: shop.email, phone2: shop.phone2,
+          holidayHours: lang === 'nl' ? shop.holidayHoursNl || shop.holidayHoursFr || '' : shop.holidayHoursFr ?? '',
+        }
+      : null,
     template: charter.back.template,
     look: api.docLook('back', charter.back.look),
   }
@@ -332,7 +337,7 @@ function ColorsCard({ colors, onChange }: { colors: CatalogueCharter['colors']; 
 }
 
 /** Une ligne du tableau « Rempli par chaque boutique » que l'on saisit : enregistrée en quittant le champ (ou Entrée). */
-function ShopInput({ label, value, placeholder, max, onSave }: { label: string; value: string; placeholder: string; max: number; onSave: (v: string) => void }) {
+function ShopInput({ label, value, placeholder, max, onSave, area = false }: { label: string; value: string; placeholder: string; max: number; onSave: (v: string) => void; area?: boolean }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
   const commit = () => {
@@ -342,17 +347,21 @@ function ShopInput({ label, value, placeholder, max, onSave }: { label: string; 
     <tr>
       <td>{label}</td>
       <td>
-        <input
-          className="cha-shopin"
-          value={draft}
-          maxLength={max}
-          placeholder={placeholder}
-          onChange={(event) => setDraft(event.target.value)}
-          onBlur={commit}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') (event.target as HTMLInputElement).blur()
-          }}
-        />
+        {area ? (
+          <textarea className="cha-shopin cha-shopin--area" rows={2} value={draft} maxLength={max} placeholder={placeholder} onChange={(event) => setDraft(event.target.value)} onBlur={commit} />
+        ) : (
+          <input
+            className="cha-shopin"
+            value={draft}
+            maxLength={max}
+            placeholder={placeholder}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commit}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') (event.target as HTMLInputElement).blur()
+            }}
+          />
+        )}
       </td>
       <td>
         <span className={`cha-dot${draft.trim() ? '' : ' cha-dot--off'}`} /> Saisi ici · cette boutique
@@ -576,7 +585,7 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
   const shops = checks?.shops ?? []
   const shop = shops.find((s) => s.id === shopId) ?? shops[0] ?? null
   /** Ce que la boutique imprime en plus à la dernière page (second téléphone, webshop direct, logo) : enregistré tout de suite. */
-  function saveShop(patch: { phone2?: string; webshopUrl?: string; logoMediaId?: number | null }) {
+  function saveShop(patch: { phone2?: string; webshopUrl?: string; logoMediaId?: number | null; holidayHoursFr?: string; holidayHoursNl?: string }) {
     if (!shop) return
     setShopSave({ status: 'saving' })
     api.saveCatalogueShop(shop.id, patch).then(
@@ -933,8 +942,15 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
         <div className="cha-grid2">
           <Field label="Titre FR" value={charter.back.titleFr} onChange={(v) => change((c) => ({ ...c, back: { ...c.back, titleFr: v } }))} />
           <Field label="Titre NL" value={charter.back.titleNl} placeholder="À écrire" onChange={(v) => change((c) => ({ ...c, back: { ...c.back, titleNl: v } }))} />
-          <Field label="Texte FR" value={charter.back.textFr} onChange={(v) => change((c) => ({ ...c, back: { ...c.back, textFr: v } }))} />
-          <Field label="Texte NL" value={charter.back.textNl} placeholder="À écrire" onChange={(v) => change((c) => ({ ...c, back: { ...c.back, textNl: v } }))} />
+          {/* Le texte : plusieurs lignes, 600 caractères (21/11/2026) ; les coordonnées de la boutique s'impriment à part. */}
+          <div>
+            <Field area label="Texte FR" value={charter.back.textFr} max={600} onChange={(v) => change((c) => ({ ...c, back: { ...c.back, textFr: v } }))} />
+            <div className="cha-count">{`${charter.back.textFr.length.toLocaleString('fr-BE')} / 600 caractères`}</div>
+          </div>
+          <div>
+            <Field area label="Texte NL" value={charter.back.textNl} max={600} placeholder="À écrire" onChange={(v) => change((c) => ({ ...c, back: { ...c.back, textNl: v } }))} />
+            <div className="cha-count">{`${charter.back.textNl.length.toLocaleString('fr-BE')} / 600 caractères`}</div>
+          </div>
         </div>
         <div className="cha-lab cha-lab--sub">Gabarit</div>
         <Choice kind="back" items={BACK_TEMPLATES} value={charter.back.template} onChange={(t) => change((c) => ({ ...c, back: { ...c.back, template: t } }))} />
@@ -952,6 +968,7 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
           {lookRow('back', charter.back.look, 'shop', 'Coordonnées', 'gotham', 'le bloc de la boutique')}
           {lookRow('back', charter.back.look, 'address', 'Adresse')}
           {lookRow('back', charter.back.look, 'hours', 'Horaires')}
+          {lookRow('back', charter.back.look, 'holidays', 'Horaires des fêtes', 'gotham', 'saisis par boutique, plus bas')}
           {lookRow('back', charter.back.look, 'phone', 'Téléphone(s)')}
           {lookRow('back', charter.back.look, 'email', 'E-mail')}
         </div>
@@ -1000,6 +1017,9 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
               ))}
               <ShopInput key={`p2-${shop.id}`} label="Téléphone 2" value={shop.phone2} placeholder="ex. 0470 12 34 56" max={40} onSave={(v) => saveShop({ phone2: v })} />
               <ShopInput key={`w-${shop.id}`} label="Webshop direct" value={shop.webshopUrl} placeholder="https://… l’adresse de la boutique sur le webshop (le QR y mène)" max={300} onSave={(v) => saveShop({ webshopUrl: v })} />
+              {/* Les horaires des fêtes (21/11/2026) : propres à chaque boutique, l'ERP ne les porte pas. */}
+              <ShopInput area key={`hf-${shop.id}`} label="Horaires des fêtes FR" value={shop.holidayHoursFr ?? ''} placeholder="ex. 24/12 : 7h – 16h · 25/12 : fermé · 31/12 : 7h – 16h · 01/01 : fermé" max={600} onSave={(v) => saveShop({ holidayHoursFr: v })} />
+              <ShopInput area key={`hn-${shop.id}`} label="Horaires des fêtes NL" value={shop.holidayHoursNl ?? ''} placeholder="ex. 24/12: 7u – 16u · 25/12: gesloten · … (vide : le français)" max={600} onSave={(v) => saveShop({ holidayHoursNl: v })} />
               <tr>
                 <td>Logo</td>
                 <td>
@@ -1026,9 +1046,9 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
         )}
         {shopSave.status === 'error' ? <p className="cha-warn">{shopSave.text}</p> : shopSave.status === 'saving' ? <p className="cha-note">Enregistrement…</p> : null}
         <p className="cha-note">
-          Changer une adresse, des horaires, le téléphone ou l’e-mail se fait dans l’ERP : le prochain PDF les reprend. Le second téléphone, le webshop direct et le
-          logo, que l’ERP ne porte pas, se saisissent ici, boutique par boutique (vides : rien ne s’imprime, le QR mène au webshop du réseau, le logo est celui
-          de la charte).
+          Changer une adresse, des horaires, le téléphone ou l’e-mail se fait dans l’ERP : le prochain PDF les reprend. Le second téléphone, le webshop direct, les
+          horaires des fêtes et le logo, que l’ERP ne porte pas, se saisissent ici, boutique par boutique (vides : rien ne s’imprime, le QR mène au webshop du
+          réseau, le logo est celui de la charte).
         </p>
       </section>
 

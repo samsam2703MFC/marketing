@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Marketing — catalogues produits
-  version: 1.12.0
+  version: 1.13.0
   description: |
     Les catalogues produits du Marketing (prix du webshop, gammes) : un imprimé A5 (A4 en option)
     de **8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16). Quatre pages viennent de la Charte des catalogues de la
@@ -115,6 +115,12 @@ info:
     page porte `look` (couleur en #RRGGBB) ; un kicker, une légende des allergènes, un QR ou une ligne des coordonnées
     masqués n'y partent pas. Élément inconnu, `show` non booléen, police ou couleur hors de la marque : 422 nommé
     (ex. `cover.look.logo.show`).
+
+    v1.13 (21 novembre 2026, catalogue « Fêtes de fin d'année » : « 24/12 : [horaire] · 25/12 : [horaire]… ») : chaque
+    boutique a ses horaires des fêtes (`PUT …/catalogue-shops/{id}` `{holidayHoursFr, holidayHoursNl}`, 600 caractères,
+    plusieurs lignes ; migration 054) ; au document, `DocShop.holidayHours` (dans la langue de la version ; NL vide : le
+    français), sous les horaires, masquable par l'élément `holidays` de la dernière page. Le texte de la dernière page
+    passe à 600 caractères et garde ses retours à la ligne.
 
     v1.5 (15 novembre 2026, client : « les deux, garde les 3 gabarits, code-le » — assistant des pages de la
     marque, maquettes A1-A4 ; assistant du franchisé, maquettes B1-B4) :
@@ -362,6 +368,8 @@ paths:
                 phone2: { type: string, maxLength: 40, pattern: '^[0-9+().\/ -]*$' }
                 webshopUrl: { type: string, maxLength: 300, description: 'http:// ou https:// ; « » : le webshop du réseau.' }
                 logoMediaId: { type: [integer, 'null'], description: 'Une image de la médiathèque, du réseau ou de cette boutique, pas archivée ; null : le logo de la charte.' }
+                holidayHoursFr: { type: string, maxLength: 600, description: 'v1.13 — Les horaires des fêtes de la boutique, plusieurs lignes ; « » : rien.' }
+                holidayHoursNl: { type: string, maxLength: 600, description: 'v1.13 — « » : le français est imprimé.' }
       responses:
         '200': { $ref: '#/components/responses/Generic' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
@@ -1293,7 +1301,7 @@ components:
               message: { type: string }
     DocShop:
       type: [object, 'null']
-      properties: { id: { type: integer }, erpShopId: { type: [integer, 'null'] }, name: { type: string }, address: { type: string }, hours: { type: string }, phone: { type: string }, email: { type: string, description: 'v1.9 — fiche publique de l''ERP ; vide : rien.' }, phone2: { type: string, description: 'v1.9 — saisi dans la charte ; vide : rien.' } }
+      properties: { id: { type: integer }, erpShopId: { type: [integer, 'null'] }, name: { type: string }, address: { type: string }, hours: { type: string }, phone: { type: string }, email: { type: string, description: 'v1.9 — fiche publique de l''ERP ; vide : rien.' }, phone2: { type: string, description: 'v1.9 — saisi dans la charte ; vide : rien.' }, holidayHours: { type: string, description: 'v1.13 — les horaires des fêtes saisis pour la boutique, dans la langue de la version ; vide : rien.' } }
     Colors:
       type: object
       properties: { primary: { type: string }, secondary: { type: string }, accent: { type: string }, ink: { type: string } }

@@ -201,3 +201,6 @@
 .cha-styles--flat .cha-swatches { gap: 4px; }
 .cha-style.is-hidden .cha-style__fonts, .cha-style.is-hidden .cha-swatches { opacity: 0.35; }
 .cha-style + .cha-style { padding-top: 8px; border-top: 1px dashed var(--line); }
+
+/* Les horaires des fêtes d'une boutique : plusieurs lignes (21/11/2026). */
+.cha-shopin--area { min-height: 52px; resize: vertical; font: inherit; }
