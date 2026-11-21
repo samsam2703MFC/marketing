@@ -36,6 +36,8 @@ import './charter-assistant.css'
 const MM = 96 / 25.4
 
 type Step = 1 | 2 | 3 | 4 | 5
+/** Une étape de l'assistant (1 couverture · 2 page 2 · 3 avant-dernière · 4 dernière page · 5 récapitulatif). */
+export type CharterStep = Step
 
 const STEPS: Array<{ n: Step; label: string; hint: string; next: string }> = [
   { n: 1, label: 'Couverture', hint: 'page 1 · une par gamme', next: 'Page 2' },
@@ -335,7 +337,17 @@ function Field({ label, value, onChange, placeholder, area = false, max = 240 }:
   )
 }
 
-export default function CharterAssistant({ onBack }: { onBack: () => void }) {
+/**
+ * Ouvert depuis un catalogue (21/11/2026, Sam : « je dois pouvoir aussi éditer les templates de marque ») : `step` est
+ * l'étape de la page cliquée, `gammes` celles du catalogue — la couverture ouverte est la sienne, par la règle de l'API
+ * (la première de ses gammes qui a une couverture, sinon la générique) — et `backLabel` le lien de retour.
+ */
+export default function CharterAssistant({ onBack, step: initialStep, gammes: catalogueGammes, backLabel = '‹ Catalogues' }: {
+  onBack: () => void
+  step?: Step
+  gammes?: number[]
+  backLabel?: string
+}) {
   const loaded = useAsync(() => api.getCatalogueCharter(), [])
   const webshop = useAsync(() => api.getWebshopProducts([]), [])
   const recent = useAsync(() => api.listMedia({ kind: 'image', perPage: 3 }), [])
@@ -344,6 +356,7 @@ export default function CharterAssistant({ onBack }: { onBack: () => void }) {
   const [versions, setVersions] = useState<CatalogueCharterVersion[] | null>(null)
   const [charter, setCharter] = useState<CatalogueCharter | null>(null)
   const [step, setStep] = useState<Step>(() => {
+    if (initialStep) return initialStep
     const n = Number(new URLSearchParams(window.location.search).get('etape'))
     return (n >= 1 && n <= 5 ? n : 1) as Step
   })
@@ -358,13 +371,22 @@ export default function CharterAssistant({ onBack }: { onBack: () => void }) {
   const [publishing, setPublishing] = useState(false)
   const [allDrawings, setAllDrawings] = useState(false)
   const dirty = useRef(false)
+  /** Modifié pendant cette visite et pas encore publié : les catalogues montrent toujours la version publiée. */
+  const unpublished = useRef(false)
   const timer = useRef<number | null>(null)
 
   useEffect(() => {
     if (loaded.data && !charter) {
       setCharter(loaded.data)
-      // Ouvert sur la couverture d'une gamme du webshop (la première après la générique), comme la maquette.
-      if (loaded.data.covers.length > 1) setCoverIndex(1)
+      const covers = loaded.data.covers
+      if (catalogueGammes) {
+        // Ouvert depuis un catalogue : sa couverture.
+        const own = catalogueGammes.map((g) => covers.findIndex((c) => c.gamme === g)).find((i) => i >= 0)
+        setCoverIndex(own ?? Math.max(0, covers.findIndex((c) => c.gamme === null)))
+      } else if (covers.length > 1) {
+        // Ouvert sur la couverture d'une gamme du webshop (la première après la générique), comme la maquette.
+        setCoverIndex(1)
+      }
     }
   }, [loaded.data, charter])
 
@@ -387,6 +409,7 @@ export default function CharterAssistant({ onBack }: { onBack: () => void }) {
   function change(update: (current: CatalogueCharter) => CatalogueCharter) {
     setCharter((current) => (current ? update(current) : current))
     dirty.current = true
+    unpublished.current = true
     setSave({ status: 'idle' })
     if (timer.current !== null) window.clearTimeout(timer.current)
     timer.current = window.setTimeout(() => void flush(), 800)
@@ -411,6 +434,22 @@ export default function CharterAssistant({ onBack }: { onBack: () => void }) {
       setSave({ status: 'error', text: message(cause) })
       return false
     }
+  }
+
+  /** Quitter l'assistant : le brouillon est enregistré ; s'il n'est pas publié, le dire avant de partir. */
+  async function leave() {
+    await flush()
+    if (
+      unpublished.current &&
+      !window.confirm(
+        'Vos changements sont enregistrés en brouillon, mais pas encore publiés : les catalogues montrent toujours la version publiée.\n\n'
+          + 'OK : partir quand même. Annuler : rester et publier (étape 5).',
+      )
+    ) {
+      void go(5)
+      return
+    }
+    onBack()
   }
 
   async function go(next: Step) {
@@ -473,6 +512,7 @@ export default function CharterAssistant({ onBack }: { onBack: () => void }) {
     setPublishing(true)
     try {
       const done = await api.publishCatalogueCharter(fromVersion ? { fromVersion } : {})
+      unpublished.current = false
       setPublished(`Version ${done.version} publiée le ${dateFr(done.publishedAt)} : ${done.catalogues.affected} catalogue(s) la prennent.`)
       const fresh = await api.getCatalogueCharter()
       setCharter(fresh)
@@ -996,8 +1036,8 @@ export default function CharterAssistant({ onBack }: { onBack: () => void }) {
       <style>{catalogueCss()}</style>
       <div className="cha-head">
         <div>
-          <button type="button" className="linklike catv-back" onClick={() => void flush().then(onBack)}>
-            ‹ Catalogues
+          <button type="button" className="linklike catv-back" onClick={() => void leave()}>
+            {backLabel}
           </button>
           <p className="catv-kicker">Catalogues · réglage de la marque</p>
           <h2 className="catv-h1">Assistant des pages de la marque</h2>
