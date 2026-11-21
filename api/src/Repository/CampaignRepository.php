@@ -106,7 +106,10 @@ final class CampaignRepository
                 st.label    AS status_label,
                 st.text_hex AS status_text_hex,
                 st.bg_rgba  AS status_bg_rgba,
-                (SELECT COUNT(*) FROM mar_campaign_shop cs WHERE cs.campaign_id = c.id) AS shops_count
+                (SELECT COUNT(*) FROM mar_campaign_shop cs WHERE cs.campaign_id = c.id) AS shops_count,
+                -- Les boutiques de chaque campagne : le hub et les visites du cockpit les lisaient dans la table de
+                -- liaison, pour toutes les campagnes en une fois (21/11/2026).
+                (SELECT GROUP_CONCAT(cs2.shop_id ORDER BY cs2.shop_id) FROM mar_campaign_shop cs2 WHERE cs2.campaign_id = c.id) AS shop_ids_csv
              FROM mar_campaign c
              JOIN mar_brand b            ON b.id = c.brand_id
              JOIN mar_campaign_status st ON st.code = c.status_code
@@ -119,7 +122,14 @@ final class CampaignRepository
         $statement = Database::connection()->prepare($sql);
         $statement->execute($bindings);
 
-        return array_map([$this, 'castRow'], $statement->fetchAll());
+        return array_map(function (array $row): array {
+            $csv = (string) ($row['shop_ids_csv'] ?? '');
+            unset($row['shop_ids_csv']);
+            $row = $this->castRow($row);
+            $row['shop_ids'] = $csv === '' ? [] : array_map('intval', explode(',', $csv));
+
+            return $row;
+        }, $statement->fetchAll());
     }
 
     /** @return array<string,mixed>|null */

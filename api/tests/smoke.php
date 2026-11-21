@@ -174,6 +174,12 @@ $refs     = $response['body'];
 check('les référentiels répondent', $response['status'] === 200);
 check('9 types de campagne', count($refs['campaignTypes']) === 9, count($refs['campaignTypes']) . ' reçus');
 check('5 états de lead', count($refs['leadStatuses']) === 5);
+// Tous les leviers, inactifs compris, dans l'ordre du réseau (le cockpit en tire ses KPI par levier, 21/11/2026).
+$tousLeviers = $pdo->query('SELECT id FROM mar_lever ORDER BY sort_order, id')->fetchAll(PDO::FETCH_COLUMN);
+check('les référentiels rendent tous les leviers (allLevers), dans l\'ordre du réseau',
+    array_map('intval', array_column($refs['allLevers'] ?? [], 'id')) === array_map('intval', $tousLeviers)
+        && count($refs['allLevers']) >= count($refs['levers']) && array_key_exists('is_active', $refs['allLevers'][0] ?? []),
+    json_encode([array_column($refs['allLevers'] ?? [], 'id'), $tousLeviers]));
 check('les couleurs viennent de la base', ($refs['leadStatuses'][0]['color_hex'] ?? '') === '#8a6d0f');
 
 // La maquette déduisait la pastille de levier par mots-clés sur un texte libre.
@@ -201,6 +207,15 @@ $campaigns = $response['body'];
 check('les deux campagnes sont visibles', count($campaigns) === 2, count($campaigns) . ' reçue(s)');
 check('le statut porte son libellé et sa couleur', ($campaigns[0]['status_label'] ?? '') !== '' && ($campaigns[0]['status_text_hex'] ?? '') !== '');
 check('les montants sont des nombres', is_float($campaigns[0]['budget_amount'] ?? null));
+// Le hub et les visites du cockpit lisent les boutiques de toutes les campagnes dans cette liste (21/11/2026).
+$liaisons = [];
+foreach ($pdo->query('SELECT campaign_id, shop_id FROM mar_campaign_shop ORDER BY campaign_id, shop_id')->fetchAll() as $l) {
+    $liaisons[(int) $l['campaign_id']][] = (int) $l['shop_id'];
+}
+check('chaque campagne de la liste porte ses boutiques (shop_ids), entiers, comme la table de liaison',
+    $campaigns !== [] && array_filter($campaigns, static fn (array $c): bool => ($c['shop_ids'] ?? null) !== ($liaisons[(int) $c['id']] ?? [])
+        || count($c['shop_ids']) !== (int) $c['shops_count'] || array_key_exists('shop_ids_csv', $c)) === [],
+    json_encode(array_map(static fn (array $c): array => [$c['id'], $c['shop_ids'] ?? 'absent', $c['shops_count'] ?? null], $campaigns)));
 // Le cockpit range et colore ses bandes de calendrier par type à partir de cette liste (21/11/2026).
 $typesParId = array_column($pdo->query('SELECT id, color_hex FROM mar_campaign_type')->fetchAll(), 'color_hex', 'id');
 check('chaque campagne porte son type : identifiant entier et couleur du type',

@@ -126,6 +126,11 @@ cockpit lit cette fiche au lieu de `mar_campaign_offer*`, `mar_offer_item` et `m
 `type_lever_color_hex`), `render_formats` (les formats de déclinaison des visuels, une fois chacun : `id`, `name`, `width_px`,
 `height_px`, `note`, `sort_order`) et, dans `channels[]`, `agency_id`. La note de campagne du cockpit lit cette fiche.
 
+**21/11/2026 — boutiques des campagnes et tous les leviers.** `GET …/campaigns` rend aussi `shop_ids` (les boutiques de
+chaque campagne, entiers, liste vide pour une campagne réseau sans liaison) ; `GET …/references` rend aussi `allLevers` (tous
+les leviers, inactifs compris : `id`, `code`, `label`, `color_hex`, `sort_order`, `is_active`, dans l'ordre du réseau). Le
+hub, les visites, les objectifs produits et les KPI par levier du cockpit lisent ces deux réponses.
+
 **21/11/2026 — visibilité et investissement.** `POST` et `PATCH …/funds/movements` acceptent `is_public` (booléen,
 `true` par défaut à la création) et `is_investment` (booléen, retenu sur une sortie seulement, `false` par défaut) ; le
 grand livre les rend sur chaque ligne. Une correction qui ne les porte pas garde les valeurs en place (jusqu'ici, le
