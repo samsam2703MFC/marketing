@@ -545,3 +545,12 @@
 .cat-back--rubis .cat-back__shop { margin-top: calc(var(--u) * 3.5mm); }
 .cat-back--rubis .cat-back__who { color: var(--s); }
 .cat-back--rubis .cat-back__contact span + span::before { color: var(--ab, #F2C9A0); }
+
+/* La photo du magasin (21/11/2026, Sam : « la photo n'est pas assez haute, coupée ») : elle prend la hauteur que
+   demandent ses proportions sur toute la largeur, dans la place que le texte, les horaires et le pied laissent ;
+   44 mm au moins (recadrée), 100 mm au plus. Le texte ne rétrécit pas : c'est la photo qui cède. */
+.cat-back--C .cat-back__photo, .cat-back--rubis .cat-back__photo {
+  flex: 0 1 auto; height: auto; min-height: calc(var(--u) * 44mm + var(--b)); max-height: calc(var(--u) * 100mm + var(--b));
+}
+.cat-back--C .cat-back__photo img { height: auto; min-height: calc(var(--u) * 44mm + var(--b)); }
+.cat-back--C .cat-back__body { flex: 1 0 auto; }
