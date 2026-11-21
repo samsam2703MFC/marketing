@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Marketing — catalogues produits
-  version: 1.16.0
+  version: 1.17.0
   description: |
     Les catalogues produits du Marketing (prix du webshop, gammes) : un imprimé A5 (A4 en option)
     de **8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16). Quatre pages viennent de la Charte des catalogues de la
@@ -144,6 +144,21 @@ info:
     webshop), `maps`, `name`, `address`, `hours`, `holidays`, `phone`, `email`, et `legend` à l'avant-dernière ; le `logo`
     de chaque page prend une couleur (le logo détouré en est rempli), pas de police. La photo du magasin reste
     afficher/masquer. Une police donnée à un élément qui n'en prend pas est ignorée (null), comme avant.
+
+    v1.17 (21 novembre 2026, client : « faire la même chose avec le catalogue bureau » — maquettes Claude Design
+    export-bureaux ; et « les accents sont abricot » : filets abricot, petits textes à l'accent) :
+    - la dernière page (charte ou page propre) porte `qrTarget` (`webshop`, défaut, ou `business` : la page de commande
+      entreprise de la boutique) et `qrLabelFr` / `qrLabelNl` (40 caractères ; vides : « Commander en ligne » /
+      « Commande entreprise », NL « Bestel online » / « Bestellen voor bedrijven ») ; au document, `qrTarget` et
+      `qrLabel` (le saisi, null sinon). En `business`, `qrUrl` est le lien de la boutique ; sans lien (ou en version
+      générale) le QR mène au webshop et le document avertit (`BUSINESS_URL_MISSING`) ;
+    - par boutique (`PUT …/catalogue-shops/{id}`, migration 056) : `businessUrl` (http/https, 300) et
+      `deliveryHoursFr` / `deliveryHoursNl` (la livraison au bureau, 600, plusieurs lignes ; NL vide : le français) ;
+      au document `DocShop.deliveryHours`, élément `delivery` de la dernière page (police, couleur ; masqué : vide) ;
+    - la charte a une cinquième couleur `colors.rule` (les filets et les tirets des listes, #RRGGBB, abricot #F2C9A0 par
+      défaut ; absente d'un PUT : le défaut) ;
+    - le dessin `bureau` (« Office Delivery ») rejoint les dessins de couverture (`illustration`), reconnu aussi dans
+      un nom de gamme qui contient « bureau » ou « entreprise ».
 
     v1.5 (15 novembre 2026, client : « les deux, garde les 3 gabarits, code-le » — assistant des pages de la
     marque, maquettes A1-A4 ; assistant du franchisé, maquettes B1-B4) :
@@ -397,6 +412,9 @@ paths:
                 mapsUrl: { type: string, maxLength: 500, description: 'v1.14 — Lien Google Maps (http/https) ; « » : fait du nom et de l’adresse de l’ERP.' }
                 openingHoursFr: { type: string, maxLength: 600, description: 'v1.14 — Horaires d’ouverture, plusieurs lignes ; « » : ceux de l’ERP.' }
                 openingHoursNl: { type: string, maxLength: 600, description: 'v1.14 — « » : le français.' }
+                businessUrl: { type: string, maxLength: 300, description: 'v1.17 — Lien de commande entreprise (http/https), le QR du catalogue « Bureaux » ; « » : le webshop.' }
+                deliveryHoursFr: { type: string, maxLength: 600, description: 'v1.17 — La livraison au bureau, plusieurs lignes ; « » : rien.' }
+                deliveryHoursNl: { type: string, maxLength: 600, description: 'v1.17 — « » : le français.' }
       responses:
         '200': { $ref: '#/components/responses/Generic' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
@@ -1318,7 +1336,7 @@ components:
                   availabilityFooter: { type: [string, 'null'], description: 'La disponibilité des produits de la page en une ligne de pied de page (« Disponible du 1/12 au 31/12 · sur commande 48 h », puis les produits qui diffèrent, ou « certains produits : voir en boutique ») ; null sans donnée ou `showAvailability` faux. Les vignettes de promotions gardent leur période.' }
               - type: object
                 description: Dernière page (charte, verrouillée).
-                properties: { kind: { const: back }, locked: { const: true }, title: { type: string }, text: { type: string }, qrUrl: { type: [string, 'null'] }, host: { type: [string, 'null'] }, shop: { $ref: '#/components/schemas/DocShop' } }
+                properties: { kind: { const: back }, locked: { const: true }, title: { type: string }, text: { type: string }, qrUrl: { type: [string, 'null'] }, host: { type: [string, 'null'] }, qrTarget: { type: string, enum: [webshop, business], description: 'v1.17' }, qrLabel: { type: [string, 'null'], description: 'v1.17 — le libellé saisi ; null : celui du gabarit.' }, shop: { $ref: '#/components/schemas/DocShop' } }
         warnings:
           type: array
           items:
@@ -1328,10 +1346,10 @@ components:
               message: { type: string }
     DocShop:
       type: [object, 'null']
-      properties: { id: { type: integer }, erpShopId: { type: [integer, 'null'] }, name: { type: string }, address: { type: string }, hours: { type: string }, phone: { type: string }, email: { type: string, description: 'v1.9 — fiche publique de l''ERP ; vide : rien.' }, phone2: { type: string, description: 'v1.9 — saisi dans la charte ; vide : rien.' }, holidayHours: { type: string, description: 'v1.13 — les horaires des fêtes saisis pour la boutique, dans la langue de la version ; vide : rien.' }, photoUrl: { type: [string, 'null'], description: 'v1.14 — la photo du magasin (gabarit C).' }, mapsUrl: { type: [string, 'null'], description: 'v1.14 — le lien Google Maps (second QR du gabarit C).' } }
+      properties: { id: { type: integer }, erpShopId: { type: [integer, 'null'] }, name: { type: string }, address: { type: string }, hours: { type: string }, phone: { type: string }, email: { type: string, description: 'v1.9 — fiche publique de l''ERP ; vide : rien.' }, phone2: { type: string, description: 'v1.9 — saisi dans la charte ; vide : rien.' }, holidayHours: { type: string, description: 'v1.13 — les horaires des fêtes saisis pour la boutique, dans la langue de la version ; vide : rien.' }, photoUrl: { type: [string, 'null'], description: 'v1.14 — la photo du magasin (gabarit C).' }, mapsUrl: { type: [string, 'null'], description: 'v1.14 — le lien Google Maps (second QR du gabarit C).' }, deliveryHours: { type: string, description: 'v1.17 — la livraison au bureau, dans la langue de la version ; vide : rien.' } }
     Colors:
       type: object
-      properties: { primary: { type: string }, secondary: { type: string }, accent: { type: string }, ink: { type: string } }
+      properties: { primary: { type: string }, secondary: { type: string }, accent: { type: string }, ink: { type: string }, rule: { type: string, description: 'v1.17 — les filets et les tirets des listes ; défaut #F2C9A0 (abricot).' } }
     Cover:
       type: object
       additionalProperties: false
@@ -1401,7 +1419,7 @@ components:
     OwnBack:
       type: object
       additionalProperties: false
-      properties: { titleFr: { type: string }, titleNl: { type: string }, textFr: { type: string, maxLength: 600 }, textNl: { type: string, maxLength: 600 }, template: { type: string, enum: [A, B, C], description: 'A QR et boutique · B boutique en avant · C le magasin (v1.14).' }, look: { $ref: '#/components/schemas/Look' } }
+      properties: { titleFr: { type: string }, titleNl: { type: string }, textFr: { type: string, maxLength: 600 }, textNl: { type: string, maxLength: 600 }, template: { type: string, enum: [A, B, C], description: 'A QR et boutique · B boutique en avant · C le magasin (v1.14).' }, qrTarget: { type: string, enum: [webshop, business], default: webshop, description: 'v1.17 — le webshop, ou la page de commande entreprise de la boutique.' }, qrLabelFr: { type: string, maxLength: 40, description: 'v1.17 — « » : celui du gabarit.' }, qrLabelNl: { type: string, maxLength: 40, description: 'v1.17 — « » : le français, sinon celui du gabarit.' }, look: { $ref: '#/components/schemas/Look' } }
     BrandPagesWrite:
       description: 'v1.10 — Chaque page : entière, ou null (absente) pour suivre la charte publiée.'
       type: object

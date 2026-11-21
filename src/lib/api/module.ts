@@ -3180,6 +3180,8 @@ export interface CatalogueShopInfo {
   phone2?: string
   /** Les horaires des fêtes saisis pour la boutique (21/11/2026), dans la langue du document ; vide : rien. */
   holidayHours?: string
+  /** La livraison au bureau (catalogue « Bureaux », migration 056), dans la langue du document ; vide : rien. */
+  deliveryHours?: string
   /** La page « Le magasin » (21/11/2026) : la photo du magasin, et son lien Google Maps (saisi, sinon fait de l'adresse). */
   photoUrl?: string | null
   mapsUrl?: string | null
@@ -3298,6 +3300,10 @@ export type CatalogueDocPage =
       host: string | null
       shop: CatalogueShopInfo | null
       template?: CatalogueBackTemplate
+      /** Où mène le QR (v1.17) : le webshop, ou la commande entreprise (catalogue « Bureaux »). */
+      qrTarget?: CatalogueQrTarget
+      /** Le libellé du QR saisi ; null : celui du gabarit. */
+      qrLabel?: string | null
       /** Chaque élément : logo, titre, texte, QR, coordonnées et chacune de leurs lignes (v1.12). */
       look?: CatalogueDocLook
     }
@@ -3316,7 +3322,11 @@ export interface CatalogueColors {
   secondary: string
   accent: string
   ink: string
+  /** Les filets et les tirets des listes (abricot par défaut, 21/11/2026) ; absent d'une ancienne réponse : abricot. */
+  rule?: string
 }
+/** Les filets : abricot, sauf couleur choisie dans la charte. */
+export const CATALOGUE_RULE_DEFAULT = '#F2C9A0'
 
 export interface CatalogueDocument {
   catalogue: { id: number; title: string; format: CatalogueFormat; owner: CatalogueOwner; pageCount?: CataloguePageCount }
@@ -3379,7 +3389,7 @@ export type CatalogueBrandTemplate = 'A' | 'B' | 'C'
 /** A QR et boutique · B boutique en avant · C le magasin (photo, logo, horaires, QR webshop et QR Maps ; 21/11/2026). */
 export type CatalogueBackTemplate = 'A' | 'B' | 'C'
 /** Les dessins de saison livrés avec le module (`public/img/print/`). */
-export const SEASON_DRAWINGS = ['noel', 'saint-nicolas', 'epiphanie', 'chandeleur', 'saint-valentin', 'paques', 'fete-des-meres', 'printemps', 'ete', 'automne', 'hiver', 'glace'] as const
+export const SEASON_DRAWINGS = ['noel', 'saint-nicolas', 'epiphanie', 'chandeleur', 'saint-valentin', 'paques', 'fete-des-meres', 'printemps', 'ete', 'automne', 'hiver', 'glace', 'bureau'] as const
 /** Caractères qu'un texte de page 2 / avant-dernière porte sans déborder, par gabarit (la règle de l'API). */
 export const BRAND_TEXT_FIT: Record<CatalogueBrandTemplate, number> = { A: 1000, B: 520, C: 520 }
 /** L'avant-dernière en gabarit A (refonte du 21/11/2026) : la légende des allergènes en cartouche laisse 850 au texte. */
@@ -3413,7 +3423,7 @@ export const CATALOGUE_LOOK: Record<CatalogueLookKind, Record<string, CatalogueL
   cover: { logo: 'tint', kicker: 'text', title: 'show', subtitle: 'show', shop: 'style' },
   page2: { logo: 'tint', title: 'text', text: 'text' },
   penultimate: { logo: 'tint', title: 'text', text: 'text', legend: 'text' },
-  back: { logo: 'tint', photo: 'show', title: 'text', text: 'text', qr: 'text', maps: 'text', shop: 'text', name: 'text', address: 'text', hours: 'text', holidays: 'text', phone: 'text', email: 'text' },
+  back: { logo: 'tint', photo: 'show', title: 'text', text: 'text', qr: 'text', maps: 'text', shop: 'text', name: 'text', address: 'text', hours: 'text', holidays: 'text', delivery: 'text', phone: 'text', email: 'text' },
 }
 export interface CatalogueLookEntry {
   show: boolean
@@ -3445,12 +3455,19 @@ export function docLook(kind: CatalogueLookKind, look?: CatalogueLook | null): C
 }
 
 /** La dernière page (« commandez en ligne ») : textes et gabarit. */
+/** Où mène le QR de la dernière page (v1.17) : le webshop de la boutique, ou sa page de commande entreprise. */
+export type CatalogueQrTarget = 'webshop' | 'business'
+
 export interface CatalogueBackPage {
   titleFr: string
   titleNl: string
   textFr: string
   textNl: string
   template: CatalogueBackTemplate
+  /** Le QR (catalogue « Bureaux », v1.17) : sa cible, et son libellé (vide : celui du gabarit). */
+  qrTarget?: CatalogueQrTarget
+  qrLabelFr?: string
+  qrLabelNl?: string
   /** Chaque élément : logo, titre, texte, QR, coordonnées et leurs lignes (v1.12). */
   look?: CatalogueLook
 }
@@ -3522,6 +3539,10 @@ export interface CatalogueCharterShop {
   openingHoursNl?: string
   mapsUrlOwn?: string
   mapsUrl?: string | null
+  /** Le catalogue « Bureaux » (migration 056) : le lien de commande entreprise (vide : le webshop), la livraison au bureau. */
+  businessUrl?: string
+  deliveryHoursFr?: string
+  deliveryHoursNl?: string
   qrUrl: string | null
   host: string | null
   /** Ce que TFBuddy ne donne pas : address, hours, phone ; qr (adresse du webshop inconnue). */
@@ -3598,7 +3619,10 @@ const coverBody = (cover: CatalogueOwnCover) => ({
   kickerFr: cover.kickerFr ?? '', kickerNl: cover.kickerNl ?? '', look: cover.look ?? null,
 })
 
-const backBody = (back: CatalogueBackPage) => ({ titleFr: back.titleFr, titleNl: back.titleNl, textFr: back.textFr, textNl: back.textNl, template: back.template, look: back.look ?? null })
+const backBody = (back: CatalogueBackPage) => ({
+  titleFr: back.titleFr, titleNl: back.titleNl, textFr: back.textFr, textNl: back.textNl, template: back.template,
+  qrTarget: back.qrTarget ?? 'webshop', qrLabelFr: back.qrLabelFr ?? '', qrLabelNl: back.qrLabelNl ?? '', look: back.look ?? null,
+})
 
 export async function saveCatalogueCharter(charter: Omit<CatalogueCharter, 'logoUrl' | 'updatedAt' | 'covers' | 'publication'> & { covers: CatalogueCover[] }): Promise<CatalogueCharter> {
   // La police et la couleur du titre et du sous-titre (v1.9) partent aussi : sans elles, le serveur les effaçait.
@@ -3639,6 +3663,9 @@ export type CatalogueShopPatch = {
   openingHoursNl?: string
   holidayHoursFr?: string
   holidayHoursNl?: string
+  businessUrl?: string
+  deliveryHoursFr?: string
+  deliveryHoursNl?: string
 }
 
 export async function saveCatalogueShop(id: number, patch: CatalogueShopPatch): Promise<CatalogueCharterShop> {

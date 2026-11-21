@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import { CATALOGUE_COVER_FONTS, isDocOffer } from '../../lib/api/module'
+import { CATALOGUE_COVER_FONTS, CATALOGUE_RULE_DEFAULT, isDocOffer } from '../../lib/api/module'
 import type {
   CatalogueCoverFont,
   CatalogueDocLook,
@@ -667,9 +667,16 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
   const hours = shop ? line('hours', shop.hours) : ''
   // Les horaires des fêtes de la boutique (21/11/2026), sous les horaires ; leurs retours à la ligne sont gardés.
   const holidays = shop ? line('holidays', shop.holidayHours) : ''
+  // La livraison au bureau (catalogue « Bureaux », 21/11/2026), sous les horaires comme les horaires des fêtes.
+  const delivery = shop ? line('delivery', shop.deliveryHours) : ''
+  // Le QR : son libellé saisi, sinon celui de sa cible (le webshop ; la commande entreprise, catalogue « Bureaux »).
+  const business = page.qrTarget === 'business'
+  const qrLabel = page.qrLabel || (lang === 'nl' ? (business ? 'Bestellen voor bedrijven' : 'Bestel online') : business ? 'Commande entreprise' : 'Commander en ligne')
+  const qrHint = page.qrLabel || business ? qrLabel
+    : shop ? (lang === 'nl' ? `De webshop van ${shop.name}` : `Le webshop de ${shop.name}`) : lang === 'nl' ? 'Al onze winkels' : 'Toutes nos boutiques'
   // Chaque ligne avec son élément, pour sa police et sa couleur (v1.16).
   const open = hours ? (lang === 'nl' ? `Open ${hours}` : `Ouvert ${hours}`) : ''
-  const lines = shop ? ([['address', line('address', shop.address)], ['hours', open], ['holidays', holidays], ['phone', phones], ['email', line('email', shop.email)]] as const).filter(([, text]) => text) : []
+  const lines = shop ? ([['address', line('address', shop.address)], ['hours', open], ['holidays', holidays], ['delivery', delivery], ['phone', phones], ['email', line('email', shop.email)]] as const).filter(([, text]) => text) : []
   const logoTag = shown(look, 'logo') ? <img className="cat-logo cat-logo--dark" src={logo} alt="" style={logoStyle(look)} /> : null
   const titleTag = shown(look, 'title') ? <div className="cat-back__title" style={textStyle(look, 'title')}>{page.title}</div> : null
   const textTag = page.text && shown(look, 'text') ? <div className="cat-back__text" style={textStyle(look, 'text')}>{page.text}</div> : null
@@ -704,11 +711,12 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
           {shown(look, 'logo') ? <img className="cat-logo cat-logo--dark cat-back__logo" src={logo} alt="" style={logoStyle(look)} /> : null}
           {titleTag}
           {textTag}
-          {showShop && shop && (hours || holidays) ? (
+          {showShop && shop && (hours || holidays || delivery) ? (
             <div className="cat-back__hoursC">
               <div className="cat-back__label">{nl ? 'Openingsuren' : 'Horaires'}</div>
               {hours ? <p className="cat-back__hoursBig" style={fieldStyle(look, 'hours')}>{hours}</p> : null}
               {holidays ? <p className="cat-back__holidays" style={fieldStyle(look, 'holidays')}>{holidays}</p> : null}
+              {delivery ? <p className="cat-back__delivery" style={fieldStyle(look, 'delivery')}>{delivery}</p> : null}
             </div>
           ) : null}
           {qr || maps || shopFoot ? (
@@ -719,7 +727,7 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
                     <div className="cat-back__qrC">
                       <Qr url={qr} size={22} />
                       <div className="cat-back__qrtext">
-                        <div className="cat-back__qrlabel" style={qrStyle}>{nl ? 'Bestel online' : 'Commander en ligne'}</div>
+                        <div className="cat-back__qrlabel" style={qrStyle}>{qrLabel}</div>
                       </div>
                     </div>
                   ) : null}
@@ -762,7 +770,7 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
           <div className="cat-back__shopB">
             {whoTag}
             {lines.map(([element, text], index) => (
-              <p key={index} style={fieldStyle(look, element)} className={element === 'holidays' ? 'cat-back__holidays' : undefined}>{text}</p>
+              <p key={index} style={fieldStyle(look, element)} className={element === 'holidays' ? 'cat-back__holidays' : element === 'delivery' ? 'cat-back__delivery' : undefined}>{text}</p>
             ))}
           </div>
         ) : null}
@@ -771,7 +779,7 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
             <Qr url={qr} size={20} />
             <div>
               <div className="cat-back__host" style={qrStyle}>{page.host}</div>
-              <div className="cat-back__hint" style={qrStyle}>{shop ? (lang === 'nl' ? `De webshop van ${shop.name}` : `Le webshop de ${shop.name}`) : lang === 'nl' ? 'Al onze winkels' : 'Toutes nos boutiques'}</div>
+              <div className="cat-back__hint" style={qrStyle}>{qrHint}</div>
             </div>
           </div>
         ) : null}
@@ -789,7 +797,7 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
           <div>
             <div className="cat-back__host" style={qrStyle}>{page.host}</div>
             <div className="cat-back__hint" style={qrStyle}>
-              {shop ? (lang === 'nl' ? `De webshop van ${shop.name}` : `Le webshop de ${shop.name}`) : lang === 'nl' ? 'Al onze winkels' : 'Toutes nos boutiques'}
+              {qrHint}
             </div>
           </div>
         </div>
@@ -799,8 +807,8 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
           {whoTag}
           {shop ? (
             <p style={shopStyle}>
-              {([['address', line('address', shop.address)], ['hours', open], ['holidays', holidays], ['phone', line('phone', shop.phone)]] as const).filter(([, text]) => text).map(([element, text], index) => (
-                <span key={index} className={element === 'holidays' ? 'cat-back__holidays' : undefined} style={textStyle(look, element)}>
+              {([['address', line('address', shop.address)], ['hours', open], ['holidays', holidays], ['delivery', delivery], ['phone', line('phone', shop.phone)]] as const).filter(([, text]) => text).map(([element, text], index) => (
+                <span key={index} className={element === 'holidays' ? 'cat-back__holidays' : element === 'delivery' ? 'cat-back__delivery' : undefined} style={textStyle(look, element)}>
                   {index > 0 ? <br /> : null}
                   {text}
                 </span>
@@ -828,6 +836,8 @@ export function CataloguePage({ doc, index }: { doc: CatalogueDocument; index: n
     '--s': doc.charter.colors.secondary,
     '--a': doc.charter.colors.accent,
     '--i': doc.charter.colors.ink,
+    // Les filets et les tirets des listes (abricot par défaut, 21/11/2026).
+    '--ab': doc.charter.colors.rule ?? CATALOGUE_RULE_DEFAULT,
   } as CSSProperties
   return (
     <div className={`cat-face cat-face--${page.kind}${page.kind === 'products' || page.kind === 'presentation' ? ` cat-face--t${page.template ?? 'A'}` : ''}${page.kind === 'cover' ? ` cat-face--cover${page.template ?? 'A'}` : ''}`} style={style} lang={doc.version.lang}>

@@ -561,3 +561,17 @@
 /* Les cartes QR du gabarit C (21/11/2026, Sam : « retirer webshop.atelierby.be/?shop=4, centrer Bestel online ») :
    le libellé seul, centré dans la place à côté du QR ; l'adresse du webshop ne s'imprime plus sous le QR. */
 .cat-back--C .cat-back__qrtext { flex: 1 1 auto; justify-items: center; text-align: center; }
+
+/* Les filets (21/11/2026, Sam : « les accents sont abricot » — filets et tirets en abricot, les petits textes à l'accent) :
+   la couleur « Filets » de la charte (--ab, abricot par défaut), sur les gabarits de la refonte. */
+.cat-cover--B .cat-cover__rule { border-top-color: var(--ab, #F2C9A0); }
+.cat-cover--papier::before { border-color: var(--ab, #F2C9A0); }
+.cat-brand--tA .cat-brand__rule { border-top-color: var(--ab, #F2C9A0); }
+.cat-brand--tA .cat-brand__text li::before { background: var(--ab, #F2C9A0); }
+
+/* Le catalogue « Bureaux » (maquettes export-bureaux, 21/11/2026) : un seul QR (le Maps masqué), il passe à 24 mm,
+   son libellé à côté, aligné à gauche. La livraison au bureau sous les horaires, comme les horaires des fêtes. */
+.cat-back--C .cat-back__qrC:only-child .cat-qr { width: calc(var(--u) * 24mm); height: calc(var(--u) * 24mm); }
+.cat-back--C .cat-back__qrC:only-child .cat-back__qrtext { flex: 1 1 auto; justify-items: start; text-align: left; }
+.cat-back__delivery { white-space: pre-line; font-weight: 600; }
+.cat-back--C .cat-back__hoursC .cat-back__delivery { margin-top: calc(var(--u) * 2mm); font-weight: 400; font-size: calc(var(--u) * 3.4mm); line-height: 1.45; color: var(--p); }
