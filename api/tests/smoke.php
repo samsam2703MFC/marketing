@@ -1978,6 +1978,44 @@ check(
     json_encode($relu)
 );
 
+// --- Visibilité et investissement (21/11/2026) ------------------------------
+// Le contrôleur écartait `is_public`, que l'écran du fonds envoie : « réservé à
+// la marque » ne tenait pas, et toute correction rendait la ligne publique. Le
+// cockpit, qui écrit désormais le fonds par cette API, envoie `is_investment`.
+$four = $movement(['label' => 'Four — investissement', 'amount' => 250, 'is_public' => false, 'is_investment' => true]);
+$fourId = (int) ($four['body']['inserted_id'] ?? 0);
+$lireDrapeaux = static fn (int $id): array => $pdo->query(sprintf(
+    'SELECT is_public, is_investment FROM mar_fund_movement WHERE id = %d', $id
+))->fetch() ?: [];
+check('une dépense réservée à la marque, marquée investissement, est écrite telle quelle',
+    $four['status'] === 201 && $lireDrapeaux($fourId) == ['is_public' => 0, 'is_investment' => 1],
+    json_encode([$four['body'], $lireDrapeaux($fourId)]));
+
+$entree = $movement(['label' => 'Entrée — pas un investissement', 'direction' => 'IN', 'is_investment' => true]);
+check('une entrée n\'est jamais un investissement',
+    (int) ($lireDrapeaux((int) ($entree['body']['inserted_id'] ?? 0))['is_investment'] ?? -1) === 0);
+
+$corrigerFour = static fn (array $extra): array => call($router, 'PATCH', sprintf('/api/v1/marketing/funds/movements/%d', $fourId), [], $extra + [
+    'direction' => 'OUT', 'movement_date' => '2026-07-01', 'label' => 'Four — investissement', 'amount' => 260,
+]);
+check('une correction muette garde la visibilité et l\'investissement',
+    $corrigerFour([])['status'] === 200 && $lireDrapeaux($fourId) == ['is_public' => 0, 'is_investment' => 1],
+    json_encode($lireDrapeaux($fourId)));
+check('une correction peut retirer l\'investissement et rendre la ligne publique',
+    $corrigerFour(['is_investment' => false, 'is_public' => true])['status'] === 200
+        && $lireDrapeaux($fourId) == ['is_public' => 1, 'is_investment' => 0],
+    json_encode($lireDrapeaux($fourId)));
+$corrigerFour(['is_investment' => true]);
+$livreFour = null;
+foreach (call($router, 'GET', '/api/v1/marketing/funds/ledger', ['granularity' => 'month'])['body']['periods'] ?? [] as $periode) {
+    foreach ([...$periode['entries'], ...$periode['exits']] as $ligne) {
+        if (($ligne['id'] ?? 0) === $fourId) { $livreFour = $ligne; }
+    }
+}
+check('le grand livre rend le drapeau d\'investissement',
+    $livreFour !== null && $livreFour['is_investment'] === true && $livreFour['is_public'] === true,
+    json_encode($livreFour));
+
 // --- Frais récurrents -------------------------------------------------------
 // Un abonnement écrit de vraies échéances : le solde d'avril doit valoir la
 // même chose qu'on l'ouvre en mai ou dans deux ans, et une ligne calculée à la

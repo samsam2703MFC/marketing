@@ -68,7 +68,7 @@ final class FundRepository
             // suivant. La jointure porte sur la clé primaire.
             'SELECT %s AS period_key, v.id, v.movement_date,
                     m.period_from, m.period_to, m.lever_id, m.recurrence_id,
-                    m.is_public,
+                    m.is_public, m.is_investment,
                     v.direction, v.label, v.amount, v.signed_amount,
                     v.source, v.supplier_name, v.document_ref, v.shop_id, v.shop_name,
                     v.campaign_id, v.campaign_name, v.lever_code, v.lever_label,
@@ -95,6 +95,7 @@ final class FundRepository
             // même chose.
             $row['recurrence_id'] = $row['recurrence_id'] !== null ? (int) $row['recurrence_id'] : null;
             $row['is_public']     = (bool) $row['is_public'];
+            $row['is_investment'] = (bool) $row['is_investment'];
             // Le badge ⛓ de la maquette : la ligne est rattachée à une campagne.
             $row['is_linked']     = $row['campaign_id'] !== null;
 
@@ -248,15 +249,16 @@ final class FundRepository
             'INSERT INTO mar_fund_movement
                 (direction, shop_id, campaign_id, lever_id, movement_date,
                  period_from, period_to, label, amount, source, is_public,
-                 supplier_name, document_ref, created_by)
+                 is_investment, supplier_name, document_ref, created_by)
              VALUES
                 (:direction, :shop_id, :campaign_id, :lever_id, :movement_date,
                  :period_from, :period_to, :label, :amount, :source, :is_public,
-                 :supplier_name, :document_ref, :created_by)'
+                 :is_investment, :supplier_name, :document_ref, :created_by)'
         );
 
         $statement->execute([
             'is_public'     => $this->readVisibility($data),
+            'is_investment' => $this->readInvestment($data, $direction, 0),
             'direction'     => $direction,
             'shop_id'       => $data['shop_id'] ?: null,
             'campaign_id'   => $data['campaign_id'] ?: null,
@@ -294,7 +296,9 @@ final class FundRepository
     {
         $connection = Database::connection();
 
-        $lecture = $connection->prepare('SELECT shop_id FROM mar_fund_movement WHERE id = :id');
+        $lecture = $connection->prepare(
+            'SELECT shop_id, is_public, is_investment FROM mar_fund_movement WHERE id = :id'
+        );
         $lecture->execute(['id' => $id]);
         $existant = $lecture->fetch();
 
@@ -318,7 +322,7 @@ final class FundRepository
                     lever_id = :lever_id, movement_date = :movement_date,
                     period_from = :period_from, period_to = :period_to,
                     label = :label, amount = :amount, source = :source,
-                    is_public = :is_public,
+                    is_public = :is_public, is_investment = :is_investment,
                     supplier_name = :supplier_name, document_ref = :document_ref
               WHERE id = :id'
         );
@@ -335,7 +339,13 @@ final class FundRepository
             'label'         => $label,
             'amount'        => $amount,
             'source'        => $data['source'] ?: 'AUTRE',
-            'is_public'     => $this->readVisibility($data),
+            // Une correction qui ne parle pas de visibilité ne rend pas publique une ligne
+            // réservée à la marque ; idem pour l'investissement (le cockpit l'envoie, l'écran
+            // du fonds non).
+            'is_public'     => array_key_exists('is_public', $data) && $data['is_public'] !== null
+                ? $this->readVisibility($data)
+                : (int) $existant['is_public'],
+            'is_investment' => $this->readInvestment($data, $direction, (int) $existant['is_investment']),
             'supplier_name' => $data['supplier_name'] ?: null,
             'document_ref'  => $data['document_ref'] ?: null,
         ]);
@@ -676,6 +686,27 @@ final class FundRepository
         }
 
         return filter_var($data['is_public'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+    }
+
+    /**
+     * Une dépense d'investissement (un four, une enseigne) plutôt qu'un frais courant.
+     *
+     * Seule une SORTIE peut en être une : sur une entrée, le drapeau n'a pas de sens et
+     * n'est pas retenu. Absent du corps : `$sinon` (0 à la création, la valeur en place
+     * à la correction).
+     *
+     * @param array<string,mixed> $data
+     */
+    private function readInvestment(array $data, string $direction, int $sinon): int
+    {
+        if ($direction !== 'OUT') {
+            return 0;
+        }
+        if (!array_key_exists('is_investment', $data) || $data['is_investment'] === null) {
+            return $sinon === 1 ? 1 : 0;
+        }
+
+        return filter_var($data['is_investment'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
     }
 
     /** @param array<string,mixed> $data */
