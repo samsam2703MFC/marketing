@@ -3047,6 +3047,8 @@ export interface Catalogue {
   brochureTemplate?: string | null
   /** Les textes récrits d'un leaflet ou d'un dépliant, par langue ; null pour un catalogue. */
   brochureTexts?: CatalogueBrochureTexts | null
+  /** Repris d'une brochure du générateur d'avant (v1.19) : sa campagne et son format ; null sinon. */
+  fromBrochure?: { campaignId: number; format: BrochureFormat } | null
   status: CatalogueStatus
   printQty: number | null
   langs: CatalogueLang[]
@@ -3082,6 +3084,13 @@ export interface CatalogueCreate {
   title: string
   support?: CatalogueSupport
   brochureTemplate?: string
+  /** Les textes récrits d'un leaflet ou d'un dépliant (v1.19 à la création). */
+  brochureTexts?: CatalogueBrochureTexts
+  /**
+   * Reprise d'une brochure du générateur d'avant (v1.19) : la source est sa campagne, le support suit son format. Rejouée,
+   * la création rend le catalogue déjà repris (200).
+   */
+  fromBrochure?: { campaignId: number; format: BrochureFormat }
   /** `ref` : une gamme, ou plusieurs (liste d'identifiants, 8 au plus). */
   source: { kind: CatalogueSourceKind; ref?: number | number[] }
   format?: CatalogueFormat
@@ -3594,6 +3603,23 @@ export async function listCatalogues(query: { owner?: CatalogueOwner; perPage?: 
 
 export async function createCatalogue(input: CatalogueCreate): Promise<Catalogue> {
   return (await request<Envelope<Catalogue>>(`${BASE}/catalogues`, { method: 'POST', body: input })).data
+}
+
+/** Une brochure enregistrée d'une campagne (le générateur d'avant), et le leaflet ou le dépliant qu'on en a repris. */
+export interface CatalogueBrochure {
+  campaignId: number
+  campaignName: string
+  format: BrochureFormat
+  support: Exclude<CatalogueSupport, 'catalogue'> | null
+  template: string | null
+  productCount: number
+  updatedAt: string
+  /** Le catalogue repris ; null : pas encore. */
+  catalogueId: number | null
+}
+
+export async function listCatalogueBrochures(): Promise<CatalogueBrochure[]> {
+  return (await request<Envelope<CatalogueBrochure[]>>(`${BASE}/catalogue-brochures`, { query: { perPage: 100 } })).data
 }
 
 export async function getCatalogue(id: number): Promise<Catalogue> {

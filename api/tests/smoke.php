@@ -5211,6 +5211,7 @@ $catBrand = new \Marketing\Controller\CatalogueController($catService);
 $catShop = new \Marketing\Controller\CatalogueIntegrationController($catService);
 $catRouter->get('/api/v1/marketing/catalogues', [$catBrand, 'index']);
 $catRouter->post('/api/v1/marketing/catalogues', [$catBrand, 'store']);
+$catRouter->get('/api/v1/marketing/catalogue-brochures', [$catBrand, 'brochures']);
 $catRouter->get('/api/v1/marketing/catalogues/{id}', [$catBrand, 'show']);
 $catRouter->put('/api/v1/marketing/catalogues/{id}', [$catBrand, 'update']);
 $catRouter->delete('/api/v1/marketing/catalogues/{id}', [$catBrand, 'destroy']);
@@ -5757,6 +5758,56 @@ check('imprimés : un leaflet A5 et un dépliant A4 (support, format fixe, modè
     json_encode([$leaflet['status'], $leaflet['body']['error'] ?? null, $depliant['body']['error'] ?? null, $textesLeaflet['status'], $textesLeaflet['body']['data']['brochureTexts'] ?? null, array_column($docLeaflet['body']['data']['pages'] ?? [], 'kind'), array_column($docLeaflet['body']['data']['warnings'] ?? [], 'code'), $leafletChezA['status']], JSON_UNESCAPED_UNICODE));
 call($catRouter, 'DELETE', '/api/v1/marketing/catalogues/' . $idLeaflet);
 call($catRouter, 'DELETE', '/api/v1/marketing/catalogues/' . $idDepliant);
+// La reprise des brochures (21/11/2026, fusion des imprimés, étape 3) : les réglages du générateur d'avant se listent, et
+// un leaflet se crée « depuis » l'un d'eux — une seule fois : rejouer la création rend le même catalogue (200).
+$campRepr = call($router, 'POST', '/api/v1/marketing/campaigns', [], [
+    'name' => 'Brochures à reprendre', 'status_code' => 'draft', 'scope' => 'RESEAU', 'client_target' => 'b2b',
+    'type_id' => (int) $types['ouverture']['id'],
+    'tracking_action_id' => (int) $actions['commandes_web']['id'], 'tracking_scope' => 'NETWORK',
+    'tracking_target' => '120', 'tracking_baseline' => 'N1',
+]);
+$idCampRepr = (int) ($campRepr['body']['inserted_id'] ?? 0);
+$brochureRepr = call($router, 'PUT', sprintf('/api/v1/marketing/campaigns/%d/brochures/leaflet-a5', $idCampRepr), [], ['settings' => [
+    'template' => 'ruby', 'texts' => ['fr' => ['title' => 'Les bûches de fêtes']],
+    'products' => [['key' => 'erp-11', 'on' => true, 'price' => null], ['key' => 'erp-12', 'on' => false, 'price' => null]],
+    'qr' => ['mode' => 'webshop', 'category' => null, 'group' => null], 'excludedShops' => [], 'cropMarks' => true,
+]]);
+$listeRepr = static fn (): array => array_values(array_filter(call($catRouter, 'GET', '/api/v1/marketing/catalogue-brochures', ['perPage' => '100'])['body']['data'] ?? [],
+    static fn (array $b): bool => $b['campaignId'] === $idCampRepr));
+$avantRepr = $listeRepr();
+$corpsRepr = ['title' => 'Brochures à reprendre — leaflet A5', 'support' => 'leaflet', 'brochureTemplate' => 'ruby',
+    'source' => ['kind' => 'campagne', 'ref' => $idCampRepr], 'products' => [['id' => 11, 'on' => true], ['id' => 12, 'on' => false]],
+    'brochureTexts' => ['fr' => ['title' => 'Les bûches de fêtes']], 'fromBrochure' => ['campaignId' => $idCampRepr, 'format' => 'leaflet-a5']];
+$repris = call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], $corpsRepr);
+$reprisEncore = call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], $corpsRepr);
+$idRepris = (int) ($repris['body']['data']['id'] ?? 0);
+$apresRepr = $listeRepr();
+$refusRepr = [
+    call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['fromBrochure' => ['campaignId' => $idCampRepr, 'format' => 'depliant-a4'], 'support' => 'depliant'] + $corpsRepr),
+    call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['fromBrochure' => ['campaignId' => $idCampRepr, 'format' => 'depliant-a4']] + $corpsRepr),
+    call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['source' => ['kind' => 'campagne', 'ref' => $idCampRepr + 1000], 'fromBrochure' => ['campaignId' => $idCampRepr + 1000, 'format' => 'leaflet-a5']] + $corpsRepr),
+    call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['fromBrochure' => ['campaignId' => 'x', 'format' => 'leaflet-a5']] + $corpsRepr),
+    call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'x', 'source' => ['kind' => 'choix'], 'brochureTexts' => ['fr' => ['title' => 'x']]]),
+];
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+$reprFranchise = call($catRouter, 'GET', '/api/v1/marketing/catalogue-brochures');
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+check('imprimés : les brochures du générateur d’avant se listent et se reprennent en leaflet (une fois : rejouer rend le même) ; refus nommés ; marque seule',
+    $brochureRepr['status'] === 200 && count($avantRepr) === 1 && $avantRepr[0]['format'] === 'leaflet-a5' && $avantRepr[0]['support'] === 'leaflet'
+        && $avantRepr[0]['template'] === 'ruby' && $avantRepr[0]['productCount'] === 1 && $avantRepr[0]['catalogueId'] === null
+        && $repris['status'] === 201 && ($repris['body']['data']['fromBrochure'] ?? null) === ['campaignId' => $idCampRepr, 'format' => 'leaflet-a5']
+        && ($repris['body']['data']['support'] ?? '') === 'leaflet' && ($repris['body']['data']['brochureTemplate'] ?? '') === 'ruby'
+        && json_decode((string) json_encode($repris['body']['data']['brochureTexts'] ?? null), true) === ['fr' => ['title' => 'Les bûches de fêtes']]
+        && ($repris['body']['data']['products'] ?? null) === [['id' => 11, 'on' => true], ['id' => 12, 'on' => false]]
+        && ($repris['body']['data']['source']['label'] ?? '') === 'Brochures à reprendre'
+        && $reprisEncore['status'] === 200 && ($reprisEncore['body']['data']['id'] ?? 0) === $idRepris
+        && count($apresRepr) === 1 && $apresRepr[0]['catalogueId'] === $idRepris
+        && array_unique(array_column($refusRepr, 'status')) === [422]
+        && array_map(static fn (array $r): string => $r['body']['error']['details'][0]['field'] ?? '', $refusRepr) === ['fromBrochure', 'fromBrochure', 'fromBrochure', 'fromBrochure', 'brochureTexts']
+        && $reprFranchise['status'] === 403,
+    json_encode([$brochureRepr['status'], $avantRepr, $repris['status'], $repris['body']['error'] ?? null, $reprisEncore['status'], $apresRepr, array_map(static fn (array $r): array => [$r['status'], $r['body']['error']['details'] ?? null], $refusRepr), $reprFranchise['status']], JSON_UNESCAPED_UNICODE));
+call($catRouter, 'DELETE', '/api/v1/marketing/catalogues/' . $idRepris);
+call($router, 'DELETE', sprintf('/api/v1/marketing/campaigns/%d', $idCampRepr));
 $brouillonM = call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Brouillon de la marque', 'source' => ['kind' => 'gamme', 'ref' => 14], 'shopIds' => [$catA, $catB]]);
 $idBrouillonM = (int) ($brouillonM['body']['data']['id'] ?? 0);
 AuthContext::clear();

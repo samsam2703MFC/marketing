@@ -146,6 +146,8 @@ return static function (Router $router): void {
     // centimes, pagination. Marque seule ; les boutiques passent par les routes d'intégration.
     $router->get('/api/v1/marketing/catalogues',                 [$catalogues, 'index']);
     $router->post('/api/v1/marketing/catalogues',                [$catalogues, 'store']);
+    // Les brochures du générateur d'avant (21/11/2026, fusion des imprimés, étape 3) : à reprendre en leaflet ou dépliant.
+    $router->get('/api/v1/marketing/catalogue-brochures', [$catalogues, 'brochures']);
     $router->get('/api/v1/marketing/catalogues/{id}',            [$catalogues, 'show']);
     $router->put('/api/v1/marketing/catalogues/{id}',            [$catalogues, 'update']);
     $router->delete('/api/v1/marketing/catalogues/{id}',         [$catalogues, 'destroy']);

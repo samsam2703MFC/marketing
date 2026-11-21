@@ -286,6 +286,79 @@ final class CatalogueRepository
         ];
     }
 
+    /**
+     * Les brochures des campagnes (`mar_campaign_brochure`, le générateur d'avant la fusion des imprimés, 21/11/2026) : les
+     * réglages enregistrés, un par campagne et par format, les plus récents d'abord.
+     *
+     * @return array{items: list<array{campaign_id:int, campaign_name:string, format:string, settings:array<string,mixed>, updated_at:string}>, total: int}
+     */
+    public function brochures(int $page, int $perPage): array
+    {
+        $from = 'FROM mar_campaign_brochure b JOIN mar_campaign c ON c.id = b.campaign_id';
+        $total = (int) Database::connection()->query('SELECT COUNT(*) ' . $from)->fetchColumn();
+        $statement = Database::connection()->query(sprintf(
+            'SELECT b.campaign_id, c.name AS campaign_name, b.format, b.settings, b.updated_at %s ORDER BY b.updated_at DESC, b.campaign_id DESC, b.format LIMIT %d OFFSET %d',
+            $from,
+            $perPage,
+            ($page - 1) * $perPage,
+        ));
+
+        return ['items' => array_map(self::brochureRow(...), $statement->fetchAll()), 'total' => $total];
+    }
+
+    /**
+     * Les réglages d'une brochure ; null : la campagne n'en a pas pour ce format.
+     *
+     * @return array{campaign_id:int, campaign_name:string, format:string, settings:array<string,mixed>, updated_at:string}|null
+     */
+    public function brochure(int $campaignId, string $format): ?array
+    {
+        $statement = Database::connection()->prepare(
+            'SELECT b.campaign_id, c.name AS campaign_name, b.format, b.settings, b.updated_at
+               FROM mar_campaign_brochure b JOIN mar_campaign c ON c.id = b.campaign_id
+              WHERE b.campaign_id = :id AND b.format = :format'
+        );
+        $statement->execute(['id' => $campaignId, 'format' => $format]);
+        $row = $statement->fetch();
+
+        return $row === false ? null : self::brochureRow($row);
+    }
+
+    /**
+     * Les catalogues faits d'une brochure (leur `settings.fromBrochure`) : « {campagne}|{format} » → identifiant du catalogue
+     * (le premier, s'il y en avait plusieurs).
+     *
+     * @return array<string,int>
+     */
+    public function cataloguesFromBrochures(): array
+    {
+        $statement = Database::connection()->query(
+            "SELECT id, JSON_UNQUOTE(JSON_EXTRACT(settings, '$.fromBrochure.campaignId')) AS campaign_id,
+                    JSON_UNQUOTE(JSON_EXTRACT(settings, '$.fromBrochure.format')) AS format
+               FROM mar_catalogue WHERE JSON_EXTRACT(settings, '$.fromBrochure') IS NOT NULL ORDER BY id"
+        );
+        $out = [];
+        foreach ($statement->fetchAll() as $row) {
+            $out[$row['campaign_id'] . '|' . $row['format']] ??= (int) $row['id'];
+        }
+
+        return $out;
+    }
+
+    /** @return array{campaign_id:int, campaign_name:string, format:string, settings:array<string,mixed>, updated_at:string} */
+    private static function brochureRow(array $row): array
+    {
+        $settings = json_decode((string) $row['settings'], true);
+
+        return [
+            'campaign_id'   => (int) $row['campaign_id'],
+            'campaign_name' => (string) $row['campaign_name'],
+            'format'        => (string) $row['format'],
+            'settings'      => is_array($settings) ? $settings : [],
+            'updated_at'    => (string) $row['updated_at'],
+        ];
+    }
+
     /** @return array<string,mixed> */
     private static function decode(array $row): array
     {

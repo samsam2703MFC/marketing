@@ -31,6 +31,7 @@ import type { BrochureCheck, BrochureShop, Lang, TextKey, Version } from '../../
 import { Sheet, fontFaces, pageSize } from './Pages'
 import type { Side } from './Pages'
 import PAGE_CSS from './brochure.css?inline'
+import { importBrochure } from '../catalogue/brochureImport'
 import { openPrintWindow } from '../../lib/print'
 
 /**
@@ -49,6 +50,8 @@ interface Props {
   onOpenCampaign?: (id: number) => void
   /** Le format demandé depuis « Imprimés » (« ＋ Leaflet A5 », « ＋ Dépliant A4 »). */
   initialFormat?: BrochureFormat | null
+  /** Ouvre un leaflet ou un dépliant des Imprimés (repris d'une brochure d'ici, 21/11/2026). */
+  onOpenCatalogue?: (id: number) => void
 }
 
 const OTHER: Record<BrochureFormat, BrochureFormat> = { 'leaflet-a5': 'depliant-a4', 'depliant-a4': 'leaflet-a5' }
@@ -88,7 +91,7 @@ interface Editing {
   left: number
 }
 
-export default function BrochureView({ campaignId: initialId, onOpenCampaign, initialFormat = null }: Props) {
+export default function BrochureView({ campaignId: initialId, onOpenCampaign, initialFormat = null, onOpenCatalogue }: Props) {
   const today = localToday()
   const campaigns = useAsync(() => api.listCampaigns(), [])
   const shops = useAsync(() => api.listShops(), [])
@@ -164,6 +167,7 @@ export default function BrochureView({ campaignId: initialId, onOpenCampaign, in
           webshopUrl={social.data?.webshopUrl ?? ''}
           today={today}
           initialFormat={initialFormat}
+          onOpenCatalogue={onOpenCatalogue}
         />
       ) : null}
     </div>
@@ -178,9 +182,75 @@ interface GeneratorProps {
   webshopUrl: string
   today: string
   initialFormat: BrochureFormat | null
+  onOpenCatalogue?: (id: number) => void
 }
 
-function Generator({ bundle, shops, socialShops, brandLangs, webshopUrl, today, initialFormat }: GeneratorProps) {
+/**
+ * Les leaflets et dépliants se font dans « Imprimés » (21/11/2026, fusion des imprimés, étape 3) : ce générateur reste
+ * lisible et modifiable (ses réglages et ses routes ne changent pas), et chaque brochure s'y reprend en un clic.
+ */
+function MovedNotice({ campaignId, campaignName, format, saved, saving, onOpenCatalogue }: { campaignId: number; campaignName: string; format: BrochureFormat; saved: boolean; saving: boolean; onOpenCatalogue?: (id: number) => void }) {
+  const [revision, setRevision] = useState(0)
+  const listed = useAsync(() => api.listCatalogueBrochures(), [revision])
+  const [state, setState] = useState<{ status: 'idle' | 'busy' | 'done' | 'error'; id?: number; notes?: string[]; text?: string }>({ status: 'idle' })
+  const noun = format === 'leaflet-a5' ? 'leaflet A5' : 'dépliant A4'
+  const made = listed.data?.find((row) => row.campaignId === campaignId && row.format === format)?.catalogueId ?? null
+  const id = state.id ?? made
+
+  async function reprendre() {
+    setState({ status: 'busy' })
+    try {
+      if (saved) {
+        const result = await importBrochure(campaignId, format)
+        setState({ status: 'done', id: result.catalogue.id, notes: result.notes })
+      } else {
+        // Rien de réglé ici : un leaflet tout neuf de la campagne, dans Imprimés.
+        const created = await api.createCatalogue({
+          title: `${campaignName} — ${noun}`.slice(0, 160),
+          support: format === 'leaflet-a5' ? 'leaflet' : 'depliant',
+          source: { kind: 'campagne', ref: campaignId },
+        })
+        setState({ status: 'done', id: created.id, notes: [] })
+      }
+      setRevision((n) => n + 1)
+    } catch (cause) {
+      setState({ status: 'error', text: message(cause) })
+    }
+  }
+
+  return (
+    <section className="bro-panelcard bro-moved">
+      <p>
+        <b>Les leaflets et dépliants se font maintenant dans « Imprimés »</b>, comme les catalogues : les produits et les prix du webshop de chaque
+        boutique, la couverture et la dernière page de la marque, les mêmes modèles.
+      </p>
+      {state.status === 'done' && state.notes?.length ? (
+        <ul>
+          {state.notes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      ) : null}
+      {state.status === 'error' ? <p className="error">{state.text}</p> : null}
+      <div className="bro-moved__actions">
+        {id !== null ? (
+          onOpenCatalogue ? (
+            <button type="button" className="btn btn--primary btn--sm" onClick={() => onOpenCatalogue(id)}>
+              Ouvrir le {noun} dans Imprimés ›
+            </button>
+          ) : null
+        ) : (
+          <button type="button" className="btn btn--primary btn--sm" disabled={saving || state.status === 'busy'} onClick={() => void reprendre()}>
+            {state.status === 'busy' ? 'Reprise…' : saved ? `Reprendre ce ${noun} dans Imprimés` : `Le faire dans Imprimés`}
+          </button>
+        )}
+        {id !== null && state.status !== 'done' ? <small>Déjà repris : les réglages d’ici ne le changent plus.</small> : null}
+      </div>
+    </section>
+  )
+}
+
+function Generator({ bundle, shops, socialShops, brandLangs, webshopUrl, today, initialFormat, onOpenCatalogue }: GeneratorProps) {
   const { file, detail } = bundle
   const [format, setFormat] = useState<BrochureFormat>(() =>
     initialFormat ?? (bundle.saved.some((row) => row.format === 'leaflet-a5') || !bundle.saved.length ? 'leaflet-a5' : 'depliant-a4'),
@@ -404,6 +474,14 @@ function Generator({ bundle, shops, socialShops, brandLangs, webshopUrl, today, 
     <div className="bro-body">
       {/* ------------------------------------------------ réglages */}
       <div className="bro-col">
+        <MovedNotice
+          campaignId={bundle.id}
+          campaignName={file.campaign.name}
+          format={format}
+          saved={store[format] !== undefined}
+          saving={save.status === 'saving' || dirty.current.size > 0}
+          onOpenCatalogue={onOpenCatalogue}
+        />
         <section className="bro-panelcard">
           <p className="bro-step">
             <b>2</b> Support

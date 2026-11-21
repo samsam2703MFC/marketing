@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Marketing — catalogues produits
-  version: 1.18.0
+  version: 1.19.0
   description: |
     Les catalogues produits du Marketing (prix du webshop, gammes) : un imprimé A5 (A4 en option)
     de **8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16). Quatre pages viennent de la Charte des catalogues de la
@@ -178,6 +178,17 @@ info:
     - le dashboard franchisé (`…/brand-catalogues`) ne reçoit que des catalogues : un leaflet ou un dépliant n'y va pas
       (404 sur le sien).
 
+    v1.19 (21 novembre 2026, fusion des imprimés, étape 3 — reprise des brochures du générateur d'avant) :
+    - `GET …/catalogue-brochures` : les brochures enregistrées des campagnes (`mar_campaign_brochure`), paginées, les plus
+      récentes d'abord — campagne, format, support qu'elles deviennent, modèle, produits cochés, date, et `catalogueId`
+      (le leaflet ou le dépliant qu'on en a repris ; null : pas encore). Marque seule (403) ;
+    - à la création, `fromBrochure: {campaignId, format}` reprend une brochure : `support` doit suivre son format
+      (`leaflet-a5` → `leaflet`, `depliant-a4` → `depliant`), la source est sa campagne (`{kind: campagne, ref}`) et la
+      campagne doit avoir des réglages pour ce format ; sinon 422 `fromBrochure`. Rejouée, la création rend le catalogue
+      déjà repris (200, rien de nouveau). Lu sur chaque catalogue (`fromBrochure`, null sinon) ;
+    - `brochureTexts` accepté à la création d'un leaflet ou d'un dépliant (un catalogue : 422 `brochureTexts`).
+    Les routes des brochures (`…/campaigns/{id}/brochures`) ne changent pas : l'ancien générateur reste lisible.
+
     v1.5 (15 novembre 2026, client : « les deux, garde les 3 gabarits, code-le » — assistant des pages de la
     marque, maquettes A1-A4 ; assistant du franchisé, maquettes B1-B4) :
     - la charte a un BROUILLON (`GET|PUT …/catalogue-charter`, que l'assistant enregistre tout seul) et des
@@ -252,7 +263,29 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/CatalogueCreate' }
       responses:
+        '200': { $ref: '#/components/responses/Catalogue', description: 'v1.19 — `fromBrochure` d''une brochure déjà reprise : le catalogue qui en est fait (rien de nouveau).' }
         '201': { $ref: '#/components/responses/Catalogue' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/marketing/catalogue-brochures:
+    get:
+      tags: [Catalogues (marque)]
+      summary: Les brochures enregistrées des campagnes (générateur d'avant), et le leaflet ou le dépliant repris de chacune
+      security: [{ session: [] }]
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/perPage' }]
+      responses:
+        '200':
+          description: Paginé, les plus récentes d'abord.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { type: array, items: { $ref: '#/components/schemas/CatalogueBrochure' } }
+                  meta: { type: object }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Error' }
         '422': { $ref: '#/components/responses/Error' }
@@ -1117,6 +1150,8 @@ components:
         title: { type: string, maxLength: 160 }
         support: { $ref: '#/components/schemas/Support' }
         brochureTemplate: { $ref: '#/components/schemas/BrochureTemplate' }
+        brochureTexts: { allOf: [{ $ref: '#/components/schemas/BrochureTexts' }], description: 'v1.19 — leaflet ou dépliant seulement.' }
+        fromBrochure: { $ref: '#/components/schemas/FromBrochure' }
         source:
           type: object
           additionalProperties: false
@@ -1151,6 +1186,25 @@ components:
         showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) en pied de page (`availabilityFooter`) ; vrai par défaut.' }
         brochureTemplate: { allOf: [{ $ref: '#/components/schemas/BrochureTemplate' }], description: 'v1.18 — leaflet ou dépliant seulement (un catalogue : 422 « champ inconnu »).' }
         brochureTexts: { allOf: [{ $ref: '#/components/schemas/BrochureTexts' }], description: 'v1.18 — leaflet ou dépliant seulement ; une langue envoyée remplace la sienne, l''autre reste.' }
+    FromBrochure:
+      type: object
+      additionalProperties: false
+      required: [campaignId, format]
+      description: 'v1.19 — La brochure du générateur d''avant qu''un leaflet ou un dépliant reprend.'
+      properties:
+        campaignId: { type: integer, minimum: 1 }
+        format: { type: string, enum: [leaflet-a5, depliant-a4] }
+    CatalogueBrochure:
+      type: object
+      properties:
+        campaignId: { type: integer }
+        campaignName: { type: string }
+        format: { type: string, enum: [leaflet-a5, depliant-a4] }
+        support: { type: [string, 'null'], enum: [leaflet, depliant, null] }
+        template: { type: [string, 'null'] }
+        productCount: { type: integer, description: Produits cochés dans la brochure. }
+        updatedAt: { type: string, format: date-time }
+        catalogueId: { type: [integer, 'null'], description: 'Le leaflet ou le dépliant repris ; null : pas encore.' }
     Support: { type: string, enum: [catalogue, leaflet, depliant], default: catalogue, description: 'v1.18 — L''imprimé : un catalogue (8 à 16 pages), un leaflet A5 recto-verso, un dépliant A4 trois volets. Fixé à la création.' }
     BrochureTemplate: { type: string, enum: [papier, fetes, epure, ruby, abricot, noir, duo, carte], default: papier, description: 'v1.18 — Le modèle d''impression d''un leaflet ou d''un dépliant (ceux des brochures).' }
     BrochureTexts:
@@ -1222,6 +1276,7 @@ components:
         support: { $ref: '#/components/schemas/Support' }
         brochureTemplate: { type: [string, 'null'], description: 'v1.18 — Le modèle d''un leaflet ou d''un dépliant ; null pour un catalogue.' }
         brochureTexts: { oneOf: [{ $ref: '#/components/schemas/BrochureTexts' }, { type: 'null' }], description: 'v1.18 — null pour un catalogue.' }
+        fromBrochure: { oneOf: [{ $ref: '#/components/schemas/FromBrochure' }, { type: 'null' }], description: 'v1.19 — la brochure reprise ; null sinon.' }
         status: { $ref: '#/components/schemas/Status' }
         printQty: { type: [integer, 'null'] }
         langs: { type: array, items: { type: string } }
