@@ -201,6 +201,13 @@ $campaigns = $response['body'];
 check('les deux campagnes sont visibles', count($campaigns) === 2, count($campaigns) . ' reçue(s)');
 check('le statut porte son libellé et sa couleur', ($campaigns[0]['status_label'] ?? '') !== '' && ($campaigns[0]['status_text_hex'] ?? '') !== '');
 check('les montants sont des nombres', is_float($campaigns[0]['budget_amount'] ?? null));
+// Le cockpit range et colore ses bandes de calendrier par type à partir de cette liste (21/11/2026).
+$typesParId = array_column($pdo->query('SELECT id, color_hex FROM mar_campaign_type')->fetchAll(), 'color_hex', 'id');
+check('chaque campagne porte son type : identifiant entier et couleur du type',
+    $campaigns !== [] && array_filter($campaigns, static fn (array $c): bool => !array_key_exists('type_id', $c) || !array_key_exists('type_color_hex', $c)) === []
+        && array_filter($campaigns, static fn (array $c): bool => $c['type_id'] !== null
+            && (!is_int($c['type_id']) || $c['type_color_hex'] !== ($typesParId[$c['type_id']] ?? null))) === [],
+    json_encode(array_map(static fn (array $c): array => [$c['type_id'] ?? 'absent', $c['type_color_hex'] ?? 'absent'], $campaigns)));
 
 $response = call($router, 'GET', '/api/v1/marketing/campaigns/calendar', ['year' => 2026]);
 $calendar = $response['body'];

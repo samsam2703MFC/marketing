@@ -112,6 +112,10 @@ entière, pour attraper une colonne ajoutée plus tard.
 | GET | `…/roi` | marque | objet |
 | GET | `…/roi/quarterly` | marque | tableau |
 
+**21/11/2026 — la liste des campagnes porte son type.** `GET …/campaigns` rend aussi `type_id` (entier ou `null`) et
+`type_color_hex` (la couleur du type) : le cockpit range et colore les bandes de son calendrier et de son budget par type,
+et ne lit plus `mar_campaign` ni `mar_campaign_type`.
+
 **21/11/2026 — visibilité et investissement.** `POST` et `PATCH …/funds/movements` acceptent `is_public` (booléen,
 `true` par défaut à la création) et `is_investment` (booléen, retenu sur une sortie seulement, `false` par défaut) ; le
 grand livre les rend sur chaque ligne. Une correction qui ne les porte pas garde les valeurs en place (jusqu'ici, le
