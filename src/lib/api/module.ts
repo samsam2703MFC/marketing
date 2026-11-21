@@ -3382,6 +3382,9 @@ export type CatalogueBackTemplate = 'A' | 'B' | 'C'
 export const SEASON_DRAWINGS = ['noel', 'saint-nicolas', 'epiphanie', 'chandeleur', 'saint-valentin', 'paques', 'fete-des-meres', 'printemps', 'ete', 'automne', 'hiver', 'glace'] as const
 /** Caractères qu'un texte de page 2 / avant-dernière porte sans déborder, par gabarit (la règle de l'API). */
 export const BRAND_TEXT_FIT: Record<CatalogueBrandTemplate, number> = { A: 1000, B: 520, C: 520 }
+/** L'avant-dernière en gabarit A (refonte du 21/11/2026) : la légende des allergènes en cartouche laisse 850 au texte. */
+export const brandTextFit = (slot: 'page2' | 'penultimate', template: CatalogueBrandTemplate): number =>
+  slot === 'penultimate' && template === 'A' ? 850 : BRAND_TEXT_FIT[template]
 export const textWeight = (text: string): number => text.length + 40 * (text.match(/\n/g)?.length ?? 0)
 
 /** Page 2 ou avant-dernière page de tous les catalogues : titre, texte (paragraphes), image. */
@@ -3408,7 +3411,7 @@ export const CATALOGUE_LOOK: Record<CatalogueLookKind, Record<string, CatalogueL
   cover: { logo: 'show', kicker: 'text', title: 'show', subtitle: 'show', shop: 'style' },
   page2: { logo: 'show', title: 'text', text: 'text' },
   penultimate: { logo: 'show', title: 'text', text: 'text', legend: 'show' },
-  back: { logo: 'show', photo: 'show', title: 'text', text: 'text', qr: 'show', maps: 'show', shop: 'text', address: 'show', hours: 'show', holidays: 'show', phone: 'show', email: 'show' },
+  back: { logo: 'show', photo: 'show', title: 'text', text: 'text', qr: 'show', maps: 'show', shop: 'text', name: 'show', address: 'show', hours: 'show', holidays: 'show', phone: 'show', email: 'show' },
 }
 export interface CatalogueLookEntry {
   show: boolean

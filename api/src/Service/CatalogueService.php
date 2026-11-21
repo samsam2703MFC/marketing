@@ -144,6 +144,18 @@ final class CatalogueService
     public const BRAND_TEXT_FIT = ['A' => 1000, 'B' => 520, 'C' => 520];
 
     /**
+     * L'avant-dernière page en gabarit A (refonte du 21/11/2026) : la légende des allergènes est un cartouche, le texte
+     * a moins de place — 850 tiennent avec jusqu'à 6 allergènes (700 de 8 à 12, 640 à 14 : la légende grandit).
+     */
+    public const PENULTIMATE_TEXT_FIT_A = 850;
+
+    /** Ce que le texte d'une page de la marque peut porter, selon la page et son gabarit. */
+    public static function brandTextFit(string $slot, string $template): int
+    {
+        return $slot === 'penultimate' && $template === 'A' ? self::PENULTIMATE_TEXT_FIT_A : self::BRAND_TEXT_FIT[$template];
+    }
+
+    /**
      * Les 4 pages de la marque qu'un catalogue de la marque peut avoir À LUI (21/11/2026, Sam : « je ne dois pas
      * modifier tout, mais chaque catalogue créé par la marque ») : `settings.brandPages`, une page par clé ; une page
      * absente suit la charte publiée.
@@ -160,7 +172,7 @@ final class CatalogueService
         'cover'       => ['logo' => 'show', 'kicker' => 'text', 'title' => 'show', 'subtitle' => 'show', 'shop' => 'style'],
         'page2'       => ['logo' => 'show', 'title' => 'text', 'text' => 'text'],
         'penultimate' => ['logo' => 'show', 'title' => 'text', 'text' => 'text', 'legend' => 'show'],
-        'back'        => ['logo' => 'show', 'photo' => 'show', 'title' => 'text', 'text' => 'text', 'qr' => 'show', 'maps' => 'show', 'shop' => 'text', 'address' => 'show', 'hours' => 'show', 'holidays' => 'show', 'phone' => 'show', 'email' => 'show'],
+        'back'        => ['logo' => 'show', 'photo' => 'show', 'title' => 'text', 'text' => 'text', 'qr' => 'show', 'maps' => 'show', 'shop' => 'text', 'name' => 'show', 'address' => 'show', 'hours' => 'show', 'holidays' => 'show', 'phone' => 'show', 'email' => 'show'],
     ];
 
     public function __construct(
@@ -2118,7 +2130,7 @@ final class CatalogueService
         foreach (['page2' => 'page 2', 'penultimate' => 'avant-dernière'] as $slot => $label) {
             $content = $charter[$slot];
             foreach (['textFr' => 'FR', 'textNl' => 'NL'] as $key => $l) {
-                if (self::textWeight($content[$key]) > self::BRAND_TEXT_FIT[$content['template']]) {
+                if (self::textWeight($content[$key]) > self::brandTextFit($slot, $content['template'])) {
                     $over[] = $label . ' ' . $l;
                 }
             }

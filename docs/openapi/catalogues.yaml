@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Marketing — catalogues produits
-  version: 1.14.0
+  version: 1.15.0
   description: |
     Les catalogues produits du Marketing (prix du webshop, gammes) : un imprimé A5 (A4 en option)
     de **8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16). Quatre pages viennent de la Charte des catalogues de la
@@ -131,6 +131,13 @@ info:
     (`…/catalogue-charter/checks`) rend `photoUrl`, `mapsUrl` (celui qui s'imprime) et `mapsUrlOwn` (le saisi). Au
     document : `DocShop.photoUrl`, `DocShop.mapsUrl`, `DocShop.hours` = les horaires saisis s'il y en a ; éléments
     `photo` et `maps` de la dernière page (masqués : null).
+
+    v1.15 (21 novembre 2026, refonte des pages de la marque — maquettes Claude Design : « le logo de la boutique porte
+    déjà son nom ») : la dernière page a un élément `name` (afficher/masquer, vrai par défaut) : le nom de la boutique
+    (« L'Atelier By — … ») ; masqué, il ne s'imprime plus, les coordonnées restent. Les `look` déjà enregistrés le
+    reçoivent affiché. La vérification « texte trop long » (`…/catalogue-charter/checks`, code `fit`) compte 850 pour
+    l'avant-dernière en gabarit A (la légende des allergènes y est un cartouche ; la page 2 garde 1000). Le reste de la
+    refonte est la mise en page des gabarits (couverture B, pages 2 et avant-dernière A, dernière page C).
 
     v1.5 (15 novembre 2026, client : « les deux, garde les 3 gabarits, code-le » — assistant des pages de la
     marque, maquettes A1-A4 ; assistant du franchisé, maquettes B1-B4) :

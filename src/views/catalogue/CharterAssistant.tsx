@@ -861,7 +861,7 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
   const brandStep = (slot: 'page2' | 'penultimate') => {
     const content = charter[slot]
     const label = slot === 'page2' ? 'page 2' : 'avant-dernière page'
-    const fit = api.BRAND_TEXT_FIT[content.template]
+    const fit = api.brandTextFit(slot, content.template)
     const weight = Math.max(api.textWeight(content.textFr), api.textWeight(content.textNl))
     return (
       <>
@@ -975,6 +975,7 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
           {lookRow('back', charter.back.look, 'qr', 'QR code', 'gotham', 'et l’adresse du webshop')}
           {lookRow('back', charter.back.look, 'maps', 'QR Google Maps', 'gotham', 'gabarit C · l’adresse du magasin')}
           {lookRow('back', charter.back.look, 'shop', 'Coordonnées', 'gotham', 'le bloc de la boutique')}
+          {lookRow('back', charter.back.look, 'name', 'Nom de la boutique', 'gotham', '« L’Atelier By — … »')}
           {lookRow('back', charter.back.look, 'address', 'Adresse')}
           {lookRow('back', charter.back.look, 'hours', 'Horaires')}
           {lookRow('back', charter.back.look, 'holidays', 'Horaires des fêtes', 'gotham', 'saisis par boutique, plus bas')}

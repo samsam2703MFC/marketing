@@ -5609,6 +5609,26 @@ check('charte : « Avant de publier » — français complet, NL à écrire (pag
         && ($verifs['body']['data']['catalogues']['affected'] ?? 0) >= 1,
     json_encode($verifs['body'], JSON_UNESCAPED_UNICODE));
 check('charte : vérifications — paramètre inconnu (422)', call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter/checks', ['x' => '1'])['status'] === 422);
+// La refonte des pages de la marque (21/11/2026) : l'avant-dernière en gabarit A a la légende des allergènes en
+// cartouche, son texte tient en 850 (la page 2 en garde 1000). Le brouillon est remis tel quel ensuite.
+$avantFit = call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter')['body']['data'] ?? [];
+// Relue, une page porte aussi son image calculée (imageUrl), que le PUT n'accepte pas.
+foreach (['page2', 'penultimate'] as $pageFit) {
+    unset($avantFit[$pageFit]['imageUrl']);
+}
+$texte900 = str_repeat('Pains au levain, bûches et cougnous. ', 24);
+$poseFit = call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], [
+    'page2' => array_replace($avantFit['page2'] ?? [], ['textFr' => $texte900, 'template' => 'A']),
+    'penultimate' => array_replace($avantFit['penultimate'] ?? [], ['textFr' => $texte900, 'template' => 'A']),
+]);
+$fit900 = array_column(call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter/checks')['body']['data']['items'] ?? [], null, 'code')['fit'] ?? [];
+$remisFit = call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['page2' => $avantFit['page2'] ?? null, 'penultimate' => $avantFit['penultimate'] ?? null]);
+check('charte : un texte de ' . mb_strlen($texte900) . ' caractères en gabarit A tient en page 2, pas à l’avant-dernière (cartouche des allergènes, 850) ; brouillon remis',
+    $poseFit['status'] === 200 && mb_strlen($texte900) > 850 && mb_strlen($texte900) <= 1000
+        && ($fit900['level'] ?? '') === 'warn' && str_contains((string) ($fit900['message'] ?? ''), 'avant-dernière FR') && !str_contains((string) ($fit900['message'] ?? ''), 'page 2')
+        && $remisFit['status'] === 200
+        && (array_column(call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter/checks')['body']['data']['items'] ?? [], null, 'code')['fit']['level'] ?? '') === 'ok',
+    json_encode([$poseFit['body']['error'] ?? null, $fit900, $remisFit['body']['error'] ?? null], JSON_UNESCAPED_UNICODE));
 $gabarits = [
     'colors' => ['primary' => '#8D1D2C', 'secondary' => '#F5EFE4', 'accent' => '#B0792A', 'ink' => '#241C1A'],
     'covers' => [
@@ -5960,7 +5980,7 @@ check('pages propres : chaque élément — logo masqué, « La gamme » renomm�
         && ($docLook[$nL - 1]['look']['shop']['font'] ?? '') === 'vank'
         && ($docAutreLook[0]['look']['logo']['show'] ?? false) === true && ($docAutreLook[0]['kicker'] ?? '') === 'La gamme' && ($docAutreLook[count($docAutreLook) - 1]['qrUrl'] ?? null) !== null
         && $poseLook2['status'] === 200 && $poseLook2['body']['data'] === $poseLook['body']['data']
-        && array_keys($poseLook['body']['data']['own']['back']['look'] ?? []) === ['logo', 'photo', 'title', 'text', 'qr', 'maps', 'shop', 'address', 'hours', 'holidays', 'phone', 'email'],
+        && array_keys($poseLook['body']['data']['own']['back']['look'] ?? []) === ['logo', 'photo', 'title', 'text', 'qr', 'maps', 'shop', 'name', 'address', 'hours', 'holidays', 'phone', 'email'],
     json_encode([$poseLook['status'], $poseLook['body']['error'] ?? null, $docLook[0]['look'] ?? null, $docLook[0]['kicker'] ?? null, $docLook[$nL - 1]['shop'] ?? null], JSON_UNESCAPED_UNICODE));
 $refusLook = [
     call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['cover' => array_replace($couvP, ['look' => ['pirate' => ['show' => false]]])]),
