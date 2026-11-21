@@ -177,19 +177,26 @@ final class CatalogueRepository
     /**
      * Les coordonnées saisies des boutiques pour la dernière page du catalogue (`mar_catalogue_shop_contact`,
      * 17/11/2026) : ce que l'ERP ne porte pas. `mar_shop.id` → {phone2, webshopUrl, logoMediaId, holidayHoursFr,
-     * holidayHoursNl} (horaires des fêtes : migration 054, 21/11/2026).
+     * holidayHoursNl} (horaires des fêtes : migration 054, 21/11/2026) et la page « Le magasin » {photoMediaId, mapsUrl,
+     * openingHoursFr, openingHoursNl} (migration 055).
      *
-     * @return array<int, array{phone2:string, webshopUrl:string, logoMediaId:?int, holidayHoursFr:string, holidayHoursNl:string}>
+     * @return array<int, array<string,mixed>>
      */
     public function shopContacts(): array
     {
         $out = [];
-        $sql = 'SELECT shop_id, phone2, webshop_url, logo_media_id, holiday_hours_fr, holiday_hours_nl FROM mar_catalogue_shop_contact';
+        $sql = 'SELECT shop_id, phone2, webshop_url, logo_media_id, photo_media_id, maps_url, hours_fr, hours_nl, holiday_hours_fr, holiday_hours_nl
+                FROM mar_catalogue_shop_contact';
         foreach (Database::connection()->query($sql)->fetchAll() as $row) {
             $out[(int) $row['shop_id']] = [
                 'phone2'      => (string) ($row['phone2'] ?? ''),
                 'webshopUrl'  => (string) ($row['webshop_url'] ?? ''),
                 'logoMediaId' => $row['logo_media_id'] !== null ? (int) $row['logo_media_id'] : null,
+                // La page « Le magasin » (migration 055, 21/11/2026) : photo, lien Google Maps, horaires d'ouverture.
+                'photoMediaId' => $row['photo_media_id'] !== null ? (int) $row['photo_media_id'] : null,
+                'mapsUrl'     => (string) ($row['maps_url'] ?? ''),
+                'openingHoursFr' => (string) ($row['hours_fr'] ?? ''),
+                'openingHoursNl' => (string) ($row['hours_nl'] ?? ''),
                 'holidayHoursFr' => (string) ($row['holiday_hours_fr'] ?? ''),
                 'holidayHoursNl' => (string) ($row['holiday_hours_nl'] ?? ''),
             ];
@@ -198,17 +205,29 @@ final class CatalogueRepository
         return $out;
     }
 
-    /** Les coordonnées saisies d'une boutique (une ligne par boutique ; une chaîne vide est rangée null). */
-    public function saveShopContact(int $shopId, string $phone2, string $webshopUrl, ?int $logoMediaId, int $userId, string $holidayFr = '', string $holidayNl = ''): void
+    /**
+     * Les coordonnées saisies d'une boutique (une ligne par boutique ; une chaîne vide est rangée null), sous les clés de
+     * `shopContacts()`.
+     *
+     * @param array<string,mixed> $contact
+     */
+    public function saveShopContact(int $shopId, array $contact, int $userId): void
     {
+        $columns = ['phone2' => 'phone2', 'webshopUrl' => 'webshop_url', 'logoMediaId' => 'logo_media_id', 'photoMediaId' => 'photo_media_id',
+            'mapsUrl' => 'maps_url', 'openingHoursFr' => 'hours_fr', 'openingHoursNl' => 'hours_nl', 'holidayHoursFr' => 'holiday_hours_fr', 'holidayHoursNl' => 'holiday_hours_nl'];
+        $bind = ['shop' => $shopId, 'user' => $userId > 0 ? $userId : null];
+        foreach ($columns as $key => $column) {
+            $value = $contact[$key] ?? null;
+            $bind[$column] = $value === '' ? null : $value;
+        }
+        $names = implode(', ', array_values($columns));
+        $values = implode(', ', array_map(static fn (string $c): string => ':' . $c, array_values($columns)));
+        $updates = implode(', ', array_map(static fn (string $c): string => $c . ' = VALUES(' . $c . ')', array_values($columns)));
         $statement = Database::connection()->prepare(
-            'INSERT INTO mar_catalogue_shop_contact (shop_id, phone2, webshop_url, logo_media_id, holiday_hours_fr, holiday_hours_nl, updated_by)
-             VALUES (:shop, :phone2, :url, :logo, :hfr, :hnl, :user)
-             ON DUPLICATE KEY UPDATE phone2 = VALUES(phone2), webshop_url = VALUES(webshop_url), logo_media_id = VALUES(logo_media_id),
-               holiday_hours_fr = VALUES(holiday_hours_fr), holiday_hours_nl = VALUES(holiday_hours_nl), updated_by = VALUES(updated_by)'
+            'INSERT INTO mar_catalogue_shop_contact (shop_id, ' . $names . ', updated_by) VALUES (:shop, ' . $values . ', :user)
+             ON DUPLICATE KEY UPDATE ' . $updates . ', updated_by = VALUES(updated_by)'
         );
-        $statement->execute(['shop' => $shopId, 'phone2' => $phone2 !== '' ? $phone2 : null, 'url' => $webshopUrl !== '' ? $webshopUrl : null, 'logo' => $logoMediaId,
-            'hfr' => $holidayFr !== '' ? $holidayFr : null, 'hnl' => $holidayNl !== '' ? $holidayNl : null, 'user' => $userId > 0 ? $userId : null]);
+        $statement->execute($bind);
     }
 
     /** La boutique du module qui porte cet identifiant de caisse (une seule marque par réseau). */

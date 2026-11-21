@@ -391,3 +391,157 @@
 /* La dernière page (21/11/2026) : le texte et les horaires des fêtes gardent leurs retours à la ligne. */
 .cat-back__text, .cat-back__holidays { white-space: pre-line; }
 .cat-back__holidays { font-weight: 600; }
+
+/* La dernière page, gabarit C « Le magasin » (21/11/2026) : la photo du magasin en haut, le logo de la boutique, les
+   horaires en grand, deux QR (commander en ligne, venir au magasin), les coordonnées en pied. */
+.cat-back--C { padding: 0; }
+.cat-back--C .cat-back__photo { flex: 0 0 auto; height: calc(var(--u) * 52mm); overflow: hidden; background: var(--p); }
+.cat-back--C .cat-back__photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.cat-back--C .cat-back__body { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; padding: calc(var(--u) * 11mm) calc(var(--u) * 12mm) calc(var(--u) * 8mm); }
+.cat-back--C.cat-back--photo .cat-back__body { padding-top: calc(var(--u) * 6mm); }
+.cat-back--C .cat-back__title { margin-top: calc(var(--u) * 4mm); font-size: calc(var(--u) * 9mm); }
+.cat-back--C .cat-back__text { margin-top: calc(var(--u) * 2.5mm); font-size: calc(var(--u) * 3.5mm); line-height: 1.4; }
+.cat-back__hoursC { margin-top: calc(var(--u) * 4mm); }
+.cat-back__label { font-size: calc(var(--u) * 2.8mm); font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--a); }
+.cat-back__hoursBig { margin-top: calc(var(--u) * 1mm); font-size: calc(var(--u) * 4.1mm); font-weight: 500; line-height: 1.4; white-space: pre-line; color: var(--i); }
+.cat-back__hoursC .cat-back__holidays { margin-top: calc(var(--u) * 1.2mm); font-size: calc(var(--u) * 3.4mm); color: var(--p); }
+.cat-back__qrs { display: flex; gap: calc(var(--u) * 8mm); margin-top: auto; padding-top: calc(var(--u) * 4mm); }
+.cat-back__qrC { flex: 1 1 0; display: flex; flex-direction: column; align-items: flex-start; gap: calc(var(--u) * 1.2mm); min-width: 0; }
+.cat-back__qrlabel { margin-top: calc(var(--u) * 1mm); font-size: calc(var(--u) * 3.8mm); font-weight: 600; color: var(--p); }
+.cat-back__qrC .cat-back__hint { margin-top: 0; font-size: calc(var(--u) * 3mm); overflow-wrap: anywhere; }
+.cat-back--C .cat-back__shop { margin-top: calc(var(--u) * 4mm); padding-top: calc(var(--u) * 3mm); }
+.cat-back--C .cat-back__who { font-size: calc(var(--u) * 4.6mm); }
+.cat-back--C .cat-back__shop p { margin-top: calc(var(--u) * 1mm); font-size: calc(var(--u) * 3mm); }
+
+/* ========== Refonte des pages de la marque (21/11/2026, maquettes Claude Design « Refonte v2 ») ==========
+   Couverture B en finition Papier, page 2 et avant-dernière (gabarit A) en finition Papier, dernière page C en
+   finition Rubis. Les règles sont bornées à ces gabarits : les autres (couvertures A et C, pages B et C, dernières
+   pages A et B) ne changent pas. --ab : l'abricot de la marque, en repli tant que la charte ne le porte pas. */
+
+/* Couverture B « Illustration » : logo plus grand, « La gamme » manuscrite, titre et sous-titre resserrés. */
+.cat-cover--B { padding: calc(var(--u) * 11mm) calc(var(--u) * 12mm) calc(var(--u) * 10mm); }
+.cat-cover--B .cat-cover__logoB { flex: 0 0 auto; height: calc(var(--u) * 15mm); max-width: calc(var(--u) * 70mm); object-position: center; }
+.cat-cover--B .cat-cover__art { margin: calc(var(--u) * 6mm) 0 calc(var(--u) * 3mm); }
+.cat-cover--B .cat-cover__drawB { max-width: calc(var(--u) * 82mm); }
+/* Le bloc de texte : transparent pour la mise en page. */
+.cat-cover__panel { display: contents; }
+.cat-cover--B .cat-cover__kicker {
+  margin-top: auto; font-family: 'Playwrite', cursive; font-weight: 400; font-size: calc(var(--u) * 5mm);
+  line-height: 1.8; letter-spacing: 0; text-transform: none; color: var(--a);
+}
+.cat-cover--B .cat-cover__title {
+  margin-top: 0; padding: 0.1em 0 0.06em; font-size: calc(var(--u) * 17mm * var(--fs, 1)); line-height: 1.08;
+  max-height: calc(var(--u) * 60mm); text-wrap: balance;
+}
+.cat-cover--B .cat-cover__rule { width: calc(var(--u) * 12mm); border-top-width: 0.5mm; margin: calc(var(--u) * 4.5mm) auto calc(var(--u) * 4mm); }
+.cat-cover--B .cat-cover__subB {
+  font-weight: 300; font-size: calc(var(--u) * 4mm); line-height: 1.45; max-width: calc(var(--u) * 100mm);
+  max-height: calc(var(--u) * 30mm); overflow: hidden; text-wrap: balance;
+}
+.cat-cover--B .cat-cover__shopB {
+  margin-top: auto; padding-top: calc(var(--u) * 6mm); font-weight: 500; font-size: calc(var(--u) * 2.7mm);
+  line-height: 1.5; letter-spacing: 0.2em; color: var(--p); text-wrap: balance;
+}
+/* Papier : un filet or encadre la page, à 6 mm du bord (le texte reste à 11 mm). */
+.cat-cover--papier::before {
+  content: ''; position: absolute; inset: calc(var(--u) * 6mm); pointer-events: none;
+  border: 0.3mm solid var(--a); border-radius: calc(var(--u) * 1.5mm);
+}
+.cat-cover--papier .cat-cover__shopB { padding-bottom: calc(var(--u) * 1mm); }
+/* Sans le nom de la boutique, le texte garde 8 mm d'air au-dessus du cadre or. */
+.cat-cover--papier { padding-bottom: calc(var(--u) * 14mm); }
+
+/* Page 2 et avant-dernière, gabarit A « Texte seul » : premier paragraphe en chapeau, la suite en Gotham Light aérée,
+   ligne de 112 mm au plus. .cat-brand__space : un blanc élastique entre le logo et le titre, qui se réduit d'abord
+   quand le texte est long. */
+.cat-brand.cat-brand--tA { padding: calc(var(--u) * 13mm) calc(var(--u) * 14mm) calc(var(--u) * 12mm); }
+.cat-brand__head { display: contents; }
+.cat-brand--tA .cat-brand__logo { flex: 0 0 auto; align-self: flex-start; height: calc(var(--u) * 9mm); width: auto; max-width: calc(var(--u) * 52mm); object-fit: contain; object-position: left center; }
+.cat-brand--tA .cat-brand__space { flex: 1 1000 calc(var(--u) * 22mm); min-height: calc(var(--u) * 4mm); max-height: calc(var(--u) * 46mm); }
+.cat-brand--tA .cat-brand__title {
+  flex: 0 0 auto; margin-top: 0; padding-top: 0.08em; font-size: calc(var(--u) * 11.5mm); line-height: 1.04;
+  max-height: calc(var(--u) * 40mm); overflow: hidden; text-wrap: balance;
+}
+.cat-brand--tA .cat-brand__rule { flex: 0 0 auto; margin-top: calc(var(--u) * 5mm); width: calc(var(--u) * 14mm); border-top-width: 0.5mm; }
+.cat-brand--tA .cat-brand__text {
+  flex: 0 1 auto; margin-top: calc(var(--u) * 6.5mm); max-width: calc(var(--u) * 112mm);
+  font-weight: 300; font-size: calc(var(--u) * 3.9mm); line-height: 1.6; gap: calc(var(--u) * 3.4mm); text-wrap: pretty;
+}
+.cat-brand--tA .cat-brand__text > p:first-child { font-weight: 400; font-size: calc(var(--u) * 4.5mm); line-height: 1.45; padding-bottom: calc(var(--u) * 1mm); }
+.cat-brand--tA .cat-brand__text ul { gap: calc(var(--u) * 1.8mm); }
+.cat-brand--tA .cat-brand__text li { padding-left: calc(var(--u) * 5.5mm); }
+.cat-brand--tA .cat-brand__text li::before { top: 0.78em; width: calc(var(--u) * 2.6mm); height: 0.5mm; background: var(--a); border-radius: 0; }
+/* La légende des allergènes : un cartouche en bas de page, de 1 à 14 entrées (4 colonnes à partir de 9). */
+.cat-brand--tA.cat-brand--penultimate .cat-brand__text { margin-bottom: calc(var(--u) * 5mm); }
+.cat-brand--tA .cat-allegend {
+  flex: 0 0 auto; margin-top: auto; padding: calc(var(--u) * 4.5mm) calc(var(--u) * 5mm) calc(var(--u) * 4mm);
+  border-top: 0; background: #fff; border-radius: calc(var(--u) * 2.5mm);
+}
+.cat-brand--tA .cat-allegend__title { font-size: calc(var(--u) * 4.6mm); line-height: 1; }
+.cat-brand--tA .cat-allegend__grid {
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--u) * 33mm), 1fr));
+  gap: calc(var(--u) * 2.2mm) calc(var(--u) * 4mm); margin-top: calc(var(--u) * 3.4mm);
+}
+.cat-brand--tA .cat-allegend__item { font-size: calc(var(--u) * 3.2mm); line-height: 1.2; gap: calc(var(--u) * 2mm); }
+.cat-brand--tA .cat-allegend__item .cat-al { width: calc(var(--u) * 5mm); height: calc(var(--u) * 5mm); }
+.cat-brand--tA .cat-allegend:has(.cat-allegend__item:nth-child(9)) .cat-allegend__grid { grid-template-columns: repeat(auto-fill, minmax(calc(var(--u) * 24mm), 1fr)); gap: calc(var(--u) * 1.6mm) calc(var(--u) * 3mm); margin-top: calc(var(--u) * 2.6mm); }
+.cat-brand--tA .cat-allegend:has(.cat-allegend__item:nth-child(9)) .cat-allegend__item { font-size: calc(var(--u) * 2.9mm); gap: calc(var(--u) * 1.5mm); }
+.cat-brand--tA .cat-allegend:has(.cat-allegend__item:nth-child(9)) .cat-al { width: calc(var(--u) * 4.2mm); height: calc(var(--u) * 4.2mm); }
+.cat-brand--tA .cat-allegend__note {
+  margin: 0; padding-top: calc(var(--u) * 3mm); border-top: 0.3mm solid rgba(36, 28, 26, 0.14);
+  font-weight: 300; font-size: calc(var(--u) * 2.9mm); line-height: 1.45; opacity: 1; text-wrap: pretty;
+}
+/* Papier : une lettrine Vank rubis ouvre le chapeau. */
+.cat-brand--papier .cat-brand__text > p:first-child::first-letter {
+  float: left; margin: calc(var(--u) * 0.6mm) calc(var(--u) * 2.2mm) 0 0; font-family: 'Vank', 'GothamPrint', serif;
+  font-size: calc(var(--u) * 14.5mm); line-height: 0.82; text-transform: uppercase; color: var(--p);
+}
+
+/* Dernière page, gabarit C « Le magasin » : la photo à fond perdu ; titre, texte, horaires ; en pied
+   (.cat-back__foot) les deux QR puis les coordonnées, l'adresse écrite une seule fois. */
+.cat-back--C .cat-back__photo {
+  flex: 0 0 auto; height: calc(var(--u) * 58mm + var(--b)); margin: calc(-1 * var(--b)) calc(-1 * var(--b)) 0; background: var(--s);
+}
+/* Une façade a son enseigne en haut : on recadre plutôt par le bas. */
+.cat-back--C .cat-back__photo img { object-fit: cover; object-position: center 25%; }
+.cat-back--C .cat-back__body, .cat-back--C.cat-back--photo .cat-back__body { padding: calc(var(--u) * 8mm) calc(var(--u) * 12mm) calc(var(--u) * 9mm); }
+.cat-back--C .cat-back__logo { flex: 0 0 auto; align-self: flex-start; height: calc(var(--u) * 9mm); width: auto; max-width: calc(var(--u) * 56mm); object-fit: contain; object-position: left center; }
+.cat-back--C .cat-back__title {
+  flex: 0 0 auto; margin-top: calc(var(--u) * 6mm); padding-top: 0.08em; font-size: calc(var(--u) * 10mm); line-height: 1.04; text-wrap: balance;
+}
+.cat-back--C .cat-back__text {
+  flex: 0 0 auto; margin-top: calc(var(--u) * 3mm); max-width: calc(var(--u) * 112mm);
+  font-weight: 300; font-size: calc(var(--u) * 3.7mm); line-height: 1.5; text-wrap: pretty;
+}
+.cat-back--C .cat-back__hoursC { flex: 0 0 auto; margin: calc(var(--u) * 6mm) 0 calc(var(--u) * 5mm); }
+.cat-back--C .cat-back__label { font-weight: 500; font-size: calc(var(--u) * 2.8mm); letter-spacing: 0.18em; }
+.cat-back--C .cat-back__hoursBig { margin-top: 0; font-size: calc(var(--u) * 3.9mm); line-height: 1.45; text-wrap: balance; }
+.cat-back--C .cat-back__hoursC .cat-back__holidays { margin-top: calc(var(--u) * 2mm); font-weight: 400; font-size: calc(var(--u) * 3.4mm); line-height: 1.45; }
+.cat-back--C .cat-back__foot { flex: 0 0 auto; margin-top: auto; }
+.cat-back--C .cat-back__qrs {
+  margin-top: 0; padding: calc(var(--u) * 3.5mm); gap: calc(var(--u) * 5mm);
+  background: #fff; border-radius: calc(var(--u) * 2.5mm);
+}
+.cat-back--C .cat-back__qrC { flex-direction: row; align-items: center; gap: calc(var(--u) * 3mm); }
+.cat-back--C .cat-back__qrC .cat-qr { flex: 0 0 auto; width: calc(var(--u) * 22mm); height: calc(var(--u) * 22mm); border: 0; }
+.cat-back--C .cat-back__qrtext { min-width: 0; display: grid; gap: calc(var(--u) * 1mm); }
+.cat-back--C .cat-back__qrC:only-child { gap: calc(var(--u) * 4mm); }
+.cat-back--C .cat-back__qrlabel { margin-top: 0; font-weight: 500; font-size: calc(var(--u) * 3.6mm); line-height: 1.2; text-wrap: balance; }
+.cat-back--C .cat-back__qrC .cat-back__hint { font-size: calc(var(--u) * 2.9mm); line-height: 1.3; opacity: 1; }
+.cat-back--C .cat-back__shop { margin-top: calc(var(--u) * 4.5mm); padding-top: 0; border-top: 0; }
+.cat-back--C .cat-back__who { font-size: calc(var(--u) * 4.8mm); line-height: 1.1; letter-spacing: 0.02em; color: var(--p); text-wrap: balance; }
+/* Coordonnées : une donnée par élément, séparées par un point or qui disparaît avec la donnée masquée. */
+.cat-back--C .cat-back__contact { margin-top: calc(var(--u) * 1.6mm); font-size: calc(var(--u) * 3.3mm); line-height: 1.5; text-wrap: pretty; }
+.cat-back--C .cat-back__contact span + span::before { content: '·'; margin: 0 calc(var(--u) * 2mm); color: var(--a); }
+/* Rubis : les QR et les coordonnées sur un pied rubis à fond perdu ; chaque QR sur sa carte blanche. */
+.cat-back--rubis .cat-back__photo { height: calc(var(--u) * 44mm + var(--b)); }
+.cat-back--rubis .cat-back__foot {
+  margin: auto calc(-1 * (var(--u) * 12mm + var(--b))) calc(-1 * (var(--u) * 9mm + var(--b)));
+  padding: calc(var(--u) * 5mm) calc(var(--u) * 12mm + var(--b)) calc(var(--u) * 9mm + var(--b));
+  background: var(--p); color: var(--s);
+}
+.cat-back--rubis .cat-back__qrs { padding: 0; gap: calc(var(--u) * 4mm); background: transparent; }
+.cat-back--rubis .cat-back__qrC { padding: calc(var(--u) * 2.5mm); background: #fff; border-radius: calc(var(--u) * 2.5mm); color: var(--i); }
+.cat-back--rubis .cat-back__shop { margin-top: calc(var(--u) * 3.5mm); }
+.cat-back--rubis .cat-back__who { color: var(--s); }
+.cat-back--rubis .cat-back__contact span + span::before { color: var(--ab, #F2C9A0); }

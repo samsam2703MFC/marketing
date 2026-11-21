@@ -204,3 +204,9 @@
 
 /* Les horaires des fêtes d'une boutique : plusieurs lignes (21/11/2026). */
 .cha-shopin--area { min-height: 52px; resize: vertical; font: inherit; }
+
+/* Gabarit C « Le magasin » : sa miniature, et la photo du magasin dans le tableau de la boutique (21/11/2026). */
+.cha-mini .photo--shop { left: 0; right: 0; top: 0; height: 34px; }
+.cha-mini .qr--left { left: 8px; top: 62px; width: 16px; height: 16px; }
+.cha-mini .qr--right { left: 36px; top: 62px; width: 16px; height: 16px; }
+.cha-shopphoto img { width: 72px; height: 48px; object-fit: cover; border-radius: 4px; }

@@ -542,7 +542,9 @@ export function fontFaces(): string {
     // Famille à part : les brochures gardent les graisses réglées pour l'impression, et
     // cette feuille injectée dans l'écran ne redéfinit pas la 'Gotham' de l'interface.
     face('GothamPrint', 'Gotham_Light.otf', 300),
-    face('GothamPrint', 'Gotham_Regular.otf', 400),
+    // 400 : Gotham Book (21/11/2026, relevé par la refonte des pages de la marque). Gotham_Regular.otf est en réalité
+    // Gotham Black, sans le signe € : le texte courant s'imprimait en Black, et l'euro dans la police de repli.
+    face('GothamPrint', 'Gotham_Book.otf', 400),
     face('GothamPrint', 'Gotham_Medium.otf', 500),
     face('Vank', 'GC_Vank.ttf', 400),
     face('Playwrite', 'PlaywriteDEVA-Regular.ttf', 400),

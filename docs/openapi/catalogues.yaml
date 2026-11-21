@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Marketing — catalogues produits
-  version: 1.13.0
+  version: 1.15.0
   description: |
     Les catalogues produits du Marketing (prix du webshop, gammes) : un imprimé A5 (A4 en option)
     de **8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16). Quatre pages viennent de la Charte des catalogues de la
@@ -121,6 +121,23 @@ info:
     plusieurs lignes ; migration 054) ; au document, `DocShop.holidayHours` (dans la langue de la version ; NL vide : le
     français), sous les horaires, masquable par l'élément `holidays` de la dernière page. Le texte de la dernière page
     passe à 600 caractères et garde ses retours à la ligne.
+
+    v1.14 (21 novembre 2026, client : « un stopper spécifique pour chaque magasin — photo du magasin, logo du magasin,
+    QR (lien spécifique par magasin), heures d'ouverture et de fermeture, QR avec l'adresse (Maps) — à mettre dans les
+    catalogues ») : la dernière page prend un gabarit C « Le magasin ». Par boutique (`PUT …/catalogue-shops/{id}`,
+    migration 055) : `photoMediaId` (la photo du magasin, une image de la médiathèque du réseau ou de la boutique),
+    `mapsUrl` (son lien Google Maps, http/https ; vide : fait de son nom et de son adresse dans l'ERP),
+    `openingHoursFr` / `openingHoursNl` (ses horaires, plusieurs lignes ; vides : ceux de l'ERP). La boutique lue
+    (`…/catalogue-charter/checks`) rend `photoUrl`, `mapsUrl` (celui qui s'imprime) et `mapsUrlOwn` (le saisi). Au
+    document : `DocShop.photoUrl`, `DocShop.mapsUrl`, `DocShop.hours` = les horaires saisis s'il y en a ; éléments
+    `photo` et `maps` de la dernière page (masqués : null).
+
+    v1.15 (21 novembre 2026, refonte des pages de la marque — maquettes Claude Design : « le logo de la boutique porte
+    déjà son nom ») : la dernière page a un élément `name` (afficher/masquer, vrai par défaut) : le nom de la boutique
+    (« L'Atelier By — … ») ; masqué, il ne s'imprime plus, les coordonnées restent. Les `look` déjà enregistrés le
+    reçoivent affiché. La vérification « texte trop long » (`…/catalogue-charter/checks`, code `fit`) compte 850 pour
+    l'avant-dernière en gabarit A (la légende des allergènes y est un cartouche ; la page 2 garde 1000). Le reste de la
+    refonte est la mise en page des gabarits (couverture B, pages 2 et avant-dernière A, dernière page C).
 
     v1.5 (15 novembre 2026, client : « les deux, garde les 3 gabarits, code-le » — assistant des pages de la
     marque, maquettes A1-A4 ; assistant du franchisé, maquettes B1-B4) :
@@ -370,6 +387,10 @@ paths:
                 logoMediaId: { type: [integer, 'null'], description: 'Une image de la médiathèque, du réseau ou de cette boutique, pas archivée ; null : le logo de la charte.' }
                 holidayHoursFr: { type: string, maxLength: 600, description: 'v1.13 — Les horaires des fêtes de la boutique, plusieurs lignes ; « » : rien.' }
                 holidayHoursNl: { type: string, maxLength: 600, description: 'v1.13 — « » : le français est imprimé.' }
+                photoMediaId: { type: [integer, 'null'], description: 'v1.14 — La photo du magasin (gabarit C) : une image de la médiathèque, du réseau ou de cette boutique ; null : aucune.' }
+                mapsUrl: { type: string, maxLength: 500, description: 'v1.14 — Lien Google Maps (http/https) ; « » : fait du nom et de l’adresse de l’ERP.' }
+                openingHoursFr: { type: string, maxLength: 600, description: 'v1.14 — Horaires d’ouverture, plusieurs lignes ; « » : ceux de l’ERP.' }
+                openingHoursNl: { type: string, maxLength: 600, description: 'v1.14 — « » : le français.' }
       responses:
         '200': { $ref: '#/components/responses/Generic' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
@@ -1301,7 +1322,7 @@ components:
               message: { type: string }
     DocShop:
       type: [object, 'null']
-      properties: { id: { type: integer }, erpShopId: { type: [integer, 'null'] }, name: { type: string }, address: { type: string }, hours: { type: string }, phone: { type: string }, email: { type: string, description: 'v1.9 — fiche publique de l''ERP ; vide : rien.' }, phone2: { type: string, description: 'v1.9 — saisi dans la charte ; vide : rien.' }, holidayHours: { type: string, description: 'v1.13 — les horaires des fêtes saisis pour la boutique, dans la langue de la version ; vide : rien.' } }
+      properties: { id: { type: integer }, erpShopId: { type: [integer, 'null'] }, name: { type: string }, address: { type: string }, hours: { type: string }, phone: { type: string }, email: { type: string, description: 'v1.9 — fiche publique de l''ERP ; vide : rien.' }, phone2: { type: string, description: 'v1.9 — saisi dans la charte ; vide : rien.' }, holidayHours: { type: string, description: 'v1.13 — les horaires des fêtes saisis pour la boutique, dans la langue de la version ; vide : rien.' }, photoUrl: { type: [string, 'null'], description: 'v1.14 — la photo du magasin (gabarit C).' }, mapsUrl: { type: [string, 'null'], description: 'v1.14 — le lien Google Maps (second QR du gabarit C).' } }
     Colors:
       type: object
       properties: { primary: { type: string }, secondary: { type: string }, accent: { type: string }, ink: { type: string } }
@@ -1374,7 +1395,7 @@ components:
     OwnBack:
       type: object
       additionalProperties: false
-      properties: { titleFr: { type: string }, titleNl: { type: string }, textFr: { type: string }, textNl: { type: string }, template: { type: string, enum: [A, B] }, look: { $ref: '#/components/schemas/Look' } }
+      properties: { titleFr: { type: string }, titleNl: { type: string }, textFr: { type: string, maxLength: 600 }, textNl: { type: string, maxLength: 600 }, template: { type: string, enum: [A, B, C], description: 'A QR et boutique · B boutique en avant · C le magasin (v1.14).' }, look: { $ref: '#/components/schemas/Look' } }
     BrandPagesWrite:
       description: 'v1.10 — Chaque page : entière, ou null (absente) pour suivre la charte publiée.'
       type: object

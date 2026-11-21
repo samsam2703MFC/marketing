@@ -5609,6 +5609,26 @@ check('charte : « Avant de publier » — français complet, NL à écrire (pag
         && ($verifs['body']['data']['catalogues']['affected'] ?? 0) >= 1,
     json_encode($verifs['body'], JSON_UNESCAPED_UNICODE));
 check('charte : vérifications — paramètre inconnu (422)', call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter/checks', ['x' => '1'])['status'] === 422);
+// La refonte des pages de la marque (21/11/2026) : l'avant-dernière en gabarit A a la légende des allergènes en
+// cartouche, son texte tient en 850 (la page 2 en garde 1000). Le brouillon est remis tel quel ensuite.
+$avantFit = call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter')['body']['data'] ?? [];
+// Relue, une page porte aussi son image calculée (imageUrl), que le PUT n'accepte pas.
+foreach (['page2', 'penultimate'] as $pageFit) {
+    unset($avantFit[$pageFit]['imageUrl']);
+}
+$texte900 = str_repeat('Pains au levain, bûches et cougnous. ', 24);
+$poseFit = call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], [
+    'page2' => array_replace($avantFit['page2'] ?? [], ['textFr' => $texte900, 'template' => 'A']),
+    'penultimate' => array_replace($avantFit['penultimate'] ?? [], ['textFr' => $texte900, 'template' => 'A']),
+]);
+$fit900 = array_column(call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter/checks')['body']['data']['items'] ?? [], null, 'code')['fit'] ?? [];
+$remisFit = call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['page2' => $avantFit['page2'] ?? null, 'penultimate' => $avantFit['penultimate'] ?? null]);
+check('charte : un texte de ' . mb_strlen($texte900) . ' caractères en gabarit A tient en page 2, pas à l’avant-dernière (cartouche des allergènes, 850) ; brouillon remis',
+    $poseFit['status'] === 200 && mb_strlen($texte900) > 850 && mb_strlen($texte900) <= 1000
+        && ($fit900['level'] ?? '') === 'warn' && str_contains((string) ($fit900['message'] ?? ''), 'avant-dernière FR') && !str_contains((string) ($fit900['message'] ?? ''), 'page 2')
+        && $remisFit['status'] === 200
+        && (array_column(call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter/checks')['body']['data']['items'] ?? [], null, 'code')['fit']['level'] ?? '') === 'ok',
+    json_encode([$poseFit['body']['error'] ?? null, $fit900, $remisFit['body']['error'] ?? null], JSON_UNESCAPED_UNICODE));
 $gabarits = [
     'colors' => ['primary' => '#8D1D2C', 'secondary' => '#F5EFE4', 'accent' => '#B0792A', 'ink' => '#241C1A'],
     'covers' => [
@@ -5648,12 +5668,12 @@ $refusG = [
     call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['covers' => [['gamme' => 14, 'titleFr' => 'a', 'template' => 'Z']]]),
     call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['covers' => [['gamme' => 14, 'titleFr' => 'a', 'visual' => 'media']]]),
     call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['covers' => [['gamme' => 14, 'titleFr' => 'a', 'illustration' => 'licorne']]]),
-    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['back' => ['titleFr' => 'a', 'template' => 'C']]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['back' => ['titleFr' => 'a', 'template' => 'Z']]),
     call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['page2' => ['titleFr' => 'a', 'template' => 'D']]),
     call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['covers' => [['gamme' => 14, 'titleFr' => 'a', 'titleFont' => 'comic']]]),
     call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['covers' => [['gamme' => 14, 'titleFr' => 'a', 'subtitleColor' => '#FF0000']]]),
 ];
-check('charte : gabarits refusés (422, champ nommé) — couverture Z, « médiathèque » sans image, dessin inconnu, dernière page C, page 2 D ; rien d’écrit',
+check('charte : gabarits refusés (422, champ nommé) — couverture Z, « médiathèque » sans image, dessin inconnu, dernière page Z, page 2 D ; rien d’écrit',
     array_unique(array_column($refusG, 'status')) === [422]
         && array_map(static fn (array $r): string => (string) ($r['body']['error']['details'][0]['field'] ?? ''), $refusG) === ['covers[0].template', 'covers[0].mediaId', 'covers[0].illustration', 'back.template', 'page2.template', 'covers[0].titleFont', 'covers[0].subtitleColor']
         && (call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter')['body']['data']['publication']['draftChanged'] ?? true) === false,
@@ -5890,7 +5910,7 @@ $refusP = [
     call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['cover' => array_replace($couvP, ['titleFr' => ''])]),
     call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['cover' => array_replace($couvP, ['gamme' => 14])]),
     call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['page2' => array_replace($page2P, ['template' => 'D'])]),
-    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['back' => ['titleFr' => 'a', 'template' => 'C']]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['back' => ['titleFr' => 'a', 'template' => 'Z']]),
     call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['penultimate' => ['titleFr' => 'x', 'mediaId' => 999999]]),
     call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['cover' => 'texte']),
 ];
@@ -5960,7 +5980,7 @@ check('pages propres : chaque élément — logo masqué, « La gamme » renomm�
         && ($docLook[$nL - 1]['look']['shop']['font'] ?? '') === 'vank'
         && ($docAutreLook[0]['look']['logo']['show'] ?? false) === true && ($docAutreLook[0]['kicker'] ?? '') === 'La gamme' && ($docAutreLook[count($docAutreLook) - 1]['qrUrl'] ?? null) !== null
         && $poseLook2['status'] === 200 && $poseLook2['body']['data'] === $poseLook['body']['data']
-        && array_keys($poseLook['body']['data']['own']['back']['look'] ?? []) === ['logo', 'title', 'text', 'qr', 'shop', 'address', 'hours', 'holidays', 'phone', 'email'],
+        && array_keys($poseLook['body']['data']['own']['back']['look'] ?? []) === ['logo', 'photo', 'title', 'text', 'qr', 'maps', 'shop', 'name', 'address', 'hours', 'holidays', 'phone', 'email'],
     json_encode([$poseLook['status'], $poseLook['body']['error'] ?? null, $docLook[0]['look'] ?? null, $docLook[0]['kicker'] ?? null, $docLook[$nL - 1]['shop'] ?? null], JSON_UNESCAPED_UNICODE));
 $refusLook = [
     call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['cover' => array_replace($couvP, ['look' => ['pirate' => ['show' => false]]])]),
@@ -6008,6 +6028,47 @@ check('dernière page : horaires des fêtes et texte refusés (422 nommé) au-de
     json_encode(array_map(static fn (array $r): array => [$r['status'], $r['body']['error']['details'] ?? null], $refusF), JSON_UNESCAPED_UNICODE));
 call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['holidayHoursFr' => '', 'holidayHoursNl' => '']);
 call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], $corpsP);
+
+// La page « Le magasin » (21/11/2026, Sam : « un stopper spécifique pour chaque magasin — photo du magasin, logo, QR du
+// magasin, heures d'ouverture et de fermeture, QR avec l'adresse (Maps) — à mettre dans les catalogues ») : gabarit C de la
+// dernière page ; photo, lien Maps et horaires saisis par boutique (migration 055).
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$pdo->exec("DELETE FROM mar_media WHERE sha256 = 'magasin-photo-test'");
+$pdo->exec("INSERT INTO mar_media (kind, file_path, mime, bytes, sha256, name, shop_id, archived_at) VALUES ('image', 'uploads/magasin.jpg', 'image/jpeg', 1000, 'magasin-photo-test', 'Façade Sombreffe', NULL, NULL)");
+$idPhoto = (int) $pdo->query("SELECT id FROM mar_media WHERE sha256 = 'magasin-photo-test'")->fetchColumn();
+$horairesMag = "Lun – ven : 7h – 18h30\nSam : 7h – 17h · dim : 7h – 13h";
+$magasin = call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['photoMediaId' => $idPhoto, 'openingHoursFr' => $horairesMag, 'mapsUrl' => '']);
+$poseC = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], array_replace($corpsP, ['back' => array_replace($dosP, ['template' => 'C'])]));
+$pagesC = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document', ['shopId' => (string) $catA])['body']['data']['pages'] ?? [];
+$dosC = $pagesC !== [] ? end($pagesC) : [];
+$pagesCnl = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document', ['shopId' => (string) $catA, 'lang' => 'nl'])['body']['data']['pages'] ?? [];
+// Le nom de l'ERP de test ne porte pas l'enseigne (« Sombreffe ») : elle est ajoutée.
+$mapsAttendu = 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode("L'Atelier By " . ($dosC['shop']['name'] ?? '?') . ', ' . ($dosC['shop']['address'] ?? '?'));
+check('page « Le magasin » : gabarit C ; photo du magasin, horaires saisis (à la place de ceux de l’ERP, NL vide = FR), QR Google Maps fait du nom et de l’adresse',
+    $magasin['status'] === 200 && ($magasin['body']['data']['photoUrl'] ?? null) !== null
+        && ($magasin['body']['data']['openingHoursFr'] ?? '') === $horairesMag && ($magasin['body']['data']['hours'] ?? '') !== $horairesMag && ($magasin['body']['data']['mapsUrl'] ?? '') === $mapsAttendu && ($magasin['body']['data']['mapsUrlOwn'] ?? 'x') === ''
+        && $poseC['status'] === 200 && ($dosC['template'] ?? '') === 'C' && ($dosC['shop']['photoUrl'] ?? null) !== null
+        && ($dosC['shop']['hours'] ?? '') === $horairesMag && ($dosC['shop']['mapsUrl'] ?? '') === $mapsAttendu && ($dosC['qrUrl'] ?? null) !== null
+        && (end($pagesCnl)['shop']['hours'] ?? '') === $horairesMag,
+    json_encode([$magasin['status'], $magasin['body']['error'] ?? null, $poseC['body']['error'] ?? null, $dosC['shop'] ?? null, $dosC['template'] ?? null], JSON_UNESCAPED_UNICODE));
+$propre = call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['mapsUrl' => 'https://maps.app.goo.gl/AtelierSombreffe']);
+$pagesPropre = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document', ['shopId' => (string) $catA])['body']['data']['pages'] ?? [];
+$masqueC = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], array_replace($corpsP, ['back' => array_replace($dosP, ['template' => 'C', 'look' => ['photo' => ['show' => false], 'maps' => ['show' => false]]])]));
+$pagesMasqueC = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document', ['shopId' => (string) $catA])['body']['data']['pages'] ?? [];
+$refusMag = [
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['photoMediaId' => 999999]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['mapsUrl' => 'ftp://maps']),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['openingHoursFr' => str_repeat('a', 601)]),
+];
+check('page « Le magasin » : un lien Maps saisi remplace celui de l’adresse ; photo et QR Maps masqués par leurs éléments ; refusés (422 nommé) — photo inconnue, lien non http, horaires trop longs',
+    $propre['status'] === 200 && (end($pagesPropre)['shop']['mapsUrl'] ?? '') === 'https://maps.app.goo.gl/AtelierSombreffe'
+        && $masqueC['status'] === 200 && array_key_exists('photoUrl', end($pagesMasqueC)['shop'] ?? []) && end($pagesMasqueC)['shop']['photoUrl'] === null && end($pagesMasqueC)['shop']['mapsUrl'] === null
+        && array_column($refusMag, 'status') === [422, 422, 422]
+        && array_map(static fn (array $r): string => $r['body']['error']['details'][0]['field'] ?? '', $refusMag) === ['photoMediaId', 'mapsUrl', 'openingHoursFr'],
+    json_encode([$propre['status'], end($pagesPropre)['shop'] ?? null, $masqueC['status'], end($pagesMasqueC)['shop'] ?? null, array_column($refusMag, 'status')], JSON_UNESCAPED_UNICODE));
+call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['photoMediaId' => null, 'mapsUrl' => '', 'openingHoursFr' => '', 'openingHoursNl' => '']);
+call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], $corpsP);
+$pdo->exec("DELETE FROM mar_media WHERE sha256 = 'magasin-photo-test'");
 
 // La boutique reçoit le catalogue avec ses pages ; sa copie adaptée les garde, et la marque n'en pose pas sur un catalogue de boutique.
 AuthContext::set(1, 'BRAND_ADMIN', 1);
