@@ -713,6 +713,28 @@ check(
     json_encode($tarte)
 );
 
+// La fiche d'une campagne porte ce que la mesure du cockpit lisait dans les tables (21/11/2026) : la référence et le
+// nom du catalogue de chaque produit promu, et le code du levier lié au type.
+$fiche = call($router, 'GET', sprintf('/api/v1/marketing/campaigns/%d', $newId))['body'];
+$catalogue = [];
+foreach ($pdo->query('SELECT id, sku_ref, name FROM mar_offer_item')->fetchAll() as $oi) { $catalogue[(int) $oi['id']] = $oi; }
+$lignesOffre = $fiche['offer']['items'] ?? [];
+check(
+    'la fiche rend la référence et le nom du catalogue de chaque produit de l\'offre',
+    $lignesOffre !== [] && array_filter($lignesOffre, static fn (array $l): bool => !array_key_exists('sku_ref', $l) || !array_key_exists('catalog_name', $l)
+        || ($l['offer_item_id'] !== null && ($l['sku_ref'] !== ($catalogue[(int) $l['offer_item_id']]['sku_ref'] ?? 'x')
+            || $l['catalog_name'] !== ($catalogue[(int) $l['offer_item_id']]['name'] ?? 'x')))) === [],
+    json_encode(array_map(static fn (array $l): array => [$l['offer_item_id'] ?? null, $l['sku_ref'] ?? 'absent', $l['catalog_name'] ?? 'absent'], $lignesOffre))
+);
+$leverDuType = $pdo->query(sprintf(
+    'SELECT l.code FROM mar_campaign c JOIN mar_campaign_type t ON t.id = c.type_id LEFT JOIN mar_lever l ON l.id = t.lever_id WHERE c.id = %d', $newId
+))->fetchColumn();
+check(
+    'la fiche rend le code du levier lié au type de la campagne',
+    array_key_exists('type_lever_code', $fiche) && $fiche['type_lever_code'] === ($leverDuType === false ? null : $leverDuType),
+    json_encode([$fiche['type_lever_code'] ?? 'absent', $leverDuType])
+);
+
 $response = call($router, 'GET', '/api/v1/marketing/offer-items');
 check(
     'le catalogue expose la référence active',
