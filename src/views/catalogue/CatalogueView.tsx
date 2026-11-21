@@ -86,12 +86,37 @@ export default function CatalogueView() {
 
 function CatalogueList({ onOpen, onCharter }: { onOpen: (id: number) => void; onCharter: () => void }) {
   const [owner, setOwner] = useState<'' | api.CatalogueOwner>('')
-  const list = useAsync(() => api.listCatalogues(owner ? { owner } : {}), [owner])
+  const [revision, setRevision] = useState(0)
+  const list = useAsync(() => api.listCatalogues(owner ? { owner } : {}), [owner, revision])
   const shops = useAsync(() => api.listShops(), [])
   const [creating, setCreating] = useState(false)
+  const [deleting, setDeleting] = useState<number | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const createRef = useRef<HTMLDivElement>(null)
 
   const shopNames = useMemo(() => new Map((shops.data ?? []).map((shop) => [shop.id, shop.name])), [shops.data])
+
+  /**
+   * Effacer un catalogue depuis la liste (21/11/2026, Sam : « je dois pouvoir effacer les catalogues »),
+   * quel que soit son état ou son auteur : le siège efface aussi ceux des franchisés. La suppression
+   * est définitive ; la réception par les boutiques et les liens en ligne partent avec le catalogue.
+   */
+  function remove(cat: Catalogue) {
+    const consequences = [
+      cat.owner === 'boutique' ? `Il disparaît aussi du dashboard de ${cat.shop?.name ?? 'la boutique'}.` : null,
+      cat.owner === 'marque' && cat.shopIds.length ? 'Les boutiques qui l’ont reçu ne le verront plus.' : null,
+      cat.status !== 'brouillon' ? `Il est à l’état « ${STATUS_LABELS[cat.status]} ».` : null,
+      'Ses liens en ligne cesseront de marcher. C’est définitif.',
+    ].filter((line): line is string => line !== null)
+    if (!window.confirm(`Supprimer le catalogue « ${cat.title} » ?\n\n${consequences.join('\n')}`)) return
+    setDeleting(cat.id)
+    setDeleteError(null)
+    api
+      .deleteCatalogue(cat.id)
+      .then(() => setRevision((n) => n + 1))
+      .catch((cause: unknown) => setDeleteError(`« ${cat.title} » n’a pas été supprimé : ${message(cause)}`))
+      .finally(() => setDeleting(null))
+  }
 
   return (
     <div className="catv">
@@ -126,6 +151,7 @@ function CatalogueList({ onOpen, onCharter }: { onOpen: (id: number) => void; on
       <section className="card catv-recent">
         <h2>Catalogues récents</h2>
         {list.error ? <p className="error">{list.error}</p> : null}
+        {deleteError ? <p className="error">{deleteError}</p> : null}
         {list.loading && !list.data ? <p className="muted">Lecture des catalogues…</p> : null}
         {list.data && list.data.items.length === 0 ? <p className="muted">Aucun catalogue pour l’instant.</p> : null}
         {list.data && list.data.items.length > 0 ? (
@@ -139,7 +165,7 @@ function CatalogueList({ onOpen, onCharter }: { onOpen: (id: number) => void; on
                   <th>Pages</th>
                   <th>Boutiques</th>
                   <th>État</th>
-                  <th aria-label="Ouvrir" />
+                  <th aria-label="Ouvrir ou supprimer" />
                 </tr>
               </thead>
               <tbody>
@@ -169,8 +195,17 @@ function CatalogueList({ onOpen, onCharter }: { onOpen: (id: number) => void; on
                         {cat.status === 'imprime' && cat.printQty ? ` · ${cat.printQty} ex.` : ''}
                       </span>
                     </td>
-                    <td className="catv-right">
-                      <button type="button" className="btn btn--sm" onClick={() => onOpen(cat.id)}>
+                    <td className="catv-right catv-row-actions">
+                      <button
+                        type="button"
+                        className="btn btn--danger btn--sm"
+                        disabled={deleting !== null}
+                        aria-label={`Supprimer le catalogue « ${cat.title} »`}
+                        onClick={() => remove(cat)}
+                      >
+                        {deleting === cat.id ? 'Suppression…' : 'Supprimer'}
+                      </button>
+                      <button type="button" className="btn btn--sm" disabled={deleting === cat.id} onClick={() => onOpen(cat.id)}>
                         Ouvrir ›
                       </button>
                     </td>
