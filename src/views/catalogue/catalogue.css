@@ -25,6 +25,10 @@
 
 /* ---------- nouveau catalogue ---------- */
 .catv-sources { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+/* Nouveau catalogue, leaflet ou dépliant (21/11/2026, fusion des imprimés) : le choix du support, à droite du titre. */
+.catv-newhead { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.catv-newhead h2 { margin: 0; }
+.catv-newnote { margin: -4px 0 12px; font-size: 13px; line-height: 1.5; color: var(--muted); }
 .catv-source {
   display: flex; flex-direction: column; overflow: hidden; padding: 0; border: 1px solid var(--line); border-radius: 12px;
   background: #fff; font: inherit; color: inherit; text-align: left; cursor: pointer;

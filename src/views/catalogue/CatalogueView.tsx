@@ -10,6 +10,7 @@ import type {
   CatalogueLayout,
   CataloguePageCount,
   CatalogueSourceKind,
+  CatalogueSupport,
   CatalogueTemplate,
   WebshopProducts,
 } from '../../lib/api/module'
@@ -24,7 +25,12 @@ import type { CharterStep } from './CharterAssistant'
 import { MediaPicker } from './MediaPicker'
 import { HeaderIcon, LayoutIcon, TemplateIcon } from './CatalogueIcons'
 import CatalogueWizard from './CatalogueWizard'
-import type { WizardStep } from './CatalogueWizard'
+import type { WizardProps, WizardStep } from './CatalogueWizard'
+import LeafletWizard from './LeafletWizard'
+import { SUPPORT_LABELS, SUPPORT_NOUNS, isLeaflet, leafletBlocked, leafletChecks, leafletDoc, supportOf } from './leaflet'
+import { Sheet as BrochureSheet, fontFaces, pageSize as brochurePageSize } from '../brochure/Pages'
+import type { Side } from '../brochure/Pages'
+import BROCHURE_CSS from '../brochure/brochure.css?inline'
 
 /**
  * Les catalogues produits de la marque : prix du webshop, gammes (Noël, Saint-Nicolas…).
@@ -135,12 +141,15 @@ function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen
   const [revision, setRevision] = useState(0)
   const list = useAsync(() => api.listCatalogues(owner ? { owner } : {}), [owner, revision])
   const shops = useAsync(() => api.listShops(), [])
-  const [creating, setCreating] = useState(false)
+  // Ce qu'on crée (21/11/2026, fusion des imprimés) : un catalogue, un leaflet A5 ou un dépliant A4 ; null : rien.
+  const [creating, setCreating] = useState<CatalogueSupport | null>(null)
+  const [kindFilter, setKindFilter] = useState<'' | CatalogueSupport>('')
   const [deleting, setDeleting] = useState<number | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const createRef = useRef<HTMLDivElement>(null)
 
   const shopNames = useMemo(() => new Map((shops.data ?? []).map((shop) => [shop.id, shop.name])), [shops.data])
+  const shown = (list.data?.items ?? []).filter((cat) => kindFilter === '' || supportOf(cat) === kindFilter)
 
   /**
    * Effacer un catalogue depuis la liste (21/11/2026, Sam : « je dois pouvoir effacer les catalogues »),
@@ -154,7 +163,7 @@ function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen
       cat.status !== 'brouillon' ? `Il est à l’état « ${STATUS_LABELS[cat.status]} ».` : null,
       'Ses liens en ligne cesseront de marcher. C’est définitif.',
     ].filter((line): line is string => line !== null)
-    if (!window.confirm(`Supprimer le catalogue « ${cat.title} » ?\n\n${consequences.join('\n')}`)) return
+    if (!window.confirm(`Supprimer le ${SUPPORT_NOUNS[supportOf(cat)]} « ${cat.title} » ?\n\n${consequences.join('\n')}`)) return
     setDeleting(cat.id)
     setDeleteError(null)
     api
@@ -174,59 +183,65 @@ function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen
             </button>
           ))}
         </span>
+        <span className="bro-seg" role="group" aria-label="Imprimés">
+          {([['', 'Tout'], ['catalogue', 'Catalogues'], ['leaflet', 'Leaflets'], ['depliant', 'Dépliants']] as const).map(([value, label]) => (
+            <button key={value} type="button" className={kindFilter === value ? 'is-on' : ''} onClick={() => setKindFilter(value)}>
+              {label}
+            </button>
+          ))}
+        </span>
         <span className="catv-grow" />
         <button type="button" className="btn" onClick={onCharter} title="Couverture, page 2, avant-dernière et dernière page : les 4 pages que reçoit chaque catalogue">
           ✎ Modifier les pages de la marque
         </button>
-        <button
-          type="button"
-          className="btn btn--primary"
-          onClick={() => {
-            setCreating(true)
-            window.setTimeout(() => createRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30)
-          }}
-        >
-          ＋ Nouveau catalogue
-        </button>
-        {onBrochure ? (
-          <>
-            {/* Les trois formats d'un imprimé (21/11/2026) : le leaflet et le dépliant partent d'une campagne. */}
-            <button type="button" className="btn" onClick={() => onBrochure('leaflet-a5')} title="Un leaflet A5 recto-verso, tiré d’une campagne">
-              ＋ Leaflet A5
-            </button>
-            <button type="button" className="btn" onClick={() => onBrochure('depliant-a4')} title="Un dépliant A4 trois volets, tiré d’une campagne">
-              ＋ Dépliant A4
-            </button>
-          </>
-        ) : null}
+        {/* Les trois formats d'un imprimé (21/11/2026, fusion, étape 2) : le leaflet et le dépliant se font comme un catalogue. */}
+        {([
+          ['catalogue', '＋ Nouveau catalogue', 'Un catalogue de 8 à 16 pages', 'btn btn--primary'],
+          ['leaflet', '＋ Leaflet A5', 'Un leaflet A5 recto-verso : les produits d’une gamme, d’une campagne ou au choix', 'btn'],
+          ['depliant', '＋ Dépliant A4', 'Un dépliant A4 trois volets : les produits d’une gamme, d’une campagne ou au choix', 'btn'],
+        ] as const).map(([support, label, title, className]) => (
+          <button
+            key={support}
+            type="button"
+            className={className}
+            title={title}
+            onClick={() => {
+              setCreating(support)
+              window.setTimeout(() => createRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30)
+            }}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       <div ref={createRef}>
-        <NewCatalogue open={creating} onOpen={() => setCreating(true)} onCreated={onOpen} />
+        <NewCatalogue open={creating !== null} support={creating ?? 'catalogue'} onSupport={setCreating} onOpen={() => setCreating((current) => current ?? 'catalogue')} onCreated={onOpen} onBrochure={onBrochure} />
       </div>
 
       <section className="card catv-recent">
-        <h2>Catalogues récents</h2>
+        <h2>Imprimés récents</h2>
         {list.error ? <p className="error">{list.error}</p> : null}
         {deleteError ? <p className="error">{deleteError}</p> : null}
         {list.loading && !list.data ? <p className="muted">Lecture des catalogues…</p> : null}
-        {list.data && list.data.items.length === 0 ? <p className="muted">Aucun catalogue pour l’instant.</p> : null}
-        {list.data && list.data.items.length > 0 ? (
+        {list.data && list.data.items.length === 0 ? <p className="muted">Aucun imprimé pour l’instant.</p> : null}
+        {list.data && list.data.items.length > 0 && shown.length === 0 ? <p className="muted">Aucun {kindFilter === 'leaflet' ? 'leaflet' : kindFilter === 'depliant' ? 'dépliant' : 'catalogue'} pour l’instant.</p> : null}
+        {list.data && shown.length > 0 ? (
           <div className="table-scroll">
             <table className="catv-table">
               <thead>
                 <tr>
-                  <th>Catalogue</th>
+                  <th>Imprimé</th>
                   <th>Par</th>
                   <th>Source</th>
-                  <th>Pages</th>
+                  <th>Format</th>
                   <th>Boutiques</th>
                   <th>État</th>
                   <th aria-label="Supprimer ou modifier" />
                 </tr>
               </thead>
               <tbody>
-                {list.data.items.map((cat) => (
+                {shown.map((cat) => (
                   <tr key={cat.id}>
                     <td>{cat.title}</td>
                     <td>{cat.owner === 'marque' ? 'Marque' : `${cat.shop?.name ?? 'Boutique'} (franchisé)`}</td>
@@ -235,7 +250,7 @@ function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen
                         {cat.source.kind === 'choix' ? `Au choix · ${cat.productCount} produits` : `${cat.source.label ?? SOURCE_LABELS[cat.source.kind]}`}
                       </span>
                     </td>
-                    <td>{cat.pageCount}</td>
+                    <td>{isLeaflet(cat) ? <span className="bro-tag">{SUPPORT_LABELS[supportOf(cat)]}</span> : `${cat.pageCount} pages ${cat.format}`}</td>
                     <td>
                       {cat.owner === 'boutique'
                         ? cat.shop?.name
@@ -298,7 +313,23 @@ function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen
   )
 }
 
-function NewCatalogue({ open, onOpen, onCreated }: { open: boolean; onOpen: () => void; onCreated: (id: number) => void }) {
+function NewCatalogue({
+  open,
+  support,
+  onSupport,
+  onOpen,
+  onCreated,
+  onBrochure,
+}: {
+  open: boolean
+  /** Ce qu'on crée : un catalogue, un leaflet A5, un dépliant A4 (21/11/2026). */
+  support: CatalogueSupport
+  onSupport: (support: CatalogueSupport) => void
+  onOpen: () => void
+  onCreated: (id: number) => void
+  /** L'ancien générateur de brochures, depuis le dossier d'impression d'une campagne. */
+  onBrochure?: (format: BrochureKind) => void
+}) {
   const webshop = useAsync<WebshopProducts | null>(() => (open ? api.getWebshopProducts([]) : Promise.resolve(null)), [open])
   const campaigns = useAsync(() => (open ? api.listCampaigns() : Promise.resolve([])), [open])
   const [kind, setKind] = useState<CatalogueSourceKind>('gamme')
@@ -321,10 +352,12 @@ function NewCatalogue({ open, onOpen, onCreated }: { open: boolean; onOpen: () =
   const nomsChoisis = choisies.map((id) => gammes.find((g) => g.id === id)?.name ?? '').filter(Boolean)
   const produitsChoisis = (webshop.data?.products ?? []).filter((product) => product.gammes.some((id) => choisies.includes(id))).length
 
+  const leaflet = support !== 'catalogue'
+  const what = SUPPORT_NOUNS[support]
   const suggestion =
-    kind === 'gamme' ? `${nomsChoisis.join(' + ') || 'Gamme'} ${new Date().getFullYear()} — catalogue du réseau`
-    : kind === 'campagne' ? `${sorted.find((c) => c.id === campaign)?.name ?? 'Campagne'} — catalogue`
-    : 'Catalogue — produits choisis'
+    kind === 'gamme' ? `${nomsChoisis.join(' + ') || 'Gamme'} ${new Date().getFullYear()} — ${leaflet ? what : 'catalogue du réseau'}`
+    : kind === 'campagne' ? `${sorted.find((c) => c.id === campaign)?.name ?? 'Campagne'} — ${what}`
+    : `${leaflet ? SUPPORT_LABELS[support] : 'Catalogue'} — produits choisis`
 
   async function create() {
     setBusy(true)
@@ -332,7 +365,7 @@ function NewCatalogue({ open, onOpen, onCreated }: { open: boolean; onOpen: () =
     try {
       const created = await api.createCatalogue({
         title: title.trim() || suggestion,
-        pageCount,
+        ...(leaflet ? { support } : { pageCount }),
         source: kind === 'choix' ? { kind } : kind === 'gamme' ? { kind, ref: choisies.length === 1 ? choisies[0] : choisies } : { kind, ref: campaign ?? 0 },
       })
       onCreated(created.id)
@@ -372,7 +405,38 @@ function NewCatalogue({ open, onOpen, onCreated }: { open: boolean; onOpen: () =
 
   return (
     <section className="card catv-new">
-      <h2>Nouveau catalogue · d’où partent les produits</h2>
+      <div className="catv-newhead">
+        <h2>Nouveau {what} · d’où partent les produits</h2>
+        <span className="bro-seg" role="group" aria-label="Imprimé">
+          {(['catalogue', 'leaflet', 'depliant'] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              className={open && support === value ? 'is-on' : ''}
+              onClick={() => {
+                onSupport(value)
+                onOpen()
+              }}
+            >
+              {value === 'catalogue' ? 'Catalogue · 8 à 16 pages' : SUPPORT_LABELS[value]}
+            </button>
+          ))}
+        </span>
+      </div>
+      {open && leaflet ? (
+        <p className="catv-newnote">
+          {support === 'leaflet' ? 'Recto-verso, 148 × 210 mm, 6 produits au plus.' : 'Trois volets roulés, 297 × 210 mm, 9 produits au plus.'} Les produits, leurs prix par boutique, le titre et le visuel de la
+          couverture et le QR de la dernière page viennent du catalogue ; il s’imprime dans un des modèles des brochures.
+          {onBrochure ? (
+            <>
+              {' '}
+              <button type="button" className="linklike" onClick={() => onBrochure(support === 'leaflet' ? 'leaflet-a5' : 'depliant-a4')}>
+                Ou depuis le dossier d’impression d’une campagne ›
+              </button>
+            </>
+          ) : null}
+        </p>
+      ) : null}
       <div className="catv-sources">
         {options.map((option) => (
           <button
@@ -443,10 +507,12 @@ function NewCatalogue({ open, onOpen, onCreated }: { open: boolean; onOpen: () =
               </select>
             </label>
           ) : null}
-          <div className="catv-field">
-            <span>Nombre de pages · dont 4 de la marque</span>
-            <PageCountChoice value={pageCount} onChange={setPageCount} />
-          </div>
+          {leaflet ? null : (
+            <div className="catv-field">
+              <span>Nombre de pages · dont 4 de la marque</span>
+              <PageCountChoice value={pageCount} onChange={setPageCount} />
+            </div>
+          )}
           <label className="catv-field catv-field--grow">
             <span>Titre (interne)</span>
             <input value={title} placeholder={suggestion} maxLength={160} onChange={(event) => setTitle(event.target.value)} />
@@ -457,7 +523,7 @@ function NewCatalogue({ open, onOpen, onCreated }: { open: boolean; onOpen: () =
             disabled={busy || (kind === 'gamme' && !choisies.length) || (kind === 'campagne' && campaign === null)}
             onClick={() => void create()}
           >
-            {busy ? 'Création…' : 'Créer le catalogue'}
+            {busy ? 'Création…' : `Créer le ${what}`}
           </button>
           {error ? <p className="error">{error}</p> : null}
         </div>
@@ -509,7 +575,7 @@ function Editor({ id, onBack, onCharter }: { id: number; onBack: () => void; onC
     return (
       <div className="catv">
         <button type="button" className="linklike" onClick={onBack}>
-          ‹ Catalogues
+          ‹ Imprimés
         </button>
         <p className="error">{loaded.error}</p>
       </div>
@@ -521,6 +587,8 @@ function Editor({ id, onBack, onCharter }: { id: number; onBack: () => void; onC
 
 function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue; shops: api.Shop[]; onBack: () => void; onCharter: OpenCharter }) {
   const [cat, setCat] = useState<Catalogue>(initial)
+  // Un leaflet A5 ou un dépliant A4 (21/11/2026) : le même catalogue, son assistant à lui, imprimé au format de la brochure.
+  const leaflet = isLeaflet(initial)
   // Un catalogue de la marque a ses pages de la marque à lui (21/11/2026) ; un catalogue de boutique garde celles de la charte.
   const brandOwned = initial.owner === 'marque'
   const ownSlots = new Set(initial.brandPagesOwn ?? [])
@@ -763,6 +831,7 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
 
   // --- impression ---
   async function print(mode: CatalogueSheetMode, all: boolean) {
+    if (leaflet) return printLeaflet(mode, all)
     setPrintError(null)
     const win = window.open('', '_blank')
     if (!win) {
@@ -796,6 +865,63 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
         target: win,
       })
       if (failure) setPrintError(failure)
+    } catch (cause) {
+      win.close()
+      setPrintError(message(cause))
+    }
+  }
+
+  /**
+   * Un leaflet ou un dépliant (21/11/2026) : chaque version composée par l'API, mise au format de la brochure, recto puis
+   * verso. Le PDF de l'imprimeur ne prend que les versions sans point bloquant ; l'épreuve les prend toutes, marquées.
+   */
+  async function printLeaflet(mode: CatalogueSheetMode, all: boolean) {
+    setPrintError(null)
+    const win = window.open('', '_blank')
+    if (!win) {
+      setPrintError('Le navigateur a bloqué la fenêtre d’impression : autorisez les fenêtres pour ce site, puis recommencez.')
+      return
+    }
+    win.document.write('<p style="font-family:system-ui;padding:24px">Composition de l’imprimé…</p>')
+    try {
+      const versions: Array<{ lang: CatalogueLang; shop: number | null }> = all
+        ? cat.langs.flatMap((l) => [{ lang: l, shop: null as number | null }, ...versionShops.map((s) => ({ lang: l, shop: s as number | null }))])
+        : [{ lang, shop: versionShop }]
+      const docs = await Promise.all(versions.map((v) => api.getCatalogueDocument(cat.id, v.lang, v.shop)))
+      const rows = docs.map((one) => ({ one, blocked: leafletBlocked(leafletChecks(cat, one)) }))
+      const printer = mode === 'printer'
+      const kept = printer ? rows.filter((row) => !row.blocked) : rows
+      if (!kept.length) {
+        win.close()
+        setPrintError(all ? 'Aucune version n’est prête : chacune a un point bloquant (voir la validation).' : 'Cette version a un point bloquant : voir la validation. L’épreuve reste possible.')
+        return
+      }
+      const sheetMode = printer ? 'printer' : 'proof'
+      const pages = kept.map(({ one, blocked }) => ({ doc: leafletDoc({ cat, doc: one, proof: !printer }), blocked }))
+      const container = document.createElement('div')
+      const root = createRoot(container)
+      flushSync(() =>
+        root.render(
+          <>
+            {pages.flatMap(({ doc: one, blocked }, d) =>
+              ([0, 1] as Side[]).map((side) => <BrochureSheet key={`${d}-${side}`} doc={one} side={side} mode={sheetMode} marks watermark={!printer && blocked} />),
+            )}
+          </>,
+        ),
+      )
+      const markup = container.innerHTML
+      root.unmount()
+      const label = all ? `${kept.length} versions` : versionShop !== null ? shopName(versionShop) : 'générale'
+      const failure = openPrintWindow({
+        title: [cat.title, SUPPORT_LABELS[supportOf(cat)], label, all ? null : lang.toUpperCase(), printer ? 'imprimeur' : 'épreuve'].filter(Boolean).join(' – '),
+        markup,
+        css: `${fontFaces()}\n${BROCHURE_CSS}`,
+        size: brochurePageSize(pages[0].doc, sheetMode, true),
+        pageClass: 'bro-page',
+        target: win,
+      })
+      if (failure) setPrintError(failure)
+      else if (kept.length < rows.length) setPrintError(`${rows.length - kept.length} version(s) écartée(s) du PDF : point bloquant (voir la validation).`)
     } catch (cause) {
       win.close()
       setPrintError(message(cause))
@@ -951,16 +1077,50 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
   function deleteCatalogue() {
     if (window.confirm(`Supprimer « ${cat.title} » ?`)) void api.deleteCatalogue(cat.id).then(onBack, (cause: unknown) => setSave({ status: 'error', text: message(cause) }))
   }
+  const wizardProps: WizardProps = {
+    step: wizStep,
+    setStep: setWizStep,
+    cat,
+    doc: doc.data ?? null,
+    docError: doc.error ?? null,
+    lang,
+    setLang: (l) => {
+      if (!cat.langs.includes(l)) change({ langs: [...cat.langs, l] })
+      setLang(l)
+    },
+    versionShop,
+    setVersionShop,
+    versionShops,
+    shops,
+    shopName,
+    products,
+    byId,
+    categories,
+    webshopLoading: webshop.loading,
+    busy: save.status === 'saving',
+    change,
+    onBrandPage: openBrandPage,
+    onCommonBrandPages: () => onCharter(1, cat, 'common'),
+    print: (mode, all) => void print(mode, all),
+    openDetail: (index) => {
+      setSelected(index)
+      setDetailState(true)
+      window.scrollTo({ top: 0 })
+    },
+    productsPanel,
+    offersPanel,
+    onDelete: deleteCatalogue,
+  }
 
   return (
     <div className="catv catv-editor">
       <div className="catv-head">
         <div>
           <button type="button" className="linklike catv-back" onClick={onBack}>
-            ‹ Catalogues
+            ‹ Imprimés
           </button>
           <p className="catv-kicker">
-            Catalogues · {sourceLabel} · webshop{cat.owner === 'boutique' ? ` · ${cat.shop?.name ?? ''} (franchisé)` : ''}
+            {leaflet ? SUPPORT_LABELS[supportOf(cat)] : 'Catalogues'} · {sourceLabel} · webshop{cat.owner === 'boutique' ? ` · ${cat.shop?.name ?? ''} (franchisé)` : ''}
           </p>
           <input className="catv-title" value={cat.title} maxLength={160} onChange={(event) => setCat({ ...cat, title: event.target.value })} onBlur={(event) => event.target.value.trim() && change({ title: event.target.value.trim() })} aria-label="Titre du catalogue" />
         </div>
@@ -1008,7 +1168,7 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
       </div>
       {printError ? <p className="error">{printError}</p> : null}
 
-      {detail ? (
+      {detail && !leaflet ? (
         <>
       <div className="catv-detailbar">
         <button type="button" className="btn btn--sm" onClick={() => setDetailState(false)}>
@@ -1407,40 +1567,7 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
       </div>
         </>
       ) : (
-        <CatalogueWizard
-          step={wizStep}
-          setStep={setWizStep}
-          cat={cat}
-          doc={doc.data ?? null}
-          docError={doc.error ?? null}
-          lang={lang}
-          setLang={(l) => {
-            if (!cat.langs.includes(l)) change({ langs: [...cat.langs, l] })
-            setLang(l)
-          }}
-          versionShop={versionShop}
-          setVersionShop={setVersionShop}
-          versionShops={versionShops}
-          shops={shops}
-          shopName={shopName}
-          products={products}
-          byId={byId}
-          categories={categories}
-          webshopLoading={webshop.loading}
-          busy={save.status === 'saving'}
-          change={change}
-          onBrandPage={openBrandPage}
-          onCommonBrandPages={() => onCharter(1, cat, 'common')}
-          print={(mode, all) => void print(mode, all)}
-          openDetail={(index) => {
-            setSelected(index)
-            setDetailState(true)
-            window.scrollTo({ top: 0 })
-          }}
-          productsPanel={productsPanel}
-          offersPanel={offersPanel}
-          onDelete={deleteCatalogue}
-        />
+        leaflet ? <LeafletWizard {...wizardProps} /> : <CatalogueWizard {...wizardProps} />
       )}
       {fillerPicking && selected !== null ? (
         <MediaPicker

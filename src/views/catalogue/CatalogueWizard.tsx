@@ -44,7 +44,7 @@ const MEP_COLORS = ['#8D1D2C', '#B0792A', '#3f7a52', '#2F5D8A', '#7A4E8C', '#A05
 const OTHER_COLOR = '#9a948c'
 const PAGE_COUNTS: CataloguePageCount[] = [8, 10, 12, 14, 16]
 const BRAND_PAGES = 4
-const STATUS_LABELS: Record<api.CatalogueStatus, string> = { brouillon: 'Brouillon', pret: 'PDF prêt', imprime: 'Imprimé' }
+export const STATUS_LABELS: Record<api.CatalogueStatus, string> = { brouillon: 'Brouillon', pret: 'PDF prêt', imprime: 'Imprimé' }
 
 const blankPage = (): api.CataloguePageRow => ({ layout: 'grille', category: null, template: 'A', gamme: null, filler: null, fillerMediaId: null, header: 'titre', script: false })
 
@@ -176,7 +176,7 @@ export function Thumb({ doc, index, width, className = '' }: { doc: CatalogueDoc
   )
 }
 
-function Seg<T extends string | number | boolean>({ value, options, onChange, disabled = false, label }: { value: T | null; options: Array<[T, string]>; onChange: (v: T) => void; disabled?: boolean; label: string }) {
+export function Seg<T extends string | number | boolean>({ value, options, onChange, disabled = false, label }: { value: T | null; options: Array<[T, string]>; onChange: (v: T) => void; disabled?: boolean; label: string }) {
   return (
     <span className="wz-seg" role="group" aria-label={label}>
       {options.map(([v, text]) => (
@@ -188,7 +188,7 @@ function Seg<T extends string | number | boolean>({ value, options, onChange, di
   )
 }
 
-function Nav({ back, next, middle }: { back?: ReactNode; next?: ReactNode; middle?: ReactNode }) {
+export function Nav({ back, next, middle }: { back?: ReactNode; next?: ReactNode; middle?: ReactNode }) {
   return (
     <div className="wz-foot">
       {back}
@@ -1181,7 +1181,7 @@ function StepValidation(p: WizardProps) {
   )
 }
 
-function VersionPicker(p: WizardProps) {
+export function VersionPicker(p: WizardProps) {
   return (
     <span className="wz-versions">
       {p.cat.langs.length > 1 ? <Seg label="Langue" value={p.lang} options={p.cat.langs.map((l) => [l, l.toUpperCase()] as [CatalogueLang, string])} onChange={p.setLang} /> : null}

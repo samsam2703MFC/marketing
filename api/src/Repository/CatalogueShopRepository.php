@@ -133,7 +133,10 @@ final class CatalogueShopRepository
      */
     public function received(int $shopId, int $page, int $perPage, ?int $id = null): array
     {
-        $where = "c.owner = 'marque' AND c.status IN ('pret', 'imprime') AND JSON_CONTAINS(JSON_EXTRACT(c.settings, '$.shopIds'), :shop)";
+        // Les catalogues seulement (21/11/2026) : un leaflet ou un dépliant de la marque ne va pas au dashboard franchisé, qui
+        // ne sait imprimer que des catalogues.
+        $where = "c.owner = 'marque' AND c.status IN ('pret', 'imprime') AND JSON_CONTAINS(JSON_EXTRACT(c.settings, '$.shopIds'), :shop)"
+            . " AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(c.settings, '$.support')), 'catalogue') = 'catalogue'";
         $bind = ['shop' => (string) $shopId, 'shop2' => $shopId];
         if ($id !== null) {
             $where .= ' AND c.id = :id';
