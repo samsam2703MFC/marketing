@@ -735,6 +735,43 @@ check(
     json_encode([$fiche['type_lever_code'] ?? 'absent', $leverDuType])
 );
 
+// La note de campagne du cockpit lit aussi la fiche (21/11/2026) : le type et son levier, les formats de déclinaison des
+// visuels, l'agence de chaque canal.
+$typeEnBase = $pdo->query(sprintf(
+    'SELECT t.icon_path, t.color_hex, t.default_kpi_label, t.lever_id, t.lever_badge_label, l.label AS lever_label, l.color_hex AS lever_color
+       FROM mar_campaign c JOIN mar_campaign_type t ON t.id = c.type_id LEFT JOIN mar_lever l ON l.id = t.lever_id WHERE c.id = %d', $newId
+))->fetch();
+check(
+    'la fiche rend le type et son levier (icône, couleur, KPI, badge, nom et couleur du levier)',
+    $typeEnBase !== false
+        && $fiche['type_icon_path'] === $typeEnBase['icon_path'] && $fiche['type_color_hex'] === $typeEnBase['color_hex']
+        && $fiche['type_default_kpi_label'] === $typeEnBase['default_kpi_label']
+        && $fiche['type_lever_id'] === ($typeEnBase['lever_id'] === null ? null : (int) $typeEnBase['lever_id'])
+        && $fiche['type_lever_badge_label'] === $typeEnBase['lever_badge_label']
+        && $fiche['type_lever_label'] === $typeEnBase['lever_label'] && $fiche['type_lever_color_hex'] === $typeEnBase['lever_color'],
+    json_encode([array_intersect_key($fiche, array_flip(['type_icon_path', 'type_color_hex', 'type_default_kpi_label', 'type_lever_id',
+        'type_lever_badge_label', 'type_lever_label', 'type_lever_color_hex'])), $typeEnBase])
+);
+$formatsEnBase = $pdo->query(sprintf(
+    'SELECT DISTINCT f.id, f.name FROM mar_asset_render ar JOIN mar_campaign_asset ca ON ca.id = ar.campaign_asset_id
+       JOIN mar_format f ON f.id = ar.format_id WHERE ca.campaign_id = %d ORDER BY f.sort_order, f.id', $newId
+))->fetchAll(PDO::FETCH_COLUMN, 1);
+check(
+    'la fiche rend les formats de déclinaison de ses visuels, une fois chacun',
+    is_array($fiche['render_formats'] ?? null) && array_column($fiche['render_formats'], 'name') === $formatsEnBase
+        && array_filter($fiche['render_formats'], static fn (array $f): bool => !is_int($f['width_px']) || !is_int($f['height_px'])) === [],
+    json_encode([$fiche['render_formats'] ?? 'absent', $formatsEnBase])
+);
+$agencesEnBase = $pdo->query(sprintf(
+    'SELECT cc.agency_id FROM mar_campaign_channel cc JOIN mar_channel ch ON ch.id = cc.channel_id WHERE cc.campaign_id = %d ORDER BY ch.family, ch.sort_order', $newId
+))->fetchAll(PDO::FETCH_COLUMN);
+check(
+    'chaque canal de la fiche porte l\'identifiant de son agence',
+    array_map(static fn (array $c) => $c['agency_id'] ?? 'absent', $fiche['channels'] ?? [])
+        === array_map(static fn ($a) => $a === null ? null : (int) $a, $agencesEnBase),
+    json_encode([array_column($fiche['channels'] ?? [], 'agency_id'), $agencesEnBase])
+);
+
 $response = call($router, 'GET', '/api/v1/marketing/offer-items');
 check(
     'le catalogue expose la référence active',

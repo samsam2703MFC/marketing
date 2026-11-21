@@ -121,6 +121,11 @@ levier lié au type) et, dans `offer.items[]`, `sku_ref` et `catalog_name` (la r
 catalogue ; `null` pour un produit saisi à la main). Le brouillon (`…/draft`) les porte aussi. La mesure des campagnes du
 cockpit lit cette fiche au lieu de `mar_campaign_offer*`, `mar_offer_item` et `mar_lever`.
 
+**21/11/2026 — la fiche d'une campagne pour la note.** `GET …/campaigns/{id}` rend aussi le type et son levier
+(`type_icon_path`, `type_color_hex`, `type_default_kpi_label`, `type_lever_id`, `type_lever_badge_label`, `type_lever_label`,
+`type_lever_color_hex`), `render_formats` (les formats de déclinaison des visuels, une fois chacun : `id`, `name`, `width_px`,
+`height_px`, `note`, `sort_order`) et, dans `channels[]`, `agency_id`. La note de campagne du cockpit lit cette fiche.
+
 **21/11/2026 — visibilité et investissement.** `POST` et `PATCH …/funds/movements` acceptent `is_public` (booléen,
 `true` par défaut à la création) et `is_investment` (booléen, retenu sur une sortie seulement, `false` par défaut) ; le
 grand livre les rend sur chaque ligne. Une correction qui ne les porte pas garde les valeurs en place (jusqu'ici, le
