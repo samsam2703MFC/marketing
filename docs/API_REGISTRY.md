@@ -392,7 +392,7 @@ campagne sans offre en reçoit une, à son nom. Produit inconnu ou liste vide :
 pas d'enveloppe `{success, data, meta}`, `snake_case`.
 
 **Brochures d'une campagne** (`GET …/brochures`, `PUT …/brochures/{format}`, octobre 2026).
-Le générateur de brochures (Campagnes › Brochures & leaflets) compose un leaflet
+Le générateur de brochures (Imprimés › Leaflets & dépliants depuis le 21/11/2026) compose un leaflet
 A5 recto-verso ou un dépliant A4 trois volets à partir du dossier d'impression
 (`GET …/print`) : offre, produits, prix, conditions et palette ne sont pas
 recopiés. Ces deux routes ne portent que ce qui appartient à la brochure : le
@@ -407,6 +407,8 @@ ligne par campagne et par format. Écart résiduel, comme le reste du module :
 pas d'enveloppe `{success, data, meta}`, erreurs sans code machine ; les clés
 des réglages sont en `camelCase` parce que le document est rendu tel quel au
 front.
+Modèles (`template`) : `papier` (21/11/2026 : le style des catalogues de la refonte — cadre et filets abricot, produits
+sur cartes blanches, pied rubis ; le modèle par défaut), `fetes`, `epure`, `ruby`, `abricot`, `noir`, `duo`, `carte`.
 
 Le générateur lit aussi, sans rien y écrire :
 

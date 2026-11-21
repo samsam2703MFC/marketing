@@ -187,7 +187,7 @@ export default function ProductionPanel({ campaignId, brandAdmin, onOpenEditor }
                   {section.dueOn ? <span className="muted">échéance {shortDate(section.dueOn)}</span> : null}
                   {section.editor && onOpenEditor && ['brochures', 'social-post'].includes(section.editor) ? (
                     <button type="button" className="btn btn--sm" onClick={() => onOpenEditor(section.editor as string)}>
-                      {section.editor === 'brochures' ? 'Ouvrir Brochures & leaflets' : 'Ouvrir Créer un post'}
+                      {section.editor === 'brochures' ? 'Ouvrir les leaflets & dépliants' : 'Ouvrir Créer un post'}
                     </button>
                   ) : null}
                 </div>

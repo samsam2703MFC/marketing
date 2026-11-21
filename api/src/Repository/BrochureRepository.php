@@ -25,7 +25,8 @@ use RuntimeException;
 final class BrochureRepository
 {
     public const FORMATS   = ['leaflet-a5', 'depliant-a4'];
-    public const TEMPLATES = ['fetes', 'epure', 'ruby', 'abricot', 'noir', 'duo', 'carte'];
+    /** Les modèles ; « papier » (21/11/2026) : celui des catalogues de la refonte (cadre et filets abricot, pied rubis). */
+    public const TEMPLATES = ['papier', 'fetes', 'epure', 'ruby', 'abricot', 'noir', 'duo', 'carte'];
     public const TEXTS     = ['eyebrow', 'title', 'phrase', 'cta', 'ctaSub', 'innerTitle', 'innerSub', 'flapTitle', 'flapText', 'conditions'];
     public const LANGS     = ['fr', 'nl'];
 
@@ -116,7 +117,7 @@ final class BrochureRepository
 
         $out = [];
 
-        $template = $settings['template'] ?? 'fetes';
+        $template = $settings['template'] ?? 'papier';
         if (!in_array($template, self::TEMPLATES, true)) {
             throw new RuntimeException('Modèle inconnu : « ' . (is_scalar($template) ? (string) $template : '?') . ' ».');
         }

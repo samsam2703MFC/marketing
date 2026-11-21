@@ -25,7 +25,7 @@ export const GROUPS: Array<{ key: ChannelGroup; label: string; hint: string }> =
 
 /** L'écran qui produit un support, tel que le menu le nomme. */
 export const EDITORS: Record<string, string> = {
-  brochures: 'Brochures & leaflets',
+  brochures: 'Imprimés › Leaflets & dépliants',
   'social-post': 'Créer un post',
   'social-ads': 'Publicités Meta',
   'social-google': 'Avis & fiches Google',
