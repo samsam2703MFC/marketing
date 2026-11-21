@@ -254,6 +254,37 @@ function textStyle(look: CatalogueDocLook | undefined, element: string): CSSProp
   } as CSSProperties
 }
 
+/**
+ * La couleur d'un logo (v1.16, 21/11/2026, Sam : « régler les couleurs sur tous les champs ») : un filtre SVG remplit
+ * sa forme de la couleur choisie — un logo détouré (PNG transparent) ; les filtres sont posés une fois par page
+ * (`TintDefs`), le logo les appelle par leur nom.
+ */
+const tintId = (hex: string): string => `cat-tint-${hex.replace('#', '').toLowerCase()}`
+const logoStyle = (look: CatalogueDocLook | undefined): CSSProperties | undefined => {
+  const color = look?.logo?.color
+  return color ? { filter: `url(#${tintId(color)})` } : undefined
+}
+function TintDefs({ colors }: { colors: string[] }) {
+  if (!colors.length) return null
+  return (
+    <svg className="cat-tint" width="0" height="0" aria-hidden="true" focusable="false">
+      {colors.map((color) => (
+        <filter key={color} id={tintId(color)} colorInterpolationFilters="sRGB">
+          <feFlood floodColor={color} />
+          <feComposite in2="SourceAlpha" operator="in" />
+        </filter>
+      ))}
+    </svg>
+  )
+}
+
+/** Le style d'un champ des coordonnées : le sien (v1.16) par-dessus celui du bloc de la boutique. */
+const fieldStyle = (look: CatalogueDocLook | undefined, element: string): CSSProperties | undefined => {
+  const block = textStyle(look, 'shop')
+  const own = textStyle(look, element)
+  return block || own ? { ...block, ...own } : undefined
+}
+
 function Cover({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'cover' }>; doc: CatalogueDocument }) {
   const template = page.template ?? 'A'
   const look = page.look
@@ -271,7 +302,7 @@ function Cover({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'cover' 
     return (
       // Finition Papier (refonte du 21/11/2026) : un filet or encadre la page, « La gamme » en manuscrite.
       <div className="cat-cover cat-cover--B cat-cover--papier">
-        {showLogo ? <img className="cat-logo cat-logo--dark cat-cover__logoB" src={doc.charter.logoUrl ?? asset('img/logo.png')} alt="" /> : null}
+        {showLogo ? <img className="cat-logo cat-logo--dark cat-cover__logoB" src={doc.charter.logoUrl ?? asset('img/logo.png')} alt="" style={logoStyle(look)} /> : null}
         <div className="cat-cover__art">
           {page.imageUrl ? <img className="cat-cover__photoB" src={page.imageUrl} alt="" /> : drawing ? <img className="cat-cover__drawB" src={drawing} alt="" /> : null}
         </div>
@@ -296,7 +327,7 @@ function Cover({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'cover' 
           {page.imageUrl ? <img className="cat-cover__photoC" src={page.imageUrl} alt="" /> : drawing ? <img className="cat-cover__drawC" src={drawing} alt="" /> : null}
         </div>
         <div className="cat-cover__band">
-          {showLogo ? <img className={`cat-logo${doc.charter.logoUrl ? ' cat-logo--custom' : ''}`} src={doc.charter.logoUrl ?? asset('img/logo-white.png')} alt="" /> : null}
+          {showLogo ? <img className={`cat-logo${doc.charter.logoUrl ? ' cat-logo--custom' : ''}`} src={doc.charter.logoUrl ?? asset('img/logo-white.png')} alt="" style={logoStyle(look)} /> : null}
           {page.kicker ? <div className="cat-cover__kicker" style={kickerStyle}>{page.kicker}</div> : null}
           {showTitle ? (
             <div className="cat-cover__title" data-fit="Titre de couverture" style={titleStyle}>
@@ -313,7 +344,7 @@ function Cover({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'cover' 
   return (
     <div className="cat-cover">
       {/* Le gabarit A n'a pas de « La gamme » (maquette A1) : rien n'y change pour les couvertures déjà imprimées. */}
-      {showLogo ? <img className={`cat-logo${doc.charter.logoUrl ? ' cat-logo--custom' : ''}`} src={logo} alt="" /> : null}
+      {showLogo ? <img className={`cat-logo${doc.charter.logoUrl ? ' cat-logo--custom' : ''}`} src={logo} alt="" style={logoStyle(look)} /> : null}
       {showTitle ? (
         <div className="cat-cover__title" data-fit="Titre de couverture" style={titleStyle}>
           {page.title}
@@ -344,7 +375,7 @@ function Brand({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'brand' 
   const top = template === 'B' && page.imageUrl
   const bottom = template === 'C' && page.imageUrl
   const look = page.look
-  const logoTag = shown(look, 'logo') ? <img className="cat-logo cat-logo--dark cat-brand__logo" src={logo} alt="" /> : null
+  const logoTag = shown(look, 'logo') ? <img className="cat-logo cat-logo--dark cat-brand__logo" src={logo} alt="" style={logoStyle(look)} /> : null
   const titleTag = shown(look, 'title') ? <div className="cat-brand__title" style={textStyle(look, 'title')}>{page.title}</div> : null
   // Gabarit A, finition Papier (refonte du 21/11/2026) : le logo, un blanc élastique, le titre ; le premier paragraphe
   // en chapeau, ouvert par une lettrine.
@@ -384,7 +415,7 @@ function Brand({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'brand' 
           ),
         )}
       </div>
-      {page.slot === 'penultimate' && shown(look, 'legend') && (page.allergens ?? []).length ? <AllergenLegend codes={page.allergens ?? []} lang={doc.version.lang} /> : null}
+      {page.slot === 'penultimate' && shown(look, 'legend') && (page.allergens ?? []).length ? <AllergenLegend codes={page.allergens ?? []} lang={doc.version.lang} style={textStyle(look, 'legend')} /> : null}
       {bottom ? (
         <div className="cat-brand__visual cat-brand__visual--bottom">
           <img src={page.imageUrl ?? ''} alt="" />
@@ -398,20 +429,21 @@ function Brand({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'brand' 
  * La légende des allergènes, à l'avant-dernière page (17/11/2026, Sam : « avec explication sur l'avant-dernière
  * page ») : le pictogramme et le nom de chaque allergène présent dans les produits du catalogue, et ce qu'ils disent.
  */
-function AllergenLegend({ codes, lang }: { codes: string[]; lang: CatalogueLang }) {
+function AllergenLegend({ codes, lang, style }: { codes: string[]; lang: CatalogueLang; style?: CSSProperties }) {
   const nl = lang === 'nl'
+  // Sa police et sa couleur (v1.16) : le titre, chaque allergène et la note.
   return (
     <div className="cat-allegend">
-      <div className="cat-allegend__title">{nl ? 'Allergenen' : 'Allergènes'}</div>
+      <div className="cat-allegend__title" style={style}>{nl ? 'Allergenen' : 'Allergènes'}</div>
       <div className="cat-allegend__grid">
         {codes.map((c) => (
-          <span key={c} className="cat-allegend__item">
+          <span key={c} className="cat-allegend__item" style={style}>
             <AllergenIcon code={c} />
             {ALLERGEN_NAMES[c as AllergenCode]?.[lang] ?? c}
           </span>
         ))}
       </div>
-      <p className="cat-allegend__note">
+      <p className="cat-allegend__note" style={style}>
         {nl
           ? 'De pictogrammen naast elk product tonen de allergenen van het recept (verordening EU 1169/2011). Sporen worden niet vermeld: vraag de volledige lijst in de winkel.'
           : 'Les pictogrammes à côté de chaque produit indiquent les allergènes de sa recette (règlement UE 1169/2011). Les traces ne sont pas indiquées : demandez la liste complète en boutique.'}
@@ -635,15 +667,18 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
   const hours = shop ? line('hours', shop.hours) : ''
   // Les horaires des fêtes de la boutique (21/11/2026), sous les horaires ; leurs retours à la ligne sont gardés.
   const holidays = shop ? line('holidays', shop.holidayHours) : ''
-  const lines = shop ? [line('address', shop.address), hours ? (lang === 'nl' ? `Open ${hours}` : `Ouvert ${hours}`) : '', holidays, phones, line('email', shop.email)].filter(Boolean) : []
-  const logoTag = shown(look, 'logo') ? <img className="cat-logo cat-logo--dark" src={logo} alt="" /> : null
+  // Chaque ligne avec son élément, pour sa police et sa couleur (v1.16).
+  const open = hours ? (lang === 'nl' ? `Open ${hours}` : `Ouvert ${hours}`) : ''
+  const lines = shop ? ([['address', line('address', shop.address)], ['hours', open], ['holidays', holidays], ['phone', phones], ['email', line('email', shop.email)]] as const).filter(([, text]) => text) : []
+  const logoTag = shown(look, 'logo') ? <img className="cat-logo cat-logo--dark" src={logo} alt="" style={logoStyle(look)} /> : null
   const titleTag = shown(look, 'title') ? <div className="cat-back__title" style={textStyle(look, 'title')}>{page.title}</div> : null
   const textTag = page.text && shown(look, 'text') ? <div className="cat-back__text" style={textStyle(look, 'text')}>{page.text}</div> : null
   const qr = page.qrUrl && shown(look, 'qr') ? page.qrUrl : null
   const shopStyle = textStyle(look, 'shop')
   const showShop = shown(look, 'shop')
   // Le nom de la boutique (v1.15, refonte du 21/11/2026) : masquable seul, son logo le portant souvent déjà.
-  const whoTag = shown(look, 'name') ? <div className="cat-back__who" style={shopStyle}>{shop ? `L’Atelier By — ${shop.name}` : 'L’Atelier By'}</div> : null
+  const qrStyle = textStyle(look, 'qr')
+  const whoTag = shown(look, 'name') ? <div className="cat-back__who" style={fieldStyle(look, 'name')}>{shop ? `L’Atelier By — ${shop.name}` : 'L’Atelier By'}</div> : null
   if (page.template === 'C') {
     // Le magasin (21/11/2026, Sam : « un stopper spécifique pour chaque magasin — photo du magasin, logo, QR du magasin,
     // heures d'ouverture et de fermeture, QR avec l'adresse (Maps) — à mettre dans les catalogues ») : la photo en haut,
@@ -653,7 +688,9 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
     const maps = shop?.mapsUrl && shown(look, 'maps') ? shop.mapsUrl : null
     const address = shop ? line('address', shop.address) : ''
     // Les coordonnées, une donnée par élément : l'adresse n'est écrite qu'ici (pas sous le QR Maps).
-    const contact = shop ? [address, line('phone', shop.phone), line('phone', shop.phone2), line('email', shop.email)].filter(Boolean) : []
+    const contact = shop
+      ? ([['address', address], ['phone', line('phone', shop.phone)], ['phone', line('phone', shop.phone2)], ['email', line('email', shop.email)]] as const).filter(([, text]) => text)
+      : []
     const shopFoot = showShop && shop && (whoTag || contact.length)
     // Finition Rubis (refonte du 21/11/2026) : les QR, chacun sur sa carte blanche, et les coordonnées sur un pied rubis.
     return (
@@ -664,14 +701,14 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
           </div>
         ) : null}
         <div className="cat-back__body">
-          {shown(look, 'logo') ? <img className="cat-logo cat-logo--dark cat-back__logo" src={logo} alt="" /> : null}
+          {shown(look, 'logo') ? <img className="cat-logo cat-logo--dark cat-back__logo" src={logo} alt="" style={logoStyle(look)} /> : null}
           {titleTag}
           {textTag}
           {showShop && shop && (hours || holidays) ? (
             <div className="cat-back__hoursC">
               <div className="cat-back__label">{nl ? 'Openingsuren' : 'Horaires'}</div>
-              {hours ? <p className="cat-back__hoursBig">{hours}</p> : null}
-              {holidays ? <p className="cat-back__holidays">{holidays}</p> : null}
+              {hours ? <p className="cat-back__hoursBig" style={fieldStyle(look, 'hours')}>{hours}</p> : null}
+              {holidays ? <p className="cat-back__holidays" style={fieldStyle(look, 'holidays')}>{holidays}</p> : null}
             </div>
           ) : null}
           {qr || maps || shopFoot ? (
@@ -682,8 +719,8 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
                     <div className="cat-back__qrC">
                       <Qr url={qr} size={22} />
                       <div className="cat-back__qrtext">
-                        <div className="cat-back__qrlabel">{nl ? 'Bestel online' : 'Commander en ligne'}</div>
-                        {page.host ? <div className="cat-back__hint">{page.host}</div> : null}
+                        <div className="cat-back__qrlabel" style={qrStyle}>{nl ? 'Bestel online' : 'Commander en ligne'}</div>
+                        {page.host ? <div className="cat-back__hint" style={qrStyle}>{page.host}</div> : null}
                       </div>
                     </div>
                   ) : null}
@@ -691,7 +728,7 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
                     <div className="cat-back__qrC">
                       <Qr url={maps} size={22} />
                       <div className="cat-back__qrtext">
-                        <div className="cat-back__qrlabel">{nl ? 'Kom langs in de winkel' : 'Venir au magasin'}</div>
+                        <div className="cat-back__qrlabel" style={textStyle(look, 'maps')}>{nl ? 'Kom langs in de winkel' : 'Venir au magasin'}</div>
                       </div>
                     </div>
                   ) : null}
@@ -702,8 +739,8 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
                   {whoTag}
                   {contact.length ? (
                     <div className="cat-back__contact" style={shopStyle}>
-                      {contact.map((text, index) => (
-                        <span key={index}>{text}</span>
+                      {contact.map(([element, text], index) => (
+                        <span key={index} style={textStyle(look, element)}>{text}</span>
                       ))}
                     </div>
                   ) : null}
@@ -725,8 +762,8 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
         {showShop ? (
           <div className="cat-back__shopB">
             {whoTag}
-            {lines.map((text, index) => (
-              <p key={index} style={shopStyle} className={text === holidays ? 'cat-back__holidays' : undefined}>{text}</p>
+            {lines.map(([element, text], index) => (
+              <p key={index} style={fieldStyle(look, element)} className={element === 'holidays' ? 'cat-back__holidays' : undefined}>{text}</p>
             ))}
           </div>
         ) : null}
@@ -734,8 +771,8 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
           <div className="cat-back__qr cat-back__qr--small">
             <Qr url={qr} size={20} />
             <div>
-              <div className="cat-back__host">{page.host}</div>
-              <div className="cat-back__hint">{shop ? (lang === 'nl' ? `De webshop van ${shop.name}` : `Le webshop de ${shop.name}`) : lang === 'nl' ? 'Al onze winkels' : 'Toutes nos boutiques'}</div>
+              <div className="cat-back__host" style={qrStyle}>{page.host}</div>
+              <div className="cat-back__hint" style={qrStyle}>{shop ? (lang === 'nl' ? `De webshop van ${shop.name}` : `Le webshop de ${shop.name}`) : lang === 'nl' ? 'Al onze winkels' : 'Toutes nos boutiques'}</div>
             </div>
           </div>
         ) : null}
@@ -751,8 +788,8 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
         <div className="cat-back__qr">
           <Qr url={qr} size={30} />
           <div>
-            <div className="cat-back__host">{page.host}</div>
-            <div className="cat-back__hint">
+            <div className="cat-back__host" style={qrStyle}>{page.host}</div>
+            <div className="cat-back__hint" style={qrStyle}>
               {shop ? (lang === 'nl' ? `De webshop van ${shop.name}` : `Le webshop de ${shop.name}`) : lang === 'nl' ? 'Al onze winkels' : 'Toutes nos boutiques'}
             </div>
           </div>
@@ -763,8 +800,8 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
           {whoTag}
           {shop ? (
             <p style={shopStyle}>
-              {[line('address', shop.address), hours ? (lang === 'nl' ? `Open ${hours}` : `Ouvert ${hours}`) : '', holidays, line('phone', shop.phone)].filter(Boolean).map((text, index) => (
-                <span key={index} className={text === holidays ? 'cat-back__holidays' : undefined}>
+              {([['address', line('address', shop.address)], ['hours', open], ['holidays', holidays], ['phone', line('phone', shop.phone)]] as const).filter(([, text]) => text).map(([element, text], index) => (
+                <span key={index} className={element === 'holidays' ? 'cat-back__holidays' : undefined} style={textStyle(look, element)}>
                   {index > 0 ? <br /> : null}
                   {text}
                 </span>
@@ -795,6 +832,7 @@ export function CataloguePage({ doc, index }: { doc: CatalogueDocument; index: n
   } as CSSProperties
   return (
     <div className={`cat-face cat-face--${page.kind}${page.kind === 'products' || page.kind === 'presentation' ? ` cat-face--t${page.template ?? 'A'}` : ''}${page.kind === 'cover' ? ` cat-face--cover${page.template ?? 'A'}` : ''}`} style={style} lang={doc.version.lang}>
+      {'look' in page && page.look?.logo?.color ? <TintDefs colors={[page.look.logo.color]} /> : null}
       <div className="cat-trim">
         {page.kind === 'cover' ? <Cover page={page} doc={doc} /> : null}
         {page.kind === 'brand' ? <Brand page={page} doc={doc} /> : null}

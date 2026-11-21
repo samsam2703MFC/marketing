@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Marketing — catalogues produits
-  version: 1.15.0
+  version: 1.16.0
   description: |
     Les catalogues produits du Marketing (prix du webshop, gammes) : un imprimé A5 (A4 en option)
     de **8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16). Quatre pages viennent de la Charte des catalogues de la
@@ -138,6 +138,12 @@ info:
     reçoivent affiché. La vérification « texte trop long » (`…/catalogue-charter/checks`, code `fit`) compte 850 pour
     l'avant-dernière en gabarit A (la légende des allergènes y est un cartouche ; la page 2 garde 1000). Le reste de la
     refonte est la mise en page des gabarits (couverture B, pages 2 et avant-dernière A, dernière page C).
+
+    v1.16 (21 novembre 2026, client : « je dois pouvoir régler les couleurs de typo sur tous les champs ») : prennent une
+    police et une couleur, en plus d'afficher/masquer, les éléments de la dernière page `qr` (libellé et adresse du
+    webshop), `maps`, `name`, `address`, `hours`, `holidays`, `phone`, `email`, et `legend` à l'avant-dernière ; le `logo`
+    de chaque page prend une couleur (le logo détouré en est rempli), pas de police. La photo du magasin reste
+    afficher/masquer. Une police donnée à un élément qui n'en prend pas est ignorée (null), comme avant.
 
     v1.5 (15 novembre 2026, client : « les deux, garde les 3 gabarits, code-le » — assistant des pages de la
     marque, maquettes A1-A4 ; assistant du franchisé, maquettes B1-B4) :

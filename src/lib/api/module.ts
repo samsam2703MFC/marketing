@@ -3406,12 +3406,14 @@ export interface CatalogueBrandPage {
  * couleur ; `style` : police et couleur seulement. La règle de l'API (CatalogueService::LOOK).
  */
 export type CatalogueLookKind = 'cover' | 'page2' | 'penultimate' | 'back'
-export type CatalogueLookType = 'show' | 'text' | 'style'
+/** show : afficher/masquer · text : + police et couleur · style : police et couleur, toujours affiché · tint : un logo,
+ * afficher/masquer + sa couleur (v1.16, 21/11/2026 : « régler les couleurs sur tous les champs »). */
+export type CatalogueLookType = 'show' | 'text' | 'style' | 'tint'
 export const CATALOGUE_LOOK: Record<CatalogueLookKind, Record<string, CatalogueLookType>> = {
-  cover: { logo: 'show', kicker: 'text', title: 'show', subtitle: 'show', shop: 'style' },
-  page2: { logo: 'show', title: 'text', text: 'text' },
-  penultimate: { logo: 'show', title: 'text', text: 'text', legend: 'show' },
-  back: { logo: 'show', photo: 'show', title: 'text', text: 'text', qr: 'show', maps: 'show', shop: 'text', name: 'show', address: 'show', hours: 'show', holidays: 'show', phone: 'show', email: 'show' },
+  cover: { logo: 'tint', kicker: 'text', title: 'show', subtitle: 'show', shop: 'style' },
+  page2: { logo: 'tint', title: 'text', text: 'text' },
+  penultimate: { logo: 'tint', title: 'text', text: 'text', legend: 'text' },
+  back: { logo: 'tint', photo: 'show', title: 'text', text: 'text', qr: 'text', maps: 'text', shop: 'text', name: 'text', address: 'text', hours: 'text', holidays: 'text', phone: 'text', email: 'text' },
 }
 export interface CatalogueLookEntry {
   show: boolean
@@ -3427,7 +3429,7 @@ export function fullLook(kind: CatalogueLookKind, look?: CatalogueLook | null): 
   const out: CatalogueLook = {}
   for (const [element, type] of Object.entries(CATALOGUE_LOOK[kind])) {
     const e = look?.[element]
-    out[element] = { show: type === 'style' ? true : e?.show !== false, font: type === 'show' ? null : e?.font ?? null, color: type === 'show' ? null : e?.color ?? null }
+    out[element] = { show: type === 'style' ? true : e?.show !== false, font: type === 'text' || type === 'style' ? e?.font ?? null : null, color: type === 'show' ? null : e?.color ?? null }
   }
   return out
 }

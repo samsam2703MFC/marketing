@@ -5996,6 +5996,35 @@ check('pages propres : éléments refusés (422, champ nommé) — élément inc
     json_encode(array_map(static fn (array $r): array => [$r['status'], $r['body']['error']['details'] ?? null], $refusLook), JSON_UNESCAPED_UNICODE));
 call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], $corpsP);
 
+// La couleur (et la police) sur tous les champs (v1.16, 21/11/2026, Sam : « je dois pouvoir régler les couleurs de typo
+// sur tous les champs ») : les QR, les lignes des coordonnées, le nom de la boutique, la légende des allergènes ; le logo
+// prend une couleur (pas de police) ; la photo n'a pas de texte : ni police ni couleur.
+$couleursP = array_replace($corpsP, [
+    'cover' => array_replace($couvP, ['look' => ['logo' => ['color' => 'blanc', 'font' => 'vank']]]),
+    'penultimate' => array_replace($sansAdresse($communes['penultimate'] ?? []), ['look' => ['legend' => ['font' => 'gotham', 'color' => 'or']]]),
+    'back' => array_replace($dosP, ['look' => [
+        'logo' => ['color' => 'rubis'], 'photo' => ['color' => 'or', 'font' => 'vank'], 'qr' => ['color' => 'blanc', 'font' => 'vank'], 'maps' => ['color' => 'encre'],
+        'name' => ['font' => 'gotham', 'color' => 'or'], 'address' => ['color' => 'blanc'], 'hours' => ['color' => 'abricot'], 'holidays' => ['color' => 'creme'],
+        'phone' => ['font' => 'playwrite'], 'email' => ['color' => 'rubis'],
+    ]]),
+]);
+$poseCouleurs = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], $couleursP);
+$docCouleurs = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document', ['shopId' => (string) $catA])['body']['data']['pages'] ?? [];
+$dosCouleurs = $docCouleurs !== [] ? end($docCouleurs)['look'] ?? [] : [];
+check('pages propres : la couleur sur tous les champs — logo teinté (sans police), QR, QR Maps, nom de la boutique, adresse, horaires, horaires des fêtes, téléphone, e-mail, légende des allergènes ; la photo n’a ni police ni couleur',
+    $poseCouleurs['status'] === 200
+        && ($docCouleurs[0]['look']['logo'] ?? null) === ['show' => true, 'font' => null, 'color' => '#FFFFFF']
+        && ($docCouleurs[count($docCouleurs) - 2]['look']['legend'] ?? null) === ['show' => true, 'font' => 'gotham', 'color' => '#B0792A']
+        && ($dosCouleurs['logo'] ?? null) === ['show' => true, 'font' => null, 'color' => '#8D1D2C']
+        && ($dosCouleurs['photo'] ?? null) === ['show' => true, 'font' => null, 'color' => null]
+        && ($dosCouleurs['qr'] ?? null) === ['show' => true, 'font' => 'vank', 'color' => '#FFFFFF']
+        && ($dosCouleurs['maps']['color'] ?? '') === '#241C1A' && ($dosCouleurs['name'] ?? null) === ['show' => true, 'font' => 'gotham', 'color' => '#B0792A']
+        && ($dosCouleurs['address']['color'] ?? '') === '#FFFFFF' && ($dosCouleurs['hours']['color'] ?? '') === '#F2C9A0' && ($dosCouleurs['holidays']['color'] ?? '') === '#F5EFE4'
+        && ($dosCouleurs['phone'] ?? null) === ['show' => true, 'font' => 'playwrite', 'color' => null] && ($dosCouleurs['email']['color'] ?? '') === '#8D1D2C'
+        && ($poseCouleurs['body']['data']['own']['cover']['look']['logo'] ?? null) === ['show' => true, 'font' => null, 'color' => 'blanc'],
+    json_encode([$poseCouleurs['status'], $poseCouleurs['body']['error'] ?? null, $docCouleurs[0]['look']['logo'] ?? null, $dosCouleurs], JSON_UNESCAPED_UNICODE));
+call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], $corpsP);
+
 // Les horaires des fêtes de chaque boutique (migration 054) et le texte de la dernière page sur plusieurs lignes
 // (21/11/2026, catalogue « Fêtes de fin d'année » : « 24/12 : [horaire] · 25/12 : [horaire]… »).
 AuthContext::set(1, 'BRAND_ADMIN', 1);

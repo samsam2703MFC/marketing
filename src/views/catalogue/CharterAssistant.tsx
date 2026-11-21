@@ -230,6 +230,7 @@ function TextStyle({
   show,
   onShow,
   hint,
+  fonts = true,
 }: {
   label: string
   font?: api.CatalogueCoverFont | null
@@ -242,6 +243,8 @@ function TextStyle({
   show?: boolean
   onShow?: (show: boolean) => void
   hint?: string
+  /** Faux : la couleur seule (un logo, v1.16). */
+  fonts?: boolean
 }) {
   const current = font ?? fallback
   return (
@@ -262,6 +265,7 @@ function TextStyle({
       ) : null}
       {onChange ? (
         <>
+      {fonts ? (
       <span className="bro-seg cha-style__fonts" role="group" aria-label={`Police — ${label}`}>
         {api.CATALOGUE_COVER_FONTS.map((f) => (
           <button
@@ -276,6 +280,7 @@ function TextStyle({
           </button>
         ))}
       </span>
+      ) : null}
       <span className="cha-swatches" role="group" aria-label={`Couleur — ${label}`}>
         <button type="button" className={`cha-swatch cha-swatch--auto${color === null ? ' is-on' : ''}`} onClick={() => onChange({ color: null })} title="La couleur du gabarit" aria-label="Couleur du gabarit">
           A
@@ -656,6 +661,7 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
         color={e.color}
         fallback={fallback}
         onChange={type === 'show' ? undefined : (p) => setLook(kind, element, p)}
+        fonts={type !== 'tint'}
       />
     )
   }
@@ -975,7 +981,7 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
           {lookRow('back', charter.back.look, 'qr', 'QR code', 'gotham', 'et l’adresse du webshop')}
           {lookRow('back', charter.back.look, 'maps', 'QR Google Maps', 'gotham', 'gabarit C · l’adresse du magasin')}
           {lookRow('back', charter.back.look, 'shop', 'Coordonnées', 'gotham', 'le bloc de la boutique')}
-          {lookRow('back', charter.back.look, 'name', 'Nom de la boutique', 'gotham', '« L’Atelier By — … »')}
+          {lookRow('back', charter.back.look, 'name', 'Nom de la boutique', 'vank', '« L’Atelier By — … »')}
           {lookRow('back', charter.back.look, 'address', 'Adresse')}
           {lookRow('back', charter.back.look, 'hours', 'Horaires')}
           {lookRow('back', charter.back.look, 'holidays', 'Horaires des fêtes', 'gotham', 'saisis par boutique, plus bas')}

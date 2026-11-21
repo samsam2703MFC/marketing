@@ -169,10 +169,10 @@ final class CatalogueService
      * leur police et leur couleur à part (`titleFont`…, v1.9), le nom de la boutique son `showShop` (v1.11).
      */
     public const LOOK = [
-        'cover'       => ['logo' => 'show', 'kicker' => 'text', 'title' => 'show', 'subtitle' => 'show', 'shop' => 'style'],
-        'page2'       => ['logo' => 'show', 'title' => 'text', 'text' => 'text'],
-        'penultimate' => ['logo' => 'show', 'title' => 'text', 'text' => 'text', 'legend' => 'show'],
-        'back'        => ['logo' => 'show', 'photo' => 'show', 'title' => 'text', 'text' => 'text', 'qr' => 'show', 'maps' => 'show', 'shop' => 'text', 'name' => 'show', 'address' => 'show', 'hours' => 'show', 'holidays' => 'show', 'phone' => 'show', 'email' => 'show'],
+        'cover'       => ['logo' => 'tint', 'kicker' => 'text', 'title' => 'show', 'subtitle' => 'show', 'shop' => 'style'],
+        'page2'       => ['logo' => 'tint', 'title' => 'text', 'text' => 'text'],
+        'penultimate' => ['logo' => 'tint', 'title' => 'text', 'text' => 'text', 'legend' => 'text'],
+        'back'        => ['logo' => 'tint', 'photo' => 'show', 'title' => 'text', 'text' => 'text', 'qr' => 'text', 'maps' => 'text', 'shop' => 'text', 'name' => 'text', 'address' => 'text', 'hours' => 'text', 'holidays' => 'text', 'phone' => 'text', 'email' => 'text'],
     ];
 
     public function __construct(
@@ -2602,7 +2602,8 @@ final class CatalogueService
 
     /**
      * Les éléments d'une page tels qu'enregistrés, complétés des défauts, clés dans un ordre FIXE ; une valeur illisible
-     * reprend le défaut. Un élément « show » n'a ni police ni couleur ; un élément « style » est toujours affiché.
+     * reprend le défaut. Un élément « show » n'a ni police ni couleur ; « tint » (un logo, v1.16) a une couleur, pas de
+     * police ; un élément « style » est toujours affiché.
      *
      * @return array<string,array{show:bool,font:?string,color:?string}>
      */
@@ -2614,7 +2615,7 @@ final class CatalogueService
             $entry = is_array($saved[$element] ?? null) ? $saved[$element] : [];
             $out[$element] = [
                 'show'  => $type === 'style' ? true : ($entry['show'] ?? true) !== false,
-                'font'  => $type !== 'show' && in_array($entry['font'] ?? null, self::COVER_FONTS, true) ? $entry['font'] : null,
+                'font'  => in_array($type, ['text', 'style'], true) && in_array($entry['font'] ?? null, self::COVER_FONTS, true) ? $entry['font'] : null,
                 'color' => $type !== 'show' && isset(self::COVER_COLORS[(string) ($entry['color'] ?? '')]) ? $entry['color'] : null,
             ];
         }
