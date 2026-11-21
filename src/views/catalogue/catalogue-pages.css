@@ -554,3 +554,6 @@
 }
 .cat-back--C .cat-back__photo img { height: auto; min-height: calc(var(--u) * 44mm + var(--b)); }
 .cat-back--C .cat-back__body { flex: 1 0 auto; }
+
+/* Les filtres de couleur des logos (v1.16) : posés une fois par page, sans place dans la mise en page. */
+.cat-tint { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
