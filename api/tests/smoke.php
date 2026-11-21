@@ -5662,7 +5662,7 @@ $etatPub = call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter');
 check('charte : publiée, le brouillon n’a plus de différence ; l’ordre des clés relues est fixe',
     ($etatPub['body']['data']['publication']['version'] ?? 0) === 2 && ($etatPub['body']['data']['publication']['draftChanged'] ?? true) === false
         && array_keys($etatPub['body']['data']['covers'][1] ?? []) === ['gamme', 'titleFr', 'titleNl', 'subtitleFr', 'subtitleNl', 'mediaId', 'template', 'visual', 'illustration', 'titleFont', 'titleColor', 'subtitleFont', 'subtitleColor', 'showShop', 'kickerFr', 'kickerNl', 'look', 'imageUrl']
-        && array_keys($etatPub['body']['data']['back'] ?? []) === ['titleFr', 'titleNl', 'textFr', 'textNl', 'template', 'look'],
+        && array_keys($etatPub['body']['data']['back'] ?? []) === ['titleFr', 'titleNl', 'textFr', 'textNl', 'template', 'qrTarget', 'qrLabelFr', 'qrLabelNl', 'look'],
     json_encode($etatPub['body']['data'] ?? null, JSON_UNESCAPED_UNICODE));
 $refusG = [
     call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['covers' => [['gamme' => 14, 'titleFr' => 'a', 'template' => 'Z']]]),
@@ -5980,7 +5980,7 @@ check('pages propres : chaque élément — logo masqué, « La gamme » renomm�
         && ($docLook[$nL - 1]['look']['shop']['font'] ?? '') === 'vank'
         && ($docAutreLook[0]['look']['logo']['show'] ?? false) === true && ($docAutreLook[0]['kicker'] ?? '') === 'La gamme' && ($docAutreLook[count($docAutreLook) - 1]['qrUrl'] ?? null) !== null
         && $poseLook2['status'] === 200 && $poseLook2['body']['data'] === $poseLook['body']['data']
-        && array_keys($poseLook['body']['data']['own']['back']['look'] ?? []) === ['logo', 'photo', 'title', 'text', 'qr', 'maps', 'shop', 'name', 'address', 'hours', 'holidays', 'phone', 'email'],
+        && array_keys($poseLook['body']['data']['own']['back']['look'] ?? []) === ['logo', 'photo', 'title', 'text', 'qr', 'maps', 'shop', 'name', 'address', 'hours', 'holidays', 'delivery', 'phone', 'email'],
     json_encode([$poseLook['status'], $poseLook['body']['error'] ?? null, $docLook[0]['look'] ?? null, $docLook[0]['kicker'] ?? null, $docLook[$nL - 1]['shop'] ?? null], JSON_UNESCAPED_UNICODE));
 $refusLook = [
     call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['cover' => array_replace($couvP, ['look' => ['pirate' => ['show' => false]]])]),
@@ -6056,6 +6056,52 @@ check('dernière page : horaires des fêtes et texte refusés (422 nommé) au-de
         && array_map(static fn (array $r): string => $r['body']['error']['details'][0]['field'] ?? '', $refusF) === ['holidayHoursFr', 'holidayHoursNl', 'back.textFr'],
     json_encode(array_map(static fn (array $r): array => [$r['status'], $r['body']['error']['details'] ?? null], $refusF), JSON_UNESCAPED_UNICODE));
 call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['holidayHoursFr' => '', 'holidayHoursNl' => '']);
+call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], $corpsP);
+
+// Le catalogue « Bureaux » (21/11/2026, maquettes export-bureaux ; migration 056, v1.17) : le QR mène à la page de
+// commande entreprise de chaque boutique (son lien saisi ; sans lien, son webshop, et le document le dit), son libellé se
+// saisit, la livraison au bureau s'imprime sous les horaires ; la couleur des filets (abricot) dans la charte.
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$lienPro = 'https://webshop.test/entreprises/' . $catA;
+$livraison = "Livraison au bureau : lun – ven\n15h – 17h";
+$bureauA = call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['businessUrl' => $lienPro, 'deliveryHoursFr' => $livraison, 'deliveryHoursNl' => '']);
+$poseBureau = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], array_replace($corpsP, ['back' => array_replace($dosP, [
+    'template' => 'C', 'qrTarget' => 'business', 'qrLabelFr' => '', 'qrLabelNl' => 'Bestel voor uw bedrijf', 'look' => ['maps' => ['show' => false], 'holidays' => ['show' => false]],
+])]));
+$docBureauA = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document', ['shopId' => (string) $catA])['body']['data'] ?? [];
+$dosBureauA = ($docBureauA['pages'] ?? []) !== [] ? end($docBureauA['pages']) : [];
+$pagesBureauNl = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document', ['shopId' => (string) $catA, 'lang' => 'nl'])['body']['data']['pages'] ?? [];
+$dosBureauNl = $pagesBureauNl !== [] ? end($pagesBureauNl) : [];
+$docBureauB = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document', ['shopId' => (string) $catB])['body']['data'] ?? [];
+$dosBureauB = ($docBureauB['pages'] ?? []) !== [] ? end($docBureauB['pages']) : [];
+$charteFilets = call($catRouter, 'GET', '/api/v1/marketing/catalogue-charter')['body']['data']['colors'] ?? [];
+check('catalogue « Bureaux » : le QR mène au lien de commande entreprise de la boutique (libellé du gabarit en FR, saisi en NL), livraison au bureau sous les horaires (NL vide = FR) ; sans lien, le webshop et un avertissement ; filets abricot',
+    $bureauA['status'] === 200 && ($bureauA['body']['data']['businessUrl'] ?? '') === $lienPro && ($bureauA['body']['data']['deliveryHoursFr'] ?? '') === $livraison
+        && $poseBureau['status'] === 200 && ($poseBureau['body']['data']['own']['back']['qrTarget'] ?? '') === 'business'
+        && ($dosBureauA['qrUrl'] ?? '') === $lienPro && ($dosBureauA['host'] ?? '') === 'webshop.test/entreprises/' . $catA
+        && ($dosBureauA['qrTarget'] ?? '') === 'business' && array_key_exists('qrLabel', $dosBureauA) && $dosBureauA['qrLabel'] === null
+        && ($dosBureauA['shop']['deliveryHours'] ?? '') === $livraison && ($dosBureauA['shop']['holidayHours'] ?? 'x') === '' && array_key_exists('mapsUrl', $dosBureauA['shop'] ?? []) && $dosBureauA['shop']['mapsUrl'] === null
+        && ($dosBureauNl['qrLabel'] ?? '') === 'Bestel voor uw bedrijf' && ($dosBureauNl['shop']['deliveryHours'] ?? '') === $livraison
+        && ($dosBureauB['qrUrl'] ?? $lienPro) !== $lienPro && ($dosBureauB['qrUrl'] ?? null) !== null && ($dosBureauB['shop']['deliveryHours'] ?? 'x') === ''
+        && in_array('BUSINESS_URL_MISSING', array_column($docBureauB['warnings'] ?? [], 'code'), true)
+        && !in_array('BUSINESS_URL_MISSING', array_column($docBureauA['warnings'] ?? [], 'code'), true)
+        && ($charteFilets['rule'] ?? '') === '#F2C9A0' && ($docBureauA['charter']['colors']['rule'] ?? '') === '#F2C9A0',
+    json_encode([$bureauA['status'], $bureauA['body']['error'] ?? null, $poseBureau['body']['error'] ?? null, $dosBureauA, $docBureauB['warnings'] ?? null, $charteFilets], JSON_UNESCAPED_UNICODE));
+$masqueLivraison = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], array_replace($corpsP, ['back' => array_replace($dosP, ['look' => ['delivery' => ['show' => false]]])]));
+$pagesSansLivraison = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idPerso . '/document', ['shopId' => (string) $catA])['body']['data']['pages'] ?? [];
+$refusBureau = [
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['back' => array_replace($dosP, ['qrTarget' => 'fax'])]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], ['back' => array_replace($dosP, ['qrLabelFr' => str_repeat('a', 41)])]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['businessUrl' => 'ftp://exemple.test/pro']),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['deliveryHoursFr' => str_repeat('a', 601)]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogue-charter', [], ['colors' => ['primary' => '#8D1D2C', 'secondary' => '#F5EFE4', 'accent' => '#B0792A', 'ink' => '#241C1A', 'rule' => 'abricot']]),
+];
+check('catalogue « Bureaux » : la livraison masquée ne part pas ; refusés (422 nommé) — cible du QR inconnue, libellé de plus de 40 caractères, lien entreprise non http(s), livraison de plus de 600 caractères, filets hors #RRGGBB',
+    $masqueLivraison['status'] === 200 && (end($pagesSansLivraison)['shop']['deliveryHours'] ?? 'x') === ''
+        && array_unique(array_column($refusBureau, 'status')) === [422]
+        && array_map(static fn (array $r): string => $r['body']['error']['details'][0]['field'] ?? '', $refusBureau) === ['back.qrTarget', 'back.qrLabelFr', 'businessUrl', 'deliveryHoursFr', 'colors.rule'],
+    json_encode(array_map(static fn (array $r): array => [$r['status'], $r['body']['error']['details'] ?? null], $refusBureau), JSON_UNESCAPED_UNICODE));
+call($catRouter, 'PUT', '/api/v1/marketing/catalogue-shops/' . $catA, [], ['businessUrl' => '', 'deliveryHoursFr' => '', 'deliveryHoursNl' => '']);
 call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPerso . '/brand-pages', [], $corpsP);
 
 // La page « Le magasin » (21/11/2026, Sam : « un stopper spécifique pour chaque magasin — photo du magasin, logo, QR du

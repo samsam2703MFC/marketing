@@ -185,7 +185,8 @@ final class CatalogueRepository
     public function shopContacts(): array
     {
         $out = [];
-        $sql = 'SELECT shop_id, phone2, webshop_url, logo_media_id, photo_media_id, maps_url, hours_fr, hours_nl, holiday_hours_fr, holiday_hours_nl
+        $sql = 'SELECT shop_id, phone2, webshop_url, business_url, logo_media_id, photo_media_id, maps_url, hours_fr, hours_nl, holiday_hours_fr, holiday_hours_nl,
+                       delivery_hours_fr, delivery_hours_nl
                 FROM mar_catalogue_shop_contact';
         foreach (Database::connection()->query($sql)->fetchAll() as $row) {
             $out[(int) $row['shop_id']] = [
@@ -199,6 +200,10 @@ final class CatalogueRepository
                 'openingHoursNl' => (string) ($row['hours_nl'] ?? ''),
                 'holidayHoursFr' => (string) ($row['holiday_hours_fr'] ?? ''),
                 'holidayHoursNl' => (string) ($row['holiday_hours_nl'] ?? ''),
+                // Le catalogue « Bureaux » (migration 056, 21/11/2026) : le lien de commande entreprise, la livraison au bureau.
+                'businessUrl' => (string) ($row['business_url'] ?? ''),
+                'deliveryHoursFr' => (string) ($row['delivery_hours_fr'] ?? ''),
+                'deliveryHoursNl' => (string) ($row['delivery_hours_nl'] ?? ''),
             ];
         }
 
@@ -214,7 +219,8 @@ final class CatalogueRepository
     public function saveShopContact(int $shopId, array $contact, int $userId): void
     {
         $columns = ['phone2' => 'phone2', 'webshopUrl' => 'webshop_url', 'logoMediaId' => 'logo_media_id', 'photoMediaId' => 'photo_media_id',
-            'mapsUrl' => 'maps_url', 'openingHoursFr' => 'hours_fr', 'openingHoursNl' => 'hours_nl', 'holidayHoursFr' => 'holiday_hours_fr', 'holidayHoursNl' => 'holiday_hours_nl'];
+            'mapsUrl' => 'maps_url', 'openingHoursFr' => 'hours_fr', 'openingHoursNl' => 'hours_nl', 'holidayHoursFr' => 'holiday_hours_fr', 'holidayHoursNl' => 'holiday_hours_nl',
+            'businessUrl' => 'business_url', 'deliveryHoursFr' => 'delivery_hours_fr', 'deliveryHoursNl' => 'delivery_hours_nl'];
         $bind = ['shop' => $shopId, 'user' => $userId > 0 ? $userId : null];
         foreach ($columns as $key => $column) {
             $value = $contact[$key] ?? null;

@@ -83,7 +83,7 @@ function seasonOf(name: string): string | null {
     [
       ['noel', 'noel'], ['nicolas', 'saint-nicolas'], ['epiphanie', 'epiphanie'], ['chandeleur', 'chandeleur'], ['valentin', 'saint-valentin'],
       ['paque', 'paques'], ['pascal', 'paques'], ['mere', 'fete-des-meres'], ['printan', 'printemps'], ['estival', 'ete'], ['automn', 'automne'],
-      ['hivern', 'hiver'], ['glace', 'glace'],
+      ['hivern', 'hiver'], ['glace', 'glace'], ['bureau', 'bureau'], ['entreprise', 'bureau'],
     ] as const
   ).find(([key]) => flat.includes(key))
   return found ? found[1] : null
@@ -134,17 +134,22 @@ function brandPage(slot: 'page2' | 'penultimate', content: CatalogueBrandPage, l
 }
 
 function backPage(charter: CatalogueCharter, lang: CatalogueLang, shop: CatalogueCharterShop | null): Extract<CatalogueDocPage, { kind: 'back' }> {
+  // Le QR « Commande entreprise » (catalogue « Bureaux ») : le lien saisi pour la boutique, sinon son webshop.
+  const business = charter.back.qrTarget === 'business' && shop?.businessUrl ? shop.businessUrl : null
   return {
     kind: 'back',
     locked: true,
     title: pick(lang, charter.back.titleFr, charter.back.titleNl),
     text: pick(lang, charter.back.textFr, charter.back.textNl),
-    qrUrl: shop?.qrUrl ?? null,
-    host: shop?.host ?? null,
+    qrUrl: business ?? shop?.qrUrl ?? null,
+    host: business ? business.replace(/^https?:\/\//, '').replace(/\/+$/, '') : shop?.host ?? null,
+    qrTarget: charter.back.qrTarget ?? 'webshop',
+    qrLabel: pick(lang, charter.back.qrLabelFr ?? '', charter.back.qrLabelNl ?? '') || null,
     shop: shop
       ? {
           id: shop.id, erpShopId: shop.erpShopId, name: shop.name, address: shop.address, hours: lang === 'nl' ? shop.hoursNl || shop.hours : shop.hours, phone: shop.phone, email: shop.email, phone2: shop.phone2,
           holidayHours: lang === 'nl' ? shop.holidayHoursNl || shop.holidayHoursFr || '' : shop.holidayHoursFr ?? '',
+          deliveryHours: lang === 'nl' ? shop.deliveryHoursNl || shop.deliveryHoursFr || '' : shop.deliveryHoursFr ?? '',
           // La page « Le magasin » : photo, lien Maps, horaires saisis à la place de ceux de l'ERP.
           photoUrl: shop.photoUrl ?? null,
           mapsUrl: shop.mapsUrl ?? null,
@@ -314,7 +319,8 @@ function ColorsCard({ colors, onChange }: { colors: CatalogueCharter['colors']; 
   const roles: Array<[keyof CatalogueCharter['colors'], string, string]> = [
     ['secondary', 'Fond des pages', 'le papier de toutes les pages'],
     ['primary', 'Principale', 'bandeaux, titres, prix'],
-    ['accent', 'Accent', 'filets, « La gamme »'],
+    ['accent', 'Accent', '« La gamme », « Horaires »'],
+    ['rule', 'Filets', 'filets et tirets des listes'],
     ['ink', 'Texte', 'noms, textes'],
   ]
   const ratio = contrast(colors.secondary, colors.ink)
@@ -323,7 +329,8 @@ function ColorsCard({ colors, onChange }: { colors: CatalogueCharter['colors']; 
       <div className="cha-lab">Couleurs de tous les catalogues</div>
       <div className="cha-styles cha-styles--flat">
         {roles.map(([key, label, hint]) => {
-          const inPalette = api.CATALOGUE_COVER_COLORS.some((c) => c.hex === colors[key].toUpperCase())
+          const value = colors[key] ?? api.CATALOGUE_RULE_DEFAULT
+          const inPalette = api.CATALOGUE_COVER_COLORS.some((c) => c.hex === value.toUpperCase())
           return (
             <div key={key} className="cha-style">
               <span className="cha-style__l" title={hint}>
@@ -331,11 +338,11 @@ function ColorsCard({ colors, onChange }: { colors: CatalogueCharter['colors']; 
               </span>
               <span className="cha-swatches cha-swatches--left" role="group" aria-label={label}>
                 {api.CATALOGUE_COVER_COLORS.map((c) => (
-                  <button key={c.id} type="button" className={`cha-swatch${colors[key].toUpperCase() === c.hex ? ' is-on' : ''}`} style={{ background: c.hex }} onClick={() => onChange(key, c.hex)} title={c.label} aria-label={c.label} />
+                  <button key={c.id} type="button" className={`cha-swatch${value.toUpperCase() === c.hex ? ' is-on' : ''}`} style={{ background: c.hex }} onClick={() => onChange(key, c.hex)} title={c.label} aria-label={c.label} />
                 ))}
-                <label className={`cha-swatch cha-swatch--other${inPalette ? '' : ' is-on'}`} title="Une autre couleur" style={inPalette ? undefined : { background: colors[key] }}>
+                <label className={`cha-swatch cha-swatch--other${inPalette ? '' : ' is-on'}`} title="Une autre couleur" style={inPalette ? undefined : { background: value }}>
                   {inPalette ? '+' : ''}
-                  <input type="color" value={colors[key]} onChange={(event) => onChange(key, event.target.value.toUpperCase())} />
+                  <input type="color" value={value} onChange={(event) => onChange(key, event.target.value.toUpperCase())} />
                 </label>
               </span>
               <span className="cha-style__hint">{hint}</span>
@@ -413,7 +420,7 @@ function charterOf(read: CatalogueBrandPages): CatalogueCharter {
 
 const COVER_KEYS = ['titleFr', 'titleNl', 'subtitleFr', 'subtitleNl', 'mediaId', 'template', 'visual', 'illustration', 'titleFont', 'titleColor', 'subtitleFont', 'subtitleColor', 'showShop', 'kickerFr', 'kickerNl', 'look']
 const PAGE_KEYS = ['titleFr', 'titleNl', 'textFr', 'textNl', 'mediaId', 'template', 'look']
-const BACK_KEYS = ['titleFr', 'titleNl', 'textFr', 'textNl', 'template', 'look']
+const BACK_KEYS = ['titleFr', 'titleNl', 'textFr', 'textNl', 'template', 'qrTarget', 'qrLabelFr', 'qrLabelNl', 'look']
 
 /** Une valeur comparable : les clés d'un objet triées (l'ordre d'un `look` modifié n'est pas celui de l'API). */
 const canon = (value: unknown): string =>
@@ -967,6 +974,39 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
         </div>
         <div className="cha-lab cha-lab--sub">Gabarit</div>
         <Choice kind="back" items={BACK_TEMPLATES} value={charter.back.template} onChange={(t) => change((c) => ({ ...c, back: { ...c.back, template: t } }))} />
+        {/* Le QR (catalogue « Bureaux », 21/11/2026) : le webshop de la boutique, ou sa page de commande entreprise. */}
+        <div className="cha-lab cha-lab--sub">Le QR code mène à</div>
+        <span className="bro-seg" role="group" aria-label="Le QR code mène à">
+          {(
+            [
+              ['webshop', 'Le webshop de la boutique'],
+              ['business', 'Sa commande entreprise'],
+            ] as const
+          ).map(([target, label]) => (
+            <button key={target} type="button" className={(charter.back.qrTarget ?? 'webshop') === target ? 'is-on' : ''} onClick={() => change((c) => ({ ...c, back: { ...c.back, qrTarget: target } }))}>
+              {label}
+            </button>
+          ))}
+        </span>
+        <div className="cha-grid2">
+          <Field
+            label="Libellé du QR FR"
+            value={charter.back.qrLabelFr ?? ''}
+            max={40}
+            placeholder={charter.back.qrTarget === 'business' ? 'vide : Commande entreprise' : 'vide : Commander en ligne'}
+            onChange={(v) => change((c) => ({ ...c, back: { ...c.back, qrLabelFr: v } }))}
+          />
+          <Field
+            label="Libellé du QR NL"
+            value={charter.back.qrLabelNl ?? ''}
+            max={40}
+            placeholder={charter.back.qrTarget === 'business' ? 'vide : Bestellen voor bedrijven' : 'vide : Bestel online'}
+            onChange={(v) => change((c) => ({ ...c, back: { ...c.back, qrLabelNl: v } }))}
+          />
+        </div>
+        {charter.back.qrTarget === 'business' ? (
+          <p className="cha-note">Le lien de commande entreprise se saisit par boutique, plus bas ; sans lien, le QR mène au webshop de la boutique.</p>
+        ) : null}
       </section>
 
       <section className="cha-card">
@@ -985,6 +1025,7 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
           {lookRow('back', charter.back.look, 'address', 'Adresse')}
           {lookRow('back', charter.back.look, 'hours', 'Horaires')}
           {lookRow('back', charter.back.look, 'holidays', 'Horaires des fêtes', 'gotham', 'saisis par boutique, plus bas')}
+          {lookRow('back', charter.back.look, 'delivery', 'Livraison au bureau', 'gotham', 'saisie par boutique, plus bas')}
           {lookRow('back', charter.back.look, 'phone', 'Téléphone(s)')}
           {lookRow('back', charter.back.look, 'email', 'E-mail')}
         </div>
@@ -1036,6 +1077,10 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
               {/* Les horaires des fêtes (21/11/2026) : propres à chaque boutique, l'ERP ne les porte pas. */}
               <ShopInput area key={`hf-${shop.id}`} label="Horaires des fêtes FR" value={shop.holidayHoursFr ?? ''} placeholder="ex. 24/12 : 7h – 16h · 25/12 : fermé · 31/12 : 7h – 16h · 01/01 : fermé" max={600} onSave={(v) => saveShop({ holidayHoursFr: v })} />
               <ShopInput area key={`hn-${shop.id}`} label="Horaires des fêtes NL" value={shop.holidayHoursNl ?? ''} placeholder="ex. 24/12: 7u – 16u · 25/12: gesloten · … (vide : le français)" max={600} onSave={(v) => saveShop({ holidayHoursNl: v })} />
+              {/* Le catalogue « Bureaux » (21/11/2026) : le lien de commande entreprise (le QR), la livraison au bureau. */}
+              <ShopInput key={`biz-${shop.id}`} label="Lien commande entreprise" value={shop.businessUrl ?? ''} placeholder="https://… la page de commande entreprise (vide : le webshop)" max={300} onSave={(v) => saveShop({ businessUrl: v })} />
+              <ShopInput area key={`lf-${shop.id}`} label="Livraison au bureau FR" value={shop.deliveryHoursFr ?? ''} placeholder="ex. Livraison au bureau : lun – ven · 15h – 17h" max={600} onSave={(v) => saveShop({ deliveryHoursFr: v })} />
+              <ShopInput area key={`ln-${shop.id}`} label="Livraison au bureau NL" value={shop.deliveryHoursNl ?? ''} placeholder="ex. Levering op kantoor: ma – vr · 15u – 17u (vide : le français)" max={600} onSave={(v) => saveShop({ deliveryHoursNl: v })} />
               {/* La page « Le magasin » (gabarit C, 21/11/2026) : ses horaires, son lien Maps, sa photo. */}
               <ShopInput area key={`hof-${shop.id}`} label="Horaires du magasin FR" value={shop.openingHoursFr ?? ''} placeholder={`vide : ceux de l’ERP (${shop.hours || 'inconnus'}) — ex. Lun – ven : 7h – 18h30 · sam : 7h – 17h`} max={600} onSave={(v) => saveShop({ openingHoursFr: v })} />
               <ShopInput area key={`hon-${shop.id}`} label="Horaires du magasin NL" value={shop.openingHoursNl ?? ''} placeholder="ex. Ma – vr: 7u – 18u30 · za: 7u – 17u (vide : le français)" max={600} onSave={(v) => saveShop({ openingHoursNl: v })} />

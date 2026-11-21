@@ -131,7 +131,9 @@ final class CatalogueService
     private const COVER_STYLE = ['titleFont', 'titleColor', 'subtitleFont', 'subtitleColor'];
 
     /** Les dessins de saison livrés avec le module (`public/img/print/<slug>.png`). */
-    public const SEASON_DRAWINGS = ['noel', 'saint-nicolas', 'epiphanie', 'chandeleur', 'saint-valentin', 'paques', 'fete-des-meres', 'printemps', 'ete', 'automne', 'hiver', 'glace'];
+    public const SEASON_DRAWINGS = ['noel', 'saint-nicolas', 'epiphanie', 'chandeleur', 'saint-valentin', 'paques', 'fete-des-meres', 'printemps', 'ete', 'automne', 'hiver', 'glace',
+        // Le catalogue « Bureaux » (21/11/2026) : le dessin « Office Delivery » de la marque.
+        'bureau'];
 
     /** Gabarits de la page 2 et de l'avant-dernière (maquette A2) : A Texte seul · B Image en haut · C Image en bas. */
     public const BRAND_TEMPLATES = ['A', 'B', 'C'];
@@ -139,6 +141,10 @@ final class CatalogueService
     /** Gabarits de la dernière page (maquette A3) : A QR et boutique · B Boutique en avant. */
     /** La dernière page : A QR et boutique · B boutique en avant · C le magasin (photo, logo, horaires, deux QR ; 21/11/2026). */
     public const BACK_TEMPLATES = ['A', 'B', 'C'];
+
+    /** Où mène le QR de la dernière page (catalogue « Bureaux », 21/11/2026) : le webshop, ou la commande entreprise. */
+    public const QR_TARGETS = ['webshop', 'business'];
+    private const QR_LABEL_MAX = 40;
 
     /** Caractères qu'un texte de la page 2 / avant-dernière peut porter sans déborder, par gabarit (A5 ; l'A4 est à l'échelle). */
     public const BRAND_TEXT_FIT = ['A' => 1000, 'B' => 520, 'C' => 520];
@@ -172,7 +178,7 @@ final class CatalogueService
         'cover'       => ['logo' => 'tint', 'kicker' => 'text', 'title' => 'show', 'subtitle' => 'show', 'shop' => 'style'],
         'page2'       => ['logo' => 'tint', 'title' => 'text', 'text' => 'text'],
         'penultimate' => ['logo' => 'tint', 'title' => 'text', 'text' => 'text', 'legend' => 'text'],
-        'back'        => ['logo' => 'tint', 'photo' => 'show', 'title' => 'text', 'text' => 'text', 'qr' => 'text', 'maps' => 'text', 'shop' => 'text', 'name' => 'text', 'address' => 'text', 'hours' => 'text', 'holidays' => 'text', 'phone' => 'text', 'email' => 'text'],
+        'back'        => ['logo' => 'tint', 'photo' => 'show', 'title' => 'text', 'text' => 'text', 'qr' => 'text', 'maps' => 'text', 'shop' => 'text', 'name' => 'text', 'address' => 'text', 'hours' => 'text', 'holidays' => 'text', 'delivery' => 'text', 'phone' => 'text', 'email' => 'text'],
     ];
 
     public function __construct(
@@ -2180,7 +2186,7 @@ final class CatalogueService
         $out = [];
         foreach ($this->catalogues->shops() as $shop) {
             $contact = array_replace(['phone2' => '', 'webshopUrl' => '', 'logoMediaId' => null, 'photoMediaId' => null, 'mapsUrl' => '', 'openingHoursFr' => '', 'openingHoursNl' => '',
-                'holidayHoursFr' => '', 'holidayHoursNl' => ''], $contacts[$shop['id']] ?? []);
+                'holidayHoursFr' => '', 'holidayHoursNl' => '', 'businessUrl' => '', 'deliveryHoursFr' => '', 'deliveryHoursNl' => ''], $contacts[$shop['id']] ?? []);
             // Le QR : l'adresse directe du webshop de la boutique, saisie ; sinon celle du réseau, la boutique en paramètre.
             $qr = $contact['webshopUrl'] !== '' ? $contact['webshopUrl'] : ($webshop === null ? null : $webshop . '?shop=' . $shop['erpShopId']);
             $info = $shop['erpShopId'] !== null ? $this->webshop->shop($shop['erpShopId']) : ['shop' => null, 'error' => null];
@@ -2221,6 +2227,11 @@ final class CatalogueService
                 'openingHoursNl' => $contact['openingHoursNl'],
                 'mapsUrlOwn' => $contact['mapsUrl'],
                 'mapsUrl'   => $contact['mapsUrl'] !== '' ? $contact['mapsUrl'] : self::mapsUrl($read !== null && $read['name'] !== '' ? $read['name'] : $shop['name'], $read['address'] ?? ''),
+                // Le catalogue « Bureaux » (056) : le lien de commande entreprise (vide : le QR mène au webshop), la livraison
+                // au bureau.
+                'businessUrl' => $contact['businessUrl'],
+                'deliveryHoursFr' => $contact['deliveryHoursFr'],
+                'deliveryHoursNl' => $contact['deliveryHoursNl'],
                 'qrUrl'     => $qr,
                 'host'      => $qr === null ? null : self::host($qr),
                 'missing'   => $missing,
@@ -2268,7 +2279,8 @@ final class CatalogueService
         if ($shop === null) {
             throw new CatalogueError('RESOURCE_NOT_FOUND', 'Boutique inconnue du Marketing.', 404);
         }
-        $blank = ['phone2' => '', 'webshopUrl' => '', 'logoMediaId' => null, 'photoMediaId' => null, 'mapsUrl' => '', 'openingHoursFr' => '', 'openingHoursNl' => '', 'holidayHoursFr' => '', 'holidayHoursNl' => ''];
+        $blank = ['phone2' => '', 'webshopUrl' => '', 'logoMediaId' => null, 'photoMediaId' => null, 'mapsUrl' => '', 'openingHoursFr' => '', 'openingHoursNl' => '', 'holidayHoursFr' => '', 'holidayHoursNl' => '',
+            'businessUrl' => '', 'deliveryHoursFr' => '', 'deliveryHoursNl' => ''];
         $current = array_replace($blank, $this->catalogues->shopContacts()[$shopId] ?? []);
         $errors = self::unknown($input, array_keys($blank));
         $phone2 = array_key_exists('phone2', $input) ? $input['phone2'] : $current['phone2'];
@@ -2276,9 +2288,10 @@ final class CatalogueService
             $errors[] = ['field' => 'phone2', 'message' => 'Téléphone : chiffres, espaces, + . / ( ) -, 40 caractères au plus.'];
             $phone2 = '';
         }
-        // Le webshop direct (le premier QR) et le lien Google Maps (le second, page « Le magasin ») : http ou https.
+        // Le webshop direct (le premier QR), le lien Google Maps (le second, page « Le magasin ») et le lien de commande
+        // entreprise (le QR du catalogue « Bureaux », 056) : http ou https.
         $links = [];
-        foreach (['webshopUrl' => [300, 'Adresse du webshop'], 'mapsUrl' => [500, 'Lien Google Maps']] as $key => [$max, $label]) {
+        foreach (['webshopUrl' => [300, 'Adresse du webshop'], 'mapsUrl' => [500, 'Lien Google Maps'], 'businessUrl' => [300, 'Lien de commande entreprise']] as $key => [$max, $label]) {
             $url = array_key_exists($key, $input) ? $input[$key] : $current[$key];
             if (!is_string($url) || mb_strlen(trim($url)) > $max
                 || (trim($url) !== '' && (filter_var(trim($url), FILTER_VALIDATE_URL) === false || preg_match('#^https?://#i', trim($url)) !== 1))) {
@@ -2301,9 +2314,11 @@ final class CatalogueService
             }
             $images[$key] = $media;
         }
-        // Les horaires d'ouverture (vides : ceux de l'ERP) et les horaires des fêtes : un texte libre, plusieurs lignes, FR et NL.
+        // Les horaires d'ouverture (vides : ceux de l'ERP), les horaires des fêtes et la livraison au bureau (056) : un texte
+        // libre, plusieurs lignes, FR et NL.
         $texts = [];
-        foreach (['openingHoursFr' => 'Horaires d’ouverture', 'openingHoursNl' => 'Horaires d’ouverture', 'holidayHoursFr' => 'Horaires des fêtes', 'holidayHoursNl' => 'Horaires des fêtes'] as $key => $label) {
+        foreach (['openingHoursFr' => 'Horaires d’ouverture', 'openingHoursNl' => 'Horaires d’ouverture', 'holidayHoursFr' => 'Horaires des fêtes', 'holidayHoursNl' => 'Horaires des fêtes',
+            'deliveryHoursFr' => 'Livraison au bureau', 'deliveryHoursNl' => 'Livraison au bureau'] as $key => $label) {
             $value = array_key_exists($key, $input) ? $input[$key] : $current[$key];
             if (!is_string($value) || mb_strlen(trim($value)) > self::HOLIDAY_HOURS_MAX) {
                 $errors[] = ['field' => $key, 'message' => $label . ' : un texte de ' . self::HOLIDAY_HOURS_MAX . ' caractères au plus.'];
@@ -2344,7 +2359,9 @@ final class CatalogueService
     {
         return [
             'logoMediaId' => null,
-            'colors'      => ['primary' => '#8D1D2C', 'secondary' => '#F5EFE4', 'accent' => '#B0792A', 'ink' => '#241C1A'],
+            // rule : les filets et les tirets des listes (21/11/2026, Sam : « les accents sont abricot » — filets abricot,
+            // « La gamme » et « HORAIRES » restent à l'accent).
+            'colors'      => ['primary' => '#8D1D2C', 'secondary' => '#F5EFE4', 'accent' => '#B0792A', 'ink' => '#241C1A', 'rule' => '#F2C9A0'],
             'covers'      => [['gamme' => null, 'titleFr' => 'Notre catalogue', 'titleNl' => 'Onze catalogus', 'subtitleFr' => '', 'subtitleNl' => '', 'mediaId' => null,
                 'template' => 'A', 'visual' => null, 'illustration' => null, 'titleFont' => null, 'titleColor' => null, 'subtitleFont' => null, 'subtitleColor' => null,
                 // Le nom de la boutique sous le titre, dans la version d'une boutique (21/11/2026 : « pouvoir l'effacer »).
@@ -2357,6 +2374,11 @@ final class CatalogueService
                 'textFr'  => 'Retrait en boutique ou livraison.',
                 'textNl'  => 'Afhalen in de winkel of levering.',
                 'template' => 'A',
+                // Le QR (catalogue « Bureaux », v1.17) : le webshop de la boutique, ou sa page de commande entreprise ; son
+                // libellé (vide : « Commander en ligne » / « Commande entreprise »).
+                'qrTarget' => 'webshop',
+                'qrLabelFr' => '',
+                'qrLabelNl' => '',
                 'look'    => self::lookDefault('back'),
             ],
             // Page 2 et avant-dernière : des textes à adapter par la marque, sans prix ni promesse chiffrée.
@@ -2399,7 +2421,7 @@ final class CatalogueService
 
         $colors = $input['colors'] ?? $default['colors'];
         if (!is_array($colors)) {
-            $errors[] = ['field' => 'colors', 'message' => 'Objet {primary, secondary, accent, ink} attendu.'];
+            $errors[] = ['field' => 'colors', 'message' => 'Objet {primary, secondary, accent, ink, rule} attendu.'];
             $colors = $default['colors'];
         }
         $errors = array_merge($errors, self::unknown($colors, array_keys($default['colors']), 'colors.'));
@@ -2555,9 +2577,27 @@ final class CatalogueService
         if (!in_array($clean['template'], self::BACK_TEMPLATES, true)) {
             $errors[] = ['field' => $field . '.template', 'message' => 'Gabarit : A (QR et boutique), B (boutique en avant) ou C (le magasin).'];
         }
+        $clean['qrTarget'] = $back['qrTarget'] ?? 'webshop';
+        if (!in_array($clean['qrTarget'], self::QR_TARGETS, true)) {
+            $errors[] = ['field' => $field . '.qrTarget', 'message' => 'Le QR mène au webshop (webshop) ou à la page de commande entreprise (business).'];
+        }
+        foreach (['qrLabelFr', 'qrLabelNl'] as $text) {
+            $clean[$text] = self::text($back[$text] ?? '', $field . '.' . $text, $errors, self::QR_LABEL_MAX);
+        }
         $clean['look'] = self::lookFields($back['look'] ?? null, 'back', $field . '.look', $errors);
 
         return $clean;
+    }
+
+    /**
+     * Le libellé du QR de la dernière page, saisi (NL vide : le français) ; null : celui du gabarit (« Commander en
+     * ligne », ou « Commande entreprise » si le QR mène à la commande entreprise).
+     */
+    private static function qrLabel(array $back, string $lang): ?string
+    {
+        $own = $lang === 'nl' ? (($back['qrLabelNl'] ?? '') ?: ($back['qrLabelFr'] ?? '')) : ($back['qrLabelFr'] ?? '');
+
+        return $own !== '' ? $own : null;
     }
 
     /**
@@ -3315,7 +3355,9 @@ final class CatalogueService
             $shopInfo = ['id' => $version['id'], 'erpShopId' => $version['erpShopId'], 'name' => $version['name'], 'address' => '', 'hours' => '', 'phone' => '',
                 'email' => '', 'phone2' => $contact['phone2'] ?? '',
                 // Les horaires des fêtes saisis pour la boutique (21/11/2026) ; NL vide : le français.
-                'holidayHours' => $lang === 'nl' ? (($contact['holidayHoursNl'] ?? '') ?: ($contact['holidayHoursFr'] ?? '')) : ($contact['holidayHoursFr'] ?? '')];
+                'holidayHours' => $lang === 'nl' ? (($contact['holidayHoursNl'] ?? '') ?: ($contact['holidayHoursFr'] ?? '')) : ($contact['holidayHoursFr'] ?? ''),
+                // La livraison au bureau (catalogue « Bureaux », 056) ; NL vide : le français.
+                'deliveryHours' => $lang === 'nl' ? (($contact['deliveryHoursNl'] ?? '') ?: ($contact['deliveryHoursFr'] ?? '')) : ($contact['deliveryHoursFr'] ?? '')];
             if ($version['erpShopId'] !== null) {
                 $info = $this->webshop->shop($version['erpShopId']);
                 if ($info['shop'] !== null) {
@@ -3341,6 +3383,20 @@ final class CatalogueService
         // Le QR : l'adresse directe du webshop de la boutique (saisie dans l'assistant de la charte), sinon celle du réseau.
         $own = (string) ($contact['webshopUrl'] ?? '');
         $qrUrl = $own !== '' ? $own : ($webshop === null ? null : ($version !== null && $version['erpShopId'] !== null ? $webshop . '?shop=' . $version['erpShopId'] : $webshop));
+        $qrHost = $qrUrl === null ? null : ($own !== '' ? self::host($own) : ($webshop === null ? null : self::host($webshop)));
+        // Le QR « Commande entreprise » (catalogue « Bureaux », v1.17) : le lien saisi pour la boutique ; sans lien (ou dans
+        // la version générale), il mène à son webshop, et le document le dit.
+        if (($back['qrTarget'] ?? 'webshop') === 'business') {
+            $business = (string) ($contact['businessUrl'] ?? '');
+            if ($business !== '') {
+                $qrUrl = $business;
+                $qrHost = self::host($business);
+            } else {
+                $warnings[] = ['code' => 'BUSINESS_URL_MISSING', 'message' => $version !== null
+                    ? sprintf('Lien de commande entreprise de %s non saisi (pages de la marque, « Rempli par chaque boutique ») : le QR mène à son webshop.', $version['name'])
+                    : 'Version générale : pas de lien de commande entreprise, le QR mène au webshop.'];
+            }
+        }
         if ($qrUrl === null) {
             $warnings[] = ['code' => 'WEBSHOP_URL_UNKNOWN', 'message' => 'Adresse du webshop inconnue (ni celle de la boutique dans la charte, ni le réglage webshop_url du module Social) : pas de QR code.'];
         }
@@ -3358,7 +3414,9 @@ final class CatalogueService
                 'title'  => $backTitle,
                 'text'   => $backText,
                 'qrUrl'  => $qrUrl,
-                'host'   => $qrUrl === null ? null : ($own !== '' ? self::host($own) : ($webshop === null ? null : self::host($webshop))),
+                'host'   => $qrHost,
+                'qrTarget' => $back['qrTarget'] ?? 'webshop',
+                'qrLabel' => self::qrLabel($back, $lang),
                 'shop'   => $shopInfo,
                 'template' => $back['template'],
             ], $back['look'] ?? null)],
@@ -3434,7 +3492,7 @@ final class CatalogueService
             $page['host'] = null;
         }
         if (is_array($page['shop'] ?? null)) {
-            foreach (['address' => ['address'], 'hours' => ['hours'], 'holidays' => ['holidayHours'], 'phone' => ['phone', 'phone2'], 'email' => ['email']] as $element => $keys) {
+            foreach (['address' => ['address'], 'hours' => ['hours'], 'holidays' => ['holidayHours'], 'delivery' => ['deliveryHours'], 'phone' => ['phone', 'phone2'], 'email' => ['email']] as $element => $keys) {
                 if (!$page['look'][$element]['show']) {
                     foreach ($keys as $key) {
                         $page['shop'][$key] = '';
@@ -3581,7 +3639,7 @@ final class CatalogueService
         $flat = self::compact($name);
         foreach ([['printan', 'printemps'], ['estival', 'ete'], ['automn', 'automne'], ['hivern', 'hiver'], ['noel', 'noel'], ['nicolas', 'saint-nicolas'],
             ['epiphanie', 'epiphanie'], ['mere', 'fete-des-meres'], ['pascal', 'paques'], ['paque', 'paques'], ['valentin', 'saint-valentin'],
-            ['chandeleur', 'chandeleur'], ['glace', 'glace'], ['b2b', 'b2b']] as [$key, $slug]) {
+            ['chandeleur', 'chandeleur'], ['glace', 'glace'], ['b2b', 'b2b'], ['bureau', 'bureau'], ['entreprise', 'bureau']] as [$key, $slug]) {
             if ($flat !== '' && str_contains($flat, $key)) {
                 return $slug;
             }
