@@ -20,6 +20,8 @@
 .catv-warn { margin: 8px 0 0; padding: 9px 11px; border-radius: 8px; background: #F6E7CE; color: #7A5207; font-size: 12px; line-height: 1.45; }
 .catv-sub { display: block; margin-top: 2px; font-size: 11px; color: var(--muted); }
 .catv-right { text-align: right; }
+.catv-row-actions { white-space: nowrap; }
+.catv-row-actions .btn + .btn { margin-left: 6px; }
 
 /* ---------- nouveau catalogue ---------- */
 .catv-sources { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
