@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Marketing — catalogues produits
-  version: 1.10.0
+  version: 1.11.0
   description: |
     Les catalogues produits du Marketing (prix du webshop, gammes) : un imprimé A5 (A4 en option)
     de **8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16). Quatre pages viennent de la Charte des catalogues de la
@@ -99,6 +99,11 @@ info:
     catalogue prend les siennes tout de suite, sans publication, et les autres catalogues ne bougent pas. La copie
     adaptée par une boutique les garde ; un catalogue de boutique n'en a pas à lui (`422`, champ `owner`).
     `Catalogue.brandPagesOwn` : les pages qu'il a à lui.
+
+    v1.11 (21 novembre 2026, client : « je dois pouvoir effacer le Atelier by Halle qui est sur la première page ») :
+    une couverture (charte ou page propre d'un catalogue) porte `showShop` (booléen, vrai par défaut) ; faux, la
+    version d'une boutique n'imprime plus son nom sous le titre (`eyebrow` null au document). Non booléen : 422
+    (`covers[i].showShop`, `cover.showShop`).
 
     v1.5 (15 novembre 2026, client : « les deux, garde les 3 gabarits, code-le » — assistant des pages de la
     marque, maquettes A1-A4 ; assistant du franchisé, maquettes B1-B4) :
@@ -1296,6 +1301,7 @@ components:
         titleColor: { $ref: '#/components/schemas/CoverColor' }
         subtitleFont: { $ref: '#/components/schemas/CoverFont' }
         subtitleColor: { $ref: '#/components/schemas/CoverColor' }
+        showShop: { type: boolean, default: true, description: 'v1.11 — Le nom de la boutique sous le titre, dans la version d’une boutique.' }
     CoverFont: { type: [string, 'null'], enum: [vank, gotham, playwrite, null], description: 'v1.9 — Police de la marque (Vank titres, Gotham texte, Playwrite DEVA manuscrite) ; null : celle du gabarit.' }
     CoverColor: { type: [string, 'null'], enum: [rubis, abricot, or, creme, encre, blanc, null], description: 'v1.9 — Couleur de la marque par son nom (rubis #8D1D2C, abricot #F2C9A0, or #B0792A, creme #F5EFE4, encre #241C1A, blanc #FFFFFF) ; null : celle du gabarit.' }
     CharterWrite:
@@ -1329,6 +1335,7 @@ components:
         titleColor: { $ref: '#/components/schemas/CoverColor' }
         subtitleFont: { $ref: '#/components/schemas/CoverFont' }
         subtitleColor: { $ref: '#/components/schemas/CoverColor' }
+        showShop: { type: boolean, default: true, description: 'v1.11 — Le nom de la boutique sous le titre, dans la version d’une boutique.' }
     OwnBack:
       type: object
       additionalProperties: false

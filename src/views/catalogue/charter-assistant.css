@@ -192,3 +192,7 @@
 .cha-own { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .cha-own.is-own { border-color: rgba(63, 122, 82, 0.45); }
 .cha-own__t { flex: 1 1 260px; font-size: 12.5px; color: var(--muted-2); }
+
+/* Le nom de la boutique sous le titre de la couverture : afficher ou masquer (21/11/2026). */
+.cha-shopname { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; }
+.cha-shopname small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--muted); }

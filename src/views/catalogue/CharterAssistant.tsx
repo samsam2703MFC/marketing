@@ -98,7 +98,8 @@ function coverPage(cover: CatalogueCover, lang: CatalogueLang, shop: CatalogueCh
     locked: true,
     title: pick(lang, cover.titleFr, cover.titleNl) || '—',
     subtitle: pick(lang, cover.subtitleFr, cover.subtitleNl),
-    eyebrow: shop?.name ?? null,
+    // Le nom de la boutique sous le titre, sauf si la couverture le masque.
+    eyebrow: cover.showShop === false ? null : shop?.name ?? null,
     imageUrl,
     template: cover.template,
     kicker: cover.gamme !== null ? (lang === 'nl' ? 'Het gamma' : 'La gamme') : null,
@@ -356,7 +357,7 @@ function charterOf(read: CatalogueBrandPages): CatalogueCharter {
   }
 }
 
-const COVER_KEYS = ['titleFr', 'titleNl', 'subtitleFr', 'subtitleNl', 'mediaId', 'template', 'visual', 'illustration', 'titleFont', 'titleColor', 'subtitleFont', 'subtitleColor']
+const COVER_KEYS = ['titleFr', 'titleNl', 'subtitleFr', 'subtitleNl', 'mediaId', 'template', 'visual', 'illustration', 'titleFont', 'titleColor', 'subtitleFont', 'subtitleColor', 'showShop']
 const PAGE_KEYS = ['titleFr', 'titleNl', 'textFr', 'textNl', 'mediaId', 'template']
 const BACK_KEYS = ['titleFr', 'titleNl', 'textFr', 'textNl', 'template']
 
@@ -513,6 +514,15 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
       return
     }
     onBack()
+  }
+
+  /** « Enregistrer » (21/11/2026) : enregistre tout de suite ce qui est à l'écran et le dit, avec l'heure. */
+  async function saveNow() {
+    dirty.current = true
+    if (await flush()) {
+      const time = new Date().toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' })
+      setSave({ status: 'saved', text: catalogue ? `✓ Enregistré à ${time}` : `✓ Brouillon enregistré à ${time}` })
+    }
   }
 
   async function go(next: Step) {
@@ -715,7 +725,21 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
           <TextStyle label="Titre" font={cover.titleFont ?? null} fallback="vank" color={cover.titleColor ?? null} onChange={(p) => setCover({ ...('font' in p ? { titleFont: p.font } : {}), ...('color' in p ? { titleColor: p.color } : {}) })} />
           <TextStyle label="Sous-titre" font={cover.subtitleFont ?? null} fallback="gotham" color={cover.subtitleColor ?? null} onChange={(p) => setCover({ ...('font' in p ? { subtitleFont: p.font } : {}), ...('color' in p ? { subtitleColor: p.color } : {}) })} />
         </div>
-        <p className="cha-note">Le nom de la boutique s’ajoute seul en bas de la couverture, dans chaque version. Polices et couleurs de la marque (design system) : le titre est en Vank, le sous-titre en Gotham, sauf autre choix ; « A » garde la couleur du gabarit.</p>
+        <div className="cha-shopname">
+          <span>
+            Nom de la boutique sous le titre
+            <small>{`ex. « L’Atelier By · ${shop?.name ?? 'Halle'} », dans la version de chaque boutique`}</small>
+          </span>
+          <span className="bro-seg" role="group" aria-label="Nom de la boutique sous le titre">
+            <button type="button" className={cover.showShop !== false ? 'is-on' : ''} onClick={() => setCover({ showShop: true })}>
+              Afficher
+            </button>
+            <button type="button" className={cover.showShop === false ? 'is-on' : ''} onClick={() => setCover({ showShop: false })}>
+              Masquer
+            </button>
+          </span>
+        </div>
+        <p className="cha-note">Polices et couleurs de la marque (design system) : le titre est en Vank, le sous-titre en Gotham, sauf autre choix ; « A » garde la couleur du gabarit.</p>
       </section>
 
       <section className="cha-card">
@@ -1147,17 +1171,30 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
           ))}
         </span>
         <span className={`cha-save${save.status === 'error' ? ' is-error' : ''}`}>
-          {save.status === 'saving' ? 'Enregistrement…' : save.status === 'error' ? `Non enregistré : ${save.text ?? ''}` : catalogue ? 'Enregistré' : 'Brouillon enregistré'}
+          {save.status === 'saving'
+            ? 'Enregistrement…'
+            : save.status === 'error'
+              ? `Non enregistré : ${save.text ?? ''}`
+              : save.status === 'saved' && save.text
+                ? save.text
+                : dirty.current
+                  ? 'Modifié… enregistrement automatique'
+                  : catalogue ? 'Enregistré' : 'Brouillon enregistré'}
         </span>
+        {step < 5 ? (
+          <button type="button" className="btn btn--primary" onClick={() => void saveNow()}>
+            Enregistrer
+          </button>
+        ) : null}
         <button type="button" className="btn" disabled={step === 1} onClick={() => void go((step - 1) as Step)}>
           ‹ Précédent
         </button>
         {catalogue && step === 4 ? (
-          <button type="button" className="btn btn--primary" onClick={() => void leave()}>
-            Terminé · retour au catalogue
+          <button type="button" className="btn" onClick={() => void leave()}>
+            Enregistrer et revenir au catalogue
           </button>
         ) : step < 5 ? (
-          <button type="button" className="btn btn--primary" onClick={() => void go((step + 1) as Step)}>
+          <button type="button" className="btn" onClick={() => void go((step + 1) as Step)}>
             {`Suivant · ${current.next} ›`}
           </button>
         ) : (

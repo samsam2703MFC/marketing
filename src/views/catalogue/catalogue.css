@@ -218,3 +218,9 @@
 .catv-offer__img img { width: 44px; height: 32px; object-fit: contain; border-radius: 6px; border: 1px solid var(--line); background: #fff; }
 .catv-offer__img .btn { margin-top: 0; }
 .catv-script { margin-bottom: 12px; }
+
+/* « Enregistrer » de l'éditeur (21/11/2026) : le bouton et l'heure du dernier enregistrement. */
+.catv-savebox { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.catv-savebox__ok { font-size: 11.5px; color: #3f7a52; }
+.catv-savebox__ko { max-width: 260px; font-size: 11.5px; text-align: right; }
+.catv-edit { font-weight: 600; }

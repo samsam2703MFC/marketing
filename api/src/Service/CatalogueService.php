@@ -1953,6 +1953,7 @@ final class CatalogueService
             $cover['template'] = in_array($cover['template'], self::COVER_TEMPLATES, true) ? $cover['template'] : 'A';
             $cover['visual'] = in_array($cover['visual'], self::COVER_VISUALS, true) ? $cover['visual'] : null;
             $cover['illustration'] = in_array($cover['illustration'], self::SEASON_DRAWINGS, true) ? $cover['illustration'] : null;
+            $cover['showShop'] = $cover['showShop'] !== false;
             $cover['imageUrl'] = $this->mediaUrl($cover['mediaId']);
         }
         unset($cover);
@@ -2261,7 +2262,9 @@ final class CatalogueService
             'logoMediaId' => null,
             'colors'      => ['primary' => '#8D1D2C', 'secondary' => '#F5EFE4', 'accent' => '#B0792A', 'ink' => '#241C1A'],
             'covers'      => [['gamme' => null, 'titleFr' => 'Notre catalogue', 'titleNl' => 'Onze catalogus', 'subtitleFr' => '', 'subtitleNl' => '', 'mediaId' => null,
-                'template' => 'A', 'visual' => null, 'illustration' => null, 'titleFont' => null, 'titleColor' => null, 'subtitleFont' => null, 'subtitleColor' => null]],
+                'template' => 'A', 'visual' => null, 'illustration' => null, 'titleFont' => null, 'titleColor' => null, 'subtitleFont' => null, 'subtitleColor' => null,
+                // Le nom de la boutique sous le titre, dans la version d'une boutique (21/11/2026 : « pouvoir l'effacer »).
+                'showShop' => true]],
             'back'        => [
                 'titleFr' => 'Commandez en ligne',
                 'titleNl' => 'Bestel online',
@@ -2426,6 +2429,12 @@ final class CatalogueService
             }
             $clean[$key] = $value;
         }
+        $showShop = $cover['showShop'] ?? true;
+        if (!is_bool($showShop)) {
+            $errors[] = ['field' => $field . '.showShop', 'message' => 'Booléen attendu : le nom de la boutique sous le titre (vrai) ou pas (faux).'];
+            $showShop = true;
+        }
+        $clean['showShop'] = $showShop;
         if ($clean['titleFr'] === '') {
             $errors[] = ['field' => $field . '.titleFr', 'message' => 'Le titre français est obligatoire.'];
         }
@@ -2602,6 +2611,7 @@ final class CatalogueService
                 $clean['template'] = in_array($clean['template'], self::COVER_TEMPLATES, true) ? $clean['template'] : 'A';
                 $clean['visual'] = in_array($clean['visual'], self::COVER_VISUALS, true) ? $clean['visual'] : null;
                 $clean['illustration'] = in_array($clean['illustration'], self::SEASON_DRAWINGS, true) ? $clean['illustration'] : null;
+                $clean['showShop'] = $clean['showShop'] !== false;
             } elseif ($slot === 'back') {
                 $clean = array_replace($default['back'], array_intersect_key($page, $default['back']));
                 $clean['template'] = in_array($clean['template'], self::BACK_TEMPLATES, true) ? $clean['template'] : 'A';
@@ -3191,7 +3201,8 @@ final class CatalogueService
             'locked'     => true,
             'title'      => $title,
             'subtitle'   => $lang === 'nl' ? (($cover['subtitleNl'] ?? '') ?: (string) ($cover['subtitleFr'] ?? '')) : (string) ($cover['subtitleFr'] ?? ''),
-            'eyebrow'    => $shopName,
+            // Le nom de la boutique sous le titre, sauf si la couverture le masque (`showShop` faux).
+            'eyebrow'    => ($cover['showShop'] ?? true) === false ? null : $shopName,
             'imageUrl'   => $imageUrl,
             'template'   => in_array($cover['template'] ?? 'A', self::COVER_TEMPLATES, true) ? ($cover['template'] ?? 'A') : 'A',
             'kicker'     => $isGamme ? ($lang === 'nl' ? 'Het gamma' : 'La gamme') : null,
