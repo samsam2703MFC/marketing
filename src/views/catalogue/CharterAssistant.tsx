@@ -65,6 +65,8 @@ const BRAND_TEMPLATES: Array<{ t: CatalogueBrandTemplate; label: string; hint: s
 const BACK_TEMPLATES: Array<{ t: CatalogueBackTemplate; label: string; hint: string }> = [
   { t: 'A', label: 'QR et boutique', hint: 'le QR à gauche, une phrase à droite, la boutique en pied' },
   { t: 'B', label: 'Boutique en avant', hint: 'QR plus petit, adresse et horaires en grand' },
+  // 21/11/2026, Sam : « un stopper spécifique pour chaque magasin, à mettre dans les catalogues ».
+  { t: 'C', label: 'Le magasin', hint: 'photo du magasin, son logo, ses horaires, QR webshop et QR Google Maps' },
 ]
 
 const message = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause))
@@ -143,6 +145,10 @@ function backPage(charter: CatalogueCharter, lang: CatalogueLang, shop: Catalogu
       ? {
           id: shop.id, erpShopId: shop.erpShopId, name: shop.name, address: shop.address, hours: lang === 'nl' ? shop.hoursNl || shop.hours : shop.hours, phone: shop.phone, email: shop.email, phone2: shop.phone2,
           holidayHours: lang === 'nl' ? shop.holidayHoursNl || shop.holidayHoursFr || '' : shop.holidayHoursFr ?? '',
+          // La page « Le magasin » : photo, lien Maps, horaires saisis à la place de ceux de l'ERP.
+          photoUrl: shop.photoUrl ?? null,
+          mapsUrl: shop.mapsUrl ?? null,
+          ...((lang === 'nl' ? shop.openingHoursNl || shop.openingHoursFr : shop.openingHoursFr) ? { hours: (lang === 'nl' ? shop.openingHoursNl || shop.openingHoursFr : shop.openingHoursFr) ?? '' } : {}),
         }
       : null,
     template: charter.back.template,
@@ -187,6 +193,7 @@ function TemplateMini({ kind, t }: { kind: 'cover' | 'brand' | 'back'; t: string
     if (t === 'B') return <span className="cha-mini"><i className="photo photo--top" /><i className="bar bar--mid" /><i className="lines lines--low" /></span>
     return <span className="cha-mini"><i className="bar bar--top" /><i className="lines lines--short" /><i className="photo photo--bottom" /></span>
   }
+  if (t === 'C') return <span className="cha-mini cha-mini--wide"><i className="photo photo--shop" /><i className="qr qr--left" /><i className="qr qr--right" /></span>
   return t === 'A' ? <span className="cha-mini cha-mini--wide"><i className="qr" /><i className="foot" /></span> : <span className="cha-mini cha-mini--wide"><i className="qr qr--small" /><i className="block" /></span>
 }
 
@@ -469,7 +476,7 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
   const [format, setFormat] = useState<CatalogueFormat>('A5')
   const [coverIndex, setCoverIndex] = useState(0)
   const [shopId, setShopId] = useState<number | null>(null)
-  const [picking, setPicking] = useState<null | 'cover' | 'page2' | 'penultimate' | 'logo' | 'shopLogo'>(null)
+  const [picking, setPicking] = useState<null | 'cover' | 'page2' | 'penultimate' | 'logo' | 'shopLogo' | 'shopPhoto'>(null)
   const [shopSave, setShopSave] = useState<{ status: 'idle' | 'saving' | 'error'; text?: string }>({ status: 'idle' })
   const [save, setSave] = useState<{ status: 'idle' | 'saving' | 'saved' | 'error'; text?: string }>({ status: 'idle' })
   const [published, setPublished] = useState<string | null>(null)
@@ -585,7 +592,7 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
   const shops = checks?.shops ?? []
   const shop = shops.find((s) => s.id === shopId) ?? shops[0] ?? null
   /** Ce que la boutique imprime en plus à la dernière page (second téléphone, webshop direct, logo) : enregistré tout de suite. */
-  function saveShop(patch: { phone2?: string; webshopUrl?: string; logoMediaId?: number | null; holidayHoursFr?: string; holidayHoursNl?: string }) {
+  function saveShop(patch: api.CatalogueShopPatch) {
     if (!shop) return
     setShopSave({ status: 'saving' })
     api.saveCatalogueShop(shop.id, patch).then(
@@ -962,9 +969,11 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
         </div>
         <div className="cha-styles cha-styles--flat">
           {lookRow('back', charter.back.look, 'logo', 'Logo')}
+          {lookRow('back', charter.back.look, 'photo', 'Photo du magasin', 'gotham', 'gabarit C · saisie par boutique')}
           {lookRow('back', charter.back.look, 'title', 'Titre', 'vank')}
           {lookRow('back', charter.back.look, 'text', 'Texte', 'gotham')}
           {lookRow('back', charter.back.look, 'qr', 'QR code', 'gotham', 'et l’adresse du webshop')}
+          {lookRow('back', charter.back.look, 'maps', 'QR Google Maps', 'gotham', 'gabarit C · l’adresse du magasin')}
           {lookRow('back', charter.back.look, 'shop', 'Coordonnées', 'gotham', 'le bloc de la boutique')}
           {lookRow('back', charter.back.look, 'address', 'Adresse')}
           {lookRow('back', charter.back.look, 'hours', 'Horaires')}
@@ -1020,6 +1029,29 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
               {/* Les horaires des fêtes (21/11/2026) : propres à chaque boutique, l'ERP ne les porte pas. */}
               <ShopInput area key={`hf-${shop.id}`} label="Horaires des fêtes FR" value={shop.holidayHoursFr ?? ''} placeholder="ex. 24/12 : 7h – 16h · 25/12 : fermé · 31/12 : 7h – 16h · 01/01 : fermé" max={600} onSave={(v) => saveShop({ holidayHoursFr: v })} />
               <ShopInput area key={`hn-${shop.id}`} label="Horaires des fêtes NL" value={shop.holidayHoursNl ?? ''} placeholder="ex. 24/12: 7u – 16u · 25/12: gesloten · … (vide : le français)" max={600} onSave={(v) => saveShop({ holidayHoursNl: v })} />
+              {/* La page « Le magasin » (gabarit C, 21/11/2026) : ses horaires, son lien Maps, sa photo. */}
+              <ShopInput area key={`hof-${shop.id}`} label="Horaires du magasin FR" value={shop.openingHoursFr ?? ''} placeholder={`vide : ceux de l’ERP (${shop.hours || 'inconnus'}) — ex. Lun – ven : 7h – 18h30 · sam : 7h – 17h`} max={600} onSave={(v) => saveShop({ openingHoursFr: v })} />
+              <ShopInput area key={`hon-${shop.id}`} label="Horaires du magasin NL" value={shop.openingHoursNl ?? ''} placeholder="ex. Ma – vr: 7u – 18u30 · za: 7u – 17u (vide : le français)" max={600} onSave={(v) => saveShop({ openingHoursNl: v })} />
+              <ShopInput key={`map-${shop.id}`} label="Lien Google Maps" value={shop.mapsUrlOwn ?? ''} placeholder={shop.mapsUrl ? `vide : ${shop.mapsUrl}` : 'https://maps.app.goo.gl/… (vide : fait de l’adresse)'} max={500} onSave={(v) => saveShop({ mapsUrl: v })} />
+              <tr>
+                <td>Photo du magasin</td>
+                <td>
+                  <span className="cha-shoplogo cha-shopphoto">
+                    {shop.photoUrl ? <img src={shop.photoUrl} alt="" /> : <span className="cha-tag">aucune</span>}
+                    <button type="button" className="btn btn--sm" onClick={() => setPicking('shopPhoto')}>
+                      {shop.photoUrl ? 'Changer' : 'Choisir dans la médiathèque'}
+                    </button>
+                    {shop.photoUrl ? (
+                      <button type="button" className="linklike" onClick={() => saveShop({ photoMediaId: null })}>
+                        Retirer
+                      </button>
+                    ) : null}
+                  </span>
+                </td>
+                <td>
+                  <span className={`cha-dot${shop.photoUrl ? '' : ' cha-dot--off'}`} /> Saisi ici · gabarit C
+                </td>
+              </tr>
               <tr>
                 <td>Logo</td>
                 <td>
@@ -1373,6 +1405,7 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
             const mediaId = Number(asset.id)
             if (picking === 'logo') change((c) => ({ ...c, logoMediaId: mediaId, logoUrl: asset.url }))
             else if (picking === 'shopLogo') saveShop({ logoMediaId: mediaId })
+            else if (picking === 'shopPhoto') saveShop({ photoMediaId: mediaId })
             else if (picking === 'cover') setCover({ visual: 'media', mediaId, imageUrl: asset.url })
             else setBrand(picking, { mediaId, imageUrl: asset.url, template: charter[picking].template === 'A' ? 'B' : charter[picking].template })
             setPicking(null)

@@ -624,6 +624,61 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
   const qr = page.qrUrl && shown(look, 'qr') ? page.qrUrl : null
   const shopStyle = textStyle(look, 'shop')
   const showShop = shown(look, 'shop')
+  if (page.template === 'C') {
+    // Le magasin (21/11/2026, Sam : « un stopper spécifique pour chaque magasin — photo du magasin, logo, QR du magasin,
+    // heures d'ouverture et de fermeture, QR avec l'adresse (Maps) — à mettre dans les catalogues ») : la photo en haut,
+    // le logo de la boutique, les horaires en grand, deux QR (commander, venir), les coordonnées en pied.
+    const nl = lang === 'nl'
+    const photo = shop?.photoUrl && shown(look, 'photo') ? shop.photoUrl : null
+    const maps = shop?.mapsUrl && shown(look, 'maps') ? shop.mapsUrl : null
+    const address = shop ? line('address', shop.address) : ''
+    const contact = shop ? [address, phones, line('email', shop.email)].filter(Boolean).join(' · ') : ''
+    return (
+      <div className={`cat-back cat-back--C${photo ? ' cat-back--photo' : ''}`}>
+        {photo ? (
+          <div className="cat-back__photo">
+            <img src={photo} alt="" />
+          </div>
+        ) : null}
+        <div className="cat-back__body">
+          {logoTag}
+          {titleTag}
+          {textTag}
+          {showShop && shop && (hours || holidays) ? (
+            <div className="cat-back__hoursC">
+              <div className="cat-back__label">{nl ? 'Openingsuren' : 'Horaires'}</div>
+              {hours ? <p className="cat-back__hoursBig" style={shopStyle}>{hours}</p> : null}
+              {holidays ? <p className="cat-back__holidays" style={shopStyle}>{holidays}</p> : null}
+            </div>
+          ) : null}
+          {qr || maps ? (
+            <div className="cat-back__qrs">
+              {qr ? (
+                <div className="cat-back__qrC">
+                  <Qr url={qr} size={20} />
+                  <div className="cat-back__qrlabel">{nl ? 'Bestel online' : 'Commander en ligne'}</div>
+                  <div className="cat-back__hint">{page.host}</div>
+                </div>
+              ) : null}
+              {maps ? (
+                <div className="cat-back__qrC">
+                  <Qr url={maps} size={20} />
+                  <div className="cat-back__qrlabel">{nl ? 'Kom langs' : 'Venir au magasin'}</div>
+                  <div className="cat-back__hint">{address || (nl ? 'Route in Google Maps' : 'Itinéraire Google Maps')}</div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {showShop ? (
+            <div className="cat-back__shop">
+              <div className="cat-back__who" style={shopStyle}>{shop ? `L’Atelier By — ${shop.name}` : 'L’Atelier By'}</div>
+              {contact ? <p style={shopStyle}>{contact}</p> : null}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    )
+  }
   if (page.template === 'B') {
     // Boutique en avant (maquette A3, gabarit B) : l'adresse et les horaires en grand, le QR plus petit en bas.
     return (

@@ -137,7 +137,8 @@ final class CatalogueService
     public const BRAND_TEMPLATES = ['A', 'B', 'C'];
 
     /** Gabarits de la dernière page (maquette A3) : A QR et boutique · B Boutique en avant. */
-    public const BACK_TEMPLATES = ['A', 'B'];
+    /** La dernière page : A QR et boutique · B boutique en avant · C le magasin (photo, logo, horaires, deux QR ; 21/11/2026). */
+    public const BACK_TEMPLATES = ['A', 'B', 'C'];
 
     /** Caractères qu'un texte de la page 2 / avant-dernière peut porter sans déborder, par gabarit (A5 ; l'A4 est à l'échelle). */
     public const BRAND_TEXT_FIT = ['A' => 1000, 'B' => 520, 'C' => 520];
@@ -159,7 +160,7 @@ final class CatalogueService
         'cover'       => ['logo' => 'show', 'kicker' => 'text', 'title' => 'show', 'subtitle' => 'show', 'shop' => 'style'],
         'page2'       => ['logo' => 'show', 'title' => 'text', 'text' => 'text'],
         'penultimate' => ['logo' => 'show', 'title' => 'text', 'text' => 'text', 'legend' => 'show'],
-        'back'        => ['logo' => 'show', 'title' => 'text', 'text' => 'text', 'qr' => 'show', 'shop' => 'text', 'address' => 'show', 'hours' => 'show', 'holidays' => 'show', 'phone' => 'show', 'email' => 'show'],
+        'back'        => ['logo' => 'show', 'photo' => 'show', 'title' => 'text', 'text' => 'text', 'qr' => 'show', 'maps' => 'show', 'shop' => 'text', 'address' => 'show', 'hours' => 'show', 'holidays' => 'show', 'phone' => 'show', 'email' => 'show'],
     ];
 
     public function __construct(
@@ -2166,7 +2167,8 @@ final class CatalogueService
         $contacts = $this->catalogues->shopContacts();
         $out = [];
         foreach ($this->catalogues->shops() as $shop) {
-            $contact = $contacts[$shop['id']] ?? ['phone2' => '', 'webshopUrl' => '', 'logoMediaId' => null, 'holidayHoursFr' => '', 'holidayHoursNl' => ''];
+            $contact = array_replace(['phone2' => '', 'webshopUrl' => '', 'logoMediaId' => null, 'photoMediaId' => null, 'mapsUrl' => '', 'openingHoursFr' => '', 'openingHoursNl' => '',
+                'holidayHoursFr' => '', 'holidayHoursNl' => ''], $contacts[$shop['id']] ?? []);
             // Le QR : l'adresse directe du webshop de la boutique, saisie ; sinon celle du réseau, la boutique en paramètre.
             $qr = $contact['webshopUrl'] !== '' ? $contact['webshopUrl'] : ($webshop === null ? null : $webshop . '?shop=' . $shop['erpShopId']);
             $info = $shop['erpShopId'] !== null ? $this->webshop->shop($shop['erpShopId']) : ['shop' => null, 'error' => null];
@@ -2199,6 +2201,14 @@ final class CatalogueService
                 'logoUrl'   => $this->mediaUrl($contact['logoMediaId']),
                 'holidayHoursFr' => $contact['holidayHoursFr'] ?? '',
                 'holidayHoursNl' => $contact['holidayHoursNl'] ?? '',
+                // La page « Le magasin » (21/11/2026) : sa photo, ses horaires saisis (vides : ceux de l'ERP), son lien Maps
+                // saisi (`mapsUrlOwn`) et celui qui s'imprime (`mapsUrl` : le saisi, sinon fait de l'adresse de l'ERP).
+                'photoMediaId' => $contact['photoMediaId'],
+                'photoUrl'  => $this->mediaUrl($contact['photoMediaId']),
+                'openingHoursFr' => $contact['openingHoursFr'],
+                'openingHoursNl' => $contact['openingHoursNl'],
+                'mapsUrlOwn' => $contact['mapsUrl'],
+                'mapsUrl'   => $contact['mapsUrl'] !== '' ? $contact['mapsUrl'] : self::mapsUrl($read !== null && $read['name'] !== '' ? $read['name'] : $shop['name'], $read['address'] ?? ''),
                 'qrUrl'     => $qr,
                 'host'      => $qr === null ? null : self::host($qr),
                 'missing'   => $missing,
@@ -2207,6 +2217,23 @@ final class CatalogueService
         }
 
         return $out;
+    }
+
+    /**
+     * Le lien Google Maps d'une boutique, fait de son nom et de son adresse (le second QR de la page « Le magasin ») ;
+     * sans adresse : null.
+     */
+    public static function mapsUrl(string $name, string $address): ?string
+    {
+        if (trim($address) === '') {
+            return null;
+        }
+
+        // Le nom de l'ERP porte souvent l'enseigne (« Atelier by - Halle ») ; sinon on l'ajoute, pour que Google Maps
+        // trouve la boutique et pas seulement la rue.
+        $label = stripos($name, 'atelier') === false ? trim("L'Atelier By " . $name) : trim($name);
+
+        return 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode($label . ', ' . trim($address));
     }
 
     /** L'adresse d'un webshop sans le protocole ni la barre finale (« webshop.atelierby.be/halle »), sous le QR. */
@@ -2229,42 +2256,53 @@ final class CatalogueService
         if ($shop === null) {
             throw new CatalogueError('RESOURCE_NOT_FOUND', 'Boutique inconnue du Marketing.', 404);
         }
-        $current = $this->catalogues->shopContacts()[$shopId] ?? ['phone2' => '', 'webshopUrl' => '', 'logoMediaId' => null, 'holidayHoursFr' => '', 'holidayHoursNl' => ''];
-        $errors = self::unknown($input, ['phone2', 'webshopUrl', 'logoMediaId', 'holidayHoursFr', 'holidayHoursNl']);
-        // Les horaires des fêtes (21/11/2026) : un texte libre, plusieurs lignes, FR et NL (vide : le français).
-        $holidays = [];
-        foreach (['holidayHoursFr', 'holidayHoursNl'] as $key) {
-            $value = array_key_exists($key, $input) ? $input[$key] : ($current[$key] ?? '');
-            if (!is_string($value) || mb_strlen(trim($value)) > self::HOLIDAY_HOURS_MAX) {
-                $errors[] = ['field' => $key, 'message' => 'Horaires des fêtes : un texte de ' . self::HOLIDAY_HOURS_MAX . ' caractères au plus.'];
-                $value = '';
-            }
-            $holidays[$key] = trim((string) $value);
-        }
+        $blank = ['phone2' => '', 'webshopUrl' => '', 'logoMediaId' => null, 'photoMediaId' => null, 'mapsUrl' => '', 'openingHoursFr' => '', 'openingHoursNl' => '', 'holidayHoursFr' => '', 'holidayHoursNl' => ''];
+        $current = array_replace($blank, $this->catalogues->shopContacts()[$shopId] ?? []);
+        $errors = self::unknown($input, array_keys($blank));
         $phone2 = array_key_exists('phone2', $input) ? $input['phone2'] : $current['phone2'];
         if (!is_string($phone2) || mb_strlen(trim($phone2)) > 40 || preg_match('/^[0-9+().\/ -]*$/', trim($phone2)) !== 1) {
             $errors[] = ['field' => 'phone2', 'message' => 'Téléphone : chiffres, espaces, + . / ( ) -, 40 caractères au plus.'];
             $phone2 = '';
         }
-        $url = array_key_exists('webshopUrl', $input) ? $input['webshopUrl'] : $current['webshopUrl'];
-        if (!is_string($url) || mb_strlen(trim($url)) > 300
-            || (trim($url) !== '' && (filter_var(trim($url), FILTER_VALIDATE_URL) === false || preg_match('#^https?://#i', trim($url)) !== 1))) {
-            $errors[] = ['field' => 'webshopUrl', 'message' => 'Adresse du webshop : http:// ou https://, 300 caractères au plus.'];
-            $url = '';
-        }
-        $logo = array_key_exists('logoMediaId', $input) ? $input['logoMediaId'] : $current['logoMediaId'];
-        if ($logo !== null) {
-            $media = is_int($logo) ? $this->media->find($logo) : null;
-            if ($media === null || (string) $media['kind'] !== 'image' || $media['archived_at'] !== null
-                || ($media['shop_id'] !== null && (int) $media['shop_id'] !== $shopId)) {
-                $errors[] = ['field' => 'logoMediaId', 'message' => 'Image de la médiathèque attendue (du réseau ou de cette boutique), ou null.'];
-                $logo = null;
+        // Le webshop direct (le premier QR) et le lien Google Maps (le second, page « Le magasin ») : http ou https.
+        $links = [];
+        foreach (['webshopUrl' => [300, 'Adresse du webshop'], 'mapsUrl' => [500, 'Lien Google Maps']] as $key => [$max, $label]) {
+            $url = array_key_exists($key, $input) ? $input[$key] : $current[$key];
+            if (!is_string($url) || mb_strlen(trim($url)) > $max
+                || (trim($url) !== '' && (filter_var(trim($url), FILTER_VALIDATE_URL) === false || preg_match('#^https?://#i', trim($url)) !== 1))) {
+                $errors[] = ['field' => $key, 'message' => $label . ' : http:// ou https://, ' . $max . ' caractères au plus.'];
+                $url = '';
             }
+            $links[$key] = trim((string) $url);
+        }
+        // Le logo de la boutique et la photo du magasin : une image de la médiathèque, du réseau ou de cette boutique.
+        $images = [];
+        foreach (['logoMediaId' => 'Image de la médiathèque attendue (du réseau ou de cette boutique), ou null.', 'photoMediaId' => 'Photo du magasin : une image de la médiathèque (du réseau ou de cette boutique), ou null.'] as $key => $message) {
+            $media = array_key_exists($key, $input) ? $input[$key] : $current[$key];
+            if ($media !== null) {
+                $found = is_int($media) ? $this->media->find($media) : null;
+                if ($found === null || (string) $found['kind'] !== 'image' || $found['archived_at'] !== null
+                    || ($found['shop_id'] !== null && (int) $found['shop_id'] !== $shopId)) {
+                    $errors[] = ['field' => $key, 'message' => $message];
+                    $media = null;
+                }
+            }
+            $images[$key] = $media;
+        }
+        // Les horaires d'ouverture (vides : ceux de l'ERP) et les horaires des fêtes : un texte libre, plusieurs lignes, FR et NL.
+        $texts = [];
+        foreach (['openingHoursFr' => 'Horaires d’ouverture', 'openingHoursNl' => 'Horaires d’ouverture', 'holidayHoursFr' => 'Horaires des fêtes', 'holidayHoursNl' => 'Horaires des fêtes'] as $key => $label) {
+            $value = array_key_exists($key, $input) ? $input[$key] : $current[$key];
+            if (!is_string($value) || mb_strlen(trim($value)) > self::HOLIDAY_HOURS_MAX) {
+                $errors[] = ['field' => $key, 'message' => $label . ' : un texte de ' . self::HOLIDAY_HOURS_MAX . ' caractères au plus.'];
+                $value = '';
+            }
+            $texts[$key] = trim((string) $value);
         }
         if ($errors !== []) {
             throw new CatalogueError('VALIDATION_FAILED', 'Coordonnées invalides.', 422, $errors);
         }
-        $this->catalogues->saveShopContact($shopId, trim((string) $phone2), trim((string) $url), $logo, $userId, $holidays['holidayHoursFr'], $holidays['holidayHoursNl']);
+        $this->catalogues->saveShopContact($shopId, ['phone2' => trim((string) $phone2)] + $links + $images + $texts, $userId);
         foreach ($this->charterShops() as $row) {
             if ($row['id'] === $shopId) {
                 return $row;
@@ -2503,7 +2541,7 @@ final class CatalogueService
         }
         $clean['template'] = $back['template'] ?? 'A';
         if (!in_array($clean['template'], self::BACK_TEMPLATES, true)) {
-            $errors[] = ['field' => $field . '.template', 'message' => 'Gabarit : A (QR et boutique) ou B (boutique en avant).'];
+            $errors[] = ['field' => $field . '.template', 'message' => 'Gabarit : A (QR et boutique), B (boutique en avant) ou C (le magasin).'];
         }
         $clean['look'] = self::lookFields($back['look'] ?? null, 'back', $field . '.look', $errors);
 
@@ -3278,6 +3316,14 @@ final class CatalogueService
                     $warnings[] = ['code' => 'SHOP_ADDRESS_MISSING', 'message' => sprintf('Adresse de %s inconnue de TFBuddy%s.', $version['name'], $info['error'] !== null ? ' (' . $info['error'] . ')' : '')];
                 }
             }
+            // La page « Le magasin » (21/11/2026) : les horaires saisis remplacent ceux de l'ERP (NL vide : le français) ;
+            // la photo du magasin ; le lien Google Maps saisi, sinon fait de son adresse.
+            $hoursOwn = $lang === 'nl' ? (($contact['openingHoursNl'] ?? '') ?: ($contact['openingHoursFr'] ?? '')) : ($contact['openingHoursFr'] ?? '');
+            if ($hoursOwn !== '') {
+                $shopInfo['hours'] = $hoursOwn;
+            }
+            $shopInfo['photoUrl'] = $this->mediaUrl($contact['photoMediaId'] ?? null);
+            $shopInfo['mapsUrl'] = ($contact['mapsUrl'] ?? '') !== '' ? $contact['mapsUrl'] : self::mapsUrl($shopInfo['name'], $shopInfo['address']);
         }
         // Le QR : l'adresse directe du webshop de la boutique (saisie dans l'assistant de la charte), sinon celle du réseau.
         $own = (string) ($contact['webshopUrl'] ?? '');
@@ -3380,6 +3426,12 @@ final class CatalogueService
                     foreach ($keys as $key) {
                         $page['shop'][$key] = '';
                     }
+                }
+            }
+            // La photo du magasin et son QR Google Maps (gabarit C) : masqués, ils ne partent pas.
+            foreach (['photo' => 'photoUrl', 'maps' => 'mapsUrl'] as $element => $key) {
+                if (array_key_exists($key, $page['shop']) && !$page['look'][$element]['show']) {
+                    $page['shop'][$key] = null;
                 }
             }
         }

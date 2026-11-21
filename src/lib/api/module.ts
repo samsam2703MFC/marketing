@@ -3180,6 +3180,9 @@ export interface CatalogueShopInfo {
   phone2?: string
   /** Les horaires des fêtes saisis pour la boutique (21/11/2026), dans la langue du document ; vide : rien. */
   holidayHours?: string
+  /** La page « Le magasin » (21/11/2026) : la photo du magasin, et son lien Google Maps (saisi, sinon fait de l'adresse). */
+  photoUrl?: string | null
+  mapsUrl?: string | null
 }
 
 export interface CatalogueDocProduct {
@@ -3373,7 +3376,8 @@ export const CATALOGUE_COVER_COLORS: { id: CatalogueCoverColor; label: string; h
 export type CatalogueCoverTemplate = 'A' | 'B' | 'C'
 export type CatalogueCoverVisual = 'illustration' | 'media' | 'none'
 export type CatalogueBrandTemplate = 'A' | 'B' | 'C'
-export type CatalogueBackTemplate = 'A' | 'B'
+/** A QR et boutique · B boutique en avant · C le magasin (photo, logo, horaires, QR webshop et QR Maps ; 21/11/2026). */
+export type CatalogueBackTemplate = 'A' | 'B' | 'C'
 /** Les dessins de saison livrés avec le module (`public/img/print/`). */
 export const SEASON_DRAWINGS = ['noel', 'saint-nicolas', 'epiphanie', 'chandeleur', 'saint-valentin', 'paques', 'fete-des-meres', 'printemps', 'ete', 'automne', 'hiver', 'glace'] as const
 /** Caractères qu'un texte de page 2 / avant-dernière porte sans déborder, par gabarit (la règle de l'API). */
@@ -3404,7 +3408,7 @@ export const CATALOGUE_LOOK: Record<CatalogueLookKind, Record<string, CatalogueL
   cover: { logo: 'show', kicker: 'text', title: 'show', subtitle: 'show', shop: 'style' },
   page2: { logo: 'show', title: 'text', text: 'text' },
   penultimate: { logo: 'show', title: 'text', text: 'text', legend: 'show' },
-  back: { logo: 'show', title: 'text', text: 'text', qr: 'show', shop: 'text', address: 'show', hours: 'show', holidays: 'show', phone: 'show', email: 'show' },
+  back: { logo: 'show', photo: 'show', title: 'text', text: 'text', qr: 'show', maps: 'show', shop: 'text', address: 'show', hours: 'show', holidays: 'show', phone: 'show', email: 'show' },
 }
 export interface CatalogueLookEntry {
   show: boolean
@@ -3503,6 +3507,16 @@ export interface CatalogueCharterShop {
   /** Les horaires des fêtes, saisis ici par boutique (21/11/2026, migration 054) ; NL vide : le français. */
   holidayHoursFr?: string
   holidayHoursNl?: string
+  /**
+   * La page « Le magasin » (migration 055) : la photo du magasin ; ses horaires saisis (vides : ceux de l'ERP) ; son lien
+   * Google Maps saisi (`mapsUrlOwn`) et celui qui s'imprime (`mapsUrl` : le saisi, sinon fait de l'adresse).
+   */
+  photoMediaId?: number | null
+  photoUrl?: string | null
+  openingHoursFr?: string
+  openingHoursNl?: string
+  mapsUrlOwn?: string
+  mapsUrl?: string | null
   qrUrl: string | null
   host: string | null
   /** Ce que TFBuddy ne donne pas : address, hours, phone ; qr (adresse du webshop inconnue). */
@@ -3610,7 +3624,19 @@ export async function saveCatalogueBrandPages(id: number, own: CatalogueOwnBrand
 
 /** « Avant de publier », les boutiques (ce que la dernière page imprime pour chacune), les catalogues concernés. */
 /** Ce qu'une boutique imprime en plus à la dernière page : second téléphone, webshop direct (QR), logo ; rend la boutique. */
-export async function saveCatalogueShop(id: number, patch: { phone2?: string; webshopUrl?: string; logoMediaId?: number | null; holidayHoursFr?: string; holidayHoursNl?: string }): Promise<CatalogueCharterShop> {
+export type CatalogueShopPatch = {
+  phone2?: string
+  webshopUrl?: string
+  logoMediaId?: number | null
+  photoMediaId?: number | null
+  mapsUrl?: string
+  openingHoursFr?: string
+  openingHoursNl?: string
+  holidayHoursFr?: string
+  holidayHoursNl?: string
+}
+
+export async function saveCatalogueShop(id: number, patch: CatalogueShopPatch): Promise<CatalogueCharterShop> {
   return (await request<Envelope<CatalogueCharterShop>>(`${BASE}/catalogue-shops/${id}`, { method: 'PUT', body: patch })).data
 }
 

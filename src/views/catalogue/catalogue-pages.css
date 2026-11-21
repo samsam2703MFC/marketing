@@ -391,3 +391,24 @@
 /* La dernière page (21/11/2026) : le texte et les horaires des fêtes gardent leurs retours à la ligne. */
 .cat-back__text, .cat-back__holidays { white-space: pre-line; }
 .cat-back__holidays { font-weight: 600; }
+
+/* La dernière page, gabarit C « Le magasin » (21/11/2026) : la photo du magasin en haut, le logo de la boutique, les
+   horaires en grand, deux QR (commander en ligne, venir au magasin), les coordonnées en pied. */
+.cat-back--C { padding: 0; }
+.cat-back--C .cat-back__photo { flex: 0 0 auto; height: calc(var(--u) * 52mm); overflow: hidden; background: var(--p); }
+.cat-back--C .cat-back__photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.cat-back--C .cat-back__body { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; padding: calc(var(--u) * 11mm) calc(var(--u) * 12mm) calc(var(--u) * 8mm); }
+.cat-back--C.cat-back--photo .cat-back__body { padding-top: calc(var(--u) * 6mm); }
+.cat-back--C .cat-back__title { margin-top: calc(var(--u) * 4mm); font-size: calc(var(--u) * 9mm); }
+.cat-back--C .cat-back__text { margin-top: calc(var(--u) * 2.5mm); font-size: calc(var(--u) * 3.5mm); line-height: 1.4; }
+.cat-back__hoursC { margin-top: calc(var(--u) * 4mm); }
+.cat-back__label { font-size: calc(var(--u) * 2.8mm); font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--a); }
+.cat-back__hoursBig { margin-top: calc(var(--u) * 1mm); font-size: calc(var(--u) * 4.1mm); font-weight: 500; line-height: 1.4; white-space: pre-line; color: var(--i); }
+.cat-back__hoursC .cat-back__holidays { margin-top: calc(var(--u) * 1.2mm); font-size: calc(var(--u) * 3.4mm); color: var(--p); }
+.cat-back__qrs { display: flex; gap: calc(var(--u) * 8mm); margin-top: auto; padding-top: calc(var(--u) * 4mm); }
+.cat-back__qrC { flex: 1 1 0; display: flex; flex-direction: column; align-items: flex-start; gap: calc(var(--u) * 1.2mm); min-width: 0; }
+.cat-back__qrlabel { margin-top: calc(var(--u) * 1mm); font-size: calc(var(--u) * 3.8mm); font-weight: 600; color: var(--p); }
+.cat-back__qrC .cat-back__hint { margin-top: 0; font-size: calc(var(--u) * 3mm); overflow-wrap: anywhere; }
+.cat-back--C .cat-back__shop { margin-top: calc(var(--u) * 4mm); padding-top: calc(var(--u) * 3mm); }
+.cat-back--C .cat-back__who { font-size: calc(var(--u) * 4.6mm); }
+.cat-back--C .cat-back__shop p { margin-top: calc(var(--u) * 1mm); font-size: calc(var(--u) * 3mm); }
