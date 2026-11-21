@@ -767,7 +767,8 @@ $agencesEnBase = $pdo->query(sprintf(
 ))->fetchAll(PDO::FETCH_COLUMN);
 check(
     'chaque canal de la fiche porte l\'identifiant de son agence',
-    array_map(static fn (array $c) => $c['agency_id'] ?? 'absent', $fiche['channels'] ?? [])
+    // array_key_exists et non ?? : un canal sans agence porte un agency_id nul, et ?? le prendrait pour absent.
+    array_map(static fn (array $c) => array_key_exists('agency_id', $c) ? $c['agency_id'] : 'absent', $fiche['channels'] ?? [])
         === array_map(static fn ($a) => $a === null ? null : (int) $a, $agencesEnBase),
     json_encode([array_column($fiche['channels'] ?? [], 'agency_id'), $agencesEnBase])
 );
