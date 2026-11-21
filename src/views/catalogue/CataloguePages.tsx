@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react'
 import { CATALOGUE_COVER_FONTS, isDocOffer } from '../../lib/api/module'
 import type {
   CatalogueCoverFont,
+  CatalogueDocLook,
   CatalogueDocFiller,
   CatalogueDocItem,
   CatalogueDocOffer,
@@ -234,27 +235,54 @@ function coverStyle(font: CatalogueCoverFont | null | undefined, color: string |
   } as CSSProperties
 }
 
+/**
+ * Chaque élément d'une page de la marque (v1.12, 21/11/2026, Sam : « toutes les données du catalogue doivent être
+ * éditables — visibles ou pas — + la typo et les couleurs ») : affiché sauf `show` faux ; sa police et sa couleur,
+ * sinon celles du gabarit.
+ */
+const shown = (look: CatalogueDocLook | undefined, element: string): boolean => look?.[element]?.show !== false
+
+function textStyle(look: CatalogueDocLook | undefined, element: string): CSSProperties | undefined {
+  const font = look?.[element]?.font
+  const color = look?.[element]?.color
+  const css = CATALOGUE_COVER_FONTS.find((f) => f.id === font)?.css
+  if (!css && !color) return undefined
+  return {
+    ...(css ? { fontFamily: css } : {}),
+    ...(font === 'playwrite' ? { textTransform: 'none', letterSpacing: 0 } : font === 'vank' ? { letterSpacing: '0.01em' } : {}),
+    ...(color ? { color } : {}),
+  } as CSSProperties
+}
+
 function Cover({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'cover' }>; doc: CatalogueDocument }) {
   const template = page.template ?? 'A'
+  const look = page.look
   const titleStyle = coverStyle(page.titleFont, page.titleColor)
   const subStyle = coverStyle(page.subtitleFont, page.subtitleColor)
+  const kickerStyle = textStyle(look, 'kicker')
+  const shopStyle = textStyle(look, 'shop')
+  const showLogo = shown(look, 'logo')
+  const showTitle = shown(look, 'title')
+  const subtitle = shown(look, 'subtitle') ? page.subtitle : ''
   // Le dessin choisi (ou reconnu au titre) ; une charte d'avant l'assistant : l'illustration de la gamme reconnue au titre.
   const drawing = page.imageUrl || page.noVisual ? null : (drawingAsset(page.drawing) ?? seasonDrawing(page.title))
   const shop = page.eyebrow ? `L’Atelier By · ${page.eyebrow}` : null
   if (template === 'B') {
     return (
       <div className="cat-cover cat-cover--B">
-        <img className="cat-logo cat-logo--dark cat-cover__logoB" src={doc.charter.logoUrl ?? asset('img/logo.png')} alt="" />
+        {showLogo ? <img className="cat-logo cat-logo--dark cat-cover__logoB" src={doc.charter.logoUrl ?? asset('img/logo.png')} alt="" /> : null}
         <div className="cat-cover__art">
           {page.imageUrl ? <img className="cat-cover__photoB" src={page.imageUrl} alt="" /> : drawing ? <img className="cat-cover__drawB" src={drawing} alt="" /> : null}
         </div>
-        {page.kicker ? <div className="cat-cover__kicker">{page.kicker}</div> : null}
-        <div className="cat-cover__title" data-fit="Titre de couverture" style={titleStyle}>
-          {page.title}
-        </div>
+        {page.kicker ? <div className="cat-cover__kicker" style={kickerStyle}>{page.kicker}</div> : null}
+        {showTitle ? (
+          <div className="cat-cover__title" data-fit="Titre de couverture" style={titleStyle}>
+            {page.title}
+          </div>
+        ) : null}
         <div className="cat-cover__rule" />
-        {page.subtitle ? <div className="cat-cover__subB" style={subStyle}>{page.subtitle}</div> : null}
-        {shop ? <div className="cat-cover__shopB">{shop}</div> : null}
+        {subtitle ? <div className="cat-cover__subB" style={subStyle}>{subtitle}</div> : null}
+        {shop ? <div className="cat-cover__shopB" style={shopStyle}>{shop}</div> : null}
       </div>
     )
   }
@@ -265,13 +293,15 @@ function Cover({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'cover' 
           {page.imageUrl ? <img className="cat-cover__photoC" src={page.imageUrl} alt="" /> : drawing ? <img className="cat-cover__drawC" src={drawing} alt="" /> : null}
         </div>
         <div className="cat-cover__band">
-          <img className={`cat-logo${doc.charter.logoUrl ? ' cat-logo--custom' : ''}`} src={doc.charter.logoUrl ?? asset('img/logo-white.png')} alt="" />
-          {page.kicker ? <div className="cat-cover__kicker">{page.kicker}</div> : null}
-          <div className="cat-cover__title" data-fit="Titre de couverture" style={titleStyle}>
-            {page.title}
-          </div>
-          {page.subtitle ? <div className="cat-cover__sub" style={subStyle}>{page.subtitle}</div> : null}
-          {shop ? <div className="cat-cover__shop">{shop}</div> : null}
+          {showLogo ? <img className={`cat-logo${doc.charter.logoUrl ? ' cat-logo--custom' : ''}`} src={doc.charter.logoUrl ?? asset('img/logo-white.png')} alt="" /> : null}
+          {page.kicker ? <div className="cat-cover__kicker" style={kickerStyle}>{page.kicker}</div> : null}
+          {showTitle ? (
+            <div className="cat-cover__title" data-fit="Titre de couverture" style={titleStyle}>
+              {page.title}
+            </div>
+          ) : null}
+          {subtitle ? <div className="cat-cover__sub" style={subStyle}>{subtitle}</div> : null}
+          {shop ? <div className="cat-cover__shop" style={shopStyle}>{shop}</div> : null}
         </div>
       </div>
     )
@@ -279,12 +309,15 @@ function Cover({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'cover' 
   const logo = doc.charter.logoUrl ?? asset('img/logo-white.png')
   return (
     <div className="cat-cover">
-      <img className={`cat-logo${doc.charter.logoUrl ? ' cat-logo--custom' : ''}`} src={logo} alt="" />
-      <div className="cat-cover__title" data-fit="Titre de couverture" style={titleStyle}>
-        {page.title}
-      </div>
-      {page.subtitle ? <div className="cat-cover__sub" style={subStyle}>{page.subtitle}</div> : null}
-      {page.eyebrow ? <div className="cat-cover__shop">{`L’Atelier By · ${page.eyebrow}`}</div> : null}
+      {/* Le gabarit A n'a pas de « La gamme » (maquette A1) : rien n'y change pour les couvertures déjà imprimées. */}
+      {showLogo ? <img className={`cat-logo${doc.charter.logoUrl ? ' cat-logo--custom' : ''}`} src={logo} alt="" /> : null}
+      {showTitle ? (
+        <div className="cat-cover__title" data-fit="Titre de couverture" style={titleStyle}>
+          {page.title}
+        </div>
+      ) : null}
+      {subtitle ? <div className="cat-cover__sub" style={subStyle}>{subtitle}</div> : null}
+      {shop ? <div className="cat-cover__shop" style={shopStyle}>{shop}</div> : null}
       {page.imageUrl ? (
         <div className="cat-cover__visual">
           <img src={page.imageUrl} alt="" />
@@ -307,18 +340,20 @@ function Brand({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'brand' 
   const template = page.template ?? (page.imageUrl ? 'B' : 'A')
   const top = template === 'B' && page.imageUrl
   const bottom = template === 'C' && page.imageUrl
+  const look = page.look
+  const logoTag = shown(look, 'logo') ? <img className="cat-logo cat-logo--dark cat-brand__logo" src={logo} alt="" /> : null
   return (
     <div className={`cat-brand cat-brand--${page.slot} cat-brand--t${template}${top ? ' cat-brand--image' : ''}`}>
-      {bottom ? <img className="cat-logo cat-logo--dark cat-brand__logo" src={logo} alt="" /> : top ? (
+      {bottom ? logoTag : top ? (
         <div className="cat-brand__visual">
           <img src={page.imageUrl ?? undefined} alt="" />
         </div>
       ) : (
-        <img className="cat-logo cat-logo--dark cat-brand__logo" src={logo} alt="" />
+        logoTag
       )}
-      <div className="cat-brand__title">{page.title}</div>
+      {shown(look, 'title') ? <div className="cat-brand__title" style={textStyle(look, 'title')}>{page.title}</div> : null}
       <div className="cat-brand__rule" />
-      <div className="cat-brand__text" data-fit={page.title}>
+      <div className="cat-brand__text" data-fit={page.title} style={shown(look, 'text') ? textStyle(look, 'text') : { display: 'none' }}>
         {blocks.map((lines, index) =>
           lines.length > 1 ? (
             <ul key={index}>
@@ -331,7 +366,7 @@ function Brand({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'brand' 
           ),
         )}
       </div>
-      {page.slot === 'penultimate' && (page.allergens ?? []).length ? <AllergenLegend codes={page.allergens ?? []} lang={doc.version.lang} /> : null}
+      {page.slot === 'penultimate' && shown(look, 'legend') && (page.allergens ?? []).length ? <AllergenLegend codes={page.allergens ?? []} lang={doc.version.lang} /> : null}
       {bottom ? (
         <div className="cat-brand__visual cat-brand__visual--bottom">
           <img src={page.imageUrl ?? ''} alt="" />
@@ -573,25 +608,38 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
   const lang = doc.version.lang
   const shop = page.shop
   const logo = doc.charter.logoUrl ?? asset('img/logo.png')
+  const look = page.look
+  // Chaque élément (v1.12) : une ligne masquée des coordonnées arrive déjà vide du document ; l'aperçu de l'assistant
+  // la masque ici aussi.
+  const line = (element: string, value: string | null | undefined): string => (shown(look, element) ? value ?? '' : '')
   // Les coordonnées : adresse, horaires, téléphone(s), e-mail (17/11/2026 : « rajouter mail, téléphone 2 »).
-  const phones = shop ? [shop.phone, shop.phone2 ?? ''].filter(Boolean).join(' · ') : ''
-  const lines = shop ? [shop.address, shop.hours ? (lang === 'nl' ? `Open ${shop.hours}` : `Ouvert ${shop.hours}`) : '', phones, shop.email ?? ''].filter(Boolean) : []
+  const phones = shop ? [line('phone', shop.phone), line('phone', shop.phone2)].filter(Boolean).join(' · ') : ''
+  const hours = shop ? line('hours', shop.hours) : ''
+  const lines = shop ? [line('address', shop.address), hours ? (lang === 'nl' ? `Open ${hours}` : `Ouvert ${hours}`) : '', phones, line('email', shop.email)].filter(Boolean) : []
+  const logoTag = shown(look, 'logo') ? <img className="cat-logo cat-logo--dark" src={logo} alt="" /> : null
+  const titleTag = shown(look, 'title') ? <div className="cat-back__title" style={textStyle(look, 'title')}>{page.title}</div> : null
+  const textTag = page.text && shown(look, 'text') ? <div className="cat-back__text" style={textStyle(look, 'text')}>{page.text}</div> : null
+  const qr = page.qrUrl && shown(look, 'qr') ? page.qrUrl : null
+  const shopStyle = textStyle(look, 'shop')
+  const showShop = shown(look, 'shop')
   if (page.template === 'B') {
     // Boutique en avant (maquette A3, gabarit B) : l'adresse et les horaires en grand, le QR plus petit en bas.
     return (
       <div className="cat-back cat-back--B">
-        <img className="cat-logo cat-logo--dark" src={logo} alt="" />
-        <div className="cat-back__title">{page.title}</div>
-        {page.text ? <div className="cat-back__text">{page.text}</div> : null}
-        <div className="cat-back__shopB">
-          <div className="cat-back__who">{shop ? `L’Atelier By — ${shop.name}` : 'L’Atelier By'}</div>
-          {lines.map((line, index) => (
-            <p key={index}>{line}</p>
-          ))}
-        </div>
-        {page.qrUrl ? (
+        {logoTag}
+        {titleTag}
+        {textTag}
+        {showShop ? (
+          <div className="cat-back__shopB">
+            <div className="cat-back__who" style={shopStyle}>{shop ? `L’Atelier By — ${shop.name}` : 'L’Atelier By'}</div>
+            {lines.map((text, index) => (
+              <p key={index} style={shopStyle}>{text}</p>
+            ))}
+          </div>
+        ) : null}
+        {qr ? (
           <div className="cat-back__qr cat-back__qr--small">
-            <Qr url={page.qrUrl} size={20} />
+            <Qr url={qr} size={20} />
             <div>
               <div className="cat-back__host">{page.host}</div>
               <div className="cat-back__hint">{shop ? (lang === 'nl' ? `De webshop van ${shop.name}` : `Le webshop de ${shop.name}`) : lang === 'nl' ? 'Al onze winkels' : 'Toutes nos boutiques'}</div>
@@ -603,12 +651,12 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
   }
   return (
     <div className="cat-back">
-      <img className="cat-logo cat-logo--dark" src={logo} alt="" />
-      <div className="cat-back__title">{page.title}</div>
-      {page.text ? <div className="cat-back__text">{page.text}</div> : null}
-      {page.qrUrl ? (
+      {logoTag}
+      {titleTag}
+      {textTag}
+      {qr ? (
         <div className="cat-back__qr">
-          <Qr url={page.qrUrl} size={30} />
+          <Qr url={qr} size={30} />
           <div>
             <div className="cat-back__host">{page.host}</div>
             <div className="cat-back__hint">
@@ -617,21 +665,23 @@ function Back({ page, doc }: { page: Extract<CatalogueDocPage, { kind: 'back' }>
           </div>
         </div>
       ) : null}
-      <div className="cat-back__shop">
-        <div className="cat-back__who">{shop ? `L’Atelier By — ${shop.name}` : 'L’Atelier By'}</div>
-        {shop ? (
-          <p>
-            {[shop.address, shop.hours ? (lang === 'nl' ? `Open ${shop.hours}` : `Ouvert ${shop.hours}`) : '', shop.phone].filter(Boolean).map((line, index) => (
-              <span key={index}>
-                {index > 0 ? <br /> : null}
-                {line}
-              </span>
-            ))}
-          </p>
-        ) : (
-          <p>{lang === 'nl' ? `Al onze winkels op ${page.host ?? ''}` : `Toutes nos boutiques sur ${page.host ?? ''}`}</p>
-        )}
-      </div>
+      {showShop ? (
+        <div className="cat-back__shop">
+          <div className="cat-back__who" style={shopStyle}>{shop ? `L’Atelier By — ${shop.name}` : 'L’Atelier By'}</div>
+          {shop ? (
+            <p style={shopStyle}>
+              {[line('address', shop.address), hours ? (lang === 'nl' ? `Open ${hours}` : `Ouvert ${hours}`) : '', line('phone', shop.phone)].filter(Boolean).map((text, index) => (
+                <span key={index}>
+                  {index > 0 ? <br /> : null}
+                  {text}
+                </span>
+              ))}
+            </p>
+          ) : page.host ? (
+            <p style={shopStyle}>{lang === 'nl' ? `Al onze winkels op ${page.host}` : `Toutes nos boutiques sur ${page.host}`}</p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }

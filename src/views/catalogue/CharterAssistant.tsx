@@ -102,7 +102,13 @@ function coverPage(cover: CatalogueCover, lang: CatalogueLang, shop: CatalogueCh
     eyebrow: cover.showShop === false ? null : shop?.name ?? null,
     imageUrl,
     template: cover.template,
-    kicker: cover.gamme !== null ? (lang === 'nl' ? 'Het gamma' : 'La gamme') : null,
+    // « La gamme » : le texte choisi (sinon celui d'une gamme), masqué si la couverture le masque (v1.12).
+    kicker: (() => {
+      if (cover.look?.kicker?.show === false) return null
+      const custom = pick(lang, cover.kickerFr ?? '', cover.kickerNl ?? '')
+      return custom !== '' ? custom : cover.gamme !== null ? (lang === 'nl' ? 'Het gamma' : 'La gamme') : null
+    })(),
+    look: api.docLook('cover', cover.look),
     drawing: imageUrl === null && slug ? `img/print/${slug}.png` : null,
     titleFont: cover.titleFont ?? null,
     titleColor: api.CATALOGUE_COVER_COLORS.find((c) => c.id === cover.titleColor)?.hex ?? null,
@@ -121,6 +127,7 @@ function brandPage(slot: 'page2' | 'penultimate', content: CatalogueBrandPage, l
     text: pick(lang, content.textFr, content.textNl),
     imageUrl: content.template === 'A' ? null : (content.imageUrl ?? null),
     template: content.template,
+    look: api.docLook(slot, content.look),
   }
 }
 
@@ -134,6 +141,7 @@ function backPage(charter: CatalogueCharter, lang: CatalogueLang, shop: Catalogu
     host: shop?.host ?? null,
     shop: shop ? { id: shop.id, erpShopId: shop.erpShopId, name: shop.name, address: shop.address, hours: lang === 'nl' ? shop.hoursNl || shop.hours : shop.hours, phone: shop.phone, email: shop.email, phone2: shop.phone2 } : null,
     template: charter.back.template,
+    look: api.docLook('back', charter.back.look),
   }
 }
 
@@ -203,22 +211,45 @@ function Choice<T extends string>({ items, value, onChange, kind }: { items: Arr
  */
 function TextStyle({
   label,
-  font,
-  fallback,
-  color,
+  font = null,
+  fallback = 'gotham',
+  color = null,
   onChange,
+  show,
+  onShow,
+  hint,
 }: {
   label: string
-  font: api.CatalogueCoverFont | null
+  font?: api.CatalogueCoverFont | null
   /** La police du gabarit pour ce texte. */
-  fallback: api.CatalogueCoverFont
-  color: api.CatalogueCoverColor | null
-  onChange: (patch: { font?: api.CatalogueCoverFont | null; color?: api.CatalogueCoverColor | null }) => void
+  fallback?: api.CatalogueCoverFont
+  color?: api.CatalogueCoverColor | null
+  /** Sans `onChange` : pas de police ni de couleur (un logo, un QR code, une ligne des coordonnées). */
+  onChange?: (patch: { font?: api.CatalogueCoverFont | null; color?: api.CatalogueCoverColor | null }) => void
+  /** Afficher / Masquer l'élément (v1.12, 21/11/2026 : « toutes les données éditables, visibles ou pas »). */
+  show?: boolean
+  onShow?: (show: boolean) => void
+  hint?: string
 }) {
   const current = font ?? fallback
   return (
-    <div className="cha-style">
-      <span className="cha-style__l">{label}</span>
+    <div className={`cha-style${show === false ? ' is-hidden' : ''}`}>
+      <span className="cha-style__l">
+        {label}
+        {hint ? <small>{hint}</small> : null}
+      </span>
+      {onShow ? (
+        <span className="bro-seg cha-style__show" role="group" aria-label={`Afficher ou masquer — ${label}`}>
+          <button type="button" className={show !== false ? 'is-on' : ''} onClick={() => onShow(true)}>
+            Afficher
+          </button>
+          <button type="button" className={show === false ? 'is-on' : ''} onClick={() => onShow(false)}>
+            Masquer
+          </button>
+        </span>
+      ) : null}
+      {onChange ? (
+        <>
       <span className="bro-seg cha-style__fonts" role="group" aria-label={`Police — ${label}`}>
         {api.CATALOGUE_COVER_FONTS.map((f) => (
           <button
@@ -241,6 +272,8 @@ function TextStyle({
           <button key={c.id} type="button" className={`cha-swatch${color === c.id ? ' is-on' : ''}`} style={{ background: c.hex }} onClick={() => onChange({ color: c.id })} title={c.label} aria-label={c.label} />
         ))}
       </span>
+        </>
+      ) : null}
     </div>
   )
 }
@@ -357,12 +390,17 @@ function charterOf(read: CatalogueBrandPages): CatalogueCharter {
   }
 }
 
-const COVER_KEYS = ['titleFr', 'titleNl', 'subtitleFr', 'subtitleNl', 'mediaId', 'template', 'visual', 'illustration', 'titleFont', 'titleColor', 'subtitleFont', 'subtitleColor', 'showShop']
-const PAGE_KEYS = ['titleFr', 'titleNl', 'textFr', 'textNl', 'mediaId', 'template']
-const BACK_KEYS = ['titleFr', 'titleNl', 'textFr', 'textNl', 'template']
+const COVER_KEYS = ['titleFr', 'titleNl', 'subtitleFr', 'subtitleNl', 'mediaId', 'template', 'visual', 'illustration', 'titleFont', 'titleColor', 'subtitleFont', 'subtitleColor', 'showShop', 'kickerFr', 'kickerNl', 'look']
+const PAGE_KEYS = ['titleFr', 'titleNl', 'textFr', 'textNl', 'mediaId', 'template', 'look']
+const BACK_KEYS = ['titleFr', 'titleNl', 'textFr', 'textNl', 'template', 'look']
+
+/** Une valeur comparable : les clés d'un objet triées (l'ordre d'un `look` modifié n'est pas celui de l'API). */
+const canon = (value: unknown): string =>
+  JSON.stringify(value ?? null, (_key, v: unknown) =>
+    v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([x], [y]) => x.localeCompare(y))) : v)
 
 const same = (a: object, b: object, keys: string[]): boolean =>
-  keys.every((k) => ((a as Record<string, unknown>)[k] ?? null) === ((b as Record<string, unknown>)[k] ?? null))
+  keys.every((k) => canon((a as Record<string, unknown>)[k]) === canon((b as Record<string, unknown>)[k]))
 
 /** Les pages qui diffèrent de celles de la charte publiée sont à lui ; les autres la suivent (null). */
 function ownOf(charter: CatalogueCharter, common: CatalogueBrandPages['common']): CatalogueOwnBrandPages {
@@ -576,6 +614,35 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
   function setBrand(slot: 'page2' | 'penultimate', patch: Partial<CatalogueBrandPage>) {
     change((c) => ({ ...c, [slot]: { ...c[slot], ...patch } }))
   }
+  /** Un élément d'une page (v1.12) : affiché ou masqué, sa police, sa couleur. */
+  function setLook(kind: api.CatalogueLookKind, element: string, patch: Partial<api.CatalogueLookEntry>) {
+    const merge = (look: api.CatalogueLook | undefined): api.CatalogueLook => {
+      const full = api.fullLook(kind, look)
+      return { ...full, [element]: { ...full[element], ...patch } }
+    }
+    if (kind === 'cover') setCover({ look: merge(cover.look) })
+    else if (kind === 'back') change((c) => ({ ...c, back: { ...c.back, look: merge(c.back.look) } }))
+    else change((c) => ({ ...c, [kind]: { ...c[kind], look: merge(c[kind].look) } }))
+  }
+  const lookOf = (kind: api.CatalogueLookKind, look: api.CatalogueLook | undefined) => api.fullLook(kind, look)
+  /** Une ligne « élément » : afficher/masquer et, pour un texte, sa police et sa couleur. */
+  const lookRow = (kind: api.CatalogueLookKind, look: api.CatalogueLook | undefined, element: string, label: string, fallback: api.CatalogueCoverFont = 'gotham', hint?: string) => {
+    const e = lookOf(kind, look)[element]
+    const type = api.CATALOGUE_LOOK[kind][element]
+    return (
+      <TextStyle
+        key={element}
+        label={label}
+        hint={hint}
+        show={e.show}
+        onShow={type === 'style' ? undefined : (v) => setLook(kind, element, { show: v })}
+        font={e.font}
+        color={e.color}
+        fallback={fallback}
+        onChange={type === 'show' ? undefined : (p) => setLook(kind, element, p)}
+      />
+    )
+  }
   /** Mode « ce catalogue » : la page reprend celle de la charte publiée (et la suit de nouveau). */
   function backToCommon(slot: CatalogueBrandSlot) {
     const base = common.current
@@ -723,25 +790,49 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
           <Field label="Sous-titre FR" value={cover.subtitleFr} onChange={(v) => setCover({ subtitleFr: v })} />
           <Field label="Sous-titre NL" value={cover.subtitleNl} placeholder="À écrire" onChange={(v) => setCover({ subtitleNl: v })} />
         </div>
-        <div className="cha-styles">
-          <TextStyle label="Titre" font={cover.titleFont ?? null} fallback="vank" color={cover.titleColor ?? null} onChange={(p) => setCover({ ...('font' in p ? { titleFont: p.font } : {}), ...('color' in p ? { titleColor: p.color } : {}) })} />
-          <TextStyle label="Sous-titre" font={cover.subtitleFont ?? null} fallback="gotham" color={cover.subtitleColor ?? null} onChange={(p) => setCover({ ...('font' in p ? { subtitleFont: p.font } : {}), ...('color' in p ? { subtitleColor: p.color } : {}) })} />
+        <div className="cha-grid2">
+          <Field label="Au-dessus du titre FR" value={cover.kickerFr ?? ''} placeholder="La gamme" onChange={(v) => setCover({ kickerFr: v })} />
+          <Field label="Au-dessus du titre NL" value={cover.kickerNl ?? ''} placeholder="Het gamma" onChange={(v) => setCover({ kickerNl: v })} />
         </div>
-        <div className="cha-shopname">
-          <span>
-            Nom de la boutique sous le titre
-            <small>{`ex. « L’Atelier By · ${shop?.name ?? 'Halle'} », dans la version de chaque boutique`}</small>
-          </span>
-          <span className="bro-seg" role="group" aria-label="Nom de la boutique sous le titre">
-            <button type="button" className={cover.showShop !== false ? 'is-on' : ''} onClick={() => setCover({ showShop: true })}>
-              Afficher
-            </button>
-            <button type="button" className={cover.showShop === false ? 'is-on' : ''} onClick={() => setCover({ showShop: false })}>
-              Masquer
-            </button>
-          </span>
+      </section>
+
+      <section className="cha-card">
+        <div className="cha-lab">
+          Chaque élément de la couverture <span className="cha-tag">afficher ou masquer · police · couleur</span>
         </div>
-        <p className="cha-note">Polices et couleurs de la marque (design system) : le titre est en Vank, le sous-titre en Gotham, sauf autre choix ; « A » garde la couleur du gabarit.</p>
+        <div className="cha-styles cha-styles--flat">
+          {lookRow('cover', cover.look, 'logo', 'Logo')}
+          {lookRow('cover', cover.look, 'kicker', 'Au-dessus du titre', 'gotham', cover.template === 'A' ? 'pas sur le gabarit A' : '« La gamme »')}
+          <TextStyle
+            label="Titre"
+            show={lookOf('cover', cover.look).title.show}
+            onShow={(v) => setLook('cover', 'title', { show: v })}
+            font={cover.titleFont ?? null}
+            fallback="vank"
+            color={cover.titleColor ?? null}
+            onChange={(p) => setCover({ ...('font' in p ? { titleFont: p.font } : {}), ...('color' in p ? { titleColor: p.color } : {}) })}
+          />
+          <TextStyle
+            label="Sous-titre"
+            show={lookOf('cover', cover.look).subtitle.show}
+            onShow={(v) => setLook('cover', 'subtitle', { show: v })}
+            font={cover.subtitleFont ?? null}
+            fallback="gotham"
+            color={cover.subtitleColor ?? null}
+            onChange={(p) => setCover({ ...('font' in p ? { subtitleFont: p.font } : {}), ...('color' in p ? { subtitleColor: p.color } : {}) })}
+          />
+          <TextStyle
+            label="Nom de la boutique"
+            hint={`« L’Atelier By · ${shop?.name ?? 'Halle'} »`}
+            show={cover.showShop !== false}
+            onShow={(v) => setCover({ showShop: v })}
+            font={lookOf('cover', cover.look).shop.font}
+            color={lookOf('cover', cover.look).shop.color}
+            fallback="gotham"
+            onChange={(p) => setLook('cover', 'shop', p)}
+          />
+        </div>
+        <p className="cha-note">Polices et couleurs de la marque (design system) ; la police montrée choisie est celle du gabarit, « A » garde sa couleur.</p>
       </section>
 
       <section className="cha-card">
@@ -763,6 +854,17 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
           <div className="cha-grid2">
             <Field label="Titre FR" value={content.titleFr} onChange={(v) => setBrand(slot, { titleFr: v })} />
             <Field label="Titre NL" value={content.titleNl} placeholder="À écrire — sinon le français est imprimé" onChange={(v) => setBrand(slot, { titleNl: v })} />
+          </div>
+        </section>
+        <section className="cha-card">
+          <div className="cha-lab">
+            {`Chaque élément de la ${label}`} <span className="cha-tag">afficher ou masquer · police · couleur</span>
+          </div>
+          <div className="cha-styles cha-styles--flat">
+            {lookRow(slot, content.look, 'logo', 'Logo', 'gotham', content.template === 'B' ? 'pas avec « image en haut »' : undefined)}
+            {lookRow(slot, content.look, 'title', 'Titre', 'vank')}
+            {lookRow(slot, content.look, 'text', 'Texte', 'gotham')}
+            {slot === 'penultimate' ? lookRow(slot, content.look, 'legend', 'Allergènes', 'gotham', 'la légende des pictogrammes') : null}
           </div>
         </section>
         <section className="cha-card">
@@ -836,6 +938,23 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
         </div>
         <div className="cha-lab cha-lab--sub">Gabarit</div>
         <Choice kind="back" items={BACK_TEMPLATES} value={charter.back.template} onChange={(t) => change((c) => ({ ...c, back: { ...c.back, template: t } }))} />
+      </section>
+
+      <section className="cha-card">
+        <div className="cha-lab">
+          Chaque élément de la dernière page <span className="cha-tag">afficher ou masquer · police · couleur</span>
+        </div>
+        <div className="cha-styles cha-styles--flat">
+          {lookRow('back', charter.back.look, 'logo', 'Logo')}
+          {lookRow('back', charter.back.look, 'title', 'Titre', 'vank')}
+          {lookRow('back', charter.back.look, 'text', 'Texte', 'gotham')}
+          {lookRow('back', charter.back.look, 'qr', 'QR code', 'gotham', 'et l’adresse du webshop')}
+          {lookRow('back', charter.back.look, 'shop', 'Coordonnées', 'gotham', 'le bloc de la boutique')}
+          {lookRow('back', charter.back.look, 'address', 'Adresse')}
+          {lookRow('back', charter.back.look, 'hours', 'Horaires')}
+          {lookRow('back', charter.back.look, 'phone', 'Téléphone(s)')}
+          {lookRow('back', charter.back.look, 'email', 'E-mail')}
+        </div>
       </section>
 
       <section className="cha-card">

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Marketing — catalogues produits
-  version: 1.11.0
+  version: 1.12.0
   description: |
     Les catalogues produits du Marketing (prix du webshop, gammes) : un imprimé A5 (A4 en option)
     de **8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16). Quatre pages viennent de la Charte des catalogues de la
@@ -104,6 +104,17 @@ info:
     une couverture (charte ou page propre d'un catalogue) porte `showShop` (booléen, vrai par défaut) ; faux, la
     version d'une boutique n'imprime plus son nom sous le titre (`eyebrow` null au document). Non booléen : 422
     (`covers[i].showShop`, `cover.showShop`).
+
+    v1.12 (21 novembre 2026, client : « toutes les données du catalogue doivent être éditables — visibles ou pas — + la
+    typo et les couleurs ») : chaque page de la marque (charte ou page propre d'un catalogue) porte `look`
+    `{élément: {show, font, color}}` — couverture : logo, kicker, title, subtitle (afficher/masquer), kicker (+ police,
+    couleur), shop (police, couleur) ; page 2 : logo, title, text ; avant-dernière : logo, title, text, legend ; dernière
+    page : logo, title, text, qr, shop (bloc des coordonnées, + police, couleur), address, hours, phone, email. Police :
+    vank · gotham · playwrite ; couleur par son nom ; absent : tout affiché, polices et couleurs du gabarit. La
+    couverture porte aussi `kickerFr` / `kickerNl` (le texte au-dessus du titre, vide : « La gamme »). Au document, chaque
+    page porte `look` (couleur en #RRGGBB) ; un kicker, une légende des allergènes, un QR ou une ligne des coordonnées
+    masqués n'y partent pas. Élément inconnu, `show` non booléen, police ou couleur hors de la marque : 422 nommé
+    (ex. `cover.look.logo.show`).
 
     v1.5 (15 novembre 2026, client : « les deux, garde les 3 gabarits, code-le » — assistant des pages de la
     marque, maquettes A1-A4 ; assistant du franchisé, maquettes B1-B4) :
@@ -1302,6 +1313,19 @@ components:
         subtitleFont: { $ref: '#/components/schemas/CoverFont' }
         subtitleColor: { $ref: '#/components/schemas/CoverColor' }
         showShop: { type: boolean, default: true, description: 'v1.11 — Le nom de la boutique sous le titre, dans la version d’une boutique.' }
+        kickerFr: { type: string, maxLength: 240, description: 'v1.12 — Le texte au-dessus du titre ; vide : « La gamme » (couverture d’une gamme).' }
+        kickerNl: { type: string, maxLength: 240 }
+        look: { $ref: '#/components/schemas/Look' }
+    Look:
+      type: object
+      description: 'v1.12 — Chaque élément de la page : {show, font, color}. Éléments permis selon la page (voir la description de l’API).'
+      additionalProperties:
+        type: object
+        additionalProperties: false
+        properties:
+          show: { type: boolean, default: true }
+          font: { $ref: '#/components/schemas/CoverFont' }
+          color: { $ref: '#/components/schemas/CoverColor' }
     CoverFont: { type: [string, 'null'], enum: [vank, gotham, playwrite, null], description: 'v1.9 — Police de la marque (Vank titres, Gotham texte, Playwrite DEVA manuscrite) ; null : celle du gabarit.' }
     CoverColor: { type: [string, 'null'], enum: [rubis, abricot, or, creme, encre, blanc, null], description: 'v1.9 — Couleur de la marque par son nom (rubis #8D1D2C, abricot #F2C9A0, or #B0792A, creme #F5EFE4, encre #241C1A, blanc #FFFFFF) ; null : celle du gabarit.' }
     CharterWrite:
@@ -1336,10 +1360,13 @@ components:
         subtitleFont: { $ref: '#/components/schemas/CoverFont' }
         subtitleColor: { $ref: '#/components/schemas/CoverColor' }
         showShop: { type: boolean, default: true, description: 'v1.11 — Le nom de la boutique sous le titre, dans la version d’une boutique.' }
+        kickerFr: { type: string, maxLength: 240 }
+        kickerNl: { type: string, maxLength: 240 }
+        look: { $ref: '#/components/schemas/Look' }
     OwnBack:
       type: object
       additionalProperties: false
-      properties: { titleFr: { type: string }, titleNl: { type: string }, textFr: { type: string }, textNl: { type: string }, template: { type: string, enum: [A, B] } }
+      properties: { titleFr: { type: string }, titleNl: { type: string }, textFr: { type: string }, textNl: { type: string }, template: { type: string, enum: [A, B] }, look: { $ref: '#/components/schemas/Look' } }
     BrandPagesWrite:
       description: 'v1.10 — Chaque page : entière, ou null (absente) pour suivre la charte publiée.'
       type: object
@@ -1382,6 +1409,7 @@ components:
         textFr: { type: string, maxLength: 1200, description: Paragraphes séparés par une ligne vide. }
         textNl: { type: string, maxLength: 1200 }
         mediaId: { type: [integer, 'null'], description: Image de la médiathèque. }
+        look: { $ref: '#/components/schemas/Look' }
     Charter:
       allOf:
         - $ref: '#/components/schemas/CharterWrite'
