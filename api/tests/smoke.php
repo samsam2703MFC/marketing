@@ -344,6 +344,91 @@ $physical = $response['body']['channels'] ?? [];
 check('seuls les canaux physiques remontent', $physical !== [] && !array_filter($physical, static fn (array $c): bool => $c['family'] !== 'PHYSIQUE'));
 check('le canal porte son agence', ($physical[0]['agency_name'] ?? '') === 'Studio Vertigo');
 
+// --- Le référentiel des agences en écriture (21/11/2026 : le cockpit l'écrivait en SQL) ----------------------------
+echo "\nAgences : création, modification, retrait\n";
+$agencesEnBase = static fn (): int => (int) $pdo->query('SELECT COUNT(*) FROM mar_agency')->fetchColumn();
+$avant = $agencesEnBase();
+$liste = call($router, 'GET', '/api/v1/marketing/agencies')['body'];
+$vertigo = array_values(array_filter($liste, static fn (array $a): bool => (int) $a['id'] === 5))[0] ?? [];
+check('la liste des agences porte adresse, site, logo, agence par défaut et les campagnes de ses canaux',
+    array_key_exists('email', $vertigo) && array_key_exists('site', $vertigo) && array_key_exists('logo_uri', $vertigo)
+        && ($vertigo['is_default'] ?? null) === false && ($vertigo['channel_campaigns'] ?? null) === 1,
+    json_encode($vertigo, JSON_UNESCAPED_UNICODE));
+
+$logo = 'data:image/png;base64,iVBORw0KGgo=';
+$cree = call($router, 'POST', '/api/v1/marketing/agencies', [], ['name' => '  Atelier Lumière ', 'email' => 'contact@lumiere.example',
+    'site' => 'https://lumiere.example', 'logoUri' => $logo, 'isDefault' => true]);
+$idA = (int) ($cree['body']['data']['id'] ?? 0);
+check('agence créée (201), en camelCase, nom nettoyé, par défaut',
+    $cree['status'] === 201 && ($cree['body']['success'] ?? null) === true && $idA > 0
+        && $cree['body']['data'] === ['id' => $idA, 'name' => 'Atelier Lumière', 'email' => 'contact@lumiere.example', 'site' => 'https://lumiere.example',
+            'logoUri' => $logo, 'isDefault' => true, 'campaigns' => 0],
+    json_encode($cree, JSON_UNESCAPED_UNICODE));
+$creeB = call($router, 'POST', '/api/v1/marketing/agencies', [], ['name' => 'Studio B', 'isDefault' => true]);
+$idB = (int) ($creeB['body']['data']['id'] ?? 0);
+$defauts = $pdo->query('SELECT id FROM mar_agency WHERE is_default = 1')->fetchAll(PDO::FETCH_COLUMN);
+check('une seule agence par défaut : la dernière désignée', $creeB['status'] === 201 && array_map('intval', $defauts) === [$idB]
+    && $creeB['body']['data']['email'] === null && $creeB['body']['data']['logoUri'] === null, json_encode($defauts));
+
+$p1 = call($router, 'PATCH', '/api/v1/marketing/agencies/' . $idA, [], ['site' => 'lumiere.example/contact', 'email' => '']);
+$p2 = call($router, 'PATCH', '/api/v1/marketing/agencies/' . $idA, [], ['site' => 'lumiere.example/contact', 'email' => '']);
+check('modification : les champs envoyés seuls (nom, logo, défaut gardés), adresse vidée ; rejouée, le même résultat',
+    $p1['status'] === 200 && $p1['body']['data'] === $p2['body']['data'] && $p1['body']['data']['name'] === 'Atelier Lumière'
+        && $p1['body']['data']['site'] === 'lumiere.example/contact' && $p1['body']['data']['email'] === null
+        && $p1['body']['data']['logoUri'] === $logo && $p1['body']['data']['isDefault'] === false,
+    json_encode($p1['body'], JSON_UNESCAPED_UNICODE));
+$p3 = call($router, 'PATCH', '/api/v1/marketing/agencies/' . $idA, [], ['isDefault' => true, 'logoUri' => null]);
+check('modification : redevenue l’agence par défaut, l’autre ne l’est plus ; logo retiré',
+    $p3['status'] === 200 && $p3['body']['data']['isDefault'] === true && $p3['body']['data']['logoUri'] === null
+        && array_map('intval', $pdo->query('SELECT id FROM mar_agency WHERE is_default = 1')->fetchAll(PDO::FETCH_COLUMN)) === [$idA]);
+
+$refus = [
+    call($router, 'POST', '/api/v1/marketing/agencies', [], []),
+    call($router, 'POST', '/api/v1/marketing/agencies', [], ['name' => '   ']),
+    call($router, 'POST', '/api/v1/marketing/agencies', [], ['name' => str_repeat('a', 161)]),
+    call($router, 'POST', '/api/v1/marketing/agencies', [], ['name' => 'X', 'email' => 'pas-une-adresse']),
+    call($router, 'POST', '/api/v1/marketing/agencies', [], ['name' => 'X', 'logoUri' => 'https://exemple.test/logo.png']),
+    call($router, 'POST', '/api/v1/marketing/agencies', [], ['name' => 'X', 'isDefault' => 'oui']),
+    call($router, 'POST', '/api/v1/marketing/agencies', [], ['name' => 'X', 'speciality' => 'Tout']),
+    call($router, 'PATCH', '/api/v1/marketing/agencies/' . $idA, [], ['name' => '']),
+];
+check('refusées en 422 VALIDATION_FAILED, champ nommé, rien d’écrit (sans nom, nom vide, trop long, adresse, logo qui n’est pas une image, défaut, champ inconnu, nom vidé)',
+    array_unique(array_column($refus, 'status')) === [422]
+        && array_map(static fn (array $r): string => ($r['body']['error']['code'] ?? '') . ':' . ($r['body']['error']['details'][0]['field'] ?? ''), $refus)
+            === ['VALIDATION_FAILED:name', 'VALIDATION_FAILED:name', 'VALIDATION_FAILED:name', 'VALIDATION_FAILED:email', 'VALIDATION_FAILED:logoUri',
+                'VALIDATION_FAILED:isDefault', 'VALIDATION_FAILED:speciality', 'VALIDATION_FAILED:name']
+        && $agencesEnBase() === $avant + 2
+        && (string) $pdo->query('SELECT name FROM mar_agency WHERE id = ' . $idA)->fetchColumn() === 'Atelier Lumière',
+    json_encode(array_map(static fn (array $r): array => [$r['status'], $r['body']['error']['details'] ?? null], $refus), JSON_UNESCAPED_UNICODE));
+
+$inconnue = [call($router, 'PATCH', '/api/v1/marketing/agencies/999999', [], ['name' => 'Y']), call($router, 'DELETE', '/api/v1/marketing/agencies/999999')];
+check('agence inconnue : 404 RESOURCE_NOT_FOUND (modification, retrait)',
+    array_column($inconnue, 'status') === [404, 404] && ($inconnue[0]['body']['error']['code'] ?? '') === 'RESOURCE_NOT_FOUND');
+$garde = call($router, 'DELETE', '/api/v1/marketing/agencies/5');
+check('une agence que des canaux et une intervention désignent ne se retire pas (409), et reste',
+    $garde['status'] === 409 && ($garde['body']['error']['code'] ?? '') === 'RESOURCE_STATE_INVALID'
+        && array_column($garde['body']['error']['details'] ?? [], 'field') === ['channels', 'interventions']
+        && (int) $pdo->query('SELECT COUNT(*) FROM mar_agency WHERE id = 5')->fetchColumn() === 1,
+    json_encode($garde['body'], JSON_UNESCAPED_UNICODE));
+
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+$refusFr = [call($router, 'POST', '/api/v1/marketing/agencies', [], ['name' => 'Boutique']), call($router, 'PATCH', '/api/v1/marketing/agencies/' . $idA, [], ['name' => 'Boutique']),
+    call($router, 'DELETE', '/api/v1/marketing/agencies/' . $idA)];
+check('un compte de boutique ne crée, ne modifie ni ne retire une agence (403 PERM_ROLE_REQUIRED), rien d’écrit',
+    array_column($refusFr, 'status') === [403, 403, 403] && ($refusFr[0]['body']['error']['code'] ?? '') === 'PERM_ROLE_REQUIRED'
+        && $agencesEnBase() === $avant + 2 && (string) $pdo->query('SELECT name FROM mar_agency WHERE id = ' . $idA)->fetchColumn() === 'Atelier Lumière');
+AuthContext::clear();
+check('sans identité : 401 (routeur réel)', call($router, 'POST', '/api/v1/marketing/agencies', [], ['name' => 'Personne'])['status'] === 401
+    && call($router, 'DELETE', '/api/v1/marketing/agencies/' . $idA)['status'] === 401 && $agencesEnBase() === $avant + 2);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+
+$d1 = call($router, 'DELETE', '/api/v1/marketing/agencies/' . $idA);
+$d2 = call($router, 'DELETE', '/api/v1/marketing/agencies/' . $idA);
+$d3 = call($router, 'DELETE', '/api/v1/marketing/agencies/' . $idB);
+check('retrait : 204 sans corps, puis 404 ; les deux agences du test parties, Studio Vertigo restée',
+    $d1['status'] === 204 && $d1['body'] === null && $d2['status'] === 404 && $d3['status'] === 204 && $agencesEnBase() === $avant
+        && (int) $pdo->query('SELECT COUNT(*) FROM mar_agency WHERE id = 5')->fetchColumn() === 1);
+
 $response = call($router, 'GET', '/api/v1/marketing/diffusion', ['family' => 'INCONNUE']);
 check('une famille inconnue retombe sur PHYSIQUE', ($response['body']['channels'][0]['family'] ?? '') === 'PHYSIQUE');
 

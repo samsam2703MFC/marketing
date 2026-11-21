@@ -147,8 +147,11 @@ campagne par ces routes, avec le jeton de service (`X-Marketing-Service`), et pl
 | GET | `…/vouchers` | tenant | tableau |
 | GET | `…/erp-promotions?family=&page=&perPage=` | tenant (franchisé : réseau + ses boutiques) | enveloppe + `data[]` paginé — §8 |
 | GET | `…/diffusion` | tenant | objet |
-| GET | `…/agencies` | — | tableau |
+| GET | `…/agencies` | — | tableau — porte aussi `email`, `site`, `logo_uri`, `is_default`, `channel_campaigns` (21/11/2026) |
 | GET | `…/agencies/{id}/campaigns` | tenant | tableau |
+| POST | `…/agencies` | réseau | enveloppe — `201`, l'agence (camelCase) — §15 |
+| PATCH | `…/agencies/{id}` | réseau | enveloppe — les champs envoyés seuls — §15 |
+| DELETE | `…/agencies/{id}` | réseau | `204` ; `409 RESOURCE_STATE_INVALID` si un canal ou une intervention la désigne — §15 |
 | GET | `…/kits` | tenant | tableau |
 | GET | `…/presence` | tenant | objet |
 | POST | `…/uploads` | tenant | objet (visuel de campagne) |
@@ -1138,3 +1141,27 @@ présentation, validation et exportation PDF ».
 
 Couches ajoutées : `CatalogueShopService` (vérifications, réception, adaptation, impression, liens) → dépôt
 `CatalogueShopRepository` (versions de la charte, `mar_catalogue_shop`, `mar_catalogue_link`).
+
+## 15. Le référentiel des agences en écriture (21 novembre 2026)
+
+Le cockpit (dépôt `consultant_BO`, `marketing/src/mkt_agences.php`) écrivait `mar_agency` en SQL : son écran
+« Agences » (créer, modifier, retirer), la reprise de l'agence de son ancien réglage unique, et les quatre colonnes
+qu'il ajoutait lui-même (`email`, `site`, `logo_uri`, `is_default`, reprises par la migration 045). Il passe par ces
+routes, avec son jeton de service. Contrat : `docs/openapi/agencies.yaml`.
+
+- `POST …/agencies` `{name, email?, site?, logoUri?, isDefault?}` → `201` et l'agence ;
+  `PATCH …/agencies/{id}` → les champs envoyés, et eux seuls ; `DELETE …/agencies/{id}` → `204`, puis `404`.
+- Une seule agence par défaut (celle qui signe la note d'une campagne dont aucun canal ne désigne d'agence) : en
+  désigner une retire ce rôle aux autres, dans la même transaction.
+- Refus en `422 VALIDATION_FAILED`, champ nommé : nom absent, vide ou de plus de 160 caractères ; adresse qui n'en est
+  pas une ; logo qui n'est pas une image embarquée (`data:image/…;base64,`) ou dépasse 700 000 caractères ;
+  `isDefault` qui n'est pas un booléen ; champ inconnu. Réseau seul (`403 PERM_ROLE_REQUIRED`).
+- Retrait refusé (`409 RESOURCE_STATE_INVALID`, `details` : `channels`, `interventions`) tant qu'un canal de
+  campagne ou une intervention enregistrée la désigne. Le cockpit refusait déjà pour les canaux ; les interventions
+  (`mar_agency_campaign`, en cascade) seraient parties avec elle sans rien dire.
+- La lecture reste `GET …/agencies` (forme d'avant), qui porte aussi `email`, `site`, `logo_uri`, `is_default` et
+  `channel_campaigns` : le nombre de campagnes dont un canal désigne l'agence, ce que le cockpit comptait.
+
+Écarts au standard, notés ici : préfixe sans segment `{app}` (comme tout le module, §3.2) ; retrait physique (la
+table n'a pas d'état « retirée », et le cockpit retirait de même) ; ni `ETag` / `If-Match` (un seul écran écrit ce
+référentiel) ni en-tête `Location` au `201`.
