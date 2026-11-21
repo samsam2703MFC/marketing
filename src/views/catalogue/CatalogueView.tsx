@@ -20,6 +20,7 @@ import { CatalogueSheet, FORMAT_MM, HEADER_LABELS, LAYOUT_LABELS, TEMPLATE_LABEL
 import type { CatalogueSheetMode } from './CataloguePages'
 import './catalogue.css'
 import CharterAssistant from './CharterAssistant'
+import type { CharterStep } from './CharterAssistant'
 import { MediaPicker } from './MediaPicker'
 
 /**
@@ -36,7 +37,12 @@ import { MediaPicker } from './MediaPicker'
  * dernière page de la charte. L'écran met en page et imprime par le moteur des brochures.
  */
 
-type Screen = { kind: 'list' } | { kind: 'editor'; id: number } | { kind: 'charter' }
+/**
+ * `charter` : l'assistant des pages de la marque, ouvert depuis la liste, ou depuis l'éditeur d'un catalogue en
+ * cliquant une de ses 4 pages de la marque (`step` : son étape ; `gammes` : celles du catalogue, pour ouvrir sa
+ * couverture ; `returnTo` : le catalogue où revenir).
+ */
+type Screen = { kind: 'list' } | { kind: 'editor'; id: number } | { kind: 'charter'; step?: CharterStep; gammes?: number[]; returnTo?: number }
 
 const MM = 96 / 25.4
 
@@ -75,8 +81,21 @@ export default function CatalogueView() {
   // `?pages-marque` ouvre l'assistant des pages de la marque (lien direct, captures).
   const [screen, setScreen] = useState<Screen>(() => (new URLSearchParams(window.location.search).has('pages-marque') ? { kind: 'charter' } : { kind: 'list' }))
 
-  if (screen.kind === 'editor') return <Editor id={screen.id} onBack={() => setScreen({ kind: 'list' })} />
-  if (screen.kind === 'charter') return <CharterAssistant onBack={() => setScreen({ kind: 'list' })} />
+  if (screen.kind === 'editor') {
+    const id = screen.id
+    return <Editor id={id} onBack={() => setScreen({ kind: 'list' })} onCharter={(step, gammes) => setScreen({ kind: 'charter', step, gammes, returnTo: id })} />
+  }
+  if (screen.kind === 'charter') {
+    const returnTo = screen.returnTo
+    return (
+      <CharterAssistant
+        step={screen.step}
+        gammes={screen.gammes}
+        backLabel={returnTo !== undefined ? '‹ Retour au catalogue' : undefined}
+        onBack={() => setScreen(returnTo !== undefined ? { kind: 'editor', id: returnTo } : { kind: 'list' })}
+      />
+    )
+  }
   return <CatalogueList onOpen={(id) => setScreen({ kind: 'editor', id })} onCharter={() => setScreen({ kind: 'charter' })} />
 }
 
@@ -129,8 +148,8 @@ function CatalogueList({ onOpen, onCharter }: { onOpen: (id: number) => void; on
           ))}
         </span>
         <span className="catv-grow" />
-        <button type="button" className="btn" onClick={onCharter}>
-          Pages de la marque (couverture, page 2, dernière page)
+        <button type="button" className="btn" onClick={onCharter} title="Couverture, page 2, avant-dernière et dernière page : les 4 pages que reçoit chaque catalogue">
+          ✎ Modifier les pages de la marque
         </button>
         <button
           type="button"
@@ -400,7 +419,25 @@ function LockIcon() {
   )
 }
 
-function Editor({ id, onBack }: { id: number; onBack: () => void }) {
+/** Ouvrir l'assistant des pages de la marque à une étape, avec les gammes du catalogue (sa couverture). */
+type OpenCharter = (step: CharterStep, gammes: number[]) => void
+
+/** L'étape de l'assistant qui règle une page de la marque. */
+function charterStepOf(page: CatalogueDocument['pages'][number]): CharterStep | null {
+  if (page.kind === 'cover') return 1
+  if (page.kind === 'brand') return page.slot === 'page2' ? 2 : 3
+  if (page.kind === 'back') return 4
+  return null
+}
+
+/** Les gammes d'un catalogue « Gamme », dans l'ordre où l'API cherche leur couverture. */
+function catalogueGammes(cat: Catalogue): number[] {
+  if (cat.source.kind !== 'gamme') return []
+  const refs = cat.source.refs ?? (cat.source.ref ? cat.source.ref.split(',') : [])
+  return refs.map(Number).filter((id) => Number.isInteger(id) && id > 0)
+}
+
+function Editor({ id, onBack, onCharter }: { id: number; onBack: () => void; onCharter: OpenCharter }) {
   const loaded = useAsync(() => api.getCatalogue(id), [id])
   const shops = useAsync(() => api.listShops(), [])
 
@@ -415,10 +452,10 @@ function Editor({ id, onBack }: { id: number; onBack: () => void }) {
     )
   }
   if (!loaded.data || shops.loading) return <p className="muted">Ouverture du catalogue…</p>
-  return <EditorBody key={loaded.data.id} initial={loaded.data} shops={shops.data ?? []} onBack={onBack} />
+  return <EditorBody key={loaded.data.id} initial={loaded.data} shops={shops.data ?? []} onBack={onBack} onCharter={onCharter} />
 }
 
-function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api.Shop[]; onBack: () => void }) {
+function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue; shops: api.Shop[]; onBack: () => void; onCharter: OpenCharter }) {
   const [cat, setCat] = useState<Catalogue>(initial)
   const [lang, setLang] = useState<CatalogueLang>(initial.langs[0] ?? 'fr')
   const [versionShop, setVersionShop] = useState<number | null>(initial.owner === 'boutique' ? null : null)
@@ -868,14 +905,19 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
                     if (inner !== null && dragFrom !== null) movePage(dragFrom, inner)
                     setDragFrom(null)
                   }}
-                  onClick={() => setSelected(inner)}
+                  onClick={() => {
+                    const step = charterStepOf(page)
+                    if (step !== null) onCharter(step, catalogueGammes(cat))
+                    else setSelected(inner)
+                  }}
+                  title={page.locked ? 'Page de la marque : cliquer pour la modifier (pour tous les catalogues)' : undefined}
                 >
                   <span style={{ zoom }}>
                     <CatalogueSheet doc={doc.data as CatalogueDocument} index={index} mode="preview" />
                   </span>
                   {page.locked ? (
-                    <span className="catv-lock" title="Fixée par la Charte des catalogues">
-                      <LockIcon /> Marque
+                    <span className="catv-lock">
+                      <LockIcon /> Marque · ✎ modifier
                     </span>
                   ) : null}
                   <span className="catv-page__no">{index + 1}</span>
@@ -1120,8 +1162,11 @@ function EditorBody({ initial, shops, onBack }: { initial: Catalogue; shops: api
               <dd>charte</dd>
             </dl>
             <p className="catv-note">
-              <LockIcon /> Réglés dans « Charte des catalogues » : les franchisés ne peuvent pas les modifier.
+              <LockIcon /> Réglés dans les pages de la marque, pour tous les catalogues : les franchisés ne peuvent pas les modifier.
             </p>
+            <button type="button" className="btn btn--sm catv-brand-edit" onClick={() => onCharter(1, catalogueGammes(cat))}>
+              ✎ Modifier les pages de la marque
+            </button>
           </section>
 
           <section className="card">
