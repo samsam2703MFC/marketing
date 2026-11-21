@@ -753,7 +753,7 @@ check(
         'type_lever_badge_label', 'type_lever_label', 'type_lever_color_hex'])), $typeEnBase])
 );
 $formatsEnBase = $pdo->query(sprintf(
-    'SELECT DISTINCT f.id, f.name FROM mar_asset_render ar JOIN mar_campaign_asset ca ON ca.id = ar.campaign_asset_id
+    'SELECT DISTINCT f.id, f.name, f.sort_order FROM mar_asset_render ar JOIN mar_campaign_asset ca ON ca.id = ar.campaign_asset_id
        JOIN mar_format f ON f.id = ar.format_id WHERE ca.campaign_id = %d ORDER BY f.sort_order, f.id', $newId
 ))->fetchAll(PDO::FETCH_COLUMN, 1);
 check(
