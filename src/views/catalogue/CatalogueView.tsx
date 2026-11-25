@@ -28,6 +28,7 @@ import CatalogueWizard from './CatalogueWizard'
 import type { WizardProps, WizardStep } from './CatalogueWizard'
 import LeafletWizard from './LeafletWizard'
 import { importBrochure } from './brochureImport'
+import { OrderFormCell, OrderFormMenu } from './OrderFormMenu'
 import { TEMPLATES } from '../../lib/brochure'
 import { SUPPORT_LABELS, SUPPORT_NOUNS, isLeaflet, leafletBlocked, leafletChecks, leafletDoc, supportOf } from './leaflet'
 import { Sheet as BrochureSheet, fontFaces, pageSize as brochurePageSize } from '../brochure/Pages'
@@ -146,6 +147,8 @@ function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen
   const [revision, setRevision] = useState(0)
   const list = useAsync(() => api.listCatalogues(owner ? { owner } : {}), [owner, revision])
   const shops = useAsync(() => api.listShops(), [])
+  // Les conditions du bon de commande que les boutiques ont réglées (lecture seule, 25/11/2026).
+  const orderConditions = useAsync(() => api.listOrderConditions(), [])
   // Ce qu'on crée (21/11/2026, fusion des imprimés) : un catalogue, un leaflet A5 ou un dépliant A4 ; null : rien.
   const [creating, setCreating] = useState<CatalogueSupport | null>(null)
   const [kindFilter, setKindFilter] = useState<'' | CatalogueSupport>('')
@@ -244,6 +247,7 @@ function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen
                   <th>Format</th>
                   <th>Boutiques</th>
                   <th>État</th>
+                  <th>Bon de commande</th>
                   <th aria-label="Supprimer ou modifier" />
                 </tr>
               </thead>
@@ -274,7 +278,11 @@ function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen
                         {cat.status === 'imprime' && cat.printQty ? ` · ${cat.printQty} ex.` : ''}
                       </span>
                     </td>
+                    <td>
+                      <OrderFormCell cat={cat} conditions={orderConditions.error ? [] : orderConditions.data} />
+                    </td>
                     <td className="catv-right catv-row-actions">
+                      <OrderFormMenu cat={cat} shopNames={shopNames} conditions={orderConditions.data} />
                       <button
                         type="button"
                         className="btn btn--danger btn--sm"
@@ -779,6 +787,8 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
   const categories = useMemo(() => new Map((webshop.data?.categories ?? []).map((c) => [c.id, c])), [webshop.data])
   const shopName = (shopId: number) => shops.find((shop) => shop.id === shopId)?.name ?? `#${shopId}`
   const versionShops = cat.owner === 'boutique' ? [] : cat.shopIds
+  const orderConditions = useAsync(() => api.listOrderConditions(), [])
+  const shopNameMap = useMemo(() => new Map(shops.map((shop) => [shop.id, shop.name])), [shops])
   const inCatalogue = new Set(cat.products.map((row) => row.id))
 
   // Les produits proposés : ceux du catalogue (dans son ordre), puis — au choix — le reste du webshop.
@@ -1267,6 +1277,8 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
         <button type="button" className="btn" onClick={() => void print('printer', cat.owner === 'marque')}>
           PDF pour l’imprimeur
         </button>
+        {/* Le bon de commande (25/11/2026) : le même menu que dans la liste, sur la langue et la version affichées. */}
+        <OrderFormMenu key={`${lang}-${versionShop ?? 'g'}`} cat={cat} shopNames={shopNameMap} conditions={orderConditions.data} initialLang={lang} initialShop={versionShop} />
         <span className="catv-savebox">
           {/* Jamais désactivé par un envoi automatique : quitter le titre en cliquant ici en lance un, le clic doit passer. */}
           <button type="button" className="btn btn--primary" aria-busy={saving} onClick={() => void saveAll()}>

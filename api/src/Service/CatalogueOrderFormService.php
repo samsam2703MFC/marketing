@@ -449,8 +449,8 @@ final class CatalogueOrderFormService
         $delay = self::delay($catalogue, $shop, $own, $nl);
         $text = implode(' · ', $footers);
         if ($delay !== null && $delay['source'] === 'boutique') {
-            $text = (string) preg_replace('/\s*·?\s*(sur commande|op bestelling) \d+ (h|u)\b/u', '', $text);
-            $text = trim((string) preg_replace('/^·\s*|\s*·\s*$/u', '', $text));
+            // Le délai de la boutique prend la place de celui du catalogue, là où le pied le disait.
+            $text = (string) preg_replace('/(sur commande|op bestelling) \d+ (h|u)\b/u', $delay['text'], $text, 1);
         }
         $has = (bool) preg_match('/(sur commande|op bestelling) \d+ (h|u)\b/u', $text);
         if ($delay !== null && !$has) {
@@ -572,7 +572,7 @@ final class CatalogueOrderFormService
             'price'       => $nl ? 'Prijs' : 'Prix',
             'qty'         => $nl ? 'Aantal' : 'Qté',
             'total'       => $nl ? 'Totaal' : 'Total',
-            'pagesWord'   => $nl ? 'p.' : 'pages',
+            'pagesWord'   => $nl ? 'blz.' : 'pages',
             'offers'      => $nl ? 'Onze aanbiedingen' : 'Nos offres',
             'other'       => $nl ? 'Andere vraag:' : 'Autre demande :',
             'continued'   => $nl ? '(vervolg)' : '(suite)',

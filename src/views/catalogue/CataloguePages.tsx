@@ -42,8 +42,8 @@ export const FORMAT_MM: Record<CatalogueFormat, { w: number; h: number }> = {
 }
 
 /** Fond perdu et marge des traits de coupe, en millimètres (ceux des brochures). */
-const BLEED = 3
-const MARKS = 7
+export const BLEED = 3
+export const MARKS = 7
 
 export const LAYOUT_LABELS: Record<CatalogueLayout, { label: string; capacity: number }> = {
   vedette: { label: '1 vedette + 4', capacity: 5 },
@@ -853,7 +853,7 @@ export function CataloguePage({ doc, index }: { doc: CatalogueDocument; index: n
   )
 }
 
-function Marks({ format, offset }: { format: CatalogueFormat; offset: number }) {
+export function Marks({ format, offset }: { format: CatalogueFormat; offset: number }) {
   const { w, h } = FORMAT_MM[format]
   const reach = offset - BLEED
   const total = { w: w + offset * 2, h: h + offset * 2 }
