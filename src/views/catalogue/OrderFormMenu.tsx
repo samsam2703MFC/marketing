@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
+import { createPortal, flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import * as api from '../../lib/api/module'
 import type { Catalogue, CatalogueLang, OrderConditions, OrderForm } from '../../lib/api/module'
@@ -52,21 +52,35 @@ export function OrderFormMenu({
   const [forms, setForms] = useState<OrderForm[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const box = useRef<HTMLDivElement>(null)
+  const box = useRef<HTMLSpanElement>(null)
+  const pop = useRef<HTMLDivElement>(null)
+  // Le menu se place sous le bouton, hors du tableau (qui défile et le couperait).
+  const [place, setPlace] = useState<{ top: number; left?: number; right?: number } | null>(null)
 
   useEffect(() => {
     if (!open) return
     const close = (event: MouseEvent) => {
-      if (box.current && !box.current.contains(event.target as Node)) setOpen(false)
+      const target = event.target as Node
+      if (!box.current?.contains(target) && !pop.current?.contains(target)) setOpen(false)
     }
+    const at = () => {
+      const r = box.current?.getBoundingClientRect()
+      if (!r) return
+      setPlace(align === 'right' ? { top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) } : { top: r.bottom + 6, left: r.left })
+    }
+    at()
+    window.addEventListener('scroll', at, true)
+    window.addEventListener('resize', at)
     const escape = (event: KeyboardEvent) => event.key === 'Escape' && setOpen(false)
     document.addEventListener('mousedown', close)
     document.addEventListener('keydown', escape)
     return () => {
       document.removeEventListener('mousedown', close)
       document.removeEventListener('keydown', escape)
+      window.removeEventListener('scroll', at, true)
+      window.removeEventListener('resize', at)
     }
-  }, [open])
+  }, [open, align])
 
   useEffect(() => {
     if (!open) return
@@ -119,8 +133,8 @@ export function OrderFormMenu({
       <button type="button" className={`btn btn--sm bdc-menu__btn${open ? ' is-open' : ''}`} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         Bon de commande ▾
       </button>
-      {open ? (
-        <div className="bdc-pop" role="dialog" aria-label={`Bon de commande · ${cat.title}`}>
+      {open && place ? createPortal(
+        <div className="bdc-pop" ref={pop} style={{ position: 'fixed', ...place }} role="dialog" aria-label={`Bon de commande · ${cat.title}`}>
           <div className="bdc-pop__k">Bon de commande · {cat.title}</div>
           <div className="bdc-pop__row">
             <span className="bro-seg" role="group" aria-label="Langue du bon">
@@ -196,7 +210,8 @@ export function OrderFormMenu({
               </span>
             ) : null}
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </span>
   )

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Marketing — catalogues produits
-  version: 1.19.0
+  version: 1.20.0
   description: |
     Les catalogues produits du Marketing (prix du webshop, gammes) : un imprimé A5 (A4 en option)
     de **8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16). Quatre pages viennent de la Charte des catalogues de la
@@ -178,6 +178,20 @@ info:
     - le dashboard franchisé (`…/brand-catalogues`) ne reçoit que des catalogues : un leaflet ou un dépliant n'y va pas
       (404 sur le sien).
 
+    v1.20 (25 novembre 2026, le bon de commande — client : « A – E1 – conditions par magasin – contenu exact de ce qu'il
+    y a dans le catalogue », puis « cadre vide à remplir, délai boutique sous chaque catégorie ») :
+    - `GET …/catalogues/{id}/order-form?lang=&shopId=` (marque) · `GET …/shops/{shopId}/catalogues/{id}/order-form?lang=`
+      et `…/brand-catalogues/{id}/order-form?lang=` (boutique) · `GET /api/v1/public/marketing/catalogue-prints/{token}/order-form?lang=`
+      (page publique ; `lang` : l'autre langue du même catalogue) : le bon de commande d'une version, composé À PARTIR
+      de son document — catégories = pages produits au même titre (« gamme — catégorie », `pages`), produits une fois
+      chacun à leur prix (remise programmée et sa période), offres (contenu, période « du … au … »), pied de chaque
+      catégorie (disponibilité du catalogue, délai le plus long du catalogue et de la boutique), cadre des conditions
+      de la boutique (`configured: false` : vide, à remplir), libellés fixes FR / NL ;
+    - `GET|PUT …/shops/{shopId}/order-conditions` (boutique) : ses conditions, une fois pour tous ses bons
+      (`minDelay {value, unit: hours|days}`, `depositPct`, `holidayDeadlines [{for, until}]`, `pickup`,
+      `delivery {enabled, radiusKm, feeCents}`, `note {fr, nl}`) ; `GET …/catalogue-order-conditions` (marque, lecture
+      seule, paginée).
+
     v1.19 (21 novembre 2026, fusion des imprimés, étape 3 — reprise des brochures du générateur d'avant) :
     - `GET …/catalogue-brochures` : les brochures enregistrées des campagnes (`mar_campaign_brochure`), paginées, les plus
       récentes d'abord — campagne, format, support qu'elles deviennent, modèle, produits cochés, date, et `catalogueId`
@@ -228,6 +242,7 @@ tags:
   - name: Catalogues (marque)
   - name: Catalogues (boutique, entre portails)
   - name: Impression
+  - name: Bon de commande
 
 paths:
   /api/v1/marketing/catalogues:
@@ -962,6 +977,110 @@ paths:
         '404': { $ref: '#/components/responses/Error' }
         '422': { $ref: '#/components/responses/Error' }
 
+  /api/v1/marketing/catalogues/{id}/order-form:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      tags: [Catalogues (marque), Bon de commande]
+      summary: Le bon de commande d'une version (contenu exact du document ; conditions de la boutique en lecture)
+      security: [{ session: [] }]
+      parameters:
+        - { name: shopId, in: query, schema: { type: integer }, description: 'Boutique de la version (mar_shop.id) ; absente : version générale (cadre des conditions vide).' }
+        - { name: lang, in: query, schema: { type: string, enum: [fr, nl], default: fr } }
+      responses:
+        '200': { $ref: '#/components/responses/OrderForm' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/marketing/catalogue-order-conditions:
+    get:
+      tags: [Catalogues (marque), Bon de commande]
+      summary: Les conditions du bon de commande réglées par les boutiques (lecture seule)
+      security: [{ session: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/perPage' }
+      responses:
+        '200':
+          description: Une page de conditions, par boutique.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/EnvelopeOk'
+                  - { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/OrderConditions' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/integration/marketing/shops/{shopId}/order-conditions:
+    parameters: [{ $ref: '#/components/parameters/shopId' }]
+    get:
+      tags: [Catalogues (boutique, entre portails), Bon de commande]
+      summary: Ses conditions du bon de commande (configured false si rien n'est réglé)
+      security: [{ serviceToken: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/OrderConditions' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+    put:
+      tags: [Catalogues (boutique, entre portails), Bon de commande]
+      summary: Enregistrer ses conditions (une fois pour tous ses bons ; idempotent)
+      security: [{ serviceToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrderConditionsWrite' }
+      responses:
+        '200': { $ref: '#/components/responses/OrderConditions' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/integration/marketing/shops/{shopId}/catalogues/{id}/order-form:
+    parameters: [{ $ref: '#/components/parameters/shopId' }, { $ref: '#/components/parameters/id' }]
+    get:
+      tags: [Catalogues (boutique, entre portails), Bon de commande]
+      summary: Le bon de commande de son catalogue
+      security: [{ serviceToken: [] }]
+      parameters:
+        - { name: lang, in: query, schema: { type: string, enum: [fr, nl], default: fr } }
+      responses:
+        '200': { $ref: '#/components/responses/OrderForm' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/integration/marketing/shops/{shopId}/brand-catalogues/{id}/order-form:
+    parameters: [{ $ref: '#/components/parameters/shopId' }, { $ref: '#/components/parameters/id' }]
+    get:
+      tags: [Catalogues (boutique, entre portails), Bon de commande]
+      summary: Le bon de commande de sa version d'un catalogue de la marque reçu
+      security: [{ serviceToken: [] }]
+      parameters:
+        - { name: lang, in: query, schema: { type: string, enum: [fr, nl], default: fr } }
+      responses:
+        '200': { $ref: '#/components/responses/OrderForm' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/public/marketing/catalogue-prints/{token}/order-form:
+    get:
+      tags: [Impression, Bon de commande]
+      summary: Le bon de commande d'un lien d'impression valable (page `catalogue/?t=…&bon=fr,nl`)
+      security: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+        - { name: lang, in: query, schema: { type: string, enum: [fr, nl] }, description: 'Absente : la langue du lien.' }
+      responses:
+        '200': { $ref: '#/components/responses/OrderForm' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
 components:
   securitySchemes:
     session:
@@ -983,6 +1102,22 @@ components:
     sort: { name: sort, in: query, schema: { type: string, enum: [updatedAt, -updatedAt, createdAt, -createdAt, title, -title], default: -updatedAt } }
 
   responses:
+    OrderForm:
+      description: Le bon de commande d'une version.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/EnvelopeOk'
+              - { type: object, properties: { data: { $ref: '#/components/schemas/OrderForm' } } }
+    OrderConditions:
+      description: Les conditions du bon de commande d'une boutique.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/EnvelopeOk'
+              - { type: object, properties: { data: { $ref: '#/components/schemas/OrderConditions' } } }
     Unauthenticated:
       description: Sans identité (forme commune du routeur du module, §3.2 du registre).
       content:
@@ -1079,6 +1214,48 @@ components:
               - { type: object, properties: { data: { $ref: '#/components/schemas/Charter' } } }
 
   schemas:
+    OrderConditionsWrite:
+      type: object
+      additionalProperties: false
+      properties:
+        minDelay: { oneOf: [{ type: object, required: [value, unit], properties: { value: { type: integer, minimum: 1, description: '720 h ou 60 jours au plus' }, unit: { type: string, enum: [hours, days] } } }, { type: 'null' }] }
+        depositPct: { type: [integer, 'null'], minimum: 0, maximum: 100 }
+        holidayDeadlines: { type: array, maxItems: 10, items: { type: object, required: [for, until], properties: { for: { type: string, format: date }, until: { type: string, format: date, description: 'Au plus tard le jour de la fête.' } } } }
+        pickup: { type: boolean, default: true }
+        delivery: { type: object, properties: { enabled: { type: boolean }, radiusKm: { type: [integer, 'null'], minimum: 1, maximum: 200 }, feeCents: { type: [integer, 'null'], minimum: 0 } } }
+        note: { type: object, properties: { fr: { type: string, maxLength: 160 }, nl: { type: string, maxLength: 160 } }, description: 'Une ligne ; NL vide : le français.' }
+    OrderConditions:
+      allOf:
+        - $ref: '#/components/schemas/OrderConditionsWrite'
+        - type: object
+          properties:
+            shopId: { type: integer }
+            configured: { type: boolean, description: 'false : rien de réglé (le bon imprime le cadre vide).' }
+            updatedAt: { type: [string, 'null'], format: date-time }
+    OrderForm:
+      type: object
+      description: 'Clés toujours dans cet ordre. Libellés fixes FR / NL dans `labels`.'
+      properties:
+        catalogue: { type: object, properties: { id: { type: integer }, title: { type: string }, format: { type: string } } }
+        version: { type: object, properties: { lang: { type: string, enum: [fr, nl] }, shop: { type: [object, 'null'], description: '{id, name, address, phone, hours, holidayHours} ; null : version générale' } } }
+        charter: { type: object, properties: { logoUrl: { type: [string, 'null'] }, colors: { type: object } } }
+        qr: { type: [object, 'null'], properties: { url: { type: string }, host: { type: [string, 'null'] }, label: { type: string }, sub: { type: string } } }
+        categories:
+          type: array
+          items:
+            type: object
+            properties:
+              title: { type: string }
+              pages: { type: array, items: { type: integer } }
+              items: { type: array, items: { type: object, properties: { id: { type: integer }, name: { type: string }, format: { type: [string, 'null'] }, priceCents: { type: [integer, 'null'] }, oldPriceCents: { type: [integer, 'null'] }, promo: { type: [object, 'null'] }, currency: { type: string } } } }
+              footer: { type: [string, 'null'] }
+              delay: { type: [object, 'null'], properties: { hours: { type: integer }, text: { type: string }, source: { type: string, enum: [catalogue, boutique] } } }
+        offers: { type: array, items: { type: object, properties: { id: { type: string }, type: { type: string }, name: { type: string }, badge: { type: string }, deal: { type: [string, 'null'] }, contents: { type: string }, period: { type: [string, 'null'] }, priceCents: { type: [integer, 'null'] }, oldPriceCents: { type: [integer, 'null'] }, currency: { type: string }, pages: { type: array, items: { type: integer } } } } }
+        counts: { type: object, properties: { products: { type: integer }, offers: { type: integer } } }
+        pages: { type: array, items: { type: integer } }
+        conditions: { type: object, properties: { configured: { type: boolean }, title: { type: string }, by: { type: [string, 'null'] }, lines: { type: array, items: { type: string } }, depositPct: { type: [integer, 'null'] }, pickup: { type: boolean }, delivery: { type: boolean }, updatedAt: { type: [string, 'null'] } } }
+        labels: { type: object, additionalProperties: { type: string } }
+        warnings: { type: array, items: { type: object } }
     EnvelopeOk:
       type: object
       required: [success, data, meta]
