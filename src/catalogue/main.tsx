@@ -69,9 +69,11 @@ function OrderPage({ token }: { token: string }) {
   if (error) return <p className="cat-print__msg">{error}</p>
   if (!forms) return <p className="cat-print__msg">Composition du bon de commande…</p>
   const size = orderFormSize(mode)
+  // `imprimer=0` : l'aperçu dans un cadre (dashboard) — ni barre, ni marge grise.
+  const apercu = params.get('imprimer') === '0'
   return (
     <>
-      <style>{`${orderFormCss()}\n@page{size:${size.w}mm ${size.h}mm;margin:0}.bdc-sheet{break-after:page}.bdc-sheet:last-child{break-after:auto}\n${BASE_CSS}`}</style>
+      <style>{`${orderFormCss()}\n@page{size:${size.w}mm ${size.h}mm;margin:0}.bdc-sheet{break-after:page}.bdc-sheet:last-child{break-after:auto}\n${BASE_CSS}${apercu ? '\n@media screen{body{background:#EDE7DE}#root{gap:4mm;padding:0}}.cat-print__bar{display:none}' : ''}`}</style>
       <div className="cat-print__bar">
         <span>
           {forms[0].labels.title} · {forms[0].catalogue.title} · {forms.map((f) => f.version.lang.toUpperCase()).join(' + ')} · {mode === 'printer' ? 'PDF imprimeur (traits de coupe)' : 'A4'}
