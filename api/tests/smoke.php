@@ -6993,7 +6993,7 @@ $lignesBon = array_merge([], ...array_map(static fn (array $c): array => $c['ite
 $lb = array_column($lignesBon, null, 'id');
 check('bon de commande : le contenu EXACT du document — ses produits dans l’ordre des pages, une fois chacun, ses offres ; les comptes',
     $bon['status'] === 200 && array_column($lignesBon, 'id') === array_keys($attenduP) && array_column($b['offers'] ?? [], 'id') === array_keys($attenduO)
-        && ($b['counts'] ?? null) === ['products' => count($attenduP), 'offers' => count($attenduO)] && $attenduP !== [] && $attenduO !== [],
+        && ($b['counts'] ?? null) === ['products' => count($attenduP), 'offers' => count($attenduO), 'catalogueLeadHours' => 48] && $attenduP !== [] && $attenduO !== [],
     json_encode([$bon['body']['error'] ?? null, array_column($lignesBon, 'id'), array_keys($attenduP), array_column($b['offers'] ?? [], 'id')], JSON_UNESCAPED_UNICODE));
 check('bon de commande : chaque produit à SON prix du document, la remise programmée barrée avec sa période, le poids en format',
     array_reduce(array_keys($attenduP), static fn (bool $ok, int|string $id): bool => $ok && isset($lb[$id]) && $lb[$id]['priceCents'] === $attenduP[$id]['priceCents']

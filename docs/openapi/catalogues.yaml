@@ -1251,7 +1251,7 @@ components:
               footer: { type: [string, 'null'] }
               delay: { type: [object, 'null'], properties: { hours: { type: integer }, text: { type: string }, source: { type: string, enum: [catalogue, boutique] } } }
         offers: { type: array, items: { type: object, properties: { id: { type: string }, type: { type: string }, name: { type: string }, badge: { type: string }, deal: { type: [string, 'null'] }, contents: { type: string }, period: { type: [string, 'null'] }, priceCents: { type: [integer, 'null'] }, oldPriceCents: { type: [integer, 'null'] }, currency: { type: string }, pages: { type: array, items: { type: integer } } } } }
-        counts: { type: object, properties: { products: { type: integer }, offers: { type: integer } } }
+        counts: { type: object, properties: { products: { type: integer }, offers: { type: integer }, catalogueLeadHours: { type: [integer, 'null'], description: 'Le plus long délai du catalogue, en heures.' } } }
         pages: { type: array, items: { type: integer } }
         conditions: { type: object, properties: { configured: { type: boolean }, title: { type: string }, by: { type: [string, 'null'] }, lines: { type: array, items: { type: string } }, depositPct: { type: [integer, 'null'] }, pickup: { type: boolean }, delivery: { type: boolean }, updatedAt: { type: [string, 'null'] } } }
         labels: { type: object, additionalProperties: { type: string } }

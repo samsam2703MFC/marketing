@@ -338,8 +338,14 @@ final class CatalogueOrderFormService
         }
 
         $productCount = 0;
+        $catalogueLead = null;
         foreach ($categories as $c) {
             $productCount += count($c['items']);
+        }
+        foreach ($sections as $s) {
+            if ($s['lead'] !== null && ($catalogueLead === null || $s['lead'] > $catalogueLead)) {
+                $catalogueLead = $s['lead'];
+            }
         }
         $today = date('d/m/Y');
 
@@ -357,7 +363,8 @@ final class CatalogueOrderFormService
             'qr'         => $qr,
             'categories' => $categories,
             'offers'     => $offerList,
-            'counts'     => ['products' => $productCount, 'offers' => count($offerList)],
+            // Le plus long délai du catalogue (heures) : celui sous lequel le délai de la boutique ne descend pas.
+            'counts'     => ['products' => $productCount, 'offers' => count($offerList), 'catalogueLeadHours' => $catalogueLead],
             'pages'      => $allPages,
             'conditions' => self::conditionsBlock($shop, $conditions, $nl),
             'labels'     => self::labels($nl, $shop, $conditions, $today, $doc, $allPages),

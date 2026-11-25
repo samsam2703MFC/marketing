@@ -3784,7 +3784,8 @@ export interface OrderForm {
   qr: { url: string; host: string | null; label: string; sub: string } | null
   categories: OrderFormCategory[]
   offers: OrderFormOffer[]
-  counts: { products: number; offers: number }
+  /** `catalogueLeadHours` : le plus long délai du catalogue (le délai de la boutique ne descend pas en dessous). */
+  counts: { products: number; offers: number; catalogueLeadHours: number | null }
   pages: number[]
   /** Le cadre « Conditions de la boutique » ; `configured: false` : vide, à remplir à la main. */
   conditions: { configured: boolean; title: string; by: string | null; lines: string[]; depositPct: number | null; pickup: boolean; delivery: boolean; updatedAt: string | null }
