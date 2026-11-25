@@ -6958,6 +6958,233 @@ $pdo->exec('DELETE FROM mar_catalogue WHERE id = ' . (int) ($creeB['body']['data
 unset($_SERVER['HTTP_X_SERVICE_TOKEN']);
 AuthContext::set(1, 'BRAND_ADMIN', 1);
 
+// --- Catalogues : le bon de commande (25/11/2026) -----------------------------
+// Client : « A – E1 – conditions par magasin – contenu exact de ce qu'il y a dans le catalogue (bien reprendre les dates
+// « du … au … » s'il y a des conditions dans les promotions) », puis « cadre vide à remplir, délai boutique sous chaque
+// catégorie ». Le bon est composé À PARTIR du document du catalogue : on le compare à ce document, jamais à une liste écrite ici.
+echo "\nCatalogues : le bon de commande\n";
+$pdo->exec('DELETE FROM mar_catalogue_order_conditions');
+$bonShop = new \Marketing\Controller\CatalogueIntegrationController($promoService);
+$promoRouter->get('/api/v1/marketing/catalogues/{id}/order-form', [$promoBrand, 'orderForm']);
+$promoRouter->get('/api/v1/marketing/catalogue-order-conditions', [$promoBrand, 'orderConditions']);
+$promoRouter->get($SB . '/order-conditions', [$bonShop, 'orderConditions'], true);
+$promoRouter->put($SB . '/order-conditions', [$bonShop, 'saveOrderConditions'], true);
+$promoRouter->get($SB . '/catalogues/{id}/order-form', [$bonShop, 'orderForm'], true);
+$promoRouter->get('/api/v1/public/marketing/catalogue-prints/{token}/order-form', [$bonShop, 'printOrderForm'], true);
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$creeBon = call($promoRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Noël — bon de commande', 'source' => ['kind' => 'gamme', 'ref' => 14], 'shopIds' => [$catA, $catB], 'langs' => ['fr', 'nl']]);
+$idBon = (int) ($creeBon['body']['data']['id'] ?? 0);
+$docBon = call($promoRouter, 'GET', '/api/v1/marketing/catalogues/' . $idBon . '/document')['body']['data'] ?? [];
+$bon = call($promoRouter, 'GET', '/api/v1/marketing/catalogues/' . $idBon . '/order-form');
+$b = $bon['body']['data'] ?? [];
+// Ce que le document imprime, dans l'ordre des pages : les produits (une fois chacun), les offres.
+$attenduP = [];
+$attenduO = [];
+foreach ($docBon['pages'] ?? [] as $page) {
+    foreach ($page['products'] ?? [] as $x) {
+        if (($x['kind'] ?? 'product') === 'offer') {
+            $attenduO[$x['id']] = $x;
+        } else {
+            $attenduP[$x['id']] ??= $x;
+        }
+    }
+}
+$lignesBon = array_merge([], ...array_map(static fn (array $c): array => $c['items'], $b['categories'] ?? []));
+$lb = array_column($lignesBon, null, 'id');
+check('bon de commande : le contenu EXACT du document — ses produits dans l’ordre des pages, une fois chacun, ses offres ; les comptes',
+    $bon['status'] === 200 && array_column($lignesBon, 'id') === array_keys($attenduP) && array_column($b['offers'] ?? [], 'id') === array_keys($attenduO)
+        && ($b['counts'] ?? null) === ['products' => count($attenduP), 'offers' => count($attenduO)] && $attenduP !== [] && $attenduO !== [],
+    json_encode([$bon['body']['error'] ?? null, array_column($lignesBon, 'id'), array_keys($attenduP), array_column($b['offers'] ?? [], 'id')], JSON_UNESCAPED_UNICODE));
+check('bon de commande : chaque produit à SON prix du document, la remise programmée barrée avec sa période, le poids en format',
+    array_reduce(array_keys($attenduP), static fn (bool $ok, int|string $id): bool => $ok && isset($lb[$id]) && $lb[$id]['priceCents'] === $attenduP[$id]['priceCents']
+        && $lb[$id]['oldPriceCents'] === $attenduP[$id]['oldPriceCents'] && $lb[$id]['name'] === $attenduP[$id]['name'], true)
+        && ($lb[11]['oldPriceCents'] ?? null) === 3290 && ($lb[11]['priceCents'] ?? null) === 2961
+        && ($lb[11]['promo'] ?? null) === ['label' => '−10 %', 'period' => $attenduP[11]['promo']['period']] && str_starts_with((string) ($lb[11]['promo']['period'] ?? ''), 'du ')
+        && ($lb[11]['format'] ?? null) === '650 g' && array_key_exists('format', $lb[12] ?? []) && $lb[12]['format'] === null,
+    json_encode([$lb[11] ?? null, $lb[12] ?? null, $attenduP[11]['promo'] ?? null], JSON_UNESCAPED_UNICODE));
+$offreBon = array_column($b['offers'] ?? [], null, 'id')['bundle-1'] ?? [];
+check('bon de commande : l’offre (bundle) avec son contenu, son prix, l’ancien prix et sa période « du … au … » telle que la vignette l’imprime',
+    ($offreBon['name'] ?? '') === 'Duo de bûches' && ($offreBon['badge'] ?? '') === 'Bundle' && ($offreBon['priceCents'] ?? null) === 5500 && ($offreBon['oldPriceCents'] ?? null) === 6280
+        && ($offreBon['contents'] ?? '') === 'Bûche praliné, Bûche glacée vanille' && ($offreBon['period'] ?? 'x') === ($attenduO['bundle-1']['period'] ?? 'y')
+        && ($offreBon['period'] ?? '') !== '' && ($offreBon['pages'] ?? []) !== [],
+    json_encode([$offreBon, $attenduO['bundle-1']['period'] ?? null], JSON_UNESCAPED_UNICODE));
+$cat500 = null;
+foreach ($b['categories'] ?? [] as $c) {
+    if (in_array(11, array_column($c['items'], 'id'), true)) {
+        $cat500 = $c;
+    }
+}
+$pied500 = null;
+foreach ($docBon['pages'] ?? [] as $i => $page) {
+    if (in_array($i + 1, $cat500['pages'] ?? [], true) && ($page['availabilityFooter'] ?? null) !== null) {
+        $pied500 = $page['availabilityFooter'];
+    }
+}
+check('bon de commande (version générale) : la catégorie = les pages du catalogue (« gamme — catégorie », n° de pages), son pied = celui du catalogue, le délai du catalogue (48 h) ; le cadre des conditions VIDE',
+    $cat500 !== null && $cat500['title'] === ($docBon['pages'][$cat500['pages'][0] - 1]['gammeTitle'] ?? 'x') . ' — ' . ($docBon['pages'][$cat500['pages'][0] - 1]['title'] ?? 'x')
+        && $cat500['footer'] === $pied500
+        && $cat500['delay'] === ['hours' => 48, 'text' => 'sur commande 48 h', 'source' => 'catalogue']
+        && ($b['conditions']['configured'] ?? null) === false && ($b['conditions']['lines'] ?? null) === [] && array_key_exists('shop', $b['version'] ?? []) && $b['version']['shop'] === null,
+    json_encode([$cat500, $pied500, $b['conditions'] ?? null], JSON_UNESCAPED_UNICODE));
+check('bon de commande : les clés dans un ordre fixe (bon, catégorie, ligne, offre)',
+    array_keys($b) === ['catalogue', 'version', 'charter', 'qr', 'categories', 'offers', 'counts', 'pages', 'conditions', 'labels', 'warnings']
+        && array_keys($cat500 ?? []) === ['title', 'pages', 'items', 'footer', 'delay']
+        && array_keys($lb[11] ?? []) === ['id', 'name', 'format', 'priceCents', 'oldPriceCents', 'promo', 'currency']
+        && array_keys($offreBon) === ['id', 'type', 'name', 'badge', 'deal', 'contents', 'period', 'priceCents', 'oldPriceCents', 'currency', 'pages']
+        && array_keys($b['qr'] ?? []) === ['url', 'host', 'label', 'sub'] && ($b['labels']['title'] ?? '') === 'Bon de commande',
+    json_encode(array_keys($b)));
+$sansCond = call($promoRouter, 'GET', '/api/v1/marketing/catalogues/' . $idBon . '/order-form', ['shopId' => (string) $catA]);
+check('bon de commande : boutique sans conditions réglées — le bon s’imprime, cadre vide à remplir ; ses coordonnées et son QR',
+    $sansCond['status'] === 200 && ($sansCond['body']['data']['conditions']['configured'] ?? null) === false
+        && ($sansCond['body']['data']['version']['shop']['name'] ?? '') !== '' && str_contains((string) ($sansCond['body']['data']['qr']['url'] ?? ''), 'shop=9104'),
+    json_encode($sansCond['body']['data']['version'] ?? $sansCond['body'], JSON_UNESCAPED_UNICODE));
+
+// Les conditions de la boutique, par son dashboard (API de service).
+$_SERVER['HTTP_X_SERVICE_TOKEN'] = 'JETON-SERVICE-CATALOGUES-TEST';
+AuthContext::clear();
+$condA = ['minDelay' => ['value' => 3, 'unit' => 'days'], 'depositPct' => 30,
+    'holidayDeadlines' => [['until' => '2026-12-28', 'for' => '2026-12-31'], ['for' => '2026-12-24', 'until' => '2026-12-21']],
+    'pickup' => true, 'delivery' => ['feeCents' => 500, 'radiusKm' => 10, 'enabled' => true], 'note' => ['nl' => 'IJsstronken: binnen het uur in de diepvries.', 'fr' => 'Bûches glacées : à mettre au congélateur dans l’heure.']];
+$avantCond = call($promoRouter, 'GET', '/api/v1/integration/marketing/shops/9104/order-conditions');
+$posA = call($promoRouter, 'PUT', '/api/v1/integration/marketing/shops/9104/order-conditions', [], $condA);
+$posA2 = call($promoRouter, 'PUT', '/api/v1/integration/marketing/shops/9104/order-conditions', [], $condA);
+$luA = call($promoRouter, 'GET', '/api/v1/integration/marketing/shops/9104/order-conditions');
+$cA = $luA['body']['data'] ?? [];
+check('conditions (boutique) : rien de réglé d’abord ; enregistrées (idempotent), relues à l’identique, clés dans un ordre fixe, dates des fêtes triées',
+    $avantCond['status'] === 200 && ($avantCond['body']['data']['configured'] ?? null) === false && ($avantCond['body']['data']['holidayDeadlines'] ?? null) === []
+        && $posA['status'] === 200 && $posA2['status'] === 200 && $luA['status'] === 200
+        && array_keys($cA) === ['shopId', 'configured', 'minDelay', 'depositPct', 'holidayDeadlines', 'pickup', 'delivery', 'note', 'updatedAt']
+        && $cA['configured'] === true && $cA['minDelay'] === ['value' => 3, 'unit' => 'days'] && $cA['depositPct'] === 30
+        && $cA['holidayDeadlines'] === [['for' => '2026-12-24', 'until' => '2026-12-21'], ['for' => '2026-12-31', 'until' => '2026-12-28']]
+        && $cA['delivery'] === ['enabled' => true, 'radiusKm' => 10, 'feeCents' => 500] && $cA['note'] === ['fr' => 'Bûches glacées : à mettre au congélateur dans l’heure.', 'nl' => 'IJsstronken: binnen het uur in de diepvries.']
+        && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/', (string) $cA['updatedAt']) === 1 && ($posA['body']['data'] ?? null) === $cA,
+    json_encode([$avantCond['body'], $posA['body'], $cA], JSON_UNESCAPED_UNICODE));
+$luB = call($promoRouter, 'GET', '/api/v1/integration/marketing/shops/9105/order-conditions');
+$posB = call($promoRouter, 'PUT', '/api/v1/integration/marketing/shops/9105/order-conditions', [], ['pickup' => true, 'depositPct' => 0]);
+$reA = call($promoRouter, 'GET', '/api/v1/integration/marketing/shops/9104/order-conditions');
+check('conditions (boutique) : isolation — une boutique ne voit ni ne touche celles d’une autre',
+    ($luB['body']['data']['configured'] ?? null) === false && ($luB['body']['data']['shopId'] ?? null) === $catB
+        && $posB['status'] === 200 && ($posB['body']['data']['depositPct'] ?? null) === 0 && array_key_exists('minDelay', $posB['body']['data'] ?? []) && $posB['body']['data']['minDelay'] === null
+        && ($reA['body']['data'] ?? null) === $cA,
+    json_encode([$luB['body'], $posB['body'], $reA['body']], JSON_UNESCAPED_UNICODE));
+$refusCond = [];
+foreach ([
+    ['minDelay' => ['value' => 0, 'unit' => 'hours']], ['minDelay' => ['value' => 2, 'unit' => 'weeks']], ['depositPct' => 120], ['depositPct' => '30'],
+    ['holidayDeadlines' => [['for' => '2026-12-24', 'until' => '2026-12-26']]], ['holidayDeadlines' => [['for' => '24/12', 'until' => '2026-12-21']]],
+    ['pickup' => false, 'delivery' => ['enabled' => false]], ['delivery' => ['enabled' => true, 'radiusKm' => 0]], ['note' => ['fr' => "deux\nlignes"]], ['couleur' => 'rouge'],
+] as $mauvais) {
+    $r = call($promoRouter, 'PUT', '/api/v1/integration/marketing/shops/9104/order-conditions', [], $mauvais);
+    $refusCond[] = $r['status'] . ':' . ($r['body']['error']['details'][0]['field'] ?? '');
+}
+check('conditions (boutique) : refusées (422, champ nommé) — rien n’est écrit',
+    $refusCond === ['422:minDelay.value', '422:minDelay.unit', '422:depositPct', '422:depositPct', '422:holidayDeadlines[0].until', '422:holidayDeadlines[0].for',
+        '422:pickup', '422:delivery.radiusKm', '422:note.fr', '422:couleur']
+        && (call($promoRouter, 'GET', '/api/v1/integration/marketing/shops/9104/order-conditions')['body']['data'] ?? null) === $cA,
+    json_encode($refusCond));
+unset($_SERVER['HTTP_X_SERVICE_TOKEN']);
+$sansJeton = call($promoRouter, 'GET', '/api/v1/integration/marketing/shops/9104/order-conditions');
+$_SERVER['HTTP_X_SERVICE_TOKEN'] = 'faux-jeton-de-service-1234';
+$fauxJeton = call($promoRouter, 'PUT', '/api/v1/integration/marketing/shops/9104/order-conditions', [], ['depositPct' => 0]);
+$_SERVER['HTTP_X_SERVICE_TOKEN'] = 'JETON-SERVICE-CATALOGUES-TEST';
+$inconnue = call($promoRouter, 'GET', '/api/v1/integration/marketing/shops/99999/order-conditions');
+check('conditions (boutique) : 401 sans jeton ou avec un faux, 404 boutique inconnue',
+    $sansJeton['status'] === 401 && ($sansJeton['body']['error']['code'] ?? '') === 'AUTH_TOKEN_MISSING' && $fauxJeton['status'] === 401
+        && ($fauxJeton['body']['error']['code'] ?? '') === 'AUTH_TOKEN_INVALID' && $inconnue['status'] === 404,
+    json_encode([$sansJeton['body'], $fauxJeton['body'], $inconnue['body']]));
+// Le bon de son propre catalogue, par l'API de service ; celui d'une autre boutique : 404.
+$sienBon = call($promoRouter, 'POST', '/api/v1/integration/marketing/shops/9104/catalogues', [], ['title' => 'Mon bon', 'source' => ['kind' => 'choix'], 'products' => [['id' => 11, 'on' => true], ['id' => 12, 'on' => true]]]);
+$idSienBon = (int) ($sienBon['body']['data']['id'] ?? 0);
+$bonSien = call($promoRouter, 'GET', '/api/v1/integration/marketing/shops/9104/catalogues/' . $idSienBon . '/order-form');
+$bonAutre = call($promoRouter, 'GET', '/api/v1/integration/marketing/shops/9105/catalogues/' . $idSienBon . '/order-form');
+$bonLang = call($promoRouter, 'GET', '/api/v1/integration/marketing/shops/9104/catalogues/' . $idSienBon . '/order-form', ['lang' => 'de']);
+check('bon de commande (boutique) : le sien — ses conditions imprimées ; celui d’une autre boutique 404 ; langue inconnue 422',
+    $bonSien['status'] === 200 && ($bonSien['body']['data']['conditions']['configured'] ?? null) === true
+        && in_array(11, array_column(array_merge([], ...array_map(static fn (array $c): array => $c['items'], $bonSien['body']['data']['categories'] ?? [])), 'id'), true)
+        && $bonAutre['status'] === 404 && $bonLang['status'] === 422,
+    json_encode([$bonSien['body']['error'] ?? null, $bonAutre['status'], $bonLang['status']]));
+$pdo->exec('DELETE FROM mar_catalogue WHERE id = ' . $idSienBon);
+unset($_SERVER['HTTP_X_SERVICE_TOKEN']);
+
+// Côté Marketing : les conditions lues (jamais écrites), imprimées sur le bon de la version de la boutique.
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$bonA = call($promoRouter, 'GET', '/api/v1/marketing/catalogues/' . $idBon . '/order-form', ['shopId' => (string) $catA])['body']['data'] ?? [];
+$c500A = null;
+foreach ($bonA['categories'] ?? [] as $c) {
+    if (in_array(11, array_column($c['items'], 'id'), true)) {
+        $c500A = $c;
+    }
+}
+check('bon de commande : délai de la boutique (3 jours) plus long que celui du catalogue (48 h) — imprimé en pied de la catégorie, à la place de « sur commande 48 h »',
+    ($c500A['delay'] ?? null) === ['hours' => 72, 'text' => 'sur commande 3 jours', 'source' => 'boutique']
+        && str_contains((string) ($c500A['footer'] ?? ''), 'sur commande 3 jours') && !str_contains((string) ($c500A['footer'] ?? ''), '48 h')
+        && str_starts_with((string) ($c500A['footer'] ?? ''), 'Disponible du 1/12 au 6/12'),
+    json_encode($c500A, JSON_UNESCAPED_UNICODE));
+check('bon de commande : le cadre des conditions — délai et dates des fêtes, acompte, retrait et livraison, mention ; l’acompte dans les totaux',
+    ($bonA['conditions']['configured'] ?? null) === true && ($bonA['conditions']['lines'] ?? null) === [
+        'Commande au plus tard 3 jours avant le retrait ; pour le 24/12 : jusqu’au 21/12 · pour le 31/12 : jusqu’au 28/12.',
+        'Acompte de 30 % à la commande, solde au retrait.',
+        'Retrait en boutique · livraison possible dans un rayon de 10 km : 5,00 €.',
+        'Bûches glacées : à mettre au congélateur dans l’heure.',
+    ] && ($bonA['conditions']['depositPct'] ?? null) === 30 && ($bonA['labels']['deposit'] ?? '') === 'Acompte versé (30 %)'
+        && str_contains((string) ($bonA['conditions']['by'] ?? ''), 'Réglées par'),
+    json_encode($bonA['conditions'] ?? null, JSON_UNESCAPED_UNICODE));
+$bonANl = call($promoRouter, 'GET', '/api/v1/marketing/catalogues/' . $idBon . '/order-form', ['shopId' => (string) $catA, 'lang' => 'nl'])['body']['data'] ?? [];
+$c500Nl = null;
+foreach ($bonANl['categories'] ?? [] as $c) {
+    if (in_array(11, array_column($c['items'], 'id'), true)) {
+        $c500Nl = $c;
+    }
+}
+check('bon de commande (NL) : libellés, conditions et délai en néerlandais ; la mention NL de la boutique ; le nom néerlandais du produit',
+    ($bonANl['labels']['title'] ?? '') === 'Bestelbon' && ($bonANl['conditions']['lines'][0] ?? '') === 'Bestellen ten laatste 3 dagen vóór het afhalen; voor 24/12: tot 21/12 · voor 31/12: tot 28/12.'
+        && ($bonANl['conditions']['lines'][3] ?? '') === 'IJsstronken: binnen het uur in de diepvries.' && ($c500Nl['delay']['text'] ?? '') === 'op bestelling 3 dagen'
+        && str_contains((string) ($c500Nl['footer'] ?? ''), 'op bestelling 3 dagen') && in_array('Pralinéstronk', array_column($c500Nl['items'] ?? [], 'name'), true),
+    json_encode([$bonANl['conditions'] ?? null, $c500Nl], JSON_UNESCAPED_UNICODE));
+// Un délai de boutique plus court que celui du catalogue ne raccourcit rien : le catalogue l'emporte.
+(new \Marketing\Repository\CatalogueOrderConditionsRepository())->save($catA, ['minDelay' => ['value' => 24, 'unit' => 'hours'], 'depositPct' => null, 'holidayDeadlines' => [],
+    'pickup' => true, 'delivery' => ['enabled' => false, 'radiusKm' => null, 'feeCents' => null], 'note' => ['fr' => '', 'nl' => '']]);
+$bonCourt = call($promoRouter, 'GET', '/api/v1/marketing/catalogues/' . $idBon . '/order-form', ['shopId' => (string) $catA])['body']['data'] ?? [];
+$c500C = null;
+foreach ($bonCourt['categories'] ?? [] as $c) {
+    if (in_array(11, array_column($c['items'], 'id'), true)) {
+        $c500C = $c;
+    }
+}
+check('bon de commande : un délai de boutique plus court (24 h) que celui du catalogue (48 h) — le catalogue l’emporte ; sans livraison, la case disparaît',
+    ($c500C['delay'] ?? null) === ['hours' => 48, 'text' => 'sur commande 48 h', 'source' => 'catalogue'] && str_contains((string) ($c500C['footer'] ?? ''), 'sur commande 48 h')
+        && ($bonCourt['conditions']['delivery'] ?? null) === false && ($bonCourt['conditions']['lines'][1] ?? '') === 'Retrait en boutique (pas de livraison).',
+    json_encode([$c500C, $bonCourt['conditions'] ?? null], JSON_UNESCAPED_UNICODE));
+$listeCond = call($promoRouter, 'GET', '/api/v1/marketing/catalogue-order-conditions', ['perPage' => '100']);
+check('conditions (Marketing) : la liste, en lecture, paginée ; paramètre inconnu 422',
+    $listeCond['status'] === 200 && array_column($listeCond['body']['data'] ?? [], 'shopId') === [$catA, $catB]
+        && ($listeCond['body']['meta']['pagination']['total'] ?? null) === 2
+        && call($promoRouter, 'GET', '/api/v1/marketing/catalogue-order-conditions', ['tri' => 'x'])['status'] === 422,
+    json_encode($listeCond['body'], JSON_UNESCAPED_UNICODE));
+$bon404 = call($promoRouter, 'GET', '/api/v1/marketing/catalogues/99999999/order-form');
+$bon422 = call($promoRouter, 'GET', '/api/v1/marketing/catalogues/' . $idBon . '/order-form', ['shopId' => 'x']);
+$bonHors = call($promoRouter, 'GET', '/api/v1/marketing/catalogues/' . $idBon . '/order-form', ['shopId' => '999999']);
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+$bon403 = call($promoRouter, 'GET', '/api/v1/marketing/catalogues/' . $idBon . '/order-form');
+$cond403 = call($promoRouter, 'GET', '/api/v1/marketing/catalogue-order-conditions');
+AuthContext::clear();
+$bon401 = call($router, 'GET', '/api/v1/marketing/catalogues/' . $idBon . '/order-form');
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+check('bon de commande (Marketing) : 404 catalogue inconnu, 422 boutique illisible ou hors du catalogue, 403 compte de boutique, 401 sans identité',
+    $bon404['status'] === 404 && $bon422['status'] === 422 && $bonHors['status'] === 422 && $bon403['status'] === 403 && $cond403['status'] === 403 && $bon401['status'] === 401,
+    json_encode([$bon404['status'], $bon422['status'], $bonHors['status'], $bon403['status'], $cond403['status'], $bon401['status']]));
+// La page publique d'impression : le bon du lien signé, et l'autre langue du même catalogue (bon FR + NL).
+$jetonBon = $promoService->printToken($idBon, 'fr')['token'] ?? '';
+$pubFr = call($promoRouter, 'GET', '/api/v1/public/marketing/catalogue-prints/' . $jetonBon . '/order-form');
+$pubNl = call($promoRouter, 'GET', '/api/v1/public/marketing/catalogue-prints/' . $jetonBon . '/order-form', ['lang' => 'nl']);
+$pubKo = call($promoRouter, 'GET', '/api/v1/public/marketing/catalogue-prints/pas-un-jeton/order-form');
+check('bon de commande (page publique) : le lien signé rend le bon, FR et NL ; un faux lien 404',
+    $pubFr['status'] === 200 && ($pubFr['body']['data']['labels']['title'] ?? '') === 'Bon de commande'
+        && array_column(array_merge([], ...array_map(static fn (array $c): array => $c['items'], $pubFr['body']['data']['categories'] ?? [])), 'id') === array_keys($attenduP)
+        && $pubNl['status'] === 200 && ($pubNl['body']['data']['version']['lang'] ?? '') === 'nl' && $pubKo['status'] === 404,
+    json_encode([$pubFr['body']['error'] ?? null, $pubNl['status'], $pubKo['status']]));
+$pdo->exec('DELETE FROM mar_catalogue WHERE id = ' . $idBon);
+$pdo->exec('DELETE FROM mar_catalogue_order_conditions');
+
 // TFBuddy muet sur les promotions : le document le dit, aucune vignette, aucun prix barré — rien d'inventé.
 \Marketing\Repository\WebshopCatalogueRepository::purge();
 $call = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idPromo, [], ['offers' => [['type' => 'bundle', 'id' => 1, 'on' => true]], 'showAvailability' => true]);

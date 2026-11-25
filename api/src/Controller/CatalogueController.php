@@ -6,6 +6,7 @@ namespace Marketing\Controller;
 
 use Marketing\Repository\CatalogueRepository;
 use Marketing\Service\CatalogueError;
+use Marketing\Service\CatalogueOrderFormService;
 use Marketing\Service\CatalogueService;
 use Marketing\Support\AuthContext;
 use Marketing\Support\Envelope;
@@ -32,8 +33,11 @@ final class CatalogueController
     /** Filtres acceptés : champ → valeurs. */
     private const FILTERS = ['owner' => CatalogueService::OWNERS, 'status' => CatalogueService::STATUSES, 'shop' => null];
 
-    public function __construct(private readonly CatalogueService $service = new CatalogueService())
+    private readonly CatalogueOrderFormService $orderForms;
+
+    public function __construct(private readonly CatalogueService $service = new CatalogueService(), ?CatalogueOrderFormService $orderForms = null)
     {
+        $this->orderForms = $orderForms ?? new CatalogueOrderFormService($service);
     }
 
     /** `GET …/catalogues` */
@@ -307,6 +311,69 @@ final class CatalogueController
         }
 
         return self::guard(fn (): array => Envelope::ok($this->service->publishCharter($request->body, self::userId()), [], 201));
+    }
+
+    /**
+     * `GET …/catalogues/{id}/order-form?lang=&shopId=` (25/11/2026) : le bon de commande d'une version — le contenu exact
+     * de son document, et les conditions de la boutique en LECTURE (elle les règle dans son dashboard ; aucune : le cadre
+     * vide à remplir).
+     */
+    public function orderForm(Request $request): array
+    {
+        if (($denied = self::deny()) !== null) {
+            return $denied;
+        }
+        $row = $this->found($request);
+        if (isset($row['body'])) {
+            return $row;
+        }
+        $errors = [];
+        foreach (array_keys($request->query) as $key) {
+            if (!in_array($key, ['shopId', 'lang'], true)) {
+                $errors[] = ['field' => (string) $key, 'message' => 'Paramètre inconnu.'];
+            }
+        }
+        $shop = $request->query['shopId'] ?? null;
+        if ($shop !== null && !ctype_digit((string) $shop)) {
+            $errors[] = ['field' => 'shopId', 'message' => 'Identifiant de boutique attendu.'];
+        }
+        if ($errors !== []) {
+            return Envelope::error('VALIDATION_FAILED', 'Paramètres invalides.', 422, $errors);
+        }
+
+        return self::guard(fn (): array => Envelope::ok($this->orderForms->forVersion($row, $shop !== null ? (int) $shop : null, (string) ($request->query['lang'] ?? 'fr'))));
+    }
+
+    /**
+     * `GET …/catalogue-order-conditions?page=&perPage=` : les conditions du bon de commande que les boutiques ont réglées
+     * (lecture seule ; une boutique absente n'a rien réglé).
+     */
+    public function orderConditions(Request $request): array
+    {
+        if (($denied = self::deny()) !== null) {
+            return $denied;
+        }
+        $errors = [];
+        foreach (array_keys($request->query) as $key) {
+            if (!in_array($key, ['page', 'perPage'], true)) {
+                $errors[] = ['field' => (string) $key, 'message' => 'Paramètre inconnu.'];
+            }
+        }
+        $page = (string) ($request->query['page'] ?? '1');
+        $perPage = (string) ($request->query['perPage'] ?? (string) self::PER_PAGE_DEFAULT);
+        if (!ctype_digit($page) || (int) $page < 1) {
+            $errors[] = ['field' => 'page', 'message' => 'Entier positif attendu.'];
+        }
+        if (!ctype_digit($perPage) || (int) $perPage < 1) {
+            $errors[] = ['field' => 'perPage', 'message' => 'Entier positif attendu.'];
+        }
+        if ($errors !== []) {
+            return Envelope::error('VALIDATION_FAILED', 'Paramètres invalides.', 422, $errors);
+        }
+        $per = min(self::PER_PAGE_MAX, (int) $perPage);
+        $result = $this->orderForms->conditionsPage((int) $page, $per);
+
+        return Envelope::ok($result['items'], ['pagination' => Envelope::pagination((int) $page, $per, $result['total'])]);
     }
 
     // ---------------------------------------------------------------------------------------------

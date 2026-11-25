@@ -204,6 +204,14 @@ final class CatalogueService
         'back'        => ['logo' => 'tint', 'photo' => 'show', 'title' => 'text', 'text' => 'text', 'qr' => 'text', 'maps' => 'text', 'shop' => 'text', 'name' => 'text', 'address' => 'text', 'hours' => 'text', 'holidays' => 'text', 'delivery' => 'text', 'phone' => 'text', 'email' => 'text'],
     ];
 
+    /**
+     * Le délai de préparation (heures) que TFBuddy donne à chaque produit du DERNIER document composé, par identifiant :
+     * le bon de commande en tire le délai de chaque catégorie (`CatalogueOrderFormService`), sans relire le webshop.
+     *
+     * @var array<int, ?int>
+     */
+    private array $leadHours = [];
+
     public function __construct(
         private readonly CatalogueRepository $catalogues = new CatalogueRepository(),
         private readonly WebshopCatalogueRepository $webshop = new WebshopCatalogueRepository(),
@@ -3169,6 +3177,7 @@ final class CatalogueService
 
         $chosen = [];
         $absent = [];
+        $this->leadHours = [];
         foreach ($row['settings']['products'] ?? [] as $item) {
             if (!($item['on'] ?? false)) {
                 continue;
@@ -3192,6 +3201,8 @@ final class CatalogueService
             if ($price === null) {
                 $warnings[] = ['code' => 'PRODUCT_NO_PRICE', 'message' => $product['name'] . ' : pas de prix au webshop.'];
             }
+            $lead = $product['availability']['leadHours'] ?? null;
+            $this->leadHours[(int) $product['id']] = is_int($lead) && $lead > 0 ? $lead : null;
             $chosen[] = [
                 'kind'          => 'product',
                 'id'            => $product['id'],
@@ -3875,6 +3886,12 @@ final class CatalogueService
     private static function money(?int $cents): string
     {
         return $cents === null ? '—' : number_format($cents / 100, 2, ',', ' ') . ' €';
+    }
+
+    /** Le délai de préparation de chaque produit du dernier document composé (heures ; null : aucun). @return array<int, ?int> */
+    public function leadHours(): array
+    {
+        return $this->leadHours;
     }
 
     /** L'adresse du webshop du réseau : réglage du module Social (`webshop_url`), sinon du Marketing. */
