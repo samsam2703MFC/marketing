@@ -6,6 +6,8 @@ import { printWhenReady } from '../lib/print'
 import { qrPath } from '../lib/qr'
 import { CataloguePage, CatalogueSheet, FORMAT_MM, catalogueCss, sheetSize } from '../views/catalogue/CataloguePages'
 import type { CatalogueSheetMode } from '../views/catalogue/CataloguePages'
+import { OrderFormSheets, orderFormCss, orderFormSize } from '../views/catalogue/OrderForm'
+import type { OrderForm } from '../lib/api/module'
 
 /**
  * Les pages publiques d'un catalogue, servies par le Marketing sous `/marketing/catalogue/` — aucune session :
@@ -16,6 +18,8 @@ import type { CatalogueSheetMode } from '../views/catalogue/CataloguePages'
  *    feuilles A4 paysage, 2 pages A5 par face, dans l'ordre d'un livret plié au milieu).
  *  - `?t=…&affiche=A4|A3&l=…` : l'AFFICHE du magasin (« Notre catalogue de Noël · Scannez pour le feuilleter ») avec le
  *    QR du catalogue en ligne (le lien permanent `l`).
+ *  - `?t=…&bon=fr|nl|fr,nl` : le BON DE COMMANDE de la même version (feuille A4 ; FR + NL : un bon par langue, à la
+ *    suite) ; `&mode=printer` : avec les traits de coupe, pour l'imprimeur.
  *  - `?l=…` : le CATALOGUE EN LIGNE, par son lien permanent (QR, affiche) : à feuilleter, lecture seule, toujours la
  *    dernière version ; FR | NL.
  */
@@ -42,6 +46,46 @@ const BASE_CSS = `html,body{margin:0;padding:0}
 .cat-print__bar button{padding:7px 16px;border:1px solid #8D1D2C;border-radius:8px;background:#8D1D2C;color:#fff;font:inherit;cursor:pointer}
 .cat-print__msg{font:14px system-ui,sans-serif;padding:24px;color:#1c1a17;background:#fff}
 @media print{.cat-print__bar{display:none}}`
+
+/** Le bon de commande d'un lien d'impression : une ou deux langues, puis la boîte d'impression. */
+function OrderPage({ token }: { token: string }) {
+  const langs = (params.get('bon') ?? 'fr').split(',').filter((l): l is CatalogueLang => l === 'fr' || l === 'nl')
+  const mode = params.get('mode') === 'printer' ? 'printer' : 'proof'
+  const [forms, setForms] = useState<OrderForm[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const key = langs.join(',')
+  useEffect(() => {
+    Promise.all((key ? key.split(',') : ['fr']).map((l) => api.getCataloguePrintOrderForm(token, l as CatalogueLang))).then(
+      (list) => {
+        setForms(list)
+        document.title = `${list[0].labels.title} – ${list[0].catalogue.title}${list[0].version.shop ? ` – ${list[0].version.shop.name}` : ''} – ${key.toUpperCase().replace(',', '+')}`
+      },
+      (cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)),
+    )
+  }, [token, key])
+  useEffect(() => {
+    if (forms && params.get('imprimer') !== '0') printWhenReady(window)
+  }, [forms])
+  if (error) return <p className="cat-print__msg">{error}</p>
+  if (!forms) return <p className="cat-print__msg">Composition du bon de commande…</p>
+  const size = orderFormSize(mode)
+  // `imprimer=0` : l'aperçu dans un cadre (dashboard) — ni barre, ni marge grise.
+  const apercu = params.get('imprimer') === '0'
+  return (
+    <>
+      <style>{`${orderFormCss()}\n@page{size:${size.w}mm ${size.h}mm;margin:0}.bdc-sheet{break-after:page}.bdc-sheet:last-child{break-after:auto}\n${BASE_CSS}${apercu ? '\n@media screen{body{background:#EDE7DE}#root{gap:4mm;padding:0}}.cat-print__bar{display:none}' : ''}`}</style>
+      <div className="cat-print__bar">
+        <span>
+          {forms[0].labels.title} · {forms[0].catalogue.title} · {forms.map((f) => f.version.lang.toUpperCase()).join(' + ')} · {mode === 'printer' ? 'PDF imprimeur (traits de coupe)' : 'A4'}
+        </span>
+        <button type="button" onClick={() => window.print()}>
+          Imprimer · Enregistrer en PDF
+        </button>
+      </div>
+      <OrderFormSheets forms={forms} mode={mode} />
+    </>
+  )
+}
 
 function PrintPage() {
   const token = params.get('t') ?? ''
@@ -222,7 +266,5 @@ function OnlineCatalogue({ doc, lang, onLang }: { doc: CatalogueDocument; lang: 
 }
 
 createRoot(document.getElementById('root') as HTMLElement).render(
-  <StrictMode>
-    <PrintPage />
-  </StrictMode>,
+  <StrictMode>{params.get('bon') && params.get('t') ? <OrderPage token={params.get('t') ?? ''} /> : <PrintPage />}</StrictMode>,
 )

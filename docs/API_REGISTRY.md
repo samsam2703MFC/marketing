@@ -1145,6 +1145,29 @@ présentation, validation et exportation PDF ».
 Couches ajoutées : `CatalogueShopService` (vérifications, réception, adaptation, impression, liens) → dépôt
 `CatalogueShopRepository` (versions de la charte, `mar_catalogue_shop`, `mar_catalogue_link`).
 
+### 14.x Le bon de commande des catalogues imprimés (25 novembre 2026, OpenAPI v1.20)
+
+Client : « A – E1 – conditions par magasin – contenu exact de ce qu'il y a dans le catalogue (bien reprendre les dates
+« du … au … » s'il y a des conditions dans les promotions) », puis « cadre vide à remplir, délai boutique sous chaque
+catégorie ». Une feuille A4 (une seconde si le contenu dépasse, en-tête répété, jamais une ligne coupée), FR, NL ou FR + NL.
+
+| Méthode | Chemin | Rôle |
+|---|---|---|
+| GET | `/api/v1/marketing/catalogues/{id}/order-form?lang=&shopId=` | le bon d'une version (marque ; conditions de la boutique en lecture) |
+| GET | `/api/v1/marketing/catalogue-order-conditions?page=&perPage=` | conditions réglées par les boutiques (lecture seule, paginée) |
+| GET / PUT | `…/shops/{shopId}/order-conditions` | ses conditions (jeton de service) : `minDelay {value, unit}`, `depositPct`, `holidayDeadlines [{for, until}]`, `pickup`, `delivery {enabled, radiusKm, feeCents}`, `note {fr, nl}` ; 422 champ nommé, rien n'est écrit |
+| GET | `…/shops/{shopId}/catalogues/{id}/order-form?lang=` · `…/brand-catalogues/{id}/order-form?lang=` | le bon de sa version ; une autre boutique : 404 |
+| GET | `/api/v1/public/marketing/catalogue-prints/{token}/order-form?lang=` | le bon d'un lien d'impression (page `catalogue/?t=…&bon=fr,nl[&mode=printer]`) |
+
+Composition (`CatalogueOrderFormService`) : À PARTIR du document du catalogue (`CatalogueService::document`), rien de
+ressaisi. Catégories = pages produits au même titre, dans l'ordre (« gamme — catégorie », n° de pages) ; produits une
+fois chacun, prix de la version, remise programmée barrée et sa période ; offres (vignettes) avec leur contenu et leur
+période ; pied = disponibilité du catalogue et délai le plus long (catalogue : délai de préparation TFBuddy des
+produits ; boutique : son délai minimum). Conditions : table `mar_catalogue_order_conditions` (migration 057, une ligne
+par boutique ; pas de ligne / version générale = cadre vide à remplir). Le bon n'est jamais bloqué.
+
+Écarts résiduels : le PDF est celui du navigateur (comme le catalogue) ; `PUT` sans `ETag`.
+
 ## 15. Le référentiel des agences en écriture (21 novembre 2026)
 
 Le cockpit (dépôt `consultant_BO`, `marketing/src/mkt_agences.php`) écrivait `mar_agency` en SQL : son écran

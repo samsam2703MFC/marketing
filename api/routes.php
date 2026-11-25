@@ -152,6 +152,9 @@ return static function (Router $router): void {
     $router->put('/api/v1/marketing/catalogues/{id}',            [$catalogues, 'update']);
     $router->delete('/api/v1/marketing/catalogues/{id}',         [$catalogues, 'destroy']);
     $router->get('/api/v1/marketing/catalogues/{id}/document',   [$catalogues, 'document']);
+    // Le bon de commande (25/11/2026) : celui d'une version, et les conditions des boutiques (lecture seule).
+    $router->get('/api/v1/marketing/catalogues/{id}/order-form', [$catalogues, 'orderForm']);
+    $router->get('/api/v1/marketing/catalogue-order-conditions', [$catalogues, 'orderConditions']);
     $router->get('/api/v1/marketing/catalogues/{id}/brand-pages', [$catalogues, 'brandPages']);
     $router->put('/api/v1/marketing/catalogues/{id}/brand-pages', [$catalogues, 'saveBrandPages']);
     $router->get('/api/v1/marketing/catalogue-products',         [$catalogues, 'products']);
@@ -178,6 +181,9 @@ return static function (Router $router): void {
     $router->delete($shopBase . '/catalogues/{id}',                [$shopCatalogues, 'destroy'], true);
     $router->get($shopBase . '/catalogues/{id}/document',          [$shopCatalogues, 'document'], true);
     $router->post($shopBase . '/catalogues/{id}/print-links',      [$shopCatalogues, 'printLink'], true);
+    // Le bon de commande : les conditions de la boutique (une fois pour tous ses bons), le bon de son catalogue.
+    $router->get($shopBase . '/order-conditions',                  [$shopCatalogues, 'orderConditions'], true);
+    $router->put($shopBase . '/order-conditions',                  [$shopCatalogues, 'saveOrderConditions'], true);
     // L'assistant du franchisé : Vérifier · Imprimer · Diffuser (son catalogue, ou celui de la marque reçu).
     foreach (['catalogues', 'brand-catalogues'] as $kind) {
         $router->get($shopBase . '/' . $kind . '/{id}/checks',          [$shopCatalogues, 'checks'], true);
@@ -185,6 +191,7 @@ return static function (Router $router): void {
         $router->post($shopBase . '/' . $kind . '/{id}/prints',         [$shopCatalogues, 'prints'], true);
         $router->get($shopBase . '/' . $kind . '/{id}/public-links',    [$shopCatalogues, 'links'], true);
         $router->post($shopBase . '/' . $kind . '/{id}/public-links',   [$shopCatalogues, 'newLink'], true);
+        $router->get($shopBase . '/' . $kind . '/{id}/order-form',      [$shopCatalogues, 'orderForm'], true);
     }
     // Les catalogues de la marque préparés pour la boutique : « Le prendre tel quel » ou « L'adapter à ma boutique ».
     $router->get($shopBase . '/brand-catalogues',                       [$shopCatalogues, 'brandIndex'], true);
@@ -195,6 +202,7 @@ return static function (Router $router): void {
     $router->post($shopBase . '/brand-catalogues/{id}/print-links',     [$shopCatalogues, 'brandPrintLink'], true);
     // La page d'impression d'un catalogue, par son lien signé (48 h) : lecture seule.
     $router->get('/api/v1/public/marketing/catalogue-prints/{token}', [$shopCatalogues, 'printDocument'], true);
+    $router->get('/api/v1/public/marketing/catalogue-prints/{token}/order-form', [$shopCatalogues, 'printOrderForm'], true);
     // Le catalogue en ligne, par son lien PERMANENT (QR, affiche ; révocable) : lecture seule, dernière version.
     $router->get('/api/v1/public/marketing/catalogue-links/{token}',  [$shopCatalogues, 'linkDocument'], true);
 

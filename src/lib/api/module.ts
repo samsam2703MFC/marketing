@@ -3734,3 +3734,92 @@ export async function listCatalogueCharterVersions(perPage = 20): Promise<Catalo
 export async function getCatalogueLink(token: string, lang: CatalogueLang): Promise<CatalogueDocument> {
   return (await request<Envelope<CatalogueDocument>>(`${API_ROOT}/api/v1/public/marketing/catalogue-links/${encodeURIComponent(token)}`, { query: { lang }, anonymous: true })).data
 }
+
+// ---------------------------------------------------------------------------------------------
+// Le bon de commande des catalogues imprimés (25/11/2026)
+// ---------------------------------------------------------------------------------------------
+
+/** Une ligne de produit du bon : le produit tel que le catalogue l'imprime (nom, poids, prix de la version, remise). */
+export interface OrderFormItem {
+  id: number
+  name: string
+  /** « 650 g », « 1,2 kg » ; null : le catalogue ne le dit pas. */
+  format: string | null
+  priceCents: number | null
+  oldPriceCents: number | null
+  /** La remise programmée qui barre le prix, et sa période (« du 23/11 au 25/12 »). */
+  promo: { label: string; period: string | null } | null
+  currency: 'EUR'
+}
+
+/** Une catégorie : les pages produits du catalogue au même titre (« Noël — Bûches », pages 3 et 4). */
+export interface OrderFormCategory {
+  title: string
+  pages: number[]
+  items: OrderFormItem[]
+  /** Le pied : la disponibilité du catalogue et le délai le plus long (catalogue ou boutique) ; null : rien. */
+  footer: string | null
+  delay: { hours: number; text: string; source: 'catalogue' | 'boutique' } | null
+}
+
+/** Une offre du catalogue (bundle, « 2+1 »…) : son contenu et sa période « du … au … ». */
+export interface OrderFormOffer {
+  id: string
+  type: string
+  name: string
+  badge: string
+  deal: string | null
+  contents: string
+  period: string | null
+  priceCents: number | null
+  oldPriceCents: number | null
+  currency: 'EUR'
+  pages: number[]
+}
+
+export interface OrderForm {
+  catalogue: { id: number; title: string; format: CatalogueFormat }
+  version: { lang: CatalogueLang; shop: { id: number; name: string; address: string; phone: string; hours: string; holidayHours: string } | null }
+  charter: { logoUrl: string | null; colors: CatalogueColors }
+  qr: { url: string; host: string | null; label: string; sub: string } | null
+  categories: OrderFormCategory[]
+  offers: OrderFormOffer[]
+  /** `catalogueLeadHours` : le plus long délai du catalogue (le délai de la boutique ne descend pas en dessous). */
+  counts: { products: number; offers: number; catalogueLeadHours: number | null }
+  pages: number[]
+  /** Le cadre « Conditions de la boutique » ; `configured: false` : vide, à remplir à la main. */
+  conditions: { configured: boolean; title: string; by: string | null; lines: string[]; depositPct: number | null; pickup: boolean; delivery: boolean; updatedAt: string | null }
+  /** Les libellés fixes du bon, dans sa langue (composés par l'API). */
+  labels: Record<string, string>
+  warnings: Array<{ code: string; message: string }>
+}
+
+/** Les conditions du bon de commande d'une boutique (réglées dans son dashboard ; le Marketing les lit). */
+export interface OrderConditions {
+  shopId: number
+  configured: boolean
+  minDelay: { value: number; unit: 'hours' | 'days' } | null
+  depositPct: number | null
+  holidayDeadlines: Array<{ for: string; until: string }>
+  pickup: boolean
+  delivery: { enabled: boolean; radiusKm: number | null; feeCents: number | null }
+  note: { fr: string; nl: string }
+  updatedAt: string | null
+}
+
+/** `GET …/catalogues/{id}/order-form` : le bon d'une version (shopId null : la version générale). */
+export async function getCatalogueOrderForm(id: number, lang: CatalogueLang, shopId: number | null): Promise<OrderForm> {
+  const query: Record<string, string> = { lang }
+  if (shopId !== null) query.shopId = String(shopId)
+  return (await request<Envelope<OrderForm>>(`${BASE}/catalogues/${id}/order-form`, { query })).data
+}
+
+/** `GET …/catalogue-order-conditions` : les conditions que les boutiques ont réglées (lecture seule). */
+export async function listOrderConditions(): Promise<OrderConditions[]> {
+  return (await request<Envelope<OrderConditions[]>>(`${BASE}/catalogue-order-conditions`, { query: { perPage: 100 } })).data
+}
+
+/** Le bon d'un lien d'impression signé (page publique) ; `lang` : l'autre langue du même catalogue. */
+export async function getCataloguePrintOrderForm(token: string, lang?: CatalogueLang): Promise<OrderForm> {
+  return (await request<Envelope<OrderForm>>(`${API_ROOT}/api/v1/public/marketing/catalogue-prints/${encodeURIComponent(token)}/order-form`, { query: lang ? { lang } : {}, anonymous: true })).data
+}

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Marketing\Controller;
 
+use Marketing\Service\CatalogueOrderFormService;
 use Marketing\Service\CatalogueService;
 use Marketing\Service\CatalogueShopService;
 use Marketing\Service\MediaService;
@@ -39,10 +40,12 @@ final class CatalogueIntegrationController
     private const UPLOAD_MAX_BYTES = 5_000_000;
 
     private readonly CatalogueShopService $shops;
+    private readonly CatalogueOrderFormService $orderForms;
 
-    public function __construct(private readonly CatalogueService $service = new CatalogueService(), ?CatalogueShopService $shops = null)
+    public function __construct(private readonly CatalogueService $service = new CatalogueService(), ?CatalogueShopService $shops = null, ?CatalogueOrderFormService $orderForms = null)
     {
         $this->shops = $shops ?? new CatalogueShopService($service);
+        $this->orderForms = $orderForms ?? new CatalogueOrderFormService($service);
     }
 
     /** `GET …/shops/{shopId}/catalogue-products` : ce que la boutique vend au webshop, à ses prix. */
@@ -339,6 +342,74 @@ final class CatalogueIntegrationController
         }
 
         return CatalogueController::guard(fn (): array => Envelope::ok($this->shops->linkDocument($read[0], $read[1], $lang)));
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Le bon de commande (25/11/2026) : les conditions de la boutique, le bon d'un catalogue
+    // ---------------------------------------------------------------------------------------------
+
+    /** `GET …/shops/{shopId}/order-conditions` : ses conditions (`configured: false` si elle n'a rien réglé). */
+    public function orderConditions(Request $request): array
+    {
+        return $this->withShop($request, function (array $shop) use ($request): array {
+            if ($request->query !== []) {
+                return Envelope::error('VALIDATION_FAILED', 'Paramètres invalides.', 422, [['field' => (string) array_key_first($request->query), 'message' => 'Paramètre inconnu.']]);
+            }
+
+            return Envelope::ok($this->orderForms->conditionsOf($shop['id']));
+        });
+    }
+
+    /**
+     * `PUT …/shops/{shopId}/order-conditions` `{minDelay, depositPct, holidayDeadlines, pickup, delivery, note}` : ses
+     * conditions, une fois pour tous ses bons (idempotent ; 422 sans rien écrire au moindre champ illisible).
+     */
+    public function saveOrderConditions(Request $request): array
+    {
+        return $this->withShop($request, fn (array $shop): array => CatalogueController::guard(
+            fn (): array => Envelope::ok($this->orderForms->saveConditions($shop['id'], $request->body))
+        ));
+    }
+
+    /** `GET …/catalogues/{id}/order-form?lang=` · `GET …/brand-catalogues/{id}/order-form?lang=` : le bon de SA version. */
+    public function orderForm(Request $request): array
+    {
+        return $this->withAny($request, function (array $row, array $shop) use ($request): array {
+            $lang = self::langQuery($request);
+            if (is_array($lang)) {
+                return $lang;
+            }
+
+            return CatalogueController::guard(fn (): array => Envelope::ok($this->orderForms->forVersion($row, null, $lang, $this->shops->document($row, $shop, $lang))));
+        });
+    }
+
+    /**
+     * `GET /api/v1/public/marketing/catalogue-prints/{token}/order-form?lang=` : le bon de commande d'un lien d'impression
+     * valable (la page publique l'imprime ; `lang` : l'autre langue du même catalogue, pour un bon FR + NL).
+     */
+    public function printOrderForm(Request $request): array
+    {
+        $read = $this->service->readPrintToken((string) $request->param('token'));
+        $row = $read !== null ? $this->service->find($read['id']) : null;
+        if ($row === null) {
+            return Envelope::error('RESOURCE_NOT_FOUND', 'Lien d’impression inconnu ou expiré.', 404);
+        }
+        $lang = self::langQuery($request);
+        if (is_array($lang)) {
+            return $lang;
+        }
+        $lang = isset($request->query['lang']) ? $lang : $read['lang'];
+        if ($read['shop'] !== null) {
+            $shop = $this->service->shops([$read['shop']])[0] ?? null;
+            if ($shop === null || $row['owner'] !== 'marque') {
+                return Envelope::error('RESOURCE_NOT_FOUND', 'Lien d’impression inconnu ou expiré.', 404);
+            }
+
+            return CatalogueController::guard(fn (): array => Envelope::ok($this->orderForms->forVersion($row, null, $lang, $this->shops->document($row, $shop, $lang))));
+        }
+
+        return CatalogueController::guard(fn (): array => Envelope::ok($this->orderForms->forVersion($row, null, $lang)));
     }
 
     // ---------------------------------------------------------------------------------------------
