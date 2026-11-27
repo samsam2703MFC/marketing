@@ -3,6 +3,7 @@ import './social.css'
 import * as api from '../../lib/api/module'
 import type { BilanLigne, BilanPeriode, SocialBilan } from '../../lib/api/module'
 import { ROOTS } from '../../lib/api/module'
+import Aide from '../../components/Aide'
 
 const PERIODES: [BilanPeriode, string][] = [
   ['semaine', 'Semaine'],
@@ -119,7 +120,12 @@ export default function BilanView() {
               <table className="bilan">
                 <thead>
                   <tr>
-                    <th>Boutique</th>
+                    <th>
+                      Boutique
+                      <Aide
+                        texte={`Classement sur la période choisie : trois critères — régularité (publications de la Page de la boutique, lues chez Meta, rapportées au rythme attendu : le quota de la semaine${semaine ? '' : ` × ${d.semaines ?? 1} semaines`}), réactivité (part des commentaires et avis traités dans le délai, moins 5 points par retard ; sans rien de traité, rien en retard vaut le meilleur score), avis Google gagnés ; le rang général additionne les trois. Chaque boutique voit son rang dans « Ma semaine » de l’espace franchisé.`}
+                      />
+                    </th>
                     <th>Régularité</th>
                     <th>Réactivité</th>
                     <th>Avis Google</th>
@@ -143,12 +149,6 @@ export default function BilanView() {
             </div>
           </section>
 
-          <p className="muted bilan__legende">
-            Classement sur la période choisie : trois critères — régularité (publications de la Page de la boutique, lues chez Meta, rapportées au
-            rythme attendu : le quota de la semaine{semaine ? '' : ` × ${d.semaines ?? 1} semaines`}), réactivité (part des commentaires et avis
-            traités dans le délai, moins 5 points par retard ; sans rien de traité, rien en retard vaut le meilleur score), avis Google gagnés ; le
-            rang général additionne les trois. Chaque boutique voit son rang dans « Ma semaine » de l’espace franchisé.
-          </p>
         </>
       ) : null}
     </div>

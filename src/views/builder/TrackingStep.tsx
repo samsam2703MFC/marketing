@@ -2,6 +2,7 @@ import { module as api } from '../../lib/api'
 import { useAsync } from '../../lib/useAsync'
 import type { KpiPeriode, References, TrackingAction, TrackingBaseline, TrackingScope } from '../../lib/api/module'
 import type { Draft } from './CampaignBuilder'
+import Aide from '../../components/Aide'
 
 /**
  * Le suivi de la campagne : l'action qu'elle doit faire bouger, et comment on la juge.
@@ -48,11 +49,10 @@ export default function TrackingStep({
 
   return (
     <>
-      <h2>Suivi</h2>
-      <p className="muted">
-        Ce que la campagne doit faire bouger, et comment on le juge : boutique par boutique, ou
-        sur le total du réseau. Facultatif — une campagne sans suivi reste une campagne.
-      </p>
+      <h2>
+        Suivi
+        <Aide texte="Ce que la campagne doit faire bouger, et comment on le juge : boutique par boutique, ou sur le total du réseau. Facultatif — une campagne sans suivi reste une campagne." />
+      </h2>
 
       <div className="filters__row">
         <label className="field">

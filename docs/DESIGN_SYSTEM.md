@@ -92,8 +92,10 @@ libellés (sauf faute ou anglais), mêmes comportements.
   /* Texte */
   --ink: #1c1a17;        /* texte principal, titres, valeurs */
   --muted-2: #5c5852;    /* texte secondaire « actif » : libellés de boutons, entrées du rail, onglets au repos */
-  --muted: #7a736a;      /* texte secondaire : aides, légendes, en-têtes de tableau, kicker */
-  --faint: #B8B2A8;      /* libellés en capitales de groupe, champ désactivé */
+  --muted: #6e675e;      /* texte secondaire : aides, légendes, en-têtes de tableau, kicker */
+  --faint: #767067;      /* libellés en capitales de groupe, champ désactivé */
+  /* 27/11/2026 : --muted (#7a736a, 4,38:1 sur papier) et --faint (#B8B2A8, 2,11:1 sur blanc) foncés pour
+     tenir le WCAG AA (4,5:1) ; même teinte chaude. Les documents (§13) gardent leur palette. */
 
   /* Surfaces et filets */
   --paper: #faf7f2;      /* fond de l'application ; survol discret */
@@ -345,11 +347,12 @@ h2 { font-size: 0.95rem; font-weight: 400; margin: 0 0 0.5rem; text-transform: u
 }
 .btn:hover:not(:disabled) { border-color: var(--muted-2); }
 .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:disabled { opacity: 1; color: var(--faint); cursor: not-allowed; }   /* lisible, pas un fantôme */
 .btn.is-busy { opacity: 0.6; cursor: progress; }
 
 .btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn--primary:hover:not(:disabled) { background: #6f1622; border-color: #6f1622; }
+.btn--primary:disabled { background: var(--chip); border-color: var(--chip); color: var(--muted); } /* gris + raison écrite à côté */
 
 .btn--ghost { background: transparent; border-color: transparent; color: var(--muted-2); }
 .btn--ghost:hover:not(:disabled) { border-color: transparent; color: var(--ink); text-decoration: underline; }
@@ -402,10 +405,12 @@ l'aspect natif, alignées avec leur libellé (`gap: 7px`, 13 px, `--ink`).
 ### 7.6 Choisir : filtres, pastilles de choix, sélecteur segmenté
 
 ```css
-/* Filtre (choix exclusif dans une barre) : rectangle, bordeaux plein quand actif */
+/* Filtre (choix exclusif dans une barre) : rectangle, liseré bordeaux sur fond teinté quand actif.
+   Jamais en bordeaux plein : il passerait pour l'action principale (§2). */
 .filter { margin: 0; padding: 6px 13px; font-size: 12.5px; border: 1px solid var(--line);
   border-radius: 8px; background: #fff; color: var(--muted-2); }
-.filter.is-on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.filter.is-on { background: rgba(141, 29, 44, 0.06); border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent); }   /* liseré 2 px sans décaler */
 
 /* Pastille de choix (option d'un formulaire) : liseré bordeaux 2 px et fond teinté quand choisie */
 .choice-pill { margin: 0; background: #fff; border: 1px solid rgba(34, 34, 34, 0.14); border-radius: 10px;

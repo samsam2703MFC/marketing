@@ -6,6 +6,7 @@ import { useSocial } from '../../lib/social/store'
 import { dShort } from '../../lib/social/format'
 import { gesteRepost, lireRepost } from '../../lib/social/api-repost'
 import type { CaseRepost, GesteRepost, ReglageRepost, StatutCase, VueRepost } from '../../lib/social/api-repost'
+import Aide from '../../components/Aide'
 
 /**
  * Repost automatique — l'écran « Repost » du module Social (SA Repost.dc.html), réécrit dans le Marketing
@@ -677,7 +678,10 @@ export default function RepostView() {
                     </select>
                   </label>
                   <div className="rp__champ">
-                    Entre
+                    <span>
+                      Entre
+                      <Aide texte="Hors de la plage, le repost attend son ouverture suivante. Une même publication ne part jamais deux fois sur une Page." />
+                    </span>
                     <span className="rp__plage">
                       <input type="time" value={brouillon.de ?? '07:00'} aria-label="Début de la plage" onChange={(e) => setD((y) => void (y.de = e.target.value))} />
                       et
@@ -685,9 +689,6 @@ export default function RepostView() {
                     </span>
                   </div>
                 </div>
-                <span className="muted rp__aide rp__aide--serre">
-                  Hors de la plage, le repost attend son ouverture suivante. Une même publication ne part jamais deux fois sur une Page.
-                </span>
 
                 <label className="rp__champ">
                   {brouillon.mode === 'copie' ? 'Texte de la boutique, ajouté sous celui de la marque (facultatif)' : 'Texte de la boutique, au-dessus du partage (facultatif)'}

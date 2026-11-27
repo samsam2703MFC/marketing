@@ -5,6 +5,7 @@ import type { CampaignTypeAdmin, CampaignTypeDraft, IconChoice } from '../lib/ap
 import { useReferences } from '../state/references'
 import { describeError } from '../state/auth'
 import { styleLevier } from '../lib/couleurs'
+import Aide from '../components/Aide'
 
 /**
  * Éditeur des types de campagne.
@@ -61,9 +62,8 @@ export default function CampaignTypesView() {
       )}
 
       <p className="muted">
-        Ces cartes sont celles de la première étape de l’assistant. Un type utilisé par des
-        campagnes ne se supprime pas : il se désactive, ce qui le retire des choix sans toucher
-        à leur historique.
+        Les cartes de la première étape de l’assistant
+        <Aide texte="Un type utilisé par des campagnes ne se supprime pas : il se désactive, ce qui le retire des choix sans toucher à leur historique." />
       </p>
 
       <ul className="type-grid type-grid--admin">

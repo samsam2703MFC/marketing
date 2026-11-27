@@ -4814,3 +4814,30 @@ textarea:focus-visible {
   text-align: left;
   cursor: pointer;
 }
+
+/* « ? » d'explication à la demande (src/components/Aide.tsx) : un cercle de 16 px, au repos en gris. */
+.aide {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+  vertical-align: 0.1em;
+  cursor: help;
+}
+
+.aide:hover,
+.aide:focus-visible {
+  border-color: var(--muted-2);
+  color: var(--ink);
+}

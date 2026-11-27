@@ -5,6 +5,7 @@ import type { SalesQuantities, ShopSalesRow } from '../../lib/api/module'
 import StaffBonus from './StaffBonus'
 import type { Draft } from './CampaignBuilder'
 import AnalysisPeriod from './AnalysisPeriod'
+import Aide from '../../components/Aide'
 
 /**
  * Étape « Objectifs » : un objectif de pièces par boutique, éclairé par les
@@ -787,11 +788,10 @@ export default function ObjectivesStep({
 
   return (
     <>
-      <h2>Objectifs</h2>
-      <p className="muted">
-        Chaque magasin porte ses trois barres sur une échelle commune : ce qu’il a vendu, ce
-        qu’il vendait l’an dernier, ce qu’on lui demande. Deux fiches se comparent à l’œil.
-      </p>
+      <h2>
+        Objectifs
+        <Aide texte="Chaque magasin porte ses trois barres sur une échelle commune : ce qu’il a vendu, ce qu’il vendait l’an dernier, ce qu’on lui demande. Deux fiches se comparent à l’œil." />
+      </h2>
 
       {/* Même réglage qu'à l'étape « Prix » : une seule période d'analyse
           pour toute la campagne, un seul composant pour la régler. */}
