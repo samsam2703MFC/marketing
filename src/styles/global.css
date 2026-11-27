@@ -101,7 +101,7 @@ p.muted {
 /* Le texte technique d'origine, replié : pour le support, pas pour l'écran. */
 .erreur__detail {
   margin-top: 4px;
-  color: var(--muted);
+  color: var(--muted-2);
   font-size: 12px;
 }
 

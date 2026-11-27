@@ -747,7 +747,7 @@ function ApiMeta({ etat, serveur, toast }: OngletProps) {
           </label>
           <span className="par__en-ligne">
             toutes les
-            <select value={String(IA.frequence || 1)} disabled={!IA.actif} onChange={(e) => saveIds({ frequence: Number(e.target.value) })}>
+            <select aria-label="Fréquence de la mise à jour" value={String(IA.frequence || 1)} disabled={!IA.actif} onChange={(e) => saveIds({ frequence: Number(e.target.value) })}>
               <option value="1">heures</option>
               <option value="6">6 heures</option>
               <option value="24">24 heures</option>
@@ -1429,8 +1429,8 @@ function Modeles({ etat, serveur, onNaviguer }: OngletProps & { onNaviguer?: (ec
         {templates.map((t) => (
           <div key={t.id} className="card par__carte">
             <div className="par__ligne par__ligne--serre">
-              <Champ className="par__flex par__grand" type="text" valeur={txt(t.name)} onValider={(v) => upTpl(t.id, { name: v })} />
-              <select value={txt(t.type)} onChange={(e) => upTpl(t.id, { type: e.target.value })}>
+              <Champ className="par__flex par__grand" type="text" aria-label="Nom du modèle" valeur={txt(t.name)} onValider={(v) => upTpl(t.id, { name: v })} />
+              <select aria-label="Type de post" value={txt(t.type)} onChange={(e) => upTpl(t.id, { type: e.target.value })}>
                 {POST_TYPES.map((o) => (
                   <option key={o} value={o}>
                     {o}
@@ -1439,9 +1439,9 @@ function Modeles({ etat, serveur, onNaviguer }: OngletProps & { onNaviguer?: (ec
               </select>
             </div>
             <span className="par__label">FR</span>
-            <Zone rows={3} valeur={txt(t.text)} onValider={(v) => upTpl(t.id, { text: v })} />
+            <Zone rows={3} aria-label="Texte du modèle en français" valeur={txt(t.text)} onValider={(v) => upTpl(t.id, { text: v })} />
             <span className="par__label">NL</span>
-            <Zone rows={3} valeur={txt(t.textNl)} placeholder="Nederlandse versie" onValider={(v) => upTpl(t.id, { textNl: v })} />
+            <Zone rows={3} aria-label="Texte du modèle en néerlandais" valeur={txt(t.textNl)} placeholder="Nederlandse versie" onValider={(v) => upTpl(t.id, { textNl: v })} />
             <span className="muted par__petit">
               Aperçu {fr?.name ?? ''} : {remplir(serveur, etat, txt(t.text), fr, produit)}
             </span>

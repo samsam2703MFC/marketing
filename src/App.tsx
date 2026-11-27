@@ -396,8 +396,6 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
 
       <div className="workspace__main">
         {/* Un écran du module Social ou la régie portent leur propre titre : rien au-dessus du cadre. */}
-        {/* Le cadre porte son propre titre à l'écran ; la page garde le sien pour les lecteurs d'écran. */}
-        {framed ? <h1 className="sr-only">{titleFor(role, route)}</h1> : null}
         {framed ? null : (
           <header className="topbar">
             <div>
@@ -412,6 +410,8 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
         <main
           className={`app__body${route === 'builder' || route === 'brochures' || route === 'catalogues' || route === 'business-cards' || route === 'media' ? ' app__body--wide' : ''}${framed ? ' app__body--frame' : ''}`}
         >
+          {/* Le cadre porte son propre titre à l'écran ; la page garde le sien pour les lecteurs d'écran. */}
+          {framed ? <h1 className="sr-only">{titleFor(role, route)}</h1> : null}
           {/* Une entrée à onglets : les écrans qui montraient la même donnée sous plusieurs entrées du menu. */}
           {tabs ? (
             <nav className="page-tabs" aria-label="Onglets">
