@@ -6,6 +6,7 @@ import type { Check } from '../lib/completeness'
 import { useAsync } from '../lib/useAsync'
 import { describeError } from '../state/auth'
 import { useReferences } from '../state/references'
+import { encreLisible } from '../lib/couleurs'
 
 /**
  * Compléter les campagnes : celles dont une donnée manque, une à une.
@@ -328,7 +329,7 @@ export default function CampaignFixView({ startId, brandAdmin, onOpenBuilder, on
           <div>
             <p className="muted">
               Campagne {position + 1} sur {ids.length} ·{' '}
-              <span className="chip" style={{ color: campaign.status_text_hex, background: campaign.status_bg_rgba }}>
+              <span className="chip" style={{ color: encreLisible(campaign.status_text_hex), background: campaign.status_bg_rgba }}>
                 {campaign.status_label}
               </span>
             </p>

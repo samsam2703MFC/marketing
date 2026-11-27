@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { module as api } from '../lib/api'
 import { useAsync, formatDate, formatEur } from '../lib/useAsync'
 import type { Campaign, CampaignStatus } from '../lib/api/module'
+import { encreLisible } from '../lib/couleurs'
 
 interface CampaignsViewProps {
   statuses: CampaignStatus[]
@@ -84,7 +85,7 @@ export default function CampaignsView({
               onClick={() => setStatus(entry.code)}
               style={
                 status === entry.code
-                  ? { color: entry.text_hex, background: entry.bg_rgba, borderColor: entry.text_hex }
+                  ? { color: encreLisible(entry.text_hex), background: entry.bg_rgba, borderColor: entry.text_hex, boxShadow: `inset 0 0 0 1px ${entry.text_hex}` }
                   : undefined
               }
             >
@@ -119,7 +120,7 @@ export default function CampaignsView({
           <button type="button" className="btn btn--sm" onClick={onComplete}>
             Compléter les données
           </button>
-          <button type="button" className="filter is-on" onClick={onCreate}>
+          <button type="button" className="btn btn--primary btn--sm" onClick={onCreate}>
             + Nouvelle campagne
           </button>
         </div>
@@ -229,7 +230,7 @@ function CampaignCard({
           <h3>{campaign.name}</h3>
           <span
             className="chip"
-            style={{ color: campaign.status_text_hex, background: campaign.status_bg_rgba }}
+            style={{ color: encreLisible(campaign.status_text_hex), background: campaign.status_bg_rgba }}
           >
             {campaign.status_label}
           </span>

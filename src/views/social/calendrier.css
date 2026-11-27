@@ -25,14 +25,14 @@ div.cal__kpi:hover { border-color: #e6e0d8; }
   font: inherit; font-size: 12.5px; cursor: pointer;
 }
 .cal__puce:hover { border-color: #5c5852; }
-.cal__puce.is-on { background: #8D1D2C; border-color: #8D1D2C; color: #fff; }
+.cal__puce.is-on { background: rgba(141, 29, 44, 0.06); border-color: #8D1D2C; box-shadow: inset 0 0 0 1px #8D1D2C; color: #8D1D2C; }
 .cal__compte { font-size: 12px; }
 .cal__compte-puce {
   display: inline-flex; align-items: center; gap: 7px; padding: 3px 9px 3px 3px; border: 1px solid #e6e0d8; border-radius: 8px;
   background: #fff; color: var(--ink); font: inherit; font-size: 12px; cursor: pointer;
 }
 .cal__compte-puce:hover { border-color: #5c5852; }
-.cal__compte-puce.is-on { background: #1c1a17; border-color: #1c1a17; color: #fff; }
+.cal__compte-puce.is-on { background: rgba(141, 29, 44, 0.06); border-color: #8D1D2C; box-shadow: inset 0 0 0 1px #8D1D2C; color: #8D1D2C; }
 .cal__compte-puce.is-erreur { border-color: #E8A0A8; }
 .cal__compte-puce.is-estompe { opacity: 0.5; }
 .cal__profil { position: relative; width: 24px; height: 24px; flex: 0 0 auto; }
@@ -43,7 +43,7 @@ div.cal__kpi:hover { border-color: #e6e0d8; }
 }
 .cal__reseau.is-ig { background: #8D1D2C; }
 .cal__nb { color: var(--muted); font-size: 11px; }
-.cal__compte-puce.is-on .cal__nb { color: #F2C9A0; }
+.cal__compte-puce.is-on .cal__nb { color: #8D1D2C; }
 .cal__mpnote { font-size: 11.5px; max-width: 460px; }
 
 .cal__corps { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; align-items: start; }

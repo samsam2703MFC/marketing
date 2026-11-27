@@ -521,7 +521,7 @@ export default function GoogleView() {
                 {label}
               </button>
             ))}
-            <select className="gg__select" value={shop} onChange={(e) => setShop(e.target.value)}>
+            <select className="gg__select" aria-label="Boutique" value={shop} onChange={(e) => setShop(e.target.value)}>
               <option value="">Toutes les boutiques</option>
               {mags.map((m) => (
                 <option key={m.id} value={m.id}>

@@ -19,6 +19,7 @@ import RangeCalendar from '../../components/RangeCalendar'
 import MediaPicker from '../media/MediaPicker'
 import type { PickedImage } from '../media/sources'
 import { familyImage, seasonImage, seasonLabel } from './illustrations'
+import { styleLevier } from '../../lib/couleurs'
 
 /**
  * Assistant de création de campagne, en huit étapes.
@@ -1701,7 +1702,7 @@ function FramingStep({
               {type.lever_label ? (
                 <span
                   className="lever-tag"
-                  style={{ background: type.lever_color_hex ?? undefined }}
+                  style={styleLevier(type.lever_color_hex)}
                 >
                   {type.lever_label}
                 </span>

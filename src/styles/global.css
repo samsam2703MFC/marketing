@@ -17,7 +17,10 @@
 
 :root {
   --ink: #1c1a17;
-  --muted: #7a736a;
+  /* Contrastes AA (audit du 27/11/2026) : --muted était à 4,38:1 sur le papier, --faint à 2,11:1 sur blanc.
+     Deux gris chauds plus foncés, même teinte brune : --muted ≥ 4,5:1 sur papier, en-tête de tableau et
+     pastille neutre ; --faint ≥ 4,5:1 sur blanc et sur papier. La hiérarchie ink > muted-2 > muted > faint reste. */
+  --muted: #6e675e;
   --line: #e6e0d8;
   --paper: #faf7f2;
   --accent: #8D1D2C;
@@ -26,7 +29,7 @@
   --table-head: #FBF9F5;
   --row-line: rgba(34, 34, 34, 0.06);
   --muted-2: #5c5852;
-  --faint: #B8B2A8;
+  --faint: #767067;
   --green: #3f7a52;
   --total-line: #F8F4EE;
 
@@ -46,9 +49,12 @@ h1, h2, h3, h4, h5, h6, th, b, strong {
   font-weight: 400;
 }
 
+/* Texte courant à 13 px (design system §4.2). Sans taille ici, tout ce qui hérite — paragraphes d'aide,
+   .muted, champs en font: inherit — sortait à 16 px, plus gros que les données qu'il commente. */
 body {
   margin: 0;
   min-height: 100vh;
+  font-size: 13px;
 }
 
 h1 {
@@ -68,6 +74,12 @@ h2 {
 .muted {
   color: var(--muted);
   margin: 0;
+}
+
+/* Un paragraphe d'aide : texte secondaire, 12,5 px (§4.2). */
+p.muted {
+  font-size: 12.5px;
+  line-height: 1.5;
 }
 
 .error {
@@ -156,6 +168,13 @@ button:disabled {
   cursor: progress;
 }
 
+/* Le bouton nu garde le bordeaux (connexion, anciens écrans) ; indisponible, il passe au gris lisible. */
+button:not([class]):disabled {
+  opacity: 1;
+  background: var(--chip);
+  color: var(--muted);
+}
+
 button.ghost {
   margin: 0;
   background: transparent;
@@ -205,7 +224,9 @@ button.ghost {
 }
 
 .btn:disabled {
-  opacity: 0.45;
+  /* Désactivé = lisible (≥ 4,5:1), pas un fantôme : l'opacité 0,45 donnait 2,55:1 sur le bordeaux. */
+  opacity: 1;
+  color: var(--faint);
   cursor: not-allowed;
 }
 
@@ -223,6 +244,14 @@ button.ghost {
 .btn--primary:hover:not(:disabled) {
   background: #6f1622;
   border-color: #6f1622;
+}
+
+/* L'action principale indisponible devient grise : un bordeaux pâle passait pour une action. La raison
+   s'écrit à côté du bouton. */
+.btn--primary:disabled {
+  background: var(--chip);
+  border-color: var(--chip);
+  color: var(--muted);
 }
 
 .btn--ghost {
@@ -545,8 +574,8 @@ tbody td {
 }
 
 .role-switch button.is-on {
-  background: var(--accent);
-  color: #fff;
+  background: rgba(141, 29, 44, 0.08);
+  color: var(--accent);
 }
 
 /* La zone de contenu défile sur toute la largeur, et ce sont ses enfants qui
@@ -620,13 +649,18 @@ tbody td {
   color: var(--muted-2);
 }
 
+/* Un filtre choisi se lit au liseré bordeaux sur fond teinté (§2 : « un bouton FAIT, une pastille
+   CHOISIT ») : en bordeaux plein, il passait pour l'action principale de l'écran. Le liseré de 2 px est
+   un filet + un trait intérieur : rien ne bouge quand on choisit. */
 .filter.is-on {
-  background: var(--accent);
+  background: rgba(141, 29, 44, 0.06);
   border-color: var(--accent);
-  color: #fff;
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--accent);
 }
 
-.filter.back {
+.filter.back,
+.btn.back {
   margin-bottom: 12px;
 }
 
@@ -1127,8 +1161,21 @@ select:disabled {
   line-height: 1.6;
   padding: 2px 8px;
   border-radius: 6px;
-  color: #fff;
-  background: var(--faint);
+  /* Texte à l'encre sur une teinte de la couleur du levier : en blanc sur l'aplat saturé, l'étiquette
+     tombait à 2,1:1 (ambre) ou 2,5:1 (vert). La couleur pleine reste dans le point. */
+  color: var(--ink);
+  background: color-mix(in srgb, var(--lever, #B8B2A8) 16%, #fff);
+}
+
+.lever-tag::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--lever, #B8B2A8);
+  vertical-align: 0.05em;
 }
 
 .section-label {
@@ -4719,3 +4766,51 @@ table.erpv__table th:nth-child(5) { width: 12%; }
 .catv-imported { display: grid; gap: 6px; justify-items: start; margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: #EAF3EC; color: #2f5f3f; font-size: 13px; }
 .catv-imported ul { margin: 0; padding-left: 18px; color: #7A5207; line-height: 1.5; }
 .catv-imported .btn { margin-top: 2px; }
+
+/* ---------------------------------------------------------------------------
+   Focus clavier : contour bordeaux de 2 px sur TOUT ce qui se manipule (§7.4, §12).
+   Il n'était posé que sur .btn et les champs ; le rail, les onglets, les filtres, les pastilles et
+   les sélecteurs segmentés gardaient le contour gris du navigateur. Placée en fin de feuille, la règle
+   l'emporte aussi sur les « outline: none » des éditeurs (les champs sans cadre restent sans cadre à
+   la souris : :focus-visible ne s'allume qu'au clavier).
+   --------------------------------------------------------------------------- */
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+input:focus-visible,
+[tabindex]:not([tabindex='-1']):focus-visible,
+[role='button']:focus-visible,
+[role='tab']:focus-visible,
+[role='switch']:focus-visible,
+[role='checkbox']:focus-visible,
+[role='radio']:focus-visible,
+[contenteditable='true']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline-offset: 1px;
+}
+
+/* Titre éditable du catalogue : il retirait son contour sans le remplacer. */
+.catv-title:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Bouton qui déplie une ligne de tableau : il a l'air du texte de la cellule. */
+.row-toggle {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}

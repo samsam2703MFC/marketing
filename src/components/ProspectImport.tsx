@@ -236,7 +236,7 @@ export default function ProspectImport() {
         rejouable : elle met à jour les fiches connues et n’ajoute que les nouvelles.
       </p>
       <div className="filters__row">
-        <button type="button" className="filter is-on" onClick={runSync} disabled={syncing}>
+        <button type="button" className="btn btn--sm" onClick={runSync} disabled={syncing}>
           {syncing ? 'Reprise…' : 'Reprendre boutiques & comptes B2B'}
         </button>
       </div>
@@ -428,7 +428,7 @@ export default function ProspectImport() {
       <div className="filters__row">
         <button
           type="button"
-          className="filter is-on"
+          className="btn btn--primary btn--sm"
           onClick={send}
           disabled={sending || named.length === 0}
         >

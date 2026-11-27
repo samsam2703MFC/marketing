@@ -303,9 +303,9 @@ export default function CampagnesView({ operation, onNaviguer }: CampagnesViewPr
 
       <div className="camp__corps">
         <aside className="camp__liste">
-          <div className="seg" role="tablist">
+          <div className="seg" role="tablist" aria-label="Opérations">
             {onglets.map(([k, label, arr]) => (
-              <button key={k} type="button" className={onglet === k ? 'is-on' : ''} onClick={() => setOnglet(k)}>
+              <button key={k} type="button" role="tab" aria-selected={onglet === k} className={onglet === k ? 'is-on' : ''} onClick={() => setOnglet(k)}>
                 {label} · {arr.length}
               </button>
             ))}
@@ -781,11 +781,11 @@ function Fiche({ c, etat, today, posts, ads, spent, r, nomBoutique, mpo, setMpo,
       <div className="card camp__bloc">
         <div className="camp__bloc-tete">
           <span>Rattacher des posts et des publicités</span>
-          <div className="seg">
-            <button type="button" className={rtTab === 'posts' ? 'is-on' : ''} onClick={() => setRtTab('posts')}>
+          <div className="seg" role="group" aria-label="Contenu rattaché">
+            <button type="button" className={rtTab === 'posts' ? 'is-on' : ''} aria-pressed={rtTab === 'posts'} onClick={() => setRtTab('posts')}>
               Posts · {postRows.filter((x) => x.on).length}/{postRows.length}
             </button>
-            <button type="button" className={rtTab === 'ads' ? 'is-on' : ''} onClick={() => setRtTab('ads')}>
+            <button type="button" className={rtTab === 'ads' ? 'is-on' : ''} aria-pressed={rtTab === 'ads'} onClick={() => setRtTab('ads')}>
               Publicités · {adRows.filter((x) => x.on).length}/{adRows.length}
             </button>
           </div>

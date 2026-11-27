@@ -4,6 +4,7 @@ import { useAsync } from '../lib/useAsync'
 import type { CampaignTypeAdmin, CampaignTypeDraft, IconChoice } from '../lib/api/module'
 import { useReferences } from '../state/references'
 import { describeError } from '../state/auth'
+import { styleLevier } from '../lib/couleurs'
 
 /**
  * Éditeur des types de campagne.
@@ -95,7 +96,7 @@ export default function CampaignTypesView() {
               {type.lever_label ? (
                 <span
                   className="lever-tag"
-                  style={{ background: type.lever_color_hex ?? undefined }}
+                  style={styleLevier(type.lever_color_hex)}
                 >
                   {type.lever_label}
                 </span>
@@ -232,7 +233,7 @@ function TypeForm({
           )}
           <strong className="type-card__name">{nom.trim() === '' ? 'Sans nom' : nom}</strong>
           {levierChoisi === undefined && pastille.trim() === '' ? null : (
-            <span className="lever-tag" style={{ background: levierChoisi?.color_hex ?? undefined }}>
+            <span className="lever-tag" style={styleLevier(levierChoisi?.color_hex)}>
               {pastille.trim() === '' ? levierChoisi?.label : pastille}
             </span>
           )}
@@ -356,12 +357,12 @@ function TypeForm({
           </button>
         )}
 
-        <button type="button" className="filter" disabled={envoi} onClick={onCancel}>
+        <button type="button" className="btn btn--ghost btn--sm" disabled={envoi} onClick={onCancel}>
           Annuler
         </button>
         <button
           type="button"
-          className="filter is-on"
+          className="btn btn--primary btn--sm"
           disabled={envoi || nom.trim() === ''}
           onClick={enregistrer}
         >

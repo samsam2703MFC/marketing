@@ -87,9 +87,21 @@ function AgencyRow({
 
   return (
     <>
-      <tr className="row-link" onClick={onToggle} aria-expanded={open}>
+      <tr className="row-link" onClick={onToggle}>
         <td>
-          {agency.name}
+          {/* aria-expanded n'est pas permis sur une ligne de tableau : il va sur un bouton, qui rend aussi la
+              ligne dépliable au clavier. */}
+          <button
+            type="button"
+            className="row-toggle"
+            aria-expanded={open}
+            onClick={(event) => {
+              event.stopPropagation()
+              onToggle()
+            }}
+          >
+            {agency.name}
+          </button>
           {agency.speciality ? <div className="muted">{agency.speciality}</div> : null}
         </td>
         <td>

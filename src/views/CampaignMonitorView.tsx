@@ -7,6 +7,7 @@ import ProductionPanel from './production/ProductionPanel'
 import type { CampaignDetail, FunnelStep, Lead, LeadStatus, TrackingBaseline, TrackingScope } from '../lib/api/module'
 import { useReferences } from '../state/references'
 import { campaignGaps } from '../lib/completeness'
+import { encreLisible } from '../lib/couleurs'
 
 interface MonitorProps {
   campaignId: number
@@ -72,26 +73,26 @@ export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, 
   return (
     <>
       <div className="monitor-actions">
-        <button type="button" className="filter back" onClick={onBack}>
+        <button type="button" className="btn btn--ghost back" onClick={onBack}>
           ← Retour aux campagnes
         </button>
         {onOpenAssistant ? (
-          <button type="button" className="filter is-on back" onClick={onOpenAssistant}>
+          <button type="button" className="btn back" onClick={onOpenAssistant}>
             Ouvrir l’assistant de la campagne →
           </button>
         ) : null}
         {onCreatePost ? (
-          <button type="button" className="filter is-on back" onClick={onCreatePost}>
+          <button type="button" className="btn back" onClick={onCreatePost}>
             Créer un post pour cette campagne →
           </button>
         ) : null}
         {onPlanPosts ? (
-          <button type="button" className="filter is-on back" onClick={onPlanPosts}>
+          <button type="button" className="btn back" onClick={onPlanPosts}>
             Planifier les posts de la campagne →
           </button>
         ) : null}
         {onBrochures ? (
-          <button type="button" className="filter is-on back" onClick={onBrochures}>
+          <button type="button" className="btn back" onClick={onBrochures}>
             Leaflets &amp; dépliants →
           </button>
         ) : null}
@@ -246,7 +247,7 @@ function Funnel({ steps }: { steps: FunnelStep[] }) {
         <li
           key={step.status_code}
           className="chip"
-          style={{ color: step.color_hex, background: step.bg_hex, border: `1px solid ${step.border_hex}` }}
+          style={{ color: encreLisible(step.color_hex), background: step.bg_hex, border: `1px solid ${step.border_hex}` }}
         >
           {step.leads_count} · {step.status_label}
         </li>
@@ -441,10 +442,10 @@ function TrackingCard({ campaign, canEdit, onSaved }: { campaign: CampaignDetail
         {choisie !== null ? <p className="muted">Se lit : {choisie.source_label}.</p> : null}
         {failure ? <p className="error">{failure}</p> : null}
         <div className="filters__row">
-          <button type="button" className="filter is-on" disabled={busy} onClick={() => void save()}>
+          <button type="button" className="btn btn--primary btn--sm" disabled={busy} onClick={() => void save()}>
             {busy ? 'Enregistrement…' : 'Enregistrer le suivi'}
           </button>
-          <button type="button" className="filter" disabled={busy} onClick={() => setEdit(false)}>
+          <button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => setEdit(false)}>
             Annuler
           </button>
         </div>

@@ -2,6 +2,7 @@ import { module as api } from '../lib/api'
 import { useAsync, formatEur } from '../lib/useAsync'
 import type { CampaignStatus, Lever } from '../lib/api/module'
 import TrafficInvestment from './TrafficInvestment'
+import { encreLisible } from '../lib/couleurs'
 
 interface DashboardProps {
   statuses: CampaignStatus[]
@@ -45,7 +46,7 @@ export default function DashboardView({ statuses, levers, brandId, network, onOp
               <li
                 key={status.code}
                 className="chip"
-                style={{ color: status.text_hex, background: status.bg_rgba }}
+                style={{ color: encreLisible(status.text_hex), background: status.bg_rgba }}
               >
                 {rows.filter((c) => c.status_code === status.code).length} · {status.label}
               </li>

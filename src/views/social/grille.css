@@ -1,7 +1,7 @@
 /* Grille Instagram (module Social, réécrit dans le Marketing) — design system du Marketing. */
 .grille code { font-family: ui-monospace, monospace; font-size: 10.5px; color: var(--faint); }
 .grille__espace { flex: 1 1 auto; }
-.grille__sans { font-size: 10px; opacity: 0.75; }
+.grille__sans { font-size: 10px; }
 .grille__avis { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .grille__petit { font-size: 12px; line-height: 1.5; }
 

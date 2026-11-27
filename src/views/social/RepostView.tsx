@@ -393,6 +393,7 @@ export default function RepostView() {
                         <button
                           type="button"
                           className={`rp__mode${x.validation ? ' is-val' : ''}`}
+                          aria-pressed={x.validation}
                           title={!x.on ? 'Décochée dans Réglage' : x.validation ? 'Cliquer : passer en automatique' : 'Cliquer : le franchisé valide avant publication'}
                           onClick={() =>
                             x.on && reglage({ boutiques: { [x.id]: { validation: !x.validation } } }, x.name + (x.validation ? ' : automatique' : ' : le franchisé valide'))

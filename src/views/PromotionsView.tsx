@@ -4,6 +4,7 @@ import type { CampaignOffer } from '../lib/api/module'
 import LinkBadge from '../components/LinkBadge'
 import { useLabel } from '../state/references'
 import ErpPromotions from '../components/ErpPromotions'
+import { encreLisible } from '../lib/couleurs'
 
 
 export default function PromotionsView() {
@@ -81,7 +82,7 @@ function CatalogTable({ promotions }: { promotions: api.Promotion[] }) {
                         <span
                           className="chip chip--inline"
                           style={{
-                            color: promotion.campaign_status_text_hex ?? undefined,
+                            color: encreLisible(promotion.campaign_status_text_hex),
                             background: promotion.campaign_status_bg_rgba ?? undefined,
                           }}
                         >
@@ -147,7 +148,7 @@ function OfferTable({ offers }: { offers: CampaignOffer[] }) {
                   <span
                     className="chip chip--inline"
                     style={{
-                      color: offer.campaign_status_text_hex,
+                      color: encreLisible(offer.campaign_status_text_hex),
                       background: offer.campaign_status_bg_rgba,
                     }}
                   >

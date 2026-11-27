@@ -873,12 +873,12 @@ function MovementForm({
           </button>
         ) : null}
 
-        <button type="button" className="filter" onClick={onCancel} disabled={envoi}>
+        <button type="button" className="btn btn--ghost btn--sm" onClick={onCancel} disabled={envoi}>
           Annuler
         </button>
         <button
           type="button"
-          className="filter is-on"
+          className="btn btn--primary btn--sm"
           disabled={!complet || envoi}
           onClick={enregistrer}
         >
