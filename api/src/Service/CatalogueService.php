@@ -232,8 +232,16 @@ final class CatalogueService
      * @param list<array{id:int, name:string, erpShopId:?int}> $shops
      * @return array<string,mixed>
      */
-    public function webshopProducts(array $shops): array
+    public function webshopProducts(array $shops, bool $relire = false): array
     {
+        if ($relire) {
+            $this->webshop->relire();
+            try {
+                return $this->webshopProducts($shops);
+            } finally {
+                $this->webshop->relire(false);
+            }
+        }
         $byId = [];
         $categories = [];
         $read = [];

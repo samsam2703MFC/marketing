@@ -740,7 +740,16 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
     window.scrollTo({ top: 0 })
   }
 
-  const webshop = useAsync(() => api.getWebshopProducts(cat.owner === 'boutique' && cat.shop ? [cat.shop.id] : cat.shopIds), [cat.shopIds.join(','), cat.owner])
+  /** « ↻ Relire le webshop » : 0 = lecture gardée (30 min), puis chaque clic relit l'ERP. */
+  const [reread, setReread] = useState(0)
+  const webshop = useAsync(
+    () => api.getWebshopProducts(cat.owner === 'boutique' && cat.shop ? [cat.shop.id] : cat.shopIds, reread > 0),
+    [cat.shopIds.join(','), cat.owner, reread],
+  )
+  // Le webshop relu : l'aperçu se recompose avec les produits, prix et promotions à jour.
+  useEffect(() => {
+    if (reread > 0 && !webshop.loading) setRevision((n) => n + 1)
+  }, [reread, webshop.loading])
   const doc = useAsync(() => api.getCatalogueDocument(cat.id, lang, versionShop), [cat.id, lang, versionShop, revision])
 
   // --- enregistrement : chaque modification part tout de suite, la composition suit ---
@@ -1114,6 +1123,10 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
   }
 
   // Les produits et les promotions : dans l'étape 2 de l'assistant, et dans l'éditeur détaillé.
+  const readAtLabel = (() => {
+    const times = (webshop.data?.shops ?? []).map((s) => s.readAt).filter((t): t is string => !!t).sort()
+    return times.length ? new Date(times[0]).toLocaleString('fr-BE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : null
+  })()
   const productsPanel = (
     <section className="card catv-col">
       <h2>
@@ -1122,6 +1135,15 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
       <div className="catv-search">
         <input placeholder="Chercher…" value={search} onChange={(event) => setSearch(event.target.value)} />
         <span className="bro-tag">{checked} cochés</span>
+        <button
+          type="button"
+          className="btn btn--sm catv-reread"
+          disabled={webshop.loading}
+          onClick={() => setReread((n) => n + 1)}
+          title={`Relit tout de suite le webshop (produits, catégories, prix, photos, gammes et promotions) au lieu de la lecture gardée 30 minutes.${readAtLabel ? ` Dernière lecture : ${readAtLabel}.` : ''}`}
+        >
+          {webshop.loading ? 'Lecture…' : '↻ Relire le webshop'}
+        </button>
       </div>
       {webshop.loading ? <p className="muted">Lecture du webshop…</p> : null}
       {webshop.error ? <p className="error">{webshop.error}</p> : null}

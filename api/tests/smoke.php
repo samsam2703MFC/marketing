@@ -5293,6 +5293,17 @@ check('catalogues : les familles du catalogue du Marketing absentes du webshop �
         && array_values(array_filter(array_column($horsWeb['body']['data']['offWebshopCategories'] ?? [], 'name'), static fn (string $n): bool => $n === 'Bûches' || stripos($n, 'B2B') === 0)) === []
         && array_keys($horsWeb['body']['data']['products'] ?? []) !== [] && array_column($horsWeb['body']['data']['products'], 'id') === array_keys($prods),
     json_encode($horsWeb['body']['data']['offWebshopCategories'] ?? $horsWeb['body']));
+// « ↻ Relire le webshop » : `relire=1` relit l'ERP au lieu de la lecture gardée (ici vidée exprès) et la remplace.
+$pdo->exec("UPDATE mar_catalogue_cache SET payload = '[]', read_at = UTC_TIMESTAMP() WHERE cle LIKE 'produits:%'");
+$pdo->exec("INSERT INTO mar_catalogue_cache (cle, payload, read_at) VALUES ('produits:0', '[]', UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE payload = '[]'");
+$avecRelire = call($catRouter, 'GET', '/api/v1/marketing/catalogue-products', ['shopIds' => $catA . ',' . $catB, 'relire' => '1']);
+$videes = (int) $pdo->query("SELECT COUNT(*) FROM mar_catalogue_cache WHERE cle LIKE 'produits:%' AND cle <> 'produits:0' AND payload = '[]'")->fetchColumn();
+$relues = (int) $pdo->query("SELECT COUNT(*) FROM mar_catalogue_cache WHERE cle LIKE 'produits:%' AND cle <> 'produits:0' AND payload <> '[]'")->fetchColumn();
+check('catalogues : « relire=1 » ignore la lecture gardée et la remplace ; « relire=2 » refusé (422)',
+    $avecRelire['status'] === 200 && count($avecRelire['body']['data']['products'] ?? []) > 0 && $videes === 0 && $relues > 0
+        && call($catRouter, 'GET', '/api/v1/marketing/catalogue-products', ['relire' => '2'])['status'] === 422,
+    json_encode([$videes, $relues, count($avecRelire['body']['data']['products'] ?? [])]));
+$pdo->exec("DELETE FROM mar_catalogue_cache WHERE cle = 'produits:0'");
 check('catalogues : paramètre illisible (422)', call($catRouter, 'GET', '/api/v1/marketing/catalogue-products', ['shopIds' => 'a'])['status'] === 422
     && call($catRouter, 'GET', '/api/v1/marketing/catalogue-products', ['pirate' => '1'])['status'] === 422);
 
