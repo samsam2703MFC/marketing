@@ -2264,8 +2264,9 @@ final class CatalogueService
      * qu'elle a, sinon une neuve) sur une page paire, une page libre intercalée quand il le faut, puis ses autres pages
      * dans leur ordre —, puis des pages libres jusqu'au format. Les pages libres d'avant sont reprises (leur photo ou
      * leur illustration suit). Une page d'une gamme qui n'est plus un bloc devient hors gamme ; sa présentation part.
-     * Trop de pages : le catalogue grandit par 2 (`$grow`), 16 au plus ; au-delà 422 `CATALOGUE_PAGES_OVERFLOW`, bloc
-     * par bloc.
+     * Trop de pages : le catalogue grandit par 2 (`$grow`), 16 au plus ; puis, si seules les pages libres de parité le
+     * font déborder, elles partent (la présentation tombe à droite, l'écran le dit) ; au-delà 422
+     * `CATALOGUE_PAGES_OVERFLOW`, bloc par bloc.
      *
      * @param list<array<string,mixed>> $pages
      * @param list<int> $blocks
@@ -2326,6 +2327,35 @@ final class CatalogueService
                 }
             }
         }
+        // Un ordre n'est jamais refusé pour une question de parité (27/11/2026, client : « quand je change l'ordre, ça doit
+        // changer l'ordre dans la vue du catalogue ») : quand le catalogue est à sa taille et que seules les pages libres
+        // intercalées pour mettre une présentation à gauche le font déborder, on les retire, de la dernière à la première.
+        // La présentation concernée tombe alors à droite (page impaire) : l'écran le dit dans la bande, avec ses remèdes.
+        if ($need > $pageCount) {
+            $limit = $grow ? $max : $pageCount;
+            $parity = [];
+            $at = count($hors);
+            foreach ($plan as $k => [$g, $n, $free]) {
+                if ($free) {
+                    $parity[] = [$at, $k];
+                }
+                $at += ($free ? 1 : 0) + 1 + $n;
+            }
+            if ($need - count($parity) <= $limit) {
+                $pageCount = max($pageCount, $limit === $max ? self::fitCount($need - count($parity), $pageCount) : $pageCount);
+                foreach (array_reverse($parity) as [$index, $k]) {
+                    if (count($out) + self::BRAND_PAGES <= $pageCount) {
+                        break;
+                    }
+                    $removed = array_splice($out, $index, 1)[0];
+                    if ($removed !== self::EMPTY_PAGE) {
+                        $spacers[] = $removed; // une page libre qui porte une photo reste disponible
+                    }
+                    $plan[$k][2] = false;
+                }
+                $need = count($out) + self::BRAND_PAGES;
+            }
+        }
         if ($need > $pageCount) {
             $details = [];
             if ($hors !== []) {
@@ -2344,6 +2374,18 @@ final class CatalogueService
         }
 
         return ['pages' => $out, 'pageCount' => $pageCount];
+    }
+
+    /** La plus petite taille de catalogue (`PAGE_COUNTS`) qui tient `$need` pages, jamais moins que `$pageCount`. */
+    private static function fitCount(int $need, int $pageCount): int
+    {
+        foreach (self::PAGE_COUNTS as $count) {
+            if ($count >= $need) {
+                return max($pageCount, $count);
+            }
+        }
+
+        return $pageCount;
     }
 
     /**

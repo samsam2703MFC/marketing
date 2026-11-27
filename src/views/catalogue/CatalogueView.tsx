@@ -26,6 +26,7 @@ import { MediaPicker } from './MediaPicker'
 import { HeaderIcon, LayoutIcon, TemplateIcon } from './CatalogueIcons'
 import CatalogueWizard from './CatalogueWizard'
 import type { WizardProps, WizardStep } from './CatalogueWizard'
+import type { ChangeOptions } from './CatalogueGammes'
 import LeafletWizard from './LeafletWizard'
 import { importBrochure } from './brochureImport'
 import { OrderFormCell, OrderFormMenu } from './OrderFormMenu'
@@ -814,7 +815,9 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
   /** La dernière erreur d'enregistrement (null : tout est passé) et le dernier titre enregistré. */
   const failed = useRef<string | null>(null)
   const savedTitle = useRef(initial.title)
-  function change(patch: api.CatalogueUpdate) {
+  /** Le dernier état relu du serveur : un ordre refusé (blocs, pages : glisser de l'étape 3) y revient. */
+  const server = useRef<Catalogue>(initial)
+  function change(patch: api.CatalogueUpdate, opts: ChangeOptions = {}) {
     // Les présentations (gamme par gamme) s'écrivent sans leurs images lues : la réponse du serveur les rend complètes.
     const { presentations: _written, ...shown } = patch
     void _written
@@ -825,13 +828,25 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
       .then((saved) => {
         failed.current = null
         savedTitle.current = saved.title
+        server.current = saved
         setCat(saved)
         setSave({ status: 'saved' })
         setRevision((value) => value + 1)
       })
       .catch((cause: unknown) => {
-        failed.current = message(cause)
-        setSave({ status: 'error', text: message(cause) })
+        // Un écran qui dit l'échec lui-même, à côté de l'action (l'étape 3 : un ordre refusé), ne le répète pas en haut.
+        if (opts.onError) {
+          opts.onError(message(cause))
+          setSave({ status: 'idle' })
+        } else {
+          failed.current = message(cause)
+          setSave({ status: 'error', text: message(cause) })
+        }
+        // Le rangement refusé (les gammes ne tiennent plus, par exemple) : l'écran revient à ce que le serveur garde.
+        if ('gammeBlocks' in patch || 'pages' in patch) {
+          const kept = server.current
+          setCat((current) => ({ ...current, gammeBlocks: kept.gammeBlocks, pages: kept.pages }))
+        }
       })
   }
 
@@ -918,6 +933,7 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
     queue.current = queue.current
       .then(() => api.updateCatalogue(cat.id, { products: next }))
       .then((saved) => {
+        server.current = saved
         setCat(saved)
         const own = saved.pages.some((page) => !isPresentation(page.layout) && page.category === categoryId)
         setSave({
@@ -1007,6 +1023,7 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
     queue.current = queue.current
       .then(() => api.updateCatalogue(cat.id, { pageCount }))
       .then((saved) => {
+        server.current = saved
         setCat(saved)
         setSave({ status: 'saved' })
         setRevision((value) => value + 1)

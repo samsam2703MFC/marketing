@@ -6884,6 +6884,32 @@ check('gamme par gamme (règles) : hors gamme avant les blocs ; liste d’une pr
         && array_map(static fn (array $items): array => array_column($items, 'id'), $rempli['items']) === [[2], [1], [5, 6], [4], [3, 4]]
         && $rempli['left'] === 0 && $trop === ['CATALOGUE_PAGES_OVERFLOW', 422, 2],
     json_encode([$plan, array_map(static fn (array $items): array => array_column($items, 'id'), $rempli['items']), $rempli['left'], $trop]));
+// L'ordre du client (27/11/2026) : 5 pages hors gamme, puis Noël (présentation + 2), Saint-Nicolas (+ 1), Épiphanie (+ 1).
+// Avec les pages libres de parité il en faudrait 17 : l'ordre n'est plus refusé, la page libre de parité part et la
+// présentation de Saint-Nicolas tombe à droite (p. 11) — l'écran le dit et propose ses remèdes. Jamais perdu.
+$horsCinq = array_map(static fn (int $c): array => ['layout' => 'grille', 'category' => $c], [830, 830, 840, 850, 860]);
+$gammesClient = [
+    ['layout' => 'presentation', 'category' => null, 'gamme' => 20], ['layout' => 'grille', 'category' => 800, 'gamme' => 20],
+    ['layout' => 'presentation', 'category' => null, 'gamme' => 16], ['layout' => 'grille', 'category' => 810, 'gamme' => 16],
+    ['layout' => 'presentation', 'category' => null, 'gamme' => 14], ['layout' => 'grille', 'category' => 500, 'gamme' => 14], ['layout' => 'grille', 'category' => 600, 'gamme' => 14],
+];
+$ordreClient = null;
+$ordreErreur = null;
+try {
+    $ordreClient = $CS::organise(array_merge($horsCinq, $gammesClient), [14, 16, 20], 16);
+} catch (\Marketing\Service\CatalogueError $e) {
+    $ordreErreur = [$e->errorCode, $e->status];
+}
+$presentations = $ordreClient === null ? [] : array_values(array_filter(array_map(
+    static fn (array $p, int $i): ?string => in_array($p['layout'], ['presentation', 'presentation_liste'], true) ? ($p['gamme'] . '@' . ($i + 3)) : null,
+    $ordreClient['pages'], array_keys($ordreClient['pages']))));
+$rejoue = $ordreClient === null ? null : $CS::organise($ordreClient['pages'], [14, 16, 20], 16, false);
+check('gamme par gamme : Noël → Saint-Nicolas → Épiphanie après 5 pages hors gamme — appliqué à 16 pages, la page libre de parité retirée (Saint-Nicolas à droite, p. 11), rien de perdu ; rejoué, identique',
+    $ordreErreur === null && ($ordreClient['pageCount'] ?? 0) === 16 && count($ordreClient['pages'] ?? []) === 12
+        && $presentations === ['14@8', '16@11', '20@13']
+        && count(array_filter($ordreClient['pages'], static fn (array $p): bool => ($p['category'] ?? null) !== null)) === 9
+        && $rejoue !== null && $rejoue['pages'] === $ordreClient['pages'] && $rejoue['pageCount'] === 16,
+    json_encode([$ordreErreur, $presentations, $ordreClient['pages'] ?? null]));
 check('gamme par gamme : sans blocs, `fill` garde la règle d’avant (une page de catégorie prend ses produits malgré sa gamme)',
     array_map(static fn (array $items): array => array_column($items, 'id'), $CS::fill([['layout' => 'grille', 'category' => 80, 'gamme' => 6]], array_values($connusG))['items']) === [[4, 3]],
     json_encode($CS::fill([['layout' => 'grille', 'category' => 80, 'gamme' => 6]], array_values($connusG))));

@@ -8,6 +8,7 @@ import { HeaderIcon, LayoutIcon, TemplateIcon } from './CatalogueIcons'
 import './catalogue-wizard.css'
 // Après la feuille de l'assistant : celle de « Gamme par gamme » la précise (mêmes poids de sélecteurs).
 import StepGammes, { initialBlocks } from './CatalogueGammes'
+import type { ChangeOptions } from './CatalogueGammes'
 import Erreur from '../../components/Erreur'
 
 /**
@@ -224,7 +225,7 @@ export interface WizardProps {
   categories: Map<number, api.WebshopCategory>
   webshopLoading: boolean
   busy: boolean
-  change: (patch: api.CatalogueUpdate) => void
+  change: (patch: api.CatalogueUpdate, opts?: ChangeOptions) => void
   onBrandPage: (docIndex: number) => void
   onCommonBrandPages: () => void
   print: (mode: CatalogueSheetMode, all: boolean) => void
