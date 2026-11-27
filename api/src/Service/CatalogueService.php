@@ -1842,8 +1842,8 @@ final class CatalogueService
     /**
      * Range les produits choisis dans les pages, dans l'ordre : chaque page prend ceux de sa catégorie
      * et de sa gamme (quand elle en a) ; « Notre sélection » (ni catégorie ni gamme) prend ceux qui
-     * restent, toutes catégories ; une présentation avec liste prend les premiers de sa gamme, une
-     * présentation seule aucun.
+     * restent, toutes catégories, en dernier ; une présentation avec liste prend, après les pages des
+     * catégories, les premiers de sa gamme restés sans page ; une présentation seule aucun.
      *
      * @param list<array<string,mixed>> $pages
      * @param list<array<string,mixed>> $chosen Produits avec leur `categoryId` (et leurs `gammes`).
@@ -1886,8 +1886,13 @@ final class CatalogueService
         $isSelection = static fn (array $page): bool => $page['layout'] !== 'pleine'
             && !in_array($page['layout'], self::PRESENTATIONS, true)
             && ($page['category'] ?? null) === null && ($page['gamme'] ?? null) === null;
+        // Une présentation avec liste (27/11/2026, même cas) : placée avant les pages de ses catégories, elle prenait
+        // leurs produits (Galette, Saint Nicolas… dans la liste de la gamme, la page « Noël » vide). Elle prend
+        // désormais, après les pages des catégories, les produits de sa gamme restés sans page.
+        $isList = static fn (array $page): bool => in_array($page['layout'], self::PRESENTATIONS, true);
         $passOrder = array_merge(
-            array_keys(array_filter($pages, static fn (array $page): bool => !$isSelection($page))),
+            array_keys(array_filter($pages, static fn (array $page): bool => !$isSelection($page) && !$isList($page))),
+            array_keys(array_filter($pages, $isList)),
             array_keys(array_filter($pages, $isSelection)),
         );
         $out = array_fill(0, count($pages), []);
@@ -1913,7 +1918,7 @@ final class CatalogueService
             $page = $pages[$index];
             // Avant les pages « Notre sélection » : une page de catégorie à qui sa gamme a laissé de la place
             // prend les produits de SA catégorie restés sans page, quelle que soit leur gamme.
-            if ($pass === 0 && $isSelection($page)) {
+            if ($pass === 0 && ($isSelection($page) || $isList($page))) {
                 $pass = 1;
                 $ownCategory($out, $placed);
             }
