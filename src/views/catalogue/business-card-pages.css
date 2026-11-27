@@ -29,8 +29,17 @@
   position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 3mm; padding: 5mm;
 }
-.bc-logo { height: 13mm; width: auto; max-width: 62mm; object-fit: contain; }
+/* Le logo du magasin, dans une boîte fixe (object-fit) : large ou carré, il la remplit sans être déformé ; plus grand
+   quand le nom de la boutique n'est pas dessous. */
+.bc-logo { width: 62mm; height: 19mm; object-fit: contain; }
+.bc-recto--alone .bc-logo { height: 27mm; }
 .bc-logo--white { filter: brightness(0) invert(1); }
+/* Pas de logo du magasin : l'aperçu le dit à sa place (une telle carte ne s'imprime pas). */
+.bc-logo-missing {
+  display: flex; align-items: center; justify-content: center; width: 62mm; height: 19mm; border: 0.35mm dashed currentColor;
+  opacity: 0.55; font-weight: 500; font-size: 2.6mm; letter-spacing: 0.12em; text-transform: uppercase;
+}
+.bc-recto--alone .bc-logo-missing { height: 27mm; }
 .bc-recto__rule { width: 9mm; height: 0.35mm; background: var(--ab); }
 .bc-recto__shop {
   max-width: 100%; font-weight: 500; font-size: 2.5mm; line-height: 1.2; letter-spacing: 0.24em; text-align: center;

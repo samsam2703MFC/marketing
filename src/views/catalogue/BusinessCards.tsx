@@ -10,6 +10,7 @@ import { openPrintWindow } from '../../lib/print'
 import { qrPath } from '../../lib/qr'
 import { fontFaces } from '../brochure/Pages'
 import { BLEED, MARKS } from './CataloguePages'
+import { MediaPicker } from './MediaPicker'
 import CARD_CSS from './business-card-pages.css?inline'
 import './catalogue.css'
 import './business-cards.css'
@@ -20,14 +21,19 @@ import './business-cards.css'
  *
  * Rien n'est saisi ici : la carte imprime ce que la dernière page des catalogues imprime déjà pour la boutique — son nom,
  * son adresse, ses téléphones, son e-mail et ses horaires (ERP et TFBuddy, ou saisis dans les pages de la marque ›
- * Dernière page), son logo (le sien, sinon celui de la charte), le QR de son webshop ou de Google Maps. Un champ vide
- * n'imprime rien ; ce qui manque est dit sous la carte, et se complète à un seul endroit, les pages de la marque.
+ * Dernière page), le QR de son webshop ou de Google Maps. Un champ vide n'imprime rien ; ce qui manque est dit sous la
+ * carte, et se complète à un seul endroit, les pages de la marque.
+ *
+ * Le logo est celui du magasin (27/11/2026, Sam : « il faut utiliser le logo du magasin ») : celui de la charte n'y est
+ * jamais mis à sa place. Une boutique sans logo n'a pas de carte imprimable ; son logo se choisit sous la carte (le même
+ * champ que dans les pages de la marque › Dernière page, `logoMediaId`).
  *
  * 85 × 55 mm (le format européen). Deux sorties, par le moteur des imprimés (`lib/print.ts`) :
  *   - la planche A4 pour l'imprimante du magasin : 10 cartes par feuille, la feuille des rectos puis celle des versos,
  *     à imprimer en recto verso (bord long) ; la grille est centrée, donc le verso tombe sous le recto ;
  *   - le PDF de l'imprimeur : par boutique, le recto puis le verso, 3 mm de fond perdu et les traits de coupe. Une carte
  *     dont le texte dépasse n'y entre pas (le leaflet fait de même avec ses points bloquants) : la planche la garde.
+ * Une carte sans le logo du magasin n'entre dans aucune des deux.
  */
 
 /** La carte de visite européenne, en millimètres. */
@@ -42,7 +48,10 @@ const MM = 96 / 25.4
 const PREVIEW_ZOOM = 1.15
 
 export type CardSide = 'recto' | 'verso'
-/** Le recto : le logo sur la couleur principale de la charte, ou en couleur sur le papier. */
+/**
+ * Le recto : le logo du magasin dans ses couleurs, sur le papier ; ou sur la couleur principale de la charte, où il passe
+ * en blanc, comme sur les couvertures des catalogues.
+ */
 export type CardRecto = 'couleur' | 'papier'
 /** Le QR du verso : le webshop de la boutique, son adresse sur Google Maps, ou aucun. */
 export type CardQr = 'webshop' | 'maps' | 'aucun'
@@ -51,11 +60,13 @@ export interface CardOptions {
   recto: CardRecto
   qr: CardQr
   hours: boolean
+  /** Le nom de la boutique sous le logo (à retirer quand le logo du magasin le porte déjà). */
+  name: boolean
 }
-type CardCharter = Pick<CatalogueCharter, 'logoUrl' | 'colors'>
+type CardCharter = Pick<CatalogueCharter, 'colors'>
 
 const mm = (value: number): string => `${value}mm`
-const asset = (path: string): string => new URL(`${import.meta.env.BASE_URL}${path}`, window.location.href).href
+const message = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause))
 
 /** Les horaires imprimés : ceux saisis pour la boutique, sinon ceux de l'ERP ; en néerlandais, le français à défaut. */
 function hoursOf(shop: CatalogueCharterShop, lang: CatalogueLang): string {
@@ -104,7 +115,7 @@ function cardLines(shop: CatalogueCharterShop, options: CardOptions): Array<{ ke
   return lines.filter((line) => line.text.trim() !== '')
 }
 
-/** Ce qui manque à la carte d'une boutique, tel qu'on le dit sous l'aperçu (rien n'est bloquant : un vide n'imprime rien). */
+/** Ce qui manque à la carte d'une boutique, hors logo, tel qu'on le dit sous l'aperçu (un vide n'imprime rien). */
 function cardMissing(shop: CatalogueCharterShop, options: CardOptions): string[] {
   const out: string[] = []
   if (!shop.address) out.push('adresse')
@@ -146,19 +157,26 @@ export function CardFace({ shop, charter, side, options, textRef }: {
     '--i': colors.ink,
     '--ab': colors.rule ?? CATALOGUE_RULE_DEFAULT,
   } as CSSProperties
-  // Le logo de la boutique, sinon celui de la charte ; sur la couleur, un logo importé passe en blanc (comme en couverture).
-  const custom = shop.logoUrl ?? charter.logoUrl
+  // Le logo du magasin, jamais celui de la charte à sa place ; sur la couleur, il passe en blanc (comme en couverture).
+  // Sans lui, l'aperçu le dit à sa place (une telle carte ne s'imprime pas).
   const onColor = side === 'recto' && options.recto === 'couleur'
-  const logo = custom ?? asset(onColor ? 'img/logo-white.png' : 'img/logo.png')
   const qr = qrOf(shop, options)
   return (
     <div className={`bc-face bc-face--${side}${side === 'recto' ? ` bc-face--${options.recto}` : ''}`} style={style} lang={options.lang}>
       <div className="bc-trim">
         {side === 'recto' ? (
-          <div className="bc-recto">
-            <img className={`bc-logo${custom && onColor ? ' bc-logo--white' : ''}`} src={logo} alt="" />
-            <div className="bc-recto__rule" />
-            <div className="bc-recto__shop">{shop.name}</div>
+          <div className={`bc-recto${options.name ? '' : ' bc-recto--alone'}`}>
+            {shop.logoUrl ? (
+              <img className={`bc-logo${onColor ? ' bc-logo--white' : ''}`} src={shop.logoUrl} alt="" />
+            ) : (
+              <div className="bc-logo-missing">Logo du magasin à choisir</div>
+            )}
+            {options.name ? (
+              <>
+                <div className="bc-recto__rule" />
+                <div className="bc-recto__shop">{shop.name}</div>
+              </>
+            ) : null}
           </div>
         ) : (
           <div className="bc-verso">
@@ -273,14 +291,18 @@ function Preview({ children }: { children: ReactNode }) {
   )
 }
 
-/** Une boutique : sa carte (recto, verso), ce qui y manque, et si elle part à l'impression. */
-function ShopCard({ shop, charter, options, picked, onPick, onOverflow }: {
+/** Une boutique : sa carte (recto, verso), son logo, ce qui y manque, et si elle part à l'impression. */
+function ShopCard({ shop, charter, options, picked, onPick, onOverflow, onChooseLogo, logoSave }: {
   shop: CatalogueCharterShop
   charter: CardCharter
   options: CardOptions
   picked: boolean
   onPick: (on: boolean) => void
   onOverflow: (over: boolean) => void
+  /** Ouvre la médiathèque pour le logo du magasin. */
+  onChooseLogo: () => void
+  /** L'enregistrement du logo de CETTE boutique, s'il est en cours ou a échoué. */
+  logoSave: { saving: boolean; error: string | null } | null
 }) {
   const text = useRef<HTMLDivElement | null>(null)
   const [over, setOver] = useState(false)
@@ -311,6 +333,10 @@ function ShopCard({ shop, charter, options, picked, onPick, onOverflow }: {
           <b>{shop.name}</b>
         </label>
         {shop.error ? <span className="bro-tag">TFBuddy : {shop.error}</span> : null}
+        <span className="catv-grow" />
+        <button type="button" className={`btn btn--sm${shop.logoUrl ? '' : ' btn--primary'}`} disabled={logoSave?.saving} onClick={onChooseLogo} title="Une image de la médiathèque, du réseau ou de la boutique : le même logo que dans ses catalogues">
+          {logoSave?.saving ? 'Enregistrement…' : shop.logoUrl ? 'Changer le logo du magasin' : 'Choisir le logo du magasin'}
+        </button>
       </div>
       <div className="bcv-shop__faces">
         <figure className="bcv-shop__side">
@@ -326,6 +352,10 @@ function ShopCard({ shop, charter, options, picked, onPick, onOverflow }: {
           <figcaption>Verso</figcaption>
         </figure>
       </div>
+      {logoSave?.error ? <p className="error">Le logo n’a pas été enregistré : {logoSave.error}</p> : null}
+      {!shop.logoUrl ? (
+        <p className="catv-warn">Pas de logo du magasin : sa carte ne s’imprime pas sans lui (celui de la charte n’est pas mis à sa place).</p>
+      ) : null}
       {over ? (
         <p className="catv-warn">
           Le texte dépasse de la carte : raccourcissez les horaires (pages de la marque › Dernière page) ou décochez « Horaires ». La planche A4 garde la carte ; le PDF de l’imprimeur l’écarte.
@@ -333,9 +363,9 @@ function ShopCard({ shop, charter, options, picked, onPick, onOverflow }: {
       ) : null}
       {missing.length ? (
         <p className="bcv-shop__missing">Inconnu, donc non imprimé : {missing.join(', ')}.</p>
-      ) : (
+      ) : shop.logoUrl ? (
         <p className="bcv-shop__ok">Tout ce que la carte imprime est connu.</p>
-      )}
+      ) : null}
     </section>
   )
 }
@@ -344,18 +374,36 @@ export default function BusinessCardsView({ onEditShops }: { onEditShops?: () =>
   const charter = useAsync(() => api.getCatalogueCharter(), [])
   const checks = useAsync(() => api.getCatalogueCharterChecks(), [])
   const [lang, setLang] = useState<CatalogueLang>('fr')
-  const [recto, setRecto] = useState<CardRecto>('couleur')
+  // Le papier d'abord : le logo du magasin y garde ses couleurs.
+  const [recto, setRecto] = useState<CardRecto>('papier')
   const [qr, setQr] = useState<CardQr>('webshop')
   const [hours, setHours] = useState(true)
+  const [name, setName] = useState(true)
+  // Les boutiques dont le logo vient d'être choisi ici (la réponse du serveur remplace la ligne lue).
+  const [saved, setSaved] = useState<Record<number, CatalogueCharterShop>>({})
+  const [picking, setPicking] = useState<number | null>(null)
+  const [logoSave, setLogoSave] = useState<{ id: number; saving: boolean; error: string | null } | null>(null)
   // Les boutiques écartées de l'impression (toutes partent par défaut).
   const [excluded, setExcluded] = useState<Set<number>>(() => new Set())
   const [overflowing, setOverflowing] = useState<Set<number>>(() => new Set())
   const [printNote, setPrintNote] = useState<{ error: boolean; text: string } | null>(null)
 
-  const options: CardOptions = { lang, recto, qr, hours }
-  const shops = checks.data?.shops ?? []
+  const options: CardOptions = { lang, recto, qr, hours, name }
+  const shops = (checks.data?.shops ?? []).map((shop) => saved[shop.id] ?? shop)
   const chosen = shops.filter((shop) => !excluded.has(shop.id))
-  const loaded = charter.data ? { logoUrl: charter.data.logoUrl, colors: charter.data.colors } : null
+  const loaded = charter.data ? { colors: charter.data.colors } : null
+
+  /** Le logo du magasin, choisi dans la médiathèque : enregistré tout de suite, comme dans les pages de la marque. */
+  function saveLogo(id: number, mediaId: number) {
+    setLogoSave({ id, saving: true, error: null })
+    api.saveCatalogueShop(id, { logoMediaId: mediaId }).then(
+      (row) => {
+        setSaved((current) => ({ ...current, [row.id]: row }))
+        setLogoSave(null)
+      },
+      (cause: unknown) => setLogoSave({ id, saving: false, error: message(cause) }),
+    )
+  }
 
   function pick(id: number, on: boolean) {
     setExcluded((current) => {
@@ -380,13 +428,20 @@ export default function BusinessCardsView({ onEditShops }: { onEditShops?: () =>
     setPrintNote(null)
     if (!loaded) return
     const printer = kind === 'printer'
-    const kept = printer ? chosen.filter((shop) => !overflowing.has(shop.id)) : chosen
+    // Sans le logo du magasin, pas de carte ; pour l'imprimeur, pas de texte qui dépasse.
+    const noLogo = chosen.filter((shop) => !shop.logoUrl)
+    const tooLong = printer ? chosen.filter((shop) => shop.logoUrl && overflowing.has(shop.id)) : []
+    const kept = chosen.filter((shop) => shop.logoUrl && !(printer && overflowing.has(shop.id)))
+    const left = [
+      noLogo.length ? `sans logo du magasin : ${noLogo.map((shop) => shop.name).join(', ')}` : null,
+      tooLong.length ? `le texte dépasse : ${tooLong.map((shop) => shop.name).join(', ')}` : null,
+    ].filter(Boolean).join(' ; ')
     if (!chosen.length) {
       setPrintNote({ error: true, text: 'Cochez au moins une boutique.' })
       return
     }
     if (!kept.length) {
-      setPrintNote({ error: true, text: 'Le texte dépasse sur chaque carte cochée : voir sous les cartes. La planche A4 reste possible.' })
+      setPrintNote({ error: true, text: `Aucune carte cochée ne peut partir (${left}) : voir sous les cartes.` })
       return
     }
     const container = document.createElement('div')
@@ -416,8 +471,7 @@ export default function BusinessCardsView({ onEditShops }: { onEditShops?: () =>
     })
     if (failure) setPrintNote({ error: true, text: failure })
     else if (kept.length < chosen.length) {
-      const left = chosen.filter((shop) => overflowing.has(shop.id)).map((shop) => shop.name)
-      setPrintNote({ error: true, text: `Écartée(s) du PDF de l’imprimeur, le texte dépasse : ${left.join(', ')}.` })
+      setPrintNote({ error: true, text: `Écartée(s) ${printer ? 'du PDF de l’imprimeur' : 'de la planche'} — ${left}.` })
     } else {
       setPrintNote({
         error: false,
@@ -433,9 +487,9 @@ export default function BusinessCardsView({ onEditShops }: { onEditShops?: () =>
     <div className="catv bcv">
       <style>{businessCardCss()}</style>
       <p className="catv-note">
-        Une carte par boutique, 85 × 55 mm : au recto le logo (celui de la boutique, sinon celui de la charte), au verso ses
-        coordonnées et un QR. Tout vient de la fiche de la boutique (ERP, TFBuddy) et de ce qui est saisi dans les pages de la
-        marque › Dernière page : rien n’est à saisir ici, un champ vide n’imprime rien.
+        Une carte par boutique, 85 × 55 mm : au recto le logo du magasin, au verso ses coordonnées et un QR. Les coordonnées
+        viennent de la fiche de la boutique (ERP, TFBuddy) et de ce qui est saisi dans les pages de la marque › Dernière page :
+        un champ vide n’imprime rien. Le logo se choisit sous chaque carte ; sans lui, la carte ne s’imprime pas.
       </p>
 
       <div className="catv-toolbar">
@@ -447,8 +501,8 @@ export default function BusinessCardsView({ onEditShops }: { onEditShops?: () =>
           ))}
         </span>
         <span className="bro-seg" role="group" aria-label="Recto">
-          {([['couleur', 'Recto couleur'], ['papier', 'Recto papier']] as const).map(([value, label]) => (
-            <button key={value} type="button" className={recto === value ? 'is-on' : ''} onClick={() => setRecto(value)}>
+          {([['papier', 'Recto papier', 'Le logo du magasin dans ses couleurs, sur le papier de la charte'], ['couleur', 'Recto couleur', 'Le logo du magasin en blanc sur la couleur principale, comme sur les couvertures des catalogues']] as const).map(([value, label, title]) => (
+            <button key={value} type="button" title={title} className={recto === value ? 'is-on' : ''} onClick={() => setRecto(value)}>
               {label}
             </button>
           ))}
@@ -463,6 +517,10 @@ export default function BusinessCardsView({ onEditShops }: { onEditShops?: () =>
         <label className="bro-check bcv-toggle">
           <input type="checkbox" checked={hours} onChange={(event) => setHours(event.target.checked)} />
           Horaires
+        </label>
+        <label className="bro-check bcv-toggle" title="À décocher quand le logo du magasin porte déjà son nom">
+          <input type="checkbox" checked={name} onChange={(event) => setName(event.target.checked)} />
+          Nom sous le logo
         </label>
         <span className="catv-grow" />
         {onEditShops ? (
@@ -519,9 +577,22 @@ export default function BusinessCardsView({ onEditShops }: { onEditShops?: () =>
               picked={!excluded.has(shop.id)}
               onPick={(on) => pick(shop.id, on)}
               onOverflow={(over) => flag(shop.id, over)}
+              onChooseLogo={() => setPicking(shop.id)}
+              logoSave={logoSave?.id === shop.id ? logoSave : null}
             />
           ))}
         </div>
+      ) : null}
+
+      {picking !== null ? (
+        <MediaPicker
+          title="Logo du magasin"
+          onClose={() => setPicking(null)}
+          onPick={(chosenAsset) => {
+            saveLogo(picking, Number(chosenAsset.id))
+            setPicking(null)
+          }}
+        />
       ) : null}
     </div>
   )
