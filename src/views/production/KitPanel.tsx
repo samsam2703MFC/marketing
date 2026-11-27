@@ -4,6 +4,7 @@ import type { Kit, KitVersions, Production } from '../../lib/api/module'
 import { describeError } from '../../state/auth'
 import KitReader from './KitReader'
 import { shortDate } from './ProductionPanel'
+import Erreur from '../../components/Erreur'
 
 /**
  * L'envoi du kit des franchisés : une version figée, un lien personnel par
@@ -105,7 +106,7 @@ export default function KitPanel({ campaignId, brandAdmin, production }: Props) 
         ) : null}
       </div>
       {!ready ? <p className="why">Le kit s’envoie quand les {production.total} sections sont validées : il en reste {production.total - production.validated}.</p> : null}
-      {error ? <p className="error">{error}</p> : null}
+      {error ? <Erreur>{error}</Erreur> : null}
       {notice ? <p className="ps-notice">{notice}</p> : null}
 
       <table className="ps-table kit-send">

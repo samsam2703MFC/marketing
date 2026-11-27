@@ -5,6 +5,7 @@ import type { MediaAsset, MediaLibrary, MediaMoment, MediaTagFields, MediaTagPro
 import { webshopProducts } from './sources'
 import type { WebshopProduct } from './sources'
 import { fold, proposeForAssets } from './tagRules'
+import Erreur from '../../components/Erreur'
 
 /**
  * Les étiquettes d'une image (idée 1 de la maquette) et les étiquettes proposées, à valider
@@ -270,7 +271,7 @@ export function TagEditor({ asset, library, shops, busy, save, onDecided }: Edit
         {productSearch.trim() ? (
           <span className="tagrow__picks">
             {productError ? (
-              <span className="error">{productError}</span>
+              <Erreur inline>{productError}</Erreur>
             ) : !products ? (
               <span className="muted">Lecture du webshop…</span>
             ) : matches.length ? (
@@ -465,7 +466,7 @@ export function ProposalsPanel({
         </button>
       </div>
       {scan ? <p className="muted proposals__note">{scan}</p> : null}
-      {error ? <p className="error">{error}</p> : null}
+      {error ? <Erreur>{error}</Erreur> : null}
 
       {loading && !rows.length ? <p className="muted">Chargement…</p> : null}
       {!loading && !rows.length ? (

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import * as api from './lib/api/module'
 import { useAsync } from './lib/useAsync'
-import { ESPACE_BOUTIQUE, SOCIAL_NATIVES, tabsFor, titleFor } from './lib/navigation'
+import { ESPACE_BOUTIQUE, SOCIAL_NATIVES, tabRoute, tabsFor, titleFor } from './lib/navigation'
 import type { Role, Route } from './lib/navigation'
 import Sidebar from './components/Sidebar'
 import DashboardView from './views/DashboardView'
@@ -41,6 +41,8 @@ import RepostView from './views/social/RepostView'
 import GoogleView from './views/social/GoogleView'
 import InStoreView from './views/InStoreView'
 import { ReferencesProvider } from './state/references'
+import { NavigationContext } from './components/Erreur'
+import Erreur from './components/Erreur'
 
 export default function App() {
   // L'identité vient du serveur : une session ouverte par les identifiants de
@@ -64,7 +66,7 @@ export default function App() {
     return (
       <div className="app">
         <main className="app__body">
-          <p className="error">Module marketing injoignable : {session.error}</p>
+          <Erreur>Module marketing injoignable : {session.error}</Erreur>
           <p className="muted">
             L’API doit répondre à <code>/api/v1/marketing/session</code>.
           </p>
@@ -170,9 +172,12 @@ const REGLAGES_SOCIAL: Record<string, { tab: string; section?: string }> = {
   version: { tab: 'api', section: 'version' }, dsa: { tab: 'api', section: 'dsa' }, ia: { tab: 'ia' },
 }
 
+/** Les réglages du module qu'un message d'erreur peut ouvrir par un lien (`?ecran=addresses`). */
+const REGLAGES_MODULE: ReadonlySet<string> = new Set(['addresses', 'settings'])
+
 function screenFromUrl(): Route | null {
   const ecran = new URLSearchParams(window.location.search).get('ecran') ?? ''
-  return SOCIAL_NATIVES.has(ecran as Route) ? (ecran as Route) : null
+  return SOCIAL_NATIVES.has(ecran as Route) || REGLAGES_MODULE.has(ecran) ? (ecran as Route) : null
 }
 
 /** La campagne à présélectionner dans « Créer un post » quand Social renvoie ici (`&op=19`). */
@@ -319,7 +324,7 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
     return (
       <div className="app">
         <main className="app__body">
-          <p className="error">Module marketing injoignable : {references.error}</p>
+          <Erreur>Module marketing injoignable : {references.error}</Erreur>
         </main>
       </div>
     )
@@ -376,6 +381,8 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
 
   return (
     <ReferencesProvider value={refs}>
+    {/* Les liens « remède » des messages d'erreur ouvrent un réglage : réservés au réseau, seul à y avoir accès. */}
+    <NavigationContext.Provider value={role === 'BRAND_ADMIN' ? navigate : null}>
     <div className="workspace">
       <Sidebar
         role={role}
@@ -395,7 +402,7 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
               <p className="topbar__kicker">
                 {role === 'BRAND_ADMIN' ? 'Vue Réseau' : 'Vue Franchisé'}
               </p>
-              <h1>{titleFor(role, route, campaignId !== null) || 'Suivi de campagne'}</h1>
+              <h1>{titleFor(role, route, campaignId !== null) || 'Marketing'}</h1>
             </div>
           </header>
         )}
@@ -403,6 +410,8 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
         <main
           className={`app__body${route === 'builder' || route === 'brochures' || route === 'catalogues' || route === 'business-cards' || route === 'media' ? ' app__body--wide' : ''}${framed ? ' app__body--frame' : ''}`}
         >
+          {/* Le cadre porte son propre titre à l'écran ; la page garde le sien pour les lecteurs d'écran. */}
+          {framed ? <h1 className="sr-only">{titleFor(role, route)}</h1> : null}
           {/* Une entrée à onglets : les écrans qui montraient la même donnée sous plusieurs entrées du menu. */}
           {tabs ? (
             <nav className="page-tabs" aria-label="Onglets">
@@ -410,8 +419,8 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
                 <button
                   key={tab.route}
                   type="button"
-                  className={`page-tabs__tab${tab.route === route ? ' is-on' : ''}`}
-                  aria-current={tab.route === route ? 'page' : undefined}
+                  className={`page-tabs__tab${tab.route === tabRoute(route) ? ' is-on' : ''}`}
+                  aria-current={tab.route === tabRoute(route) ? 'page' : undefined}
                   onClick={() => navigate(tab.route)}
                 >
                   {tab.label}
@@ -566,6 +575,7 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
         </main>
       </div>
     </div>
+    </NavigationContext.Provider>
     </ReferencesProvider>
   )
 }

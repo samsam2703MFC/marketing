@@ -11,6 +11,7 @@ import type { EtatSocial, Objet } from '../../lib/social/store'
 import { Barres, C, Courbe, court, fmtG, incomplets, lg, plages, signe } from './GrilleGraphes'
 import type { Survol } from './GrilleGraphes'
 import Aide from '../../components/Aide'
+import Erreur, { TexteAvecRemedes } from '../../components/Erreur'
 
 interface PostG {
   id: string
@@ -178,7 +179,7 @@ export default function GrilleView() {
   }, [pret])
 
   if (chargement === 'attente') return <p className="muted">Lecture du module Social…</p>
-  if (!etat || !serveur) return <p className="error">Module Social illisible : {erreur}</p>
+  if (!etat || !serveur) return <Erreur>Module Social illisible : {erreur}</Erreur>
 
   const igUnique = !!serveur.instagramUnique
   const boutiques = boutiquesReseau(etat)
@@ -232,7 +233,7 @@ export default function GrilleView() {
   type Controle = { t: string; ton: 'ok' | 'warn' | 'info' }
   const checks: Controle[] = []
   if (compte && compte.igs !== 'connected')
-    checks.push({ t: `Pas de compte Instagram connecté pour ${compte.name} : rien ne partira sur Instagram (Paramètres → identifiants Meta).`, ton: 'warn' })
+    checks.push({ t: `Pas de compte Instagram connecté pour ${compte.name} : rien ne partira sur Instagram (Paramètres → API Meta → Identifiants Meta).`, ton: 'warn' })
   const friseIdx: { i: number; post: PostG; published: boolean }[] = []
   raw.forEach((c, i) => {
     if (c.sched && c.post?.frise && c.tile === 0) friseIdx.push({ i, post: c.post, published: false })
@@ -319,7 +320,7 @@ export default function GrilleView() {
       <div className="filters">
         <div className="filters__row">
           <span className="muted social-native__periode">
-            Le profil tel qu’il sera : les posts programmés au-dessus de ceux déjà en ligne · <code>GET /{'{ig_user_id}'}/media</code>
+            Le profil tel qu’il sera : les posts programmés au-dessus de ceux déjà en ligne
           </span>
           <span className="grille__espace" />
           {comptes.map((x) => {
@@ -461,7 +462,7 @@ export default function GrilleView() {
             {checks.map((k, i) => (
               <div key={i} className="grille__controle">
                 <span className={`grille__tag is-${k.ton}`}>{k.ton === 'ok' ? 'OK' : k.ton === 'warn' ? 'Attention' : 'Info'}</span>
-                <span>{k.t}</span>
+                <span><TexteAvecRemedes texte={k.t} /></span>
               </div>
             ))}
           </div>

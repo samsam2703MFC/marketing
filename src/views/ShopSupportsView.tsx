@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import * as api from '../lib/api/module'
 import type { Shop, ShopSupport, ShopSupportInput } from '../lib/api/module'
 import { summarize } from './builder/Supports'
+import Erreur from '../components/Erreur'
 
 /**
  * Marketing en magasin › Bâches & affiches : les supports de chaque boutique, déclarés
@@ -46,7 +47,7 @@ export default function ShopSupportsView() {
     return map
   }, [supports])
 
-  if (error) return <p className="error">{error}</p>
+  if (error) return <Erreur>{error}</Erreur>
   if (!shops) return <p className="muted">Chargement…</p>
 
   const count = (list: ShopSupport[], format: string) =>
@@ -271,7 +272,7 @@ function SupportsSheet({
         ))}
       </div>
 
-      {error ? <p className="error">{error}</p> : null}
+      {error ? <Erreur>{error}</Erreur> : null}
       <div className="supports__actions">
         <button type="button" className="btn btn--sm" onClick={onClose}>
           Annuler

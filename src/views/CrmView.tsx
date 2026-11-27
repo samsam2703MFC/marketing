@@ -1,6 +1,8 @@
 import { module as api } from '../lib/api'
 import { useAsync, formatEur, formatNumber } from '../lib/useAsync'
 import ProspectImport from '../components/ProspectImport'
+import Erreur from '../components/Erreur'
+import Aide from '../components/Aide'
 
 /**
  * Fidélité & CRM.
@@ -13,7 +15,7 @@ import ProspectImport from '../components/ProspectImport'
 export default function CrmView() {
   const { data, error, loading } = useAsync(() => api.getCrm(), [])
 
-  if (error) return <p className="error">{error}</p>
+  if (error) return <Erreur>{error}</Erreur>
   if (loading) return <p className="muted">Chargement…</p>
   if (!data) return null
 
@@ -42,7 +44,10 @@ export default function CrmView() {
       </div>
 
       <section className="card table-card">
-        <h2>Segments RFM</h2>
+        <h2>
+          Segments de clientèle
+          <Aide texte="Chaque client rangé selon la date de son dernier achat, sa fréquence d’achat et le montant dépensé (méthode RFM)." />
+        </h2>
         {segments.length === 0 ? (
           <p className="muted">Aucun segment défini.</p>
         ) : (
@@ -82,9 +87,8 @@ export default function CrmView() {
 
             {segmented === 0 ? (
               <p className="muted">
-                Les segments sont déclarés mais leur règle de calcul n’est pas encore écrite :
-                l’appartenance (<code>mar_crm_customer_segment</code>) n’est peuplée par aucun
-                traitement, d’où des effectifs à zéro.
+                Segments bientôt disponibles : le calcul qui range chaque client dans son segment n’est pas encore en
+                place, d’où des effectifs à zéro.
               </p>
             ) : null}
           </>

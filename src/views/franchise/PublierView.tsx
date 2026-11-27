@@ -27,6 +27,7 @@ import { FORMATS, STYLES, control, fill, vars } from '../../lib/franchise/visuel
 import type { ChampsVisuel, ReglagesVisuel } from '../../lib/franchise/visuel'
 import VisuelPost from './VisuelPost'
 import type { VisuelHandle } from './VisuelPost'
+import Erreur from '../../components/Erreur'
 
 export interface PublierViewProps {
   /**
@@ -260,7 +261,7 @@ function lirePhoto(file: File | undefined): Promise<string | null> {
 export default function PublierView(props: PublierViewProps = {}) {
   const { etat, erreur, chargement } = useFranchise()
   if (chargement === 'attente') return <p className="muted">Lecture de votre espace…</p>
-  if (!etat) return <p className="error">{erreur || 'Chargement impossible.'}</p>
+  if (!etat) return <Erreur>{erreur || 'Chargement impossible.'}</Erreur>
   return <Publier etat={etat} props={props} />
 }
 

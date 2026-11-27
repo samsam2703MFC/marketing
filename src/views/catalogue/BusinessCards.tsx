@@ -14,6 +14,7 @@ import { MediaPicker } from './MediaPicker'
 import CARD_CSS from './business-card-pages.css?inline'
 import './catalogue.css'
 import './business-cards.css'
+import Erreur from '../../components/Erreur'
 
 /**
  * Les cartes de visite des boutiques (27/11/2026, Sam : « dans la gestion des imprimés : rajouter pour chaque magasin
@@ -352,7 +353,7 @@ function ShopCard({ shop, charter, options, picked, onPick, onOverflow, onChoose
           <figcaption>Verso</figcaption>
         </figure>
       </div>
-      {logoSave?.error ? <p className="error">Le logo n’a pas été enregistré : {logoSave.error}</p> : null}
+      {logoSave?.error ? <Erreur>Le logo n’a pas été enregistré : {logoSave.error}</Erreur> : null}
       {!shop.logoUrl ? (
         <p className="catv-warn">Pas de logo du magasin : sa carte ne s’imprime pas sans lui (celui de la charte n’est pas mis à sa place).</p>
       ) : null}
@@ -559,7 +560,7 @@ export default function BusinessCardsView({ onEditShops }: { onEditShops?: () =>
       </div>
 
       {printNote ? <p className={printNote.error ? 'catv-warn' : 'catv-note'}>{printNote.text}</p> : null}
-      {error ? <p className="error">{error}</p> : null}
+      {error ? <Erreur>{error}</Erreur> : null}
       {charter.data?.publication?.draftChanged ? (
         <p className="catv-note">La charte a des changements non publiés : les cartes montrent déjà son logo et ses couleurs en cours.</p>
       ) : null}

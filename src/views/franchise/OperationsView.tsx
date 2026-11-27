@@ -4,6 +4,7 @@ import './operations.css'
 import { dLabel, dShort, eur } from '../../lib/social/format'
 import { boost, lien, media, operations, publicites, texteErreur, useFranchise } from './_donnees'
 import type { DemandeBoost, Naviguer, OperationFranchise, PubliciteFranchise, VuePublicites } from './_donnees'
+import Erreur from '../../components/Erreur'
 
 /**
  * Publicités et opérations — la page « Publicités et opérations » de l'espace franchisé
@@ -59,7 +60,7 @@ export default function OperationsView({ onNaviguer }: Props) {
       .catch(() => setPubs({ reseau: [], boutique: [], erreur: true }))
   }, [pret])
 
-  if (!etat) return <div className="social-native">{erreur ? <p className="error">{erreur}</p> : <p className="muted">Chargement de l’espace boutique…</p>}</div>
+  if (!etat) return <div className="social-native">{erreur ? <Erreur>{erreur}</Erreur> : <p className="muted">Chargement de l’espace boutique…</p>}</div>
 
   const regles = etat.rules ?? {}
   const voirRes = regles.voirResultats !== false
@@ -176,7 +177,7 @@ export default function OperationsView({ onNaviguer }: Props) {
       ) : null}
 
       {hidden ? <div className="card fop__info">Le réseau ne partage pas les opérations dans l’espace boutique.</div> : null}
-      {err ? <p className="error">{err}</p> : null}
+      {err ? <Erreur>{err}</Erreur> : null}
       {!data ? <p className="muted">Lecture des opérations du réseau…</p> : null}
       {data && !hidden && !ops.length && !err ? <div className="card fop__info">Aucune opération du réseau ne concerne votre boutique pour l’instant.</div> : null}
 

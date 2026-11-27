@@ -11,6 +11,7 @@ import { Nav, STATUS_LABELS, Seg, Thumb, VersionPicker } from './CatalogueWizard
 import type { WizardProps, WizardStep } from './CatalogueWizard'
 import { SUPPORT_LABELS, documentTexts, leafletBlocked, leafletChecks, leafletDoc, leafletFormat, leafletItems, leafletTextKeys, supportOf } from './leaflet'
 import type { LeafletCheck, LeafletTarget } from './leaflet'
+import Erreur from '../../components/Erreur'
 
 /**
  * L'assistant d'un leaflet A5 ou d'un dépliant A4 tiré d'un catalogue (21/11/2026, fusion des imprimés, étape 2). Le
@@ -99,7 +100,7 @@ export default function LeafletWizard(props: WizardProps) {
           </button>
         ))}
       </nav>
-      {props.docError ? <p className="error">{props.docError}</p> : null}
+      {props.docError ? <Erreur>{props.docError}</Erreur> : null}
       {step === 1 ? <StepSupport {...props} /> : null}
       {step === 2 ? <StepProducts {...props} /> : null}
       {step === 3 ? <StepLook {...props} /> : null}
@@ -488,7 +489,7 @@ function StepChecks(p: WizardProps) {
                       <td>{versionLabel(r.shop)}</td>
                       <td>{r.lang.toUpperCase()}</td>
                       <td>
-                        {r.error ? <span className="error">{r.error}</span> : blocked ? <span className="lf-over">✕ {blocked} bloquant{blocked > 1 ? 's' : ''}</span> : <span className="wz-ok">✓ prête</span>}
+                        {r.error ? <Erreur inline>{r.error}</Erreur> : blocked ? <span className="lf-over">✕ {blocked} bloquant{blocked > 1 ? 's' : ''}</span> : <span className="wz-ok">✓ prête</span>}
                         {!r.error && toSee ? ` · ${toSee} à voir` : ''}
                       </td>
                       <td>

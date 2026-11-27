@@ -5,20 +5,22 @@ import LinkBadge from '../components/LinkBadge'
 import { useLabel } from '../state/references'
 import ErpPromotions from '../components/ErpPromotions'
 import { encreLisible } from '../lib/couleurs'
+import Erreur from '../components/Erreur'
+import Aide from '../components/Aide'
 
 
 export default function PromotionsView() {
   const { data, error, loading } = useAsync(() => api.listPromotions(), [])
   const offers = useAsync(() => api.listCampaignOffers(), [])
 
-  if (error) return <p className="error">{error}</p>
+  if (error) return <Erreur>{error}</Erreur>
   if (loading) return <p className="muted">Chargement…</p>
 
   return (
     <>
       <ErpPromotions families={['buyXGetY', 'quantity', 'scheduledDiscount']} title="Promotions de l’ERP" />
       {data?.length ? <CatalogTable promotions={data} /> : <EmptyCatalog />}
-      {offers.error ? <p className="error">{offers.error}</p> : null}
+      {offers.error ? <Erreur>{offers.error}</Erreur> : null}
       {offers.data?.length ? <OfferTable offers={offers.data} /> : null}
     </>
   )
@@ -34,12 +36,11 @@ export default function PromotionsView() {
 function EmptyCatalog() {
   return (
     <section className="card">
-      <h2>Promotions du catalogue</h2>
-      <p className="muted">
-        Aucune promotion : cette table (<code>mar_promotion</code>) est alimentée par l’import
-        produit de l’ERP, qui n’est pas encore raccordé. Les offres montées dans l’assistant de
-        campagne apparaissent ci-dessous.
-      </p>
+      <h2>
+        Promotions du catalogue
+        <Aide texte="Elles viendront de l’import des produits de l’ERP, qui n’est pas encore relié au module. Les offres montées dans l’assistant de campagne apparaissent plus bas." />
+      </h2>
+      <p className="muted">Aucune promotion du catalogue pour l’instant : les promotions de la caisse ne sont pas encore reliées.</p>
     </section>
   )
 }

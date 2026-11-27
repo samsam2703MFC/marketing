@@ -21,6 +21,7 @@ import type { PickedImage } from '../media/sources'
 import { familyImage, seasonImage, seasonLabel } from './illustrations'
 import { styleLevier } from '../../lib/couleurs'
 import Aide from '../../components/Aide'
+import Erreur from '../../components/Erreur'
 
 /**
  * Assistant de création de campagne, en huit étapes.
@@ -843,7 +844,7 @@ export default function CampaignBuilder({
           </section>
 
           {blocking ? <p className="muted wizard__hint">{blocking}</p> : null}
-          {failure ? <p className="error">{failure}</p> : null}
+          {failure ? <Erreur>{failure}</Erreur> : null}
 
           {/* Une seule barre d'actions, toujours visible en bas de l'écran : les deux
               façons de quitter à gauche, le retour puis l'avancée à droite — l'action
@@ -1899,7 +1900,7 @@ function FramingStep({
                   </button>
                 )}
               </div>
-              {valide ? null : <span className="error">Attendu #RRGGBB</span>}
+              {valide ? null : <Erreur inline>Attendu #RRGGBB</Erreur>}
             </div>
           )
         })}
@@ -2155,7 +2156,7 @@ function OfferStep({ draft, patch }: StepProps) {
         <Aide texte="Facultative : toutes les campagnes n’en portent pas. Composez-la comme en boutique — saison, catégories, produits ; elle court sur la période fixée à l’étape 1." />
       </h2>
 
-      {catalog.error ? <p className="error">Catalogue indisponible : {catalog.error}</p> : null}
+      {catalog.error ? <Erreur>Catalogue indisponible : {catalog.error}</Erreur> : null}
       {!catalog.loading && !catalog.error && products.length === 0 ? (
         <p className="muted">
           Le catalogue est vide : lancez la reprise ERP depuis l’écran du vivier B2B pour
@@ -3070,7 +3071,7 @@ function LeadsStep({ draft, patch }: StepProps) {
       </div>
 
       {(availability.error ?? distinct.error) ? (
-        <p className="error">{availability.error ?? distinct.error}</p>
+        <Erreur>{availability.error ?? distinct.error}</Erreur>
       ) : null}
       {availability.loading || distinct.loading ? (
         <p className="muted">Lecture du vivier…</p>

@@ -3,6 +3,7 @@ import { useAsync, formatEur } from '../lib/useAsync'
 import type { CampaignStatus, Lever } from '../lib/api/module'
 import TrafficInvestment from './TrafficInvestment'
 import { encreLisible } from '../lib/couleurs'
+import Erreur from '../components/Erreur'
 
 interface DashboardProps {
   statuses: CampaignStatus[]
@@ -35,7 +36,7 @@ export default function DashboardView({ statuses, levers, brandId, network, onOp
 
   return (
     <>
-      {campaigns.error ? <p className="error">{campaigns.error}</p> : null}
+      {campaigns.error ? <Erreur>{campaigns.error}</Erreur> : null}
 
       <div className="grid">
         <section className="card">

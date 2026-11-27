@@ -319,6 +319,19 @@ const TABS: Record<Role, Tab[][]> = {
       { route: 'social-bilan', label: 'Classement' },
       { route: 'social-suivi', label: 'Abonnés & budget' },
     ],
+    // Les réglages du module Social (audit du 27/11/2026) : sans onglets, ces écrans n'étaient joignables que par leur
+    // adresse, alors que les messages d'erreur y renvoient (« Paramètres → API Meta → Clés d’accès Meta »). Les libellés
+    // sont ceux que citent ces messages.
+    [
+      { route: 'social-set-conn', label: 'Connexions des boutiques' },
+      { route: 'social-set-cles', label: 'API Meta' },
+      { route: 'social-set-ia', label: 'Rédaction IA' },
+      { route: 'social-set-tpl', label: 'Modèles' },
+      { route: 'social-set-grp', label: 'Groupes' },
+      { route: 'social-set-rights', label: 'Droits' },
+      { route: 'social-set-log', label: 'Journal' },
+      { route: 'social-set-tfb', label: 'API TFBuddy' },
+    ],
   ],
   FRANCHISEE: [
     [
@@ -328,9 +341,25 @@ const TABS: Record<Role, Tab[][]> = {
   ],
 }
 
+/**
+ * Les sections de l'onglet « API Meta » (identifiants, plateformes, version, DSA) : une adresse chacune, un seul onglet.
+ */
+const ALIAS_ONGLET: Partial<Record<Route, Route>> = {
+  'social-set-ids': 'social-set-cles',
+  'social-set-pf': 'social-set-cles',
+  'social-set-version': 'social-set-cles',
+  'social-set-dsa': 'social-set-cles',
+}
+
+/** L'onglet qui affiche cette route (elle-même, ou l'onglet dont elle est une section). */
+export function tabRoute(route: Route): Route {
+  return ALIAS_ONGLET[route] ?? route
+}
+
 /** Les onglets de l'entrée qui affiche cette route, s'il y en a. */
 export function tabsFor(role: Role, route: Route): Tab[] | null {
-  return TABS[role].find((group) => group.some((tab) => tab.route === route)) ?? null
+  const onglet = tabRoute(route)
+  return TABS[role].find((group) => group.some((tab) => tab.route === onglet)) ?? null
 }
 
 /** L'entrée du menu qui affiche cette route : elle-même, ou la tête de son groupe d'onglets. */
@@ -353,6 +382,8 @@ export function titleFor(role: Role, route: Route, resuming = false): string {
 
   // Ouvert depuis la fiche d'une campagne, plus depuis le menu.
   if (route === 'social-camp') return 'Posts & pubs par campagne'
+  // Un réglage du module Social hors onglets (il n'en reste pas, mais l'adresse peut en nommer un nouveau).
+  if (route.startsWith('social-set-')) return 'Paramètres & connexions'
 
   if (route === 'campaign') return 'Suivi de campagne'
   // Reprendre un brouillon et en créer un ne se ressemblent pas : sans cette

@@ -4,6 +4,7 @@ import type { Production, ProductionSection, ProductionShop, ProductionShopStatu
 import { describeError } from '../../state/auth'
 import KitPanel from './KitPanel'
 import './production.css'
+import Erreur from '../../components/Erreur'
 
 /**
  * Le fil de production d'une campagne validée (maquette du 05/11/2026).
@@ -78,7 +79,7 @@ export default function ProductionPanel({ campaignId, brandAdmin, onOpenEditor }
     setShopNotes(Object.fromEntries((section?.shops ?? []).map((s) => [s.shopId, s.note ?? ''])))
   }, [section?.code, section?.note, section?.shops])
 
-  if (error) return <section className="card prod"><p className="error">{error}</p></section>
+  if (error) return <section className="card prod"><Erreur>{error}</Erreur></section>
   if (!production) return <section className="card prod"><p className="muted">Lecture du fil de production…</p></section>
   if (production.sections.length === 0) return null
 
@@ -169,7 +170,7 @@ export default function ProductionPanel({ campaignId, brandAdmin, onOpenEditor }
 
       <div className="hub-layout">
         <div className="hub-main">
-          {error ? <p className="error">{error}</p> : null}
+          {error ? <Erreur>{error}</Erreur> : null}
           {current === '__kit' ? (
             <KitPanel campaignId={campaignId} brandAdmin={brandAdmin} production={production} />
           ) : section ? (

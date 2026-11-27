@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { module as api } from '../../lib/api'
 import type { Annexe, AnnexeType, AnnexesEtat } from '../../lib/api/module'
+import Erreur from '../../components/Erreur'
 
 /**
  * Les documents joints à une campagne.
@@ -160,7 +161,7 @@ export default function Annexes({ campaignId }: { campaignId: number | null }) {
         </label>
       </div>
 
-      {erreur === null ? null : <p className="error">{erreur}</p>}
+      {erreur === null ? null : <Erreur>{erreur}</Erreur>}
 
       {(etat?.types ?? []).length === 0 ? null : (
         <p className="muted annexes__types">
