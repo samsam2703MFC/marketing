@@ -54,6 +54,7 @@ function thumb(m, secPerLine, wPx = 248) {
   // Frame « posé » : entrée terminée, contenu lisible.
   const lt = Math.min(1.1, moduleDur(m, secPerLine) * 0.45);
   const stage = h('div', {
+    className: 'sig-stage',
     style: {
       position: 'absolute', left: 0, top: 0, width: W + 'px', height: H + 'px',
       background: '#F5EFE4', transform: `scale(${scale})`, transformOrigin: 'top left',

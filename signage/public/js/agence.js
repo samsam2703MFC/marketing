@@ -137,7 +137,7 @@ class Agence extends Component {
           <h3 style="margin:0 0 8px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">Comment ça marche</h3>
           <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.7;color:var(--muted-2);">
             <li><strong>Format vidéo :</strong> .mp4 ou .webm, codec H.264 (ou H.265/HEVC), 1080p ou 4K, sans son. <strong>Photo :</strong> .jpg / .png / .webp, idéalement 2000×2000 px.</li>
-            <li><strong>Tags :</strong> choisis le <strong>moment</strong> (matin / midi / après-midi), le <strong>produit</strong> et la <strong>saison</strong>. Le système diffusera aléatoirement les médias tagués au bon moment et à la bonne période.</li>
+            <li><strong>Tags :</strong> choisissez le <strong>moment</strong> (matin / midi / après-midi), le <strong>produit</strong> et la <strong>saison</strong>. Le système diffusera aléatoirement les médias tagués au bon moment et à la bonne période.</li>
             <li><strong>Nommage :</strong> à l'upload, un préfixe est ajouté automatiquement (<code>1_</code> matin, <code>2_</code> midi, <code>3_</code> après-midi).</li>
             <li><strong>Taille :</strong> jusqu'à ${st.maxMb} Mo par fichier (vidéos 4K comprises), envoyé tel quel ; la progression s'affiche pendant l'envoi.${st.storage === 's3' ? ' Les fichiers sont rangés sur le stockage OVHcloud.' : ''}</li>
           </ul>
@@ -202,7 +202,7 @@ class Agence extends Component {
                 </div>
               `)}
             </div>
-          ` : html`<p style="margin:0;font-size:12.5px;color:var(--muted);">Aucun média pour l'instant. Ajoute une vidéo ou une photo ci-dessus.</p>`}
+          ` : html`<p style="margin:0;font-size:12.5px;color:var(--muted);">Aucun média pour l'instant. Ajoutez une vidéo ou une photo ci-dessus.</p>`}
         </div>
 
         ${st.toast ? html`<div style="position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--ink);color:#fff;font-size:13px;padding:11px 18px;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,0.25);z-index:50;">${st.toast}</div>` : ''}

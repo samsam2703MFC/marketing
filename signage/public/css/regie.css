@@ -26,6 +26,18 @@
   --warn-soft: rgba(216, 170, 30, 0.14);
 }
 
+/* Graisses du design system du Marketing (docs/DESIGN_SYSTEM.md §4.1) pour l'interface de la régie : 400 = le trait
+   normal (Gotham_Medium.otf), 700 = le trait appuyé (Gotham_Regular_New.otf, le même fichier que Gotham_Regular.otf
+   du Marketing). Dans base.css, la famille « Gotham » sert aux ÉCRANS DES MAGASINS (400 = trait appuyé, 700 = Black) :
+   elle n'est pas touchée. L'interface prend une famille à part, « Gotham UI » ; les aperçus de film gardent
+   « Gotham » (.sig-stage, .cw-screen) pour montrer ce que l'écran montrera. 500 et 600 tombent sur le trait normal. */
+@font-face { font-family: 'Gotham UI'; src: url('../fonts/Gotham_Medium.otf') format('opentype'); font-weight: 100 600; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Gotham UI'; src: url('../fonts/Gotham_Regular_New.otf') format('opentype'); font-weight: 700 900; font-style: normal; font-display: swap; }
+html, body, input, select, button, textarea { font-family: 'Gotham UI', system-ui, sans-serif; }
+.sig-stage, .cw-screen { font-family: 'Gotham', system-ui, sans-serif; }
+/* Pas de gras dans une phrase d'interface (§4.3) : titres, en-têtes et <strong> au trait normal. */
+h1, h2, h3, h4, h5, h6, th, b, strong { font-weight: 400; }
+
 html, body { background: var(--paper); color: var(--ink); }
 * { box-sizing: border-box; }
 a { color: var(--accent); }
@@ -64,20 +76,20 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
   display: flex; align-items: center; justify-content: center; gap: 8px;
   width: calc(100% - 24px); margin: 2px 12px 8px; padding: 9px 12px;
   border: none; border-radius: 8px; background: var(--accent); color: #fff;
-  font: 500 13px/1.2 'Gotham', system-ui, sans-serif; cursor: pointer;
+  font: 400 13px/1.2 'Gotham UI', system-ui, sans-serif; cursor: pointer;
 }
 .sidebar__action:hover, .sidebar__action.is-active { background: var(--accent-dark); color: #fff; }
 .sidebar__item {
   display: flex; align-items: center; gap: 9px; width: 100%;
   padding: 9px 10px; border: none; border-radius: 9px; background: transparent;
-  font: 400 13px/1.2 'Gotham', system-ui, sans-serif; color: var(--muted-2);
+  font: 400 13px/1.2 'Gotham UI', system-ui, sans-serif; color: var(--muted-2);
   text-align: left; text-decoration: none; cursor: pointer; transition: all 0.15s;
 }
 .sidebar__item:hover { background: var(--paper); color: var(--muted-2); }
-.sidebar__item.is-active { background: var(--accent-soft); color: var(--accent); }
+.sidebar__item.is-active { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
 .sidebar__item svg, .sidebar__action svg, .sidebar__back svg { flex: 0 0 auto; }
 .sidebar__item-count {
-  margin-left: auto; padding: 1px 7px; border-radius: 999px;
+  margin-left: auto; padding: 1px 7px; border-radius: 6px;
   background: var(--chip); color: var(--muted-2); font-size: 11px;
 }
 .sidebar__foot { margin-top: auto; padding: 18px 22px 0; }
@@ -122,7 +134,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .page-tabs--bar { flex: 0 0 auto; margin: 0; padding: 6px 24px 0; background: #fff; }
 .page-tabs__tab {
   margin: 0 0 -1px; padding: 8px 12px; border: none; border-bottom: 2px solid transparent; border-radius: 0;
-  background: none; color: var(--muted-2); font: 500 13px/1.2 'Gotham', system-ui, sans-serif; cursor: pointer;
+  background: none; color: var(--muted-2); font: 400 13px/1.2 'Gotham UI', system-ui, sans-serif; cursor: pointer;
 }
 .page-tabs__tab:hover { color: var(--ink); }
 .page-tabs__tab.is-on { color: var(--accent); border-bottom-color: var(--accent); }
@@ -134,7 +146,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   min-height: 36px; margin: 0; padding: 7px 16px;
   border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink);
-  font: 500 13px/1.2 'Gotham', system-ui, sans-serif; text-decoration: none; white-space: nowrap;
+  font: 400 13px/1.2 'Gotham UI', system-ui, sans-serif; text-decoration: none; white-space: nowrap;
   cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .btn:hover:not(:disabled) { border-color: var(--muted-2); color: var(--ink); }
@@ -151,12 +163,13 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .btn--icon.is-ok { color: var(--green); }
 
 /* Sélecteur de langue de l'interface (gabarit du sélecteur de rôle). */
-.role-switch { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; flex: 0 0 auto; }
+.role-switch { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; flex: 0 0 auto; }
 .role-switch button {
   margin: 0; border: none; border-radius: 0; background: #fff; color: var(--muted-2);
-  padding: 7px 12px; font: 500 12px/1.2 'Gotham', system-ui, sans-serif; letter-spacing: 0.04em; cursor: pointer;
+  padding: 7px 12px; font: 400 12px/1.2 'Gotham UI', system-ui, sans-serif; letter-spacing: 0.04em; cursor: pointer;
 }
-.role-switch button.is-on { background: var(--accent); color: #fff; }
+/* Langue choisie : teinte bordeaux et texte bordeaux (§7.6), jamais un bordeaux plein qui passerait pour une action. */
+.role-switch button.is-on { background: rgba(141, 29, 44, 0.08); color: var(--accent); }
 
 /* Bulles des boutons de la barre : encre du module. */
 .hdr-btn .hdr-tip { background: var(--ink); color: #fff; font-weight: 400; box-shadow: none; }

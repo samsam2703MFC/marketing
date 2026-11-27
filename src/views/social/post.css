@@ -377,3 +377,5 @@
 @media (max-width: 760px) { .pst__canaux-tete, .pst__canaux-ligne { grid-template-columns: 1fr 70px 80px; } .pst__canaux-tete > span:last-child, .pst__canaux-ligne > span { display: none; } .pst__lib-fiche, .pst__lib-nav { display: none; } }
 .pst__lien-bloc .pst__champ-titre, .pst__carte > .pst__champ-titre { flex: 0 0 auto; }
 .pst__panneau { font-size: 12px; }
+/* Téléphone : une idée de post se lit en entier — l'étiquette, puis le texte sur toute la largeur, puis le bouton. */
+@media (max-width: 760px) { .pst__idee { flex-wrap: wrap; } .pst__idee-texte { flex-basis: 100%; order: 1; } .pst__idee > .btn { order: 2; } }

@@ -17,11 +17,14 @@
 .franchise__select { min-height: 36px; }
 
 .franchise__kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.social-native .franchise__kpi { color: var(--ink); }
 .franchise__kpi { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; margin: 0; text-decoration: none; color: var(--ink); }
 .franchise__kpi:hover { border-color: var(--muted-2); }
 .franchise__kpi.is-attente { border-color: var(--prize); }
 .franchise__kpi .kpi__label { margin-top: 0; }
 .franchise__kpi-val { font-size: 22px; font-weight: 700; line-height: 1.15; }
+/* La valeur reste à l'encre : « Ouvert », « Fermé », « Par l'ERP » disent l'état par le mot (§3, §7.10). */
+.social-native .franchise__kpi-val, .social-native .franchise__kpi-val.is-bon, .social-native .franchise__kpi-val.is-alerte, .social-native .franchise__kpi-val.is-moyen { color: var(--ink); }
 
 .franchise__section { display: flex; flex-direction: column; gap: 12px; padding: 16px; margin: 0; }
 .franchise__tete { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }

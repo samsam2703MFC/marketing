@@ -31,7 +31,7 @@ function typeDe(c: Operation): TypeOperation {
   )
 }
 
-const tonRoi = (v: number | null | undefined) => (v == null ? 'muted' : v >= 1 ? 'is-bon' : v >= 0 ? 'is-moyen' : 'is-alerte')
+const tonRoi = (v: number | null | undefined) => (v == null ? 'muted' : v >= 1 ? 'is-bon' : v >= 0 ? 'is-moyen' : 'is-negatif')
 
 /**
  * Retour sur opération — l'écran « Retour » du module Social, réécrit dans le Marketing
@@ -346,7 +346,7 @@ function Ventes({ label, ref_, camp, f }: { label: string; ref_: number | null |
     <div className="retour__ventes">
       <div className="retour__ventes-tete">
         <span>{label}</span>
-        <span className={d == null ? 'muted' : d >= 0 ? 'is-bon' : 'is-alerte'}>{d == null ? 'n.d.' : `${d >= 0 ? '+' : ''}${pct(d, 1)}`}</span>
+        <span className={d == null ? 'muted' : d >= 0 ? 'is-bon' : 'is-negatif'}>{d == null ? 'n.d.' : `${d >= 0 ? '+' : ''}${pct(d, 1)}`}</span>
       </div>
       <div className="retour__barre muted">
         <span>Référence</span>
@@ -444,7 +444,7 @@ function LigneDetail({ x, total, focus }: { x: RoiBoutique | RoiTotal; total?: b
       <td className="num">{eur(x.cpc, 2)}</td>
       <td className="num">{na ? '—' : eur(x.caRef)}</td>
       <td className="num">{na ? '—' : eur(x.caCamp)}</td>
-      <td className={`num ${na ? 'muted' : (x.caAdd ?? 0) >= 0 ? 'is-bon' : 'is-alerte'}`}>{na ? 'n.d.' : eur(x.caAdd)}</td>
+      <td className={`num ${na ? 'muted' : (x.caAdd ?? 0) >= 0 ? 'is-bon' : 'is-negatif'}`}>{na ? 'n.d.' : eur(x.caAdd)}</td>
       <td className="num">{na ? '—' : eur(x.mAdd)}</td>
       <td className="num">{na || x.roas == null ? '—' : `${fmt(x.roas, 1)} ×`}</td>
       <td className={`num ${tonRoi(na ? null : x.roi)}`}>{na || x.roi == null ? '—' : `${x.roi >= 0 ? '+' : ''}${pct(x.roi)}`}</td>

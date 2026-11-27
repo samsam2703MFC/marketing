@@ -142,7 +142,7 @@ const PHOTO_TIP = 'Qualité top : photo carrée d’au moins 2000 × 2000 px, id
 // Tag de période d'une entité (promotion, campagne) : trois cases matin / midi
 // / après-midi qui cyclent visible → exclu → vide. Même vocabulaire et mêmes
 // règles que la table « Périodes de vente » des produits et des catégories.
-const MOMENT_TAG_TIP = 'Périodes de la journée où cette fiche peut passer sur les écrans. Clique pour cycler : visible → exclue → vide. Aucune case = elle passe à tous les moments. Enregistré tout de suite.';
+const MOMENT_TAG_TIP = 'Périodes de la journée où cette fiche peut passer sur les écrans. Cliquez pour cycler : visible → exclue → vide. Aucune case = elle passe à tous les moments. Enregistré tout de suite.';
 const momentTagCells = (cells) => html`
   <span style="display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap;">
     <span style="font-size:10.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Périodes</span>
@@ -410,8 +410,12 @@ class App extends Component {
         // passe (une seule tentative par chargement ; sinon, connexion classique).
         if (EMBEDDED && !this._ssoTried) {
           this._ssoTried = true;
-          const ok = await api('POST', '/sso/marketing').then(() => true, () => false);
+          // Refusée, l'ouverture dit pourquoi sur l'écran de connexion (module injoignable, rôle, session) :
+          // sans cela, une seconde connexion apparaissait dans le module sans qu'on sache d'où elle venait.
+          let pourquoi = '';
+          const ok = await api('POST', '/sso/marketing').then(() => true, (err) => { pourquoi = String((err && err.message) || ''); return false; });
           if (ok) return this.loadState();
+          this.setState({ ssoError: pourquoi });
         }
         this.setState({ loading: false, authRequired: true });
       } else if (e.status === 403) {
@@ -1616,7 +1620,7 @@ class App extends Component {
     this.setState({ surpriseBusy: true });
     try {
       for (const f of list) {
-        if (f.size > 18 * 1024 * 1024) { this.showToast(`${f.name} : trop lourd (max 18 Mo par l'upload) — dépose-le dans public/surprise/ sur le serveur`); continue; }
+        if (f.size > 18 * 1024 * 1024) { this.showToast(`${f.name} : trop lourd (max 18 Mo par l'upload) — déposez-le dans public/surprise/ sur le serveur`); continue; }
         const dataUrl = await new Promise((res, rej) => { const rd = new FileReader(); rd.onload = () => res(rd.result); rd.onerror = rej; rd.readAsDataURL(f); });
         const out = await api('POST', '/surprise', { name: f.name, dataUrl });
         this.setState({ surpriseVideos: out.videos || [] });
@@ -1630,7 +1634,7 @@ class App extends Component {
   // « fond » ou « fichier » reçoit l'URL.
   async uploadAnimAsset(field, file) {
     if (!file || this.state.animBusy) return;
-    if (file.size > 18 * 1024 * 1024) { this.showToast(`${file.name} : trop lourd (max 18 Mo) — dépose-le dans public/anim/ sur le serveur`); return; }
+    if (file.size > 18 * 1024 * 1024) { this.showToast(`${file.name} : trop lourd (max 18 Mo) — déposez-le dans public/anim/ sur le serveur`); return; }
     this.setState({ animBusy: true });
     try {
       const dataUrl = await new Promise((res, rej) => { const rd = new FileReader(); rd.onload = () => res(rd.result); rd.onerror = rej; rd.readAsDataURL(file); });
@@ -1891,7 +1895,7 @@ class App extends Component {
   async saveLibCats() {
     if (this.state.libCatBusy) return;
     const list = this.state.libCatDraft || [];
-    if (!list.length) { this.showToast('Garde au moins une catégorie de bibliothèque'); return; }
+    if (!list.length) { this.showToast('Gardez au moins une catégorie de bibliothèque'); return; }
     if (list.some((c) => !String(c.name || '').trim())) { this.showToast('Chaque catégorie a besoin d\'un nom'); return; }
     this.setState({ libCatBusy: true });
     try {
@@ -2010,7 +2014,7 @@ class App extends Component {
     if ((st.mediaLib || []).length) dataBits.push('médias');
     const T = (k, vars) => this.t(k, vars);
     const steps = [
-      { key: 'catalog', ok: catalogOk, label: T('home.stepCatalog'), hint: catalogOk ? `${products.length} produit(s) · ${(st.catalog.categories || []).length} catégorie(s)` : 'aucun produit — connecte ta base', cta: { label: catalogOk ? 'Voir les produits' : 'Importer le catalogue', go: () => (catalogOk ? this.openProducts() : this.setView('settings')) } },
+      { key: 'catalog', ok: catalogOk, label: T('home.stepCatalog'), hint: catalogOk ? `${products.length} produit(s) · ${(st.catalog.categories || []).length} catégorie(s)` : 'aucun produit — connectez votre base', cta: { label: catalogOk ? 'Voir les produits' : 'Importer le catalogue', go: () => (catalogOk ? this.openProducts() : this.setView('settings')) } },
       { key: 'film', ok: filmsReady.length > 0, label: T('home.stepFilm'), hint: filmsReady.length ? `${filmsReady.length} film(s)` : 'aucun film avec du contenu', cta: { label: filmsReady.length ? 'Ouvrir le compositeur' : 'Créer mon premier film', go: () => (filmsReady.length ? this.setView('composer') : this.startFirstFilm()) } },
       { key: 'screen', ok: players.length > 0, label: T('home.stepScreen'), hint: players.length ? `${onlineN}/${players.length} en ligne` : 'aucun écran branché', cta: { label: 'Brancher un écran', go: () => this.openOnboarding() } },
       { key: 'data', ok: dataBits.length > 0, soft: true, label: T('home.stepData'), hint: dataBits.length ? dataBits.join(' · ') : 'saisons · périodes de vente · médias (optionnel mais recommandé)', cta: { label: 'Remplir les périodes', go: () => this.openSeasons() } },
@@ -2150,7 +2154,7 @@ class App extends Component {
   addProd() {
     const id = 'pr' + uid();
     const catId = this.state.catSel;
-    if (!catId) { this.showToast('Crée d’abord une catégorie'); return; }
+    if (!catId) { this.showToast('Créez d’abord une catégorie'); return; }
     this.setCat((d) => d.products.push({ id, categoryId: catId, name: 'Nouveau produit', price: '0,00', img: 'assets/cake.png', src: 'illus', active: true, prices: {} }));
   }
   moveProd(pid, dir) {
@@ -2195,7 +2199,7 @@ class App extends Component {
       this.showToast('Table produits enregistrée ✓');
     } catch (e) {
       this.setState({ catSaving: false });
-      this.showToast(e.status === 401 ? 'Session expirée — recharge la page (F5)' : `Erreur : ${e.message}`);
+      this.showToast(e.status === 401 ? 'Session expirée — rechargez la page (F5)' : `Erreur : ${e.message}`);
     }
   }
   // Catalogue depuis l'API TFBuddy (la base PWA prend le relais si elle ne
@@ -2439,7 +2443,7 @@ class App extends Component {
         try { data = cv.toDataURL('image/jpeg', 0.85); } catch { data = r.result; }
         cb(data);
       };
-      img.onerror = () => this.showToast('Image illisible — essaie un JPG ou PNG');
+      img.onerror = () => this.showToast('Image illisible — essayez un JPG ou PNG');
       img.src = r.result;
     };
     r.readAsDataURL(f);
@@ -2486,7 +2490,7 @@ class App extends Component {
       if (this.activeFilm().mode === 'continu') this.loadContPreview();
     } catch (e) {
       this.showToast(e.status === 401
-        ? 'Session expirée — recharge la page (F5) et reconnecte-toi, puis réessaie'
+        ? 'Session expirée — rechargez la page (F5) et reconnectez-vous, puis réessayez'
         : `Échec de l'enregistrement : ${e.message}`);
     } finally {
       this._saving = false;
@@ -2621,7 +2625,7 @@ class App extends Component {
       }
     } catch (e) {
       this.showToast(e.status === 401
-        ? 'Session expirée — recharge la page (F5) et reconnecte-toi, puis réessaie'
+        ? 'Session expirée — rechargez la page (F5) et reconnectez-vous, puis réessayez'
         : `Échec de la publication : ${e.message}`);
     } finally {
       this.setState({ deploying: false });
@@ -2678,7 +2682,7 @@ class App extends Component {
       await this.copyText(url);
       this.showToast('Lien copié ✓');
     } catch {
-      this.showToast('Copie impossible — sélectionne le lien à la main');
+      this.showToast('Copie impossible — sélectionnez le lien à la main');
     }
   };
 
@@ -2734,7 +2738,7 @@ class App extends Component {
       this.showToast(`${out.name} : ${out.format.label} = ${out.format.px} · langue ${(out.lang || 'fr').toUpperCase()} ✓`);
     } catch (e) {
       this.showToast(e.status === 401
-        ? 'Session expirée — recharge la page (F5) et reconnecte-toi'
+        ? 'Session expirée — rechargez la page (F5) et reconnectez-vous'
         : `Erreur : ${e.message}`);
     }
   }
@@ -2786,7 +2790,7 @@ class App extends Component {
     const cur = this.state.planSlots[moment] || [];
     if (cur.includes(filmId)) return; // pas de doublon dans un même moment
     if (cur.length >= MAX_PLAN_FILMS) { this.showToast(`${MAX_PLAN_FILMS} films maximum par moment`); return; }
-    if (!this.state.planStores.length) { this.showToast('Sélectionne d’abord un magasin'); return; }
+    if (!this.state.planStores.length) { this.showToast('Sélectionnez d’abord un magasin'); return; }
     this.setState({ planSlots: { ...this.state.planSlots, [moment]: [...cur, filmId] } }, () => this.scheduleSavePlan());
   }
   removePlanFilm(moment, idx) {
@@ -2810,7 +2814,7 @@ class App extends Component {
       this.setState({ planByStore: out.byStore || {}, planActiveWeek: out.activeWeek || st.planActiveWeek, planSaving: false, planSavedAt: Date.now() });
     } catch (e) {
       this.setState({ planSaving: false });
-      this.showToast(e.status === 401 ? 'Session expirée — recharge la page (F5)' : `Erreur : ${e.message}`);
+      this.showToast(e.status === 401 ? 'Session expirée — rechargez la page (F5)' : `Erreur : ${e.message}`);
     }
   }
   async activatePlanWeek() {
@@ -2822,7 +2826,7 @@ class App extends Component {
   }
   async duplicatePlanWeek(to) {
     const st = this.state;
-    if (!st.planStores.length) { this.showToast('Sélectionne au moins un magasin'); return; }
+    if (!st.planStores.length) { this.showToast('Sélectionnez au moins un magasin'); return; }
     if (!to || to === st.planWeek) return;
     if (!window.confirm(`Copier la semaine ${st.planWeek} vers la semaine ${to} ?\nLe contenu de la semaine ${to} (magasins sélectionnés) sera remplacé.`)) return;
     try {
@@ -2946,7 +2950,7 @@ class App extends Component {
     const pw = this.previewWidth();
     const scale = pw / W;
     this._scale = scale;
-    const stage = h('div', { style: { position: 'absolute', left: 0, top: 0, width: W, height: H, background: '#F5EFE4', transform: `scale(${scale})`, transformOrigin: 'top left' } }, inner);
+    const stage = h('div', { className: 'sig-stage', style: { position: 'absolute', left: 0, top: 0, width: W, height: H, background: '#F5EFE4', transform: `scale(${scale})`, transformOrigin: 'top left' } }, inner);
     return h('div', { style: { position: 'relative', width: pw, height: Math.round(H * scale), margin: '0 auto' } }, stage);
   }
 
@@ -4468,7 +4472,7 @@ class App extends Component {
       saveStyle: `padding:9px 20px;font-size:13px;font-weight:500;letter-spacing:0.01em;border-radius:8px;cursor:${st.dirty ? 'pointer' : 'default'};${st.dirty ? 'background:var(--muted-2);color:#fff;border:1px solid var(--muted-2);' : 'background:transparent;color:var(--muted);border:1px solid var(--line);'}`,
       // Bandeau : icônes rondes + vignettes, palette gris/rubis/abricot/cuivre.
       saveIconStyle: `${hdrRound}${st.dirty ? 'background:var(--muted-2);color:#fff;border:1px solid var(--muted-2);' : 'background:transparent;color:var(--green);border:1px solid rgba(63,122,82,0.35);'}`,
-      saveTip: st.dirty ? 'Enregistrement automatique en cours… (clique pour forcer)' : 'Tout est enregistré automatiquement',
+      saveTip: st.dirty ? 'Enregistrement automatique en cours… (cliquez pour forcer)' : 'Tout est enregistré automatiquement',
       pricesIconStyle: `${hdrRound}background:rgba(201,123,74,0.14);color:var(--warn);border:1px solid rgba(201,123,74,0.5);`,
       overrideIconStyle: `${hdrRound}${st.override ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:transparent;color:var(--muted-2);border:1px solid var(--line);'}`,
       overrideTip: st.override ? this.t('override.tipOn') : this.t('override.tipOff'),
@@ -4535,7 +4539,8 @@ class App extends Component {
           <input value=${st.loginUser} onInput=${(e) => this.setState({ loginUser: e.target.value })} autocomplete="username" spellcheck="false" style="width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
           <label style="font-size:12.5px;font-weight:500;color:var(--muted);">${this.t('login.password')}</label>
           <input type="password" value=${st.loginPass} onInput=${(e) => this.setState({ loginPass: e.target.value })} autocomplete="current-password" style="width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;border:1px solid var(--line);border-radius:8px;background:#fff;" />
-          ${st.loginError && html`<div style="font-size:12.5px;color:var(--accent);">${st.loginError}</div>`}
+          ${EMBEDDED && st.ssoError ? html`<div style="font-size:12px;line-height:1.45;color:#7A5207;background:#F6E7CE;border-radius:8px;padding:8px 10px;overflow-wrap:anywhere;">Ouverture automatique depuis le Marketing impossible : ${st.ssoError}. Connectez-vous avec le compte de la régie.</div>` : ''}
+          ${st.loginError && html`<div style="font-size:12.5px;color:var(--danger);">${st.loginError}</div>`}
           <button type="submit" style="margin-top:6px;padding:12px;font-size:14px;font-weight:500;border-radius:8px;border:none;cursor:pointer;background:var(--accent);color:#fff;opacity:${st.loggingIn ? 0.7 : 1};">${st.loggingIn ? this.t('login.signingIn') : this.t('login.signIn')}</button>
           <a class="btn" href="film" target="_blank" style="margin-top:10px;">${this.t('login.viewFilm')}</a>
         </form>
@@ -4576,11 +4581,11 @@ class App extends Component {
       </div>
       ${v.isTimelineTab && this.activeFilm().mode === 'continu' && v.contPreviewMeta && v.contPreviewMeta.products === 0 ? html`
         <div style="margin:-4px 0 12px;padding:11px 14px;border-radius:10px;background:rgba(201,123,74,0.1);border:1px solid rgba(201,123,74,0.35);font-size:12.5px;color:var(--warn);line-height:1.5;">
-          ⚠ <strong>Aucun produit éligible</strong> au moment courant${v.contPreviewMeta.moment ? ` (${{ matin: 'matin', midi: 'midi', aprem: 'après-midi' }[v.contPreviewMeta.moment] || v.contPreviewMeta.moment})` : ''} — la boucle serait quasi vide à l'écran. Vérifie la <strong>source</strong> et les <strong>périodes de vente / saisons</strong> (onglet Périodes), ou mets « Si rien en saison » sur <strong>Tout le catalogue</strong>.
+          ⚠ <strong>Aucun produit éligible</strong> au moment courant${v.contPreviewMeta.moment ? ` (${{ matin: 'matin', midi: 'midi', aprem: 'après-midi' }[v.contPreviewMeta.moment] || v.contPreviewMeta.moment})` : ''} — la boucle serait quasi vide à l'écran. Vérifiez la <strong>source</strong> et les <strong>périodes de vente / saisons</strong> (onglet Périodes), ou mettez « Si rien en saison » sur <strong>Tout le catalogue</strong>.
         </div>
       ` : ''}
       ${v.dragHint && html`
-        <p style="margin:-4px 0 12px;font-size:11.5px;color:var(--muted);">✥ Glisse l'illustration ou le bandeau sur l'aperçu pour les positionner.</p>
+        <p style="margin:-4px 0 12px;font-size:11.5px;color:var(--muted);">✥ Glissez l'illustration ou le bandeau sur l'aperçu pour les positionner.</p>
       `}
       <div style="background:var(--ink);border-radius:12px;padding:20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
@@ -4677,7 +4682,7 @@ class App extends Component {
     const filmModeToggle = html`
       <div style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);">
         <div style="display:flex;align-items:center;gap:6px;">
-          ${infoTip('Le film ne monte rien à la main : tu poses des règles (sources, moments, formats, ratios…) et la boucle se compose toute seule, en s’adaptant au fil de la journée, sans republier.')}
+          ${infoTip('Le film ne monte rien à la main : vous posez des règles (sources, moments, formats, ratios…) et la boucle se compose toute seule, en s’adaptant au fil de la journée, sans republier.')}
           <span style="font-size:12px;font-weight:500;color:var(--muted-2);">Boucle continue</span>
           <span style="font-size:11.5px;color:var(--muted);">composée en direct · saisons · moments · formats</span>
         </div>
@@ -4736,7 +4741,7 @@ class App extends Component {
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
               <div style="display:flex;align-items:center;gap:7px;">
                 <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Suites — montage à la main</span>
-                ${infoTip('Une suite est une petite séquence que tu montes toi-même : intro, outro, présentation d’une gamme… Tu choisis son ordre, sa place dans la boucle (ouverture, clôture, ou toutes les N positions) et son format d’écran. Le reste du film continue à se composer tout seul autour.')}
+                ${infoTip('Une suite est une petite séquence que vous montez vous-même : intro, outro, présentation d’une gamme… Vous choisissez son ordre, sa place dans la boucle (ouverture, clôture, ou toutes les N positions) et son format d’écran. Le reste du film continue à se composer tout seul autour.')}
               </div>
               <div style="display:flex;align-items:center;gap:8px;">
                 ${v.seqDirty ? html`<span style="font-size:11.5px;font-weight:500;color:var(--warn);">non enregistré</span>` : ''}
@@ -4791,7 +4796,7 @@ class App extends Component {
                             <button onClick=${it.del} title="Retirer de la suite" style="width:24px;height:24px;border-radius:6px;border:1px solid var(--line);background:var(--paper);color:var(--accent);cursor:pointer;font-size:11px;">✕</button>
                           </span>
                         </div>
-                      `) : html`<span style="font-size:12px;color:var(--muted);padding:4px 0;">Suite vide — ajoute un élément ci-dessous.</span>`}
+                      `) : html`<span style="font-size:12px;color:var(--muted);padding:4px 0;">Suite vide — ajoutez un élément ci-dessous.</span>`}
                     </div>
                     ${v.seqCur.addable.length ? html`
                       <select onChange=${v.seqCur.onAdd} style="margin-top:10px;width:100%;box-sizing:border-box;padding:8px 10px;font-size:12.5px;border:1px dashed rgba(141,29,44,0.4);border-radius:8px;background:rgba(141,29,44,0.04);color:var(--accent);font-weight:500;cursor:pointer;">
@@ -4824,7 +4829,7 @@ class App extends Component {
             <!-- Parcours de la bibliothèque : actif/inactif + ratio de passage -->
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:16px 0 8px;">
               <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Parcours de la bibliothèque · ${cont.orient === 'portrait' ? '9:16 portrait' : '16:9 paysage'}</span>
-              ${infoTip('Créer une boucle, c’est passer en revue TOUS les éléments de la bibliothèque : coche ceux qui doivent passer et donne à chacun son ratio « 1 : N » (un passage tous les N slots). Seuls les éléments au format d’écran de cette boucle sont listés, et un élément tagué par moment ne passera qu’à ces moments-là. Décocher garde le ratio en mémoire.')}
+              ${infoTip('Créer une boucle, c’est passer en revue TOUS les éléments de la bibliothèque : cochez ceux qui doivent passer et donnez à chacun son ratio « 1 : N » (un passage tous les N slots). Seuls les éléments au format d’écran de cette boucle sont listés, et un élément tagué par moment ne passera qu’à ces moments-là. Décocher garde le ratio en mémoire.')}
               <span style="font-size:11.5px;font-weight:500;color:${v.contLoopOn ? 'var(--muted-2)' : '#8A847C'};">${v.contLoopOn} / ${v.contItemRatios.length} actif(s)</span>
               ${v.contItemRatios.length ? html`<span style="display:inline-flex;gap:5px;">
                 <button onClick=${v.contLoopAll} style="padding:4px 10px;font-size:11.5px;font-weight:500;border-radius:8px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);">Tout activer</button>
@@ -4979,7 +4984,7 @@ class App extends Component {
           </div>
         </div>
         <p style="margin:0 0 14px;font-size:12px;color:var(--muted);line-height:1.5;">Lie une matière première à <strong>une animation</strong> de la bibliothèque : c'est ce lien que le module produit du franchiseur (Produit → Ingrédient) vient lire. Le réglage se fait <strong>ici</strong> — la régie est la seule source. La référence ERP est optionnelle : elle rapproche les deux mondes sans dépendre du nom.</p>
-        ${v.ingAnimOptions.length ? '' : html`<p style="margin:0 0 12px;font-size:12px;color:var(--warn);">Aucune animation dans la bibliothèque — crée un élément « animation » dans le Compositeur pour pouvoir en lier une.</p>`}
+        ${v.ingAnimOptions.length ? '' : html`<p style="margin:0 0 12px;font-size:12px;color:var(--warn);">Aucune animation dans la bibliothèque — créez un élément « animation » dans le Compositeur pour pouvoir en lier une.</p>`}
         <div style="display:flex;flex-direction:column;gap:8px;">
           ${v.ingRows.map((x) => html`
             <div key=${x.id} style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:9px 11px;border-radius:10px;border:1px solid ${x.active ? 'rgba(35,34,32,0.10)' : 'rgba(35,34,32,0.06)'};background:${x.active ? '#fff' : 'rgba(35,34,32,0.03)'};">
@@ -5065,7 +5070,7 @@ class App extends Component {
           ${hs && hs.ok ? html`
             <p style="margin:0 0 10px;font-size:12px;color:var(--green);font-weight:500;">● https actif — <a href=${hs.base} style="color:var(--green);">${hs.base}</a></p>
             <p style="margin:0 0 10px;font-size:12px;color:${late ? '#8D1D2C' : '#8A847C'};line-height:1.5;">Certificat ${hs.issuer || 'Let\'s Encrypt'} valable jusqu'au ${until}${late ? ' — renouvellement en retard : à vérifier sur le serveur (la livraison dit, à l\'étape HTTPS, qui le renouvelle et si son défi passe)' : ' · renouvelé automatiquement (certificats de 6 jours)'}.</p>
-            <p style="margin:0 0 ${onHttp ? 12 : 0}px;font-size:12px;color:var(--muted);line-height:1.5;">Un écran ne <strong>redémarre sans réseau</strong> que s'il est ouvert en https : la page et son code restent alors sur l'écran. Ouvre la régie à cette adresse et ses liens (player, magasin, film) seront tous en https.</p>
+            <p style="margin:0 0 ${onHttp ? 12 : 0}px;font-size:12px;color:var(--muted);line-height:1.5;">Un écran ne <strong>redémarre sans réseau</strong> que s'il est ouvert en https : la page et son code restent alors sur l'écran. Ouvrez la régie à cette adresse et ses liens (player, magasin, film) seront tous en https.</p>
             ${onHttp ? html`<a href=${hs.base} style="display:inline-flex;align-items:center;gap:6px;padding:9px 16px;font-size:12.5px;font-weight:500;color:#fff;background:var(--green);border-radius:999px;">Ouvrir la régie en https ↗</a>` : ''}
           ` : html`<p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">Pas de https constaté sur ce serveur. La livraison s'appuie sur celui du serveur s'il en a un, et pose sinon un certificat Let's Encrypt pour l'adresse IP (renouvelé automatiquement). En http, les écrans tiennent une coupure réseau page ouverte, mais ne redémarrent pas sans réseau — le navigateur réserve le service worker au https.</p>`}
         </div>`;
@@ -5149,7 +5154,7 @@ class App extends Component {
           <h2 style="margin:0;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">Liens de diffusion — film</h2>
           <a href="film" target="_blank" style="font-size:12.5px;font-weight:500;color:var(--accent);">▶ Ouvrir le film</a>
         </div>
-        <p style="margin:0 0 16px;font-size:12px;color:var(--muted);line-height:1.5;">Le format d'écran (pixels + ratio) est inscrit dans l'URL : copie le lien du format voulu et pointe la TV / box / navigateur directement dessus. La lecture ne demande aucune connexion.</p>
+        <p style="margin:0 0 16px;font-size:12px;color:var(--muted);line-height:1.5;">Le format d'écran (pixels + ratio) est inscrit dans l'URL : copiez le lien du format voulu et pointez la TV / box / navigateur directement dessus. La lecture ne demande aucune connexion.</p>
         <div style="display:flex;flex-direction:column;gap:8px;">
           ${this.filmLinks().map((l) => html`
             <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--paper);border:1px solid var(--line);">
@@ -5165,7 +5170,7 @@ class App extends Component {
         </div>
         ${this.perFilmLinks().length > 0 && html`
           <h3 style="margin:20px 0 4px;font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Par film · dernière publication du film (55″ standard)</h3>
-          <p style="margin:0 0 12px;font-size:11.5px;color:var(--muted);line-height:1.5;">Un lien par film de la régie. Un film jamais publié s'affiche en prévisualisation (badge « brouillon ») — pense à Enregistrer puis Publier.</p>
+          <p style="margin:0 0 12px;font-size:11.5px;color:var(--muted);line-height:1.5;">Un lien par film de la régie. Un film jamais publié s'affiche en prévisualisation (badge « brouillon ») — pensez à Enregistrer puis Publier.</p>
           <div style="display:flex;flex-direction:column;gap:8px;">
             ${this.perFilmLinks().map((l) => html`
               <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--paper);border:1px solid var(--line);">
@@ -5256,7 +5261,7 @@ class App extends Component {
               </div>
             `}
           `)}
-          ${!v.prodCats.length && html`<div style="font-size:12px;color:var(--muted);padding:8px;">Aucune catégorie — clique ＋ pour commencer.</div>`}
+          ${!v.prodCats.length && html`<div style="font-size:12px;color:var(--muted);padding:8px;">Aucune catégorie — cliquez ＋ pour commencer.</div>`}
         </div>
 
         <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;min-width:0;overflow-x:auto;">
@@ -5347,7 +5352,7 @@ class App extends Component {
               </div>
             </div>
           `}
-          <p style="margin:14px 0 0;font-size:11.5px;color:var(--muted);">Prix par magasin : laisse vide pour utiliser le prix par défaut. Langues : FR = noms de base ; dans une autre langue, le champ nom édite la traduction (vide = nom de base). Chaque magasin affiche automatiquement ses prix ET sa langue (réglée dans Réseau). État : ✓ actif · <strong style="color:var(--accent);">⦸ rupture</strong> = temporairement indisponible, retiré des boucles en mode Continu (le reste du catalogue continue).</p>
+          <p style="margin:14px 0 0;font-size:11.5px;color:var(--muted);">Prix par magasin : laissez vide pour utiliser le prix par défaut. Langues : FR = noms de base ; dans une autre langue, le champ nom édite la traduction (vide = nom de base). Chaque magasin affiche automatiquement ses prix ET sa langue (réglée dans Réseau). État : ✓ actif · <strong style="color:var(--accent);">⦸ rupture</strong> = temporairement indisponible, retiré des boucles en mode Continu (le reste du catalogue continue).</p>
         </div>
       </div>
     </div>
@@ -5370,7 +5375,7 @@ class App extends Component {
       </div>
       ${v.wsCandidates.length ? html`
         <div style="background:rgba(201,123,74,0.08);border:1px solid rgba(201,123,74,0.3);border-radius:12px;padding:12px 16px;font-size:12.5px;color:var(--muted-2);">
-          Aucune table de périodes exploitée. Tables candidates — clique l'une d'elles (elle remplit le champ) puis « Importer » :
+          Aucune table de périodes exploitée. Tables candidates — cliquez l'une d'elles (elle remplit le champ) puis « Importer » :
           <span style="display:inline-flex;flex-wrap:wrap;gap:6px;margin-left:6px;">
             ${v.wsCandidates.map((t) => html`<button onClick=${() => v.useWsCandidate(t)} style="font-family:ui-monospace,monospace;font-size:12px;font-weight:500;color:var(--muted-2);background:#fff;border:1px solid var(--line);border-radius:8px;padding:3px 10px;cursor:pointer;">${t}</button>`)}
           </span>
@@ -5397,7 +5402,7 @@ class App extends Component {
             <div style="margin-top:8px;"><code style="font-weight:500;color:var(--muted-2);">${ins.table}</code> → <span style="font-family:ui-monospace,monospace;">${(ins.types || ins.columns).join(', ')}</span></div>
             ${ins.sample && ins.sample.length ? html`<div style="margin-top:2px;color:var(--muted);font-family:ui-monospace,monospace;font-size:11px;">ex. : ${ins.sample.join(' | ')}</div>` : ''}
           `)}
-          <div style="margin-top:8px;color:var(--muted);">${v.wsDiag.imageFound ? html`L'import récupère automatiquement cette colonne. Clique « ⟳ Importer » pour (re)charger les périodes avec leur illustration.` : html`Diagnostic lecture seule — rien n'a été modifié. Si une colonne image existe sous un autre nom, dis-le-moi et je l'ajoute au détecteur.`}</div>
+          <div style="margin-top:8px;color:var(--muted);">${v.wsDiag.imageFound ? html`L'import récupère automatiquement cette colonne. Cliquez « ⟳ Importer » pour (re)charger les périodes avec leur illustration.` : html`Diagnostic lecture seule — rien n'a été modifié. Si une colonne image existe sous un autre nom, dis-le-moi et je l'ajoute au détecteur.`}</div>
         </div>
       ` : ''}
 
@@ -5428,9 +5433,9 @@ class App extends Component {
                   : html`<span title=${s.image ? 'Valeur non affichable ici' : 'Aucune illustration'} style="width:48px;height:48px;border-radius:8px;flex:0 0 auto;border:1px dashed rgba(35,34,32,0.22);background:var(--chip);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--faint);">${icon(ICON.image, 16)}</span>`}
                 <div style="display:flex;flex-direction:column;gap:4px;flex:1 1 240px;min-width:0;">
                   <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Illustration</span>
-                  <input value=${s.image} onInput=${s.onImage} placeholder="URL/lien direct de l'image (auto-rempli si la table importée a une colonne image)" spellcheck="false" title="Lien direct de l'illustration de la période. Rempli automatiquement à l'import si la table (ex. product_availability_period) expose une colonne image ; sinon colle une URL ici." style="width:100%;box-sizing:border-box;padding:7px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;" />
+                  <input value=${s.image} onInput=${s.onImage} placeholder="URL/lien direct de l'image (auto-rempli si la table importée a une colonne image)" spellcheck="false" title="Lien direct de l'illustration de la période. Rempli automatiquement à l'import si la table (ex. product_availability_period) expose une colonne image ; sinon collez une URL ici." style="width:100%;box-sizing:border-box;padding:7px 10px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;" />
                 </div>
-                ${s.image && !s.imageOk ? html`<span title="Valeur non affichable directement (id ou nom de fichier sans chemin) — indique-moi le format et je résous l'URL." style="font-size:11px;color:var(--accent);background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;padding:2px 9px;flex:0 0 auto;">⚠ non affichable</span>` : ''}
+                ${s.image && !s.imageOk ? html`<span title="Valeur non affichable directement (id ou nom de fichier sans chemin) — format d'image non reconnu : collez le lien direct de l'image." style="font-size:11px;color:var(--accent);background:rgba(141,29,44,0.08);border:1px solid rgba(141,29,44,0.22);border-radius:999px;padding:2px 9px;flex:0 0 auto;">⚠ non affichable</span>` : ''}
               </div>
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding-left:20px;">
                 <span style="font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Produits liés :</span>
@@ -5458,7 +5463,7 @@ class App extends Component {
             <button onClick=${v.saveProdMoments} disabled=${!v.prodMomentsDirty || v.prodMomentsBusy} style="padding:8px 16px;font-size:12.5px;font-weight:500;border-radius:8px;border:1px solid ${v.prodMomentsDirty ? 'var(--accent)' : 'var(--line)'};cursor:${v.prodMomentsDirty && !v.prodMomentsBusy ? 'pointer' : 'not-allowed'};background:${v.prodMomentsDirty ? 'var(--accent)' : '#fff'};color:${v.prodMomentsDirty ? '#fff' : 'var(--muted)'};">${v.prodMomentsBusy ? 'Enregistrement…' : (v.prodMomentsDirty ? 'Enregistrer' : '✓ Enregistré')}</button>
           </div>
         </div>
-        <p style="margin:0 0 12px;font-size:12px;color:var(--muted);max-width:820px;">Clique une case pour cycler : <strong style="color:var(--green);">vendu</strong> → <strong style="color:var(--accent);">exception (exclu)</strong> → vide. Un produit sans aucune case cochée est vendu à tous les moments. En mode continu, la boucle ne montre que les produits vendus au moment courant${v.prodMomentsCurrent ? html` (actuellement : <strong>${v.prodMomentsCurrent}</strong>)` : ''}. La ligne d'une <strong>catégorie</strong> se tague aussi : hors créneau, elle retire <strong>tous</strong> ses produits, et les tags produits affinent à l'intérieur. Clique une catégorie pour la plier/déplier.</p>
+        <p style="margin:0 0 12px;font-size:12px;color:var(--muted);max-width:820px;">Cliquez une case pour cycler : <strong style="color:var(--green);">vendu</strong> → <strong style="color:var(--accent);">exception (exclu)</strong> → vide. Un produit sans aucune case cochée est vendu à tous les moments. En mode continu, la boucle ne montre que les produits vendus au moment courant${v.prodMomentsCurrent ? html` (actuellement : <strong>${v.prodMomentsCurrent}</strong>)` : ''}. La ligne d'une <strong>catégorie</strong> se tague aussi : hors créneau, elle retire <strong>tous</strong> ses produits, et les tags produits affinent à l'intérieur. Clique une catégorie pour la plier/déplier.</p>
         <div style="overflow-x:auto;">
           <table style="border-collapse:collapse;width:100%;min-width:420px;font-size:13px;">
             <thead><tr>
@@ -5488,7 +5493,7 @@ class App extends Component {
                   </tr>
                 `)}
               `)}
-              ${!v.prodMomentCats.length ? html`<tr><td colspan="4" style="padding:12px 10px;color:var(--muted);font-size:12.5px;">Aucun produit dans le catalogue. Importe le catalogue dans l'onglet Produits.</td></tr>` : ''}
+              ${!v.prodMomentCats.length ? html`<tr><td colspan="4" style="padding:12px 10px;color:var(--muted);font-size:12.5px;">Aucun produit dans le catalogue. Importez le catalogue dans l'onglet Produits.</td></tr>` : ''}
             </tbody>
           </table>
         </div>
@@ -5804,7 +5809,7 @@ class App extends Component {
               <div style="margin-top:9px;">${momentTagCells(c.moCells)}</div>
             </div>
           `)}
-          ${!v.campaignRows.length && html`<p style="margin:0;font-size:12.5px;color:var(--muted);padding:8px 0;">Aucune campagne. « + Ajouter une campagne » pour en créer une (ou importe-les depuis l'ERP plus tard).</p>`}
+          ${!v.campaignRows.length && html`<p style="margin:0;font-size:12.5px;color:var(--muted);padding:8px 0;">Aucune campagne. « + Ajouter une campagne » pour en créer une (ou importez-les depuis l'ERP plus tard).</p>`}
         </div>
         <p style="margin:14px 0 0;font-size:11.5px;color:var(--muted);">Portée <strong>produit</strong> = la campagne affiche la photo et le prix du produit lié. Portée <strong>gamme thématique</strong> = un thème libre (ex. « Viennoiseries »). Supprimer une campagne ne casse pas les éléments qui la diffusaient : ils affichent un repère neutre jusqu'à réassignation.</p>
       </div>
@@ -5902,7 +5907,7 @@ class App extends Component {
               </button>
             `)}
           </div>
-        ` : html`<p style="margin:0;font-size:12.5px;color:var(--muted);">Aucun magasin — importe ton catalogue (⚙ Paramètres → Rafraîchir) ou branche un écran.</p>`}
+        ` : html`<p style="margin:0;font-size:12.5px;color:var(--muted);">Aucun magasin — importez votre catalogue (⚙ Paramètres → Rafraîchir) ou branchez un écran.</p>`}
       </div>
 
       <!-- 2 · Semaine (modèle A–E) + activation + duplication -->
@@ -5932,7 +5937,7 @@ class App extends Component {
 
       ${!v.planHasStores ? html`
         <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:22px 20px;text-align:center;">
-          <p style="margin:0;font-size:13px;color:var(--muted);">Sélectionne au moins un magasin ci-dessus pour remplir son planning de la semaine ${v.planWeek}.</p>
+          <p style="margin:0;font-size:13px;color:var(--muted);">Sélectionnez au moins un magasin ci-dessus pour remplir son planning de la semaine ${v.planWeek}.</p>
         </div>
       ` : html`
 
@@ -5950,7 +5955,7 @@ class App extends Component {
       </div>
 
       <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;">
-        <h3 style="margin:0 0 12px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Films — ${v.planDayName} (glisse-les sur un moment)</h3>
+        <h3 style="margin:0 0 12px;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Films — ${v.planDayName} (glissez-les sur un moment)</h3>
         ${v.planFilmCards.length ? html`
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             ${v.planFilmCards.map((f) => html`
@@ -6000,8 +6005,8 @@ class App extends Component {
                 ${col.films.length
                   ? (col.full
                     ? html`<div style="font-size:10.5px;color:var(--accent);text-align:center;padding:3px;">${col.max} films max atteint — retires-en un pour changer</div>`
-                    : html`<div style="font-size:10.5px;color:var(--faint);text-align:center;padding:3px;">＋ glisse un autre film (joué à la suite)</div>`)
-                  : html`<div style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--faint);">Glisse un film ici — ou utilise « ＋ ajouter » ci-dessous (5 max)</div>`}
+                    : html`<div style="font-size:10.5px;color:var(--faint);text-align:center;padding:3px;">＋ glissez un autre film (joué à la suite)</div>`)
+                  : html`<div style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--faint);">Glissez un film ici — ou utilisez « ＋ ajouter » ci-dessous (5 max)</div>`}
               </div>
               ${!col.full && col.addFilms.length ? html`
                 <select onChange=${col.onAdd} title="Ajouter un film sans glisser" style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:12.5px;border:1px solid rgba(141,29,44,0.25);border-radius:8px;background:#fff;color:var(--accent);cursor:pointer;">
@@ -6012,7 +6017,7 @@ class App extends Component {
             </div>
           `)}
         </div>
-        <p style="margin:12px 0 0;font-size:11.5px;color:var(--muted);">Glisse les films sur un moment, ou ajoute-les avec le menu « ＋ ajouter » (jusqu'à 5 par moment, enchaînés en boucle). Les fenêtres horaires sont communes à tous les magasins et à toutes les semaines.</p>
+        <p style="margin:12px 0 0;font-size:11.5px;color:var(--muted);">Glissez les films sur un moment, ou ajoutez-les avec le menu « ＋ ajouter » (jusqu'à 5 par moment, enchaînés en boucle). Les fenêtres horaires sont communes à tous les magasins et à toutes les semaines.</p>
       </div>
 
       <!-- Liens des écrans (semaine active diffusée en direct) -->
@@ -6036,9 +6041,9 @@ class App extends Component {
       <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:18px 20px;">
         <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;">
           <h3 style="margin:0;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Jours de planning des films</h3>
-          ${infoTip('Quels films sont PROPOSÉS quel jour quand tu remplis le planning ci-dessus (ex. « Crêpes » = mercredi). Purement un filtre d’organisation : ça ne change pas quand un film est diffusé (ça, c’est « Jours de diffusion », réglé sur le film). Un film coché sur tous les jours est proposé tous les jours.')}
+          ${infoTip('Quels films sont PROPOSÉS quel jour quand vous remplissez le planning ci-dessus (ex. « Crêpes » = mercredi). Purement un filtre d’organisation : ça ne change pas quand un film est diffusé (ça, c’est « Jours de diffusion », réglé sur le film). Un film coché sur tous les jours est proposé tous les jours.')}
         </div>
-        <p style="margin:0 0 12px;font-size:12px;color:var(--muted);">Coche les jours où chaque film doit apparaître dans le sélecteur du planning. Décoche pour le masquer ce jour-là.</p>
+        <p style="margin:0 0 12px;font-size:12px;color:var(--muted);">Cochez les jours où chaque film doit apparaître dans le sélecteur du planning. Décochez pour le masquer ce jour-là.</p>
         <div style="overflow-x:auto;">
           <table style="border-collapse:collapse;width:100%;min-width:460px;font-size:13px;">
             <thead><tr>
@@ -6264,7 +6269,7 @@ class App extends Component {
                 <div style="font-size:14px;font-weight:500;color:var(--ink);">${s.label}${s.soft && !s.ok ? html` <span style="font-size:11px;font-weight:500;color:var(--muted);">· optionnel</span>` : ''}</div>
                 <div style="font-size:12px;color:var(--muted);">${s.hint}</div>
               </div>
-              ${!s.ok && s.cta ? html`<button onClick=${s.cta.go} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:500;color:#fff;background:var(--accent);border:none;border-radius:8px;cursor:pointer;">${s.cta.label}</button>`
+              ${!s.ok && s.cta ? html`<button onClick=${s.cta.go} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${s.cta.label}</button>`
                 : (s.cta ? html`<button onClick=${s.cta.go} style="flex:0 0 auto;padding:9px 16px;font-size:12.5px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${s.cta.label}</button>` : '')}
             </div>
           `)}
@@ -6272,13 +6277,13 @@ class App extends Component {
       </div>
 
       <!-- Assistant vidéo de campagne : de la campagne du Marketing à la diffusion -->
-      <button data-cw-open onClick=${() => this.openWizard()} title=${v.t('hdr.broadcastTip')} style="width:100%;box-sizing:border-box;text-align:left;display:flex;align-items:center;gap:16px;padding:18px 22px;border-radius:12px;background:var(--accent);border:none;cursor:pointer;">
-        <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:8px;background:rgba(255,255,255,0.14);color:#fff;">${icon(ICON.play, 20)}</div>
+      <button data-cw-open onClick=${() => this.openWizard()} title=${v.t('hdr.broadcastTip')} style="width:100%;box-sizing:border-box;text-align:left;display:flex;align-items:center;gap:16px;padding:18px 22px;border-radius:12px;background:#fff;border:1px solid var(--line);cursor:pointer;">
+        <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:8px;background:var(--accent-soft);color:var(--accent);">${icon(ICON.play, 20)}</div>
         <div style="flex:1 1 auto;min-width:0;">
-          <div style="font-size:16px;font-weight:400;color:#fff;">${v.t('home.cwTitle')}</div>
-          <div style="font-size:12.5px;color:rgba(255,255,255,0.82);margin-top:3px;line-height:1.45;">${v.t('home.cwSub')}</div>
+          <div style="font-size:16px;font-weight:400;color:var(--ink);">${v.t('home.cwTitle')}</div>
+          <div style="font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.45;">${v.t('home.cwSub')}</div>
         </div>
-        <div style="font-size:22px;color:rgba(255,255,255,0.85);flex:0 0 auto;">→</div>
+        <div style="font-size:22px;color:var(--muted-2);flex:0 0 auto;">→</div>
       </button>
 
       <!-- Actions rapides -->
@@ -6291,7 +6296,7 @@ class App extends Component {
         <button onClick=${() => this.openOnboarding()} style="text-align:left;padding:18px 20px;border-radius:12px;background:#FFFFFF;border:1px solid var(--line);cursor:pointer;">
           <div style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;background:var(--accent-soft);color:var(--accent);margin-bottom:10px;">${icon(ICON.screens, 18)}</div>
           <div style="font-size:14px;font-weight:500;color:var(--ink);">Brancher un écran</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:3px;">Configure et connecte tes magasins pas à pas.</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px;">Configurez et connectez vos magasins pas à pas.</div>
         </button>
         <button onClick=${() => this.openSeasons()} style="text-align:left;padding:18px 20px;border-radius:12px;background:#FFFFFF;border:1px solid var(--line);cursor:pointer;">
           <div style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;background:var(--accent-soft);color:var(--accent);margin-bottom:10px;">${icon(ICON.seasons, 18)}</div>
@@ -6309,7 +6314,7 @@ class App extends Component {
       <button onClick=${v.setTabLib} class=${'page-tabs__tab' + (v.isTimelineTab ? '' : ' is-on')}>1 · Bibliothèque — construire</button>
       <button onClick=${v.setTabTimeline} class=${'page-tabs__tab' + (v.isTimelineTab ? ' is-on' : '')}>2 · Playlist — ligne du temps</button>
     </nav>
-    <span style="font-size:12px;color:var(--muted);padding-bottom:10px;">${v.isTimelineTab ? 'Glisse les éléments de la bibliothèque sur la ligne du temps, puis Enregistrer et Publier sur le réseau.' : 'Construis ici les éléments (catégories, liaisons) qui composeront tes films.'}</span>
+    <span style="font-size:12px;color:var(--muted);padding-bottom:10px;">${v.isTimelineTab ? 'Glissez les éléments de la bibliothèque sur la ligne du temps, puis Enregistrer et Publier sur le réseau.' : 'Construisez ici les éléments (catégories, liaisons) qui composeront vos films.'}</span>
   </div>
   `}
 
@@ -6319,7 +6324,7 @@ class App extends Component {
     <aside style="background:#fff;border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;overflow:auto;">
       <div style="flex:0 0 auto;padding:18px 18px 10px;">
         <h2 style="margin:0 0 3px;font-size:15px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${v.t('composer.library')}</h2>
-        <p style="margin:0 0 9px;font-size:11.5px;color:var(--muted);line-height:1.4;">Tous les éléments · clique pour éditer · ＋ ajoute au film affiché dans l'onglet Playlist</p>
+        <p style="margin:0 0 9px;font-size:11.5px;color:var(--muted);line-height:1.4;">Tous les éléments · cliquez pour éditer · ＋ ajoute au film affiché dans l'onglet Playlist</p>
         <!-- Filtre de format : 16:9 paysage / 9:16 portrait -->
         <div style="display:flex;gap:5px;flex-wrap:wrap;">
           ${v.libOrientChips.map((o) => html`
@@ -6364,7 +6369,7 @@ class App extends Component {
           </div>
           <input value=${v.selName} onInput=${v.onSelName} placeholder="Nom du module" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:19px;font-weight:500;border:1px solid var(--line);border-radius:10px;background:#fff;" />
           <div style="margin-top:8px;display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted);flex-wrap:wrap;">
-            ${infoTip('Champs dynamiques : dans le titre ou le sous-titre, écris un jeton entre doubles accolades — il est remplacé PAR MAGASIN à la diffusion (un seul gabarit, les bonnes valeurs partout). Jetons : {{magasin}} (nom), {{adresse}}, {{horaires}}, {{tel}} (coordonnées saisies dans l’onglet Réseau) · {{date}} (date du jour) · {{saison}} (période active) · {{moment}} (matin/midi/après-midi). Ex. « Bienvenue à {{magasin}} ». Dans l’aperçu générique le jeton reste visible ; via le lien d’un magasin il est résolu.')}
+            ${infoTip('Champs dynamiques : dans le titre ou le sous-titre, écrivez un jeton entre doubles accolades — il est remplacé PAR MAGASIN à la diffusion (un seul gabarit, les bonnes valeurs partout). Jetons : {{magasin}} (nom), {{adresse}}, {{horaires}}, {{tel}} (coordonnées saisies dans l’onglet Réseau) · {{date}} (date du jour) · {{saison}} (période active) · {{moment}} (matin/midi/après-midi). Ex. « Bienvenue à {{magasin}} ». Dans l’aperçu générique le jeton reste visible ; via le lien d’un magasin il est résolu.')}
             <span>Jetons dynamiques :</span>
             ${['{{magasin}}', '{{adresse}}', '{{date}}', '{{saison}}'].map((t) => html`<code style="background:var(--chip);padding:1px 5px;border-radius:4px;">${t}</code>`)}
             <span>…</span>
@@ -6379,7 +6384,7 @@ class App extends Component {
           </div>
           <div style="margin-top:14px;">
             <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:7px;">
-              ${infoTip('Format de l’élément : un écran est soit paysage (16:9), soit portrait (9:16). Ce choix sert de FILTRE au montage — un élément 16:9 n’est proposé que quand tu montes pour des écrans paysage, un 9:16 que pour du portrait.')}
+              ${infoTip('Format de l’élément : un écran est soit paysage (16:9), soit portrait (9:16). Ce choix sert de FILTRE au montage — un élément 16:9 n’est proposé que quand vous montez pour des écrans paysage, un 9:16 que pour du portrait.')}
               <span>Format de diffusion</span>
             </label>
             <div style="display:flex;flex-wrap:wrap;gap:7px;">
@@ -6491,7 +6496,7 @@ class App extends Component {
               <div style="width:64px;height:64px;border-radius:12px;background:#1B1B1B;color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;">🎯</div>
               <p style="margin:0;font-size:13px;line-height:1.6;color:var(--muted-2);max-width:420px;">Cet élément diffuse <strong>automatiquement</strong> une vidéo ou photo de la <strong>médiathèque agence</strong>, <strong>tirée au sort</strong> parmi celles taguées pour le <strong>moment courant</strong> (matin/midi/soir, selon les fenêtres du planning) et une <strong>saison active</strong>. La pioche change à chaque diffusion — parfait pour surprendre le client tout en restant de saison.</p>
               <a href=${v.mediaAgencyUrl} target="_blank" style="font-size:13px;font-weight:500;color:var(--accent);">↗ Ouvrir l'espace Vidéo — Agence (upload et tags)</a>
-              <p style="margin:0;font-size:11.5px;color:var(--muted);">Règle la <strong>durée</strong> à l'écran ci-dessus, et la <strong>mise en page</strong> (plein écran ou adapté). S'il n'y a aucun média éligible à l'instant, un écran repère « Média ciblé » s'affiche.</p>
+              <p style="margin:0;font-size:11.5px;color:var(--muted);">Réglez la <strong>durée</strong> à l'écran ci-dessus, et la <strong>mise en page</strong> (plein écran ou adapté). S'il n'y a aucun média éligible à l'instant, un écran repère « Média ciblé » s'affiche.</p>
             </div>
             </div>`}
           </div>
@@ -6604,7 +6609,7 @@ class App extends Component {
             ${secHead('campaign', 'Campagne à diffuser', v.campaignSummary)}
             ${secOpen('campaign') && html`<div style=${secBody}>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
-              <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">Choisis une <strong>campagne</strong> dans la liste — son nom, son visuel, son produit lié et sa période s'affichent automatiquement. La liste se gère (ou s'importe) dans <strong>Campagnes</strong>.</p>
+              <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">Choisissez une <strong>campagne</strong> dans la liste — son nom, son visuel, son produit lié et sa période s'affichent automatiquement. La liste se gère (ou s'importe) dans <strong>Campagnes</strong>.</p>
               <button onClick=${v.goCampaigns} style="flex:0 0 auto;padding:7px 13px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">📣 Gérer les campagnes</button>
             </div>
             ${v.hasCampaigns ? html`
@@ -6646,7 +6651,7 @@ class App extends Component {
             ${secHead('htmlcode', 'Code HTML', v.htmlSummary)}
             ${secOpen('htmlcode') && html`<div style=${secBody}>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
-              <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;max-width:420px;">Colle ici ton <strong>code HTML</strong> (document complet ou fragment) : il est mis à l'échelle de l'écran. Les <strong>variables</strong> ci-dessous sont remplacées <strong>par magasin</strong> à la diffusion.</p>
+              <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;max-width:420px;">Collez ici votre <strong>code HTML</strong> (document complet ou fragment) : il est mis à l'échelle de l'écran. Les <strong>variables</strong> ci-dessous sont remplacées <strong>par magasin</strong> à la diffusion.</p>
             </div>
 
             <!-- Format source de la maquette : ratio + dimensions -->
@@ -6664,7 +6669,7 @@ class App extends Component {
             </div>
 
             <!-- Variables insérables au curseur -->
-            <label style="display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:7px;">Variables — clique pour insérer dans le code</label>
+            <label style="display:block;font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:7px;">Variables — cliquez pour insérer dans le code</label>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
               ${v.htmlTokens.map((t) => html`
                 <button onClick=${t.insert} title=${t.label} style="padding:5px 11px;font-size:12px;font-weight:500;font-family:ui-monospace,monospace;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">${t.token}</button>
@@ -6675,7 +6680,7 @@ class App extends Component {
             ${v.htmlVarRows.length ? html`
               <div style="margin-bottom:14px;padding:12px 13px;border-radius:10px;background:var(--paper);border:1px solid var(--line);">
                 <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px;">
-                  ${infoTip('Chaque {{ variable }} trouvée dans ton code est listée ici. Lie-la à une donnée (produit, promotion, campagne, magasin) ou à une valeur libre : elle sera remplacée à la diffusion, magasin par magasin. Une variable laissée « non liée » retombe sur les jetons standards ({{magasin}}, {{date}}…) ou reste visible telle quelle. Les constantes de marque comme {{ logo }} sont résolues d’office — rien à lier.')}
+                  ${infoTip('Chaque {{ variable }} trouvée dans votre code est listée ici. Liez-la à une donnée (produit, promotion, campagne, magasin) ou à une valeur libre : elle sera remplacée à la diffusion, magasin par magasin. Une variable laissée « non liée » retombe sur les jetons standards ({{magasin}}, {{date}}…) ou reste visible telle quelle. Les constantes de marque comme {{ logo }} sont résolues d’office — rien à lier.')}
                   <span style="font-size:12px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--accent);">Variables détectées — ${v.htmlVarsSummary}</span>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:7px;">
@@ -6733,7 +6738,7 @@ class App extends Component {
             ` : ''}
 
             <!-- Éditeur de code (non contrôlé : la saisie résiste aux re-rendus) -->
-            <textarea id="sig-html-editor" key=${'html-' + v.selId} defaultValue=${v.htmlCode} onInput=${v.onHtmlCode} spellcheck="false" placeholder="Colle ton HTML ici — ex. une affiche générée, un gabarit…" style="width:100%;box-sizing:border-box;min-height:280px;padding:12px 13px;font-size:12px;line-height:1.5;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;border:1px solid var(--line);border-radius:10px;background:#fff;resize:vertical;"></textarea>
+            <textarea id="sig-html-editor" key=${'html-' + v.selId} defaultValue=${v.htmlCode} onInput=${v.onHtmlCode} spellcheck="false" placeholder="Collez votre HTML ici — ex. une affiche générée, un gabarit…" style="width:100%;box-sizing:border-box;min-height:280px;padding:12px 13px;font-size:12px;line-height:1.5;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;border:1px solid var(--line);border-radius:10px;background:#fff;resize:vertical;"></textarea>
             <p style="margin:9px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5;">Les polices <strong>Gotham</strong> et <strong>Vank</strong> et les images de <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">assets/</code> sont déjà disponibles — pas besoin de redéclarer <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">@font-face</code>. Les <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">&lt;script&gt;</code> et gestionnaires d'événements sont retirés à l'affichage (sécurité) ; les <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">&lt;style&gt;</code> sont conservés.</p>
             </div>`}
           </div>
@@ -6819,7 +6824,7 @@ class App extends Component {
             `}
 
             ${v.isSurprise && html`
-              <p style="margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.5;">Le player pioche <strong>une vidéo au hasard</strong> dans le dossier serveur <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">public/surprise/</code> à chaque diffusion — pour surprendre le client. Ajoute des vidéos ici (≤ 18 Mo) ou dépose-les directement dans le dossier par SFTP (gros fichiers).</p>
+              <p style="margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.5;">Le player pioche <strong>une vidéo au hasard</strong> dans le dossier serveur <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">public/surprise/</code> à chaque diffusion — pour surprendre le client. Ajoutez des vidéos ici (≤ 18 Mo) ou déposez-les directement dans le dossier par SFTP (gros fichiers).</p>
               <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">
                 <span style="font-size:12.5px;font-weight:500;color:var(--muted-2);">${v.surpriseList.length} vidéo(s) dans le dossier</span>
                 <button onClick=${v.refreshSurprise} style="padding:6px 12px;font-size:12px;font-weight:500;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;cursor:pointer;">⟳ Rafraîchir</button>
@@ -6836,7 +6841,7 @@ class App extends Component {
                     </div>
                   `)}
                 </div>
-              ` : html`<p style="margin:0 0 12px;font-size:12px;color:var(--faint);">Dossier vide — ajoute au moins une vidéo.</p>`}
+              ` : html`<p style="margin:0 0 12px;font-size:12px;color:var(--faint);">Dossier vide — ajoutez au moins une vidéo.</p>`}
               <label style="display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 12px;font-size:13px;font-weight:500;color:var(--muted-2);border:1px dashed rgba(92,88,82,0.45);border-radius:10px;background:rgba(92,88,82,0.05);cursor:${v.surpriseBusy ? 'wait' : 'pointer'};">
                 <span style="display:inline-flex;">${icon(ICON.upload, 15)}</span><span>${v.surpriseBusy ? 'Envoi…' : 'Ajouter des vidéos au dossier'}</span>
                 <input type="file" accept="video/mp4,video/webm,video/*" multiple onChange=${v.onSurpriseFiles} style="display:none;" />
@@ -6858,7 +6863,7 @@ class App extends Component {
             <p style="margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.5;">
               ${v.animMode === 'fichier'
                 ? html`Le fichier importé <strong>remplace</strong> le rendu généré : l'élément devient un conteneur. Formats acceptés : <strong>GIF</strong>, PNG, WebP, <strong>SVG animé</strong>, <strong>MP4 / WebM</strong> et <strong>Lottie (.json)</strong> — 18 Mo max.`
-                : html`Le titre et l'accroche restent générés (jetons <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">{{magasin}}</code> compris). Tu peux poser un <strong>visuel de fond</strong> derrière — image ou vidéo — avec un voile qui garde le texte lisible.`}
+                : html`Le titre et l'accroche restent générés (jetons <code style="background:var(--chip);padding:1px 5px;border-radius:4px;">{{magasin}}</code> compris). Vous pouvez poser un <strong>visuel de fond</strong> derrière — image ou vidéo — avec un voile qui garde le texte lisible.`}
             </p>
             ${(() => {
               const isFile = v.animMode === 'fichier';
@@ -6943,7 +6948,7 @@ class App extends Component {
             ${secHead('pos', 'Positions (avancé)', v.posSummary)}
             ${secOpen('pos') && html`<div style=${secBody}>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-              <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">Ajuste finement titre, liste et illustration par-dessus la mise en page.</p>
+              <p style="margin:0;font-size:12px;color:var(--muted);line-height:1.5;">Ajustez finement titre, liste et illustration par-dessus la mise en page.</p>
               <button onClick=${v.resetPos} style="flex:0 0 auto;padding:7px 12px;font-size:12px;font-weight:500;color:var(--muted);background:var(--paper);border:1px solid var(--line);border-radius:8px;cursor:pointer;">Réinitialiser</button>
             </div>
             <div style="display:flex;flex-direction:column;gap:12px;">
@@ -6968,7 +6973,7 @@ class App extends Component {
             <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
               <span style="font-size:11.5px;font-weight:500;color:var(--green);background:var(--green-soft);border:none;border-radius:999px;padding:3px 10px;">⛓ ${v.linkedCatName}</span>
             </div>
-            <p style="margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.5;">Les lignes viennent de la table produits : noms, prix (et prix par magasin), actifs/inactifs suivent automatiquement. Modifie-les dans la table.</p>
+            <p style="margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.5;">Les lignes viennent de la table produits : noms, prix (et prix par magasin), actifs/inactifs suivent automatiquement. Modifiez-les dans la table.</p>
             <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;">
               ${v.linkedRows.map((r) => html`
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:8px;background:${r.active ? '#fff' : 'rgba(35,34,32,0.04)'};opacity:${r.active ? 1 : 0.55};">
@@ -7067,7 +7072,7 @@ class App extends Component {
 
       <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:16px 18px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Bibliothèque de films — choisis une catégorie, puis un film à éditer</h3>
+          <h3 style="margin:0;font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Bibliothèque de films — choisissez une catégorie, puis un film à éditer</h3>
           <span style="font-size:12px;color:var(--muted);">film courant : <strong style="color:var(--ink);">${this.activeFilm().name}</strong> · ${v.timelineTotal} · ${v.moduleCount} module(s)</span>
         </div>
         ${filmSelector}
@@ -7076,7 +7081,7 @@ class App extends Component {
 
       ${filmMode === 'continu' ? contPanel : html`
       <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:16px 18px;">
-        <h3 style="margin:0 0 12px;font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Bibliothèque — choisis d'abord l'orientation de l'écran, puis une catégorie, et glisse un élément sur la ligne du temps (ou clique ＋)</h3>
+        <h3 style="margin:0 0 12px;font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Bibliothèque — choisissez d'abord l'orientation de l'écran, puis une catégorie, et glissez un élément sur la ligne du temps (ou clique ＋)</h3>
         <!-- 1 · Orientation de l'écran : filtre principal du montage -->
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line);">
           <span style="font-size:11.5px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">1 · Orientation de l'écran</span>
@@ -7124,11 +7129,11 @@ class App extends Component {
             </div>
           `)}
           ${v.playlistEmpty && html`
-            <div style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:var(--faint);border:1px dashed rgba(35,34,32,0.2);border-radius:10px;padding:18px;">Glisse ici les éléments de la bibliothèque pour composer le film</div>
+            <div style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:var(--faint);border:1px dashed rgba(35,34,32,0.2);border-radius:10px;padding:18px;">Glissez ici les éléments de la bibliothèque pour composer le film</div>
           `}
           <div style="flex:1 1 64px;min-width:64px;border:1px dashed var(--line);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:18px;" title="Dépose ici pour ajouter à la fin">＋</div>
         </div>
-        <p style="margin:10px 0 0;font-size:11.5px;color:var(--muted);">Clique un bloc pour caler l'aperçu dessus · glisse pour réordonner · ✕ retire (l'élément reste en bibliothèque) · la largeur d'un bloc reflète sa durée.</p>
+        <p style="margin:10px 0 0;font-size:11.5px;color:var(--muted);">Cliquez un bloc pour caler l'aperçu dessus · glissez pour réordonner · ✕ retire (l'élément reste en bibliothèque) · la largeur d'un bloc reflète sa durée.</p>
       </div>`}
 
       <div style="background:#FFFFFF;border:1px solid var(--line);border-radius:12px;padding:16px 18px;">
@@ -7241,7 +7246,7 @@ class App extends Component {
           <h2 style="margin:0;font-size:19px;font-weight:500;">Mise en route</h2>
           <button onClick=${v.closeOnb} style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:var(--chip);border:1px solid var(--line);cursor:pointer;font-size:14px;">✕</button>
         </div>
-        <p style="margin:0 0 16px;font-size:12.5px;color:var(--muted);">Configure chaque magasin pas à pas : écran, langue, test, lien. ${v.onbDoneCount}/${v.onbCount} magasin(s) prêt(s).</p>
+        <p style="margin:0 0 16px;font-size:12.5px;color:var(--muted);">Configurez chaque magasin pas à pas : écran, langue, test, lien. ${v.onbDoneCount}/${v.onbCount} magasin(s) prêt(s).</p>
         ${v.onbStores.length ? html`
         <div style="display:grid;grid-template-columns:220px 1fr;gap:18px;align-items:start;">
           <div style="display:flex;flex-direction:column;gap:7px;">
@@ -7295,7 +7300,7 @@ class App extends Component {
                 <div style="font-size:12.5px;color:var(--green);line-height:1.6;">✓ Lien OK — sert « <strong>${v.onbSel.test.name}</strong> »${v.onbSel.test.plan ? ` (planning : ${v.onbSel.test.plan})` : ''} · ${v.onbSel.test.modules} élément(s) · rendu ${v.onbSel.test.px}${v.onbSel.test.draft ? ' · brouillon (pas encore publié)' : ''}</div>
               `}
               ${v.onbSel.test && v.onbSel.test.state === 'err' && html`<div style="font-size:12.5px;color:var(--accent);">✗ ${v.onbSel.test.error}</div>`}
-              ${!v.onbSel.test && html`<div style="font-size:12px;color:var(--muted);">Clique « Tester » pour vérifier que le lien du magasin répond et voir ce qu'il diffuse.</div>`}
+              ${!v.onbSel.test && html`<div style="font-size:12px;color:var(--muted);">Cliquez « Tester » pour vérifier que le lien du magasin répond et voir ce qu'il diffuse.</div>`}
             </div>
 
             <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;">
@@ -7303,7 +7308,7 @@ class App extends Component {
               <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
                 <div style="flex:0 0 auto;text-align:center;">
                   <img src=${qrDataUri(v.onbSel.link)} alt="QR du lien écran" style="width:140px;height:140px;display:block;border:1px solid var(--line);border-radius:10px;background:#fff;" />
-                  <div style="font-size:10.5px;color:var(--muted);margin-top:5px;">📱 Scanne pour ouvrir sur l'écran</div>
+                  <div style="font-size:10.5px;color:var(--muted);margin-top:5px;">📱 Scannez pour ouvrir sur l'écran</div>
                 </div>
                 <div style="flex:1 1 260px;min-width:220px;">
                   <div style="display:flex;align-items:center;gap:8px;">
@@ -7311,7 +7316,7 @@ class App extends Component {
                     <button onClick=${v.onbSel.copyLink} style="flex:0 0 auto;padding:8px 14px;font-size:12px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;">⎘ Copier</button>
                     <a href=${v.onbSel.link} target="_blank" style="flex:0 0 auto;font-size:12px;font-weight:500;color:var(--accent);">↗</a>
                   </div>
-                  <p style="margin:8px 0 0;font-size:11.5px;color:var(--muted);">Ouvre ce lien en plein écran sur l'écran du magasin (mode kiosque), ou scanne le QR depuis la box/TV. Il bascule tout seul selon l'heure si tu as fait un Planning.</p>
+                  <p style="margin:8px 0 0;font-size:11.5px;color:var(--muted);">Ouvrez ce lien en plein écran sur l'écran du magasin (mode kiosque), ou scannez le QR depuis la box/TV. Il bascule tout seul selon l'heure si vous avez fait un Planning.</p>
                 </div>
               </div>
             </div>
@@ -7321,7 +7326,7 @@ class App extends Component {
           </div>
           `}
         </div>
-        ` : html`<p style="margin:0;font-size:13px;color:var(--muted);">Aucun magasin actif. Fais ⚙ Paramètres → ⟳ Rafraîchir pour importer tes magasins, ou branche un écran.</p>`}
+        ` : html`<p style="margin:0;font-size:13px;color:var(--muted);">Aucun magasin actif. Faites ⚙ Paramètres → ⟳ Rafraîchir pour importer vos magasins, ou branchez un écran.</p>`}
       </div>
     </div>
   `}
@@ -7333,7 +7338,7 @@ class App extends Component {
           <h2 style="margin:0;font-size:19px;font-weight:500;">Nouvel élément</h2>
           <button onClick=${v.closeAddPicker} style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:var(--chip);border:1px solid var(--line);cursor:pointer;font-size:14px;">✕</button>
         </div>
-        <p style="margin:0 0 16px;font-size:12.5px;color:var(--muted);">Choisis le type — chaque type a ses propres mises en page.</p>
+        <p style="margin:0 0 16px;font-size:12.5px;color:var(--muted);">Choisissez le type — chaque type a ses propres mises en page.</p>
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
           ${v.typeCards.map((t) => html`
             <button onClick=${t.pick} style="text-align:left;display:flex;gap:13px;align-items:flex-start;padding:15px 16px;border-radius:12px;cursor:pointer;background:#fff;border:1px solid var(--line);">
@@ -7369,7 +7374,7 @@ class App extends Component {
             </div>
           </div>
           <div style="background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px 16px;">
-            <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Ton lien pour voir le film (public · 55″)</div>
+            <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Votre lien pour voir le film (public · 55″)</div>
             <div style="display:flex;gap:8px;align-items:center;">
               <input readonly value=${st.pubDone.url} onClick=${(e) => e.target.select()} style="flex:1 1 auto;min-width:0;padding:9px 11px;font-size:12px;font-family:ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;background:#fff;" />
               <button onClick=${() => this.copyLink(st.pubDone.url)} style="flex:0 0 auto;padding:9px 14px;font-size:12.5px;font-weight:500;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;">Copier</button>

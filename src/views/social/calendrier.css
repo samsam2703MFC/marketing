@@ -14,8 +14,7 @@ div.cal__kpi { cursor: default; }
 .cal__kpi:hover { border-color: #5c5852; }
 div.cal__kpi:hover { border-color: #e6e0d8; }
 .cal__kpi.is-or { border-left-color: #B0792A; }
-.cal__kpi.is-alerte-bord { border-left-color: #8D1D2C; }
-.cal__kpi .kpi__value.is-moyen { color: #7A5207; }
+.cal__kpi.is-alerte-bord { border-left-color: var(--danger); }
 
 .cal__filtres { gap: 6px; flex-wrap: wrap; align-items: center; }
 .cal__etiquette { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); margin-right: 4px; }

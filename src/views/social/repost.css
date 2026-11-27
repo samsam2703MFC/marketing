@@ -3,10 +3,11 @@
 .rp .page-tabs { margin: 0; }
 .rp__select { height: 36px; padding: 0 10px; font: inherit; font-size: 13px; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 8px; }
 
-/* Interrupteur compact : piste et curseur ronds (seuls ronds permis). */
-.rp__sw { position: relative; display: inline-block; flex: 0 0 auto; width: 30px; height: 17px; border-radius: 999px; background: var(--chip); transition: background 0.15s; }
+/* Interrupteur (§7.11) : piste 38 × 22, curseur 16 px — il était de 30 × 17, une cible de 14 px de haut au doigt.
+   Dans l'en-tête d'une colonne de boutique, une version réduite (32 × 18), toujours lisible au doigt avec son libellé. */
+.rp__sw { position: relative; display: inline-block; flex: 0 0 auto; width: 38px; height: 22px; border-radius: 999px; background: var(--chip); transition: background 0.15s; }
 .rp__sw::after {
-  content: ''; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #fff;
+  content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff;
   box-shadow: 0 1px 2px rgba(28, 26, 23, 0.25); transition: transform 0.15s;
 }
 .rp__actif { gap: 8px; color: var(--muted-2); }
@@ -14,18 +15,16 @@
 .rp__actif.is-on .rp__sw,
 .rp__sw.is-on { background: var(--prize); }
 .rp__actif.is-on .rp__sw::after,
-.rp__sw.is-on::after { transform: translateX(13px); }
-.rp__sw--petit { width: 24px; height: 14px; }
-.rp__sw--petit::after { width: 10px; height: 10px; }
-.rp__sw--petit.is-on::after { transform: translateX(10px); }
+.rp__sw.is-on::after { transform: translateX(16px); }
+.rp__sw--petit { width: 32px; height: 18px; }
+.rp__sw--petit::after { top: 3px; left: 3px; width: 12px; height: 12px; }
+.rp__sw--petit.is-on::after { transform: translateX(14px); }
 
 .rp__guet { font-size: 12px; line-height: 1.45; color: var(--muted-2); background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
 .rp__guet.is-erreur { background: #F6DCDF; border-color: transparent; color: #8D1D2C; }
 .rp__guet.is-pause { background: var(--chip); border-color: transparent; }
 
 .rp__tuiles { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-.rp .kpi__value.is-prog { color: #2F5D8A; }
-.rp .kpi__value.is-moyen { color: var(--prize-ink, #7A5207); }
 
 .rp__alerte { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: #F6DCDF; color: #6E1A14; border-radius: 12px; padding: 10px 14px; font-size: 13px; }
 .rp__alerte-signe { width: 26px; height: 26px; border-radius: 50%; background: var(--danger); color: #fff; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }

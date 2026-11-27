@@ -155,7 +155,7 @@ export default function FundsView() {
       {data ? (
         <section className="card balance">
           <h2>Solde du fonds</h2>
-          <p className="metric">{formatEur(data.closing_balance, 2)}</p>
+          <p className={`metric${data.closing_balance < 0 ? ' is-negatif' : ''}`}>{formatEur(data.closing_balance, 2)}</p>
         </section>
       ) : null}
 
