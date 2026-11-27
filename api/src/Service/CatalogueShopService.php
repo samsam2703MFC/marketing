@@ -166,7 +166,10 @@ final class CatalogueShopService
                 'offers'           => array_values($settings['offers'] ?? []),
                 'showAvailability' => (bool) ($settings['showAvailability'] ?? true),
                 'adaptedFrom'      => (int) $row['id'],
-            ],
+            ]
+            // Gamme par gamme (27/11/2026) : la copie garde les blocs, les gammes validées et les présentations.
+            + (CatalogueService::blocksOf($settings) !== null ? ['gammeBlocks' => CatalogueService::blocksOf($settings), 'gammesOk' => array_values($settings['gammesOk'] ?? [])] : [])
+            + (is_array($settings['presentations'] ?? null) && $settings['presentations'] !== [] ? ['presentations' => $settings['presentations']] : []),
         ];
         // Les pages de la marque propres au catalogue copié le suivent : la boutique ne les modifie pas.
         if (is_array($settings['brandPages'] ?? null) && $settings['brandPages'] !== []) {

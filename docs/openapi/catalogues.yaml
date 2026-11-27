@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Marketing — catalogues produits
-  version: 1.22.0
+  version: 1.23.0
   description: |
     Les catalogues produits du Marketing (prix du webshop, gammes) : un imprimé A5 (A4 en option)
     de **8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16). Quatre pages viennent de la Charte des catalogues de la
@@ -177,6 +177,34 @@ info:
       brochure (6 produits au plus sur un leaflet, 9 sur un dépliant) ;
     - le dashboard franchisé (`…/brand-catalogues`) ne reçoit que des catalogues : un leaflet ou un dépliant n'y va pas
       (404 sur le sien).
+
+    v1.23 (27 novembre 2026, la construction « gamme par gamme », maquettes M1 · M2 · M3 validées) :
+    - un catalogue peut se ranger en BLOCS : `gammeBlocks` (liste ordonnée de 1 à 8 gammes du webshop ; null = les pages
+      libres d'avant, le défaut — un catalogue existant ne change pas). Le catalogue s'imprime alors : pages 1-2 de la
+      marque · les produits HORS GAMME (ceux d'aucune gamme des blocs, sans présentation) · pour chaque gamme, sa page
+      de présentation sur une page de GAUCHE (paire) puis les pages de ses catégories, la première en face (impaire) ;
+      une page libre (`{layout: grille, category: null}`, photo ou illustration) s'intercale quand le compte ne tombe pas
+      juste · des pages libres jusqu'aux deux dernières pages. Le total reste pair, 8 à 16 ; le catalogue grandit par 2
+      quand il le faut ; au-delà, 422 `CATALOGUE_PAGES_OVERFLOW` (un détail par bloc). Un `pageCount` envoyé trop petit :
+      le même 422 ;
+    - en mode blocs, une page porte (gamme, catégorie) et ne prend QUE les produits de cette catégorie qui sont dans
+      cette gamme (un produit de deux gammes du catalogue paraît dans chacune) ; une page sans gamme, les produits hors
+      gamme ; « Notre sélection » (page libre) ce qui n'a de place nulle part, en dernier ; une présentation avec liste,
+      les produits de sa gamme restés sans page de sa gamme ;
+    - `PUT` : `gammeBlocks` (ajouter, retirer, réordonner : les pages se refont en gardant les mises en page de chaque
+      (gamme, catégorie) ; une gamme qui arrive part du modèle de sa présentation) ; `pages` (rangées par blocs, l'ordre
+      des catégories d'un bloc gardé) ; `pages: []` (« Répartir automatiquement » dans l'ordre des blocs) ; `gammesOk`
+      (les gammes validées dans l'assistant, parmi les blocs) ; `presentations` (`{ "<gamme>": Presentation | null }` :
+      la présentation propre au catalogue, null = retirée) ;
+    - `GET …/catalogue-gammes` : les gammes du webshop, leur COULEUR (réglée une fois pour toutes, sinon celle de la
+      palette des gammes, `colorSet` faux) et le MODÈLE de leur présentation (null : pas de modèle) ; `PUT
+      …/catalogue-gammes/{id}` `{color?, presentation?}` (couleur de `GammeColor`, null = celle par défaut ; modèle
+      avec des images du réseau seulement ; null = retiré). Marque seule ; 404 gamme inconnue ; 422 nommé ;
+    - au document, une page `presentation` porte `design` (null : la présentation d'avant, gabarits A · B · C) : photos
+      (adresse, cadrage `x`/`y` en %, `zoom` en %), titre, accroche, texte (le texte dans la langue — le néerlandais vide :
+      le français, dit `NL_TEXT_MISSING` —, police, taille en points, graisse, couleur #RRGGBB, alignement), fond
+      (couleur, photo et voile), `gammeColor` ; `title` et `text` de la page suivent le design. Avertissement
+      `PRESENTATION_PHOTO_MISSING`. Champs ajoutés : un client qui les ignore imprime l'ancienne présentation.
 
     v1.21 (26 novembre 2026, client : « je ne vois pas toutes les catégories » — les galettes des rois) :
     `catalogue-products` (marque et boutique) rend aussi `offWebshopCategories` [{name, nameNl, products}], dans cet
@@ -489,6 +517,55 @@ paths:
                 businessUrl: { type: string, maxLength: 300, description: 'v1.17 — Lien de commande entreprise (http/https), le QR du catalogue « Bureaux » ; « » : le webshop.' }
                 deliveryHoursFr: { type: string, maxLength: 600, description: 'v1.17 — La livraison au bureau, plusieurs lignes ; « » : rien.' }
                 deliveryHoursNl: { type: string, maxLength: 600, description: 'v1.17 — « » : le français.' }
+      responses:
+        '200': { $ref: '#/components/responses/Generic' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/marketing/catalogue-gammes:
+    get:
+      tags: [Catalogues (marque)]
+      summary: v1.23 — Les gammes du webshop pour les catalogues — couleur et modèle de la présentation
+      description: |
+        Toutes les gammes actives du webshop en une page (une dizaine) ; la pagination est rendue pour la forme. `color` :
+        la couleur réglée (`colorSet` vrai) ou celle que la palette des gammes lui donne d'office (sa saison, sinon tirée
+        de son identifiant). `presentation` : le modèle de sa page de présentation, que reprend la présentation d'un
+        catalogue où la gamme arrive ; null : pas de modèle.
+      security: [{ session: [] }]
+      responses:
+        '200':
+          description: Les gammes.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/EnvelopeOk'
+                  - properties: { data: { type: array, items: { $ref: '#/components/schemas/CatalogueGamme' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Error' }
+
+  /api/v1/marketing/catalogue-gammes/{id}:
+    put:
+      tags: [Catalogues (marque)]
+      summary: v1.23 — La couleur d'une gamme et le modèle de sa page de présentation
+      description: |
+        Un champ absent garde sa valeur. `color` : une couleur de la palette des gammes (`GammeColor`), null = celle par
+        défaut. `presentation` : le modèle (images de la médiathèque du RÉSEAU, pas archivées), null = retiré. Réponse : la
+        gamme telle que `GET …/catalogue-gammes` la rend. Les catalogues déjà faits gardent leur présentation à eux.
+      security: [{ session: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                color: { oneOf: [{ $ref: '#/components/schemas/GammeColor' }, { type: 'null' }] }
+                presentation: { oneOf: [{ $ref: '#/components/schemas/Presentation' }, { type: 'null' }] }
       responses:
         '200': { $ref: '#/components/responses/Generic' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
@@ -1312,6 +1389,7 @@ components:
       properties:
         id: { type: integer, description: Identifiant du produit dans TFBuddy (webshop). }
         'on': { type: boolean, default: true }
+    DocPresText: { type: object, properties: { text: { type: string }, font: { type: string }, size: { type: integer }, weight: { type: string }, color: { type: string }, align: { type: string } } }
     PageRow:
       type: object
       additionalProperties: false
@@ -1372,6 +1450,63 @@ components:
         showAvailability: { type: boolean, description: 'La disponibilité (période, délai de commande) en pied de page (`availabilityFooter`) ; vrai par défaut.' }
         brochureTemplate: { allOf: [{ $ref: '#/components/schemas/BrochureTemplate' }], description: 'v1.18 — leaflet ou dépliant seulement (un catalogue : 422 « champ inconnu »).' }
         brochureTexts: { allOf: [{ $ref: '#/components/schemas/BrochureTexts' }], description: 'v1.18 — leaflet ou dépliant seulement ; une langue envoyée remplace la sienne, l''autre reste.' }
+        gammeBlocks: { type: [array, 'null'], maxItems: 8, uniqueItems: true, items: { type: integer }, description: 'v1.23 — Les blocs, gammes du webshop dans l''ordre du catalogue ; null : retour aux pages libres (les pages restent). Trop de pages : 422 CATALOGUE_PAGES_OVERFLOW.' }
+        gammesOk: { type: array, items: { type: integer }, description: 'v1.23 — Les gammes validées dans l''assistant, parmi `gammeBlocks` (sinon 422).' }
+        presentations: { type: object, additionalProperties: { oneOf: [{ $ref: '#/components/schemas/Presentation' }, { type: 'null' }] }, description: 'v1.23 — Par identifiant de gamme : la présentation propre au catalogue (images que le catalogue peut prendre) ; null = retirée ; une clé absente reste.' }
+    GammeColor: { type: string, enum: ['#2F5D50', '#A3442E', '#B0821A', '#8D1D2C', '#3D5A73', '#78554B', '#6A3B5C', '#5E6B3A', '#8A8278'], description: 'v1.23 — La palette des gammes (sapin, brique, or, rubis, ardoise, Pop-Up, prune, olive, gris).' }
+    PresentationText:
+      type: object
+      additionalProperties: false
+      description: 'v1.23 — Un texte d''une présentation ; un champ absent prend son défaut. Titre et accroche : 80 caractères ; texte : 400.'
+      properties:
+        fr: { type: string }
+        nl: { type: string, description: 'Vide : le français, dit (NL_TEXT_MISSING).' }
+        font: { type: string, enum: [vank, gotham, playwrite] }
+        size: { type: integer, description: 'Points. Titre : 24, 28, 32, 36, 40, 48, 56 ; accroche : 10 à 20 (par 2) ; texte : 8 à 12.' }
+        weight: { type: string, enum: [light, regular, medium, bold] }
+        color: { type: string, enum: [gamme, rubis, or, encre, creme, blanc], description: 'gamme : la couleur de la gamme.' }
+        align: { type: string, enum: [left, center, right] }
+    Presentation:
+      type: object
+      additionalProperties: false
+      description: |
+        v1.23 — Une page de présentation de gamme (modèle ou celle d'un catalogue), relue dans cet ordre de clés. Défauts :
+        une grande photo ; titre Vank 40 pt à la couleur de la gamme ; accroche manuscrite 12 pt ; texte Gotham 9 pt ; fond
+        papier. En lecture, chaque photo et le fond portent aussi `image {url, width, height}` (null : image retirée).
+      properties:
+        layout: { type: string, enum: [une, deux, mosaique, pleine], description: '1 grande · 2 photos · 3 en mosaïque · pleine page.' }
+        photos:
+          type: array
+          maxItems: 4
+          items:
+            type: object
+            additionalProperties: false
+            required: [mediaId]
+            properties:
+              mediaId: { type: integer }
+              x: { type: integer, minimum: 0, maximum: 100, default: 50, description: 'Position horizontale du cadrage, en %.' }
+              y: { type: integer, minimum: 0, maximum: 100, default: 50 }
+              zoom: { type: integer, minimum: 100, maximum: 300, default: 100, description: 'Agrandissement, en %.' }
+        title: { $ref: '#/components/schemas/PresentationText' }
+        kicker: { $ref: '#/components/schemas/PresentationText' }
+        text: { $ref: '#/components/schemas/PresentationText' }
+        background:
+          type: object
+          additionalProperties: false
+          properties:
+            kind: { type: string, enum: [color, photo] }
+            color: { type: string, enum: [papier, gamme-pale, gamme, creme, abricot, blanc] }
+            mediaId: { type: [integer, 'null'], description: 'Exigée avec kind photo.' }
+            veil: { type: integer, minimum: 0, maximum: 80, default: 40, description: 'Le voile sur la photo, en %.' }
+    CatalogueGamme:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string, description: 'Le nom au webshop.' }
+        title: { type: string, description: 'Le nom court (sans emoji ni « Gamme »).' }
+        color: { $ref: '#/components/schemas/GammeColor' }
+        colorSet: { type: boolean }
+        presentation: { oneOf: [{ $ref: '#/components/schemas/Presentation' }, { type: 'null' }] }
     FromBrochure:
       type: object
       additionalProperties: false
@@ -1475,6 +1610,9 @@ components:
         pageCount: { $ref: '#/components/schemas/PageCount' }
         innerPageCount: { type: integer, enum: [4, 8, 12], description: 'pageCount − 4.' }
         brandPagesOwn: { type: array, items: { type: string, enum: [cover, page2, penultimate, back] }, description: 'v1.10 — Les pages de la marque que ce catalogue a à lui ; les autres suivent la charte publiée.' }
+        gammeBlocks: { type: [array, 'null'], items: { type: integer }, description: 'v1.23 — Les blocs dans leur ordre ; null : pages libres.' }
+        gammesOk: { type: array, items: { type: integer }, description: 'v1.23 — Les gammes validées dans l''assistant.' }
+        presentations: { type: object, additionalProperties: { $ref: '#/components/schemas/Presentation' }, description: 'v1.23 — Par identifiant de gamme, la présentation propre au catalogue.' }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     Category: { type: object, properties: { id: { type: integer }, name: { type: string }, nameNl: { type: string } } }
@@ -1625,6 +1763,17 @@ components:
                   imageUrl: { type: [string, 'null'] }
                   drawing: { type: [string, 'null'] }
                   drawingUrl: { type: [string, 'null'] }
+                  design:
+                    type: [object, 'null']
+                    description: 'v1.23 — La présentation gamme par gamme telle qu''elle s''imprime ; null : celle d''avant (gabarit).'
+                    properties:
+                      layout: { type: string, enum: [une, deux, mosaique, pleine] }
+                      photos: { type: array, items: { type: object, properties: { url: { type: [string, 'null'] }, x: { type: integer }, y: { type: integer }, zoom: { type: integer } } } }
+                      title: { $ref: '#/components/schemas/DocPresText' }
+                      kicker: { $ref: '#/components/schemas/DocPresText' }
+                      text: { $ref: '#/components/schemas/DocPresText' }
+                      background: { type: object, properties: { color: { type: string }, imageUrl: { type: [string, 'null'] }, veil: { type: integer } } }
+                      gammeColor: { type: string }
                   products: { type: array, items: { $ref: '#/components/schemas/DocProduct' } }
                   availabilityFooter: { type: [string, 'null'], description: 'La disponibilité des produits de la page en une ligne de pied de page (« Disponible du 1/12 au 31/12 · sur commande 48 h », puis les produits qui diffèrent, ou « certains produits : voir en boutique ») ; null sans donnée ou `showAvailability` faux. Les vignettes de promotions gardent leur période.' }
               - type: object

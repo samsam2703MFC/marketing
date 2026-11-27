@@ -1168,6 +1168,32 @@ par boutique ; pas de ligne / version générale = cadre vide à remplir). Le bo
 
 Écarts résiduels : le PDF est celui du navigateur (comme le catalogue) ; `PUT` sans `ETag`.
 
+### 14.y La construction « gamme par gamme » (27 novembre 2026, OpenAPI v1.23)
+
+Client (maquettes M1 · M2 · M3 validées) : le catalogue se range en BLOCS de gamme — pages 1-2 de la marque, les produits
+hors gamme (sans présentation), puis pour chaque gamme sa page de présentation sur une page de GAUCHE (paire) et ses
+catégories en face ; une page libre s'intercale quand le compte ne tombe pas juste ; total pair, 8 à 16.
+
+| Méthode | Chemin | Rôle |
+|---|---|---|
+| GET | `/api/v1/marketing/catalogue-gammes` | les gammes du webshop : `color` (réglée, sinon celle de la palette des gammes, `colorSet` faux), `presentation` (le modèle, null sinon). Toutes en une page, pagination rendue pour la forme |
+| PUT | `/api/v1/marketing/catalogue-gammes/{id}` | `{color?, presentation?}` : couleur de la palette (`GammeColor`) ou null ; modèle de présentation (images du réseau) ou null. 404 gamme inconnue, 422 nommé (rien n'est écrit) |
+| PUT | `/api/v1/marketing/catalogues/{id}` | en plus : `gammeBlocks` (liste ordonnée de gammes, null = pages libres), `gammesOk` (gammes validées dans l'assistant), `presentations` (`{gamme: Presentation | null}`). Trop de pages : 422 `CATALOGUE_PAGES_OVERFLOW`, un détail par bloc |
+
+Règles (`CatalogueService`) : `organise` (rangement par blocs, pages libres intercalées, croissance par 2, refus
+au-delà de 16), `autoBlocks` (pages refaites depuis les produits, en gardant la mise en page de chaque (gamme,
+catégorie) ; « Répartir automatiquement » = grilles, puis listes), `fillBlocks` (une page (gamme, catégorie) ne prend que
+les produits de la gamme ; un produit de deux gammes paraît dans chacune ; « Notre sélection » en dernier). Un catalogue
+sans `gammeBlocks` (tous ceux d'avant) garde exactement ses pages et la règle `fill` d'avant.
+
+Couleur et modèle : table `mar_catalogue_gamme` (migration 058 ; `gamme_id` = la gamme du webshop, sans clé étrangère ;
+`presentation` en texte JSON relu dans un ordre de clés fixe). Le modèle est COPIÉ dans le catalogue quand la gamme y
+arrive (`settings.presentations`) : un catalogue imprimé ne change pas quand le modèle change. Au document, une page de
+présentation porte `design` (null : celle d'avant, gabarits A · B · C — le dashboard franchisé, qui compose lui-même
+l'aperçu, imprime donc l'ancienne présentation tant qu'il ne lit pas `design`).
+
+Écarts résiduels : `GET …/catalogue-gammes` non paginée réellement (une dizaine de lignes) ; `PUT` sans `ETag`.
+
 ## 15. Le référentiel des agences en écriture (21 novembre 2026)
 
 Le cockpit (dépôt `consultant_BO`, `marketing/src/mkt_agences.php`) écrivait `mar_agency` en SQL : son écran

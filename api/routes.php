@@ -166,6 +166,9 @@ return static function (Router $router): void {
     $router->post('/api/v1/marketing/catalogue-charter/publications', [$catalogues, 'publishCharter']);
     // Ce qu'une boutique imprime en plus à la dernière page (17/11/2026) : second téléphone, webshop direct (QR), logo.
     $router->put('/api/v1/marketing/catalogue-shops/{id}',            [$catalogues, 'saveShop']);
+    // Gamme par gamme (27/11/2026) : la couleur de chaque gamme et le modèle de sa page de présentation.
+    $router->get('/api/v1/marketing/catalogue-gammes',                [$catalogues, 'gammes']);
+    $router->put('/api/v1/marketing/catalogue-gammes/{id}',           [$catalogues, 'saveGamme']);
 
     // Les catalogues d'une boutique, pour le dashboard magasin du cockpit (entre portails) : jeton
     // de service `erp_jeton_service` (en-tête X-Service-Token), vérifié par le contrôleur — d'où
