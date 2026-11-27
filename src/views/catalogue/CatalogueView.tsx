@@ -57,7 +57,7 @@ import BROCHURE_CSS from '../brochure/brochure.css?inline'
 type Screen =
   | { kind: 'list' }
   | { kind: 'editor'; id: number }
-  | { kind: 'charter'; step?: CharterStep; gammes?: number[]; returnTo?: number; catalogue?: { id: number; title: string } }
+  | { kind: 'charter'; step?: CharterStep; gammes?: number[]; returnTo?: number; catalogue?: { id: number; title: string }; exit?: boolean }
 
 const MM = 96 / 25.4
 
@@ -95,11 +95,20 @@ function PageCountChoice({ value, onChange, disabled = false }: { value: Catalog
 /** Un leaflet ou un dépliant de campagne : ouvert dans l'onglet « Ancien générateur » des imprimés (21/11/2026). */
 export type BrochureKind = 'leaflet-a5' | 'depliant-a4'
 
-export default function CatalogueView({ onBrochure, initialCatalogue = null }: { onBrochure?: (format: BrochureKind) => void; initialCatalogue?: number | null } = {}) {
+export default function CatalogueView({ onBrochure, initialCatalogue = null, initialCharterStep, charterExit }: {
+  onBrochure?: (format: BrochureKind) => void
+  initialCatalogue?: number | null
+  /** L'assistant des pages de la marque ouvert à cette étape (les coordonnées des boutiques, depuis les cartes de visite). */
+  initialCharterStep?: CharterStep
+  /** Où ramène alors l'assistant, au lieu de la liste (27/11/2026 : les cartes de visite). */
+  charterExit?: { label: string; go: () => void }
+} = {}) {
   // `?pages-marque` ouvre l'assistant des pages de la marque (lien direct, captures) ; `initialCatalogue`, un imprimé repris
   // d'une brochure depuis l'ancien générateur.
   const [screen, setScreen] = useState<Screen>(() =>
-    initialCatalogue !== null ? { kind: 'editor', id: initialCatalogue } : new URLSearchParams(window.location.search).has('pages-marque') ? { kind: 'charter' } : { kind: 'list' },
+    initialCatalogue !== null ? { kind: 'editor', id: initialCatalogue }
+    : initialCharterStep !== undefined ? { kind: 'charter', step: initialCharterStep, exit: true }
+    : new URLSearchParams(window.location.search).has('pages-marque') ? { kind: 'charter' } : { kind: 'list' },
   )
 
   if (screen.kind === 'editor') {
@@ -117,14 +126,15 @@ export default function CatalogueView({ onBrochure, initialCatalogue = null }: {
   }
   if (screen.kind === 'charter') {
     const returnTo = screen.returnTo
+    const exit = screen.exit && charterExit ? charterExit : null
     return (
       <CharterAssistant
         step={screen.step}
         gammes={screen.gammes}
         catalogue={screen.catalogue}
-        backLabel={returnTo !== undefined ? '‹ Retour au catalogue' : undefined}
+        backLabel={returnTo !== undefined ? '‹ Retour au catalogue' : exit ? exit.label : undefined}
         doneLabel={returnTo !== undefined ? 'Enregistrer et revenir au catalogue' : 'Enregistrer et revenir à la liste'}
-        onBack={() => setScreen(returnTo !== undefined ? { kind: 'editor', id: returnTo } : { kind: 'list' })}
+        onBack={() => (exit ? exit.go() : setScreen(returnTo !== undefined ? { kind: 'editor', id: returnTo } : { kind: 'list' }))}
       />
     )
   }

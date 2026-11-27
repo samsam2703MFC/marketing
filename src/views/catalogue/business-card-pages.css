@@ -1,0 +1,68 @@
+/*
+ * Les cartes de visite des boutiques (27/11/2026) : 85 × 55 mm, 3 mm de fond perdu (--b). La même feuille sert
+ * l'aperçu (mis à l'échelle par `zoom`) et l'impression, comme les pages des catalogues.
+ * Couleurs de la Charte des catalogues : --p (principale), --s (papier), --i (encre), --ab (filets).
+ * Polices : celles des brochures (fontFaces) — 'Vank' pour le nom, 'GothamPrint' pour le texte.
+ * Le texte courant fait 2,45 mm (7 pt) : en dessous, une carte ne se lit plus à bout de bras.
+ */
+
+.bc-sheet { position: relative; overflow: hidden; background: #fff; flex: 0 0 auto; }
+.bc-sheet__face { position: absolute; }
+.bc-cell { position: absolute; overflow: hidden; }
+.bc-ground { position: absolute; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.bc-cell > .bc-face { position: absolute; left: -3mm; top: -3mm; }
+.bc-marks { position: absolute; left: 0; top: 0; pointer-events: none; }
+
+.bc-face {
+  position: relative; overflow: hidden; text-align: left; background: var(--s); color: var(--i);
+  font-family: 'GothamPrint', system-ui, sans-serif; font-weight: 400; line-height: 1.3;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.bc-face *, .bc-face *::before, .bc-face *::after { box-sizing: border-box; }
+.bc-face p { margin: 0; }
+.bc-face img { display: block; }
+.bc-trim { position: absolute; inset: var(--b); }
+
+/* ---------- recto : le logo et le nom de la boutique ---------- */
+.bc-face--couleur { background: var(--p); color: var(--s); }
+.bc-recto {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3mm; padding: 5mm;
+}
+/* Le logo du magasin, dans une boîte fixe (object-fit) : large ou carré, il la remplit sans être déformé ; plus grand
+   quand le nom de la boutique n'est pas dessous. */
+.bc-logo { width: 62mm; height: 19mm; object-fit: contain; }
+.bc-recto--alone .bc-logo { height: 27mm; }
+.bc-logo--white { filter: brightness(0) invert(1); }
+/* Pas de logo du magasin : l'aperçu le dit à sa place (une telle carte ne s'imprime pas). */
+.bc-logo-missing {
+  display: flex; align-items: center; justify-content: center; width: 62mm; height: 19mm; border: 0.35mm dashed currentColor;
+  opacity: 0.55; font-weight: 500; font-size: 2.6mm; letter-spacing: 0.12em; text-transform: uppercase;
+}
+.bc-recto--alone .bc-logo-missing { height: 27mm; }
+.bc-recto__rule { width: 9mm; height: 0.35mm; background: var(--ab); }
+.bc-recto__shop {
+  max-width: 100%; font-weight: 500; font-size: 2.5mm; line-height: 1.2; letter-spacing: 0.24em; text-align: center;
+  text-transform: uppercase; overflow-wrap: anywhere;
+}
+.bc-face--papier .bc-recto__shop { color: var(--p); }
+
+/* ---------- verso : les coordonnées, le QR ---------- */
+.bc-verso { position: absolute; inset: 0; display: flex; gap: 3.5mm; padding: 4.5mm 4.5mm 4.5mm 5mm; }
+.bc-verso__text { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 0.8mm; overflow: hidden; }
+.bc-verso__who {
+  flex: 0 0 auto; padding-top: 0.6mm; font-family: 'Vank', 'GothamPrint', serif; font-size: 3.9mm; line-height: 1.08;
+  letter-spacing: 0.02em; text-transform: uppercase; color: var(--p); overflow-wrap: anywhere;
+}
+.bc-verso__rule { flex: 0 0 auto; width: 8mm; height: 0.35mm; margin: 1mm 0 1.2mm; background: var(--ab); }
+.bc-line { flex: 0 0 auto; font-size: 2.45mm; line-height: 1.32; white-space: pre-line; overflow-wrap: anywhere; }
+.bc-line--hours { font-weight: 300; }
+.bc-line--web { margin-top: auto; padding-top: 0.6mm; font-weight: 500; color: var(--p); }
+.bc-verso__qr {
+  flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 1.2mm; width: 20mm;
+}
+.bc-qr { display: block; width: 20mm; height: 20mm; }
+.bc-verso__qrlabel {
+  font-weight: 500; font-size: 1.95mm; line-height: 1.2; letter-spacing: 0.06em; text-align: center; text-transform: uppercase;
+  color: var(--p);
+}

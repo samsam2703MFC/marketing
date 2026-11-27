@@ -28,6 +28,8 @@ export type Route =
   | 'brochures'
   /** Catalogues produits (prix du webshop, gammes), couverture et dernière page de la charte — réseau seul. */
   | 'catalogues'
+  /** Les cartes de visite de chaque boutique (85 × 55 mm), un onglet des imprimés — réseau seul. */
+  | 'business-cards'
   /** La médiathèque commune : photos et vidéos de tout le marketing (Social, campagnes, brochures, bâches) — réseau seul. */
   | 'media'
   | 'promotions'
@@ -299,6 +301,9 @@ const TABS: Record<Role, Tab[][]> = {
       // 21/11/2026 (fusion des imprimés, étape 3) : catalogues, leaflets et dépliants se font au même endroit ; l'ancien
       // générateur des brochures de campagne reste ouvert, pour relire et reprendre ce qui y a été réglé.
       { route: 'catalogues', label: 'Catalogues, leaflets, dépliants' },
+      // 27/11/2026 (Sam : « rajouter pour chaque magasin les cartes de visite ») : une carte par boutique, ses coordonnées
+      // lues là où la dernière page des catalogues les lit.
+      { route: 'business-cards', label: 'Cartes de visite' },
       { route: 'brochures', label: 'Ancien générateur' },
     ],
     [

@@ -425,3 +425,36 @@ format fini, filigranée tant qu'un point bloque ; PDF imprimeur avec 3 mm de
 fond perdu et, au choix, traits de coupe et repères de pli (7 mm de marge).
 Les illustrations de gamme sont imprimées en 560 px (`public/img/print/`).
 
+---
+
+## 12. Les cartes de visite des boutiques — *en base*
+
+Imprimés › **Cartes de visite** (vue Réseau, 27/11/2026) : une carte par
+boutique, 85 × 55 mm. Rien ne s'y saisit : la carte lit ce que la dernière page
+des catalogues lit déjà pour la boutique (`GET …/catalogue-charter/checks`,
+`shops`) et le logo et les couleurs de la charte (`GET …/catalogue-charter`).
+
+| Face | Contenu | Source |
+|---|---|---|
+| Recto | le logo du magasin, le nom de la boutique (à retirer si le logo le porte) ; sur le papier (logo dans ses couleurs) ou sur la couleur principale (logo en blanc) | logo du magasin seul (`mar_catalogue_shop_contact.logo_media_id`) : jamais celui de la charte à sa place |
+| Verso | « L'Atelier By — {boutique} », adresse, téléphone(s), e-mail, horaires, adresse du webshop | ERP et TFBuddy (fiche de la boutique), second téléphone et horaires saisis (051, 055) |
+| Verso | QR : le webshop de la boutique, ou Google Maps, ou aucun | `qrUrl` (webshop direct saisi, sinon `{webshopUrl}?shop=N`), `mapsUrl` |
+
+**Le logo du magasin est obligatoire** (27/11/2026) : une boutique sans logo n'a
+pas de carte imprimable. Il se choisit sous sa carte, dans la médiathèque, et
+s'enregistre dans le même champ que celui des pages de la marque › Dernière
+page (`PUT …/catalogue-shops/{id}` `{logoMediaId}`) : ses catalogues le prennent
+aussi.
+
+Les horaires de l'ERP (une plage) s'impriment « Ouvert 6h00–18h30 » ; ceux saisis
+pour la boutique, tels quels. L'adresse du webshop s'imprime sans `https://` ni
+paramètre. Un champ vide n'imprime rien ; ce qui manque est dit sous la carte et
+se complète dans les pages de la marque › Dernière page (bouton « Coordonnées des
+boutiques »).
+
+**Sortie** par le navigateur : la planche A4 de l'imprimante du magasin (2 × 5
+cartes bord à bord, centrées, une feuille de rectos puis une de versos, à
+imprimer en recto verso bord long, à 100 %) ; le PDF imprimeur (par boutique, le
+recto puis le verso, 3 mm de fond perdu, traits de coupe à 7 mm). Une carte dont
+le texte dépasse est écartée du PDF imprimeur, pas de la planche ; une carte
+sans le logo du magasin, des deux.

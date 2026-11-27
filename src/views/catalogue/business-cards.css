@@ -1,0 +1,22 @@
+/* Imprimés › Cartes de visite (27/11/2026) — l'écran : une carte par boutique, son recto et son verso côte à côte.
+   Les faces elles-mêmes sont dans business-card-pages.css (la feuille de l'impression). */
+
+.bcv-toggle { margin-top: 0; }
+.bcv-count { margin: 0; font-size: 12.5px; color: var(--muted); }
+.bcv-list { display: grid; gap: 14px; }
+
+.bcv-shop { display: grid; gap: 10px; }
+.bcv-shop--off .bcv-shop__faces { opacity: 0.45; }
+.bcv-shop__head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.bcv-shop__pick { margin-top: 0; font-size: 13.5px; }
+.bcv-shop__faces { display: flex; flex-wrap: wrap; gap: 18px; }
+.bcv-shop__side { margin: 0; display: grid; gap: 6px; }
+.bcv-shop__side figcaption { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.bcv-shop__missing, .bcv-shop__ok { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.bcv-shop__missing { color: #7A5207; }
+
+/* L'aperçu d'une face : le format fini, le fond perdu rogné, un filet pour voir le bord d'une carte claire. */
+.bcv-face { position: relative; flex: 0 0 auto; overflow: hidden; border-radius: 3px; outline: 1px solid var(--line); background: #fff; }
+.bcv-face > span { display: block; }
+.bcv-face__trim { position: relative; display: block; overflow: hidden; }
+.bcv-face__bleed { position: absolute; display: block; }
