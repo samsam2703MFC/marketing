@@ -21,6 +21,7 @@ import CampaignFixView from './views/CampaignFixView'
 import LoginView from './views/LoginView'
 import BrochureView from './views/brochure/BrochureView'
 import CatalogueView from './views/catalogue/CatalogueView'
+import BusinessCardsView from './views/catalogue/BusinessCards'
 import MediaLibraryView from './views/media/MediaLibraryView'
 import SettingsView from './views/SettingsView'
 import CampaignBuilder from './views/builder/CampaignBuilder'
@@ -227,8 +228,14 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
   const [brochureFormat, setBrochureFormat] = useState<'leaflet-a5' | 'depliant-a4' | null>(null)
   // Le leaflet ou le dépliant à ouvrir dans « Imprimés » (repris d'une brochure du générateur d'avant, 21/11/2026).
   const [catalogueToOpen, setCatalogueToOpen] = useState<number | null>(null)
+  // Les coordonnées des boutiques ouvertes depuis « Cartes de visite » (27/11/2026) : la dernière page des pages de la
+  // marque, d'où l'on revient aux cartes.
+  const [shopsFromCards, setShopsFromCards] = useState(false)
   useEffect(() => {
-    if (route !== 'catalogues') setCatalogueToOpen(null)
+    if (route !== 'catalogues') {
+      setCatalogueToOpen(null)
+      setShopsFromCards(false)
+    }
   }, [route])
   const [postFor, setPostFor] = useState<number | null>(postFromUrl)
   // L'étape où rouvrir l'assistant, quand « Compléter les campagnes » y renvoie.
@@ -394,7 +401,7 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
         )}
 
         <main
-          className={`app__body${route === 'builder' || route === 'brochures' || route === 'catalogues' || route === 'media' ? ' app__body--wide' : ''}${framed ? ' app__body--frame' : ''}`}
+          className={`app__body${route === 'builder' || route === 'brochures' || route === 'catalogues' || route === 'business-cards' || route === 'media' ? ' app__body--wide' : ''}${framed ? ' app__body--frame' : ''}`}
         >
           {/* Une entrée à onglets : les écrans qui montraient la même donnée sous plusieurs entrées du menu. */}
           {tabs ? (
@@ -462,11 +469,21 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
           ) : null}
           {route === 'catalogues' && role === 'BRAND_ADMIN' ? (
             <CatalogueView
-              key={catalogueToOpen ?? 'liste'}
+              key={catalogueToOpen ?? (shopsFromCards ? 'cartes' : 'liste')}
               initialCatalogue={catalogueToOpen}
+              initialCharterStep={shopsFromCards ? 4 : undefined}
+              charterExit={shopsFromCards ? { label: '‹ Cartes de visite', go: () => setRoute('business-cards') } : undefined}
               onBrochure={(format) => {
                 setBrochureFormat(format)
                 setRoute('brochures')
+              }}
+            />
+          ) : null}
+          {route === 'business-cards' && role === 'BRAND_ADMIN' ? (
+            <BusinessCardsView
+              onEditShops={() => {
+                setShopsFromCards(true)
+                setRoute('catalogues')
               }}
             />
           ) : null}
