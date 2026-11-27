@@ -575,3 +575,35 @@
 .cat-back--C .cat-back__qrC:only-child .cat-back__qrtext { flex: 1 1 auto; justify-items: start; text-align: left; }
 .cat-back__delivery { white-space: pre-line; font-weight: 600; }
 .cat-back--C .cat-back__hoursC .cat-back__delivery { margin-top: calc(var(--u) * 2mm); font-weight: 400; font-size: calc(var(--u) * 3.4mm); line-height: 1.45; color: var(--p); }
+
+/* ---------- présentation gamme par gamme (27/11/2026, maquettes M2-2 et M3) ----------
+ * Photos dans leur case, cadrées (object-position + scale, les mêmes à l'écran et à l'impression) ; accroche, titre et
+ * texte dans leurs styles (posés en ligne) ; fond de couleur jusqu'au fond perdu, ou photo pleine page sous un voile. */
+.cat-pd { position: absolute; inset: 0; display: flex; flex-direction: column; gap: calc(var(--u) * 6mm); padding: calc(var(--u) * 12mm) calc(var(--u) * 11mm) calc(var(--u) * 11mm); }
+.cat-pd__bg { position: absolute; inset: calc(-1 * var(--b)); overflow: hidden; }
+.cat-pd__bg > img { width: 100%; height: 100%; object-fit: cover; }
+.cat-pd__bg > i { position: absolute; inset: 0; }
+.cat-pd__bg .cat-pd__ph { width: 100%; height: 100%; border-radius: 0; }
+.cat-pd__photos { position: relative; flex: 0 0 58%; min-height: 0; display: grid; gap: calc(var(--u) * 2.4mm); }
+.cat-pd--une .cat-pd__photos { grid-template-columns: 1fr; }
+.cat-pd--deux .cat-pd__photos { grid-template-columns: 1fr 1fr; }
+.cat-pd--mosaique .cat-pd__photos { grid-template-columns: 1.45fr 1fr; grid-template-rows: 1fr 1fr; }
+.cat-pd--mosaique .cat-pd__ph--0 { grid-row: 1 / span 2; }
+.cat-pd--liste .cat-pd__photos { flex-basis: 34%; }
+.cat-pd__ph { position: relative; overflow: hidden; min-height: 0; border-radius: calc(var(--u) * 1.6mm); background: rgba(36, 28, 26, 0.06); }
+.cat-pd__ph.is-empty { border: 0.3mm dashed rgba(36, 28, 26, 0.22); background: rgba(255, 255, 255, 0.35); }
+.cat-pd__ph img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.cat-pd__head { position: relative; flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: calc(var(--u) * 2.2mm); overflow: hidden; }
+.cat-pd--pleine .cat-pd__head { flex: 0 0 auto; margin: auto calc(-1 * var(--u) * 11mm) calc(-1 * var(--u) * 11mm); padding: calc(var(--u) * 7mm) calc(var(--u) * 11mm) calc(var(--u) * 10mm); }
+.cat-pd--liste .cat-pd__head { justify-content: flex-start; }
+.cat-pd__kicker { font-weight: 400; overflow-wrap: anywhere; }
+.cat-pd__title { overflow-wrap: anywhere; max-height: 2.2em; overflow: hidden; }
+.cat-pd__text { white-space: pre-line; overflow: hidden; }
+.cat-pd__list { margin-top: calc(var(--u) * 2mm); }
+/* Une page libre (gamme par gamme) : la photo à fond perdu, ou l'illustration de la gamme voisine au centre. */
+.cat-free { position: absolute; inset: 0; }
+.cat-free .cat-filler { position: absolute; inset: 0; border-radius: 0; background: transparent; }
+.cat-free--photo .cat-filler { inset: calc(-1 * var(--b)); }
+.cat-free--photo .cat-filler img { width: 100%; height: 100%; object-fit: cover; }
+.cat-free--illustration .cat-filler { display: grid; place-items: center; }
+.cat-free--illustration .cat-filler img { width: 58%; height: auto; max-height: 52%; object-fit: contain; opacity: 0.9; }

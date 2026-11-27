@@ -3070,6 +3070,12 @@ export interface Catalogue {
   innerPageCount: number
   /** Les pages de la marque que ce catalogue a à lui (v1.10) ; les autres suivent la charte publiée. */
   brandPagesOwn?: CatalogueBrandSlot[]
+  /** Gamme par gamme (v1.23) : les blocs dans leur ordre ; null : les pages libres d'avant. */
+  gammeBlocks?: number[] | null
+  /** Les gammes validées dans l'assistant (v1.23). */
+  gammesOk?: number[]
+  /** La présentation propre au catalogue, par identifiant de gamme (v1.23). */
+  presentations?: Record<string, CataloguePresentation>
   createdAt: string
   updatedAt: string
 }
@@ -3104,6 +3110,10 @@ export interface CatalogueCreate {
 }
 
 export type CatalogueUpdate = Partial<Pick<Catalogue, 'title' | 'format' | 'pageCount' | 'langs' | 'shopIds' | 'products' | 'pages' | 'status' | 'printQty' | 'offers' | 'showAvailability'>> & {
+  /** Gamme par gamme (v1.23) : les blocs (null : retour aux pages libres), les gammes validées, les présentations (null : retirée). */
+  gammeBlocks?: number[] | null
+  gammesOk?: number[]
+  presentations?: Record<string, CataloguePresentationInput | null>
   /** Le modèle d'un leaflet ou d'un dépliant (v1.18). */
   brochureTemplate?: string
   /** Ses textes récrits : une langue envoyée remplace la sienne (v1.18). */
@@ -3305,6 +3315,8 @@ export type CatalogueDocPage =
       products: CatalogueDocItem[]
       /** La disponibilité des produits de la page, en une ligne de pied de page ; null : rien de connu ou éteinte. */
       availabilityFooter?: string | null
+      /** Gamme par gamme (v1.23) : une page libre voulue — toute la page à la photo ou à l'illustration, sans titre. */
+      free?: boolean
     }
   | {
       kind: 'presentation'
@@ -3318,6 +3330,8 @@ export type CatalogueDocPage =
       imageUrl: string | null
       drawing: string | null
       drawingUrl: string | null
+      /** Gamme par gamme (v1.23) : la présentation telle qu'elle s'imprime ; null : celle d'avant (gabarit). */
+      design?: CatalogueDocDesign | null
       products: CatalogueDocProduct[]
       availabilityFooter?: string | null
     }
@@ -3337,6 +3351,111 @@ export type CatalogueDocPage =
       /** Chaque élément : logo, titre, texte, QR, coordonnées et chacune de leurs lignes (v1.12). */
       look?: CatalogueDocLook
     }
+
+// --- Gamme par gamme (v1.23) -----------------------------------------------------------------------
+
+/** La disposition des photos d'une présentation : 1 grande · 2 photos · 3 en mosaïque · pleine page. */
+export type CataloguePresLayout = 'une' | 'deux' | 'mosaique' | 'pleine'
+export const CATALOGUE_PRES_SLOTS: Record<CataloguePresLayout, number> = { une: 1, deux: 2, mosaique: 3, pleine: 1 }
+export type CataloguePresElement = 'title' | 'kicker' | 'text'
+export const CATALOGUE_PRES_SIZES: Record<CataloguePresElement, number[]> = { title: [24, 28, 32, 36, 40, 48, 56], kicker: [10, 12, 14, 16, 18, 20], text: [8, 9, 10, 11, 12] }
+export type CataloguePresWeight = 'light' | 'regular' | 'medium' | 'bold'
+export type CataloguePresTextColor = 'gamme' | 'rubis' | 'or' | 'encre' | 'creme' | 'blanc'
+export type CataloguePresBgColor = 'papier' | 'gamme-pale' | 'gamme' | 'creme' | 'abricot' | 'blanc'
+export type CataloguePresAlign = 'left' | 'center' | 'right'
+/** La palette des gammes (une gamme en prend une, fixée une fois pour toutes). */
+export const CATALOGUE_GAMME_COLORS: { hex: string; label: string }[] = [
+  { hex: '#2F5D50', label: 'Sapin' },
+  { hex: '#A3442E', label: 'Brique' },
+  { hex: '#B0821A', label: 'Or' },
+  { hex: '#8D1D2C', label: 'Rubis' },
+  { hex: '#3D5A73', label: 'Ardoise' },
+  { hex: '#78554B', label: 'Pop-Up' },
+  { hex: '#6A3B5C', label: 'Prune' },
+  { hex: '#5E6B3A', label: 'Olive' },
+  { hex: '#8A8278', label: 'Gris' },
+]
+/** Les couleurs nommées de la charte, comme le serveur les imprime. */
+export const CATALOGUE_PRES_HEX: Record<string, string> = { rubis: '#8D1D2C', or: '#B0792A', encre: '#241C1A', creme: '#F5EFE4', blanc: '#FFFFFF', papier: '#FCFAF6', abricot: '#F2C9A0' }
+
+export interface CataloguePresText {
+  fr: string
+  nl: string
+  font: CatalogueCoverFont
+  size: number
+  weight: CataloguePresWeight
+  color: CataloguePresTextColor
+  align: CataloguePresAlign
+}
+export interface CataloguePresImage {
+  url: string
+  width: number | null
+  height: number | null
+}
+export interface CataloguePresPhoto {
+  mediaId: number
+  x: number
+  y: number
+  zoom: number
+  /** En lecture : l'image (null : retirée de la médiathèque). */
+  image?: CataloguePresImage | null
+}
+export interface CataloguePresentation {
+  layout: CataloguePresLayout
+  photos: CataloguePresPhoto[]
+  title: CataloguePresText
+  kicker: CataloguePresText
+  text: CataloguePresText
+  background: { kind: 'color' | 'photo'; color: CataloguePresBgColor; mediaId: number | null; veil: number; image?: CataloguePresImage | null }
+}
+/** Ce qu'on écrit d'une présentation : sans les images lues. */
+export type CataloguePresentationInput = Omit<CataloguePresentation, 'photos' | 'background'> & {
+  photos: Array<Omit<CataloguePresPhoto, 'image'>>
+  background: Omit<CataloguePresentation['background'], 'image'>
+}
+export const presentationInput = (p: CataloguePresentation): CataloguePresentationInput => ({
+  layout: p.layout,
+  photos: p.photos.map((ph) => ({ mediaId: ph.mediaId, x: ph.x, y: ph.y, zoom: ph.zoom })),
+  title: p.title,
+  kicker: p.kicker,
+  text: p.text,
+  background: { kind: p.background.kind, color: p.background.color, mediaId: p.background.mediaId, veil: p.background.veil },
+})
+/** La présentation d'office (celle du serveur, `presentationDefault`). */
+export const presentationDefault = (): CataloguePresentation => ({
+  layout: 'une',
+  photos: [],
+  title: { fr: '', nl: '', font: 'vank', size: 40, weight: 'regular', color: 'gamme', align: 'left' },
+  kicker: { fr: '', nl: '', font: 'playwrite', size: 12, weight: 'regular', color: 'encre', align: 'left' },
+  text: { fr: '', nl: '', font: 'gotham', size: 9, weight: 'regular', color: 'encre', align: 'left' },
+  background: { kind: 'color', color: 'papier', mediaId: null, veil: 40, image: null },
+})
+/** Une gamme du webshop pour les catalogues : sa couleur et le modèle de sa présentation. */
+export interface CatalogueGamme {
+  id: number
+  name: string
+  title: string
+  color: string
+  colorSet: boolean
+  presentation: CataloguePresentation | null
+}
+export interface CatalogueDocPresText {
+  text: string
+  font: CatalogueCoverFont
+  size: number
+  weight: CataloguePresWeight
+  color: string
+  align: CataloguePresAlign
+}
+export interface CatalogueDocDesign {
+  layout: CataloguePresLayout
+  photos: Array<{ url: string | null; x: number; y: number; zoom: number }>
+  title: CatalogueDocPresText
+  kicker: CatalogueDocPresText
+  text: CatalogueDocPresText
+  background: { color: string; imageUrl: string | null; veil: number }
+  gammeColor: string
+}
 
 export interface CatalogueDocFiller {
   kind: CatalogueFiller
@@ -3652,6 +3771,15 @@ export async function getWebshopProducts(shopIds: number[], relire = false): Pro
   const query: Record<string, string> = shopIds.length ? { shopIds: shopIds.join(',') } : {}
   if (relire) query.relire = '1'
   return (await request<Envelope<WebshopProducts>>(`${BASE}/catalogue-products`, { query })).data
+}
+
+export async function getCatalogueGammes(): Promise<CatalogueGamme[]> {
+  return (await request<Envelope<CatalogueGamme[]>>(`${BASE}/catalogue-gammes`)).data
+}
+
+/** La couleur d'une gamme (null : celle par défaut) et le modèle de sa présentation (null : retiré). */
+export async function saveCatalogueGamme(id: number, patch: { color?: string | null; presentation?: CataloguePresentationInput | null }): Promise<CatalogueGamme> {
+  return (await request<Envelope<CatalogueGamme>>(`${BASE}/catalogue-gammes/${id}`, { method: 'PUT', body: patch })).data
 }
 
 export async function getCatalogueCharter(): Promise<CatalogueCharter> {

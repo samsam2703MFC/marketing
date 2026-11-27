@@ -6763,7 +6763,8 @@ check('gamme par gamme : hors gamme d’abord, puis la gamme — page libre inte
             ['layout' => 'grille', 'category' => 500], ['layout' => 'grille', 'category' => 600], ['layout' => 'grille', 'category' => null],
             ['layout' => 'presentation', 'category' => null, 'gamme' => 16], ['layout' => 'grille', 'category' => 600, 'gamme' => 16], ['layout' => 'grille', 'category' => null]]
         && array_column($doc16[2]['products'] ?? [], 'id') === [11, 12] && array_column($doc16[3]['products'] ?? [], 'id') === [13]
-        && ($doc16[4]['kind'] ?? '') === 'products' && ($doc16[4]['products'] ?? null) === [] && ($doc16[5]['kind'] ?? '') === 'presentation' && ($doc16[5]['gamme'] ?? 0) === 16
+        && ($doc16[4]['kind'] ?? '') === 'products' && ($doc16[4]['products'] ?? null) === [] && ($doc16[4]['free'] ?? false) === true && ($doc16[4]['title'] ?? 'x') === ''
+        && ($doc16[2]['free'] ?? true) === false && ($doc16[5]['kind'] ?? '') === 'presentation' && ($doc16[5]['gamme'] ?? 0) === 16
         && array_column($doc16[6]['products'] ?? [], 'id') === [14] && count($doc16) === 10,
     json_encode([$bloc16['body']['data']['pages'] ?? $bloc16['body'], array_map(static fn (array $p): array => [$p['kind'], array_column($p['products'] ?? [], 'id')], $doc16)]));
 // Deux blocs, Saint-Nicolas puis Noël (le modèle de Noël arrive avec lui) : plus de hors gamme ; « Viennoiseries de fête »

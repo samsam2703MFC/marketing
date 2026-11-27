@@ -1483,7 +1483,12 @@ final class CatalogueService
         }
         if ($blocks !== null && (array_key_exists('products', $input) || array_key_exists('pages', $input) || array_key_exists('shopIds', $input) || array_key_exists('gammeBlocks', $input) || $resize)) {
             // Gamme par gamme : les pages se rangent par blocs (hors gamme, puis chaque gamme, sa présentation à gauche).
-            $known = array_column($this->webshopProducts($this->shopsOf($row))['products'], null, 'id');
+            $read = $this->webshopProducts($this->shopsOf($row));
+            $known = array_column($read['products'], null, 'id');
+            $names = [];
+            foreach ($read['gammes'] as $gamme) {
+                $names[(int) $gamme['id']] = self::gammeLabel((string) $gamme['name']);
+            }
             if (array_key_exists('products', $input)) {
                 $settings['products'] = $this->productRows($input['products'], $row, $known);
             }
@@ -1491,12 +1496,12 @@ final class CatalogueService
             if (array_key_exists('pages', $input)) {
                 $sent = $this->pageRows($input['pages'], self::PAGE_COUNTS[count(self::PAGE_COUNTS) - 1], $row);
                 $laid = $sent === []
-                    ? self::autoBlocks($settings['products'], $known, $blocks, $settings['pages'], $pageCount, true)
-                    : self::organise($sent, $blocks, $pageCount, !array_key_exists('pageCount', $input));
+                    ? self::autoBlocks($settings['products'], $known, $blocks, $settings['pages'], $pageCount, true, $names)
+                    : self::organise($sent, $blocks, $pageCount, !array_key_exists('pageCount', $input), $names);
             } elseif (array_key_exists('products', $input) || array_key_exists('gammeBlocks', $input) || array_key_exists('shopIds', $input)) {
-                $laid = self::autoBlocks($settings['products'], $known, $blocks, $settings['pages'], $pageCount, $blocksBefore === null);
+                $laid = self::autoBlocks($settings['products'], $known, $blocks, $settings['pages'], $pageCount, $blocksBefore === null, $names);
             } else {
-                $laid = self::organise($settings['pages'], $blocks, $pageCount, false);
+                $laid = self::organise($settings['pages'], $blocks, $pageCount, false, $names);
             }
             $settings['pages'] = $laid['pages'];
             $settings['pageCount'] = $laid['pageCount'];
@@ -2266,7 +2271,7 @@ final class CatalogueService
      * @param list<int> $blocks
      * @return array{pages: list<array<string,mixed>>, pageCount:int}
      */
-    public static function organise(array $pages, array $blocks, int $pageCount, bool $grow = true): array
+    public static function organise(array $pages, array $blocks, int $pageCount, bool $grow = true, array $names = []): array
     {
         $hors = [];
         $heads = array_fill_keys($blocks, null);
@@ -2327,7 +2332,7 @@ final class CatalogueService
                 $details[] = ['field' => 'gammeBlocks', 'message' => sprintf('Produits hors gamme : %d page%s.', count($hors), count($hors) > 1 ? 's' : '')];
             }
             foreach ($plan as [$g, $n, $free]) {
-                $details[] = ['field' => 'gammeBlocks', 'message' => sprintf('Gamme %d : sa présentation et %d page%s de produits%s.', $g, $n, $n > 1 ? 's' : '',
+                $details[] = ['field' => 'gammeBlocks', 'message' => sprintf('%s : sa présentation et %d page%s de produits%s.', $names[$g] ?? 'Gamme ' . $g, $n, $n > 1 ? 's' : '',
                     $free ? ', plus une page libre pour mettre la présentation à gauche' : '')];
             }
             throw new CatalogueError('CATALOGUE_PAGES_OVERFLOW', sprintf(
@@ -2353,7 +2358,7 @@ final class CatalogueService
      * @param list<array<string,mixed>> $pages Les pages d'avant.
      * @return array{pages: list<array<string,mixed>>, pageCount:int}
      */
-    public static function autoBlocks(array $products, array $known, array $blocks, array $pages, int $pageCount, bool $fresh): array
+    public static function autoBlocks(array $products, array $known, array $blocks, array $pages, int $pageCount, bool $fresh, array $names = []): array
     {
         $groups = [];
         foreach ($products as $item) {
@@ -2428,7 +2433,7 @@ final class CatalogueService
                 }
             }
             try {
-                return self::organise(array_merge($candidate, $spacers), $blocks, $pageCount);
+                return self::organise(array_merge($candidate, $spacers), $blocks, $pageCount, true, $names);
             } catch (CatalogueError $e) {
                 if (!$fresh || $dense) {
                     throw $e;
@@ -4246,7 +4251,10 @@ final class CatalogueService
                 ];
                 continue;
             }
-            if ($items === []) {
+            // Une page libre d'un catalogue gamme par gamme (27/11/2026) : voulue, elle porte une photo ou l'illustration de
+            // la gamme voisine (celle qui suit, sinon celle d'avant), sans titre, et n'est pas « sans produit ».
+            $free = $blocks !== null && self::isSpacer($page) && $items === [];
+            if ($items === [] && !$free) {
                 $empty++;
             }
             if ($page['layout'] === 'pleine' && isset($page['product']) && (int) ($items[0]['id'] ?? 0) !== (int) $page['product']) {
@@ -4280,15 +4288,26 @@ final class CatalogueService
             // La place libre : une photo de la médiathèque, ou l'illustration de la gamme (celle de la page,
             // sinon la première du catalogue), à défaut celle de la famille de la catégorie.
             $filler = null;
-            if ($fillable && ($page['filler'] ?? null) === 'photo') {
+            $fillerKind = $page['filler'] ?? ($free ? 'illustration' : null);
+            $near = null;
+            if ($free) {
+                foreach (array_merge(array_slice($innerRows, $index + 1), array_reverse(array_slice($innerRows, 0, $index))) as $other) {
+                    if (in_array($other['layout'], self::PRESENTATIONS, true) && isset($other['gamme'])) {
+                        $near = (int) $other['gamme'];
+                        break;
+                    }
+                }
+            }
+            if ($fillable && $fillerKind === 'photo') {
                 $media = isset($page['fillerMediaId']) ? $this->media->find((int) $page['fillerMediaId']) : null;
                 if ($media === null || $media['archived_at'] !== null) {
                     $warnings[] = ['code' => 'FILLER_MEDIA_MISSING', 'message' => sprintf('Page %d : la photo choisie pour la place libre n’est plus dans la médiathèque.', $no)];
                 } else {
                     $filler = ['kind' => 'photo', 'imageUrl' => (string) $this->media->serialize($media, false)['webUrl'], 'drawing' => null, 'drawingUrl' => null];
                 }
-            } elseif ($fillable && ($page['filler'] ?? null) === 'illustration') {
-                $source = $visual ?? (isset($catalogueGammes[0]) ? $this->gammeVisual($catalogueGammes[0], $gammesById, $charter, $lang) : null);
+            } elseif ($fillable && $fillerKind === 'illustration') {
+                $sourceGid = $near ?? ($catalogueGammes[0] ?? null);
+                $source = $visual ?? ($sourceGid !== null ? $this->gammeVisual($sourceGid, $gammesById, $charter, $lang) : null);
                 $family = $category !== null ? self::familyDrawing((string) $category['name']) : null;
                 $drawing = $source['drawing'] ?? $family;
                 $imageUrl = $source['imageUrl'] ?? null;
@@ -4347,7 +4366,12 @@ final class CatalogueService
                 // La disponibilité en pied de page (client, 14/11/2026 : « la disponibilité en dessous de page en
                 // footer, par catégorie ») : une ligne pour la page, plus sous le prix de chaque vignette.
                 'availabilityFooter' => self::availabilityFooter($items, $lang),
+                // Gamme par gamme : une page libre voulue (la place pour une photo ou l'illustration, sans titre).
+                'free'       => $free,
             ];
+            if ($free) {
+                $inner[count($inner) - 1]['title'] = '';
+            }
         }
         $left = $filled['left'];
         $pageCount = self::pageCountOf($row['settings']);
