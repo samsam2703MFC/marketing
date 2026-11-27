@@ -211,8 +211,8 @@
 .catv-offer.is-off .catv-offer__badge { background: var(--chip); color: var(--muted-2); }
 .catv-offer__body { display: grid; gap: 2px; min-width: 0; }
 .catv-offer__name { font-size: 13px; color: var(--ink); overflow-wrap: anywhere; }
-.catv-addcat { margin: 4px 0 10px; }
-.catv-addcat select { width: 100%; }
+
+
 
 /* En-tête des pages (titre · bandeau · grande illustration) : vignettes comme les gabarits. */
 .catv-layouts--4 { grid-template-columns: repeat(2, 1fr); }
@@ -257,3 +257,10 @@
 .bdc-tag--ok { background: rgba(63, 122, 82, 0.12); color: var(--green); }
 .bdc-pop__row > .bro-seg { flex: 0 0 auto; }
 .bdc-pop button { margin-top: 0; }
+
+/* Étape 2 : les autres catégories du webshop, après celles du catalogue (26/11/2026). */
+.catv-sep { margin: 18px 0 2px; font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; color: #7a736a; }
+.catv-acc__add { flex: 0 0 132px; justify-content: center; }
+.catv-acc__title--static { cursor: default; }
+.catv-acc--off .catv-acc__name, .catv-acc--off .catv-acc__count { color: #B8B2A8; }
+.catv-acc__badge { flex: 0 0 132px; display: inline-flex; justify-content: center; padding: 3px 0; border-radius: 6px; background: #EDE7DE; color: #5c5852; font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }

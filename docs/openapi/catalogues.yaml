@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Marketing — catalogues produits
-  version: 1.20.0
+  version: 1.21.0
   description: |
     Les catalogues produits du Marketing (prix du webshop, gammes) : un imprimé A5 (A4 en option)
     de **8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16). Quatre pages viennent de la Charte des catalogues de la
@@ -177,6 +177,13 @@ info:
       brochure (6 produits au plus sur un leaflet, 9 sur un dépliant) ;
     - le dashboard franchisé (`…/brand-catalogues`) ne reçoit que des catalogues : un leaflet ou un dépliant n'y va pas
       (404 sur le sien).
+
+    v1.21 (26 novembre 2026, client : « je ne vois pas toutes les catégories » — les galettes des rois) :
+    `catalogue-products` (marque et boutique) rend aussi `offWebshopCategories` [{name, nameNl, products}], dans cet
+    ordre de clés : les familles du catalogue du Marketing (repris de l'ERP) dont AUCUN produit n'est sur le webshop des
+    boutiques lues (comparées produit par produit, par identifiant ERP ; une famille qui porte le nom d'une catégorie lue
+    au webshop n'y figure pas ; B2B exclu). L'écran les nomme, grisées, sans pouvoir les ajouter. Champ ajouté : rien ne
+    change pour un client qui l'ignore.
 
     v1.20 (25 novembre 2026, le bon de commande — client : « A – E1 – conditions par magasin – contenu exact de ce qu'il
     y a dans le catalogue », puis « cadre vide à remplir, délai boutique sous chaque catégorie ») :
@@ -1189,6 +1196,7 @@ components:
                       offers: { type: array, items: { $ref: '#/components/schemas/Offer' } }
                       offersError: { type: [string, 'null'] }
                       categories: { type: array, items: { $ref: '#/components/schemas/Category' } }
+                      offWebshopCategories: { type: array, description: v1.21 — voir WebshopProducts., items: { type: object, properties: { name: { type: string }, nameNl: { type: string }, products: { type: integer } } } }
                       gammes: { type: array, items: { $ref: '#/components/schemas/Gamme' } }
                       shops: { type: array, items: { $ref: '#/components/schemas/ShopRead' } }
                       layouts: { type: array, items: { $ref: '#/components/schemas/Layout' } }
@@ -1490,6 +1498,10 @@ components:
               priceDiffers: { type: array, items: { type: integer }, description: Boutiques qui ont un autre prix. }
               availability: { $ref: '#/components/schemas/Availability' }
         categories: { type: array, items: { $ref: '#/components/schemas/Category' } }
+        offWebshopCategories:
+          type: array
+          description: 'v1.21 — familles du catalogue du Marketing dont aucun produit n''est sur le webshop de ces boutiques (montrées, pas ajoutables : ni prix ni photo).'
+          items: { type: object, additionalProperties: false, required: [name, nameNl, products], properties: { name: { type: string }, nameNl: { type: string }, products: { type: integer, minimum: 1 } } }
         gammes: { type: array, items: { $ref: '#/components/schemas/Gamme' } }
         shops: { type: array, items: { $ref: '#/components/schemas/ShopRead' } }
         offers: { type: array, items: { $ref: '#/components/schemas/Offer' }, description: 'Promotions actives de TFBuddy qui valent pour le réseau ou l''une des boutiques, pas finies, et touchent un produit ou une catégorie lus.' }
