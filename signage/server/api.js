@@ -1088,7 +1088,11 @@ export async function handleApi(req, res, url, readBody, ctx, pathname) {
     // pas de second mot de passe (voir server/marketing-sso.js).
     if (req.method === 'POST' && path === '/sso/marketing') {
       const who = await marketingSession(req);
-      if (!who.ok) return send(who.status, { error: who.error });
+      if (!who.ok) {
+        // Au journal du service : une seconde connexion dans le cadre du Marketing se diagnostique d'ici.
+        console.warn(`[marketing] ouverture refusée (${who.status}) : ${who.error}`);
+        return send(who.status, { error: who.error });
+      }
       const token = createSession('admin');
       const secure = String(req.headers['x-forwarded-proto'] || '').toLowerCase() === 'https' ? '; Secure' : '';
       setCookies.push(`sig_session=${token}; Path=${ctx.cookiePath}; HttpOnly; SameSite=Lax; Max-Age=2592000${secure}`);

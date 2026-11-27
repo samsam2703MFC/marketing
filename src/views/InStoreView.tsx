@@ -27,11 +27,12 @@ export default function InStoreView({ role }: { role: Role }) {
 
   return (
     <>
-      <nav className="instore-tabs" aria-label="Marketing en magasin">
-        <button type="button" className={`choice-pill${tab === 'screens' ? ' is-on' : ''}`} onClick={() => setTab('screens')}>
+      {/* Deux pages d'un même écran : des onglets de page (§7.7), pas des pastilles de choix. */}
+      <nav className="page-tabs instore-tabs" aria-label="Marketing en magasin">
+        <button type="button" className={`page-tabs__tab${tab === 'screens' ? ' is-on' : ''}`} aria-current={tab === 'screens' ? 'page' : undefined} onClick={() => setTab('screens')}>
           Écrans des magasins
         </button>
-        <button type="button" className={`choice-pill${tab === 'supports' ? ' is-on' : ''}`} onClick={() => setTab('supports')}>
+        <button type="button" className={`page-tabs__tab${tab === 'supports' ? ' is-on' : ''}`} aria-current={tab === 'supports' ? 'page' : undefined} onClick={() => setTab('supports')}>
           Bâches &amp; affiches
         </button>
       </nav>
