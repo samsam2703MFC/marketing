@@ -420,7 +420,10 @@ export default function StepGammes(p: GammesProps) {
       }
     }
     const g = rightPres[0].x.gamme as number
-    fixes.push({ label: `Retirer la gamme « ${nameOf(g)} »`, run: () => setBlocks(blocks.filter((b) => b !== g), { gammesOk: [...ok].filter((b) => b !== g) }) })
+    fixes.push({ label: `Retirer la gamme « ${nameOf(g)} »`, run: () => {
+      if (!window.confirm(`Retirer la gamme « ${nameOf(g)} » de ce catalogue ? Ses pages partent ; elle se rajoute par « Ajouter une gamme ».`)) return
+      setBlocks(blocks.filter((b) => b !== g), { gammesOk: [...ok].filter((b) => b !== g) })
+    } })
   }
   const moveErrorShort = moveError ? moveError.split(/(?<=\.)\s/)[0] : ''
   const moveErrorLine = moveErrorShort.replace(/\s*\([^)]*\)/, '').replace(/^\p{Lu}/u, (m) => m.toLowerCase())
