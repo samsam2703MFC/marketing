@@ -7,13 +7,13 @@
 .pub__tech { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; color: var(--faint); }
 .pub__actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .pub__point { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: 0 0 auto; }
-.pub__point.is-on, .pub__point.is-active { background: #3f7a52; }
-.pub__point.is-all { background: #8D1D2C; }
+.pub__point.is-on, .pub__point.is-active { background: var(--green); }
+.pub__point.is-all { background: var(--muted); }
 .pub__regle-on { border-color: #3f7a52; }
 
 .pub__kpis { gap: 10px; }
 .pub__kpis .kpi { background: #fff; border: 1px solid #e6e0d8; border-left-width: 3px; border-radius: 12px; }
-.pub__kpis .kpi.pub__kpi-alerte { border-left-color: #8D1D2C; }
+.pub__kpis .kpi.pub__kpi-alerte { border-left-color: var(--danger); }
 .pub__kpis .kpi.pub__kpi-or { border-left-color: #B0792A; }
 
 .pub__filtres { gap: 6px; flex-wrap: wrap; align-items: center; }
@@ -23,7 +23,6 @@
 }
 .pub__puce:hover { border-color: #5c5852; }
 .pub__puce.is-on { background: rgba(141, 29, 44, 0.06); border-color: #8D1D2C; box-shadow: inset 0 0 0 1px #8D1D2C; color: #8D1D2C; }
-.pub__puce.is-on.is-vert { background: rgba(63, 122, 82, 0.08); border-color: #3f7a52; box-shadow: inset 0 0 0 1px #3f7a52; color: #2f6a42; }
 
 .pub__sep { width: 1px; height: 22px; background: #e6e0d8; margin: 0 4px; }
 

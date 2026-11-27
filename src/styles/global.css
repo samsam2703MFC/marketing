@@ -754,8 +754,14 @@ tbody td {
 }
 
 /* Grand livre */
+/* Le solde est un montant : à l'encre, comme tout chiffre clé (§7.10). Le bordeaux est la couleur de l'action, pas
+   d'un montant ; seul un solde devenu négatif passe au rouge d'arrêt (§3). */
 .balance .metric {
-  color: var(--accent);
+  color: var(--ink);
+}
+
+.balance .metric.is-negatif {
+  color: var(--stop);
 }
 
 .ledger {
@@ -792,11 +798,17 @@ tbody td {
 }
 
 .ledger__out {
-  color: var(--accent);
+  /* Une sortie est un montant, pas une action : à l'encre, le signe « − » la dit (le bordeaux décorait). */
+  color: var(--ink);
 }
 
 .ledger__balance {
   font-weight: 400;
+}
+
+/* « + 5 000,00 € » : le signe ne passe pas seul à la ligne au-dessus du montant. */
+.ledger td.num {
+  white-space: nowrap;
 }
 
 .ledger__section th {
@@ -4928,6 +4940,28 @@ textarea:focus-visible {
     min-width: 0;
     max-width: 100%;
   }
+
+  /* Une carte, une ligne de formulaire ou un champ dans une grille ou une rangée flexible ne s'élargit plus à la
+     taille de son contenu le plus large (tableau, longue option de liste) : c'est le tableau qui défile, dans
+     son propre cadre (.table-scroll), et la liste qui se resserre. */
+  .app__body .card,
+  .app__body label,
+  .app__body .table-scroll {
+    min-width: 0;
+  }
+
+  .app__body select,
+  .app__body input,
+  .app__body textarea {
+    max-width: 100%;
+  }
+
+  /* Un sélecteur segmenté trop long passe à la ligne plutôt que de pousser l'écran. */
+  .app__body .seg,
+  .app__body .bro-seg {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
 }
 
 /* Au-delà de 1000 px, la barre d'un écran en cadre n'a rien à porter : elle disparaît comme avant. */
@@ -4944,6 +4978,13 @@ textarea:focus-visible {
 
   .topbar__kicker {
     margin-bottom: 2px;
+  }
+
+  /* Un libellé de bouton trop long pour la largeur passe à la ligne au lieu de sortir de l'écran. */
+  .app__body .btn {
+    max-width: 100%;
+    white-space: normal;
+    text-align: center;
   }
 
   /* 16 px au téléphone : en dessous, iOS agrandit la page à chaque saisie. */

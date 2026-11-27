@@ -8,7 +8,7 @@ const PERIODES: Jours[] = [7, 28, 90]
 
 const nombre = (v: number, d = 0) => v.toLocaleString('fr-BE', { minimumFractionDigits: d, maximumFractionDigits: d })
 const signe = (n: number | null | undefined) => (n == null ? '—' : `${n > 0 ? '▲ +' : n < 0 ? '▼ ' : ''}${nombre(n)}`)
-const ton = (n: number | null | undefined) => (n == null ? 'is-neutre' : n > 0 ? 'is-bon' : n < 0 ? 'is-alerte' : '')
+const ton = (n: number | null | undefined) => (n == null ? 'is-neutre' : n > 0 ? 'is-bon' : n < 0 ? 'is-negatif' : '')
 const jourCourt = (iso: string) => (iso ? `${Number(iso.slice(8, 10))}/${Number(iso.slice(5, 7))}` : '')
 const jourLong = (iso: string) =>
   new Date(`${iso}T12:00:00`).toLocaleDateString('fr-BE', { weekday: 'short', day: 'numeric', month: 'short' })

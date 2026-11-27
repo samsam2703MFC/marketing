@@ -8,7 +8,7 @@
 .is-orange .gg__point { background: #E08A1E; }
 .is-vert .gg__point { background: #2E9E6A; }
 .is-classer .gg__point { background: #A39E97; }
-.is-retard .gg__point { background: #8D1D2C; }
+.is-retard .gg__point { background: var(--danger); }
 
 .gg__msg { font-size: 13px; line-height: 1.45; border-radius: 8px; padding: 10px 14px; }
 .gg__msg.is-ok { background: #E2F0E8; color: #0F6B4A; }
@@ -56,7 +56,6 @@
 .gg__kpi.is-on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .gg__kpi-label { display: flex; align-items: center; gap: 7px; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .gg__kpi-n { font-size: 24px; font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; color: var(--ink); }
-.gg__kpi-n.is-alerte { color: #8D1D2C; }
 .gg__kpi-sub { font-size: 12px; }
 
 .gg__filtre { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font: inherit; font-size: 12.5px; }
@@ -82,7 +81,7 @@
 .gg__couleur.is-vert { background: #E2F0E8; color: #0F6B4A; }
 .gg__sujet { font-size: 12px; color: var(--ink); }
 .gg__source { font-size: 10px; color: var(--muted); }
-.gg__retard { align-self: flex-start; font-size: 10.5px; border-radius: 6px; padding: 2px 8px; background: #8D1D2C; color: #fff; }
+.gg__retard { align-self: flex-start; font-size: 10.5px; border-radius: 6px; padding: 2px 8px; background: var(--stop-soft, #F7E0DC); color: var(--stop, #A32014); }
 .gg__resp { font-size: 10.5px; }
 .gg__avis-tete { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .gg__meta { font-size: 11px; }

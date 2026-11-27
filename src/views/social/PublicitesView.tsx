@@ -737,7 +737,7 @@ function Publicites({ etat, serveur, avis, onGererFormulaires }: { etat: EtatSoc
               ['all', `Toutes (${baseAct.length})`],
             ] as [typeof act, string][]
           ).map(([id, label]) => (
-            <button key={id} type="button" className={`pub__puce${act === id ? ' is-on' : ''}${id === 'active' ? ' is-vert' : ''}`} aria-pressed={act === id} onClick={() => setAct(id)}>
+            <button key={id} type="button" className={`pub__puce${act === id ? ' is-on' : ''}`} aria-pressed={act === id} onClick={() => setAct(id)}>
               <span className={`pub__point is-${id}`} />
               {label}
             </button>
