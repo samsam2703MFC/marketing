@@ -8,6 +8,7 @@ import { apercuBoutique, enregistrerKit, enregistrerRegles, lireKit } from '../.
 import type { KitLigne, KitVue, Regles } from '../../lib/social/api-franchise'
 import { boutiquesReseau, effacerAvis, enregistrer, journaliser, parId, useSocial } from '../../lib/social/store'
 import type { Boutique, EtatSocial, Objet, Serveur } from '../../lib/social/store'
+import Erreur from '../../components/Erreur'
 
 // ---------------------------------------------------------------------------
 // Le visuel figé d'un modèle (repris de social/public/franchise-visuel.js)
@@ -294,7 +295,7 @@ export default function FranchiseView() {
   }, [pret])
 
   if (chargement === 'attente') return <p className="muted">Lecture du module Social…</p>
-  if (!etat || !serveur) return <p className="error">Module Social illisible : {erreur}</p>
+  if (!etat || !serveur) return <Erreur>Module Social illisible : {erreur}</Erreur>
 
   const boutiques = boutiquesReseau(etat)
   const franchise = { ...(etat.franchise ?? { rules: {} }) }
@@ -432,7 +433,7 @@ export default function FranchiseView() {
         <div className="filters__row">
           <span className="muted social-native__periode franchise__intro">
             Chaque boutique y voit son calendrier, les opérations du réseau et publie ses posts et ses promotions — uniquement avec les modèles, les champs et
-            les règles que vous fixez ici · <code>/social_franchisee</code>
+            les règles que vous fixez ici
           </span>
           <span className="franchise__espace" />
           <select className="franchise__select" value={asShop} onChange={(ev) => setAsShop(ev.target.value)} aria-label="Boutique">
@@ -936,8 +937,8 @@ function Editeur({
           </label>
         </div>
         <span className="muted franchise__aide">
-          Le post de la boutique est rattaché à l’opération choisie et renvoie vers son propre webshop ({'{webshop}'} → webshop.atelierby.be/?shop=n° de la
-          boutique). La boutique peut retirer le lien, jamais en mettre un autre.
+          Le post de la boutique est rattaché à l’opération choisie et renvoie vers son propre webshop (la page de sa boutique). La boutique peut
+          retirer le lien, jamais en mettre un autre.
         </span>
         <div className="franchise__cases franchise__cases--ligne">
           <label className="franchise__case">

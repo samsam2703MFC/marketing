@@ -7,6 +7,7 @@ import { roi } from '../../lib/social/roi'
 import type { RoiBoutique, RoiTotal } from '../../lib/social/roi'
 import { boutiquesReseau, useSocial } from '../../lib/social/store'
 import type { Operation } from '../../lib/social/store'
+import Erreur from '../../components/Erreur'
 
 type Metrique = 'caAdd' | 'roas' | 'roi' | 'att'
 const METRIQUES: Record<Metrique, [string, (v: number) => string]> = {
@@ -52,7 +53,7 @@ export default function RetourView() {
   }, [etat, serveur])
 
   if (chargement === 'attente') return <p className="muted">Lecture du module Social…</p>
-  if (!etat || !serveur) return <p className="error">Module Social illisible : {erreur}</p>
+  if (!etat || !serveur) return <Erreur>Module Social illisible : {erreur}</Erreur>
 
   const nBoutiques = boutiquesReseau(etat).length
   const R = toutes.find((x) => x.c.id === cid) ?? toutes[0]

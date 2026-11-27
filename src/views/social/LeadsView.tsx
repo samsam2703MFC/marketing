@@ -6,6 +6,8 @@ import { corrigerTextes } from '../../lib/social/api-leads'
 import type { Relecture } from '../../lib/social/api-leads'
 import { boutiquesReseau, effacerAvis, enregistrer, journaliser, parId, useSocial } from '../../lib/social/store'
 import type { Objet } from '../../lib/social/store'
+import Erreur from '../../components/Erreur'
+import Aide from '../../components/Aide'
 
 /** Les questions standard d'un formulaire instantané Meta (repris de social-data.js, LF_Q). */
 const LF_Q: Record<string, string> = {
@@ -180,7 +182,7 @@ export default function LeadsView() {
   }, [vide])
 
   if (chargement === 'attente') return <p className="muted">Lecture du module Social…</p>
-  if (!etat || !serveur) return <p className="error">Module Social illisible : {erreur}</p>
+  if (!etat || !serveur) return <Erreur>Module Social illisible : {erreur}</Erreur>
 
   const boutiques = boutiquesReseau(etat)
   const sel = forms.find((x) => x.id === selId) ?? forms[0]
@@ -352,9 +354,7 @@ export default function LeadsView() {
     <div className="social-native leads">
       <div className="filters">
         <div className="filters__row">
-          <span className="muted social-native__periode">
-            Formulaires instantanés · <code>POST /{'{page_id}'}/leadgen_forms</code>
-          </span>
+          <span className="muted social-native__periode">Formulaires instantanés de Meta, par Page Facebook</span>
           <span className="leads__espace" />
           <button
             type="button"
@@ -382,14 +382,14 @@ export default function LeadsView() {
       <div className="leads__info card">
         <span className="leads__info-v">v</span>
         <span>
-          <span className="leads__encre">Un formulaire Meta ne se modifie pas après sa création.</span> « Nouvelle version » duplique le formulaire ; à
-          la publication, la nouvelle version remplace l'ancienne dans les publicités et l'ancienne est archivée. Ses leads restent consultables.
+          <span className="leads__encre">Un formulaire Meta ne se modifie pas après sa création : on en publie une nouvelle version.</span>
+          <Aide texte="« Nouvelle version » duplique le formulaire ; à la publication, la nouvelle version remplace l’ancienne dans les publicités et l’ancienne est archivée. Ses leads restent consultables." />
         </span>
       </div>
 
       <div className="leads__corps">
         {/* Liste */}
-        <aside className="leads__liste">
+        <aside className="leads__liste" aria-label="Formulaires et versions">
           {draft?.isNew ? (
             <div className="leads__famille">
               <div className="leads__famille-nom">{draft.name || 'Nouveau formulaire'}</div>
@@ -514,26 +514,22 @@ export default function LeadsView() {
 
           <div className="leads__ligne">
             <label className="leads__champ leads__champ--2">
-              <span>
-                Nom interne <code>name *</code>
-              </span>
+              <span>Nom interne *</span>
               <input type="text" value={d.name} disabled={!editable} onChange={(e) => D({ name: e.target.value })} />
             </label>
             <label className="leads__champ">
-              <span>
-                Langue <code>locale</code>
-              </span>
+              <span>Langue du formulaire</span>
               <select value={d.locale} disabled={!editable} onChange={(e) => D({ locale: e.target.value })}>
-                <option value="fr_FR">fr_FR · Français</option>
-                <option value="nl_BE">nl_BE · Nederlands</option>
-                <option value="en_GB">en_GB · English</option>
+                <option value="fr_FR">Français</option>
+                <option value="nl_BE">Nederlands</option>
+                <option value="en_GB">English</option>
               </select>
             </label>
           </div>
 
           <div className="leads__bloc">
             <span className="leads__libelle">
-              Questions standard <code>questions [{'{type}'}] *</code>
+              Questions standard *
             </span>
             <div className="leads__puces">
               {Object.keys(LF_Q).map((t) => (
@@ -553,7 +549,7 @@ export default function LeadsView() {
                     })
                   }
                 >
-                  {LF_Q[t]} <code>{t}</code>
+                  {LF_Q[t]}
                 </button>
               ))}
             </div>
@@ -561,27 +557,32 @@ export default function LeadsView() {
 
           <div className="leads__bloc">
             <span className="leads__libelle">
-              Questions personnalisées <code>{'{type: "CUSTOM", key, label, options: [{key, value}]}'}</code>
+              Questions personnalisées
+              <Aide texte="Une question à vous : réponse libre, ou choix parmi des options que vous ajoutez." />
             </span>
             {custom.map(({ q, i }) => (
               <div key={i} className="leads__question">
                 <div className="leads__ligne">
-                  <input
-                    className="leads__grand"
-                    type="text"
-                    placeholder="Intitulé"
-                    value={q.label ?? ''}
-                    disabled={!editable}
-                    onChange={(e) => setQ(i, { label: e.target.value })}
-                  />
-                  <input
-                    className="leads__cle"
-                    type="text"
-                    placeholder="clé"
-                    value={q.key ?? ''}
-                    disabled={!editable}
-                    onChange={(e) => setQ(i, { key: e.target.value.replace(/[^a-z0-9_]/gi, '_').toLowerCase() })}
-                  />
+                  <label className="leads__champ leads__champ--2">
+                    <span>Question</span>
+                    <input
+                      type="text"
+                      placeholder="Ex. : Quand souhaitez-vous être rappelé ?"
+                      value={q.label ?? ''}
+                      disabled={!editable}
+                      onChange={(e) => setQ(i, { label: e.target.value })}
+                    />
+                  </label>
+                  <label className="leads__champ" title="Le nom de la colonne de cette réponse dans l’export des leads">
+                    <span>Nom de la colonne dans l’export</span>
+                    <input
+                      className="leads__cle"
+                      type="text"
+                      value={q.key ?? ''}
+                      disabled={!editable}
+                      onChange={(e) => setQ(i, { key: e.target.value.replace(/[^a-z0-9_]/gi, '_').toLowerCase() })}
+                    />
+                  </label>
                   {editable ? (
                     <button type="button" className="btn btn--sm btn--danger" onClick={() => D({ questions: d.questions.filter((_, j) => j !== i) })}>
                       Supprimer
@@ -648,100 +649,93 @@ export default function LeadsView() {
 
           <div className="leads__bloc leads__bloc--filet">
             <span className="leads__sous-titre">
-              Écran d'introduction <code>context_card</code>
+              Écran d'introduction
             </span>
             <div className="leads__ligne">
-              <input
-                className="leads__grand"
-                type="text"
-                placeholder="title"
-                value={ctx.title ?? ''}
-                disabled={!editable}
-                onChange={(e) => D({ context: { ...ctx, title: e.target.value } })}
-              />
-              <select aria-label="Présentation du texte d’accueil" value={ctx.style ?? 'LIST_STYLE'} disabled={!editable} onChange={(e) => D({ context: { ...ctx, style: e.target.value } })}>
-                <option value="LIST_STYLE">Liste · LIST_STYLE</option>
-                <option value="PARAGRAPH_STYLE">Paragraphe · PARAGRAPH_STYLE</option>
-              </select>
-              <input
-                type="text"
-                placeholder="button_text"
-                value={ctx.button_text ?? ''}
-                disabled={!editable}
-                onChange={(e) => D({ context: { ...ctx, button_text: e.target.value } })}
-              />
+              <label className="leads__champ leads__champ--2">
+                <span>Titre</span>
+                <input type="text" value={ctx.title ?? ''} disabled={!editable} onChange={(e) => D({ context: { ...ctx, title: e.target.value } })} />
+              </label>
+              <label className="leads__champ">
+                <span>Présentation du texte</span>
+                <select value={ctx.style ?? 'LIST_STYLE'} disabled={!editable} onChange={(e) => D({ context: { ...ctx, style: e.target.value } })}>
+                  <option value="LIST_STYLE">Liste à puces</option>
+                  <option value="PARAGRAPH_STYLE">Paragraphe</option>
+                </select>
+              </label>
+              <label className="leads__champ">
+                <span>Texte du bouton</span>
+                <input type="text" value={ctx.button_text ?? ''} disabled={!editable} onChange={(e) => D({ context: { ...ctx, button_text: e.target.value } })} />
+              </label>
             </div>
-            <textarea
-              rows={3}
-              placeholder="content (une ligne par point)"
-              value={(ctx.content ?? []).join('\n')}
-              disabled={!editable}
-              onChange={(e) => D({ context: { ...ctx, content: e.target.value.split('\n') } })}
-            />
+            <label className="leads__champ">
+              <span>Texte d’accueil (une ligne par point)</span>
+              <textarea
+                rows={3}
+                value={(ctx.content ?? []).join('\n')}
+                disabled={!editable}
+                onChange={(e) => D({ context: { ...ctx, content: e.target.value.split('\n') } })}
+              />
+            </label>
           </div>
 
           <div className="leads__bloc leads__bloc--filet">
             <span className="leads__sous-titre">
-              Écran de remerciement <code>thank_you_page</code>
+              Écran de remerciement
             </span>
             <div className="leads__ligne">
-              <input type="text" placeholder="title" value={ty.title ?? ''} disabled={!editable} onChange={(e) => D({ thanks: { ...ty, title: e.target.value } })} />
-              <input
-                className="leads__grand"
-                type="text"
-                placeholder="body"
-                value={ty.body ?? ''}
-                disabled={!editable}
-                onChange={(e) => D({ thanks: { ...ty, body: e.target.value } })}
-              />
+              <label className="leads__champ">
+                <span>Titre</span>
+                <input type="text" value={ty.title ?? ''} disabled={!editable} onChange={(e) => D({ thanks: { ...ty, title: e.target.value } })} />
+              </label>
+              <label className="leads__champ leads__champ--2">
+                <span>Texte</span>
+                <input type="text" value={ty.body ?? ''} disabled={!editable} onChange={(e) => D({ thanks: { ...ty, body: e.target.value } })} />
+              </label>
             </div>
             <div className="leads__ligne">
-              <select aria-label="Bouton de l’écran de remerciement" value={ty.button_type ?? 'VIEW_WEBSITE'} disabled={!editable} onChange={(e) => D({ thanks: { ...ty, button_type: e.target.value } })}>
-                <option value="VIEW_WEBSITE">Voir le site · VIEW_WEBSITE</option>
-                <option value="CALL_BUSINESS">Appeler · CALL_BUSINESS</option>
-                <option value="DOWNLOAD">Télécharger · DOWNLOAD</option>
-              </select>
-              <input
-                type="text"
-                placeholder="button_text"
-                value={ty.button_text ?? ''}
-                disabled={!editable}
-                onChange={(e) => D({ thanks: { ...ty, button_text: e.target.value } })}
-              />
-              <input
-                className="leads__grand"
-                type="url"
-                placeholder="website_url"
-                value={ty.website_url ?? ''}
-                disabled={!editable}
-                onChange={(e) => D({ thanks: { ...ty, website_url: e.target.value } })}
-              />
+              <label className="leads__champ">
+                <span>Action du bouton</span>
+                <select value={ty.button_type ?? 'VIEW_WEBSITE'} disabled={!editable} onChange={(e) => D({ thanks: { ...ty, button_type: e.target.value } })}>
+                  <option value="VIEW_WEBSITE">Voir le site</option>
+                  <option value="CALL_BUSINESS">Appeler</option>
+                  <option value="DOWNLOAD">Télécharger</option>
+                </select>
+              </label>
+              <label className="leads__champ">
+                <span>Texte du bouton</span>
+                <input type="text" value={ty.button_text ?? ''} disabled={!editable} onChange={(e) => D({ thanks: { ...ty, button_text: e.target.value } })} />
+              </label>
+              <label className="leads__champ leads__champ--2">
+                <span>Adresse du site</span>
+                <input type="url" placeholder="https://" value={ty.website_url ?? ''} disabled={!editable} onChange={(e) => D({ thanks: { ...ty, website_url: e.target.value } })} />
+              </label>
             </div>
           </div>
 
           <div className="leads__ligne leads__bloc--filet">
             <label className="leads__champ leads__champ--2">
               <span>
-                Politique de confidentialité <code>privacy_policy.url *</code>
+                Adresse de la politique de confidentialité *
               </span>
               <input type="url" value={privacy.url ?? ''} disabled={!editable} onChange={(e) => D({ privacy: { ...privacy, url: e.target.value } })} />
             </label>
             <label className="leads__champ">
               <span>
-                Texte du lien <code>privacy_policy.link_text</code>
+                Texte du lien
               </span>
               <input type="text" value={privacy.link_text ?? ''} disabled={!editable} onChange={(e) => D({ privacy: { ...privacy, link_text: e.target.value } })} />
             </label>
             <label className="leads__champ leads__champ--2">
               <span>
-                Lien après envoi <code>follow_up_action_url</code>
+                Lien après envoi
               </span>
               <input type="url" value={d.followUp ?? ''} disabled={!editable} onChange={(e) => D({ followUp: e.target.value })} />
             </label>
           </div>
           <label className="leads__case">
             <input type="checkbox" checked={!!d.quality} disabled={!editable} onChange={() => D({ quality: !d.quality })} />
-            Écran de confirmation avant envoi (moins de leads, meilleure qualité) <code>is_optimized_for_quality</code>
+            Écran de confirmation avant envoi (moins de leads, meilleure qualité)
           </label>
           <div className="leads__bloc">
             <span className="leads__libelle">Pages Facebook qui utilisent ce formulaire</span>
@@ -762,7 +756,7 @@ export default function LeadsView() {
         </section>
 
         {/* Aperçu mobile */}
-        <aside className="leads__apercu">
+        <aside className="leads__apercu" aria-label="Aperçu sur téléphone">
           <div className="seg" role="group" aria-label="Écran de l’aperçu">
             {(
               [
@@ -839,7 +833,7 @@ export default function LeadsView() {
         <div className="leads__recus-tete">
           <span className="leads__recus-titre">
             <span>Leads reçus · {rowsSrc.length}</span>
-            <code>GET /{'{form_id}'}/leads · webhook leadgen · id, created_time, field_data, ad_id, form_id</code>
+            <Aide texte="Relus chez Meta et reçus en direct à chaque nouveau lead." />
           </span>
           <div className="leads__actions">
             <select aria-label="Leads à afficher" value={leadScope} onChange={(e) => setLeadScope(e.target.value as 'version' | 'family')}>

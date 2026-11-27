@@ -11,6 +11,7 @@ import type { EtatSocial, Objet, Operation } from '../../lib/social/store'
 import { calendriers, planCreer, planOptions, planProposer } from '../../lib/social/api-campagnes'
 import type { PlanDemande, PlanOptions, PlanPropose, PostMeta } from '../../lib/social/api-campagnes'
 import { avatar, lienSocial } from '../../lib/social/liens'
+import Erreur from '../../components/Erreur'
 
 interface CampagnesViewProps {
   /** Campagne du Marketing à ouvrir (son id ; l'opération du module est `bo-<id>`), sur son plan de posts. */
@@ -230,7 +231,7 @@ export default function CampagnesView({ operation, onNaviguer }: CampagnesViewPr
   }, [c])
 
   if (chargement === 'attente') return <p className="muted">Lecture du module Social…</p>
-  if (!etat || !serveur) return <p className="error">Module Social illisible : {erreur}</p>
+  if (!etat || !serveur) return <Erreur>Module Social illisible : {erreur}</Erreur>
 
   const aller = (page: string, query = '') => ({
     href: lienSocial(page, query),
@@ -284,7 +285,7 @@ export default function CampagnesView({ operation, onNaviguer }: CampagnesViewPr
         nom, dates, boutiques, produits de l’offre, objectif et budget se modifient là-bas. Ici, on y rattache les posts et les publicités Meta, et
         on en suit le retour.
       </p>
-      {opsErr && <p className="camp__alerte">{opsErr} — Paramètres → adresse de l’API Marketing.</p>}
+      {opsErr && <Erreur className="camp__alerte">{opsErr} — Paramètres → API TFBuddy (adresse de l’API Marketing).</Erreur>}
 
       {refOpen && (
         <section className="card camp__ref">
@@ -796,7 +797,7 @@ function Fiche({ c, etat, today, posts, ads, spent, r, nomBoutique, mpo, setMpo,
             : 'Posts du module et publications déjà en ligne sur les Pages (lues chez Meta) pendant l’opération, dans ses boutiques. Cochez pour les rattacher à cette campagne du Marketing.'}
         </span>
         {rtTab === 'posts' && mpo.loading && <span className="muted">Lecture des publications des Pages chez Meta…</span>}
-        {rtTab === 'posts' && mpo.err && <span className="error">Publications des Pages illisibles : {mpo.err}</span>}
+        {rtTab === 'posts' && mpo.err && <Erreur inline>Publications des Pages illisibles : {mpo.err}</Erreur>}
         {!rows.length && !(rtTab === 'posts' && mpo.loading) && (
           <span className="muted">{rtTab === 'ads' ? 'Aucune publicité pendant la période.' : 'Aucun post pendant la période.'}</span>
         )}
@@ -946,7 +947,7 @@ function Plan({ refSection, c, per, pl, setPl, opts, res, busy, done, err: plErr
         </div>
       </div>
       {!!res.loading && !err && <span className="muted">Calcul du plan…</span>}
-      {!!err && <span className="error">{err}</span>}
+      {!!err && <Erreur inline>{err}</Erreur>}
       {d && n > 0 && (
         <div className="camp__plan-res">
           <div className="camp__plan-resume">

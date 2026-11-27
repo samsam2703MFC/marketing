@@ -7,6 +7,7 @@ import { dShort } from '../../lib/social/format'
 import { gesteRepost, lireRepost } from '../../lib/social/api-repost'
 import type { CaseRepost, GesteRepost, ReglageRepost, StatutCase, VueRepost } from '../../lib/social/api-repost'
 import Aide from '../../components/Aide'
+import Erreur, { TexteAvecRemedes } from '../../components/Erreur'
 
 /**
  * Repost automatique — l'écran « Repost » du module Social (SA Repost.dc.html), réécrit dans le Marketing
@@ -128,7 +129,7 @@ export default function RepostView() {
     const g = d.guet
     const page = `Page « ${d.marque.name} »`
     if (!d.metaConfigure) {
-      guet = 'Token Meta absent : à saisir dans Paramètres → API Meta → Clés d’accès Meta.'
+      guet = 'Connexion à Meta non faite : la clé d’accès se saisit dans Paramètres → API Meta → Clés d’accès Meta.'
       guetTon = 'is-erreur'
     } else if (!d.marque.pageId) {
       guet = 'La Page de la marque n’est pas renseignée : Paramètres → API Meta → Identifiants Meta, ligne « marque ».'
@@ -296,11 +297,11 @@ export default function RepostView() {
       </div>
 
       {loading && !d ? <p className="muted">Lecture du repost automatique…</p> : null}
-      {err ? <p className="error">{err}</p> : null}
+      {err ? <Erreur>{err}</Erreur> : null}
 
       {d && r && brouillon && c ? (
         <>
-          <div className={`rp__guet ${guetTon}`}>{guet}</div>
+          <div className={`rp__guet ${guetTon}`}><TexteAvecRemedes texte={guet} /></div>
 
           <div className="page-tabs" role="tablist">
             {(

@@ -6,6 +6,7 @@ import { ROOTS } from '../../lib/api/module'
 import { qrPath } from '../../lib/qr'
 import { avisRepondu, commentaireProposer, commentaireRepondre, commentaireTraiter, dateHeure, google, maintenant, texteErreur, useFranchise } from './_donnees'
 import type { Commentaire, Couleur, MagasinGoogle, Totaux, VueGoogleFranchise } from './_donnees'
+import Erreur from '../../components/Erreur'
 
 /**
  * Avis Google — la page « Avis Google » de l'espace franchisé (social/franchisee/Google.dc.html), réécrite dans le
@@ -93,7 +94,7 @@ export default function GoogleFranchiseView() {
     if (pret) charger(depart.jours)
   }, [pret, charger, depart.jours])
 
-  if (!etat) return <div className="social-native">{erreur ? <p className="error">{erreur}</p> : <p className="muted">Chargement de l’espace boutique…</p>}</div>
+  if (!etat) return <div className="social-native">{erreur ? <Erreur>{erreur}</Erreur> : <p className="muted">Chargement de l’espace boutique…</p>}</div>
 
   const dire = (t: string, k: Ton) => setMsg({ t, k })
   const masque = !!data?.hidden || etat.rules?.voirAvisGoogle === false
@@ -254,7 +255,7 @@ export default function GoogleFranchiseView() {
       {masque ? <div className="card gg__indispo">Le réseau ne partage pas les avis Google dans l’espace boutique.</div> : null}
       {msg ? <div className={`gg__msg is-${msg.k}`}>{msg.t}</div> : null}
       {loading && !data ? <p className="muted">Lecture des avis…</p> : null}
-      {err ? <p className="error">{err}</p> : null}
+      {err ? <Erreur>{err}</Erreur> : null}
       {!masque && rp?.indispo ? <div className="card gg__indispo">Les notes Google ne sont pas disponibles pour l’instant : le réseau doit raccorder les fiches.</div> : null}
 
       {/* Ma boutique : la carte de la Réputation digitale du BO, et le réseau pour se situer. */}

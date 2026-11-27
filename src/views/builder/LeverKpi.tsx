@@ -4,6 +4,7 @@ import { useAsync } from '../../lib/useAsync'
 import type { KpiDefinition, KpiPeriode } from '../../lib/api/module'
 import type { References } from '../../lib/api/module'
 import type { Draft } from './CampaignBuilder'
+import Erreur from '../../components/Erreur'
 
 /**
  * Le KPI du levier, sur la période choisie.
@@ -138,7 +139,7 @@ export default function LeverKpi({
       ) : kpi.loading ? (
         <p className="muted wizard__hint">Lecture des ventes de l'an dernier…</p>
       ) : kpi.error !== null ? (
-        <p className="error">{kpi.error}</p>
+        <Erreur>{kpi.error}</Erreur>
       ) : kpi.data === null ? null : (
         <Reference donnees={kpi.data} pct={draft.objective_coef_pct} choisir={setMetric} />
       )}

@@ -3,6 +3,8 @@ import { useAsync, formatEur } from '../lib/useAsync'
 import LinkBadge from '../components/LinkBadge'
 import { useLabel } from '../state/references'
 import ErpPromotions from '../components/ErpPromotions'
+import Erreur from '../components/Erreur'
+import Aide from '../components/Aide'
 
 /** Les campagnes de bons de l'ERP, puis les bons et codes suivis par le module. */
 export default function VouchersView() {
@@ -25,16 +27,16 @@ function CatalogVouchers() {
   const { data, error, loading } = useAsync(() => api.listVouchers(), [])
   const channelLabel = useLabel((refs) => refs.salesChannels)
 
-  if (error) return <p className="error">{error}</p>
+  if (error) return <Erreur>{error}</Erreur>
   if (loading) return <p className="muted">Chargement…</p>
   if (!data?.length) {
     return (
       <section className="card">
-        <h2>Vouchers & bons</h2>
-        <p className="muted">
-          Aucun bon : <code>mar_voucher</code> est alimentée par le web-shop et la caisse,
-          dont le raccordement n’est pas encore fait. Le module ne crée pas de bon lui-même.
-        </p>
+        <h2>
+          Bons
+          <Aide texte="Les bons viendront du webshop et de la caisse, qui ne sont pas encore reliés au module. Le module n’en crée pas lui-même." />
+        </h2>
+        <p className="muted">Aucun bon pour l’instant : le webshop et la caisse ne sont pas encore reliés.</p>
       </section>
     )
   }

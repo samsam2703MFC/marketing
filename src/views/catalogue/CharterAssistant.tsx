@@ -24,6 +24,7 @@ import { seasonLabel } from '../builder/illustrations'
 import { CatalogueSheet, FORMAT_MM, catalogueCss } from './CataloguePages'
 import { MediaPicker } from './MediaPicker'
 import './charter-assistant.css'
+import Erreur from '../../components/Erreur'
 
 /**
  * L'assistant des pages de la marque (maquettes A1-A4, client 15/11/2026 : « les deux, garde les 3 gabarits ») : les
@@ -639,7 +640,7 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
     [charter, coverIndex, lang, shop, format],
   )
 
-  if (loaded.error) return <p className="error">{loaded.error}</p>
+  if (loaded.error) return <Erreur>{loaded.error}</Erreur>
   if (!charter || !doc) return <p className="muted">Lecture de la charte…</p>
 
   const cover = charter.covers[coverIndex] ?? charter.covers[0]

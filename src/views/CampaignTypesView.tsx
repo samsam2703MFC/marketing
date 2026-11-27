@@ -6,6 +6,7 @@ import { useReferences } from '../state/references'
 import { describeError } from '../state/auth'
 import { styleLevier } from '../lib/couleurs'
 import Aide from '../components/Aide'
+import Erreur from '../components/Erreur'
 
 /**
  * Éditeur des types de campagne.
@@ -45,7 +46,7 @@ export default function CampaignTypesView() {
         </div>
       </div>
 
-      {error ? <p className="error">{error}</p> : null}
+      {error ? <Erreur>{error}</Erreur> : null}
       {loading ? <p className="muted">Chargement…</p> : null}
 
       {edite === null ? null : (
@@ -343,7 +344,7 @@ function TypeForm({
         </div>
       </div>
 
-      {erreur === null ? null : <p className="error">{erreur}</p>}
+      {erreur === null ? null : <Erreur>{erreur}</Erreur>}
 
       <div className="movement__actions">
         {type === null ? null : (

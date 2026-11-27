@@ -3,6 +3,7 @@ import { module as api } from '../lib/api'
 import { useAsync, formatDate, formatEur } from '../lib/useAsync'
 import type { Campaign, CampaignStatus } from '../lib/api/module'
 import { encreLisible } from '../lib/couleurs'
+import Erreur from '../components/Erreur'
 
 interface CampaignsViewProps {
   statuses: CampaignStatus[]
@@ -126,7 +127,7 @@ export default function CampaignsView({
         </div>
       </div>
 
-      {error ? <p className="error">{error}</p> : null}
+      {error ? <Erreur>{error}</Erreur> : null}
       {loading ? <p className="muted">Chargement…</p> : null}
 
       {data && data.length === 0 ? (
@@ -164,7 +165,7 @@ export default function CampaignsView({
               et ses leads seront effacés avec elle. C’est définitif.
             </p>
 
-            {suppression === null ? null : <p className="error">{suppression}</p>}
+            {suppression === null ? null : <Erreur>{suppression}</Erreur>}
 
             <div className="confirm__actions">
               <button

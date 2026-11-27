@@ -40,6 +40,7 @@ import { ASSET, ETIQUETTES, FONDS, FORMES, LOGOS, POLICES, TRAITS, tonDe } from 
 import type { ModeleEtiquette, PhotoVisuel, Qc, TextePose, Visuel } from './studio-ds'
 import * as Montages from './montage'
 import type { Montage } from './montage'
+import Erreur, { TexteAvecRemedes } from '../../components/Erreur'
 
 /**
  * « Créer un post » — l'écran du module Social & Ads (social/public/SA Post.dc.html et son studio
@@ -575,7 +576,7 @@ function etatInitial(etat: EtatSocial, serveur: Serveur, operation: PostViewProp
 export default function PostView(props: PostViewProps) {
   const { etat, serveur, erreur, chargement, avis } = useSocial()
   if (chargement === 'attente') return <p className="muted">Lecture du module Social…</p>
-  if (!etat || !serveur) return <p className="error">Module Social illisible : {erreur}</p>
+  if (!etat || !serveur) return <Erreur>Module Social illisible : {erreur}</Erreur>
   return <Post etat={etat} serveur={serveur} avis={avis} props={props} />
 }
 
@@ -2277,7 +2278,7 @@ function Post({ etat, serveur, avis, props }: { etat: EtatSocial; serveur: Serve
       : nPano
         ? `Instagram : ${nPano} × POST /{ig_user_id}/media (is_carousel_item=true) → POST /{ig_user_id}/media (media_type=CAROUSEL, children) → media_publish`
         : 'Instagram : POST /{ig_user_id}/media → POST /{ig_user_id}/media_publish'
-  const schedRule = !later ? 'Publication immédiate : published=true.' : mins < 10 ? 'Trop tôt : Meta exige au moins 10 minutes d’avance.' : mins > 43200 ? 'Trop tard : 30 jours maximum.' : 'Fenêtre Meta respectée : entre 10 minutes et 30 jours.'
+  const schedRule = !later ? 'Publication immédiate.' : mins < 10 ? 'Trop tôt : Meta exige au moins 10 minutes d’avance.' : mins > 43200 ? 'Trop tard : 30 jours maximum.' : 'Fenêtre Meta respectée : entre 10 minutes et 30 jours.'
   const schedClass = !later ? 'muted' : mins < 10 || mins > 43200 ? 'is-alerte' : 'is-bon'
   const publishLabel = s.saving
     ? 'Préparation du visuel…'
@@ -2822,7 +2823,6 @@ function Post({ etat, serveur, avis, props }: { etat: EtatSocial; serveur: Serve
                         s.videoFormat,
                         (k) => put({ videoFormat: k }),
                       )}
-                      <span className="pst__tech">{s.videoFormat === 'reel' ? 'POST /{page_id}/video_reels · upload_phase=start → upload → finish (video_state=PUBLISHED)' : 'POST /{page_id}/videos · file_url, title, description'}</span>
                     </div>
                   </>
                 ) : null}
@@ -3680,7 +3680,7 @@ function Post({ etat, serveur, avis, props }: { etat: EtatSocial; serveur: Serve
           <section className="card pst__carte">
             <div className="pst__ligne">
               <span className="pst__etiquette">
-                5 · Texte du post <span className="pst__tech">message / caption</span>
+                5 · Texte du post
               </span>
               <div className="pst__puces">
                 {VARS.map(([code, tip]) => (
@@ -3860,7 +3860,7 @@ function Post({ etat, serveur, avis, props }: { etat: EtatSocial; serveur: Serve
             <div className="pst__lien-bloc">
               <label className="pst__champ-titre">
                 <span>
-                  Lien (optionnel) <span className="pst__tech">link</span>
+                  Lien (optionnel)
                 </span>
                 {champ(s.link, (x) => put({ link: x }), 'https://www.latelierby.be/…  ou  {webshop} / {webshop_produit}')}
               </label>
@@ -3979,7 +3979,7 @@ function Post({ etat, serveur, avis, props }: { etat: EtatSocial; serveur: Serve
           <section className="card pst__carte">
             <div className="pst__ligne">
               <span className="pst__etiquette">
-                6 · Publication <span className="pst__tech">{s.dark ? 'object_story_spec · dark post' : 'published · scheduled_publish_time'}</span>
+                6 · Publication
               </span>
               {seg(
                 [
@@ -4066,11 +4066,13 @@ function Post({ etat, serveur, avis, props }: { etat: EtatSocial; serveur: Serve
                     </span>
                   ))}
                 </div>
-                <div className="pst__appel">
-                  <div className="pst__appel-tete">
-                    <span>POST /{'{page_id}'}/{ep}</span>
-                    <span>× {pages.length} Pages · Page token</span>
-                  </div>
+                <details className="pst__appel">
+                  <summary className="pst__appel-tete">
+                    <span>Détails techniques de l’envoi à Meta</span>
+                    <span>
+                      POST /{'{page_id}'}/{ep} × {pages.length} Pages
+                    </span>
+                  </summary>
                   <div className="pst__appel-corps">
                     {apiParams.map(([k, val], i) => (
                       <span key={i}>
@@ -4079,7 +4081,7 @@ function Post({ etat, serveur, avis, props }: { etat: EtatSocial; serveur: Serve
                     ))}
                   </div>
                   {t.some((id) => s.ch[id]?.ig) ? <div className="pst__appel-pied">{igCall}</div> : null}
-                </div>
+                </details>
               </>
             )}
             {/* Permissions du token Meta : la publication serait refusée, on le dit avant */}
@@ -4089,7 +4091,7 @@ function Post({ etat, serveur, avis, props }: { etat: EtatSocial; serveur: Serve
                 {permWarn.map((w) => (
                   <span key={w}>• {w}</span>
                 ))}
-                <span>À ajouter dans le Business Manager (utilisateur système → Générer un nouveau token), puis à coller dans Paramètres → API Meta.</span>
+                <span><TexteAvecRemedes texte="À ajouter dans le Business Manager (utilisateur système, « Générer un nouveau token »), puis à coller dans Paramètres → API Meta." /></span>
               </div>
             ) : null}
             {s.errors.length ? (
@@ -4674,7 +4676,7 @@ function Post({ etat, serveur, avis, props }: { etat: EtatSocial; serveur: Serve
               <input type="checkbox" checked={s.tplForm.free} onChange={() => put((st) => ({ tplForm: { ...st.tplForm, free: !st.tplForm.free } }))} />
               La boutique peut ajouter une phrase (90 caractères, sans lien)
             </label>
-            {s.tplErr ? <span className="error">{s.tplErr}</span> : null}
+            {s.tplErr ? <Erreur inline>{s.tplErr}</Erreur> : null}
             <div className="confirm__actions">
               <button type="button" className="btn" onClick={() => put({ tplOpen: false })}>
                 Annuler

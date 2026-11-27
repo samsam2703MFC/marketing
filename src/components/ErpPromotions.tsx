@@ -1,6 +1,8 @@
 import * as api from '../lib/api/module'
 import type { ErpPromotion, ErpPromotionFamily } from '../lib/api/module'
 import { useAsync, formatDate } from '../lib/useAsync'
+import Erreur from './Erreur'
+import Aide from './Aide'
 
 const FAMILY_LABEL: Record<ErpPromotionFamily, string> = {
   bundle: 'Bundle',
@@ -115,7 +117,7 @@ export default function ErpPromotions({ families, title }: ErpPromotionsProps) {
     return (
       <section className="card">
         <h2>{title}</h2>
-        <p className="error">{error}</p>
+        <Erreur>{error}</Erreur>
       </section>
     )
   }
@@ -127,17 +129,17 @@ export default function ErpPromotions({ families, title }: ErpPromotionsProps) {
 
   return (
     <section className="card table-card">
-      <h2>{title}</h2>
-      <p className="muted">
-        Lues sur l’API de l’ERP : elles s’y créent et s’y modifient, et ce sont elles que la caisse applique.
-      </p>
+      <h2>
+        {title}
+        <Aide texte="Lues dans l’ERP : elles s’y créent et s’y modifient, et ce sont elles que la caisse applique." />
+      </h2>
       {!data?.configured ? (
-        <p className="muted">L’adresse de l’ERP n’est pas renseignée sur ce serveur (MAR_ERP_API_BASE) : rien n’a été lu.</p>
+        <p className="muted">L’adresse de l’ERP n’est pas encore réglée sur ce serveur : les promotions de la caisse ne peuvent pas être lues.</p>
       ) : (
         refusals.map(({ family, source }) => (
-          <p key={family} className="error">
+          <Erreur key={family}>
             {FAMILY_LABEL[family]} : {source?.error}
-          </p>
+          </Erreur>
         ))
       )}
       {rows.length ? (

@@ -8,6 +8,7 @@ import { HeaderIcon, LayoutIcon, TemplateIcon } from './CatalogueIcons'
 import './catalogue-wizard.css'
 // Après la feuille de l'assistant : celle de « Gamme par gamme » la précise (mêmes poids de sélecteurs).
 import StepGammes, { initialBlocks } from './CatalogueGammes'
+import Erreur from '../../components/Erreur'
 
 /**
  * L'assistant de l'éditeur de catalogue (21/11/2026, Sam : « dans l'éditeur de catalogue faire un assistant comme dans le
@@ -249,7 +250,7 @@ export default function CatalogueWizard(props: WizardProps) {
           </button>
         ))}
       </nav>
-      {props.docError ? <p className="error">{props.docError}</p> : null}
+      {props.docError ? <Erreur>{props.docError}</Erreur> : null}
       {step === 1 ? <StepCatalogue {...props} /> : null}
       {step === 2 ? <StepProducts {...props} /> : null}
       {step === 3 ? (props.cat.gammeBlocks != null ? <StepGammesHost {...props} /> : <StepPresentation {...props} />) : null}
@@ -1173,7 +1174,7 @@ function StepValidation(p: WizardProps) {
                     <tr key={`${r.lang}-${r.shop}`}>
                       <td>{versionLabel(r.shop)}</td>
                       <td>{r.lang.toUpperCase()}</td>
-                      <td>{r.error ? <span className="error">{r.error}</span> : n === 0 ? <span className="wz-ok">✓ rien à signaler</span> : `${openN} à voir · ${n - openN} vu${n - openN > 1 ? 's' : ''}`}</td>
+                      <td>{r.error ? <Erreur inline>{r.error}</Erreur> : n === 0 ? <span className="wz-ok">✓ rien à signaler</span> : `${openN} à voir · ${n - openN} vu${n - openN > 1 ? 's' : ''}`}</td>
                       <td>
                         <button
                           type="button"

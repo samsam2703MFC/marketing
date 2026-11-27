@@ -34,6 +34,7 @@ import { SUPPORT_LABELS, SUPPORT_NOUNS, isLeaflet, leafletBlocked, leafletChecks
 import { Sheet as BrochureSheet, fontFaces, pageSize as brochurePageSize } from '../brochure/Pages'
 import type { Side } from '../brochure/Pages'
 import BROCHURE_CSS from '../brochure/brochure.css?inline'
+import Erreur from '../../components/Erreur'
 
 /**
  * Les catalogues produits de la marque : prix du webshop, gammes (Noël, Saint-Nicolas…).
@@ -241,8 +242,8 @@ function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen
 
       <section className="card catv-recent">
         <h2>Imprimés récents</h2>
-        {list.error ? <p className="error">{list.error}</p> : null}
-        {deleteError ? <p className="error">{deleteError}</p> : null}
+        {list.error ? <Erreur>{list.error}</Erreur> : null}
+        {deleteError ? <Erreur>{deleteError}</Erreur> : null}
         {list.loading && !list.data ? <p className="muted">Lecture des catalogues…</p> : null}
         {list.data && list.data.items.length === 0 ? <p className="muted">Aucun imprimé pour l’instant.</p> : null}
         {list.data && list.data.items.length > 0 && shown.length === 0 ? <p className="muted">Aucun {kindFilter === 'leaflet' ? 'leaflet' : kindFilter === 'depliant' ? 'dépliant' : 'catalogue'} pour l’instant.</p> : null}
@@ -394,8 +395,8 @@ function BrochuresToImport({ onOpen, revision, onImported }: { onOpen: (id: numb
           </button>
         </div>
       ) : null}
-      {error ? <p className="error">{error}</p> : null}
-      {list.error ? <p className="error">{list.error}</p> : null}
+      {error ? <Erreur>{error}</Erreur> : null}
+      {list.error ? <Erreur>{list.error}</Erreur> : null}
       <div className="table-scroll">
         <table className="catv-table">
           <thead>
@@ -598,7 +599,7 @@ function NewCatalogue({
             <div className="catv-field catv-field--grow">
               <span>Gammes · une ou plusieurs ({choisies.length} choisie{choisies.length > 1 ? 's' : ''}, {produitsChoisis} produits)</span>
               {webshop.loading ? <span className="muted">Lecture du webshop…</span> : null}
-              {webshop.error ? <span className="error">{webshop.error}</span> : null}
+              {webshop.error ? <Erreur inline>{webshop.error}</Erreur> : null}
               {webshop.data && !gammes.length ? (
                 <span className="muted">Le webshop ne donne aucune gamme active : partez d’une campagne ou de produits choisis.</span>
               ) : null}
@@ -653,7 +654,7 @@ function NewCatalogue({
           >
             {busy ? 'Création…' : `Créer le ${what}`}
           </button>
-          {error ? <p className="error">{error}</p> : null}
+          {error ? <Erreur>{error}</Erreur> : null}
         </div>
       ) : null}
     </section>
@@ -705,7 +706,7 @@ function Editor({ id, onBack, onCharter }: { id: number; onBack: () => void; onC
         <button type="button" className="linklike" onClick={onBack}>
           ‹ Imprimés
         </button>
-        <p className="error">{loaded.error}</p>
+        <Erreur>{loaded.error}</Erreur>
       </div>
     )
   }
@@ -1159,7 +1160,7 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
         </button>
       </div>
       {webshop.loading ? <p className="muted">Lecture du webshop…</p> : null}
-      {webshop.error ? <p className="error">{webshop.error}</p> : null}
+      {webshop.error ? <Erreur>{webshop.error}</Erreur> : null}
       {(webshop.data?.shops ?? []).filter((s) => s.error).map((s) => (
         <p key={s.id} className="catv-warn">
           Webshop de {s.name} illisible : {s.error}
@@ -1372,7 +1373,7 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
           {save.status === 'error' ? <span className="error catv-savebox__ko">{save.text}</span> : null}
         </span>
       </div>
-      {printError ? <p className="error">{printError}</p> : null}
+      {printError ? <Erreur>{printError}</Erreur> : null}
 
       {detail && !leaflet ? (
         <>
@@ -1403,10 +1404,10 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
               </select>
             ) : null}
             <span className="catv-save">
-              {save.status === 'saving' ? 'Enregistrement…' : save.status === 'saved' ? (save.text ?? 'Enregistré') : save.status === 'error' ? <span className="error">{save.text}</span> : null}
+              {save.status === 'saving' ? 'Enregistrement…' : save.status === 'saved' ? (save.text ?? 'Enregistré') : save.status === 'error' ? <Erreur inline>{save.text}</Erreur> : null}
             </span>
           </div>
-          {doc.error ? <p className="error">{doc.error}</p> : null}
+          {doc.error ? <Erreur>{doc.error}</Erreur> : null}
           <style>{catalogueCss()}</style>
           <div className="catv-pages">
             {docPages.map((page, index) => {

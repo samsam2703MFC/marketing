@@ -6,6 +6,7 @@ import StaffBonus from './StaffBonus'
 import type { Draft } from './CampaignBuilder'
 import AnalysisPeriod from './AnalysisPeriod'
 import Aide from '../../components/Aide'
+import Erreur from '../../components/Erreur'
 
 /**
  * Étape « Objectifs » : un objectif de pièces par boutique, éclairé par les
@@ -810,12 +811,12 @@ export default function ObjectivesStep({
           l’historique et les objectifs portent sur eux.
         </p>
       ) : sales.error !== null ? (
-        <p className="error">
-          Ventes indisponibles : {sales.error}{' '}
+        <div className="error">
+          <Erreur inline>Ventes indisponibles : {sales.error}</Erreur>{' '}
           <button type="button" className="btn btn--sm" onClick={() => setAttempt(attempt + 1)}>
             Réessayer
           </button>
-        </p>
+        </div>
       ) : data === null ? (
         <p className="muted">Chargement des ventes…</p>
       ) : (
@@ -1332,7 +1333,7 @@ export default function ObjectivesStep({
                       }
                     />
                     {!valid ? (
-                      <span className="error">Entier ≥ 0</span>
+                      <Erreur inline>Entier ≥ 0</Erreur>
                     ) : effort === null ? (
                       <span className="shop-card__effort shop-card__effort--blind">
                         sans repère

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { module as api } from '../lib/api'
 import type { Shop, StoreMonth } from '../lib/api/module'
 import { useAsync, formatEur } from '../lib/useAsync'
+import Erreur from '../components/Erreur'
 
 /**
  * Trafic, panier moyen, et ce qu'il faudrait investir pour vendre plus.
@@ -192,7 +193,7 @@ export default function TrafficInvestment() {
       </header>
 
       {sales.loading ? <p className="muted">Lecture des ventes mensuelles de chaque magasin…</p> : null}
-      {sales.error ? <p className="error">Ventes indisponibles : {sales.error}</p> : null}
+      {sales.error ? <Erreur>Ventes indisponibles : {sales.error}</Erreur> : null}
       {silent.length ? (
         <p className="muted traffic__method">
           Sans vente au panel sur {year - 1}–{year}, donc hors graphique et hors calcul : {silent.map((r) => r.shop.name).join(', ')}.

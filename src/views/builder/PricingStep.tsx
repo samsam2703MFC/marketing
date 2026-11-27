@@ -5,6 +5,7 @@ import { Fragment } from 'react'
 import type { Draft, MechanicCode } from './CampaignBuilder'
 import AnalysisPeriod from './AnalysisPeriod'
 import Aide from '../../components/Aide'
+import Erreur from '../../components/Erreur'
 
 /**
  * Étape « Prix » : la promotion produit par produit, et ce qu'elle coûte.
@@ -402,11 +403,11 @@ export default function PricingStep({
       </div>
 
       {sales.error !== null ? (
-        <p className="error">Volumes indisponibles : {sales.error}</p>
+        <Erreur>Volumes indisponibles : {sales.error}</Erreur>
       ) : null}
 
       {prices.error !== null ? (
-        <p className="error">Prix indisponibles : {prices.error}</p>
+        <Erreur>Prix indisponibles : {prices.error}</Erreur>
       ) : null}
 
       <h3 className="section-label">

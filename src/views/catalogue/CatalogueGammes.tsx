@@ -21,6 +21,7 @@ import { CatalogueSheet, FORMAT_MM, HEADER_LABELS, LAYOUT_LABELS, TEMPLATE_LABEL
 import { LayoutIcon } from './CatalogueIcons'
 import { MediaPicker } from './MediaPicker'
 import './catalogue-gammes.css'
+import Erreur from '../../components/Erreur'
 
 /**
  * L'étape 3 de l'assistant, « Gamme par gamme » (27/11/2026, maquettes M1 · M2 · M3 validées par le client) : le
@@ -1146,7 +1147,7 @@ function FinalView(
             <small>Refait les pages de chaque gamme dans l’ordre des blocs ; les présentations restent.</small>
           </div>
         </div>
-        {notice ? <p className="error">{notice}</p> : null}
+        {notice ? <Erreur>{notice}</Erreur> : null}
         <div className="wz-foot">
           <button type="button" className="btn" onClick={() => p.onOpen(blocks[blocks.length - 1] ?? HORS)} disabled={!blocks.length}>
             ‹ Gammes

@@ -6,6 +6,7 @@ import type { Role } from '../lib/navigation'
 import { useAsync } from '../lib/useAsync'
 import { encreLisible } from '../lib/couleurs'
 import Aide from '../components/Aide'
+import Erreur from '../components/Erreur'
 
 /**
  * Calendrier marketing : tout ce qui est prévu ou en cours, au même endroit.
@@ -293,9 +294,9 @@ export default function CalendarView({
 
   const reading = (state: { loading: boolean; error: string | null }, what: string) =>
     state.error ? (
-      <span className="mc-msg is-error">
+      <Erreur inline className="mc-msg is-error">
         Lecture {what} impossible : {state.error}
-      </span>
+      </Erreur>
     ) : state.loading ? (
       <span className="mc-msg">Lecture {what}…</span>
     ) : null

@@ -6,6 +6,7 @@ import { SourceBrowser, addToLibrary } from './SourceBrowser'
 import { SOURCE_LABEL, imageSize } from './sources'
 import type { ImageSource, PickedImage, SourceImage } from './sources'
 import './media.css'
+import Erreur from '../../components/Erreur'
 
 const PER_PAGE = 48
 
@@ -82,7 +83,7 @@ export default function MediaPicker({
             Fermer
           </button>
         </div>
-        {error ? <p className="error">{error}</p> : null}
+        {error ? <Erreur>{error}</Erreur> : null}
         {busy ? <p className="muted">Versement dans la médiathèque…</p> : null}
         <div className="mpick__body">
           {source === 'mediatheque' ? (

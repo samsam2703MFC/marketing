@@ -3,6 +3,7 @@ import { module as api } from '../../lib/api'
 import type { ErpVoucher, ErpVoucherInput, ErpVouchers as ErpVouchersData } from '../../lib/api/module'
 import { describeError } from '../../state/auth'
 import { formatDate } from '../../lib/useAsync'
+import Erreur from '../../components/Erreur'
 
 /**
  * Les bons de la campagne, dans TFBuddy (05/11/2026) : ils valent en caisse et au webshop.
@@ -96,7 +97,7 @@ export default function ErpVouchers({ campaignId, startsOn, endsOn }: { campaign
     try { void navigator.clipboard.writeText(text); setNotice(v.codeType === 'SHARED' ? 'Code copié.' : `${v.codes.length} codes copiés (un par ligne).`) } catch { setNotice('Copie impossible : sélectionnez le texte à la main.') }
   }
 
-  if (error && !data) return <p className="error">{error}</p>
+  if (error && !data) return <Erreur>{error}</Erreur>
   if (!data) return <p className="vouchers__hint">Lecture des bons dans TFBuddy…</p>
 
   const eligible = data.lines.filter((l) => l.eligible)
@@ -107,7 +108,7 @@ export default function ErpVouchers({ campaignId, startsOn, endsOn }: { campaign
         <span className="section-label__aside">dans TFBuddy · valables en caisse et au webshop</span>
       </h3>
       {!data.configured ? <p className="tag-warn vouchers__notice">{data.message}</p> : null}
-      {error ? <p className="error">{error}</p> : null}
+      {error ? <Erreur>{error}</Erreur> : null}
       {notice ? <p className="erpv__notice">{notice}</p> : null}
 
       {data.vouchers.length === 0 ? <p className="vouchers__hint">Aucun bon pour cette campagne.</p> : (
