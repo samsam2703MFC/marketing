@@ -25,7 +25,7 @@ function routeDuChemin(chemin: string): Route {
   if (c.includes('identifiants meta')) return 'social-set-ids'
   if (c.includes('meta') || c.includes('clés d’accès') || c.includes("clés d'accès")) return 'social-set-cles'
   if (c.includes('rédaction ia') || c.includes('ia')) return 'social-set-ia'
-  if (c.includes('tfbuddy') || c.includes('api marketing')) return 'social-set-tfb'
+  if (c.includes('tfbuddy')) return 'social-set-tfb'
   if (c.includes('google')) return 'social-set-google'
   if (c.includes('modèle')) return 'social-set-tpl'
   if (c.includes('droit')) return 'social-set-rights'

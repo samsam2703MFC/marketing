@@ -285,7 +285,7 @@ export default function CampagnesView({ operation, onNaviguer }: CampagnesViewPr
         nom, dates, boutiques, produits de l’offre, objectif et budget se modifient là-bas. Ici, on y rattache les posts et les publicités Meta, et
         on en suit le retour.
       </p>
-      {opsErr && <Erreur className="camp__alerte">{opsErr} — Paramètres → API TFBuddy (adresse de l’API Marketing).</Erreur>}
+      {opsErr && <Erreur className="camp__alerte">{opsErr} — adresse de l’API Marketing : Paramètres → API Meta → Clés d’accès Meta.</Erreur>}
 
       {refOpen && (
         <section className="card camp__ref">
