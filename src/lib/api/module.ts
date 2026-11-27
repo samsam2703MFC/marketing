@@ -3187,6 +3187,8 @@ export interface WebshopGamme {
 export interface WebshopProducts {
   products: WebshopProduct[]
   categories: WebshopCategory[]
+  /** Familles du catalogue du Marketing dont aucun produit n'est sur le webshop de ces boutiques (montrées, pas ajoutables). */
+  offWebshopCategories?: Array<{ name: string; nameNl: string; products: number }>
   gammes: WebshopGamme[]
   shops: Array<{ id: number; erpShopId: number | null; name: string; products: number; error: string | null; readAt: string | null }>
   /** Promotions et bundles de TFBuddy qui valent pour le réseau ou l'une des boutiques. */

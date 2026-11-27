@@ -312,6 +312,34 @@ final class CatalogueService
             }
         }
 
+        // Les familles du catalogue du Marketing (repris de l'ERP) dont AUCUN produit n'est sur le webshop des boutiques
+        // lues (26/11/2026, client : « je ne vois pas toutes les catégories ») : l'écran les nomme, grisées, sans pouvoir
+        // les ajouter (ni prix ni photo). Comparées produit par produit (même identifiant ERP) : la famille du Marketing
+        // est l'ancêtre au millier, pas la catégorie du webshop, et leurs noms ne se comparent pas.
+        $offWebshop = [];
+        if ($byId !== []) {
+            $families = [];
+            foreach ($this->webshop->localProducts() as $product) {
+                $family = trim((string) $product['categoryName']);
+                if ($family === '' || $product['categoryId'] === null) {
+                    continue;
+                }
+                $families[$family] ??= ['name' => $family, 'nameNl' => (string) $product['categoryNameNl'], 'products' => 0, 'onWebshop' => 0];
+                $families[$family]['products']++;
+                if (isset($byId[(int) $product['id']])) {
+                    $families[$family]['onWebshop']++;
+                }
+            }
+            // Une famille qui porte le nom d'une catégorie lue au webshop n'est pas « absente » : elle y est déjà.
+            $names = array_map(static fn (array $c): string => mb_strtolower(trim((string) $c['name'])), array_values($categories));
+            foreach ($families as $family) {
+                if ($family['onWebshop'] === 0 && !in_array(mb_strtolower($family['name']), $names, true)) {
+                    $offWebshop[] = ['name' => $family['name'], 'nameNl' => $family['nameNl'], 'products' => $family['products']];
+                }
+            }
+            usort($offWebshop, static fn (array $a, array $b): int => strcasecmp($a['name'], $b['name']));
+        }
+
         $products = array_values($byId);
         foreach ($products as &$product) {
             [$price, $differs] = self::generalPrice($product['prices']);
@@ -341,6 +369,7 @@ final class CatalogueService
         return [
             'products'    => $products,
             'categories'  => $categoryOrder,
+            'offWebshopCategories' => $offWebshop,
             'gammes'      => $gammes,
             'shops'       => $read,
             'offers'      => array_map(fn (array $o): array => $this->offerOut($o, array_column($products, null, 'id'), null, 'fr'), $offers['offers']),

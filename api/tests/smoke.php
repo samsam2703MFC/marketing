@@ -5277,6 +5277,22 @@ check('catalogues : le poids d’une pièce et les allergènes de la recette, lu
     ($prods[11]['weightGrams'] ?? null) === 650 && ($prods[11]['allergens'] ?? null) === ['gluten', 'oeufs', 'lait', 'fruits_coque']
         && ($prods[13]['weightGrams'] ?? null) === 500 && ($prods[12]['allergens'] ?? null) === [] && array_key_exists('weightGrams', $prods[12] ?? []) && $prods[12]['weightGrams'] === null,
     json_encode([$prods[11] ?? null, $prods[13]['weightGrams'] ?? null, $prods[12] ?? null]));
+// Les familles du catalogue du Marketing dont aucun produit n'est sur le webshop (26/11/2026, « je ne vois pas toutes
+// les catégories ») : nommées à part, avec leur nombre de produits ; une famille dont un produit est au webshop n'y est pas.
+$pdo->exec("DELETE FROM mar_offer_item WHERE sku_ref IN ('erp-11', 'erp-990011', 'erp-990012', 'erp-990013')");
+$pdo->exec("INSERT INTO mar_offer_item (category, sku_ref, name, detail, is_active) VALUES
+    ('produit', 'erp-11', 'Bûche praliné', 'Bûches', 1),
+    ('produit', 'erp-990011', 'Galette frangipane test', 'Galettes des rois (essai)', 1),
+    ('produit', 'erp-990012', 'Galette pomme test', 'Galettes des rois (essai)', 1),
+    ('produit', 'erp-990013', 'Carton galettes test', 'B2B - Galettes', 1)");
+\Marketing\Repository\WebshopCatalogueRepository::purge();
+$horsWeb = call($catRouter, 'GET', '/api/v1/marketing/catalogue-products', ['shopIds' => $catA . ',' . $catB]);
+$pdo->exec("DELETE FROM mar_offer_item WHERE sku_ref IN ('erp-11', 'erp-990011', 'erp-990012', 'erp-990013')");
+check('catalogues : les familles du catalogue du Marketing absentes du webshop — nommées, comptées, clés dans un ordre fixe ; ni B2B ni famille déjà au webshop',
+    $horsWeb['status'] === 200 && (array_column($horsWeb['body']['data']['offWebshopCategories'] ?? [], null, 'name')['Galettes des rois (essai)'] ?? null) === ['name' => 'Galettes des rois (essai)', 'nameNl' => 'Galettes des rois (essai)', 'products' => 2]
+        && array_values(array_filter(array_column($horsWeb['body']['data']['offWebshopCategories'] ?? [], 'name'), static fn (string $n): bool => $n === 'Bûches' || stripos($n, 'B2B') === 0)) === []
+        && array_keys($horsWeb['body']['data']['products'] ?? []) !== [] && array_column($horsWeb['body']['data']['products'], 'id') === array_keys($prods),
+    json_encode($horsWeb['body']['data']['offWebshopCategories'] ?? $horsWeb['body']));
 check('catalogues : paramètre illisible (422)', call($catRouter, 'GET', '/api/v1/marketing/catalogue-products', ['shopIds' => 'a'])['status'] === 422
     && call($catRouter, 'GET', '/api/v1/marketing/catalogue-products', ['pirate' => '1'])['status'] === 422);
 
