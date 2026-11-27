@@ -597,7 +597,7 @@
 .cat-pd--pleine .cat-pd__head { flex: 0 0 auto; margin: auto calc(-1 * var(--u) * 11mm) calc(-1 * var(--u) * 11mm); padding: calc(var(--u) * 7mm) calc(var(--u) * 11mm) calc(var(--u) * 10mm); }
 .cat-pd--liste .cat-pd__head { justify-content: flex-start; }
 .cat-pd__kicker { font-weight: 400; overflow-wrap: anywhere; }
-.cat-pd__title { overflow-wrap: anywhere; max-height: 2.2em; overflow: hidden; }
+.cat-pd__title { overflow-wrap: anywhere; max-height: 2.5em; overflow: hidden; padding-top: 0.16em; }
 .cat-pd__text { white-space: pre-line; overflow: hidden; }
 .cat-pd__list { margin-top: calc(var(--u) * 2mm); }
 /* Une page libre (gamme par gamme) : la photo à fond perdu, ou l'illustration de la gamme voisine au centre. */

@@ -672,7 +672,7 @@ export function presTextStyle(t: Pick<CatalogueDocPresText, 'font' | 'size' | 'w
     fontWeight: PRES_WEIGHT[t.weight] ?? 400,
     color: t.color,
     textAlign: t.align,
-    ...(t.font === 'vank' ? { letterSpacing: '0.01em', lineHeight: 1.02 } : t.font === 'playwrite' ? { lineHeight: 1.6 } : { lineHeight: 1.45 }),
+    ...(t.font === 'vank' ? { letterSpacing: '0.01em', lineHeight: 1.08 } : t.font === 'playwrite' ? { lineHeight: 1.6 } : { lineHeight: 1.45 }),
   } as CSSProperties
 }
 
