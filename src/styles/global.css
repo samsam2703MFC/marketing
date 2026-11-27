@@ -3956,10 +3956,15 @@ table select,
 
 .monitor-actions {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: flex-start;
-  gap: 1rem;
+  gap: 8px;
   flex-wrap: wrap;
+}
+
+/* Le retour à gauche, les actions groupées à droite. */
+.monitor-actions > .btn--ghost {
+  margin-right: auto;
 }
 
 /* --- KPI du levier, étape « Budget & leviers » -----------------------------
