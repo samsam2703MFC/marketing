@@ -396,6 +396,8 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
 
       <div className="workspace__main">
         {/* Un écran du module Social ou la régie portent leur propre titre : rien au-dessus du cadre. */}
+        {/* Le cadre porte son propre titre à l'écran ; la page garde le sien pour les lecteurs d'écran. */}
+        {framed ? <h1 className="sr-only">{titleFor(role, route)}</h1> : null}
         {framed ? null : (
           <header className="topbar">
             <div>

@@ -62,7 +62,7 @@ export default function RetourView() {
     return (
       <div className="social-native">
         <section className="card retour__vide">
-          <h3>Aucune opération à mesurer pour l’instant</h3>
+          <h2 className="retour__vide-titre">Aucune opération à mesurer pour l’instant</h2>
           <p className="muted">
             Créez une opération (dates, boutiques, produits), puis ses publicités. Les résultats Meta et les ventes des produits — lues dans
             l’API TFBuddy — sont recalculés chaque heure, pour les opérations en cours ou finies depuis moins de 60 jours.

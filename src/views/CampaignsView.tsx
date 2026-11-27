@@ -134,6 +134,7 @@ export default function CampaignsView({
         <p className="muted">Aucune campagne ne correspond à ces filtres.</p>
       ) : null}
 
+      <h2 className="sr-only">Liste des campagnes</h2>
       <div className="campaign-grid">
         {(data ?? []).map((campaign) => (
           <CampaignCard

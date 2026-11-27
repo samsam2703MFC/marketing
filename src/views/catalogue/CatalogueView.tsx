@@ -34,7 +34,7 @@ import { SUPPORT_LABELS, SUPPORT_NOUNS, isLeaflet, leafletBlocked, leafletChecks
 import { Sheet as BrochureSheet, fontFaces, pageSize as brochurePageSize } from '../brochure/Pages'
 import type { Side } from '../brochure/Pages'
 import BROCHURE_CSS from '../brochure/brochure.css?inline'
-import Erreur from '../../components/Erreur'
+import Erreur, { MessageErreur } from '../../components/Erreur'
 
 /**
  * Les catalogues produits de la marque : prix du webshop, gammes (Noël, Saint-Nicolas…).
@@ -1893,7 +1893,11 @@ function OffersCard({
     <section className="card">
       <h2>Promotions et bundles</h2>
       {loading && !offers.length ? <p className="catv-note">Lecture des promotions de TFBuddy…</p> : null}
-      {error ? <p className="catv-warn">Promotions de TFBuddy illisibles : {error}. Rien n’est inventé : le catalogue n’en montre aucune.</p> : null}
+      {error ? (
+        <div className="catv-warn">
+          <MessageErreur texte={`Promotions de la caisse indisponibles : ${error}`} /> Le catalogue n’en montre aucune.
+        </div>
+      ) : null}
       {!loading && !error && !offers.length ? <p className="catv-note">Aucune promotion active dans TFBuddy pour ces produits et ces boutiques.</p> : null}
       <div className="catv-offers">
         {offers.map((offer) => {

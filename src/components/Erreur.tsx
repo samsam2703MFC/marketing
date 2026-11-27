@@ -53,6 +53,8 @@ const ADRESSES = { route: 'addresses' as Route, label: 'Adresses et réglages' }
 export function lireErreur(brut: string): ErreurLue {
   let texte = brut.trim()
   let remede: ErreurLue['remede'] = null
+  // Les remèdes cités par le message (« Paramètres → … ») : gardés quoi qu'il arrive à la phrase.
+  const chemins = [...texte.matchAll(CHEMIN)].map((m) => m[0])
 
   // Le service appelé n'existe pas à cette adresse (404 du routeur du module).
   if (/route inconnue\.?/i.test(texte)) {
@@ -63,14 +65,16 @@ export function lireErreur(brut: string): ErreurLue {
   if (/failed to connect|couldn['’]t connect|connection refused|could not resolve host|timed out|failed to fetch|networkerror|load failed/i.test(texte)) {
     const avant = texte.split(/\s*\(|\s*:\s*(?=failed|couldn|connection|could not|curl)/i)[0].trim()
     texte = avant && !/^(failed|couldn|connection|could|networkerror|load failed)/i.test(avant)
-      ? `${avant.replace(/[.\s]+$/, '')} : le serveur ne répond pas.`
+      ? /injoignable|ne répond pas/i.test(avant)
+        ? `${avant.replace(/[.\s]+$/, '')} : le serveur ne répond pas.`.replace(/\s*injoignable\s*:\s*le serveur ne répond pas/i, ' ne répond pas')
+        : `${avant.replace(/[.\s]+$/, '')} : le serveur ne répond pas.`
       : 'Le serveur ne répond pas : réessayez dans un instant ; si cela dure, vérifiez son adresse.'
     remede = remede ?? ADRESSES
   }
   // L'adresse de l'ERP (TFBuddy) n'est pas réglée.
   if (/MAR_ERP_API_BASE/.test(texte)) {
     texte = texte
-      .replace(/\(?\s*MAR_ERP_API_BASE\s*\)?\s*n[’']est pas renseignée?/i, 'l’adresse de l’ERP n’est pas réglée')
+      .replace(/\(?MAR_ERP_API_BASE\)?\s*n[’']est pas renseignée?/i, 'l’adresse de l’ERP n’est pas réglée')
       .replace(/\(?\s*MAR_ERP_API_BASE\s*\)?/g, '')
     remede = remede ?? { route: 'settings', label: 'Variables et clés' }
   }
@@ -80,7 +84,10 @@ export function lireErreur(brut: string): ErreurLue {
   // Les préfixes qui ne disent rien à l'utilisateur.
   texte = texte.replace(/^erreur interne\s*:\s*/i, '')
   // Les « Token Meta absent » : la connexion n'est pas faite.
-  texte = texte.replace(/\btoken Meta absent\b/gi, 'connexion à Meta non faite')
+  texte = texte
+    .replace(/\btoken Meta absent\b/gi, 'connexion à Meta non faite')
+    .replace(/saisissez-le dans/gi, 'saisissez la clé d’accès dans')
+    .replace(/\s*\(accès de Social\s*:[^)]*\)/gi, '')
   // Ce qui ne parle qu'au développeur : variables d'environnement, tables, adresses internes.
   texte = texte
     .replace(/\s*\(\s*`?(?:MAR|VITE|COCKPIT|SOCIAL)_[A-Z0-9_]+`?\s*\)/g, '')
@@ -97,6 +104,7 @@ export function lireErreur(brut: string): ErreurLue {
     texte = 'Le serveur a renvoyé une réponse illisible : réessayez dans un instant.'
   }
 
+  for (const chemin of chemins) if (!texte.includes(chemin)) texte = `${texte.replace(/[.\s]+$/, '')} — ${chemin}.`
   texte = texte.replace(/\s{2,}/g, ' ').replace(/\s+([.,])/g, '$1').trim()
   if (texte && texte[0] !== texte[0].toUpperCase()) texte = texte[0].toUpperCase() + texte.slice(1)
   // Un remède déjà cité dans le message (« Paramètres → … ») devient un lien : pas besoin d'un second.
@@ -167,8 +175,18 @@ export default function Erreur({ children, inline = false, className = '' }: { c
   if (brut === null) {
     return inline ? <span className={classes}>{children}</span> : <p className={classes}>{children}</p>
   }
-  const lu = lireErreur(brut)
-  const corps = (
+  const corps = <MessageErreur texte={brut} />
+  return inline ? (
+    <span className={classes}>{corps}</span>
+  ) : (
+    <div className={classes}>{corps}</div>
+  )
+}
+
+/** Le message lisible d'une erreur, sans cadre : pour un bandeau qui a déjà son style (avertissement, alerte). */
+export function MessageErreur({ texte }: { texte: string }) {
+  const lu = lireErreur(texte)
+  return (
     <>
       <TexteAvecRemedes texte={lu.texte} />
       {lu.remede ? (
@@ -184,10 +202,5 @@ export default function Erreur({ children, inline = false, className = '' }: { c
         </details>
       ) : null}
     </>
-  )
-  return inline ? (
-    <span className={classes}>{corps}</span>
-  ) : (
-    <div className={classes}>{corps}</div>
   )
 }

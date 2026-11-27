@@ -634,7 +634,16 @@ export default function RepostView() {
                 <span className="rp__intro">Chaque nouveau post de la Page « {d.marque.name} » est repris sur les Pages des boutiques cochées.</span>
 
                 <div className="rp__groupe">
-                  <span className="muted">Sur Facebook</span>
+                  <span className="muted">
+                    Sur Facebook
+                    <Aide
+                      texte={
+                        brouillon.mode === 'copie'
+                          ? 'Copier : la Page de la boutique publie le même visuel et le même texte, comme son propre post. Une vidéo ou un lien sont partagés.'
+                          : 'Partager : la Page de la boutique partage le post de la marque, un lien vers lui, avec le texte de la boutique au-dessus.'
+                      }
+                    />
+                  </span>
                   <div className="seg" role="group" aria-label="Mode Facebook">
                     {(
                       [
@@ -647,22 +656,20 @@ export default function RepostView() {
                       </button>
                     ))}
                   </div>
-                  <span className="muted rp__aide">
-                    {brouillon.mode === 'copie'
-                      ? 'La Page de la boutique publie le même visuel et le même texte, comme son propre post. Une vidéo ou un lien sont partagés.'
-                      : 'La Page de la boutique partage le post de la marque : un lien vers lui, avec le texte de la boutique au-dessus.'}
-                  </span>
                 </div>
 
                 <label className={`rp__case-a-cocher${igU ? ' is-off' : ''}`}>
                   <input type="checkbox" checked={!!brouillon.instagram} disabled={igU} onChange={() => !igU && setD((y) => void (y.instagram = !y.instagram))} />
                   <span>
-                    <span>Aussi une copie sur l’Instagram de chaque boutique</span>
-                    <span className="muted rp__aide">
-                      {igU
-                        ? 'Instagram unique au réseau : le compte du réseau est celui de la marque, il n’y a rien à reposter.'
-                        : 'Instagram n’a pas de repost : la boutique publie une copie (même visuel, même texte). Seulement les boutiques qui ont leur compte.'}
+                    <span>
+                      Aussi une copie sur l’Instagram de chaque boutique
+                      {igU ? null : (
+                        <Aide texte="Instagram n’a pas de repost : la boutique publie une copie (même visuel, même texte). Seulement les boutiques qui ont leur compte." />
+                      )}
                     </span>
+                    {igU ? (
+                      <span className="muted rp__aide">Instagram unique au réseau : le compte du réseau est celui de la marque, il n’y a rien à reposter.</span>
+                    ) : null}
                   </span>
                 </label>
 
