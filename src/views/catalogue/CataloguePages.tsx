@@ -1,9 +1,11 @@
 import type { CSSProperties } from 'react'
-import { CATALOGUE_COVER_FONTS, CATALOGUE_RULE_DEFAULT, isDocOffer } from '../../lib/api/module'
+import { CATALOGUE_COVER_FONTS, CATALOGUE_PRES_SLOTS, CATALOGUE_RULE_DEFAULT, isDocOffer } from '../../lib/api/module'
 import type {
   CatalogueCoverFont,
+  CatalogueDocDesign,
   CatalogueDocLook,
   CatalogueDocFiller,
+  CatalogueDocPresText,
   CatalogueDocItem,
   CatalogueDocOffer,
   CatalogueDocPage,
@@ -519,6 +521,10 @@ export function freeRows(layout: CatalogueLayout, count: number): number {
 }
 
 function Products({ page, lang }: { page: Extract<CatalogueDocPage, { kind: 'products' }>; lang: CatalogueLang }) {
+  // Une page libre (gamme par gamme) : toute la page à la photo ou à l'illustration de la gamme voisine, sans titre.
+  if (page.free) {
+    return <div className={`cat-free${page.filler ? ` cat-free--${page.filler.kind}` : ''}`}>{page.filler ? <Filler filler={page.filler} /> : null}</div>
+  }
   const [first, ...rest] = page.products
   const template = page.template ?? 'A'
   const filler = page.filler ?? null
@@ -625,6 +631,7 @@ function ProductList({ products, lang, family }: { products: CatalogueDocItem[];
  * et au choix la liste de ses produits avec leurs prix.
  */
 function Presentation({ page, lang }: { page: Extract<CatalogueDocPage, { kind: 'presentation' }>; lang: CatalogueLang }) {
+  if (page.design) return <PresentationDesign page={page} design={page.design} lang={lang} />
   const drawing = drawingAsset(page.drawing)
   const withList = page.layout === 'presentation_liste'
   // « Photo pleine » préfère la photo ; les deux autres, le dessin au trait.
@@ -649,6 +656,92 @@ function Presentation({ page, lang }: { page: Extract<CatalogueDocPage, { kind: 
           <ProductList products={page.products} lang={lang} family={famOf(page)} />
         </div>
       ) : null}
+      {withList ? <AvailabilityFooter text={page.availabilityFooter} /> : null}
+    </div>
+  )
+}
+
+const PRES_WEIGHT: Record<string, number> = { light: 300, regular: 400, medium: 500, bold: 700 }
+
+/** Le style d'un texte d'une présentation (gamme par gamme) : police de la charte, taille en points, graisse, couleur, alignement. */
+export function presTextStyle(t: Pick<CatalogueDocPresText, 'font' | 'size' | 'weight' | 'color' | 'align'>): CSSProperties {
+  const css = CATALOGUE_COVER_FONTS.find((f) => f.id === t.font)?.css
+  return {
+    fontFamily: css,
+    fontSize: `calc(var(--u) * ${t.size}pt)`,
+    fontWeight: PRES_WEIGHT[t.weight] ?? 400,
+    color: t.color,
+    textAlign: t.align,
+    ...(t.font === 'vank' ? { letterSpacing: '0.01em', lineHeight: 1.08 } : t.font === 'playwrite' ? { lineHeight: 1.6 } : { lineHeight: 1.45 }),
+  } as CSSProperties
+}
+
+/** Une photo dans sa case, cadrée : position (x, y en %) et agrandissement (zoom en %) — les mêmes à l'écran et à l'impression. */
+export function CroppedPhoto({ url, x, y, zoom, className = '' }: { url: string | null; x: number; y: number; zoom: number; className?: string }) {
+  return (
+    <div className={`cat-pd__ph ${url ? '' : 'is-empty'} ${className}`}>
+      {url ? (
+        <img
+          src={url}
+          alt=""
+          style={{ objectPosition: `${x}% ${y}%`, transform: zoom !== 100 ? `scale(${zoom / 100})` : undefined, transformOrigin: `${x}% ${y}%` }}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * La page de présentation d'une gamme, gamme par gamme (maquettes M2-2 et M3, 27/11/2026) : ses photos dans la
+ * disposition choisie (1 grande · 2 · 3 en mosaïque · pleine page), son accroche, son titre et son texte dans leurs
+ * styles, sur un fond de couleur ou une photo pleine page sous un voile ; au choix, la liste de ses produits.
+ */
+function PresentationDesign({ page, design, lang }: { page: Extract<CatalogueDocPage, { kind: 'presentation' }>; design: CatalogueDocDesign; lang: CatalogueLang }) {
+  const withList = page.layout === 'presentation_liste'
+  const slots = CATALOGUE_PRES_SLOTS[design.layout]
+  const photos = Array.from({ length: slots }, (_, i) => design.photos[i] ?? { url: null, x: 50, y: 50, zoom: 100 })
+  const light = ['#FFFFFF', '#F5EFE4'].includes(design.title.color.toUpperCase())
+  const full = design.layout === 'pleine'
+  return (
+    <div className={`cat-pd cat-pd--${design.layout}${withList ? ' cat-pd--liste' : ''}`}>
+      {design.background.imageUrl ? (
+        <div className="cat-pd__bg">
+          <img src={design.background.imageUrl} alt="" />
+          <i style={{ background: light ? '#000' : design.background.color, opacity: design.background.veil / 100 }} />
+        </div>
+      ) : null}
+      {full ? (
+        <div className="cat-pd__bg">
+          <CroppedPhoto {...photos[0]} />
+        </div>
+      ) : (
+        <div className="cat-pd__photos">
+          {photos.map((ph, i) => (
+            <CroppedPhoto key={i} {...ph} className={`cat-pd__ph--${i}`} />
+          ))}
+        </div>
+      )}
+      <div className="cat-pd__head" style={full ? { background: design.background.color } : undefined}>
+        {design.kicker.text ? (
+          <div className="cat-pd__kicker" style={presTextStyle(design.kicker)}>
+            {design.kicker.text}
+          </div>
+        ) : null}
+        <div className="cat-pd__title" style={presTextStyle(design.title)} data-fit="Titre de la présentation">
+          {/* La Vank en capitales, écrites (pas par CSS : les accents tombaient, « EPIPHANIE »). */}
+          {design.title.font === 'vank' ? design.title.text.toLocaleUpperCase(lang === 'nl' ? 'nl-BE' : 'fr-BE') : design.title.text}
+        </div>
+        {design.text.text ? (
+          <div className="cat-pd__text" style={presTextStyle(design.text)}>
+            {design.text.text}
+          </div>
+        ) : null}
+        {withList && page.products.length ? (
+          <div className="cat-pres__list cat-pd__list" data-fit={page.title}>
+            <ProductList products={page.products} lang={lang} family={famOf(page)} />
+          </div>
+        ) : null}
+      </div>
       {withList ? <AvailabilityFooter text={page.availabilityFooter} /> : null}
     </div>
   )
@@ -838,6 +931,8 @@ export function CataloguePage({ doc, index }: { doc: CatalogueDocument; index: n
     '--i': doc.charter.colors.ink,
     // Les filets et les tirets des listes (abricot par défaut, 21/11/2026).
     '--ab': doc.charter.colors.rule ?? CATALOGUE_RULE_DEFAULT,
+    // Gamme par gamme : le fond choisi de la présentation, jusqu'au fond perdu ; sa gamme pour les filets.
+    ...(page.kind === 'presentation' && page.design ? { background: page.design.background.color, '--g': page.design.gammeColor } : {}),
   } as CSSProperties
   return (
     <div className={`cat-face cat-face--${page.kind}${page.kind === 'products' || page.kind === 'presentation' ? ` cat-face--t${page.template ?? 'A'}` : ''}${page.kind === 'cover' ? ` cat-face--cover${page.template ?? 'A'}` : ''}`} style={style} lang={doc.version.lang}>

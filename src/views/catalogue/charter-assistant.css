@@ -210,3 +210,11 @@
 .cha-mini .qr--left { left: 8px; top: 62px; width: 16px; height: 16px; }
 .cha-mini .qr--right { left: 36px; top: 62px; width: 16px; height: 16px; }
 .cha-shopphoto img { width: 72px; height: 48px; object-fit: cover; border-radius: 4px; }
+
+/* La couleur d'une gamme (gamme par gamme, 27/11/2026) : la palette des gammes, enregistrée tout de suite. */
+.cha-gcolor { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.cha-gcolor__lab { font-size: 12px; color: var(--muted-2); margin-right: 4px; }
+.cha-gcolor__hint { font-size: 11.5px; color: var(--muted); }
+.cha-gcolor__sw { width: 22px; height: 22px; border-radius: 50%; border: 0; cursor: pointer; padding: 0; }
+.cha-gcolor__sw.is-on { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent); }
+.cha-gcolor__sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

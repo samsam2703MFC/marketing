@@ -768,7 +768,10 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
   const failed = useRef<string | null>(null)
   const savedTitle = useRef(initial.title)
   function change(patch: api.CatalogueUpdate) {
-    setCat((current) => ({ ...current, ...patch }))
+    // Les présentations (gamme par gamme) s'écrivent sans leurs images lues : la réponse du serveur les rend complètes.
+    const { presentations: _written, ...shown } = patch
+    void _written
+    setCat((current) => ({ ...current, ...shown }))
     setSave({ status: 'saving' })
     queue.current = queue.current
       .then(() => api.updateCatalogue(cat.id, patch))

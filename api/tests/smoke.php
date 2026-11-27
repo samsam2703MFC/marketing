@@ -5224,6 +5224,8 @@ $catRouter->put('/api/v1/marketing/catalogue-charter', [$catBrand, 'saveCharter'
 $catRouter->get('/api/v1/marketing/catalogue-charter/checks', [$catBrand, 'charterChecks']);
 $catRouter->put('/api/v1/marketing/catalogue-shops/{id}', [$catBrand, 'saveShop']);
 $catRouter->get('/api/v1/marketing/catalogue-charter/publications', [$catBrand, 'charterVersions']);
+$catRouter->get('/api/v1/marketing/catalogue-gammes', [$catBrand, 'gammes']);
+$catRouter->put('/api/v1/marketing/catalogue-gammes/{id}', [$catBrand, 'saveGamme']);
 $catRouter->post('/api/v1/marketing/catalogue-charter/publications', [$catBrand, 'publishCharter']);
 $SB = '/api/v1/integration/marketing/shops/{shopId}';
 $catRouter->get($SB . '/catalogue-products', [$catShop, 'products'], true);
@@ -6673,6 +6675,220 @@ check('l’illustration d’une catégorie : le dessin de sa famille (celui des 
         && array_key_exists('drawing', $pE[2] ?? []) && $pE[2]['drawing'] === null && $pE[2]['drawingUrl'] === null,
     json_encode([$pE[2]['drawing'] ?? null, $pE[2]['drawingUrl'] ?? null]));
 call($catRouter, 'DELETE', '/api/v1/marketing/catalogues/' . $idPc);
+
+// Gamme par gamme (27/11/2026, maquettes M1 · M2 · M3) : le catalogue se range en blocs — les produits hors gamme d'abord,
+// puis chaque gamme (sa présentation sur une page de GAUCHE, paire ; ses catégories en face) ; une page libre s'intercale
+// quand le compte ne tombe pas juste. La couleur d'une gamme et le modèle de sa présentation sont réglés une fois.
+echo "\nCatalogues : gamme par gamme\n";
+$pdo->exec("DELETE FROM mar_catalogue_gamme WHERE gamme_id IN (14, 16)");
+$pdo->exec("DELETE FROM mar_media WHERE sha256 LIKE 'catgam%'");
+$pdo->exec("INSERT INTO mar_media (kind, file_path, mime, bytes, sha256, name, shop_id, archived_at, width, height) VALUES
+    ('image', 'media/test/gamme-buffet.jpg', 'image/jpeg', 1000, RPAD('catgam-buffet', 64, '0'), 'Buffet (test)', NULL, NULL, 3200, 2400),
+    ('image', 'media/test/gamme-tartes.jpg', 'image/jpeg', 1000, RPAD('catgam-tartes', 64, '0'), 'Tartes (test)', NULL, NULL, 1200, 900),
+    ('image', 'media/test/gamme-boutique.jpg', 'image/jpeg', 1000, RPAD('catgam-boutique', 64, '0'), 'Boutique (test)', $catA, NULL, 800, 600),
+    ('image', 'media/test/gamme-vieille.jpg', 'image/jpeg', 1000, RPAD('catgam-vieille', 64, '0'), 'Vieille (test)', NULL, NOW(), 800, 600)");
+$mGam = [];
+foreach ($pdo->query("SELECT sha256, id FROM mar_media WHERE sha256 LIKE 'catgam%'") as $m) {
+    $mGam[rtrim(substr((string) $m['sha256'], 7), '0')] = (int) $m['id'];
+}
+$G = '/api/v1/marketing/catalogue-gammes';
+AuthContext::clear();
+$gam401 = call($router, 'GET', $G);
+AuthContext::set(77, 'FRANCHISEE', 1, [1]);
+$gam403 = [call($catRouter, 'GET', $G), call($catRouter, 'PUT', $G . '/14', [], ['color' => '#3F7A52'])];
+AuthContext::set(1, 'BRAND_ADMIN', 1);
+$gamListe = call($catRouter, 'GET', $G);
+$parG = array_column($gamListe['body']['data'] ?? [], null, 'id');
+check('gammes : 401 sans identité, 403 compte de boutique ; la liste — la couleur par défaut de la palette (Saint-Nicolas : brique), pas de modèle',
+    $gam401['status'] === 401 && array_map(static fn (array $r): int => $r['status'], $gam403) === [403, 403]
+        && $gamListe['status'] === 200 && array_keys($parG) === [14, 16] && ($parG[16]['color'] ?? '') === '#8D1D2C' && ($parG[16]['colorSet'] ?? true) === false
+        && ($parG[14]['color'] ?? '') === '#3F7A52' && array_key_exists('presentation', $parG[14] ?? []) && $parG[14]['presentation'] === null
+        && ($gamListe['body']['meta']['pagination']['total'] ?? 0) === 2,
+    json_encode([$gam401['status'], $gamListe['body']], JSON_UNESCAPED_UNICODE));
+
+$modele = ['layout' => 'deux', 'photos' => [['mediaId' => $mGam['buffet'], 'x' => 30, 'y' => 60, 'zoom' => 150], ['mediaId' => $mGam['tartes']]],
+    'title' => ['fr' => '  Noël & Nouvel An ', 'nl' => 'Kerst & Nieuwjaar', 'font' => 'vank', 'size' => 48, 'color' => 'gamme', 'align' => 'center'],
+    'kicker' => ['fr' => 'Les douceurs des fêtes', 'font' => 'playwrite', 'size' => 14],
+    'text' => ['fr' => 'Bûches, cougnous et plateaux du réveillon.', 'nl' => 'Stronken, kerstbrood en schotels.', 'weight' => 'light'],
+    'background' => ['kind' => 'color', 'color' => 'gamme-pale']];
+$gamPut = call($catRouter, 'PUT', $G . '/14', [], ['color' => '#78554b', 'presentation' => $modele]);
+$gamRelu = array_column(call($catRouter, 'GET', $G)['body']['data'] ?? [], null, 'id')[14] ?? [];
+$pm = $gamRelu['presentation'] ?? [];
+check('gammes : la couleur réglée (palette, en capitales) et le modèle de la présentation — relus dans un ordre de clés fixe, les défauts complétés, l’adresse et la taille de chaque photo',
+    $gamPut['status'] === 200 && ($gamRelu['color'] ?? '') === '#78554B' && ($gamRelu['colorSet'] ?? false) === true
+        && array_keys($pm) === ['layout', 'photos', 'title', 'kicker', 'text', 'background'] && ($pm['layout'] ?? '') === 'deux'
+        && array_keys($pm['title'] ?? []) === ['fr', 'nl', 'font', 'size', 'weight', 'color', 'align'] && ($pm['title']['fr'] ?? '') === 'Noël & Nouvel An'
+        && ($pm['photos'][0] ?? [])['x'] === 30 && ($pm['photos'][1]['zoom'] ?? 0) === 100 && array_keys($pm['photos'][0] ?? []) === ['mediaId', 'x', 'y', 'zoom', 'image']
+        && ($pm['photos'][0]['image']['width'] ?? 0) === 3200 && str_ends_with((string) ($pm['photos'][0]['image']['url'] ?? ''), 'gamme-buffet.jpg')
+        && ($pm['kicker']['font'] ?? '') === 'playwrite' && ($pm['text']['weight'] ?? '') === 'light' && ($pm['text']['size'] ?? 0) === 9
+        && ($pm['background'] ?? []) === ['kind' => 'color', 'color' => 'gamme-pale', 'mediaId' => null, 'veil' => 40, 'image' => null],
+    json_encode([$gamPut['body'], $pm], JSON_UNESCAPED_UNICODE));
+$gamRefus = [
+    call($catRouter, 'PUT', $G . '/14', [], ['color' => '#123456']),
+    call($catRouter, 'PUT', $G . '/14', [], ['presentation' => ['title' => ['size' => 13]]]),
+    call($catRouter, 'PUT', $G . '/14', [], ['presentation' => ['photos' => [['mediaId' => $mGam['vieille']]]]]),
+    call($catRouter, 'PUT', $G . '/14', [], ['presentation' => ['photos' => [['mediaId' => $mGam['boutique']]]]]),
+    call($catRouter, 'PUT', $G . '/14', [], ['presentation' => ['layout' => 'cinq']]),
+    call($catRouter, 'PUT', $G . '/14', [], ['presentation' => ['background' => ['kind' => 'photo']]]),
+    call($catRouter, 'PUT', $G . '/14', [], ['presentation' => ['text' => ['color' => '#ff0000']]]),
+    call($catRouter, 'PUT', $G . '/14', [], ['couleur' => 'vert']),
+];
+$gam404 = call($catRouter, 'PUT', $G . '/999', [], ['color' => '#3F7A52']);
+check('gammes : refusés (422, champ nommé) — couleur hors palette, taille hors liste, photo archivée ou d’une boutique, disposition inconnue, fond photo sans photo, couleur libre, champ inconnu ; gamme inconnue (404) ; rien n’est écrit',
+    array_map(static fn (array $r): array => [$r['status'], $r['body']['error']['details'][0]['field'] ?? ''], $gamRefus) === [
+        [422, 'color'], [422, 'presentation.title.size'], [422, 'presentation.photos[0].mediaId'], [422, 'presentation.photos[0].mediaId'],
+        [422, 'presentation.layout'], [422, 'presentation.background.mediaId'], [422, 'presentation.text.color'], [422, 'couleur']]
+        && $gam404['status'] === 404 && ($gam404['body']['error']['code'] ?? '') === 'RESOURCE_NOT_FOUND'
+        && (array_column(call($catRouter, 'GET', $G)['body']['data'] ?? [], null, 'id')[14]['color'] ?? '') === '#78554B',
+    json_encode(array_map(static fn (array $r): mixed => $r['body'], $gamRefus), JSON_UNESCAPED_UNICODE));
+
+// Un catalogue des deux boutiques, quatre produits : Bûches (11, 12 — Noël), Cougnou (13 — Noël), Pain d'épices (14 — Noël
+// et Saint-Nicolas) ; catégorie 500 = Bûches, 600 = Viennoiseries de fête.
+$parGam = call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Gamme par gamme', 'source' => ['kind' => 'choix'], 'shopIds' => [$catA, $catB], 'langs' => ['fr', 'nl'], 'pageCount' => 8,
+    'products' => [['id' => 11, 'on' => true], ['id' => 12, 'on' => true], ['id' => 13, 'on' => true], ['id' => 14, 'on' => true]]]);
+$idGam = (int) ($parGam['body']['data']['id'] ?? 0);
+$pagesAvant = $parGam['body']['data']['pages'] ?? null;
+check('gamme par gamme : un catalogue d’avant n’a pas de blocs (null) — ses pages ne changent pas',
+    $parGam['status'] === 201 && array_key_exists('gammeBlocks', $parGam['body']['data'] ?? []) && $parGam['body']['data']['gammeBlocks'] === null
+        && ($parGam['body']['data']['gammesOk'] ?? null) === [] && ($parGam['body']['data']['presentations'] ?? null) == new stdClass()
+        && $pagesAvant === [['layout' => 'vedette', 'category' => 500], ['layout' => 'grille', 'category' => 600], ['layout' => 'grille', 'category' => null], ['layout' => 'grille', 'category' => null]],
+    json_encode($parGam['body'], JSON_UNESCAPED_UNICODE));
+// Un seul bloc, Saint-Nicolas : Bûches et Cougnou sont hors gamme (avant), Pain d'épices dans le bloc ; la présentation tombe
+// en page 5 (impaire) : une page libre s'intercale, la présentation est en page 6, le Pain d'épices en page 7 ; 10 pages.
+$bloc16 = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idGam, [], ['gammeBlocks' => [16]]);
+$doc16 = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idGam . '/document')['body']['data']['pages'] ?? [];
+check('gamme par gamme : hors gamme d’abord, puis la gamme — page libre intercalée, présentation sur une page paire (6), ses produits en face (7) ; le catalogue grandit par 2',
+    $bloc16['status'] === 200 && ($bloc16['body']['data']['gammeBlocks'] ?? null) === [16] && ($bloc16['body']['data']['pageCount'] ?? 0) === 10
+        && ($bloc16['body']['data']['pages'] ?? null) === [
+            ['layout' => 'grille', 'category' => 500], ['layout' => 'grille', 'category' => 600], ['layout' => 'grille', 'category' => null],
+            ['layout' => 'presentation', 'category' => null, 'gamme' => 16], ['layout' => 'grille', 'category' => 600, 'gamme' => 16], ['layout' => 'grille', 'category' => null]]
+        && array_column($doc16[2]['products'] ?? [], 'id') === [11, 12] && array_column($doc16[3]['products'] ?? [], 'id') === [13]
+        && ($doc16[4]['kind'] ?? '') === 'products' && ($doc16[4]['products'] ?? null) === [] && ($doc16[4]['free'] ?? false) === true && ($doc16[4]['title'] ?? 'x') === ''
+        && ($doc16[2]['free'] ?? true) === false && ($doc16[5]['kind'] ?? '') === 'presentation' && ($doc16[5]['gamme'] ?? 0) === 16
+        && array_column($doc16[6]['products'] ?? [], 'id') === [14] && count($doc16) === 10,
+    json_encode([$bloc16['body']['data']['pages'] ?? $bloc16['body'], array_map(static fn (array $p): array => [$p['kind'], array_column($p['products'] ?? [], 'id')], $doc16)]));
+// Deux blocs, Saint-Nicolas puis Noël (le modèle de Noël arrive avec lui) : plus de hors gamme ; « Viennoiseries de fête »
+// est dans les deux gammes, pas avec les mêmes produits (Saint-Nicolas : Pain d'épices ; Noël : Cougnou ET Pain d'épices).
+$bloc2 = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idGam, [], ['gammeBlocks' => [16, 14]]);
+$doc2 = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idGam . '/document');
+$p2 = $doc2['body']['data']['pages'] ?? [];
+$codes2 = array_column($doc2['body']['data']['warnings'] ?? [], 'code');
+check('gamme par gamme : une catégorie dans deux gammes — chaque page (gamme, catégorie) ne prend que les produits de sa gamme ; un produit des deux paraît dans les deux',
+    $bloc2['status'] === 200 && ($bloc2['body']['data']['pages'] ?? null) === [
+            ['layout' => 'grille', 'category' => null], ['layout' => 'presentation', 'category' => null, 'gamme' => 16], ['layout' => 'grille', 'category' => 600, 'gamme' => 16],
+            ['layout' => 'presentation', 'category' => null, 'gamme' => 14], ['layout' => 'grille', 'category' => 500, 'gamme' => 14], ['layout' => 'grille', 'category' => 600, 'gamme' => 14]]
+        && ($bloc2['body']['data']['pageCount'] ?? 0) === 10
+        && array_column($p2[4]['products'] ?? [], 'id') === [14] && array_column($p2[6]['products'] ?? [], 'id') === [11, 12] && array_column($p2[7]['products'] ?? [], 'id') === [13, 14]
+        && !in_array('PRODUCTS_OVERFLOW', $codes2, true) && ($p2[3]['kind'] ?? '') === 'presentation' && ($p2[5]['kind'] ?? '') === 'presentation',
+    json_encode([$bloc2['body']['data']['pages'] ?? $bloc2['body'], array_map(static fn (array $p): array => [$p['kind'], array_column($p['products'] ?? [], 'id')], $p2), $codes2]));
+$pres14 = ((array) ($bloc2['body']['data']['presentations'] ?? []))[14] ?? null;
+$design = $p2[5]['design'] ?? [];
+check('gamme par gamme : la présentation d’une gamme qui arrive part de son modèle ; le document l’imprime — photos cadrées, textes stylés, couleurs de la gamme, fond pâle',
+    is_array($pres14) && ($pres14['layout'] ?? '') === 'deux' && ($pres14['title']['fr'] ?? '') === 'Noël & Nouvel An'
+        && ($p2[5]['title'] ?? '') === 'Noël & Nouvel An' && ($p2[5]['text'] ?? '') === 'Bûches, cougnous et plateaux du réveillon.'
+        && ($design['layout'] ?? '') === 'deux' && ($design['gammeColor'] ?? '') === '#78554B' && ($design['title']['color'] ?? '') === '#78554B'
+        && ($design['title']['size'] ?? 0) === 48 && ($design['title']['align'] ?? '') === 'center' && ($design['kicker']['text'] ?? '') === 'Les douceurs des fêtes'
+        && ($design['photos'][0]['x'] ?? 0) === 30 && ($design['photos'][0]['zoom'] ?? 0) === 150 && str_ends_with((string) ($design['photos'][0]['url'] ?? ''), 'gamme-buffet.jpg')
+        && ($design['background']['color'] ?? '') === $CS::paleOf('#78554B') && array_key_exists('imageUrl', $design['background'] ?? []) && $design['background']['imageUrl'] === null
+        && array_key_exists('design', $p2[3] ?? []) && $p2[3]['design'] === null,
+    json_encode([$pres14, $p2[5] ?? null], JSON_UNESCAPED_UNICODE));
+$doc2nl = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idGam . '/document', ['lang' => 'nl'])['body']['data'] ?? [];
+check('gamme par gamme : en néerlandais, les textes NL de la présentation ; l’accroche sans NL garde le français et le document le dit',
+    ($doc2nl['pages'][5]['design']['title']['text'] ?? '') === 'Kerst & Nieuwjaar' && ($doc2nl['pages'][5]['text'] ?? '') === 'Stronken, kerstbrood en schotels.'
+        && ($doc2nl['pages'][5]['design']['kicker']['text'] ?? '') === 'Les douceurs des fêtes'
+        && in_array('Page 6 : texte néerlandais de la présentation à écrire — le français est imprimé.', array_column($doc2nl['warnings'] ?? [], 'message'), true),
+    json_encode([$doc2nl['pages'][5] ?? null, $doc2nl['warnings'] ?? null], JSON_UNESCAPED_UNICODE));
+// La présentation propre au catalogue : on la change ici, le modèle ne bouge pas ; « Enregistrer comme modèle » est un PUT de la gamme.
+$propre = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idGam, [], ['presentations' => ['14' => ['layout' => 'pleine', 'photos' => [['mediaId' => $mGam['boutique'], 'x' => 10, 'y' => 90, 'zoom' => 200]],
+    'title' => ['fr' => 'Les fêtes', 'color' => 'blanc', 'font' => 'gotham', 'size' => 36, 'weight' => 'bold'], 'background' => ['kind' => 'photo', 'mediaId' => $mGam['tartes'], 'veil' => 50]]], 'gammesOk' => [16]]);
+$docPropre = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idGam . '/document')['body']['data']['pages'][5]['design'] ?? [];
+$modeleApres = array_column(call($catRouter, 'GET', $G)['body']['data'] ?? [], null, 'id')[14]['presentation']['title']['fr'] ?? '';
+check('gamme par gamme : la présentation du catalogue est la sienne (photo d’une boutique du catalogue permise, fond photo et voile) ; le modèle reste ; les gammes validées',
+    $propre['status'] === 200 && ($docPropre['layout'] ?? '') === 'pleine' && ($docPropre['title']['color'] ?? '') === '#FFFFFF' && ($docPropre['title']['weight'] ?? '') === 'bold'
+        && str_ends_with((string) ($docPropre['background']['imageUrl'] ?? ''), 'gamme-tartes.jpg') && ($docPropre['background']['veil'] ?? 0) === 50
+        && $modeleApres === 'Noël & Nouvel An' && ($propre['body']['data']['gammesOk'] ?? null) === [16],
+    json_encode([$propre['body'], $docPropre], JSON_UNESCAPED_UNICODE));
+// Les clés de la présentation relue dans le désordre (MySQL 8 réordonne les clés JSON) : rendues dans l'ordre fixe.
+$brut = json_decode((string) $pdo->query('SELECT settings FROM mar_catalogue WHERE id = ' . $idGam)->fetchColumn(), true);
+$brut['presentations']['14'] = array_reverse($brut['presentations']['14'], true);
+$brut['presentations']['14']['title'] = array_reverse($brut['presentations']['14']['title'], true);
+$brut['presentations']['14']['photos'][0] = array_reverse($brut['presentations']['14']['photos'][0], true);
+$pdo->prepare('UPDATE mar_catalogue SET settings = ? WHERE id = ?')->execute([json_encode($brut, JSON_UNESCAPED_UNICODE), $idGam]);
+$relu = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idGam)['body']['data'] ?? [];
+$reluP = (array) ($relu['presentations'] ?? []);
+$reluP = $reluP['14'] ?? $reluP[14] ?? [];
+check('gamme par gamme : la présentation relue dans un ordre de clés fixe, quel que soit l’ordre en base',
+    array_keys($reluP) === ['layout', 'photos', 'title', 'kicker', 'text', 'background'] && array_keys($reluP['title'] ?? []) === ['fr', 'nl', 'font', 'size', 'weight', 'color', 'align']
+        && array_keys($reluP['photos'][0] ?? []) === ['mediaId', 'x', 'y', 'zoom', 'image'],
+    json_encode($reluP));
+// Réordonner les catégories dans un bloc (les pages envoyées) : l'ordre est gardé ; une page hors bloc est rangée à sa place.
+$ordre = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idGam, [], ['pages' => [
+    ['layout' => 'presentation', 'category' => null, 'gamme' => 14], ['layout' => 'liste', 'category' => 600, 'gamme' => 14], ['layout' => 'grille', 'category' => 500, 'gamme' => 14],
+    ['layout' => 'grille', 'category' => 600, 'gamme' => 16], ['layout' => 'presentation', 'category' => null, 'gamme' => 16], ['layout' => 'grille', 'category' => null]]]);
+check('gamme par gamme : des pages envoyées dans le désordre — rangées par blocs (Saint-Nicolas puis Noël), l’ordre des catégories dans un bloc gardé, la présentation toujours à gauche',
+    $ordre['status'] === 200 && ($ordre['body']['data']['pages'] ?? null) === [
+        ['layout' => 'grille', 'category' => null], ['layout' => 'presentation', 'category' => null, 'gamme' => 16], ['layout' => 'grille', 'category' => 600, 'gamme' => 16],
+        ['layout' => 'presentation', 'category' => null, 'gamme' => 14], ['layout' => 'liste', 'category' => 600, 'gamme' => 14], ['layout' => 'grille', 'category' => 500, 'gamme' => 14]],
+    json_encode($ordre['body']['data']['pages'] ?? $ordre['body']));
+// Réordonner les blocs : Noël d'abord ; il faut alors une seconde page libre (la présentation de Saint-Nicolas tomberait en 7).
+$inverse = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idGam, [], ['gammeBlocks' => [14, 16]]);
+check('gamme par gamme : les blocs réordonnés — les catégories suivent leur gamme, une page libre de plus, 12 pages',
+    $inverse['status'] === 200 && ($inverse['body']['data']['pageCount'] ?? 0) === 12 && array_map(static fn (array $p): string => $p['layout'] . ':' . ($p['category'] ?? '-') . ':' . ($p['gamme'] ?? '-'), $inverse['body']['data']['pages'] ?? []) === [
+        'grille:-:-', 'presentation:-:14', 'liste:600:14', 'grille:500:14', 'grille:-:-', 'presentation:-:16', 'grille:600:16', 'grille:-:-'],
+    json_encode($inverse['body']['data']['pages'] ?? $inverse['body']));
+$refusBlocs = [
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idGam, [], ['gammeBlocks' => [999]]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idGam, [], ['gammeBlocks' => 'noel']),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idGam, [], ['gammeBlocks' => [14, 14]]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idGam, [], ['gammesOk' => [99]]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idGam, [], ['presentations' => ['14' => ['layout' => 'cinq']]]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idGam, [], ['presentations' => ['14' => ['photos' => [['mediaId' => $mGam['vieille']]]]]]),
+    call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idGam, [], ['pageCount' => 8]),
+];
+check('gamme par gamme : refusés (422) — gamme inconnue, liste invalide, doublon, gamme validée hors des blocs, présentation invalide, photo archivée ; à 8 pages les gammes ne tiennent plus (CATALOGUE_PAGES_OVERFLOW, bloc par bloc)',
+    array_map(static fn (array $r): array => [$r['status'], $r['body']['error']['details'][0]['field'] ?? ''], $refusBlocs) === [
+        [422, 'gammeBlocks[0]'], [422, 'gammeBlocks'], [422, 'gammeBlocks'], [422, 'gammesOk'], [422, 'presentations.14.layout'], [422, 'presentations.14.photos[0].mediaId'], [422, 'gammeBlocks']]
+        && ($refusBlocs[6]['body']['error']['code'] ?? '') === 'CATALOGUE_PAGES_OVERFLOW' && count($refusBlocs[6]['body']['error']['details'] ?? []) === 2
+        && (call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idGam)['body']['data']['pageCount'] ?? 0) === 12,
+    json_encode(array_map(static fn (array $r): mixed => $r['body'], $refusBlocs), JSON_UNESCAPED_UNICODE));
+// « Répartir automatiquement » suit l'ordre des blocs ; la présentation de chaque gamme est gardée.
+$auto = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idGam, [], ['pages' => []]);
+$retourLibre = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idGam, [], ['gammeBlocks' => null]);
+check('gamme par gamme : « Répartir automatiquement » refait les blocs dans leur ordre ; null revient aux pages libres (pages gardées)',
+    $auto['status'] === 200 && array_map(static fn (array $p): string => $p['layout'] . ':' . ($p['category'] ?? '-') . ':' . ($p['gamme'] ?? '-'), $auto['body']['data']['pages'] ?? []) === [
+        'grille:-:-', 'presentation:-:14', 'grille:500:14', 'grille:600:14', 'grille:-:-', 'presentation:-:16', 'grille:600:16', 'grille:-:-']
+        && $retourLibre['status'] === 200 && $retourLibre['body']['data']['gammeBlocks'] === null && ($retourLibre['body']['data']['pages'] ?? null) === ($auto['body']['data']['pages'] ?? 0),
+    json_encode([$auto['body']['data']['pages'] ?? $auto['body'], $retourLibre['body']['data']['gammeBlocks'] ?? 'x']));
+call($catRouter, 'DELETE', '/api/v1/marketing/catalogues/' . $idGam);
+
+// Les règles seules : un produit d'aucune gamme du catalogue (hors gamme) ; une présentation avec liste prend les produits de
+// sa gamme restés sans page ; « Notre sélection » (page libre) ce qui n'a de place nulle part, en dernier.
+$connusG = [
+    1 => ['id' => 1, 'categoryId' => 70, 'gammes' => []], 2 => ['id' => 2, 'categoryId' => 70, 'gammes' => [5]], 3 => ['id' => 3, 'categoryId' => 80, 'gammes' => [5]],
+    4 => ['id' => 4, 'categoryId' => 80, 'gammes' => [5, 6]], 5 => ['id' => 5, 'categoryId' => 90, 'gammes' => [6]], 6 => ['id' => 6, 'categoryId' => 95, 'gammes' => [6]],
+];
+$lignesG = array_map(static fn (int $id): array => ['id' => $id, 'on' => true], array_keys($connusG));
+$plan = $CS::autoBlocks($lignesG, $connusG, [5, 6], [], 8, true);
+$sel = [['layout' => 'grille', 'category' => null], ['layout' => 'grille', 'category' => 70], ['layout' => 'presentation_liste', 'category' => null, 'gamme' => 6], ['layout' => 'grille', 'category' => 80, 'gamme' => 6], ['layout' => 'grille', 'category' => 80, 'gamme' => 5]];
+$rempli = $CS::fill($sel, array_values($connusG), [5, 6]);
+$trop = null;
+try {
+    $CS::organise(array_fill(0, 13, ['layout' => 'grille', 'category' => 70]), [5], 16);
+} catch (\Marketing\Service\CatalogueError $e) {
+    $trop = [$e->errorCode, $e->status, count($e->details)];
+}
+check('gamme par gamme (règles) : hors gamme avant les blocs ; liste d’une présentation = produits de sa gamme sans page ; « Notre sélection » en dernier ; au-delà de 16 pages, refus nommé',
+    array_map(static fn (array $p): string => $p['layout'] . ':' . ($p['category'] ?? '-') . ':' . ($p['gamme'] ?? '-'), $plan['pages']) === [
+        'grille:70:-', 'presentation:-:5', 'grille:70:5', 'grille:80:5', 'grille:-:-', 'presentation:-:6', 'grille:80:6', 'grille:90:6', 'grille:95:6', 'grille:-:-']
+        && $plan['pageCount'] === 14
+        && array_map(static fn (array $items): array => array_column($items, 'id'), $rempli['items']) === [[2], [1], [5, 6], [4], [3, 4]]
+        && $rempli['left'] === 0 && $trop === ['CATALOGUE_PAGES_OVERFLOW', 422, 2],
+    json_encode([$plan, array_map(static fn (array $items): array => array_column($items, 'id'), $rempli['items']), $rempli['left'], $trop]));
+check('gamme par gamme : sans blocs, `fill` garde la règle d’avant (une page de catégorie prend ses produits malgré sa gamme)',
+    array_map(static fn (array $items): array => array_column($items, 'id'), $CS::fill([['layout' => 'grille', 'category' => 80, 'gamme' => 6]], array_values($connusG))['items']) === [[4, 3]],
+    json_encode($CS::fill([['layout' => 'grille', 'category' => 80, 'gamme' => 6]], array_values($connusG))));
+$pdo->exec("DELETE FROM mar_catalogue_gamme WHERE gamme_id IN (14, 16)");
+$pdo->exec("DELETE FROM mar_media WHERE sha256 LIKE 'catgam%'");
 
 // Webshop illisible (droits de l'ERP refusés) : le catalogue du Marketing, repris de l'ERP — le même
 // que l'assistant de campagne — donne les produits, leurs gammes (saisons) et leur prix de référence.

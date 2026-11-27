@@ -236,6 +236,38 @@ final class CatalogueRepository
         $statement->execute($bind);
     }
 
+    /**
+     * Les réglages des gammes pour les catalogues (`mar_catalogue_gamme`, migration 058) : couleur et modèle de la page
+     * de présentation, par identifiant de gamme du webshop.
+     *
+     * @return array<int, array{color:?string, presentation:?array<string,mixed>}>
+     */
+    public function gammeSettings(): array
+    {
+        $out = [];
+        foreach (Database::connection()->query('SELECT gamme_id, color, presentation FROM mar_catalogue_gamme')->fetchAll() as $row) {
+            $pres = $row['presentation'] !== null ? json_decode((string) $row['presentation'], true) : null;
+            $out[(int) $row['gamme_id']] = ['color' => $row['color'] !== null ? (string) $row['color'] : null, 'presentation' => is_array($pres) ? $pres : null];
+        }
+
+        return $out;
+    }
+
+    /** Écrit la couleur et le modèle d'une gamme (null : par défaut / pas de modèle). */
+    public function saveGamme(int $gammeId, ?string $color, ?array $presentation, ?int $userId): void
+    {
+        $statement = Database::connection()->prepare(
+            'INSERT INTO mar_catalogue_gamme (gamme_id, color, presentation, updated_by) VALUES (:gamme, :color, :pres, :user)
+             ON DUPLICATE KEY UPDATE color = VALUES(color), presentation = VALUES(presentation), updated_by = VALUES(updated_by)'
+        );
+        $statement->execute([
+            'gamme' => $gammeId,
+            'color' => $color,
+            'pres'  => $presentation !== null ? json_encode($presentation, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) : null,
+            'user'  => $userId !== null && $userId > 0 ? $userId : null,
+        ]);
+    }
+
     /** La boutique du module qui porte cet identifiant de caisse (une seule marque par réseau). */
     public function shopByErpId(int $erpShopId): ?array
     {

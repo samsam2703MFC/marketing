@@ -474,6 +474,24 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
     [],
   )
   const webshop = useAsync(() => api.getWebshopProducts([]), [])
+  // La couleur de chaque gamme (gamme par gamme, 27/11/2026) : fixée une fois pour toutes, enregistrée tout de suite.
+  const [gammeColors, setGammeColors] = useState<Record<number, { color: string; set: boolean }>>({})
+  const [colorError, setColorError] = useState<string | null>(null)
+  useEffect(() => {
+    api.getCatalogueGammes().then(
+      (list) => setGammeColors(Object.fromEntries(list.map((g) => [g.id, { color: g.color, set: g.colorSet }]))),
+      () => undefined,
+    )
+  }, [])
+  async function setGammeColor(id: number, color: string | null) {
+    setColorError(null)
+    try {
+      const saved = await api.saveCatalogueGamme(id, { color })
+      setGammeColors((all) => ({ ...all, [id]: { color: saved.color, set: saved.colorSet } }))
+    } catch (cause) {
+      setColorError(message(cause))
+    }
+  }
   const recent = useAsync(() => api.listMedia({ kind: 'image', perPage: 3 }), [])
   const [checks, setChecks] = useState<CatalogueCharterChecks | null>(null)
   const [checksError, setChecksError] = useState<string | null>(null)
@@ -758,6 +776,31 @@ export default function CharterAssistant({ onBack, step: initialStep, gammes: ca
           ) : null}
         </div>
         {webshop.error ? <p className="cha-warn">Gammes du webshop illisibles : {webshop.error}</p> : null}
+        {cover.gamme !== null && gammeColors[cover.gamme] ? (
+          <div className="cha-gcolor" title="La couleur de la gamme colore son bloc dans l’éditeur des catalogues et peut colorer le titre ou le fond de sa page de présentation. Enregistrée tout de suite, pour tous les catalogues, sans publication.">
+            <span className="cha-gcolor__lab">Couleur de la gamme · pour tous les catalogues</span>
+            {api.CATALOGUE_GAMME_COLORS.map((c) => (
+              <button
+                key={c.hex}
+                type="button"
+                className={`cha-gcolor__sw${gammeColors[cover.gamme as number].color === c.hex ? ' is-on' : ''}`}
+                style={{ background: c.hex }}
+                title={c.label}
+                aria-label={`Couleur ${c.label}`}
+                aria-pressed={gammeColors[cover.gamme as number].color === c.hex}
+                onClick={() => void setGammeColor(cover.gamme as number, c.hex)}
+              />
+            ))}
+            {gammeColors[cover.gamme].set ? (
+              <button type="button" className="linklike" onClick={() => void setGammeColor(cover.gamme as number, null)}>
+                Couleur par défaut
+              </button>
+            ) : (
+              <span className="cha-gcolor__hint">par défaut</span>
+            )}
+            {colorError ? <span className="cha-warn">{colorError}</span> : null}
+          </div>
+        ) : null}
         {coverIndex > 0 ? (
           <button type="button" className="linklike cha-remove" onClick={() => { change((c) => ({ ...c, covers: c.covers.filter((_, i) => i !== coverIndex) })); setCoverIndex(0) }}>
             Retirer la couverture de cette gamme (la générique la remplace)

@@ -254,6 +254,36 @@ final class CatalogueController
         return self::guard(fn (): array => Envelope::ok($this->service->saveCharter($request->body, self::userId())));
     }
 
+    /**
+     * `GET …/catalogue-gammes` (27/11/2026, gamme par gamme) : les gammes du webshop, leur couleur (réglée ou celle par
+     * défaut, `colorSet`) et le modèle de leur page de présentation (null : pas de modèle). Toutes en une page (une
+     * dizaine de gammes) ; la pagination est rendue pour la forme.
+     */
+    public function gammes(Request $request): array
+    {
+        unset($request);
+        if (($denied = self::deny()) !== null) {
+            return $denied;
+        }
+        $items = $this->service->gammes();
+
+        return Envelope::ok($items, ['pagination' => Envelope::pagination(1, max(1, count($items)), count($items))]);
+    }
+
+    /** `PUT …/catalogue-gammes/{id}` `{color?, presentation?}` : la couleur de la gamme et le modèle de sa présentation. */
+    public function saveGamme(Request $request): array
+    {
+        if (($denied = self::deny()) !== null) {
+            return $denied;
+        }
+        $id = $request->intParam('id');
+        if ($id === null || $id < 1) {
+            return Envelope::error('RESOURCE_NOT_FOUND', 'Gamme inconnue ou inactive au webshop.', 404);
+        }
+
+        return self::guard(fn (): array => Envelope::ok($this->service->saveGamme($id, is_array($request->body) ? $request->body : [], self::userId())));
+    }
+
     /** `PUT …/catalogue-shops/{id}` `{phone2?, webshopUrl?, logoMediaId?}` : ce que la boutique imprime en plus à la dernière page. */
     public function saveShop(Request $request): array
     {

@@ -6,6 +6,8 @@ import { CatalogueSheet, FORMAT_MM, HEADER_LABELS, LAYOUT_LABELS, TEMPLATE_LABEL
 import type { CatalogueSheetMode } from './CataloguePages'
 import { HeaderIcon, LayoutIcon, TemplateIcon } from './CatalogueIcons'
 import './catalogue-wizard.css'
+// Après la feuille de l'assistant : celle de « Gamme par gamme » la précise (mêmes poids de sélecteurs).
+import StepGammes, { initialBlocks } from './CatalogueGammes'
 
 /**
  * L'assistant de l'éditeur de catalogue (21/11/2026, Sam : « dans l'éditeur de catalogue faire un assistant comme dans le
@@ -27,7 +29,7 @@ const MM = 96 / 25.4
 const STEPS: Array<{ n: WizardStep; label: string; hint: string }> = [
   { n: 1, label: 'Catalogue', hint: 'format, pages, boutiques' },
   { n: 2, label: 'Produits', hint: 'par catégorie, promotions' },
-  { n: 3, label: 'Présentation', hint: 'catégorie par catégorie' },
+  { n: 3, label: 'Gamme par gamme', hint: 'présentation, mise en page' },
   { n: 4, label: 'Validation', hint: 'ce qui s’imprimera' },
   { n: 5, label: 'Feuilleter, imprimer', hint: 'le PDF, son état' },
 ]
@@ -250,7 +252,7 @@ export default function CatalogueWizard(props: WizardProps) {
       {props.docError ? <p className="error">{props.docError}</p> : null}
       {step === 1 ? <StepCatalogue {...props} /> : null}
       {step === 2 ? <StepProducts {...props} /> : null}
-      {step === 3 ? <StepPresentation {...props} /> : null}
+      {step === 3 ? (props.cat.gammeBlocks != null ? <StepGammesHost {...props} /> : <StepPresentation {...props} />) : null}
       {step === 4 ? <StepValidation {...props} /> : null}
       {step === 5 ? <StepFlipbook {...props} /> : null}
       {!doc && step !== 2 ? <p className="muted">Composition du catalogue…</p> : null}
@@ -396,7 +398,54 @@ function StepProducts(p: WizardProps) {
   )
 }
 
-// --- 3 · Présentation ------------------------------------------------------------------------------
+// --- 3 · Gamme par gamme (27/11/2026, maquettes M1 · M2 · M3) -------------------------------------------
+
+function StepGammesHost(p: WizardProps) {
+  const [zoomPage, setZoomPage] = useState<number | null>(null)
+  return (
+    <>
+      <StepGammes
+        cat={p.cat}
+        doc={p.doc}
+        lang={p.lang}
+        busy={p.busy}
+        products={p.products}
+        byId={p.byId}
+        categories={p.categories}
+        change={p.change}
+        setStep={p.setStep}
+        openDetail={p.openDetail}
+        onZoom={setZoomPage}
+      />
+      {zoomPage !== null && p.doc ? <Zoom doc={p.doc} index={zoomPage} onClose={() => setZoomPage(null)} onIndex={setZoomPage} /> : null}
+    </>
+  )
+}
+
+/**
+ * Un catalogue d'avant les gammes (pages rangées catégorie par catégorie) : on lui propose de passer gamme par gamme,
+ * avec ses gammes d'aujourd'hui (ses présentations, sinon sa source) ; un catalogue imprimé reste tel quel.
+ */
+function ToGammes(p: WizardProps) {
+  const start = initialBlocks(p.cat)
+  if (p.cat.status === 'imprime') return null
+  return (
+    <div className="wz-pan gp-convert">
+      <div>
+        <b>Construire ce catalogue gamme par gamme</b>
+        <small>
+          Les produits hors gamme d’abord, puis chaque gamme : sa page de présentation à gauche, ses catégories en face.
+          {start.length ? ` Gammes reprises : ${start.length}.` : ' Vous ajoutez ensuite les gammes une à une.'} Les pages se refont dans ce nouvel ordre.
+        </small>
+      </div>
+      <button type="button" className="btn" disabled={p.busy} onClick={() => p.change({ gammeBlocks: start })}>
+        Passer gamme par gamme
+      </button>
+    </div>
+  )
+}
+
+// --- 3 · Présentation (catalogue d'avant les gammes) ----------------------------------------------------
 
 function StepPresentation(p: WizardProps) {
   const { cat, doc, byId, categories, lang, change, busy } = p
@@ -915,6 +964,7 @@ function StepPresentation(p: WizardProps) {
 
   return (
     <>
+      <ToGammes {...p} />
       {subBar}
       {cats.length === 0 && !final ? null : final ? finalView() : categoryView(cats[sub])}
       {cats.length === 0 ? (
