@@ -6695,14 +6695,14 @@ $G = '/api/v1/marketing/catalogue-gammes';
 AuthContext::clear();
 $gam401 = call($router, 'GET', $G);
 AuthContext::set(77, 'FRANCHISEE', 1, [1]);
-$gam403 = [call($catRouter, 'GET', $G), call($catRouter, 'PUT', $G . '/14', [], ['color' => '#2F5D50'])];
+$gam403 = [call($catRouter, 'GET', $G), call($catRouter, 'PUT', $G . '/14', [], ['color' => '#3F7A52'])];
 AuthContext::set(1, 'BRAND_ADMIN', 1);
 $gamListe = call($catRouter, 'GET', $G);
 $parG = array_column($gamListe['body']['data'] ?? [], null, 'id');
 check('gammes : 401 sans identité, 403 compte de boutique ; la liste — la couleur par défaut de la palette (Saint-Nicolas : brique), pas de modèle',
     $gam401['status'] === 401 && array_map(static fn (array $r): int => $r['status'], $gam403) === [403, 403]
-        && $gamListe['status'] === 200 && array_keys($parG) === [14, 16] && ($parG[16]['color'] ?? '') === '#A3442E' && ($parG[16]['colorSet'] ?? true) === false
-        && ($parG[14]['color'] ?? '') === '#2F5D50' && array_key_exists('presentation', $parG[14] ?? []) && $parG[14]['presentation'] === null
+        && $gamListe['status'] === 200 && array_keys($parG) === [14, 16] && ($parG[16]['color'] ?? '') === '#8D1D2C' && ($parG[16]['colorSet'] ?? true) === false
+        && ($parG[14]['color'] ?? '') === '#3F7A52' && array_key_exists('presentation', $parG[14] ?? []) && $parG[14]['presentation'] === null
         && ($gamListe['body']['meta']['pagination']['total'] ?? 0) === 2,
     json_encode([$gam401['status'], $gamListe['body']], JSON_UNESCAPED_UNICODE));
 
@@ -6711,11 +6711,11 @@ $modele = ['layout' => 'deux', 'photos' => [['mediaId' => $mGam['buffet'], 'x' =
     'kicker' => ['fr' => 'Les douceurs des fêtes', 'font' => 'playwrite', 'size' => 14],
     'text' => ['fr' => 'Bûches, cougnous et plateaux du réveillon.', 'nl' => 'Stronken, kerstbrood en schotels.', 'weight' => 'light'],
     'background' => ['kind' => 'color', 'color' => 'gamme-pale']];
-$gamPut = call($catRouter, 'PUT', $G . '/14', [], ['color' => '#3d5a73', 'presentation' => $modele]);
+$gamPut = call($catRouter, 'PUT', $G . '/14', [], ['color' => '#78554b', 'presentation' => $modele]);
 $gamRelu = array_column(call($catRouter, 'GET', $G)['body']['data'] ?? [], null, 'id')[14] ?? [];
 $pm = $gamRelu['presentation'] ?? [];
 check('gammes : la couleur réglée (palette, en capitales) et le modèle de la présentation — relus dans un ordre de clés fixe, les défauts complétés, l’adresse et la taille de chaque photo',
-    $gamPut['status'] === 200 && ($gamRelu['color'] ?? '') === '#3D5A73' && ($gamRelu['colorSet'] ?? false) === true
+    $gamPut['status'] === 200 && ($gamRelu['color'] ?? '') === '#78554B' && ($gamRelu['colorSet'] ?? false) === true
         && array_keys($pm) === ['layout', 'photos', 'title', 'kicker', 'text', 'background'] && ($pm['layout'] ?? '') === 'deux'
         && array_keys($pm['title'] ?? []) === ['fr', 'nl', 'font', 'size', 'weight', 'color', 'align'] && ($pm['title']['fr'] ?? '') === 'Noël & Nouvel An'
         && ($pm['photos'][0] ?? [])['x'] === 30 && ($pm['photos'][1]['zoom'] ?? 0) === 100 && array_keys($pm['photos'][0] ?? []) === ['mediaId', 'x', 'y', 'zoom', 'image']
@@ -6733,13 +6733,13 @@ $gamRefus = [
     call($catRouter, 'PUT', $G . '/14', [], ['presentation' => ['text' => ['color' => '#ff0000']]]),
     call($catRouter, 'PUT', $G . '/14', [], ['couleur' => 'vert']),
 ];
-$gam404 = call($catRouter, 'PUT', $G . '/999', [], ['color' => '#2F5D50']);
+$gam404 = call($catRouter, 'PUT', $G . '/999', [], ['color' => '#3F7A52']);
 check('gammes : refusés (422, champ nommé) — couleur hors palette, taille hors liste, photo archivée ou d’une boutique, disposition inconnue, fond photo sans photo, couleur libre, champ inconnu ; gamme inconnue (404) ; rien n’est écrit',
     array_map(static fn (array $r): array => [$r['status'], $r['body']['error']['details'][0]['field'] ?? ''], $gamRefus) === [
         [422, 'color'], [422, 'presentation.title.size'], [422, 'presentation.photos[0].mediaId'], [422, 'presentation.photos[0].mediaId'],
         [422, 'presentation.layout'], [422, 'presentation.background.mediaId'], [422, 'presentation.text.color'], [422, 'couleur']]
         && $gam404['status'] === 404 && ($gam404['body']['error']['code'] ?? '') === 'RESOURCE_NOT_FOUND'
-        && (array_column(call($catRouter, 'GET', $G)['body']['data'] ?? [], null, 'id')[14]['color'] ?? '') === '#3D5A73',
+        && (array_column(call($catRouter, 'GET', $G)['body']['data'] ?? [], null, 'id')[14]['color'] ?? '') === '#78554B',
     json_encode(array_map(static fn (array $r): mixed => $r['body'], $gamRefus), JSON_UNESCAPED_UNICODE));
 
 // Un catalogue des deux boutiques, quatre produits : Bûches (11, 12 — Noël), Cougnou (13 — Noël), Pain d'épices (14 — Noël
@@ -6786,10 +6786,10 @@ $design = $p2[5]['design'] ?? [];
 check('gamme par gamme : la présentation d’une gamme qui arrive part de son modèle ; le document l’imprime — photos cadrées, textes stylés, couleurs de la gamme, fond pâle',
     is_array($pres14) && ($pres14['layout'] ?? '') === 'deux' && ($pres14['title']['fr'] ?? '') === 'Noël & Nouvel An'
         && ($p2[5]['title'] ?? '') === 'Noël & Nouvel An' && ($p2[5]['text'] ?? '') === 'Bûches, cougnous et plateaux du réveillon.'
-        && ($design['layout'] ?? '') === 'deux' && ($design['gammeColor'] ?? '') === '#3D5A73' && ($design['title']['color'] ?? '') === '#3D5A73'
+        && ($design['layout'] ?? '') === 'deux' && ($design['gammeColor'] ?? '') === '#78554B' && ($design['title']['color'] ?? '') === '#78554B'
         && ($design['title']['size'] ?? 0) === 48 && ($design['title']['align'] ?? '') === 'center' && ($design['kicker']['text'] ?? '') === 'Les douceurs des fêtes'
         && ($design['photos'][0]['x'] ?? 0) === 30 && ($design['photos'][0]['zoom'] ?? 0) === 150 && str_ends_with((string) ($design['photos'][0]['url'] ?? ''), 'gamme-buffet.jpg')
-        && ($design['background']['color'] ?? '') === $CS::paleOf('#3D5A73') && array_key_exists('imageUrl', $design['background'] ?? []) && $design['background']['imageUrl'] === null
+        && ($design['background']['color'] ?? '') === $CS::paleOf('#78554B') && array_key_exists('imageUrl', $design['background'] ?? []) && $design['background']['imageUrl'] === null
         && array_key_exists('design', $p2[3] ?? []) && $p2[3]['design'] === null,
     json_encode([$pres14, $p2[5] ?? null], JSON_UNESCAPED_UNICODE));
 $doc2nl = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idGam . '/document', ['lang' => 'nl'])['body']['data'] ?? [];

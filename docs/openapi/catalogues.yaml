@@ -1453,7 +1453,7 @@ components:
         gammeBlocks: { type: [array, 'null'], maxItems: 8, uniqueItems: true, items: { type: integer }, description: 'v1.23 — Les blocs, gammes du webshop dans l''ordre du catalogue ; null : retour aux pages libres (les pages restent). Trop de pages : 422 CATALOGUE_PAGES_OVERFLOW.' }
         gammesOk: { type: array, items: { type: integer }, description: 'v1.23 — Les gammes validées dans l''assistant, parmi `gammeBlocks` (sinon 422).' }
         presentations: { type: object, additionalProperties: { oneOf: [{ $ref: '#/components/schemas/Presentation' }, { type: 'null' }] }, description: 'v1.23 — Par identifiant de gamme : la présentation propre au catalogue (images que le catalogue peut prendre) ; null = retirée ; une clé absente reste.' }
-    GammeColor: { type: string, enum: ['#2F5D50', '#A3442E', '#B0821A', '#8D1D2C', '#3D5A73', '#78554B', '#6A3B5C', '#5E6B3A', '#8A8278'], description: 'v1.23 — La palette des gammes (sapin, brique, or, rubis, ardoise, Pop-Up, prune, olive, gris).' }
+    GammeColor: { type: string, enum: ['#8D1D2C', '#78554B', '#B0792A', '#3F7A52', '#222222', '#7A736A', '#F2C9A0', '#EAE4DC'], description: 'v1.23 — La palette des gammes (sapin, brique, or, rubis, ardoise, Pop-Up, prune, olive, gris).' }
     PresentationText:
       type: object
       additionalProperties: false

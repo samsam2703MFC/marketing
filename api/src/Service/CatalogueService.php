@@ -77,11 +77,11 @@ final class CatalogueService
      * Gamme par gamme (27/11/2026) : la palette des gammes (charte : rubis, or, Pop-Up de la marque, et des couleurs de
      * saison accordées) — la couleur d'une gamme, fixée une fois pour toutes, en est une.
      */
-    public const GAMME_COLORS = ['#2F5D50', '#A3442E', '#B0821A', '#8D1D2C', '#3D5A73', '#78554B', '#6A3B5C', '#5E6B3A', '#8A8278'];
+    // Les couleurs du design system de la marque (docs/DESIGN_SYSTEM.md : Ruby, Pop-Up, or, vert, Noir, gris, Abricot,
+    // Beige — client, 27/11/2026 : « les couleurs viennent des couleurs disponibles du design system »).
+    public const GAMME_COLORS = ['#8D1D2C', '#78554B', '#B0792A', '#3F7A52', '#222222', '#7A736A', '#F2C9A0', '#EAE4DC'];
     /** La couleur d'office d'une gamme de saison connue (le reste : la palette, d'après l'identifiant). */
-    private const GAMME_SEASON_COLORS = ['noel' => '#2F5D50', 'saint-nicolas' => '#A3442E', 'epiphanie' => '#B0821A', 'saint-valentin' => '#8D1D2C',
-        'chandeleur' => '#B0821A', 'paques' => '#5E6B3A', 'fete-des-meres' => '#6A3B5C', 'printemps' => '#5E6B3A', 'ete' => '#3D5A73', 'automne' => '#78554B',
-        'hiver' => '#3D5A73', 'glace' => '#3D5A73', 'b2b' => '#8A8278', 'bureau' => '#8A8278'];
+    private const GAMME_SEASON_COLORS = ['noel' => '#3F7A52', 'saint-nicolas' => '#8D1D2C', 'epiphanie' => '#B0792A', 'saint-valentin' => '#8D1D2C', 'chandeleur' => '#B0792A', 'paques' => '#3F7A52', 'fete-des-meres' => '#8D1D2C', 'printemps' => '#3F7A52', 'ete' => '#B0792A', 'automne' => '#78554B', 'hiver' => '#222222', 'glace' => '#7A736A', 'b2b' => '#7A736A', 'bureau' => '#7A736A'];
     /** La disposition des photos d'une présentation → nombre de cases : 1 grande · 2 photos · 3 en mosaïque · pleine page. */
     public const PRES_LAYOUTS = ['une' => 1, 'deux' => 2, 'mosaique' => 3, 'pleine' => 1];
     private const PRES_PHOTOS_MAX = 4;

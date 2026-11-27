@@ -3365,15 +3365,14 @@ export type CataloguePresBgColor = 'papier' | 'gamme-pale' | 'gamme' | 'creme' |
 export type CataloguePresAlign = 'left' | 'center' | 'right'
 /** La palette des gammes (une gamme en prend une, fixée une fois pour toutes). */
 export const CATALOGUE_GAMME_COLORS: { hex: string; label: string }[] = [
-  { hex: '#2F5D50', label: 'Sapin' },
-  { hex: '#A3442E', label: 'Brique' },
-  { hex: '#B0821A', label: 'Or' },
-  { hex: '#8D1D2C', label: 'Rubis' },
-  { hex: '#3D5A73', label: 'Ardoise' },
+  { hex: '#8D1D2C', label: 'Ruby' },
   { hex: '#78554B', label: 'Pop-Up' },
-  { hex: '#6A3B5C', label: 'Prune' },
-  { hex: '#5E6B3A', label: 'Olive' },
-  { hex: '#8A8278', label: 'Gris' },
+  { hex: '#B0792A', label: 'Or' },
+  { hex: '#3F7A52', label: 'Vert' },
+  { hex: '#222222', label: 'Noir' },
+  { hex: '#7A736A', label: 'Gris' },
+  { hex: '#F2C9A0', label: 'Abricot' },
+  { hex: '#EAE4DC', label: 'Beige' },
 ]
 /** Les couleurs nommées de la charte, comme le serveur les imprime. */
 export const CATALOGUE_PRES_HEX: Record<string, string> = { rubis: '#8D1D2C', or: '#B0792A', encre: '#241C1A', creme: '#F5EFE4', blanc: '#FFFFFF', papier: '#FCFAF6', abricot: '#F2C9A0' }

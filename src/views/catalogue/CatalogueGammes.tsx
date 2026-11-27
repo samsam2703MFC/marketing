@@ -51,7 +51,7 @@ const WEIGHTS: Array<[api.CataloguePresWeight, string]> = [['light', 'Light'], [
 const ALIGNS: Array<[api.CataloguePresAlign, string]> = [['left', 'Gauche'], ['center', 'Centre'], ['right', 'Droite']]
 const TEXT_COLORS: Array<[api.CataloguePresTextColor, string]> = [['gamme', 'Gamme'], ['rubis', 'Bordeaux'], ['or', 'Or'], ['encre', 'Encre'], ['creme', 'Crème'], ['blanc', 'Blanc']]
 const BG_COLORS: Array<[api.CataloguePresBgColor, string]> = [['papier', 'Papier'], ['gamme-pale', 'Gamme pâle'], ['gamme', 'Gamme'], ['creme', 'Crème'], ['abricot', 'Abricot'], ['blanc', 'Blanc']]
-const HORS_COLOR = '#8A8278'
+const HORS_COLOR = '#7A736A'
 /** La largeur imprimée d'une case de photo (mm, A5) : sert à dire la résolution d'une photo. */
 const SLOT_MM: Record<CataloguePresLayout, number[]> = { une: [126], deux: [62, 62], mosaique: [74, 51, 51], pleine: [154] }
 
