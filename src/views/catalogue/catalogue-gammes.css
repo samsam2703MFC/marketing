@@ -15,6 +15,20 @@
 .gp-lab { display: flex; align-items: center; gap: 8px; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
 .gp-lab small { text-transform: none; letter-spacing: 0; font-weight: 400; }
 .gp-grip { color: var(--faint); font-size: 11px; letter-spacing: -2px; cursor: grab; user-select: none; }
+/* La poignée du glisser (useReorder) : un bouton, visible, que le doigt peut prendre sans faire défiler la page. */
+button.gp-grip { flex: none; display: inline-grid; place-items: center; min-width: 20px; height: 22px; padding: 0 3px; border: 1px solid var(--line); border-radius: 6px;
+  background: #fff; color: var(--muted-2); font: inherit; font-size: 12px; line-height: 1; letter-spacing: -0.5em; text-indent: -0.5em; touch-action: none; cursor: grab; }
+button.gp-grip:hover { border-color: var(--muted-2); color: var(--ink); }
+button.gp-grip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button.gp-grip[aria-disabled='true'] { cursor: default; opacity: 0.5; }
+/* L'emplacement de dépôt : l'élément pris, en pointillés, à sa future place. */
+.is-ghost { outline: 1.5px dashed var(--accent); outline-offset: 2px; border-radius: 8px; }
+.is-ghost > * { visibility: hidden; }
+/* La copie flottante qui suit le pointeur (sans ombre : un filet bordeaux). */
+.gp-float { box-sizing: border-box; outline: 1px solid var(--accent); outline-offset: 4px; border-radius: 6px; background: #EFEAE2; cursor: grabbing; }
+.gp-float.gp-blk, .gp-float.gp-ci, .gp-float.gp-crow { background: #fff; }
+.gp-float .gp-grip { cursor: grabbing; }
+body.gp-dragging, body.gp-dragging * { cursor: grabbing !important; user-select: none; }
 .gp-warn { margin: 0; font-size: 11.5px; color: #7A5207; background: #F6E7CE; border-radius: 8px; padding: 6px 10px; }
 
 /* --- la colonne « Le catalogue » --- */
@@ -22,7 +36,6 @@
 .gp-ci { display: flex; align-items: flex-start; gap: 8px; width: 100%; text-align: left; font: inherit; color: var(--ink); background: #fff; border: 1px solid transparent; border-radius: 10px; padding: 8px 9px; cursor: pointer; }
 .gp-ci:hover { background: var(--paper); }
 .gp-ci.is-on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: #fff; }
-.gp-ci.is-drag { opacity: 0.45; }
 .gp-ci .gp-dot { margin-top: 5px; }
 .gp-ci__t { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; line-height: 1.35; }
 .gp-ci__t small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; margin-top: 2px; }
@@ -49,6 +62,11 @@
 .gp-grp.is-locked { border-top-color: transparent; }
 .gp-grp.is-free { border-top-style: dashed; }
 .gp-grp__h { font-size: 11.5px; color: var(--muted-2); display: flex; align-items: center; gap: 6px; }
+.gp-grp.is-hors .gp-grp__h { color: var(--muted-2); }
+.gp-grp__cat { display: grid; gap: 3px; align-content: start; }
+.gp-grp > .gp-grp__pp, .gp-blk > .gp-blk__pp { align-items: flex-start; }
+.gp-grp__ch { display: flex; align-items: center; gap: 5px; min-height: 22px; font-size: 10.5px; color: var(--muted-2); max-width: 200px; }
+.gp-grp__ch span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gp-grp__pp, .gp-strip__pp, .gp-blk__pp, .gp-blk__cpp { display: flex; gap: 6px; align-items: flex-end; flex-wrap: wrap; }
 .gp-hole { width: 120px; height: 170px; border: 1.5px dashed #c9bfb2; border-radius: 6px; display: grid; place-items: center; text-align: center; color: var(--muted); font-size: 12px; padding: 10px; line-height: 1.5; }
 .gp-th { display: grid; justify-items: center; gap: 3px; border: 0; background: none; padding: 0; cursor: pointer; font: inherit; font-size: 10.5px; color: var(--muted); }
@@ -107,8 +125,7 @@
 
 /* --- b) les catégories (M2-3) --- */
 .gp-cats { display: grid; gap: 8px; }
-.gp-crow { display: grid; grid-template-columns: 18px minmax(130px, 1fr) auto auto auto; gap: 12px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #fff; }
-.gp-crow.is-drag { opacity: 0.45; }
+.gp-crow { display: grid; grid-template-columns: 22px minmax(130px, 1fr) auto auto auto; gap: 12px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #fff; }
 .gp-crow__nm { font-size: 13.5px; font-weight: 500; }
 .gp-crow__nm small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; }
 .gp-crow__opts { display: grid; gap: 4px; }
@@ -124,14 +141,12 @@
 .gp-blk.is-locked { border-left-color: transparent; background: var(--paper); }
 .gp-blk.is-free { border-left-style: dashed; background: var(--paper); }
 .gp-blk.is-hors { background: #F6F3EF; }
-.gp-blk.is-drag { opacity: 0.45; }
 .gp-blk__h { display: flex; align-items: center; gap: 7px; font-size: 12.5px; }
 .gp-blk__nm { border: 0; background: none; font: inherit; font-weight: 500; padding: 0; cursor: pointer; color: var(--ink); }
 .gp-blk__nm:hover { text-decoration: underline; }
 .gp-blk__cat { display: grid; gap: 3px; }
 .gp-blk__cat small { font-size: 10.5px; color: var(--muted-2); max-width: 160px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gp-blk__cat.is-cat { cursor: grab; }
-.gp-blk__cat.is-drag { opacity: 0.45; }
+.gp-blk__ch { display: flex; align-items: center; gap: 5px; }
 .gp-spreads { display: flex; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 10px; }
 .gp-spread { display: grid; justify-items: center; gap: 3px; font-size: 10.5px; color: var(--muted); }
 .gp-spread__pp { display: flex; }
@@ -152,7 +167,18 @@
   .gp-col { position: static; }
   .gp-pres { grid-template-columns: 1fr; }
   .gp-panel { max-height: none; }
-  .gp-crow { grid-template-columns: 18px 1fr; }
+  .gp-crow { grid-template-columns: 22px 1fr; }
 }
 .gp-th > span:last-child, .gp-spread > span { font-size: 10.5px; line-height: 1.2; }
 .gp .wz-seg button { white-space: nowrap; }
+
+/* La bande « à ce stade » et la mise en page finale : un déplacement refusé, une présentation tombée à droite (27/11/2026).
+   Court, à côté de l'action ; le détail du serveur replié dans « Détails ». */
+.gp-alerts { display: grid; gap: 6px; }
+.gp-alert { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; font-size: 12.5px; line-height: 1.4; color: #7A5207; background: #F6E7CE; border-radius: 8px; padding: 7px 10px; }
+.gp-alert > span:first-child { flex: 1 1 320px; }
+.gp-alert--ko { color: var(--danger, #b3261e); background: #FBECEA; }
+.gp-alert__fix { display: flex; flex-wrap: wrap; gap: 6px; }
+.gp-alert__x { border: 0; background: none; color: inherit; cursor: pointer; font-size: 12px; padding: 2px 4px; }
+.gp-alert .erreur__detail { flex-basis: 100%; font-size: 11.5px; }
+.gp-alert .erreur__detail code { white-space: pre-wrap; }

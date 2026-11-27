@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties, DragEvent as ReactDragEvent, ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import * as api from '../../lib/api/module'
 import type {
   CatalogueDocDesign,
@@ -20,6 +20,8 @@ import { useAsync } from '../../lib/useAsync'
 import { CatalogueSheet, FORMAT_MM, HEADER_LABELS, LAYOUT_LABELS, TEMPLATE_LABELS, isPresentation } from './CataloguePages'
 import { LayoutIcon } from './CatalogueIcons'
 import { MediaPicker } from './MediaPicker'
+import { useReorder } from './useReorder'
+import type { Reorder } from './useReorder'
 import './catalogue-gammes.css'
 import Erreur from '../../components/Erreur'
 
@@ -37,6 +39,12 @@ import Erreur from '../../components/Erreur'
  *
  * Le rangement (pages libres intercalées, présentation à gauche, 8 à 16 pages) est celui du serveur (`organise`) : l'écran
  * envoie les blocs ou les pages, et relit ce que le serveur a rangé.
+ *
+ * Glisser (27/11/2026, client : « je dois pouvoir adapter le sens en drag and drop ») : la bande « Le catalogue à ce
+ * stade », la mise en page finale, la colonne et la liste des catégories partagent `useReorder` — un bloc de gamme entier,
+ * ou une catégorie dans son bloc (hors gamme compris) ; marque et hors gamme ne bougent pas. Un ordre n'est plus refusé
+ * pour la parité : le serveur retire la page libre qui manquait, la bande dit quelle présentation tombe à droite et
+ * propose ses remèdes ; un vrai refus est dit dans la bande et l'écran revient à l'ordre enregistré.
  */
 
 const MM = 96 / 25.4
@@ -83,6 +91,57 @@ function categoriesOf(pages: CataloguePageRow[], blocks: number[], sec: Section)
   })
   return out
 }
+
+/**
+ * Les pages après un changement d'ordre des catégories d'une section : leurs pages suivent, après la présentation de la
+ * gamme (au début pour le bloc hors gamme). Le serveur remet ensuite les pages libres où il faut.
+ */
+function catsPages(pages: CataloguePageRow[], blocks: number[], sec: Section, from: number, to: number): CataloguePageRow[] {
+  const cats = categoriesOf(pages, blocks, sec)
+  const order = cats.map((x) => x.c)
+  const [moved] = order.splice(from, 1)
+  order.splice(to, 0, moved)
+  const others = pages.filter((_, i) => !cats.some((x) => x.idx.includes(i)))
+  const at = sec === HORS ? -1 : others.findIndex((x) => isPresentation(x.layout) && x.gamme === sec)
+  const out = [...others]
+  out.splice(at + 1, 0, ...order.flatMap((c) => (cats.find((x) => x.c === c)?.idx ?? []).map((i) => pages[i])))
+  return toSend(out)
+}
+
+/**
+ * Les pages après avoir refait celles d'une catégorie d'une section : sa mise en page, au moins `nPages` pages (assez pour
+ * ses `nProducts` produits), gabarit et en-tête. null : la catégorie n'a pas de page.
+ */
+function relayPages(
+  pages: CataloguePageRow[],
+  blocks: number[],
+  sec: Section,
+  c: number | null,
+  nProducts: number,
+  wanted: { layout?: CatalogueLayout; nPages?: number; template?: CatalogueTemplate; header?: CatalogueHeader },
+): CataloguePageRow[] | null {
+  const own = categoriesOf(pages, blocks, sec).find((x) => x.c === c)
+  if (!own) return null
+  const first = pages[own.idx[0]]
+  const layout = wanted.layout ?? (first.layout === 'pleine' ? 'grille' : first.layout)
+  const need = Math.max(1, Math.ceil(nProducts / LAYOUT_LABELS[layout].capacity), Math.min(wanted.nPages ?? own.idx.length, Math.max(1, nProducts)))
+  const base: CataloguePageRow = { ...first }
+  delete base.product
+  const fresh: CataloguePageRow[] = Array.from({ length: need }, () => ({
+    ...base,
+    layout,
+    category: c,
+    gamme: sec === HORS ? null : sec,
+    template: wanted.template ?? first.template ?? 'A',
+    header: wanted.header ?? first.header ?? 'titre',
+  }))
+  const out = pages.filter((_, i) => !own.idx.includes(i))
+  out.splice(own.idx[0] - own.idx.filter((i) => i < own.idx[0]).length, 0, ...fresh)
+  return toSend(out)
+}
+
+/** Le nom du groupe de glisser des catégories d'une section. */
+const catsGroup = (sec: Section): string => `cats:${sec}`
 
 const range = (idx: number[]): string => (idx.length ? `p. ${Math.min(...idx) + 3}${idx.length > 1 ? `-${Math.max(...idx) + 3}` : ''}` : '')
 
@@ -134,6 +193,11 @@ function docDesign(pres: CataloguePresentation, gammeColor: string, lang: Catalo
   }
 }
 
+/** Une modification qui dit elle-même son échec, à côté de l'action (l'étape 3 : un ordre refusé par le serveur). */
+export interface ChangeOptions {
+  onError?: (message: string) => void
+}
+
 export interface GammesProps {
   cat: api.Catalogue
   doc: CatalogueDocument | null
@@ -142,7 +206,7 @@ export interface GammesProps {
   products: api.WebshopProduct[]
   byId: Map<number, api.WebshopProduct>
   categories: Map<number, api.WebshopCategory>
-  change: (patch: api.CatalogueUpdate) => void
+  change: (patch: api.CatalogueUpdate, opts?: ChangeOptions) => void
   setStep: (step: 1 | 2 | 3 | 4 | 5) => void
   openDetail: (innerIndex: number | null) => void
   onZoom: (docIndex: number) => void
@@ -178,22 +242,42 @@ export default function StepGammes(p: GammesProps) {
   const [final, setFinal] = useState(false)
   const [adding, setAdding] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
-  const [dragBlock, setDragBlock] = useState<number | null>(null)
 
   const inner = cat.pageCount - BRAND_PAGES
   const used = pages.filter((x) => !isSpacer(x)).length
   const presIndex = (g: number) => pages.findIndex((x) => isPresentation(x.layout) && x.gamme === g)
   const pagesOf = (sec: Section) => pages.map((_, i) => i).filter((i) => (isPresentation(pages[i].layout) ? pages[i].gamme === sec : sectionOf(pages[i], blocks) === sec))
 
+  // Un déplacement refusé par le serveur : dit dans la bande, court ; l'écran revient à l'ordre enregistré.
+  const [moveError, setMoveError] = useState<string | null>(null)
+  const layoutChange = (patch: api.CatalogueUpdate) => {
+    setMoveError(null)
+    change(patch, { onError: setMoveError })
+  }
   function setBlocks(next: number[], extra: api.CatalogueUpdate = {}) {
     setNotice(null)
-    change({ gammeBlocks: next, ...extra })
+    layoutChange({ gammeBlocks: next, ...extra })
   }
   function moveBlock(g: number, to: number) {
     const next = blocks.filter((x) => x !== g)
     next.splice(to, 0, g)
     setBlocks(next)
   }
+  // Le glisser (colonne, bande « à ce stade », mise en page finale, catégories) : une seule implémentation, un seul état.
+  const dnd = useReorder(
+    (group, from, to) => {
+      if (group === 'blocks') {
+        if (blocks[from] !== undefined) moveBlock(blocks[from], to)
+        return
+      }
+      if (!group.startsWith('cats:')) return
+      const raw = group.slice(5)
+      const sec: Section = raw === HORS ? HORS : Number(raw)
+      setNotice(null)
+      layoutChange({ pages: catsPages(pages, blocks, sec, from, to) })
+    },
+    { busy },
+  )
 
   // Les gammes que propose « Ajouter une gamme » : celles des produits choisis, avec leurs catégories et produits.
   const candidates = useMemo(() => {
@@ -217,7 +301,7 @@ export default function StepGammes(p: GammesProps) {
   // --- la colonne « Le catalogue » ---
   const n = cat.pageCount
   const column = (
-    <aside className="wz-pan gp-col">
+    <aside className="wz-pan gp-col" data-sort-scope="">
       <div className="wz-kick">Le catalogue · {n} pages</div>
       <div className="gp-ci is-done">
         <span className="gp-ok">✓</span>
@@ -239,26 +323,20 @@ export default function StepGammes(p: GammesProps) {
           <span className="gp-ci__p">{range(pagesOf(HORS))}</span>
         </button>
       ) : null}
-      {blocks.map((g, k) => (
+      {dnd.order('blocks', blocks, String).map(({ x: g, k }) => (
         <div
           key={g}
-          className={`gp-ci${open === g ? ' is-on' : ''}${ok.has(g) ? ' is-done' : ''}${dragBlock === g ? ' is-drag' : ''}`}
+          {...dnd.item('blocks', k, 'y')}
+          className={`gp-ci${open === g ? ' is-on' : ''}${ok.has(g) ? ' is-done' : ''}${dnd.isGhost('blocks', k) ? ' is-ghost' : ''}`}
           role="button"
           tabIndex={0}
           onClick={() => { setOpen(g); setSub(ok.has(g) ? 'cats' : 'pres'); setFinal(false) }}
           onKeyDown={(e) => {
+            if (e.target !== e.currentTarget) return
             if (e.key === 'Enter') { setOpen(g); setFinal(false) }
-            if (e.altKey && e.key === 'ArrowUp' && k > 0) moveBlock(g, k - 1)
-            if (e.altKey && e.key === 'ArrowDown' && k < blocks.length - 1) moveBlock(g, k + 1)
           }}
-          draggable={!busy}
-          onDragStart={(e: ReactDragEvent) => { setDragBlock(g); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(g)) }}
-          onDragEnd={() => setDragBlock(null)}
-          onDragOver={(e) => { if (dragBlock !== null) e.preventDefault() }}
-          onDrop={(e) => { e.preventDefault(); if (dragBlock !== null && dragBlock !== g) moveBlock(dragBlock, k); setDragBlock(null) }}
-          title="Glisser pour changer l’ordre des gammes (Alt + ↑ ↓ au clavier)"
         >
-          <span className="gp-grip" aria-hidden="true">⋮⋮</span>
+          <button {...dnd.grip('blocks', k, blocks.length, `col-${g}`, nameOf(g))}>⋮⋮</button>
           {ok.has(g) ? <span className="gp-ok">✓</span> : null}
           <i className="gp-dot" style={{ background: colorOf(g) }} />
           <span className="gp-ci__t">
@@ -319,13 +397,77 @@ export default function StepGammes(p: GammesProps) {
 
   const noticeEl = notice ? <p className={notice.kind === 'error' ? 'error' : 'wz-info'}>{notice.text}</p> : null
 
-  if (final) return <FinalView {...p} gammes={gammes} colorOf={colorOf} nameOf={nameOf} catName={catName} onOpen={(sec) => { setFinal(false); setOpen(sec); setSub(sec === HORS ? 'cats' : 'pres') }} />
+  // Une présentation tombée sur une page de droite (le serveur a retiré la page libre de parité faute de place, plutôt que
+  // de refuser l'ordre) : dit dans la bande, avec des remèdes en un clic — une catégorie ramassée en liste, la gamme retirée.
+  const rightPres = pages
+    .map((x, i) => ({ x, i }))
+    .filter(({ x, i }) => isPresentation(x.layout) && typeof x.gamme === 'number' && blocks.includes(x.gamme) && (i + 3) % 2 === 1)
+  const fixes: Array<{ label: string; run: () => void }> = []
+  if (rightPres.length) {
+    const cap = LAYOUT_LABELS.liste.capacity
+    for (const sec of [HORS as Section, ...blocks]) {
+      for (const x of categoriesOf(pages, blocks, sec)) {
+        const nb = count(sec, x.c)
+        if (x.idx.length < 2 || nb > cap * (x.idx.length - 1) || fixes.length >= 2) continue
+        const already = x.idx.every((i) => pages[i].layout === 'liste')
+        fixes.push({
+          label: already ? `Ramasser « ${catName(x.c)} » sur ${x.idx.length - 1} page${x.idx.length > 2 ? 's' : ''} (−1 page)` : `Passer « ${catName(x.c)} » en liste (−1 page)`,
+          run: () => {
+            const out = relayPages(pages, blocks, sec, x.c, nb, { layout: 'liste', nPages: x.idx.length - 1 })
+            if (out) layoutChange({ pages: out })
+          },
+        })
+      }
+    }
+    const g = rightPres[0].x.gamme as number
+    fixes.push({ label: `Retirer la gamme « ${nameOf(g)} »`, run: () => setBlocks(blocks.filter((b) => b !== g), { gammesOk: [...ok].filter((b) => b !== g) }) })
+  }
+  const moveErrorShort = moveError ? moveError.split(/(?<=\.)\s/)[0] : ''
+  const moveErrorLine = moveErrorShort.replace(/\s*\([^)]*\)/, '').replace(/^\p{Lu}/u, (m) => m.toLowerCase())
+  const layoutAlert =
+    moveError || rightPres.length ? (
+      <div className="gp-alerts" role="status">
+        {moveError ? (
+          <div className="gp-alert gp-alert--ko">
+            <span>
+              Déplacement non enregistré : {moveErrorLine} L’ordre enregistré est rétabli.
+            </span>
+            <button type="button" className="gp-alert__x" onClick={() => setMoveError(null)} aria-label="Fermer">
+              ✕
+            </button>
+            {moveError !== moveErrorShort ? (
+              <details className="erreur__detail">
+                <summary>Détails</summary>
+                <code>{moveError}</code>
+              </details>
+            ) : null}
+          </div>
+        ) : null}
+        {rightPres.length ? (
+          <div className="gp-alert">
+            <span>
+              {rightPres.map(({ x, i }) => `« ${nameOf(x.gamme as number)} » (p. ${i + 3})`).join(', ')} : présentation sur une page de droite, il manque une
+              page pour la mettre à gauche.
+            </span>
+            <span className="gp-alert__fix">
+              {fixes.map((f) => (
+                <button key={f.label} type="button" className="btn btn--sm" disabled={busy} onClick={f.run}>
+                  {f.label}
+                </button>
+              ))}
+            </span>
+          </div>
+        ) : null}
+      </div>
+    ) : null
+
+  if (final) return <FinalView {...p} change={layoutChange} alert={layoutAlert} dnd={dnd} gammes={gammes} colorOf={colorOf} nameOf={nameOf} catName={catName} onOpen={(sec) => { setFinal(false); setOpen(sec); setSub(sec === HORS ? 'cats' : 'pres') }} />
 
   return (
     <div className="gp">
       {column}
       {open === null ? (
-        <Overview {...p} colorOf={colorOf} nameOf={nameOf} onFinal={() => setFinal(true)} lastOk={blocks.filter((g) => ok.has(g)).slice(-1)[0] ?? null} />
+        <Overview {...p} alert={layoutAlert} dnd={dnd} catName={catName} colorOf={colorOf} nameOf={nameOf} onFinal={() => setFinal(true)} lastOk={blocks.filter((g) => ok.has(g)).slice(-1)[0] ?? null} />
       ) : open !== HORS && sub === 'pres' ? (
         <PresentationEditor
           key={`pres-${open}`}
@@ -343,6 +485,7 @@ export default function StepGammes(p: GammesProps) {
       ) : (
         <CategoriesEditor
           {...p}
+          dnd={dnd}
           sec={open}
           color={colorOf(open)}
           name={nameOf(open)}
@@ -377,8 +520,32 @@ function groups(pages: CataloguePageRow[], blocks: number[]): Array<{ sec: Secti
   return out
 }
 
-function Overview(p: GammesProps & { colorOf: (s: Section) => string; nameOf: (s: Section) => string; onFinal: () => void; lastOk: number | null }) {
-  const { cat, doc } = p
+/**
+ * Les groupes dans l'ordre affiché : les gammes prennent l'ordre du glisser (ou celui déposé, en attente du serveur),
+ * dans les places qu'occupent les gammes ; marque, hors gamme et pages libres ne bougent pas. `k` : l'indice de la gamme
+ * dans `gammeBlocks` (-1 hors des gammes), seul le premier groupe d'une gamme la porte.
+ */
+function orderedGroups(grps: Array<{ sec: Section | 'libre'; idx: number[] }>, blocks: number[], dnd: Reorder): Array<{ sec: Section | 'libre'; idx: number[]; k: number }> {
+  const byId = new Map<number, Array<{ sec: Section | 'libre'; idx: number[] }>>()
+  grps.forEach((g) => {
+    if (typeof g.sec === 'number') byId.set(g.sec, [...(byId.get(g.sec) ?? []), g])
+  })
+  const queue = dnd
+    .order('blocks', blocks, String)
+    .filter(({ x }) => byId.has(x))
+    .flatMap(({ x, k }) => (byId.get(x) ?? []).map((g, j) => ({ ...g, k: j === 0 ? k : -1 })))
+  return grps.map((g) => (typeof g.sec === 'number' ? (queue.shift() ?? { ...g, k: -1 }) : { ...g, k: -1 }))
+}
+
+/** Les catégories d'une section dans l'ordre affiché, avec leur indice d'origine. */
+function orderedCats(pages: CataloguePageRow[], blocks: number[], sec: Section, dnd: Reorder) {
+  return dnd.order(catsGroup(sec), categoriesOf(pages, blocks, sec), (x) => String(x.c))
+}
+
+function Overview(
+  p: GammesProps & { alert: ReactNode; dnd: Reorder; catName: (c: number | null) => string; colorOf: (s: Section) => string; nameOf: (s: Section) => string; onFinal: () => void; lastOk: number | null },
+) {
+  const { cat, doc, dnd } = p
   const blocks = cat.gammeBlocks ?? []
   const n = cat.pageCount
   const W = 92
@@ -398,7 +565,8 @@ function Overview(p: GammesProps & { colorOf: (s: Section) => string; nameOf: (s
           {cat.pages.filter((x) => !isSpacer(x)).length + BRAND_PAGES} pages sur {n}
         </span>
       </div>
-      <div className="gp-stage">
+      {p.alert}
+      <div className="gp-stage" data-sort-scope="">
         <div className="gp-grp is-locked">
           <div className="gp-grp__h">🔒 Marque</div>
           <div className="gp-grp__pp">
@@ -407,15 +575,55 @@ function Overview(p: GammesProps & { colorOf: (s: Section) => string; nameOf: (s
           </div>
         </div>
         {blocks.length === 0 && !cat.pages.some((x) => !isSpacer(x)) ? <div className="gp-hole">Vos gammes<br />p. 3 à {n - 2}</div> : null}
-        {groups(cat.pages, blocks).map((grp) => (
-          <div key={`${grp.sec}-${grp.idx[0]}`} className={`gp-grp${grp.sec === 'libre' ? ' is-free' : ''}`} style={grp.sec !== 'libre' ? { borderTopColor: p.colorOf(grp.sec) } : undefined}>
-            <div className="gp-grp__h">
-              {grp.sec !== 'libre' ? <i className="gp-dot" style={{ background: p.colorOf(grp.sec) }} /> : null}
-              {grp.sec === 'libre' ? `${grp.idx.length > 1 ? 'Pages libres' : 'Page libre'}` : p.nameOf(grp.sec)} · {range(grp.idx)}
+        {orderedGroups(groups(cat.pages, blocks), blocks, dnd).map((grp) => {
+          if (grp.sec === 'libre') {
+            return (
+              <div key={`l-${grp.idx[0]}`} className="gp-grp is-free">
+                <div className="gp-grp__h">{grp.idx.length > 1 ? 'Pages libres' : 'Page libre'} · {range(grp.idx)}</div>
+                <div className="gp-grp__pp">{grp.idx.map((i) => thumb(i + 2, String(i + 3)))}</div>
+              </div>
+            )
+          }
+          const sec = grp.sec
+          const movable = typeof sec === 'number' && grp.k >= 0
+          const fixed = grp.idx.filter((i) => isSpacer(cat.pages[i]) || isPresentation(cat.pages[i].layout))
+          const cats = orderedCats(cat.pages, blocks, sec, dnd).filter(({ x }) => x.idx.some((i) => grp.idx.includes(i)))
+          const group = catsGroup(sec)
+          const nCats = categoriesOf(cat.pages, blocks, sec).length
+          return (
+            <div
+              key={`${sec}-${grp.idx[0]}`}
+              {...(movable ? dnd.item('blocks', grp.k) : {})}
+              className={`gp-grp${sec === HORS ? ' is-hors' : ''}${movable && dnd.isGhost('blocks', grp.k) ? ' is-ghost' : ''}`}
+              style={{ borderTopColor: p.colorOf(sec) }}
+            >
+              <div className="gp-grp__h">
+                {movable ? <button {...dnd.grip('blocks', grp.k, blocks.length, `strip-${sec}`, p.nameOf(sec))}>⋮⋮</button> : null}
+                <i className="gp-dot" style={{ background: p.colorOf(sec) }} />
+                {p.nameOf(sec)} · {range(grp.idx)}
+              </div>
+              <div className="gp-grp__pp" data-sort-scope="">
+                {fixed.length ? (
+                  <div className="gp-grp__cat">
+                    <div className="gp-grp__ch">
+                      <span>{fixed.some((i) => isPresentation(cat.pages[i].layout)) ? 'Présentation' : fixed.length > 1 ? 'Pages libres' : 'Page libre'}</span>
+                    </div>
+                    <div className="gp-grp__pp">{fixed.map((i) => thumb(i + 2, String(i + 3)))}</div>
+                  </div>
+                ) : null}
+                {cats.map(({ x, k }) => (
+                  <div key={String(x.c)} {...dnd.item(group, k)} className={`gp-grp__cat${dnd.isGhost(group, k) ? ' is-ghost' : ''}`}>
+                    <div className="gp-grp__ch">
+                      <button {...dnd.grip(group, k, nCats, `strip-${sec}-${x.c}`, p.catName(x.c))}>⋮⋮</button>
+                      <span>{p.catName(x.c)}</span>
+                    </div>
+                    <div className="gp-grp__pp">{x.idx.map((i) => thumb(i + 2, String(i + 3)))}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="gp-grp__pp">{grp.idx.map((i) => thumb(i + 2, String(i + 3)))}</div>
-          </div>
-        ))}
+          )
+        })}
         <div className="gp-grp is-locked">
           <div className="gp-grp__h">🔒 Marque</div>
           <div className="gp-grp__pp">
@@ -779,6 +987,7 @@ function PresentationEditor(
 
 function CategoriesEditor(
   p: GammesProps & {
+    dnd: Reorder
     sec: Section
     color: string
     name: string
@@ -790,45 +999,16 @@ function CategoriesEditor(
     notice: ReactNode
   },
 ) {
-  const { cat, doc, sec, busy } = p
+  const { cat, doc, sec, busy, dnd } = p
   const blocks = cat.gammeBlocks ?? []
   const cats = categoriesOf(cat.pages, blocks, sec)
-  const [drag, setDrag] = useState<number | null>(null)
+  const group = catsGroup(sec)
   const idxOfSection = cat.pages.map((_, i) => i).filter((i) => (isPresentation(cat.pages[i].layout) ? cat.pages[i].gamme === sec : sectionOf(cat.pages[i], blocks) === sec))
 
   /** Refait les pages d'une catégorie de la gamme : sa mise en page, au moins `nPages` pages, gabarit et en-tête. */
   function relay(c: number | null, wanted: { layout?: CatalogueLayout; nPages?: number; template?: CatalogueTemplate; header?: CatalogueHeader }) {
-    const own = cats.find((x) => x.c === c)
-    if (!own) return
-    const first = cat.pages[own.idx[0]]
-    const layout = wanted.layout ?? (first.layout === 'pleine' ? 'grille' : first.layout)
-    const nProducts = p.count(sec, c)
-    const need = Math.max(1, Math.ceil(nProducts / LAYOUT_LABELS[layout].capacity), Math.min(wanted.nPages ?? own.idx.length, Math.max(1, nProducts)))
-    const base: CataloguePageRow = { ...first }
-    delete base.product
-    const fresh: CataloguePageRow[] = Array.from({ length: need }, () => ({
-      ...base,
-      layout,
-      category: c,
-      gamme: sec === HORS ? null : sec,
-      template: wanted.template ?? first.template ?? 'A',
-      header: wanted.header ?? first.header ?? 'titre',
-    }))
-    const out = cat.pages.filter((_, i) => !own.idx.includes(i))
-    out.splice(own.idx[0] - own.idx.filter((i) => i < own.idx[0]).length, 0, ...fresh)
-    p.change({ pages: toSend(out) })
-  }
-  /** Change l'ordre des catégories de la gamme : leurs pages suivent. */
-  function reorder(from: number, to: number) {
-    const order = cats.map((x) => x.c)
-    const [moved] = order.splice(from, 1)
-    order.splice(to, 0, moved)
-    const others = cat.pages.filter((_, i) => !cats.some((x) => x.idx.includes(i)))
-    const at = others.findIndex((x) => (sec === HORS ? false : isPresentation(x.layout) && x.gamme === sec))
-    const moving = order.flatMap((c) => (cats.find((x) => x.c === c)?.idx ?? []).map((i) => cat.pages[i]))
-    const out = [...others]
-    out.splice(at >= 0 ? at + 1 : 0, 0, ...moving)
-    p.change({ pages: toSend(out) })
+    const out = relayPages(cat.pages, blocks, sec, c, p.count(sec, c), wanted)
+    if (out) p.change({ pages: out })
   }
 
   return (
@@ -853,22 +1033,15 @@ function CategoriesEditor(
           <span className="wz-note">Sans page de présentation, avant les gammes</span>
         )}
       </div>
-      <div className="gp-cats">
+      <div className="gp-cats" data-sort-scope="">
         {cats.length === 0 ? <p className="wz-note">Aucune catégorie : cochez des produits de cette gamme à l’étape 2.</p> : null}
-        {cats.map((x, k) => {
+        {dnd.order(group, cats, (x) => String(x.c)).map(({ x, k }) => {
           const first = cat.pages[x.idx[0]]
           const layout = first.layout === 'pleine' && x.idx.length > 1 ? cat.pages[x.idx[1]].layout : first.layout
           const nb = p.count(sec, x.c)
           return (
-            <div
-              key={String(x.c)}
-              className={`gp-crow${drag === k ? ' is-drag' : ''}`}
-              draggable={!busy}
-              onDragStart={() => setDrag(k)}
-              onDragOver={(e) => { if (drag !== null) e.preventDefault() }}
-              onDrop={(e) => { e.preventDefault(); if (drag !== null && drag !== k) reorder(drag, k); setDrag(null) }}
-            >
-              <span className="gp-grip" title="Glisser pour changer l’ordre des catégories">⋮⋮</span>
+            <div key={String(x.c)} {...dnd.item(group, k, 'y')} className={`gp-crow${dnd.isGhost(group, k) ? ' is-ghost' : ''}`}>
+              <button {...dnd.grip(group, k, cats.length, `row-${sec}-${x.c}`, p.catName(x.c))}>⋮⋮</button>
               <span className="gp-crow__nm">
                 {p.catName(x.c)}
                 <small>
@@ -943,6 +1116,8 @@ function CategoriesEditor(
 
 function FinalView(
   p: GammesProps & {
+    alert: ReactNode
+    dnd: Reorder
     gammes: CatalogueGamme[]
     colorOf: (s: Section) => string
     nameOf: (s: Section) => string
@@ -950,28 +1125,15 @@ function FinalView(
     onOpen: (s: Section) => void
   },
 ) {
-  const { cat, doc, busy } = p
+  const { cat, doc, busy, dnd } = p
   const blocks = cat.gammeBlocks ?? []
   const [mode, setMode] = useState<'gammes' | 'doubles'>('gammes')
-  const [dragBlock, setDragBlock] = useState<number | null>(null)
-  const [dragCat, setDragCat] = useState<{ sec: Section; k: number } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const n = cat.pageCount
   const inner = n - BRAND_PAGES
   const used = cat.pages.filter((x) => !isSpacer(x)).length
   const grps = groups(cat.pages, blocks)
 
-  function moveCat(sec: Section, from: number, to: number) {
-    const cats = categoriesOf(cat.pages, blocks, sec)
-    const order = cats.map((x) => x.c)
-    const [moved] = order.splice(from, 1)
-    order.splice(to, 0, moved)
-    const others = cat.pages.filter((_, i) => !cats.some((x) => x.idx.includes(i)))
-    const at = sec === HORS ? -1 : others.findIndex((x) => isPresentation(x.layout) && x.gamme === sec)
-    const out = [...others]
-    out.splice(at + 1, 0, ...order.flatMap((c) => (cats.find((x) => x.c === c)?.idx ?? []).map((i) => cat.pages[i])))
-    p.change({ pages: toSend(out) })
-  }
   function setCount(nb: CataloguePageCount) {
     if (nb - BRAND_PAGES < used) {
       setNotice(`À ${nb} pages, les gammes ne tiennent plus : retirez une gamme ou des produits, ou choisissez des mises en page plus denses.`)
@@ -1019,10 +1181,11 @@ function FinalView(
           <span className="wz-grow" />
           <Seg label="Vue" value={mode} options={[['gammes', 'Par gamme'], ['doubles', 'Doubles pages']]} onChange={setMode} />
         </div>
+        {p.alert}
         {mode === 'gammes' ? (
-          <div className="gp-blks">
+          <div className="gp-blks" data-sort-scope="">
             {brand(0, 1, 'Marque')}
-            {grps.map((grp) => {
+            {orderedGroups(grps, blocks, dnd).map((grp) => {
               if (grp.sec === 'libre') {
                 return (
                   <div key={`l${grp.idx[0]}`} className="gp-blk is-free">
@@ -1032,54 +1195,37 @@ function FinalView(
                 )
               }
               const sec = grp.sec
-              const k = typeof sec === 'number' ? blocks.indexOf(sec) : -1
-              const cats = categoriesOf(cat.pages, blocks, sec)
+              const k = grp.k
+              const movable = typeof sec === 'number' && k >= 0
+              const group = catsGroup(sec)
+              const nCats = categoriesOf(cat.pages, blocks, sec).length
+              const cats = orderedCats(cat.pages, blocks, sec, dnd).filter(({ x }) => x.idx.some((i) => grp.idx.includes(i)))
               return (
                 <div
                   key={`${sec}-${grp.idx[0]}`}
-                  className={`gp-blk${dragBlock === sec ? ' is-drag' : ''}${sec === HORS ? ' is-hors' : ''}`}
+                  {...(movable ? dnd.item('blocks', k) : {})}
+                  className={`gp-blk${movable && dnd.isGhost('blocks', k) ? ' is-ghost' : ''}${sec === HORS ? ' is-hors' : ''}`}
                   style={{ borderLeftColor: p.colorOf(sec) }}
-                  onDragOver={(e) => { if (dragBlock !== null && typeof sec === 'number') e.preventDefault() }}
-                  onDrop={(e) => {
-                    e.preventDefault()
-                    if (dragBlock !== null && typeof sec === 'number' && dragBlock !== sec) {
-                      const next = blocks.filter((x) => x !== dragBlock)
-                      next.splice(k, 0, dragBlock)
-                      p.change({ gammeBlocks: next })
-                    }
-                    setDragBlock(null)
-                  }}
                 >
                   <div className="gp-blk__h">
-                    {typeof sec === 'number' ? (
-                      <span
-                        className="gp-grip"
-                        draggable={!busy}
-                        onDragStart={(e: ReactDragEvent) => { setDragBlock(sec); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(sec)) }}
-                        onDragEnd={() => setDragBlock(null)}
-                        title="Prendre la gamme entière : présentation et catégories"
-                        aria-label={`Déplacer « ${p.nameOf(sec)} »`}
-                      >
-                        ⋮⋮
-                      </span>
-                    ) : null}
+                    {movable ? <button {...dnd.grip('blocks', k, blocks.length, `final-${sec}`, p.nameOf(sec))}>⋮⋮</button> : null}
                     <i className="gp-dot" style={{ background: p.colorOf(sec) }} />
                     <button type="button" className="gp-blk__nm" onClick={() => p.onOpen(sec)}>
                       {p.nameOf(sec)}
                     </button>
                     <span className="wz-note">{range(grp.idx)}</span>
-                    {typeof sec === 'number' ? (
+                    {movable ? (
                       <>
-                        <button type="button" className="wz-mv" disabled={k === 0 || busy} onClick={() => { const next = [...blocks]; next.splice(k, 1); next.splice(k - 1, 0, sec); p.change({ gammeBlocks: next }) }} aria-label="Avant">
+                        <button type="button" className="wz-mv" disabled={k === 0 || busy} onClick={() => dnd.move('blocks', k, k - 1)} aria-label={`Avancer « ${p.nameOf(sec)} »`}>
                           ‹
                         </button>
-                        <button type="button" className="wz-mv" disabled={k === blocks.length - 1 || busy} onClick={() => { const next = [...blocks]; next.splice(k, 1); next.splice(k + 1, 0, sec); p.change({ gammeBlocks: next }) }} aria-label="Après">
+                        <button type="button" className="wz-mv" disabled={k === blocks.length - 1 || busy} onClick={() => dnd.move('blocks', k, k + 1)} aria-label={`Reculer « ${p.nameOf(sec)} »`}>
                           ›
                         </button>
                       </>
                     ) : null}
                   </div>
-                  <div className="gp-blk__pp">
+                  <div className="gp-blk__pp" data-sort-scope="">
                     {grp.idx
                       .filter((i) => isSpacer(cat.pages[i]) || isPresentation(cat.pages[i].layout))
                       .map((i) => (
@@ -1088,17 +1234,12 @@ function FinalView(
                           <div className="gp-blk__cpp">{pageThumb(i)}</div>
                         </div>
                       ))}
-                    {cats.map((x, ck) => (
-                      <div
-                        key={String(x.c)}
-                        className={`gp-blk__cat is-cat${dragCat && dragCat.sec === sec && dragCat.k === ck ? ' is-drag' : ''}`}
-                        draggable={!busy}
-                        onDragStart={(e) => { e.stopPropagation(); setDragCat({ sec, k: ck }) }}
-                        onDragOver={(e) => { if (dragCat && dragCat.sec === sec) { e.preventDefault(); e.stopPropagation() } }}
-                        onDrop={(e) => { e.preventDefault(); e.stopPropagation(); if (dragCat && dragCat.sec === sec && dragCat.k !== ck) moveCat(sec, dragCat.k, ck); setDragCat(null) }}
-                        title="Glisser pour réordonner les catégories de la gamme"
-                      >
-                        <small>⋮⋮ {p.catName(x.c)}</small>
+                    {cats.map(({ x, k: ck }) => (
+                      <div key={String(x.c)} {...dnd.item(group, ck)} className={`gp-blk__cat is-cat${dnd.isGhost(group, ck) ? ' is-ghost' : ''}`}>
+                        <span className="gp-blk__ch">
+                          <button {...dnd.grip(group, ck, nCats, `final-${sec}-${x.c}`, p.catName(x.c))}>⋮⋮</button>
+                          <small>{p.catName(x.c)}</small>
+                        </span>
                         <div className="gp-blk__cpp">{x.idx.map((i) => pageThumb(i))}</div>
                       </div>
                     ))}
