@@ -4846,3 +4846,110 @@ textarea:focus-visible {
   border-color: var(--muted-2);
   color: var(--ink);
 }
+
+/* ---------------------------------------------------------------------------
+   Téléphone et tablette (audit du 27/11/2026, recommandation 10).
+   Le rail de 246 px restait à gauche à toutes les largeurs : à 390 px, il laissait 144 px au contenu.
+   Sous 1000 px, il se replie : « Menu » en tête de la barre supérieure l'ouvre en tiroir par-dessus le
+   contenu (voile, Échap ou un clic dehors le referment), et le contenu prend toute la largeur.
+   À 1000 px et au-delà, rien de ce bloc ne s'applique.
+   --------------------------------------------------------------------------- */
+.topbar__menu {
+  display: none;
+}
+
+@media (max-width: 999px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 60;
+    width: min(280px, 86vw);
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform 0.2s ease, visibility 0s linear 0.2s;
+  }
+
+  .workspace.is-menu-open .sidebar {
+    transform: none;
+    visibility: visible;
+    transition: transform 0.2s ease;
+  }
+
+  .workspace__voile {
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(24, 18, 20, 0.42);
+  }
+
+  .topbar {
+    justify-content: flex-start;
+    padding: 12px 16px;
+  }
+
+  .topbar__titre {
+    min-width: 0;
+  }
+
+  .topbar__menu {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex: none;
+    min-height: 36px;
+    margin: 0;
+    padding: 6px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--muted-2);
+    font: 400 13px/1.2 'Gotham', system-ui, sans-serif;
+    cursor: pointer;
+  }
+
+  .topbar__menu:hover {
+    border-color: var(--muted-2);
+  }
+
+  /* Un écran en cadre (la régie) n'a pas de titre au-dessus de lui : la barre ne porte que le bouton. */
+  .topbar--cadre {
+    padding: 8px 16px;
+  }
+
+  .app__body {
+    padding: 16px 16px 32px;
+  }
+
+  /* Les enfants de la zone de contenu ne débordent jamais de l'écran : ce qui est plus large (tableau,
+     frise, aperçu) défile dans son propre cadre. */
+  .app__body > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+/* Au-delà de 1000 px, la barre d'un écran en cadre n'a rien à porter : elle disparaît comme avant. */
+@media (min-width: 1000px) {
+  .topbar--cadre {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .topbar h1 {
+    font-size: 20px;
+  }
+
+  .topbar__kicker {
+    margin-bottom: 2px;
+  }
+
+  /* 16 px au téléphone : en dessous, iOS agrandit la page à chaque saisie. */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}

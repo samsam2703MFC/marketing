@@ -241,6 +241,25 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
   // L'étape où rouvrir l'assistant, quand « Compléter les campagnes » y renvoie.
   const [builderStep, setBuilderStep] = useState<string | null>(null)
   const [frameKey, setFrameKey] = useState(0)
+  // Sous 1000 px, le rail se replie : il s'ouvre par « Menu » en tiroir par-dessus le contenu (Échap, un clic
+  // dehors ou le choix d'une entrée le referme). Au-delà, il reste à gauche et cet état ne sert pas.
+  const [menuOpen, setMenuOpen] = useState(false)
+  useEffect(() => {
+    setMenuOpen(false)
+  }, [route])
+  useEffect(() => {
+    if (!menuOpen) return
+    const fermer = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMenuOpen(false)
+        document.querySelector<HTMLButtonElement>('.topbar__menu')?.focus()
+      }
+    }
+    window.addEventListener('keydown', fermer)
+    // Le tiroir prend le focus : sa première entrée, sinon il reste derrière le voile pour le clavier.
+    document.querySelector<HTMLElement>('.sidebar a, .sidebar button')?.focus()
+    return () => window.removeEventListener('keydown', fermer)
+  }, [menuOpen])
   const requested = brandFromUrl()
 
   // Les référentiels sont chargés une fois et traversent tous les écrans :
@@ -265,6 +284,7 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
   }
 
   function navigate(next: Route) {
+    setMenuOpen(false)
     setCampaignId(null)
     setPostFor(null)
     setBuilderStep(null)
@@ -376,7 +396,8 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
 
   return (
     <ReferencesProvider value={refs}>
-    <div className="workspace">
+    <div className={`workspace${menuOpen ? ' is-menu-open' : ''}`}>
+      {menuOpen ? <div className="workspace__voile" aria-hidden="true" onClick={() => setMenuOpen(false)} /> : null}
       <Sidebar
         role={role}
         route={route}
@@ -388,17 +409,29 @@ function Workspace({ account, onLogin, onLogout }: { account: Account; onLogin: 
       />
 
       <div className="workspace__main">
-        {/* Un écran du module Social ou la régie portent leur propre titre : rien au-dessus du cadre. */}
-        {framed ? null : (
-          <header className="topbar">
-            <div>
+        {/* Sous 1000 px, la barre porte le bouton qui ouvre le rail ; un écran en cadre n'en garde que ce bouton. */}
+        <header className={`topbar${framed ? ' topbar--cadre' : ''}`}>
+          <button
+            type="button"
+            className="topbar__menu"
+            aria-label="Ouvrir le menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen(true)}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true">
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+            <span>Menu</span>
+          </button>
+          {framed ? null : (
+            <div className="topbar__titre">
               <p className="topbar__kicker">
                 {role === 'BRAND_ADMIN' ? 'Vue Réseau' : 'Vue Franchisé'}
               </p>
               <h1>{titleFor(role, route, campaignId !== null) || 'Suivi de campagne'}</h1>
             </div>
-          </header>
-        )}
+          )}
+        </header>
 
         <main
           className={`app__body${route === 'builder' || route === 'brochures' || route === 'catalogues' || route === 'business-cards' || route === 'media' ? ' app__body--wide' : ''}${framed ? ' app__body--frame' : ''}`}
