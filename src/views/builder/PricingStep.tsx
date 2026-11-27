@@ -4,6 +4,7 @@ import type { PriceList, PriceListItem, SalesQuantities } from '../../lib/api/mo
 import { Fragment } from 'react'
 import type { Draft, MechanicCode } from './CampaignBuilder'
 import AnalysisPeriod from './AnalysisPeriod'
+import Aide from '../../components/Aide'
 
 /**
  * Étape « Prix » : la promotion produit par produit, et ce qu'elle coûte.
@@ -365,12 +366,10 @@ export default function PricingStep({
 
   return (
     <>
-      <h2>Prix</h2>
-      <p className="muted">
-        Choisissez la mécanique de promotion produit par produit. La colonne « à vendre » dit ce
-        qu’il faudra écouler pour retrouver la marge d’avant — à confronter à l’objectif posé à
-        l’étape précédente.
-      </p>
+      <h2>
+        Prix
+        <Aide texte="Choisissez la mécanique de promotion produit par produit. La colonne « à vendre » dit ce qu’il faudra écouler pour retrouver la marge d’avant — à confronter à l’objectif posé à l’étape précédente." />
+      </h2>
 
       {/* Les volumes de référence viennent d'une période d'analyse — la même
           qu'à l'étape « Objectifs de vente », où elle est réglée en premier.

@@ -659,7 +659,7 @@ export default function LeadsView() {
                 disabled={!editable}
                 onChange={(e) => D({ context: { ...ctx, title: e.target.value } })}
               />
-              <select value={ctx.style ?? 'LIST_STYLE'} disabled={!editable} onChange={(e) => D({ context: { ...ctx, style: e.target.value } })}>
+              <select aria-label="Présentation du texte d’accueil" value={ctx.style ?? 'LIST_STYLE'} disabled={!editable} onChange={(e) => D({ context: { ...ctx, style: e.target.value } })}>
                 <option value="LIST_STYLE">Liste · LIST_STYLE</option>
                 <option value="PARAGRAPH_STYLE">Paragraphe · PARAGRAPH_STYLE</option>
               </select>
@@ -696,7 +696,7 @@ export default function LeadsView() {
               />
             </div>
             <div className="leads__ligne">
-              <select value={ty.button_type ?? 'VIEW_WEBSITE'} disabled={!editable} onChange={(e) => D({ thanks: { ...ty, button_type: e.target.value } })}>
+              <select aria-label="Bouton de l’écran de remerciement" value={ty.button_type ?? 'VIEW_WEBSITE'} disabled={!editable} onChange={(e) => D({ thanks: { ...ty, button_type: e.target.value } })}>
                 <option value="VIEW_WEBSITE">Voir le site · VIEW_WEBSITE</option>
                 <option value="CALL_BUSINESS">Appeler · CALL_BUSINESS</option>
                 <option value="DOWNLOAD">Télécharger · DOWNLOAD</option>
@@ -842,7 +842,7 @@ export default function LeadsView() {
             <code>GET /{'{form_id}'}/leads · webhook leadgen · id, created_time, field_data, ad_id, form_id</code>
           </span>
           <div className="leads__actions">
-            <select value={leadScope} onChange={(e) => setLeadScope(e.target.value as 'version' | 'family')}>
+            <select aria-label="Leads à afficher" value={leadScope} onChange={(e) => setLeadScope(e.target.value as 'version' | 'family')}>
               <option value="version">Cette version</option>
               <option value="family">Toutes les versions</option>
             </select>

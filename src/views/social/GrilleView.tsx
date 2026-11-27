@@ -10,6 +10,7 @@ import { boutiquesReseau, effacerAvis, enregistrer, journaliser, parId, useSocia
 import type { EtatSocial, Objet } from '../../lib/social/store'
 import { Barres, C, Courbe, court, fmtG, incomplets, lg, plages, signe } from './GrilleGraphes'
 import type { Survol } from './GrilleGraphes'
+import Aide from '../../components/Aide'
 
 interface PostG {
   id: string
@@ -465,7 +466,12 @@ export default function GrilleView() {
             ))}
           </div>
           <div className="card grille__bloc">
-            <span className="grille__bloc-titre">Légende</span>
+            <span className="grille__bloc-titre">
+              Légende
+              <Aide texte="Réordonner : glissez une case programmée sur une autre (ou cliquez-la, « Échanger avec… », puis l’autre case) : les deux posts échangent leur date et leur heure de publication. Une frise se déplace en bloc. Les posts déjà en ligne ne bougent pas.
+
+D’où viennent les cases : les posts déjà publiés sont relus chez Instagram (les 30 dernières publications du compte de la boutique, toutes les heures, ou tout de suite avec « Relire chez Instagram ») ; les posts programmés viennent du calendrier du module. Le profil montre chaque post recadré en 3:4. Les posts épinglés ne sont pas lus par l’API : ils s’affichent en tête du profil et décalent la grille d’autant." />
+            </span>
             <div className="grille__legende-cases">
               <span>
                 <span className="grille__ech is-prog" />
@@ -480,21 +486,6 @@ export default function GrilleView() {
                 Proposé par la boutique
               </span>
             </div>
-          </div>
-          <div className="card grille__bloc">
-            <span className="grille__bloc-titre">Réordonner</span>
-            <span className="grille__prose">
-              Glissez une case programmée sur une autre (ou cliquez-la, « Échanger avec… », puis l’autre case) : les deux posts échangent leur date et
-              leur heure de publication. Une frise se déplace en bloc. Les posts déjà en ligne ne bougent pas.
-            </span>
-          </div>
-          <div className="card grille__bloc">
-            <span className="grille__bloc-titre">D’où viennent les cases</span>
-            <span className="grille__prose">
-              Les posts déjà publiés sont relus chez Instagram (les 30 dernières publications du compte de la boutique, toutes les heures, ou tout de suite
-              avec « Relire chez Instagram ») ; les posts programmés viennent du calendrier du module. Le profil montre chaque post recadré en 3:4. Les posts
-              épinglés ne sont pas lus par l’API : ils s’affichent en tête du profil et décalent la grille d’autant.
-            </span>
           </div>
         </section>
       </div>

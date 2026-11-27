@@ -697,8 +697,8 @@ export default function FranchiseView() {
             </div>
           </div>
           <div className="franchise__heures">
-            Heures de publication de <input type="time" value={String(r.heureMin ?? '')} onChange={(ev) => R('heureMin', ev.target.value)} /> à{' '}
-            <input type="time" value={String(r.heureMax ?? '')} onChange={(ev) => R('heureMax', ev.target.value)} />
+            Heures de publication de <input type="time" aria-label="Heure de publication au plus tôt" value={String(r.heureMin ?? '')} onChange={(ev) => R('heureMin', ev.target.value)} /> à{' '}
+            <input type="time" aria-label="Heure de publication au plus tard" value={String(r.heureMax ?? '')} onChange={(ev) => R('heureMax', ev.target.value)} />
           </div>
           <div className="franchise__cases">
             {(
@@ -1052,7 +1052,7 @@ function Editeur({
             </label>
             <span>
               Phrase libre{' '}
-              <input type="number" min={0} max={200} value={e.free ?? 0} onChange={(ev) => E({ free: Math.max(0, Math.min(200, +ev.target.value || 0)) })} />{' '}
+              <input type="number" min={0} max={200} aria-label="Phrase libre : nombre de caractères au plus" value={e.free ?? 0} onChange={(ev) => E({ free: Math.max(0, Math.min(200, +ev.target.value || 0)) })} />{' '}
               caractères max <span className="muted">(0 = aucune · ni lien, ni @, ni #)</span>
             </span>
           </div>

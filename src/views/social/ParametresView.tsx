@@ -1104,6 +1104,7 @@ function Google({ etat, toast }: OngletProps) {
                     <td>
                       <select
                         className="par__plein"
+                        aria-label={`Fiche Google de ${x.name}`}
                         value={b.fiche || ''}
                         onChange={(e) => {
                           const v = e.target.value
@@ -1116,6 +1117,7 @@ function Google({ etat, toast }: OngletProps) {
                     <td>
                       <select
                         className="par__plein"
+                        aria-label={`Compte Google Ads de ${x.name}`}
                         value={b.ads || ''}
                         onChange={(e) => {
                           const v = e.target.value
@@ -1526,11 +1528,12 @@ function Groupes({ etat, toast }: OngletProps) {
           return (
             <div key={sh.id} className="par__langue">
               <span>{sh.name}</span>
-              <div className="seg">
+              <div className="seg" role="group" aria-label={`Langue de ${sh.name}`}>
                 {OPTS.map(([k, label]) => (
                   <button
                     key={k}
                     type="button"
+                    aria-pressed={cur === k}
                     className={cur === k ? 'is-on' : ''}
                     onClick={() => {
                       enregistrer({ shops: etat.shops.map((x) => (x.id === sh.id ? { ...x, langs: k.split(',') } : x)) })

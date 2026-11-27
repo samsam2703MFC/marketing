@@ -43,7 +43,7 @@
 .franchise__resume { font-size: 11px; line-height: 1.4; }
 .franchise__tags { display: flex; gap: 4px; flex: 0 0 auto; }
 .franchise__tag { font-size: 10.5px; border-radius: 6px; padding: 2px 7px; background: var(--chip); color: var(--muted-2); }
-.franchise__tag.is-ouvert { background: rgba(63, 122, 82, 0.12); color: var(--green); }
+.franchise__tag.is-ouvert { background: rgba(63, 122, 82, 0.12); color: #2f6a42; }
 .franchise__tag.is-valider { background: var(--prize-soft); color: var(--prize-ink); }
 
 .franchise__editeur { flex: 2 1 560px; min-width: 300px; display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }

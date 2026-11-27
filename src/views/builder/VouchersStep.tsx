@@ -6,6 +6,7 @@ import type {
 import { formatDate, formatEur, formatNumber, useAsync } from '../../lib/useAsync'
 import type { Draft } from './CampaignBuilder'
 import ErpVouchers from './ErpVouchers'
+import Aide from '../../components/Aide'
 
 /**
  * Sous-étape « Bons » de « Offre & promotions ».
@@ -99,12 +100,10 @@ export function VouchersStep({
 
   return (
     <>
-      <h2>Bons</h2>
-      <p className="muted">
-        Un bon est un code : il ne vaut que pour qui l’a, et c’est ce qui dit ce qu’un flyer, un post ou un e-mail a
-        vraiment rapporté. Il se crée dans TFBuddy à partir d’une promotion de l’étape « Prix » (qui ne s’applique
-        alors qu’avec le code) et vaut en caisse comme au webshop : un code pour tous, ou des codes uniques à imprimer.
-      </p>
+      <h2>
+        Bons
+        <Aide texte="Un bon est un code : il ne vaut que pour qui l’a, et c’est ce qui dit ce qu’un flyer, un post ou un e-mail a vraiment rapporté. Il se crée dans TFBuddy à partir d’une promotion de l’étape « Prix » (qui ne s’applique alors qu’avec le code) et vaut en caisse comme au webshop : un code pour tous, ou des codes uniques à imprimer." />
+      </h2>
 
       {printed ? (
         <section className={`vouchers__printed${printed.on ? ' is-on' : ''}`}>

@@ -8,7 +8,6 @@
 .ctrl__onglet--todo .dot { background: var(--prize); }
 .ctrl__onglet--ko .dot { background: var(--danger); }
 .ctrl__onglet--ok .dot { background: var(--green); }
-.ctrl__onglet.is-on .dot { background: #fff; }
 
 .ctrl__boutiques { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; margin: 0; }
 .ctrl__chip {

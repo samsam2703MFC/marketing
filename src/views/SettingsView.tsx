@@ -100,7 +100,7 @@ export default function SettingsView() {
                         <td className="settings__actions">
                           <button
                             type="button"
-                            className="btn btn--sm btn--primary"
+                            className={draft === undefined ? 'btn btn--sm' : 'btn btn--sm btn--primary'}
                             disabled={busy !== null || draft === undefined || draft.trim() === ''}
                             onClick={() => void run(v.name, () => api.saveModuleVariable(v.name, draft ?? ''), setVariables, `${v.label} : enregistré en base.`)}
                           >
@@ -155,7 +155,7 @@ export default function SettingsView() {
                             <>
                               <button
                                 type="button"
-                                className="btn btn--sm btn--primary"
+                                className={draft ? 'btn btn--sm btn--primary' : 'btn btn--sm'}
                                 disabled={busy !== null || !masterKey || !draft || draft.trim() === ''}
                                 onClick={() => void run(k.name, () => api.saveModuleKey(k.name, draft ?? ''), setKeys, `${k.label} : enregistrée, chiffrée.`)}
                               >

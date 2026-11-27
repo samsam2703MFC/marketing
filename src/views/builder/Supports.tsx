@@ -5,6 +5,7 @@ import { campaignShops } from '../../lib/brochure'
 import { fontFaces } from '../brochure/Pages'
 import type { Channel, ChannelGroup, References, ShopSupport, TextProposal } from '../../lib/api/module'
 import type { ChannelEntry, Draft, MessageDraft } from './CampaignBuilder'
+import Aide from '../../components/Aide'
 
 /**
  * L'assistant réunit tous les supports de la campagne (maquette validée le 04/11/2026) :
@@ -514,11 +515,10 @@ export function ContentStep({ refs, draft, patch, shops }: { refs: References; d
     <>
       {/* Les polices de la marque (Vank, Playwrite) pour les aperçus, comme les brochures. */}
       <style>{fontFaces()}</style>
-      <h2>Le message — un seul, décliné sur tous les supports</h2>
-      <p className="muted">
-        Titre, accroche, offre et appel à l’action : écrits une fois, repris par chaque support retenu à l’étape
-        précédente, à son format.
-      </p>
+      <h2>
+        Le message — un seul, décliné sur tous les supports
+        <Aide texte="Titre, accroche, offre et appel à l’action : écrits une fois, repris par chaque support retenu à l’étape précédente, à son format." />
+      </h2>
 
       <div className="content__langs">
         {(['fr', 'nl'] as const).map((code) => (

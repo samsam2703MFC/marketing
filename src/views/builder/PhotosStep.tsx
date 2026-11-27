@@ -5,6 +5,7 @@ import MediaPicker from '../media/MediaPicker'
 import type { PickedImage } from '../media/sources'
 import { seasonImage, seasonLabel } from './illustrations'
 import type { Draft } from './CampaignBuilder'
+import Aide from '../../components/Aide'
 
 /**
  * Étape « Photos produits ».
@@ -147,12 +148,10 @@ export default function PhotosStep({
 
   return (
     <>
-      <h2>Photos produits</h2>
-      <p className="muted">
-        Ce qui part dans le dossier d’impression. La photo du catalogue sert par défaut ; une
-        autre se choisit dans la médiathèque — ses fichiers, les photos du webshop ou les
-        illustrations de la marque — et ne vaut que pour cette campagne : le catalogue ne change pas.
-      </p>
+      <h2>
+        Photos produits
+        <Aide texte="Ce qui part dans le dossier d’impression. La photo du catalogue sert par défaut ; une autre se choisit dans la médiathèque — ses fichiers, les photos du webshop ou les illustrations de la marque — et ne vaut que pour cette campagne : le catalogue ne change pas." />
+      </h2>
 
       <p className="photos__bilan">
         <strong>{avecPhoto}</strong> photo{avecPhoto > 1 ? 's' : ''} sur {produits.length} produit

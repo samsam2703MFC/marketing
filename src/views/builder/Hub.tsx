@@ -3,6 +3,7 @@ import { module as api } from '../../lib/api'
 import { useAsync, formatDate, formatEur, formatNumber } from '../../lib/useAsync'
 import type { References, SocialAttached } from '../../lib/api/module'
 import type { Draft } from './CampaignBuilder'
+import { encreLisible } from '../../lib/couleurs'
 
 /**
  * L'assistant « hub » : huit étapes qui suivent la vie d'une campagne (maquette validée
@@ -72,7 +73,7 @@ export function HubHeader({
       <h2 className="hub-head__name">{draft.name.trim() || 'Nouvelle campagne'}</h2>
       <p className="hub-head__meta">
         {status ? (
-          <span className="hub-chip" style={{ color: status.text_hex, background: status.bg_rgba }}>
+          <span className="hub-chip" style={{ color: encreLisible(status.text_hex), background: status.bg_rgba }}>
             {status.label}
           </span>
         ) : null}

@@ -4,6 +4,8 @@ import { module as api } from '../lib/api'
 import type { Campaign, CockpitNewsletter, GoogleOverview, MetaPost, SocialState } from '../lib/api/module'
 import type { Role } from '../lib/navigation'
 import { useAsync } from '../lib/useAsync'
+import { encreLisible } from '../lib/couleurs'
+import Aide from '../components/Aide'
 
 /**
  * Calendrier marketing : tout ce qui est prévu ou en cours, au même endroit.
@@ -366,7 +368,7 @@ export default function CalendarView({
                 top: 8 + c.row * ROW,
                 left: `${left(c.start)}%`,
                 width: `${width(c.start, c.end)}%`,
-                color: c.status_text_hex,
+                color: encreLisible(c.status_text_hex),
                 background: c.status_bg_rgba,
                 borderColor: c.status_text_hex,
               }}
@@ -622,10 +624,9 @@ export default function CalendarView({
         </div>
 
         <div className="mc-legend">
-          <span>Cliquez un jour pour voir sa semaine en visuels</span>
+          <Aide texte="Cliquez un jour pour voir sa semaine en visuels. Une campagne s’ouvre d’un clic sur sa barre." />
           <span>Vignette = premier visuel du jour · chiffre = publications du jour</span>
           {network ? <span>→ = publicité sans date de fin · ↳ = rattachée à une campagne</span> : null}
-          <span>Une campagne s’ouvre d’un clic sur sa barre</span>
         </div>
       </section>
 
@@ -717,7 +718,7 @@ function Agenda({
               key={c.id}
               type="button"
               className="mc-pill"
-              style={{ color: c.status_text_hex, background: c.status_bg_rgba, borderColor: c.status_text_hex }}
+              style={{ color: encreLisible(c.status_text_hex), background: c.status_bg_rgba, borderColor: c.status_text_hex }}
               onClick={() => onOpen(c.id)}
             >
               {c.name}{' '}

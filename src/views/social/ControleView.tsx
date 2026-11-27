@@ -5,6 +5,7 @@ import './controle.css'
 import { useSocial, boutiquesReseau, parId } from '../../lib/social/store'
 import { addDays, dLabel, dShort, iso } from '../../lib/social/format'
 import { avatarSocial, lireCalendriers } from '../../lib/social/api-controle'
+import Aide from '../../components/Aide'
 
 /**
  * Contrôle des posts — l'écran « Contrôle » du module Social (SA Controle.dc.html), réécrit dans le Marketing
@@ -646,10 +647,12 @@ export default function ControleView() {
                   </label>
                 </div>
                 <label className="ctrl__champ">
-                  Message à la boutique
+                  <span>
+                    Message à la boutique
+                    <Aide texte="Le mail contient le visuel annoté, la liste numérotée des points, la grille de la charte et le lien vers la publication." />
+                  </span>
                   <textarea value={msg} rows={6} onChange={(e) => setMsg(e.target.value)} />
                 </label>
-                <span className="muted ctrl__aide">Le mail contient le visuel annoté, la liste numérotée des points, la grille de la charte et le lien vers la publication.</span>
                 {!tache ? (
                   <div className="ctrl__actions">
                     <button

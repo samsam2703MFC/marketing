@@ -4049,8 +4049,8 @@ function Post({ etat, serveur, avis, props }: { etat: EtatSocial; serveur: Serve
                   )}
                   {later ? (
                     <>
-                      <input type="date" className="pst__champ" value={s.date} disabled={locked} onChange={(e) => put({ date: e.target.value })} />
-                      <input type="time" className="pst__champ" value={s.time} disabled={locked} onChange={(e) => put({ time: e.target.value })} />
+                      <input type="date" className="pst__champ" aria-label="Date de publication" value={s.date} disabled={locked} onChange={(e) => put({ date: e.target.value })} />
+                      <input type="time" className="pst__champ" aria-label="Heure de publication" value={s.time} disabled={locked} onChange={(e) => put({ time: e.target.value })} />
                     </>
                   ) : null}
                 </div>

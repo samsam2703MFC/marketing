@@ -19,6 +19,8 @@ import RangeCalendar from '../../components/RangeCalendar'
 import MediaPicker from '../media/MediaPicker'
 import type { PickedImage } from '../media/sources'
 import { familyImage, seasonImage, seasonLabel } from './illustrations'
+import { styleLevier } from '../../lib/couleurs'
+import Aide from '../../components/Aide'
 
 /**
  * Assistant de création de campagne, en huit étapes.
@@ -1539,11 +1541,10 @@ function FramingStep({
   if (part === 'target') {
     return (
       <>
-        <h2>À qui s’adresse la campagne ?</h2>
-        <p className="muted">
-          La cible se reprend sur chaque support : la publicité Meta vise le rayon et la langue de chaque
-          boutique, la newsletter les segments du CRM, la prospection B2B les comptes du vivier.
-        </p>
+        <h2>
+          À qui s’adresse la campagne ?
+          <Aide texte="La cible se reprend sur chaque support : la publicité Meta vise le rayon et la langue de chaque boutique, la newsletter les segments du CRM, la prospection B2B les comptes du vivier." />
+        </h2>
         {/* Plusieurs cibles à la fois : les particuliers et les professionnels se cochent
             ensemble (c'est la cible « mixte » du modèle), chacun avec ses segments ou ses
             secteurs. Au moins une reste cochée : une campagne parle toujours à quelqu'un. */}
@@ -1673,10 +1674,10 @@ function FramingStep({
 
   return (
     <>
-      <h2>Quel type de campagne ?</h2>
-      <p className="muted">
-        Le type détermine le levier suivi et l’indicateur affiché en pilotage.
-      </p>
+      <h2>
+        Quel type de campagne ?
+        <Aide texte="Le type détermine le levier suivi et l’indicateur affiché en pilotage." />
+      </h2>
 
       <ul className="type-grid">
         {refs.campaignTypes.map((type) => (
@@ -1701,7 +1702,7 @@ function FramingStep({
               {type.lever_label ? (
                 <span
                   className="lever-tag"
-                  style={{ background: type.lever_color_hex ?? undefined }}
+                  style={styleLevier(type.lever_color_hex)}
                 >
                   {type.lever_label}
                 </span>
@@ -2149,11 +2150,10 @@ function OfferStep({ draft, patch }: StepProps) {
 
   return (
     <>
-      <h2>Offre</h2>
-      <p className="muted">
-        Facultative : toutes les campagnes n’en portent pas. Composez-la comme en boutique —
-        saison, catégories, produits ; elle court sur la période fixée à l’étape 1.
-      </p>
+      <h2>
+        Offre
+        <Aide texte="Facultative : toutes les campagnes n’en portent pas. Composez-la comme en boutique — saison, catégories, produits ; elle court sur la période fixée à l’étape 1." />
+      </h2>
 
       {catalog.error ? <p className="error">Catalogue indisponible : {catalog.error}</p> : null}
       {!catalog.loading && !catalog.error && products.length === 0 ? (
@@ -2337,10 +2337,10 @@ function BudgetStep({
 }: StepProps & { shops: Array<{ id: number; code: string; name: string }> }) {
   return (
     <>
-      <h2>Budget & leviers</h2>
-      <p className="muted">
-        L’engagé se remplit ensuite depuis le grand livre du fonds, il ne se saisit pas ici.
-      </p>
+      <h2>
+        Budget & leviers
+        <Aide texte="L’engagé se remplit ensuite depuis le grand livre du fonds, il ne se saisit pas ici." />
+      </h2>
 
       <div className="filters__row">
         <label className="field">
@@ -2466,11 +2466,10 @@ function CommunicationStep({
   if (part === 'medias') {
     return (
       <>
-        <h2>Visuel &amp; documents</h2>
-        <p className="muted">
-          Le visuel de la campagne, décliné par format, et les documents qui l'accompagnent (plan de
-          publication, bon de commande PLV…) : partout, le même visuel.
-        </p>
+        <h2>
+          Visuel &amp; documents
+          <Aide texte="Le visuel de la campagne, décliné par format, et les documents qui l'accompagnent (plan de publication, bon de commande PLV…) : partout, le même visuel." />
+        </h2>
         <h3 className="section-label">Déclinaisons du visuel</h3>
 
         {draft.image_url.trim() === '' ? (
@@ -2540,12 +2539,10 @@ function CommunicationStep({
 
   return (
     <>
-      <h2>Sur quels supports la campagne passe-t-elle ?</h2>
-      <p className="muted">
-        Cochez ce que la campagne utilise : chaque support reçoit sa quantité, ses précisions et son budget,
-        puis ses contenus à l’étape suivante — un seul message, décliné partout. Un support « validé » est
-        arrêté et son budget engagé : c’est lui qui alimente « Pub physique » et « Pub digitale ».
-      </p>
+      <h2>
+        Sur quels supports la campagne passe-t-elle ?
+        <Aide texte="Cochez ce que la campagne utilise : chaque support reçoit sa quantité, ses précisions et son budget, puis ses contenus à l’étape suivante — un seul message, décliné partout. Un support « validé » est arrêté et son budget engagé : c’est lui qui alimente « Pub physique » et « Pub digitale »." />
+      </h2>
 
       <SupportsGrid
         refs={refs}
@@ -2789,12 +2786,10 @@ function PlanningStep({ refs, draft, patch }: StepProps) {
 
   return (
     <>
-      <h2>Rétroplanning</h2>
-      <p className="muted">
-        Les jalons sont comptés en jours avant le lancement. La date affichée se déduit de la
-        date de début de campagne — elle bouge avec elle plutôt que d’être figée. Chaque support
-        retenu apporte ses délais types : ils se proposent ci-dessous.
-      </p>
+      <h2>
+        Rétroplanning
+        <Aide texte="Les jalons sont comptés en jours avant le lancement. La date affichée se déduit de la date de début de campagne — elle bouge avec elle plutôt que d’être figée. Chaque support retenu apporte ses délais types : ils se proposent ci-dessous." />
+      </h2>
 
       <SupportsMilestones refs={refs} draft={draft} patch={patch} />
 
@@ -3052,11 +3047,10 @@ function LeadsStep({ draft, patch }: StepProps) {
 
   return (
     <>
-      <h2>Leads CRM</h2>
-      <p className="muted">
-        Les comptes du vivier B2B correspondant aux secteurs retenus sont distribués aux
-        boutiques de la campagne, à l’état « à appeler ». Ils apparaissent ensuite dans son suivi.
-      </p>
+      <h2>
+        Leads CRM
+        <Aide texte="Les comptes du vivier B2B correspondant aux secteurs retenus sont distribués aux boutiques de la campagne, à l’état « à appeler ». Ils apparaissent ensuite dans son suivi." />
+      </h2>
 
       <div className="filters__row">
         <button
