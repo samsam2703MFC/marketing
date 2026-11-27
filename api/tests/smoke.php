@@ -5323,6 +5323,19 @@ $remplir = \Marketing\Service\CatalogueService::fill(
 check('catalogues : « Notre sélection » se remplit en dernier ; la page d\'une catégorie garde ses produits malgré sa gamme',
     array_column($remplir['items'][1], 'id') === [2, 1] && array_column($remplir['items'][0], 'id') === [3] && $remplir['left'] === 0,
     json_encode(array_map(static fn (array $items): array => array_column($items, 'id'), $remplir['items'])));
+$avecListe = \Marketing\Service\CatalogueService::fill(
+    [
+        ['layout' => 'presentation_liste', 'category' => null, 'gamme' => 5],
+        ['layout' => 'grille', 'category' => 70, 'gamme' => null],
+    ],
+    [
+        ['id' => 1, 'categoryId' => 70, 'gammes' => [5]],
+        ['id' => 2, 'categoryId' => 90, 'gammes' => [5]],
+    ],
+);
+check('catalogues : une présentation avec liste placée avant une catégorie ne prend pas ses produits (elle prend ceux de sa gamme restés sans page)',
+    array_column($avecListe['items'][1], 'id') === [1] && array_column($avecListe['items'][0], 'id') === [2],
+    json_encode(array_map(static fn (array $items): array => array_column($items, 'id'), $avecListe['items'])));
 $cree = call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Noël 2026 — catalogue du réseau', 'source' => ['kind' => 'gamme', 'ref' => 14], 'shopIds' => [$catA, $catB], 'langs' => ['fr', 'nl']]);
 $cat = $cree['body']['data'] ?? [];
 check('catalogues : créé depuis une gamme — ses produits du webshop cochés, pages réparties par catégorie',
@@ -6418,11 +6431,11 @@ check('présentation : enregistrée au plus court (gabarit A, texte vide, catég
         ['layout' => 'vedette', 'category' => null, 'filler' => 'photo', 'fillerMediaId' => $mediaTest['reseau']],
         ['layout' => 'presentation', 'category' => null, 'gamme' => 16],
     ], json_encode([$majG2['status'], $majG2['body']['error'] ?? null, $majG2['body']['data']['pages'] ?? null]));
-check('présentation : le document — liste de la gamme avec ses prix, texte (NL manquant : le français, dit), gabarits, place libre remplie par l\'illustration et par la photo',
+check('présentation : le document — liste de la gamme (ses produits sans page de catégorie : la page 600 garde les siens, 27/11/2026) avec ses prix, texte (NL manquant : le français, dit), gabarits, place libre remplie par l\'illustration et par la photo',
     ($pm2[2]['layout'] ?? '') === 'presentation_liste' && ($pm2[2]['template'] ?? '') === 'B' && ($pm2[2]['title'] ?? '') === 'Lekkere kerst'
-        && ($pm2[2]['text'] ?? '') === 'Nos bûches du réveillon.' && array_column($pm2[2]['products'] ?? [], 'id') === [12, 11, 13, 14]
+        && ($pm2[2]['text'] ?? '') === 'Nos bûches du réveillon.' && array_column($pm2[2]['products'] ?? [], 'id') === [12, 11]
         && isset($pm2[2]['products'][0]['priceCents']) && !isset($pm2[2]['products'][0]['gammes'])
-        && ($pm2[3]['template'] ?? '') === 'C' && ($pm2[3]['products'] ?? null) === [] && ($pm2[3]['filler']['kind'] ?? '') === 'illustration' && ($pm2[3]['filler']['drawing'] ?? '') === 'img/print/noel.png'
+        && ($pm2[3]['template'] ?? '') === 'C' && array_column($pm2[3]['products'] ?? [], 'id') === [13, 14] && ($pm2[3]['filler']['kind'] ?? '') === 'illustration' && ($pm2[3]['filler']['drawing'] ?? '') === 'img/print/noel.png'
         && ($pm2[4]['template'] ?? '') === 'A' && ($pm2[4]['filler']['kind'] ?? '') === 'photo' && str_ends_with((string) ($pm2[4]['filler']['imageUrl'] ?? ''), 'media/test/vitrine-reseau.jpg')
         && str_contains((string) json_encode($docMajG2['body']['data']['warnings'] ?? [], JSON_UNESCAPED_UNICODE), 'Page 3 : texte néerlandais'),
     json_encode([array_slice($pm2, 2, 3), $docMajG2['body']['data']['warnings'] ?? null], JSON_UNESCAPED_UNICODE));
