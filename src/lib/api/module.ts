@@ -3647,8 +3647,11 @@ export async function getCataloguePrint(token: string): Promise<CatalogueDocumen
   return (await request<Envelope<CatalogueDocument>>(`${API_ROOT}/api/v1/public/marketing/catalogue-prints/${encodeURIComponent(token)}`, { anonymous: true })).data
 }
 
-export async function getWebshopProducts(shopIds: number[]): Promise<WebshopProducts> {
-  return (await request<Envelope<WebshopProducts>>(`${BASE}/catalogue-products`, { query: shopIds.length ? { shopIds: shopIds.join(',') } : {} })).data
+/** `relire` : ignore les lectures gardées (30 min) et relit le webshop, les gammes et les promotions. */
+export async function getWebshopProducts(shopIds: number[], relire = false): Promise<WebshopProducts> {
+  const query: Record<string, string> = shopIds.length ? { shopIds: shopIds.join(',') } : {}
+  if (relire) query.relire = '1'
+  return (await request<Envelope<WebshopProducts>>(`${BASE}/catalogue-products`, { query })).data
 }
 
 export async function getCatalogueCharter(): Promise<CatalogueCharter> {

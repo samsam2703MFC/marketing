@@ -66,6 +66,7 @@
 .catv-col { min-width: 0; }
 .catv-search { display: flex; align-items: center; gap: 8px; }
 .catv-search input { flex: 1 1 auto; font: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.catv-reread { flex: 0 0 auto; white-space: nowrap; }
 /* Pas de barre de défilement interne (client, 14/11/2026 : « pas de scroll bar latérale ») : la page entière défile. */
 .catv-products { margin-top: 6px; }
 .catv-group { margin: 14px 0 4px; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }

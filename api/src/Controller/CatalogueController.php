@@ -182,13 +182,17 @@ final class CatalogueController
             }
             $ids[] = (int) $part;
         }
+        $relire = (string) ($request->query['relire'] ?? '');
+        if ($relire !== '' && $relire !== '1') {
+            return Envelope::error('VALIDATION_FAILED', 'Paramètres invalides.', 422, [['field' => 'relire', 'message' => '« 1 » seulement.']]);
+        }
         foreach (array_keys($request->query) as $key) {
-            if ($key !== 'shopIds') {
+            if ($key !== 'shopIds' && $key !== 'relire') {
                 return Envelope::error('VALIDATION_FAILED', 'Paramètres invalides.', 422, [['field' => (string) $key, 'message' => 'Paramètre inconnu.']]);
             }
         }
 
-        return Envelope::ok($this->service->webshopProducts($this->service->shops($ids)));
+        return Envelope::ok($this->service->webshopProducts($this->service->shops($ids), $relire === '1'));
     }
 
     /** `GET …/catalogue-charter` */
