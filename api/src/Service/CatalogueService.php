@@ -1880,11 +1880,47 @@ final class CatalogueService
                 $reserved[$offer] = $index;
             }
         }
-        foreach ($pages as $index => $page) {
+        // « Notre sélection » (ni catégorie ni gamme) prend ce qui RESTE : elle se remplit en dernier, même placée
+        // avant les pages des catégories (27/11/2026 : une page « Notre sélection » placée avant « Noël » prenait
+        // ses produits et la page « Noël » restait vide).
+        $isSelection = static fn (array $page): bool => $page['layout'] !== 'pleine'
+            && !in_array($page['layout'], self::PRESENTATIONS, true)
+            && ($page['category'] ?? null) === null && ($page['gamme'] ?? null) === null;
+        $passOrder = array_merge(
+            array_keys(array_filter($pages, static fn (array $page): bool => !$isSelection($page))),
+            array_keys(array_filter($pages, $isSelection)),
+        );
+        $out = array_fill(0, count($pages), []);
+        $pass = 0;
+        $ownCategory = static function (array &$out, array &$placed) use ($pages, $order, $chosen, $reserved): void {
+            foreach ($pages as $at => $own) {
+                $cat = $own['category'] ?? null;
+                if ($cat === null || ($own['gamme'] ?? null) === null || $own['layout'] === 'pleine' || in_array($own['layout'], self::PRESENTATIONS, true)) {
+                    continue;
+                }
+                foreach ($order as $key) {
+                    if (count($out[$at]) >= (self::LAYOUTS[$own['layout']] ?? 6)) {
+                        break;
+                    }
+                    if (!isset($placed[$key]) && !isset($reserved[$key]) && !isset($chosen[$key]['offer']) && (int) ($chosen[$key]['categoryId'] ?? 0) === (int) $cat) {
+                        $placed[$key] = true;
+                        $out[$at][] = $chosen[$key];
+                    }
+                }
+            }
+        };
+        foreach ($passOrder as $index) {
+            $page = $pages[$index];
+            // Avant les pages « Notre sélection » : une page de catégorie à qui sa gamme a laissé de la place
+            // prend les produits de SA catégorie restés sans page, quelle que soit leur gamme.
+            if ($pass === 0 && $isSelection($page)) {
+                $pass = 1;
+                $ownCategory($out, $placed);
+            }
             $capacity = self::LAYOUTS[$page['layout']] ?? 6;
             $category = $page['category'] ?? null;
             $gamme = $page['gamme'] ?? null;
-            $items = [];
+            $items = $out[$index];
             if ($page['layout'] === 'pleine') {
                 // Son produit réservé ; sinon le premier de sa catégorie (et de sa gamme) — puis sa promotion.
                 $mine = array_keys(array_filter($reserved, static fn (int $at): bool => $at === $index));
@@ -1910,7 +1946,7 @@ final class CatalogueService
                         }
                     }
                 }
-                $out[] = $items;
+                $out[$index] = $items;
                 continue;
             }
             // Une présentation avec liste : les premiers produits de sa gamme, dans l'ordre du catalogue.
@@ -1935,7 +1971,11 @@ final class CatalogueService
                 $placed[$key] = true;
                 $items[] = $product;
             }
-            $out[] = $items;
+            $out[$index] = $items;
+        }
+
+        if ($pass === 0) {
+            $ownCategory($out, $placed);
         }
 
         return ['items' => $out, 'left' => count($chosen) - count($placed)];

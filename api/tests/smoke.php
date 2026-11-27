@@ -5307,6 +5307,22 @@ $pdo->exec("DELETE FROM mar_catalogue_cache WHERE cle = 'produits:0'");
 check('catalogues : paramètre illisible (422)', call($catRouter, 'GET', '/api/v1/marketing/catalogue-products', ['shopIds' => 'a'])['status'] === 422
     && call($catRouter, 'GET', '/api/v1/marketing/catalogue-products', ['pirate' => '1'])['status'] === 422);
 
+// « Notre sélection » prend ce qui RESTE, même placée avant une catégorie ; une page de catégorie dont la gamme
+// filtre trop prend quand même les produits de sa catégorie restés sans page (27/11/2026, page « Noël » vide).
+$remplir = \Marketing\Service\CatalogueService::fill(
+    [
+        ['layout' => 'grille', 'category' => null, 'gamme' => null],
+        ['layout' => 'grille', 'category' => 70, 'gamme' => 3],
+    ],
+    [
+        ['id' => 1, 'categoryId' => 70, 'gammes' => [5]],
+        ['id' => 2, 'categoryId' => 70, 'gammes' => [3]],
+        ['id' => 3, 'categoryId' => 80, 'gammes' => []],
+    ],
+);
+check('catalogues : « Notre sélection » se remplit en dernier ; la page d\'une catégorie garde ses produits malgré sa gamme',
+    array_column($remplir['items'][1], 'id') === [2, 1] && array_column($remplir['items'][0], 'id') === [3] && $remplir['left'] === 0,
+    json_encode(array_map(static fn (array $items): array => array_column($items, 'id'), $remplir['items'])));
 $cree = call($catRouter, 'POST', '/api/v1/marketing/catalogues', [], ['title' => 'Noël 2026 — catalogue du réseau', 'source' => ['kind' => 'gamme', 'ref' => 14], 'shopIds' => [$catA, $catB], 'langs' => ['fr', 'nl']]);
 $cat = $cree['body']['data'] ?? [];
 check('catalogues : créé depuis une gamme — ses produits du webshop cochés, pages réparties par catégorie',
