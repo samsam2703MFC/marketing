@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { module as api } from '../lib/api'
 import { useAsync, formatEur, formatNumber } from '../lib/useAsync'
 import type { Agency } from '../lib/api/module'
+import Erreur from '../components/Erreur'
 
 /**
  * Agences & prestataires.
@@ -16,7 +17,7 @@ export default function AgenciesView() {
   const { data, error, loading } = useAsync(() => api.listAgencies(), [])
   const [openId, setOpenId] = useState<number | null>(null)
 
-  if (error) return <p className="error">{error}</p>
+  if (error) return <Erreur>{error}</Erreur>
   if (loading) return <p className="muted">Chargement…</p>
   if (!data?.length) return <p className="muted">Aucune agence référencée.</p>
 
@@ -134,7 +135,7 @@ function AgencyRow({
       {open ? (
         <tr>
           <td colSpan={7}>
-            {interventions.error ? <p className="error">{interventions.error}</p> : null}
+            {interventions.error ? <Erreur>{interventions.error}</Erreur> : null}
             {interventions.loading ? <p className="muted">Chargement…</p> : null}
             {interventions.data?.length === 0 && !interventions.loading ? (
               <p className="muted">Aucune intervention enregistrée pour cette agence.</p>

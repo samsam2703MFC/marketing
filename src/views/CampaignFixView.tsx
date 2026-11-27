@@ -7,6 +7,7 @@ import { useAsync } from '../lib/useAsync'
 import { describeError } from '../state/auth'
 import { useReferences } from '../state/references'
 import { encreLisible } from '../lib/couleurs'
+import Erreur from '../components/Erreur'
 
 /**
  * Compléter les campagnes : celles dont une donnée manque, une à une.
@@ -75,7 +76,7 @@ export default function CampaignFixView({ startId, brandAdmin, onOpenBuilder, on
     setCurrent(startId !== null && first.includes(startId) ? startId : (first[0] ?? null))
   }
 
-  if (campaigns.error) return <p className="error">{campaigns.error}</p>
+  if (campaigns.error) return <Erreur>{campaigns.error}</Erreur>
   if (campaigns.loading) return <p className="muted">Lecture des campagnes et de ce qui leur manque…</p>
 
   const ids = queue ?? []

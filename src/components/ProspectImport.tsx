@@ -3,6 +3,7 @@ import { module as api } from '../lib/api'
 import { useAsync, formatNumber } from '../lib/useAsync'
 import type { ImportReport, ProspectRow, SyncReport, SyncResult } from '../lib/api/module'
 import { describeError } from '../state/auth'
+import Erreur from './Erreur'
 
 /**
  * Import du vivier de comptes B2B.
@@ -189,7 +190,7 @@ export default function ProspectImport() {
           : ' Les secteurs sont les types de compte professionnel de l’ERP, et chaque compte peut en relever de plusieurs.'}
       </p>
 
-      {availability.error ? <p className="error">{availability.error}</p> : null}
+      {availability.error ? <Erreur>{availability.error}</Erreur> : null}
 
       <div className="table-scroll">
         <table>
@@ -288,19 +289,19 @@ export default function ProspectImport() {
           des fiches, et c'est la seule partie de la reprise qui peut échouer
           seule. Un tableau à zéro n'aurait pas dit laquelle des deux. */}
       {sync?.links?.error ? (
-        <p className="error">Secteurs non rattachés : {sync.links.error}</p>
+        <Erreur>Secteurs non rattachés : {sync.links.error}</Erreur>
       ) : null}
 
       {sync?.products && 'error' in sync.products ? (
-        <p className="error">Catalogue produit non repris : {sync.products.error}</p>
+        <Erreur>Catalogue produit non repris : {sync.products.error}</Erreur>
       ) : null}
 
       {sync?.seasons && 'error' in sync.seasons ? (
-        <p className="error">Gammes saisonnières non reprises : {sync.seasons.error}</p>
+        <Erreur>Gammes saisonnières non reprises : {sync.seasons.error}</Erreur>
       ) : null}
 
       {sync?.season_links?.error ? (
-        <p className="error">Disponibilités produit ↔ gamme non reprises : {sync.season_links.error}</p>
+        <Erreur>Disponibilités produit ↔ gamme non reprises : {sync.season_links.error}</Erreur>
       ) : null}
 
       {sync?.season_links && !sync.season_links.error ? (
@@ -402,7 +403,7 @@ export default function ProspectImport() {
         </p>
       ) : null}
 
-      {failure ? <p className="error">{failure}</p> : null}
+      {failure ? <Erreur>{failure}</Erreur> : null}
 
       {report ? (
         <>

@@ -4,6 +4,7 @@ import type { MediaAsset, MediaLibrary } from '../../lib/api/module'
 import { designImages, fetchSourceImage, webshopImages } from './sources'
 import type { SourceImage } from './sources'
 import { proposeForAssets } from './tagRules'
+import Erreur from '../../components/Erreur'
 
 const STEP = 60
 
@@ -52,9 +53,9 @@ export function SourceBrowser({
 
   if (error) {
     return (
-      <p className="error">
+      <Erreur>
         {source === 'webshop' ? 'Photos du webshop illisibles' : 'Illustrations illisibles'} : {error}
-      </p>
+      </Erreur>
     )
   }
 

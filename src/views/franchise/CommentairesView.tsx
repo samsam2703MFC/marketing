@@ -4,6 +4,7 @@ import '../social/google.css'
 import './commentaires.css'
 import { commentaireRepondre, commentaires, commentaireTraiter, dateHeure, maintenant, texteErreur, useFranchise } from './_donnees'
 import type { Commentaire, Couleur, Totaux, VueCommentaires } from './_donnees'
+import Erreur from '../../components/Erreur'
 
 /**
  * Commentaires — la page « Commentaires » de l'espace franchisé (social/franchisee/Commentaires.dc.html), réécrite
@@ -72,7 +73,7 @@ export default function CommentairesView() {
     if (pret) charger(depart.jours)
   }, [pret, charger, depart.jours])
 
-  if (!etat) return <div className="social-native">{erreur ? <p className="error">{erreur}</p> : <p className="muted">Chargement de l’espace boutique…</p>}</div>
+  if (!etat) return <div className="social-native">{erreur ? <Erreur>{erreur}</Erreur> : <p className="muted">Chargement de l’espace boutique…</p>}</div>
 
   const regles = etat.rules ?? {}
   const masque = !!data?.hidden || regles.voirCommentaires === false
@@ -226,7 +227,7 @@ export default function CommentairesView() {
       ) : null}
 
       {loading && !data ? <p className="muted">Lecture des commentaires…</p> : null}
-      {err ? <p className="error">{err}</p> : null}
+      {err ? <Erreur>{err}</Erreur> : null}
 
       {data && !masque ? (
         <section className="card table-card gg__table">

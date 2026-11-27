@@ -3,6 +3,7 @@ import { useAsync } from '../../lib/useAsync'
 import type { KpiPeriode, References, TrackingAction, TrackingBaseline, TrackingScope } from '../../lib/api/module'
 import type { Draft } from './CampaignBuilder'
 import Aide from '../../components/Aide'
+import Erreur from '../../components/Erreur'
 
 /**
  * Le suivi de la campagne : l'action qu'elle doit faire bouger, et comment on la juge.
@@ -191,7 +192,7 @@ function TrackingReference({
     )
   }
   if (kpi.loading) return <p className="muted wizard__hint">Lecture des ventes de l'an dernier…</p>
-  if (kpi.error !== null) return <p className="error">Référence indisponible : {kpi.error}</p>
+  if (kpi.error !== null) return <Erreur>Référence indisponible : {kpi.error}</Erreur>
   if (kpi.data === null) return null
 
   const { kpi: definition, reseau, magasins, fenetres } = kpi.data

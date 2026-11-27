@@ -33,6 +33,7 @@ import type { Side } from './Pages'
 import PAGE_CSS from './brochure.css?inline'
 import { importBrochure } from '../catalogue/brochureImport'
 import { openPrintWindow } from '../../lib/print'
+import Erreur from '../../components/Erreur'
 
 /**
  * Générateur de brochures : un leaflet A5 recto-verso ou un dépliant A4 trois
@@ -143,19 +144,19 @@ export default function BrochureView({ campaignId: initialId, onOpenCampaign, in
             Suivi de la campagne →
           </button>
         ) : null}
-        {campaigns.error ? <p className="error">{campaigns.error}</p> : null}
+        {campaigns.error ? <Erreur>{campaigns.error}</Erreur> : null}
       </section>
 
-      {bundle.error ? <p className="error">Dossier d’impression illisible : {bundle.error}</p> : null}
+      {bundle.error ? <Erreur>Dossier d’impression illisible : {bundle.error}</Erreur> : null}
       {bundle.loading && campaignId !== null ? <p className="muted">Chargement du dossier d’impression…</p> : null}
       {social.error ? (
-        <p className="error">
-          Module Social injoignable ({social.error}) : adresses, horaires et langues des boutiques, et lien du webshop, manquent.
-        </p>
+        <Erreur>
+          Adresses, horaires et langues des boutiques, et lien du webshop, manquent : le module Social ne répond pas. ({social.error})
+        </Erreur>
       ) : null}
 
       {bundle.data && !bundle.loading && (social.loading || shops.loading) ? <p className="muted">Lecture des boutiques et du webshop…</p> : null}
-      {shops.error ? <p className="error">Boutiques illisibles : {shops.error}</p> : null}
+      {shops.error ? <Erreur>Boutiques illisibles : {shops.error}</Erreur> : null}
 
       {bundle.data && !bundle.loading && !social.loading && !shops.loading ? (
         <Generator
@@ -231,7 +232,7 @@ function MovedNotice({ campaignId, campaignName, format, saved, saving, onOpenCa
           ))}
         </ul>
       ) : null}
-      {state.status === 'error' ? <p className="error">{state.text}</p> : null}
+      {state.status === 'error' ? <Erreur>{state.text}</Erreur> : null}
       <div className="bro-moved__actions">
         {id !== null ? (
           onOpenCatalogue ? (
@@ -865,7 +866,7 @@ function Generator({ bundle, shops, socialShops, brandLangs, webshopUrl, today, 
               Épreuves de toutes les versions
             </button>
           </div>
-          {printError ? <p className="error">{printError}</p> : null}
+          {printError ? <Erreur>{printError}</Erreur> : null}
           <p className="bro-hint">
             Dans la fenêtre d’impression, choisissez « Enregistrer au format PDF ». PDF imprimeur : {def.trimW} × {def.trimH} mm et 3 mm de fond perdu
             {settings.cropMarks ? ', traits de coupe' : ''}. Épreuve : au format fini, filigranée tant qu’un point bloque.

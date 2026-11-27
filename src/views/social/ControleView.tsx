@@ -6,6 +6,7 @@ import { useSocial, boutiquesReseau, parId } from '../../lib/social/store'
 import { addDays, dLabel, dShort, iso } from '../../lib/social/format'
 import { avatarSocial, lireCalendriers } from '../../lib/social/api-controle'
 import Aide from '../../components/Aide'
+import Erreur from '../../components/Erreur'
 
 /**
  * Contrôle des posts — l'écran « Contrôle » du module Social (SA Controle.dc.html), réécrit dans le Marketing
@@ -436,7 +437,7 @@ export default function ControleView() {
 
   const imgDe = (x: Pub) => x.img || avatarSocial(nomBoutique(x.shop), 'facebook')
 
-  if (chargement === 'erreur') return <p className="error">Le module Social ne répond pas : {erreur}</p>
+  if (chargement === 'erreur') return <Erreur>Le module Social ne répond pas : {erreur}</Erreur>
 
   return (
     <div className="social-native ctrl">

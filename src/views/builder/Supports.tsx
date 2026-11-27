@@ -6,6 +6,7 @@ import { fontFaces } from '../brochure/Pages'
 import type { Channel, ChannelGroup, References, ShopSupport, TextProposal } from '../../lib/api/module'
 import type { ChannelEntry, Draft, MessageDraft } from './CampaignBuilder'
 import Aide from '../../components/Aide'
+import Erreur from '../../components/Erreur'
 
 /**
  * L'assistant réunit tous les supports de la campagne (maquette validée le 04/11/2026) :
@@ -548,7 +549,7 @@ export function ContentStep({ refs, draft, patch, shops }: { refs: References; d
       </div>
       {words > 6 ? <p className="muted wizard__hint">Titre de {words} mots : au-delà de 6, il se lit mal sur une bâche.</p> : null}
 
-      {failure ? <p className="error">Propositions indisponibles : {failure}</p> : null}
+      {failure ? <Erreur>Propositions indisponibles : {failure}</Erreur> : null}
       {proposals ? (
         <div className="content__proposals">
           {proposals.map((proposal, i) => (

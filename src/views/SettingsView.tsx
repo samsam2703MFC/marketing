@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import * as api from '../lib/api/module'
 import type { ModuleKey, ModuleVariable, SettingSource } from '../lib/api/module'
+import Erreur from '../components/Erreur'
+import Aide from '../components/Aide'
 
 /**
  * Paramètres › Variables et clés.
@@ -55,7 +57,7 @@ export default function SettingsView() {
     }
   }
 
-  if (error && !variables) return <p className="error">{error}</p>
+  if (error && !variables) return <Erreur>{error}</Erreur>
   if (!variables || !keys) return <p className="muted">Chargement…</p>
 
   const groups = [...new Set(variables.map((v) => v.group).concat(keys.map((k) => k.group)))]
@@ -64,16 +66,15 @@ export default function SettingsView() {
     <div className="settings">
       <section className="card settings__intro">
         <p>
-          Les réglages du module vivent en base (<code>mar_variable</code>) et ses secrets y sont chiffrés (<code>mar_keys</code>) : le module
-          se déplace avec eux. Une valeur posée ici l’emporte sur le fichier du serveur ; retirée, le fichier reprend.
+          Les réglages et les clés du module, enregistrés avec lui : une valeur posée ici l’emporte sur le fichier du serveur.
+          <Aide texte="Ils vivent dans la base du module, les clés y sont chiffrées : le module se déplace avec eux. Retirée, une valeur laisse le fichier du serveur reprendre. Restent dans la configuration du serveur l’accès à la base et la clé maîtresse qui déchiffre les clés." />
         </p>
-        <p className="muted">
-          Restent dans la configuration du serveur, par construction : l’accès à la base (il faut l’avoir pour lire ces tables) et la clé
-          maîtresse qui déchiffre les clés. {masterKey ? 'Clé maîtresse présente sur ce serveur.' : 'Clé maîtresse absente : les clés ne peuvent pas être enregistrées en base.'}
-        </p>
+        {masterKey ? null : (
+          <p className="settings__notice settings__notice--warn">Clé maîtresse absente sur ce serveur : les clés ne peuvent pas être enregistrées.</p>
+        )}
       </section>
       {notice ? <p className="settings__notice">{notice}</p> : null}
-      {error ? <p className="error">{error}</p> : null}
+      {error ? <Erreur>{error}</Erreur> : null}
 
       {groups.map((group) => (
         <section key={group} className="card table-card">
@@ -89,9 +90,10 @@ export default function SettingsView() {
                     return (
                       <tr key={v.name}>
                         <td className="settings__name">
-                          <b>{v.label}</b>
-                          <code>{v.name}</code>
-                          {v.help ? <small className="muted">{v.help}</small> : null}
+                          <b title={v.name}>
+                            {v.label}
+                            {v.help ? <Aide texte={v.help} /> : null}
+                          </b>
                         </td>
                         <td className="settings__value">
                           <input value={shown} onChange={(e) => setDrafts((d) => ({ ...d, [v.name]: e.target.value }))} aria-label={v.label} />
@@ -127,9 +129,13 @@ export default function SettingsView() {
                     return (
                       <tr key={k.name} className="settings__key">
                         <td className="settings__name">
-                          <b>🔒 {k.label}</b>
-                          <code>{k.name}</code>
-                          {k.help ? <small className="muted">{k.help}</small> : null}
+                          <b title={k.name}>
+                            <svg className="settings__lock" viewBox="0 0 24 24" aria-label="Clé secrète" role="img">
+                              <path d="M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z" />
+                            </svg>
+                            {k.label}
+                            {k.help ? <Aide texte={k.help} /> : null}
+                          </b>
                         </td>
                         <td className="settings__value">
                           {k.managedByDeploy ? (

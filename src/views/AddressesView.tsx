@@ -1,6 +1,7 @@
 import { module as api } from '../lib/api'
 import { API_BASE_URL as TFBUDDY_BASE, AUTH_MODE as TFBUDDY_AUTH_MODE, DEV_PROXY_PREFIX } from '../lib/api/config'
 import { useAsync } from '../lib/useAsync'
+import Erreur from '../components/Erreur'
 
 /**
  * Adresses et réglages.
@@ -111,7 +112,7 @@ export default function AddressesView() {
       <section className="card">
         <h2>Connexion</h2>
         {session.loading ? <p className="muted">Lecture de la session…</p> : null}
-        {session.error ? <p className="error">Session illisible : {session.error}</p> : null}
+        {session.error ? <Erreur>Session illisible : {session.error}</Erreur> : null}
         {s ? (
           <div className="addresses__session">
             <p>

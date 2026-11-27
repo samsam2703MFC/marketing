@@ -9,6 +9,7 @@ import type { EtatSocial, Serveur } from '../../lib/social/store'
 import { alertes, avatar, languesDe, libelleConnexion, pageSocial, remplir } from '../../lib/social/ecrans'
 import { lireCalendriers, lireChiffresPost, relancerPost, supprimerPost } from '../../lib/social/api-calendrier'
 import type { Calendriers, ChiffresPost, CompteMeta, PostCal } from '../../lib/social/api-calendrier'
+import Erreur from '../../components/Erreur'
 
 export interface CalendrierViewProps {
   /** « Nouveau post » (et « Créer un post » sur un jour) : l'écran Créer un post, éventuellement à une date. */
@@ -76,7 +77,7 @@ function periode(vue: Vue, curseur: string): [string, string] {
 export default function CalendrierView({ onCreerPost, onOuvrirPost, onControler, onCreerPub, onParametres }: CalendrierViewProps = {}) {
   const { etat, serveur, erreur, chargement, avis } = useSocial()
   if (chargement === 'attente') return <p className="muted">Lecture du module Social…</p>
-  if (!etat || !serveur) return <p className="error">Module Social illisible : {erreur}</p>
+  if (!etat || !serveur) return <Erreur>Module Social illisible : {erreur}</Erreur>
   return (
     <Calendrier
       etat={etat}

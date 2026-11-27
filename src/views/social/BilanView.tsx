@@ -4,6 +4,7 @@ import * as api from '../../lib/api/module'
 import type { BilanLigne, BilanPeriode, SocialBilan } from '../../lib/api/module'
 import { ROOTS } from '../../lib/api/module'
 import Aide from '../../components/Aide'
+import Erreur from '../../components/Erreur'
 
 const PERIODES: [BilanPeriode, string][] = [
   ['semaine', 'Semaine'],
@@ -83,7 +84,7 @@ export default function BilanView() {
         </div>
       </div>
 
-      {error ? <p className="error">{error}</p> : null}
+      {error ? <Erreur>{error}</Erreur> : null}
       {!d && !error ? (
         <p className="muted">
           {periode === 'semaine' ? 'Calcul du bilan…' : 'Calcul du bilan sur la période… la première lecture chez Meta peut prendre une minute.'}

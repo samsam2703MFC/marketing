@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import './social.css'
 import * as api from '../../lib/api/module'
 import type { SocialSuivi, SuiviLigne } from '../../lib/api/module'
+import Erreur from '../../components/Erreur'
 
 type Jours = 7 | 28 | 90
 const PERIODES: Jours[] = [7, 28, 90]
@@ -117,7 +118,7 @@ export default function SuiviView() {
         </div>
       </div>
 
-      {error ? <p className="error">Lecture chez Meta impossible : {error}</p> : null}
+      {error ? <Erreur>Lecture chez Meta impossible : {error}</Erreur> : null}
       {loading && !r ? <p className="muted">Lecture des Pages, des comptes Instagram et des comptes publicitaires chez Meta…</p> : null}
 
       {r && vue ? (

@@ -1,6 +1,7 @@
 import { module as api } from '../lib/api'
 import { useAsync, formatEur, formatNumber } from '../lib/useAsync'
 import CostTable from '../components/CostTable'
+import Erreur from '../components/Erreur'
 
 /**
  * Marketing Analyse : dépense, valeur générée et ROI par levier.
@@ -12,7 +13,7 @@ import CostTable from '../components/CostTable'
 export default function AnalysisView() {
   const { data, error, loading } = useAsync(() => api.getAnalysis(), [])
 
-  if (error) return <p className="error">{error}</p>
+  if (error) return <Erreur>{error}</Erreur>
   if (loading) return <p className="muted">Chargement…</p>
   if (!data) return null
 

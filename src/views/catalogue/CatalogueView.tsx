@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { DragEvent as ReactDragEvent } from 'react'
+import type { DragEvent as ReactDragEvent, ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import * as api from '../../lib/api/module'
@@ -34,6 +34,7 @@ import { SUPPORT_LABELS, SUPPORT_NOUNS, isLeaflet, leafletBlocked, leafletChecks
 import { Sheet as BrochureSheet, fontFaces, pageSize as brochurePageSize } from '../brochure/Pages'
 import type { Side } from '../brochure/Pages'
 import BROCHURE_CSS from '../brochure/brochure.css?inline'
+import Erreur, { MessageErreur } from '../../components/Erreur'
 
 /**
  * Les catalogues produits de la marque : prix du webshop, gammes (Noël, Saint-Nicolas…).
@@ -241,8 +242,8 @@ function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen
 
       <section className="card catv-recent">
         <h2>Imprimés récents</h2>
-        {list.error ? <p className="error">{list.error}</p> : null}
-        {deleteError ? <p className="error">{deleteError}</p> : null}
+        {list.error ? <Erreur>{list.error}</Erreur> : null}
+        {deleteError ? <Erreur>{deleteError}</Erreur> : null}
         {list.loading && !list.data ? <p className="muted">Lecture des catalogues…</p> : null}
         {list.data && list.data.items.length === 0 ? <p className="muted">Aucun imprimé pour l’instant.</p> : null}
         {list.data && list.data.items.length > 0 && shown.length === 0 ? <p className="muted">Aucun {kindFilter === 'leaflet' ? 'leaflet' : kindFilter === 'depliant' ? 'dépliant' : 'catalogue'} pour l’instant.</p> : null}
@@ -258,13 +259,13 @@ function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen
                   <th>Boutiques</th>
                   <th>État</th>
                   <th>Bon de commande</th>
-                  <th aria-label="Supprimer ou modifier" />
+                  <th className="catv-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {shown.map((cat) => (
                   <tr key={cat.id}>
-                    <td>{cat.title}</td>
+                    <td className="catv-col-titre">{cat.title}</td>
                     <td>{cat.owner === 'marque' ? 'Marque' : `${cat.shop?.name ?? 'Boutique'} (franchisé)`}</td>
                     <td>
                       <span className="bro-tag">
@@ -295,29 +296,6 @@ function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen
                       <OrderFormMenu cat={cat} shopNames={shopNames} conditions={orderConditions.data} />
                       <button
                         type="button"
-                        className="btn btn--danger btn--sm"
-                        disabled={deleting !== null}
-                        aria-label={`Supprimer le catalogue « ${cat.title} »`}
-                        onClick={() => remove(cat)}
-                      >
-                        {deleting === cat.id ? 'Suppression…' : 'Supprimer'}
-                      </button>
-                      {/* Deux boutons (21/11/2026, Sam) : les 4 pages de la marque de CE catalogue, puis son contenu. Un
-                          catalogue de franchisé garde les pages communes : il n'a que son contenu. */}
-                      {cat.owner === 'marque' ? (
-                        <button
-                          type="button"
-                          className="btn btn--sm catv-edit"
-                          disabled={deleting === cat.id}
-                          aria-label={`Modifier les pages de la marque du catalogue « ${cat.title} »`}
-                          title="Couverture, page 2, avant-dernière et dernière page de ce catalogue seulement"
-                          onClick={() => onBrandPages(cat)}
-                        >
-                          ✎ Pages de la marque
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
                         className="btn btn--sm catv-edit"
                         disabled={deleting === cat.id}
                         aria-label={`Modifier le contenu du catalogue « ${cat.title} »`}
@@ -326,6 +304,31 @@ function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen
                       >
                         ✎ Contenu
                       </button>
+                      {/* Les gestes moins fréquents dans un menu (audit du 27/11/2026 : quatre boutons par ligne écrasaient le
+                          titre, écrit mot par mot). Deux boutons (21/11/2026, Sam) : les 4 pages de la marque de CE catalogue,
+                          puis son contenu ; un catalogue de franchisé garde les pages communes. */}
+                      <PlusDActions label={`Autres actions pour « ${cat.title} »`}>
+                        {cat.owner === 'marque' ? (
+                          <button
+                            type="button"
+                            className="linklike"
+                            disabled={deleting === cat.id}
+                            title="Couverture, page 2, avant-dernière et dernière page de ce catalogue seulement"
+                            onClick={() => onBrandPages(cat)}
+                          >
+                            ✎ Pages de la marque
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="linklike catv-more__danger"
+                          disabled={deleting !== null}
+                          aria-label={`Supprimer le catalogue « ${cat.title} »`}
+                          onClick={() => remove(cat)}
+                        >
+                          {deleting === cat.id ? 'Suppression…' : 'Supprimer'}
+                        </button>
+                      </PlusDActions>
                     </td>
                   </tr>
                 ))}
@@ -335,6 +338,50 @@ function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen
         ) : null}
       </section>
     </div>
+  )
+}
+
+/**
+ * « … » d'une ligne : les gestes moins fréquents, dans un menu posé hors du tableau (qui défile et le couperait).
+ * Échap ou un clic ailleurs le ferme ; il reste dans la fenêtre.
+ */
+function PlusDActions({ label, children }: { label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+  const [place, setPlace] = useState<{ top?: number; bottom?: number; right: number } | null>(null)
+  const box = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const at = () => {
+      const r = box.current?.getBoundingClientRect()
+      if (!r) return
+      const right = Math.max(8, window.innerWidth - r.right)
+      setPlace(window.innerHeight - r.bottom > 120 ? { top: r.bottom + 4, right } : { bottom: window.innerHeight - r.top + 4, right })
+    }
+    at()
+    const close = (event: MouseEvent) => !box.current?.contains(event.target as Node) && setOpen(false)
+    const escape = (event: KeyboardEvent) => event.key === 'Escape' && setOpen(false)
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', escape)
+    window.addEventListener('scroll', at, true)
+    window.addEventListener('resize', at)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      document.removeEventListener('keydown', escape)
+      window.removeEventListener('scroll', at, true)
+      window.removeEventListener('resize', at)
+    }
+  }, [open])
+  return (
+    <span className="catv-more" ref={box}>
+      <button type="button" className="btn btn--sm" aria-label={label} title="Autres actions" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        …
+      </button>
+      {open && place ? (
+        <span className="catv-more__pop" style={{ position: 'fixed', ...place }} onClick={() => setOpen(false)}>
+          {children}
+        </span>
+      ) : null}
+    </span>
   )
 }
 
@@ -394,8 +441,8 @@ function BrochuresToImport({ onOpen, revision, onImported }: { onOpen: (id: numb
           </button>
         </div>
       ) : null}
-      {error ? <p className="error">{error}</p> : null}
-      {list.error ? <p className="error">{list.error}</p> : null}
+      {error ? <Erreur>{error}</Erreur> : null}
+      {list.error ? <Erreur>{list.error}</Erreur> : null}
       <div className="table-scroll">
         <table className="catv-table">
           <thead>
@@ -598,7 +645,7 @@ function NewCatalogue({
             <div className="catv-field catv-field--grow">
               <span>Gammes · une ou plusieurs ({choisies.length} choisie{choisies.length > 1 ? 's' : ''}, {produitsChoisis} produits)</span>
               {webshop.loading ? <span className="muted">Lecture du webshop…</span> : null}
-              {webshop.error ? <span className="error">{webshop.error}</span> : null}
+              {webshop.error ? <Erreur inline>{webshop.error}</Erreur> : null}
               {webshop.data && !gammes.length ? (
                 <span className="muted">Le webshop ne donne aucune gamme active : partez d’une campagne ou de produits choisis.</span>
               ) : null}
@@ -653,7 +700,7 @@ function NewCatalogue({
           >
             {busy ? 'Création…' : `Créer le ${what}`}
           </button>
-          {error ? <p className="error">{error}</p> : null}
+          {error ? <Erreur>{error}</Erreur> : null}
         </div>
       ) : null}
     </section>
@@ -705,7 +752,7 @@ function Editor({ id, onBack, onCharter }: { id: number; onBack: () => void; onC
         <button type="button" className="linklike" onClick={onBack}>
           ‹ Imprimés
         </button>
-        <p className="error">{loaded.error}</p>
+        <Erreur>{loaded.error}</Erreur>
       </div>
     )
   }
@@ -1159,7 +1206,7 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
         </button>
       </div>
       {webshop.loading ? <p className="muted">Lecture du webshop…</p> : null}
-      {webshop.error ? <p className="error">{webshop.error}</p> : null}
+      {webshop.error ? <Erreur>{webshop.error}</Erreur> : null}
       {(webshop.data?.shops ?? []).filter((s) => s.error).map((s) => (
         <p key={s.id} className="catv-warn">
           Webshop de {s.name} illisible : {s.error}
@@ -1319,7 +1366,7 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
   return (
     <div className="catv catv-editor">
       <div className="catv-head">
-        <div>
+        <div className="catv-head__titre">
           <button type="button" className="linklike catv-back" onClick={onBack}>
             ‹ Imprimés
           </button>
@@ -1372,7 +1419,7 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
           {save.status === 'error' ? <span className="error catv-savebox__ko">{save.text}</span> : null}
         </span>
       </div>
-      {printError ? <p className="error">{printError}</p> : null}
+      {printError ? <Erreur>{printError}</Erreur> : null}
 
       {detail && !leaflet ? (
         <>
@@ -1403,10 +1450,10 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
               </select>
             ) : null}
             <span className="catv-save">
-              {save.status === 'saving' ? 'Enregistrement…' : save.status === 'saved' ? (save.text ?? 'Enregistré') : save.status === 'error' ? <span className="error">{save.text}</span> : null}
+              {save.status === 'saving' ? 'Enregistrement…' : save.status === 'saved' ? (save.text ?? 'Enregistré') : save.status === 'error' ? <Erreur inline>{save.text}</Erreur> : null}
             </span>
           </div>
-          {doc.error ? <p className="error">{doc.error}</p> : null}
+          {doc.error ? <Erreur>{doc.error}</Erreur> : null}
           <style>{catalogueCss()}</style>
           <div className="catv-pages">
             {docPages.map((page, index) => {
@@ -1846,7 +1893,11 @@ function OffersCard({
     <section className="card">
       <h2>Promotions et bundles</h2>
       {loading && !offers.length ? <p className="catv-note">Lecture des promotions de TFBuddy…</p> : null}
-      {error ? <p className="catv-warn">Promotions de TFBuddy illisibles : {error}. Rien n’est inventé : le catalogue n’en montre aucune.</p> : null}
+      {error ? (
+        <div className="catv-warn">
+          <MessageErreur texte={`Promotions de la caisse indisponibles : ${error}`} /> Le catalogue n’en montre aucune.
+        </div>
+      ) : null}
       {!loading && !error && !offers.length ? <p className="catv-note">Aucune promotion active dans TFBuddy pour ces produits et ces boutiques.</p> : null}
       <div className="catv-offers">
         {offers.map((offer) => {

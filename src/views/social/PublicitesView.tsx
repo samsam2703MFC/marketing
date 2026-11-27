@@ -32,6 +32,7 @@ import {
   refuserDemande,
 } from '../../lib/social/api-publicites'
 import type { CommentaireDark, ComptesPub, DarkPost, Demandes, ImportMeta, Meilleurs, PostBoost, ReglesPause } from '../../lib/social/api-publicites'
+import Erreur, { TexteAvecRemedes } from '../../components/Erreur'
 
 export interface PublicitesViewProps {
   /** « Gérer les formulaires de leads → » : l'écran Leads du module. */
@@ -241,7 +242,7 @@ function formatDe(p: PostPub | null | undefined) {
 export default function PublicitesView({ onGererFormulaires }: PublicitesViewProps = {}) {
   const { etat, serveur, erreur, chargement, avis } = useSocial()
   if (chargement === 'attente') return <p className="muted">Lecture du module Social…</p>
-  if (!etat || !serveur) return <p className="error">Module Social illisible : {erreur}</p>
+  if (!etat || !serveur) return <Erreur>Module Social illisible : {erreur}</Erreur>
   return <Publicites etat={etat} serveur={serveur} avis={avis} onGererFormulaires={onGererFormulaires} />
 }
 
@@ -818,7 +819,7 @@ function Publicites({ etat, serveur, avis, onGererFormulaires }: { etat: EtatSoc
               </div>
             )
           })}
-          {regErr ? <span className="error">{regErr}</span> : null}
+          {regErr ? <Erreur inline>{regErr}</Erreur> : null}
           <div className="pub__actions">
             <button type="button" className="btn btn--sm" disabled={regSaving} onClick={() => void saveRegles()}>
               {regSaving ? 'Enregistrement…' : 'Enregistrer la règle'}
@@ -1337,7 +1338,7 @@ function Suivi(P: SuiviProps) {
               (quot && cptA.minDaily ? ` Minimum Meta : ${money(a, cptA.minDaily, 2)} par jour et par ensemble.` : '') +
               ' Plafond vide : inchangé.'}
           </span>
-          {change && budErr ? <span className="error">{budErr}</span> : null}
+          {change && budErr ? <Erreur inline>{budErr}</Erreur> : null}
           <button type="button" className="btn btn--sm btn--primary" disabled={!change || !!budErr} onClick={saveBud}>
             Appliquer chez Meta
           </button>
@@ -1865,7 +1866,10 @@ function Wizard(P: WizardProps) {
       ))}
     </div>
   )
-  const Tech = ({ children }: { children: ReactNode }) => <span className="pub__tech">{children}</span>
+  // Le nom du champ chez Meta (`objective`, `bid_strategy`…) ne s'affiche plus (audit du 27/11/2026) : seul reste
+  // l'astérisque d'un champ obligatoire.
+  const Tech = ({ children }: { children: ReactNode }) =>
+    [children].flat().join('').includes('*') ? <span className="pub__requis" title="Obligatoire">*</span> : null
   const nouvelle = w.crea === 'new'
   const needsNl = nlPour().length > 0
 
@@ -1883,7 +1887,7 @@ function Wizard(P: WizardProps) {
             </button>
           </div>
           <div className="pub__etapes">
-            {ETAPES.map(([label, tech], i) => (
+            {ETAPES.map(([label], i) => (
               <button
                 key={label}
                 type="button"
@@ -1899,7 +1903,6 @@ function Wizard(P: WizardProps) {
                 <span>
                   {i + 1} · {label}
                 </span>
-                <span className="pub__tech">{tech}</span>
               </button>
             ))}
           </div>
@@ -2004,12 +2007,12 @@ function Wizard(P: WizardProps) {
                     { boutique: !propres.length },
                   )}
                   <span className="muted pub__petit">
-                    {(dev !== 'EUR' ? `Ce compte facture en ${dev} : tous les montants de l’assistant sont en ${dev}, pas en euros. ` : '') +
+                    <TexteAvecRemedes texte={(dev !== 'EUR' ? `Ce compte facture en ${dev} : tous les montants de l’assistant sont en ${dev}, pas en euros. ` : '') +
                       (w.account === 'boutique'
                         ? `Chaque boutique paie sur son compte : ${propres.map((sh) => `${sh.name} (${ids(sh.id).ad_account_id})`).join(', ')}. Les boutiques se cochent à l’étape 2.`
                         : (reseauAcc
                             ? `Compte réseau ${reseauAcc} : une campagne, un ad set par boutique cochée à l’étape 2 (sa zone, sa Page).`
-                            : 'Compte réseau non renseigné : Paramètres → API Meta.') + (propres.length ? '' : ' Aucune boutique n’a encore son propre compte publicitaire.'))}
+                            : 'Compte réseau non renseigné : Paramètres → API Meta.') + (propres.length ? '' : ' Aucune boutique n’a encore son propre compte publicitaire.'))} />
                   </span>
                 </div>
                 <div className="pub__champ">
@@ -2333,19 +2336,6 @@ function Wizard(P: WizardProps) {
                   ],
                   (v) => W(v === 'existing' ? { crea: 'existing', variants: [] } : { crea: 'new', variants: [], boost: null }),
                 )}
-                <span className="pub__tech">
-                  {w.boost
-                    ? w.boost.canal === 'Instagram'
-                      ? `source_instagram_media_id = ${w.boost.metaId}`
-                      : `object_story_id = ${w.boost.metaId}`
-                    : w.crea === 'existing'
-                      ? 'object_story_id = {page_id}_{post_id}'
-                      : fmtP.kind === 'video'
-                        ? 'POST /act_{id}/advideos → object_story_spec.video_data'
-                        : fmtP.kind === 'carousel'
-                          ? `POST /act_{id}/adimages ×${fmtP.n} → object_story_spec.link_data.child_attachments`
-                          : 'POST /act_{id}/adimages → image_hash, puis object_story_spec'}
-                </span>
               </div>
               <span className="muted pub__petit">
                 {w.boost
@@ -2629,7 +2619,7 @@ function Wizard(P: WizardProps) {
         </div>
 
         <div className="pub__wiz-pied">
-          <span className="error">{P.err}</span>
+          <Erreur inline>{P.err}</Erreur>
           <div className="pub__actions">
             {step > 1 ? (
               <button

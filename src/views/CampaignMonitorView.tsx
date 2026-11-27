@@ -8,6 +8,7 @@ import type { CampaignDetail, FunnelStep, Lead, LeadStatus, TrackingBaseline, Tr
 import { useReferences } from '../state/references'
 import { campaignGaps } from '../lib/completeness'
 import { encreLisible } from '../lib/couleurs'
+import Erreur from '../components/Erreur'
 
 interface MonitorProps {
   campaignId: number
@@ -98,7 +99,7 @@ export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, 
         ) : null}
       </div>
 
-      {campaign.error ? <p className="error">{campaign.error}</p> : null}
+      {campaign.error ? <Erreur>{campaign.error}</Erreur> : null}
       {campaign.data ? <h2 className="screen-subtitle">{campaign.data.name}</h2> : null}
 
       {/* Après la validation : le fil de production de chaque section, puis le kit des franchisés. */}
@@ -205,7 +206,7 @@ export default function CampaignMonitorView({ campaignId, leadStatuses, onBack, 
           {generation ? <span className="muted">{generation}</span> : null}
         </div>
 
-        {leads.error ? <p className="error">{leads.error}</p> : null}
+        {leads.error ? <Erreur>{leads.error}</Erreur> : null}
 
         {leads.data && leads.data.leads.length === 0 ? (
           <p className="muted">Aucun lead sur cette campagne.</p>
@@ -299,7 +300,7 @@ function LeadRow({
             ) : null}
           </div>
         </div>
-        {error ? <p className="error">{error}</p> : null}
+        {error ? <Erreur>{error}</Erreur> : null}
       </td>
       <td className="muted">{lead.sector_label ?? '—'}</td>
       <td>{lead.shop_name ?? '—'}</td>
@@ -440,7 +441,7 @@ function TrackingCard({ campaign, canEdit, onSaved }: { campaign: CampaignDetail
           ) : null}
         </div>
         {choisie !== null ? <p className="muted">Se lit : {choisie.source_label}.</p> : null}
-        {failure ? <p className="error">{failure}</p> : null}
+        {failure ? <Erreur>{failure}</Erreur> : null}
         <div className="filters__row">
           <button type="button" className="btn btn--primary btn--sm" disabled={busy} onClick={() => void save()}>
             {busy ? 'Enregistrement…' : 'Enregistrer le suivi'}

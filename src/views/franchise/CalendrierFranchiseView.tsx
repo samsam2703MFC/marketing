@@ -25,6 +25,7 @@ import type { EtatFranchise, PostFranchise } from '../../lib/franchise/store'
 import { lireBoosts, lireCalendrier, lireChiffresPublication, lireMaSemaine, lireReposts, lireSuivi, lireVues, proposerBoost, repondreRepost } from '../../lib/franchise/api'
 import { Barres, C, Courbe, court, fmtG as fmt, incomplets, lg, plages, signe } from '../social/GrilleGraphes'
 import type { Survol } from '../social/GrilleGraphes'
+import Erreur from '../../components/Erreur'
 
 export interface CalendrierFranchiseViewProps {
   /** « Publier un post », « + » d'un jour, « Refaire avec ce modèle » : l'écran Créer un post (`date=…`, `template=…`). */
@@ -195,7 +196,7 @@ function periode(vue: Vue, curseur: string, today: string, jours: number): [stri
 export default function CalendrierFranchiseView(props: CalendrierFranchiseViewProps = {}) {
   const { etat, erreur, chargement } = useFranchise()
   if (chargement === 'attente') return <p className="muted">Lecture de votre espace…</p>
-  if (!etat) return <p className="error">{erreur || 'Chargement impossible.'}</p>
+  if (!etat) return <Erreur>{erreur || 'Chargement impossible.'}</Erreur>
   return <Calendrier etat={etat} props={props} />
 }
 

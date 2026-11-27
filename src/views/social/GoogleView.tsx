@@ -16,6 +16,7 @@ import {
   traiterAvis,
 } from '../../lib/social/api-google'
 import type { AvisGoogle, Couleur, MagasinReputation, Repartition, VueGoogle } from '../../lib/social/api-google'
+import Erreur, { TexteAvecRemedes } from '../../components/Erreur'
 
 /**
  * Avis Google — l'écran « Google » du module Social (SA Google.dc.html), réécrit dans le Marketing
@@ -395,7 +396,7 @@ export default function GoogleView() {
 
       {msg ? <div className={`gg__msg is-${msgKind}`}>{msg}</div> : null}
       {loading && !d ? <p className="muted">Lecture des avis…</p> : null}
-      {err ? <p className="error">{err}</p> : null}
+      {err ? <Erreur>{err}</Erreur> : null}
       {rp?.indispo ? (
         <div className="card gg__indispo">{`${rp.raison || 'Réputation indisponible.'} Les avis Google viennent de l’écran Réputation digitale du BO.`}</div>
       ) : null}
@@ -534,9 +535,9 @@ export default function GoogleView() {
               Non traités seulement
             </label>
             <span className="muted gg__etat">
-              {(d.relu?.le ? `Relu dans le BO le ${dShort(d.relu.le.slice(0, 10))} ${d.relu.le.slice(11, 16)} · ` : '') +
+              <TexteAvecRemedes texte={(d.relu?.le ? `Relu dans le BO le ${dShort(d.relu.le.slice(0, 10))} ${d.relu.le.slice(11, 16)} · ` : '') +
                 (d.ia?.configure ? 'analyse par Claude' : 'analyse par règles simples (clé Claude : Paramètres → Rédaction IA)') +
-                ' · relu toutes les heures'}
+                ' · relu toutes les heures'} />
             </span>
           </div>
 

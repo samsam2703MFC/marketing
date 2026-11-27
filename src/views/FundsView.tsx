@@ -14,6 +14,7 @@ import LinkBadge from '../components/LinkBadge'
 import { useLabel, useReferences } from '../state/references'
 import { describeError } from '../state/auth'
 import RangeCalendar, { DayCalendar } from '../components/RangeCalendar'
+import Erreur from '../components/Erreur'
 
 const GRANULARITIES: Array<{ value: Granularity; label: string }> = [
   { value: 'month', label: 'Mois' },
@@ -148,7 +149,7 @@ export default function FundsView() {
         />
       )}
 
-      {error ? <p className="error">{error}</p> : null}
+      {error ? <Erreur>{error}</Erreur> : null}
       {loading ? <p className="muted">Chargement…</p> : null}
 
       {data ? (
@@ -264,7 +265,7 @@ function RecurrenceList({ frais, onChange }: { frais: Recurrence[]; onChange: ()
               C’est définitif.
             </p>
 
-            {echec === null ? null : <p className="error">{echec}</p>}
+            {echec === null ? null : <Erreur>{echec}</Erreur>}
 
             <div className="confirm__actions">
               <button
@@ -845,7 +846,7 @@ function MovementForm({
         </p>
       ) : null}
 
-      {erreur === null ? null : <p className="error">{erreur}</p>}
+      {erreur === null ? null : <Erreur>{erreur}</Erreur>}
 
       {/* L'aperçu dit ce que le bouton va faire. Pour un abonnement, ce n'est
           pas le montant saisi qui touche le solde, c'est le total — et c'est

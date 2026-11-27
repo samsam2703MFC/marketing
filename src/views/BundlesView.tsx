@@ -1,6 +1,8 @@
 import * as api from '../lib/api/module'
 import { useAsync, formatEur, formatNumber } from '../lib/useAsync'
 import ErpPromotions from '../components/ErpPromotions'
+import Erreur from '../components/Erreur'
+import Aide from '../components/Aide'
 
 /** Les bundles de l'ERP (ceux que la caisse applique), puis les menus du catalogue du module. */
 export default function BundlesView() {
@@ -16,16 +18,16 @@ export default function BundlesView() {
 function CatalogBundles() {
   const { data, error, loading } = useAsync(() => api.listBundles(), [])
 
-  if (error) return <p className="error">{error}</p>
+  if (error) return <Erreur>{error}</Erreur>
   if (loading) return <p className="muted">Chargement…</p>
   if (!data?.length) {
     return (
       <section className="card">
-        <h2>Bundles & menus</h2>
-        <p className="muted">
-          Aucun bundle : <code>mar_bundle</code> est alimentée par l’import produit de l’ERP,
-          qui n’est pas encore raccordé. Le module ne crée pas de bundle lui-même.
-        </p>
+        <h2>
+          Bundles & menus
+          <Aide texte="Les menus et formules viendront de l’import des produits de l’ERP, qui n’est pas encore relié. Le module n’en crée pas lui-même." />
+        </h2>
+        <p className="muted">Aucun menu ni formule pour l’instant : les produits de l’ERP ne sont pas encore reliés.</p>
       </section>
     )
   }

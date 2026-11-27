@@ -3,6 +3,7 @@ import '../social/social.css'
 import './messages.css'
 import { dateHeure, messageConversation, messageRepondre, messages, messageTraiter, texteErreur, useFranchise } from './_donnees'
 import type { Boite, FilConversation } from './_donnees'
+import Erreur from '../../components/Erreur'
 
 /**
  * Messages privés — la page « Messages » de l'espace franchisé (social/franchisee/Messages.dc.html), réécrite dans le
@@ -66,7 +67,7 @@ export default function MessagesView() {
     if (fil.current) fil.current.scrollTop = fil.current.scrollHeight
   }, [conv])
 
-  if (!etat) return <div className="social-native">{erreur ? <p className="error">{erreur}</p> : <p className="muted">Chargement de l’espace boutique…</p>}</div>
+  if (!etat) return <div className="social-native">{erreur ? <Erreur>{erreur}</Erreur> : <p className="muted">Chargement de l’espace boutique…</p>}</div>
 
   const quand = (t?: string | null) => (!t ? '' : t.slice(0, 10) === etat.today ? t.slice(11, 16) : dateHeure(t.slice(0, 10)))
   const peut = !!boite && boite.peutRepondre !== false
@@ -125,7 +126,7 @@ export default function MessagesView() {
         </div>
       </div>
 
-      {err ? <p className="error">{`Les messages n’ont pas pu être lus : ${err}`}</p> : null}
+      {err ? <Erreur>{`Les messages n’ont pas pu être lus : ${err}`}</Erreur> : null}
       {masque ? <div className="card fmsg__vide">Le réseau ne partage pas les messages privés dans l’espace boutique.</div> : null}
 
       {!masque ? (

@@ -8,6 +8,7 @@ import { Barres, C, Courbe, court, fmtG, incomplets, lg, plages, signe } from '.
 import type { Survol } from '../social/GrilleGraphes'
 import { instagram, instagramAbonnes, lien, media, texteErreur, useFranchise } from './_donnees'
 import type { AbonnesFranchise, MediaGrille, Naviguer, ProgrammeGrille, VueInstagram } from './_donnees'
+import Erreur from '../../components/Erreur'
 
 /**
  * Grille Instagram — la page « Grille Instagram » de l'espace franchisé (social/franchisee/Instagram.dc.html),
@@ -81,7 +82,7 @@ export default function InstagramView({ onNaviguer }: Props) {
     if (pret) charger()
   }, [pret, charger])
 
-  if (!etat) return <div className="social-native">{erreur ? <p className="error">{erreur}</p> : <p className="muted">Chargement de l’espace boutique…</p>}</div>
+  if (!etat) return <div className="social-native">{erreur ? <Erreur>{erreur}</Erreur> : <p className="muted">Chargement de l’espace boutique…</p>}</div>
 
   const r = data ?? {}
   const reseau = r.reseau != null ? !!r.reseau : !!etat.instagramUnique
@@ -147,7 +148,7 @@ export default function InstagramView({ onNaviguer }: Props) {
           </a>
         </div>
       </div>
-      {err ? <p className="error">{`Lecture impossible : ${err}`}</p> : null}
+      {err ? <Erreur>{`Lecture impossible : ${err}`}</Erreur> : null}
 
       <div className="grille__corps">
         <section className="card grille__profil">

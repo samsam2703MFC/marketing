@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { module as api } from '../../lib/api'
 import { useAsync } from '../../lib/useAsync'
 import type { Prospect } from '../../lib/api/module'
+import Erreur from '../../components/Erreur'
 
 /**
  * Comptes des secteurs retenus, sous les secteurs eux-mêmes.
@@ -95,7 +96,7 @@ export default function ProspectList({
     )
   }
 
-  if (error !== null) return <p className="error">{error}</p>
+  if (error !== null) return <Erreur>{error}</Erreur>
   if (loading && data === null) return <p className="muted">Lecture du vivier…</p>
   if (data === null) return null
 

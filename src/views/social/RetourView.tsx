@@ -7,6 +7,7 @@ import { roi } from '../../lib/social/roi'
 import type { RoiBoutique, RoiTotal } from '../../lib/social/roi'
 import { boutiquesReseau, useSocial } from '../../lib/social/store'
 import type { Operation } from '../../lib/social/store'
+import Erreur from '../../components/Erreur'
 
 type Metrique = 'caAdd' | 'roas' | 'roi' | 'att'
 const METRIQUES: Record<Metrique, [string, (v: number) => string]> = {
@@ -52,7 +53,7 @@ export default function RetourView() {
   }, [etat, serveur])
 
   if (chargement === 'attente') return <p className="muted">Lecture du module Social…</p>
-  if (!etat || !serveur) return <p className="error">Module Social illisible : {erreur}</p>
+  if (!etat || !serveur) return <Erreur>Module Social illisible : {erreur}</Erreur>
 
   const nBoutiques = boutiquesReseau(etat).length
   const R = toutes.find((x) => x.c.id === cid) ?? toutes[0]
@@ -61,7 +62,7 @@ export default function RetourView() {
     return (
       <div className="social-native">
         <section className="card retour__vide">
-          <h3>Aucune opération à mesurer pour l’instant</h3>
+          <h2 className="retour__vide-titre">Aucune opération à mesurer pour l’instant</h2>
           <p className="muted">
             Créez une opération (dates, boutiques, produits), puis ses publicités. Les résultats Meta et les ventes des produits — lues dans
             l’API TFBuddy — sont recalculés chaque heure, pour les opérations en cours ou finies depuis moins de 60 jours.

@@ -8,6 +8,7 @@ import type { Boutique, EtatSocial, Objet, Serveur } from '../../lib/social/stor
 import * as P from '../../lib/social/api-parametres'
 import type { Audit, EcranGoogle, IdsAuto, MetaStatus, Portefeuille } from '../../lib/social/api-parametres'
 import { lienSocial } from '../../lib/social/liens'
+import Erreur from '../../components/Erreur'
 
 /** Les onglets de l'écran (le rail du Marketing est la navigation entre eux). */
 export type OngletParametres = 'conn' | 'api' | 'google' | 'ia' | 'tpl' | 'grp' | 'rights' | 'log' | 'tfb'
@@ -160,7 +161,7 @@ export default function ParametresView({ tab, section, onNaviguer }: ParametresV
   }, [sec, onglet, chargement])
 
   if (chargement === 'attente') return <p className="muted">Lecture du module Social…</p>
-  if (!etat || !serveur) return <p className="error">Module Social illisible : {erreur}</p>
+  if (!etat || !serveur) return <Erreur>Module Social illisible : {erreur}</Erreur>
 
   const props = { etat, serveur, toast }
   return (
@@ -358,10 +359,6 @@ function Connexions({ etat, serveur, toast }: OngletProps) {
           </table>
         </div>
       </section>
-      <p className="muted par__note">
-        Publication via Graph API (Pages API, permission pages_manage_posts) avec un Page access token par boutique. Publicités via Marketing API. Les
-        tokens sont stockés côté serveur ; le navigateur n'y a jamais accès.
-      </p>
     </>
   )
 }
@@ -418,7 +415,7 @@ function ApiMeta({ etat, serveur, toast }: OngletProps) {
         : `invalide : ${J.erreur || 'refusé par Meta'}`
   const champsCles: [string, string, keyof MetaStatus, string, string][] = [
     ['appId', "Identifiant de l'application (App ID)", 'appId', ms.appId || '1234567890', 'text'],
-    ['systemToken', 'Token du System User', 'tokenDefini', 'EAAG…', 'password'],
+    ['systemToken', 'Jeton de l’utilisateur système', 'tokenDefini', 'EAAG…', 'password'],
     ['appSecret', "Clé secrète de l'app", 'secretDefini', 'app secret', 'password'],
     ['verifyToken', 'Jeton du webhook', 'verifyDefini', 'chaîne libre', 'password'],
   ]
@@ -560,7 +557,7 @@ function ApiMeta({ etat, serveur, toast }: OngletProps) {
       <section id="sec-cles" className="card par__carte">
         <div className="par__tete">
           <span>Clés d'accès Meta</span>
-          <span className="muted">Chiffrées en base (mar_keys) · jamais réaffichées · un champ vide ne change rien</span>
+          <span className="muted">Enregistrées chiffrées · jamais réaffichées · un champ vide ne change rien</span>
         </div>
         <div className="par__grille par__grille--240">
           {champsCles.map(([k, label, flag, ph, type]) => {
@@ -622,7 +619,7 @@ function ApiMeta({ etat, serveur, toast }: OngletProps) {
             <span className="muted">
               {PF.le
                 ? `${PF.business?.id ? `Business ${PF.business.name || ''} (${PF.business.id}) · ` : 'Business non trouvé · '}relu le ${dd(PF.le)}`
-                : 'Jamais relu — « Rafraîchir » lit chez Meta les Pages, comptes publicitaires, comptes Instagram et pixels visibles du System User.'}
+                : 'Jamais relu — « Rafraîchir » lit chez Meta les Pages, comptes publicitaires, comptes Instagram et pixels visibles de l’utilisateur système Meta.'}
             </span>
           </span>
           <span className="par__ligne">
@@ -671,7 +668,7 @@ function ApiMeta({ etat, serveur, toast }: OngletProps) {
       <div className="par__grille par__grille--300">
         <section id="sec-version" className="card par__carte">
           <span>
-            Version de l'API <span className="par__mono par__faint">{'{VERSION}'}</span>
+            Version de l'API Meta
           </span>
           <div className="par__ligne">
             {versions.map((v) => (
@@ -695,10 +692,7 @@ function ApiMeta({ etat, serveur, toast }: OngletProps) {
           <p className="warning">
             La doc Meta affiche v25.0 ; une v26.0 est signalée depuis le 29/07/2026. Vérifiez le changelog Marketing API avant de figer la version.
           </p>
-          <span className="muted par__petit">
-            Backend Franchise Buddy : <span className="par__mono">{'{API_BASE_URL}/api/v1/social/{domaine}/{ressource}'}</span> · session du cockpit
-            (même connexion que le BO consultant). Le navigateur n'appelle jamais Meta directement.
-          </span>
+          <span className="muted par__petit">Le navigateur n'appelle jamais Meta directement : le serveur du module s'en charge.</span>
         </section>
         <section id="sec-perms" className="card par__carte">
           <span>Permissions et niveaux d'accès</span>
@@ -724,31 +718,17 @@ function ApiMeta({ etat, serveur, toast }: OngletProps) {
           <span>Transparence UE (DSA) · obligatoire pour cibler la Belgique</span>
           <label className="par__champ">
             <span>
-              Bénéficiaire <span className="par__mono par__faint">dsa_beneficiary</span>
+              Bénéficiaire
             </span>
             <Champ type="text" valeur={dsa.beneficiary} onValider={(v) => setMeta({ dsa: { ...dsa, beneficiary: v } })} />
           </label>
           <label className="par__champ">
             <span>
-              Payeur <span className="par__mono par__faint">dsa_payor</span>
+              Payeur
             </span>
             <Champ type="text" valeur={dsa.payor} onValider={(v) => setMeta({ dsa: { ...dsa, payor: v } })} />
           </label>
           <span className="muted par__petit">Pré-rempli dans chaque ad set créé par l'assistant Publicités.</span>
-        </section>
-        <section className="card par__carte">
-          <span>Conventions</span>
-          <span className="par__texte">
-            Montants en centimes : 20 € → <span className="par__mono">2000</span>.
-          </span>
-          <span className="par__texte">
-            Dates en ISO 8601 (<span className="par__mono">2026-10-18T08:00:00+0200</span>) ou timestamp Unix.
-          </span>
-          <span className="par__texte">
-            Posts programmés : <span className="par__mono">published=false</span> + <span className="par__mono">scheduled_publish_time</span>, entre
-            10 minutes et 30 jours.
-          </span>
-          <span className="par__texte">Tokens : System User (Business Manager) pour les pubs, Page token par boutique pour les posts.</span>
         </section>
       </div>
 
@@ -767,7 +747,7 @@ function ApiMeta({ etat, serveur, toast }: OngletProps) {
           </label>
           <span className="par__en-ligne">
             toutes les
-            <select value={String(IA.frequence || 1)} disabled={!IA.actif} onChange={(e) => saveIds({ frequence: Number(e.target.value) })}>
+            <select aria-label="Fréquence de la mise à jour" value={String(IA.frequence || 1)} disabled={!IA.actif} onChange={(e) => saveIds({ frequence: Number(e.target.value) })}>
               <option value="1">heures</option>
               <option value="6">6 heures</option>
               <option value="24">24 heures</option>
@@ -1449,8 +1429,8 @@ function Modeles({ etat, serveur, onNaviguer }: OngletProps & { onNaviguer?: (ec
         {templates.map((t) => (
           <div key={t.id} className="card par__carte">
             <div className="par__ligne par__ligne--serre">
-              <Champ className="par__flex par__grand" type="text" valeur={txt(t.name)} onValider={(v) => upTpl(t.id, { name: v })} />
-              <select value={txt(t.type)} onChange={(e) => upTpl(t.id, { type: e.target.value })}>
+              <Champ className="par__flex par__grand" type="text" aria-label="Nom du modèle" valeur={txt(t.name)} onValider={(v) => upTpl(t.id, { name: v })} />
+              <select aria-label="Type de post" value={txt(t.type)} onChange={(e) => upTpl(t.id, { type: e.target.value })}>
                 {POST_TYPES.map((o) => (
                   <option key={o} value={o}>
                     {o}
@@ -1459,9 +1439,9 @@ function Modeles({ etat, serveur, onNaviguer }: OngletProps & { onNaviguer?: (ec
               </select>
             </div>
             <span className="par__label">FR</span>
-            <Zone rows={3} valeur={txt(t.text)} onValider={(v) => upTpl(t.id, { text: v })} />
+            <Zone rows={3} aria-label="Texte du modèle en français" valeur={txt(t.text)} onValider={(v) => upTpl(t.id, { text: v })} />
             <span className="par__label">NL</span>
-            <Zone rows={3} valeur={txt(t.textNl)} placeholder="Nederlandse versie" onValider={(v) => upTpl(t.id, { textNl: v })} />
+            <Zone rows={3} aria-label="Texte du modèle en néerlandais" valeur={txt(t.textNl)} placeholder="Nederlandse versie" onValider={(v) => upTpl(t.id, { textNl: v })} />
             <span className="muted par__petit">
               Aperçu {fr?.name ?? ''} : {remplir(serveur, etat, txt(t.text), fr, produit)}
             </span>
@@ -1846,7 +1826,7 @@ function Tfbuddy({ etat, serveur, toast }: OngletProps) {
         <div className="par__tete">
           <span>Compte de l'API TFBuddy</span>
           <span className="muted">
-            Source principale des données du module · stocké en base (mar_variable / mar_keys) · swagger : <span className="par__mono">{T.swagger || ''}</span>
+            Source principale des données du module · enregistré avec lui
           </span>
         </div>
         <div className="par__grille par__grille--200">

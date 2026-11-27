@@ -184,3 +184,4 @@
 .retour__chiffre { display: flex; flex-direction: column; font-size: 13px; }
 .retour__chiffre .muted { font-size: 10px; }
 @media print { .filters, .retour__operations { display: none; } }
+.retour__vide-titre { margin: 0; font-size: 15px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--ink); }

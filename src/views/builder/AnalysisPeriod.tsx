@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import RangeCalendar from '../../components/RangeCalendar'
+import Erreur from '../../components/Erreur'
 
 /**
  * Période d'analyse : la fenêtre de ventes qui sert de repère.
@@ -145,7 +146,7 @@ export default function AnalysisPeriod({
         />
       ) : null}
 
-      {to < from ? <p className="error">La date de fin précède la date de début.</p> : null}
+      {to < from ? <Erreur>La date de fin précède la date de début.</Erreur> : null}
     </>
   )
 }

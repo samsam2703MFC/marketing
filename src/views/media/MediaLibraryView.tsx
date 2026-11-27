@@ -10,6 +10,7 @@ import { ProposalsPanel, TagEditor, TileTags } from './MediaTags'
 import { ImportAssistant } from './ImportAssistant'
 import { proposeForAssets } from './tagRules'
 import './media.css'
+import Erreur from '../../components/Erreur'
 
 /**
  * La médiathèque commune du marketing.
@@ -303,7 +304,7 @@ function FilesLibrary() {
   const lib = library.data
   const total = page?.total ?? 0
 
-  if (library.error) return <p className="error">{library.error}</p>
+  if (library.error) return <Erreur>{library.error}</Erreur>
 
   return (
     <div
@@ -440,7 +441,7 @@ function FilesLibrary() {
           </div>
         ) : null}
 
-        {error ? <p className="error">{error}</p> : null}
+        {error ? <Erreur>{error}</Erreur> : null}
 
         {view === 'proposals' && lib ? (
           <ProposalsPanel
@@ -710,7 +711,7 @@ function MediaSheet({ asset, library, shops, items, onSaved, onRemoved, onDecide
         </div>
       ) : null}
 
-      {error ? <p className="error">{error}</p> : null}
+      {error ? <Erreur>{error}</Erreur> : null}
 
       <div className="media__actions">
         <a className="btn btn--sm" href={asset.url} target="_blank" rel="noreferrer">
