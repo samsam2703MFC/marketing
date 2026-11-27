@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { DragEvent as ReactDragEvent } from 'react'
+import type { DragEvent as ReactDragEvent, ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import * as api from '../../lib/api/module'
@@ -259,13 +259,13 @@ function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen
                   <th>Boutiques</th>
                   <th>État</th>
                   <th>Bon de commande</th>
-                  <th aria-label="Supprimer ou modifier" />
+                  <th className="catv-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {shown.map((cat) => (
                   <tr key={cat.id}>
-                    <td>{cat.title}</td>
+                    <td className="catv-col-titre">{cat.title}</td>
                     <td>{cat.owner === 'marque' ? 'Marque' : `${cat.shop?.name ?? 'Boutique'} (franchisé)`}</td>
                     <td>
                       <span className="bro-tag">
@@ -296,29 +296,6 @@ function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen
                       <OrderFormMenu cat={cat} shopNames={shopNames} conditions={orderConditions.data} />
                       <button
                         type="button"
-                        className="btn btn--danger btn--sm"
-                        disabled={deleting !== null}
-                        aria-label={`Supprimer le catalogue « ${cat.title} »`}
-                        onClick={() => remove(cat)}
-                      >
-                        {deleting === cat.id ? 'Suppression…' : 'Supprimer'}
-                      </button>
-                      {/* Deux boutons (21/11/2026, Sam) : les 4 pages de la marque de CE catalogue, puis son contenu. Un
-                          catalogue de franchisé garde les pages communes : il n'a que son contenu. */}
-                      {cat.owner === 'marque' ? (
-                        <button
-                          type="button"
-                          className="btn btn--sm catv-edit"
-                          disabled={deleting === cat.id}
-                          aria-label={`Modifier les pages de la marque du catalogue « ${cat.title} »`}
-                          title="Couverture, page 2, avant-dernière et dernière page de ce catalogue seulement"
-                          onClick={() => onBrandPages(cat)}
-                        >
-                          ✎ Pages de la marque
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
                         className="btn btn--sm catv-edit"
                         disabled={deleting === cat.id}
                         aria-label={`Modifier le contenu du catalogue « ${cat.title} »`}
@@ -327,6 +304,31 @@ function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen
                       >
                         ✎ Contenu
                       </button>
+                      {/* Les gestes moins fréquents dans un menu (audit du 27/11/2026 : quatre boutons par ligne écrasaient le
+                          titre, écrit mot par mot). Deux boutons (21/11/2026, Sam) : les 4 pages de la marque de CE catalogue,
+                          puis son contenu ; un catalogue de franchisé garde les pages communes. */}
+                      <PlusDActions label={`Autres actions pour « ${cat.title} »`}>
+                        {cat.owner === 'marque' ? (
+                          <button
+                            type="button"
+                            className="linklike"
+                            disabled={deleting === cat.id}
+                            title="Couverture, page 2, avant-dernière et dernière page de ce catalogue seulement"
+                            onClick={() => onBrandPages(cat)}
+                          >
+                            ✎ Pages de la marque
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="linklike catv-more__danger"
+                          disabled={deleting !== null}
+                          aria-label={`Supprimer le catalogue « ${cat.title} »`}
+                          onClick={() => remove(cat)}
+                        >
+                          {deleting === cat.id ? 'Suppression…' : 'Supprimer'}
+                        </button>
+                      </PlusDActions>
                     </td>
                   </tr>
                 ))}
@@ -336,6 +338,50 @@ function CatalogueList({ onOpen, onCharter, onBrandPages, onBrochure }: { onOpen
         ) : null}
       </section>
     </div>
+  )
+}
+
+/**
+ * « … » d'une ligne : les gestes moins fréquents, dans un menu posé hors du tableau (qui défile et le couperait).
+ * Échap ou un clic ailleurs le ferme ; il reste dans la fenêtre.
+ */
+function PlusDActions({ label, children }: { label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+  const [place, setPlace] = useState<{ top?: number; bottom?: number; right: number } | null>(null)
+  const box = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const at = () => {
+      const r = box.current?.getBoundingClientRect()
+      if (!r) return
+      const right = Math.max(8, window.innerWidth - r.right)
+      setPlace(window.innerHeight - r.bottom > 120 ? { top: r.bottom + 4, right } : { bottom: window.innerHeight - r.top + 4, right })
+    }
+    at()
+    const close = (event: MouseEvent) => !box.current?.contains(event.target as Node) && setOpen(false)
+    const escape = (event: KeyboardEvent) => event.key === 'Escape' && setOpen(false)
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', escape)
+    window.addEventListener('scroll', at, true)
+    window.addEventListener('resize', at)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      document.removeEventListener('keydown', escape)
+      window.removeEventListener('scroll', at, true)
+      window.removeEventListener('resize', at)
+    }
+  }, [open])
+  return (
+    <span className="catv-more" ref={box}>
+      <button type="button" className="btn btn--sm" aria-label={label} title="Autres actions" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        …
+      </button>
+      {open && place ? (
+        <span className="catv-more__pop" style={{ position: 'fixed', ...place }} onClick={() => setOpen(false)}>
+          {children}
+        </span>
+      ) : null}
+    </span>
   )
 }
 
@@ -1320,7 +1366,7 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
   return (
     <div className="catv catv-editor">
       <div className="catv-head">
-        <div>
+        <div className="catv-head__titre">
           <button type="button" className="linklike catv-back" onClick={onBack}>
             ‹ Imprimés
           </button>

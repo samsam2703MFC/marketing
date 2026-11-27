@@ -55,7 +55,9 @@ export function OrderFormMenu({
   const box = useRef<HTMLSpanElement>(null)
   const pop = useRef<HTMLDivElement>(null)
   // Le menu se place sous le bouton, hors du tableau (qui défile et le couperait).
-  const [place, setPlace] = useState<{ top: number; left?: number; right?: number } | null>(null)
+  // Il reste dans la fenêtre (audit du 27/11/2026 : il recouvrait le rail et sortait par le bas) : ouvert vers le haut quand
+  // la place manque dessous, hauteur limitée à la place disponible, jamais à gauche du contenu.
+  const [place, setPlace] = useState<{ top?: number; bottom?: number; left?: number; right?: number; maxHeight: number } | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -66,7 +68,19 @@ export function OrderFormMenu({
     const at = () => {
       const r = box.current?.getBoundingClientRect()
       if (!r) return
-      setPlace(align === 'right' ? { top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) } : { top: r.bottom + 6, left: r.left })
+      const largeur = Math.min(430, window.innerWidth - 16)
+      const gauche = (document.querySelector('.workspace__main')?.getBoundingClientRect().left ?? 0) + 8
+      const dessous = window.innerHeight - r.bottom - 14
+      const dessus = r.top - 14
+      const vertical = dessous >= 360 || dessous >= dessus ? { top: r.bottom + 6, maxHeight: dessous } : { bottom: window.innerHeight - r.top + 6, maxHeight: dessus }
+      const x = align === 'right' ? r.right - largeur : r.left
+      setPlace(
+        x < gauche
+          ? { ...vertical, left: gauche }
+          : align === 'right'
+            ? { ...vertical, right: Math.max(8, window.innerWidth - r.right) }
+            : { ...vertical, left: Math.min(r.left, window.innerWidth - largeur - 8) },
+      )
     }
     at()
     window.addEventListener('scroll', at, true)

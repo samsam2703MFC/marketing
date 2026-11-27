@@ -1,7 +1,7 @@
 /* Écran « Catalogues » — design system du Marketing : gris chauds, bordeaux pour l'action
    principale et la sélection, coins de 8 px (boutons, champs) et 12 px (cartes), aucune pilule. */
 
-.catv { display: grid; gap: 16px; }
+.catv { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .catv h2 { margin-bottom: 12px; }
 .catv-grow { flex: 1 1 auto; }
 .catv-toolbar, .catv-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -21,7 +21,16 @@
 .catv-sub { display: block; margin-top: 2px; font-size: 11px; color: var(--muted); }
 .catv-right { text-align: right; }
 .catv-row-actions { white-space: nowrap; }
-.catv-row-actions .btn + .btn { margin-left: 6px; }
+.catv-row-actions .btn + .btn, .catv-row-actions .bdc-menu + .btn, .catv-row-actions .btn + .catv-more { margin-left: 6px; }
+/* Le titre d'un imprimé garde la place de se lire (audit du 27/11/2026 : il s'écrivait mot par mot). */
+.catv-col-titre { min-width: 170px; }
+/* « … » : les gestes moins fréquents d'une ligne (pages de la marque, supprimer). */
+.catv-more { position: relative; display: inline-block; vertical-align: middle; }
+.catv-more > .btn { min-width: 32px; justify-content: center; }
+.catv-more__pop { z-index: 60; display: grid; gap: 2px; min-width: 190px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: #fff; text-align: left; white-space: nowrap; }
+.catv-more__pop > button { padding: 7px 10px; border-radius: 6px; text-align: left; color: var(--ink); }
+.catv-more__pop > button:hover { background: var(--table-head); }
+.catv-more__danger { color: var(--danger) !important; }
 
 /* ---------- nouveau catalogue ---------- */
 .catv-sources { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
@@ -239,7 +248,7 @@
 .bdc-menu { position: relative; display: inline-block; }
 .bdc-menu__btn { border-color: var(--accent); color: var(--accent); }
 .bdc-menu__btn.is-open { background: #F6EDEE; }
-.bdc-pop { z-index: 60; max-height: calc(100vh - 24px); overflow: auto; width: 430px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: #fff; white-space: normal; text-align: left; box-shadow: 0 8px 24px rgba(34, 34, 34, 0.12); }
+.bdc-pop { z-index: 60; max-width: calc(100vw - 16px); max-height: calc(100vh - 24px); overflow: auto; width: 430px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: #fff; white-space: normal; text-align: left; box-shadow: 0 8px 24px rgba(34, 34, 34, 0.12); }
 .bdc-pop__k { font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
 .bdc-pop__row { display: flex; gap: 10px; align-items: center; }
 .bdc-pop__select { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 12.5px; background: #fff; }
@@ -265,3 +274,13 @@
 .catv-acc__title--static { cursor: default; }
 .catv-acc--off .catv-acc__name, .catv-acc--off .catv-acc__count { color: #B8B2A8; }
 .catv-acc__badge { flex: 0 0 132px; display: inline-flex; justify-content: center; padding: 3px 0; border-radius: 6px; background: #EDE7DE; color: #5c5852; font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+
+/* Liste des imprimés (audit du 27/11/2026) : les étiquettes tiennent sur une ligne, la colonne du bon de commande se lit. */
+.catv-table td:nth-child(4) .bro-tag { white-space: nowrap; }
+.catv-table td:nth-child(7) { min-width: 130px; }
+.catv-table td:nth-child(7) .catv-subt { display: block; }
+.catv-table td:nth-child(3) { min-width: 118px; }
+
+/* Le titre d'un imprimé sur sa ligne, en entier (audit du 27/11/2026 : « … — catalogue » était coupé par les outils). */
+.catv-head__titre { flex: 1 1 100%; min-width: 0; }
+.catv-head__titre .catv-title { width: 100%; min-width: 0; text-overflow: ellipsis; }
