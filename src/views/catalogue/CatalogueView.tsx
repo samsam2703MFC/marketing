@@ -730,7 +730,6 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
   const [versionShop, setVersionShop] = useState<number | null>(initial.owner === 'boutique' ? null : null)
   const [selected, setSelected] = useState<number | null>(null)
   const [search, setSearch] = useState('')
-  const [allWebshop, setAllWebshop] = useState(initial.source.kind === 'choix')
   const [save, setSave] = useState<{ status: 'idle' | 'saving' | 'saved' | 'error'; text?: string }>({ status: 'idle' })
   const [printError, setPrintError] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
@@ -751,7 +750,16 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
     window.scrollTo({ top: 0 })
   }
 
-  const webshop = useAsync(() => api.getWebshopProducts(cat.owner === 'boutique' && cat.shop ? [cat.shop.id] : cat.shopIds), [cat.shopIds.join(','), cat.owner])
+  /** « ↻ Relire le webshop » : 0 = lecture gardée (30 min), puis chaque clic relit l'ERP. */
+  const [reread, setReread] = useState(0)
+  const webshop = useAsync(
+    () => api.getWebshopProducts(cat.owner === 'boutique' && cat.shop ? [cat.shop.id] : cat.shopIds, reread > 0),
+    [cat.shopIds.join(','), cat.owner, reread],
+  )
+  // Le webshop relu : l'aperçu se recompose avec les produits, prix et promotions à jour.
+  useEffect(() => {
+    if (reread > 0 && !webshop.loading) setRevision((n) => n + 1)
+  }, [reread, webshop.loading])
   const doc = useAsync(() => api.getCatalogueDocument(cat.id, lang, versionShop), [cat.id, lang, versionShop, revision])
 
   // --- enregistrement : chaque modification part tout de suite, la composition suit ---
@@ -801,24 +809,42 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
   const shopNameMap = useMemo(() => new Map(shops.map((shop) => [shop.id, shop.name])), [shops])
   const inCatalogue = new Set(cat.products.map((row) => row.id))
 
-  // Les produits proposés : ceux du catalogue (dans son ordre), puis — au choix — le reste du webshop.
-  const rows = [
-    ...cat.products.map((row) => ({ row, product: byId.get(row.id) ?? null })),
-    ...(allWebshop ? products.filter((product) => !inCatalogue.has(product.id)).map((product) => ({ row: { id: product.id, on: false }, product })) : []),
-  ]
+  // Les produits proposés (26/11/2026, client : « je ne vois pas toutes les catégories ») : les catégories du catalogue
+  // d'abord (ses produits dans son ordre, puis les autres produits du webshop de la même catégorie, décochés) ; ensuite
+  // chaque autre catégorie du webshop des boutiques du catalogue, repliée, à ajouter d'un clic.
   const needle = search.trim().toLowerCase()
-  const visible = rows.filter(({ product, row }) => !needle || (product?.name ?? String(row.id)).toLowerCase().includes(needle))
-  const groups = new Map<string, typeof visible>()
-  for (const entry of visible) {
-    const key = entry.product?.categoryId != null ? (categories.get(entry.product.categoryId)?.name ?? 'Autres') : entry.product ? 'Autres' : 'Absents du webshop'
-    groups.set(key, [...(groups.get(key) ?? []), entry])
+  const matches = (name: string) => !needle || name.toLowerCase().includes(needle)
+  type Entry = { row: api.CatalogueProductRow; product: api.WebshopProduct | null }
+  const groupOf = (product: api.WebshopProduct | null) =>
+    product?.categoryId != null ? (categories.get(product.categoryId)?.name ?? 'Autres') : product ? 'Autres' : 'Absents du webshop'
+  const groups = new Map<string, Entry[]>()
+  for (const row of cat.products) {
+    const product = byId.get(row.id) ?? null
+    if (!matches(product?.name ?? String(row.id))) continue
+    const key = groupOf(product)
+    groups.set(key, [...(groups.get(key) ?? []), { row, product }])
   }
+  const catalogueGroups = new Set(cat.products.map((row) => groupOf(byId.get(row.id) ?? null)))
+  const others = new Map<string, { categoryId: number | null; entries: Entry[] }>()
+  for (const product of products) {
+    if (inCatalogue.has(product.id)) continue
+    const key = groupOf(product)
+    const entry = { row: { id: product.id, on: false }, product }
+    if (catalogueGroups.has(key)) {
+      if (matches(product.name)) groups.set(key, [...(groups.get(key) ?? []), entry])
+      continue
+    }
+    const other = others.get(key) ?? { categoryId: product.categoryId ?? null, entries: [] }
+    other.entries.push(entry)
+    others.set(key, other)
+  }
+  const otherList = [...others.entries()]
+    .map(([name, other]) => ({ name, ...other, shown: other.entries.filter(({ product }) => matches(product?.name ?? '')) }))
+    .filter(({ name, shown }) => shown.length > 0 || matches(name))
+    .sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+  // Les familles du catalogue du Marketing dont aucun produit n'est sur le webshop : nommées, pas ajoutables.
+  const offWebshop = (webshop.data?.offWebshopCategories ?? []).filter((c) => !others.has(c.name) && !groups.has(c.name) && matches(c.name))
   const checked = cat.products.filter((row) => row.on).length
-  // Les catégories du webshop qui ont des produits hors du catalogue : on peut les ajouter d'un coup.
-  const addable = [...categories.values()]
-    .map((c) => ({ c, ids: products.filter((product) => product.categoryId === c.id && !inCatalogue.has(product.id)).map((product) => product.id) }))
-    .filter(({ ids }) => ids.length > 0)
-    .sort((a, b) => a.c.name.localeCompare(b.c.name, 'fr'))
 
   function toggleProduct(productId: number, on: boolean) {
     toggleProducts([productId], on)
@@ -1075,7 +1101,42 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
   const currentTemplate: CatalogueTemplate | null = selectedPage ? (selectedPage.template ?? 'A')
     : innerPages.length && innerPages.every((p) => (p.template ?? 'A') === (innerPages[0].template ?? 'A')) ? (innerPages[0].template ?? 'A') : null
 
+  /** Une ligne de produit : sa photo, son nom, ses alertes, son prix et sa bascule. */
+  function productRow({ row, product }: { row: api.CatalogueProductRow; product: api.WebshopProduct | null }) {
+    const missing = product ? versionShops.filter((s) => !product.prices.some((p) => p.shopId === s)) : []
+    const differs = product?.priceDiffers ?? []
+    const mine = versionShop !== null ? product?.prices.find((p) => p.shopId === versionShop) : null
+    const price = versionShop !== null ? (mine ? (mine.webPriceCents ?? mine.shopPriceCents) : null) : (product?.priceCents ?? null)
+    return (
+      <div key={row.id} className={`catv-product${!row.on ? ' is-off' : ''}`}>
+        <span className="catv-thumb">{product?.imageUrl ? <img src={product.imageUrl} alt="" loading="lazy" /> : null}</span>
+        <span className="catv-product__name">
+          {product ? (lang === 'nl' ? product.nameNl : product.name) : `Produit ${row.id}`}
+          {!product ? <small className="catv-flag">absent du webshop</small> : null}
+          {missing.length ? <small className="catv-flag">pas sur le webshop de {missing.map(shopName).join(', ')}</small> : null}
+          {differs.length && versionShop === null ? <small className="catv-flag">prix différent à {differs.map(shopName).join(', ')}</small> : null}
+        </span>
+        <span className="catv-product__price">{formatCents(price, lang)}</span>
+        <button
+          type="button"
+          className={`catv-sw${row.on ? ' is-on' : ''}`}
+          role="switch"
+          aria-checked={row.on}
+          aria-label={product ? product.name : `Produit ${row.id}`}
+          disabled={!product}
+          onClick={() => toggleProduct(row.id, !row.on)}
+        >
+          <span className="catv-sw__track" aria-hidden="true" />
+        </button>
+      </div>
+    )
+  }
+
   // Les produits et les promotions : dans l'étape 2 de l'assistant, et dans l'éditeur détaillé.
+  const readAtLabel = (() => {
+    const times = (webshop.data?.shops ?? []).map((s) => s.readAt).filter((t): t is string => !!t).sort()
+    return times.length ? new Date(times[0]).toLocaleString('fr-BE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : null
+  })()
   const productsPanel = (
     <section className="card catv-col">
       <h2>
@@ -1084,32 +1145,16 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
       <div className="catv-search">
         <input placeholder="Chercher…" value={search} onChange={(event) => setSearch(event.target.value)} />
         <span className="bro-tag">{checked} cochés</span>
+        <button
+          type="button"
+          className="btn btn--sm catv-reread"
+          disabled={webshop.loading}
+          onClick={() => setReread((n) => n + 1)}
+          title={`Relit tout de suite le webshop (produits, catégories, prix, photos, gammes et promotions) au lieu de la lecture gardée 30 minutes.${readAtLabel ? ` Dernière lecture : ${readAtLabel}.` : ''}`}
+        >
+          {webshop.loading ? 'Lecture…' : '↻ Relire le webshop'}
+        </button>
       </div>
-      <label className="bro-check">
-        <input type="checkbox" checked={allWebshop} onChange={(event) => setAllWebshop(event.target.checked)} />
-        Montrer tout le webshop {cat.owner === 'boutique' ? 'de la boutique' : ''}
-      </label>
-      {addable.length ? (
-        <label className="catv-field catv-addcat">
-          <span>Ajouter une catégorie du webshop</span>
-          <select
-            value=""
-            onChange={(event) => {
-              const pick = addable.find(({ c }) => String(c.id) === event.target.value)
-              if (!pick) return
-              addCategory(pick.c.id, pick.c.name, pick.ids)
-              setOpened((prev) => new Set([...(prev ?? []), pick.c.name]))
-            }}
-          >
-            <option value="">＋ Choisir une catégorie…</option>
-            {addable.map(({ c, ids }) => (
-              <option key={c.id} value={c.id}>
-                {c.name} ({ids.length} produit{ids.length > 1 ? 's' : ''})
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
       {webshop.loading ? <p className="muted">Lecture du webshop…</p> : null}
       {webshop.error ? <p className="error">{webshop.error}</p> : null}
       {(webshop.data?.shops ?? []).filter((s) => s.error).map((s) => (
@@ -1146,38 +1191,64 @@ function EditorBody({ initial, shops, onBack, onCharter }: { initial: Catalogue;
                 <span className="catv-sw__track" aria-hidden="true" />
               </button>
             </div>
-            {open ? entries.map(({ row, product }) => {
-              const missing = product ? versionShops.filter((s) => !product.prices.some((p) => p.shopId === s)) : []
-              const differs = product?.priceDiffers ?? []
-              const mine = versionShop !== null ? product?.prices.find((p) => p.shopId === versionShop) : null
-              const price = versionShop !== null ? (mine ? (mine.webPriceCents ?? mine.shopPriceCents) : null) : (product?.priceCents ?? null)
-              return (
-                <div key={row.id} className={`catv-product${!row.on ? ' is-off' : ''}`}>
-                  <span className="catv-thumb">{product?.imageUrl ? <img src={product.imageUrl} alt="" loading="lazy" /> : null}</span>
-                  <span className="catv-product__name">
-                    {product ? (lang === 'nl' ? product.nameNl : product.name) : `Produit ${row.id}`}
-                    {!product ? <small className="catv-flag">absent du webshop</small> : null}
-                    {missing.length ? <small className="catv-flag">pas sur le webshop de {missing.map(shopName).join(', ')}</small> : null}
-                    {differs.length && versionShop === null ? <small className="catv-flag">prix différent à {differs.map(shopName).join(', ')}</small> : null}
-                  </span>
-                  <span className="catv-product__price">{formatCents(price, lang)}</span>
-                  <button
-                    type="button"
-                    className={`catv-sw${row.on ? ' is-on' : ''}`}
-                    role="switch"
-                    aria-checked={row.on}
-                    aria-label={product ? product.name : `Produit ${row.id}`}
-                    disabled={!product}
-                    onClick={() => toggleProduct(row.id, !row.on)}
-                  >
-                    <span className="catv-sw__track" aria-hidden="true" />
-                  </button>
-                </div>
-              )
-            }) : null}
+            {open ? entries.map(productRow) : null}
           </div>
           )
         })}
+        {otherList.length || offWebshop.length ? (
+          <p className="catv-sep" title="Les catégories du webshop des boutiques du catalogue qui n'ont encore aucun produit dans ce catalogue. « ＋ Ajouter » coche tous leurs produits et leur donne une page.">
+            Autres catégories du webshop · {otherList.length + offWebshop.length}
+          </p>
+        ) : null}
+        {otherList.map(({ name, categoryId, entries, shown }) => {
+          const key = `autre:${name}`
+          const open = needle !== '' ? shown.length > 0 : (opened?.has(key) ?? false)
+          const ids = entries.map(({ row }) => row.id)
+          return (
+            <div key={key} className={`catv-acc catv-acc--other${open ? ' is-open' : ''}`}>
+              <div className="catv-acc__head">
+                <button type="button" className="catv-acc__title" aria-expanded={open} onClick={() => flip(key)}>
+                  <span className="catv-acc__chev" aria-hidden="true">›</span>
+                  <span className="catv-acc__name">{name}</span>
+                  <span className="catv-acc__count">
+                    {entries.length} produit{entries.length > 1 ? 's' : ''}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--sm catv-acc__add"
+                  title={`Ajouter les ${entries.length} produit${entries.length > 1 ? 's' : ''} de « ${name} », cochés, avec leur page`}
+                  onClick={() => {
+                    if (categoryId !== null) addCategory(categoryId, name, ids)
+                    else toggleProducts(ids, true)
+                    setOpened((prev) => new Set([...(prev ?? []), name]))
+                  }}
+                >
+                  ＋ Ajouter
+                </button>
+              </div>
+              {open ? (needle !== '' ? shown : entries).map(productRow) : null}
+            </div>
+          )
+        })}
+        {offWebshop.map((c) => (
+          <div
+            key={`hors:${c.name}`}
+            className="catv-acc catv-acc--off"
+            title={`Catégorie du catalogue du Marketing (repris de l'ERP) : aucun de ses produits n'est actif sur le webshop ${cat.owner === 'boutique' ? 'de la boutique' : 'des boutiques du catalogue'}. Sans prix ni photo du webshop, elle ne peut pas aller au catalogue : l'activer d'abord sur le webshop.`}
+          >
+            <div className="catv-acc__head">
+              <span className="catv-acc__title catv-acc__title--static">
+                <span className="catv-acc__chev" aria-hidden="true" />
+                <span className="catv-acc__name">{lang === 'nl' ? c.nameNl : c.name}</span>
+                <span className="catv-acc__count">
+                  {c.products} produit{c.products > 1 ? 's' : ''}
+                </span>
+              </span>
+              <span className="catv-acc__badge">pas sur le webshop</span>
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   )

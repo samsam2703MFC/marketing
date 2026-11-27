@@ -52,6 +52,17 @@ final class WebshopCatalogueRepository
     /** Lectures déjà faites pendant la requête. @var array<string, array{data:array<mixed>, error:?string}> */
     private array $memo = [];
 
+    /** « ↻ Relire le webshop » : la prochaine lecture ignore les lectures gardées et les remplace. */
+    private bool $relire = false;
+
+    public function relire(bool $oui = true): void
+    {
+        $this->relire = $oui;
+        if ($oui) {
+            $this->memo = [];
+        }
+    }
+
     /** @var null|callable(string $method, string $url, list<string> $headers, ?string $body): array{0:int,1:string} */
     private $socialTransport;
 
@@ -566,7 +577,7 @@ final class WebshopCatalogueRepository
             $row = null;
         }
 
-        $fresh = $row !== null && strtotime((string) $row['read_at'] . ' UTC') >= time() - $ttl;
+        $fresh = !$this->relire && $row !== null && strtotime((string) $row['read_at'] . ' UTC') >= time() - $ttl;
         if ($fresh) {
             $data = json_decode((string) $row['payload'], true);
             if (is_array($data)) {

@@ -232,8 +232,16 @@ final class CatalogueService
      * @param list<array{id:int, name:string, erpShopId:?int}> $shops
      * @return array<string,mixed>
      */
-    public function webshopProducts(array $shops): array
+    public function webshopProducts(array $shops, bool $relire = false): array
     {
+        if ($relire) {
+            $this->webshop->relire();
+            try {
+                return $this->webshopProducts($shops);
+            } finally {
+                $this->webshop->relire(false);
+            }
+        }
         $byId = [];
         $categories = [];
         $read = [];
@@ -312,6 +320,34 @@ final class CatalogueService
             }
         }
 
+        // Les familles du catalogue du Marketing (repris de l'ERP) dont AUCUN produit n'est sur le webshop des boutiques
+        // lues (26/11/2026, client : « je ne vois pas toutes les catégories ») : l'écran les nomme, grisées, sans pouvoir
+        // les ajouter (ni prix ni photo). Comparées produit par produit (même identifiant ERP) : la famille du Marketing
+        // est l'ancêtre au millier, pas la catégorie du webshop, et leurs noms ne se comparent pas.
+        $offWebshop = [];
+        if ($byId !== []) {
+            $families = [];
+            foreach ($this->webshop->localProducts() as $product) {
+                $family = trim((string) $product['categoryName']);
+                if ($family === '' || $product['categoryId'] === null) {
+                    continue;
+                }
+                $families[$family] ??= ['name' => $family, 'nameNl' => (string) $product['categoryNameNl'], 'products' => 0, 'onWebshop' => 0];
+                $families[$family]['products']++;
+                if (isset($byId[(int) $product['id']])) {
+                    $families[$family]['onWebshop']++;
+                }
+            }
+            // Une famille qui porte le nom d'une catégorie lue au webshop n'est pas « absente » : elle y est déjà.
+            $names = array_map(static fn (array $c): string => mb_strtolower(trim((string) $c['name'])), array_values($categories));
+            foreach ($families as $family) {
+                if ($family['onWebshop'] === 0 && !in_array(mb_strtolower($family['name']), $names, true)) {
+                    $offWebshop[] = ['name' => $family['name'], 'nameNl' => $family['nameNl'], 'products' => $family['products']];
+                }
+            }
+            usort($offWebshop, static fn (array $a, array $b): int => strcasecmp($a['name'], $b['name']));
+        }
+
         $products = array_values($byId);
         foreach ($products as &$product) {
             [$price, $differs] = self::generalPrice($product['prices']);
@@ -341,6 +377,7 @@ final class CatalogueService
         return [
             'products'    => $products,
             'categories'  => $categoryOrder,
+            'offWebshopCategories' => $offWebshop,
             'gammes'      => $gammes,
             'shops'       => $read,
             'offers'      => array_map(fn (array $o): array => $this->offerOut($o, array_column($products, null, 'id'), null, 'fr'), $offers['offers']),
@@ -1805,8 +1842,8 @@ final class CatalogueService
     /**
      * Range les produits choisis dans les pages, dans l'ordre : chaque page prend ceux de sa catégorie
      * et de sa gamme (quand elle en a) ; « Notre sélection » (ni catégorie ni gamme) prend ceux qui
-     * restent, toutes catégories ; une présentation avec liste prend les premiers de sa gamme, une
-     * présentation seule aucun.
+     * restent, toutes catégories, en dernier ; une présentation avec liste prend, après les pages des
+     * catégories, les premiers de sa gamme restés sans page ; une présentation seule aucun.
      *
      * @param list<array<string,mixed>> $pages
      * @param list<array<string,mixed>> $chosen Produits avec leur `categoryId` (et leurs `gammes`).
@@ -1843,11 +1880,52 @@ final class CatalogueService
                 $reserved[$offer] = $index;
             }
         }
-        foreach ($pages as $index => $page) {
+        // « Notre sélection » (ni catégorie ni gamme) prend ce qui RESTE : elle se remplit en dernier, même placée
+        // avant les pages des catégories (27/11/2026 : une page « Notre sélection » placée avant « Noël » prenait
+        // ses produits et la page « Noël » restait vide).
+        $isSelection = static fn (array $page): bool => $page['layout'] !== 'pleine'
+            && !in_array($page['layout'], self::PRESENTATIONS, true)
+            && ($page['category'] ?? null) === null && ($page['gamme'] ?? null) === null;
+        // Une présentation avec liste (27/11/2026, même cas) : placée avant les pages de ses catégories, elle prenait
+        // leurs produits (Galette, Saint Nicolas… dans la liste de la gamme, la page « Noël » vide). Elle prend
+        // désormais, après les pages des catégories, les produits de sa gamme restés sans page.
+        $isList = static fn (array $page): bool => in_array($page['layout'], self::PRESENTATIONS, true);
+        $passOrder = array_merge(
+            array_keys(array_filter($pages, static fn (array $page): bool => !$isSelection($page) && !$isList($page))),
+            array_keys(array_filter($pages, $isList)),
+            array_keys(array_filter($pages, $isSelection)),
+        );
+        $out = array_fill(0, count($pages), []);
+        $pass = 0;
+        $ownCategory = static function (array &$out, array &$placed) use ($pages, $order, $chosen, $reserved): void {
+            foreach ($pages as $at => $own) {
+                $cat = $own['category'] ?? null;
+                if ($cat === null || ($own['gamme'] ?? null) === null || $own['layout'] === 'pleine' || in_array($own['layout'], self::PRESENTATIONS, true)) {
+                    continue;
+                }
+                foreach ($order as $key) {
+                    if (count($out[$at]) >= (self::LAYOUTS[$own['layout']] ?? 6)) {
+                        break;
+                    }
+                    if (!isset($placed[$key]) && !isset($reserved[$key]) && !isset($chosen[$key]['offer']) && (int) ($chosen[$key]['categoryId'] ?? 0) === (int) $cat) {
+                        $placed[$key] = true;
+                        $out[$at][] = $chosen[$key];
+                    }
+                }
+            }
+        };
+        foreach ($passOrder as $index) {
+            $page = $pages[$index];
+            // Avant les pages « Notre sélection » : une page de catégorie à qui sa gamme a laissé de la place
+            // prend les produits de SA catégorie restés sans page, quelle que soit leur gamme.
+            if ($pass === 0 && ($isSelection($page) || $isList($page))) {
+                $pass = 1;
+                $ownCategory($out, $placed);
+            }
             $capacity = self::LAYOUTS[$page['layout']] ?? 6;
             $category = $page['category'] ?? null;
             $gamme = $page['gamme'] ?? null;
-            $items = [];
+            $items = $out[$index];
             if ($page['layout'] === 'pleine') {
                 // Son produit réservé ; sinon le premier de sa catégorie (et de sa gamme) — puis sa promotion.
                 $mine = array_keys(array_filter($reserved, static fn (int $at): bool => $at === $index));
@@ -1873,7 +1951,7 @@ final class CatalogueService
                         }
                     }
                 }
-                $out[] = $items;
+                $out[$index] = $items;
                 continue;
             }
             // Une présentation avec liste : les premiers produits de sa gamme, dans l'ordre du catalogue.
@@ -1898,7 +1976,11 @@ final class CatalogueService
                 $placed[$key] = true;
                 $items[] = $product;
             }
-            $out[] = $items;
+            $out[$index] = $items;
+        }
+
+        if ($pass === 0) {
+            $ownCategory($out, $placed);
         }
 
         return ['items' => $out, 'left' => count($chosen) - count($placed)];
