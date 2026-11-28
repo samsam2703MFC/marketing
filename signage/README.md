@@ -187,8 +187,10 @@ elle en reprend les jetons de couleur, la coquille et le système de boutons
   une commodité, pas un verrou ; quand il vérifiera l'identité (JWT de l'ERP), la régie
   suivra sans changement. Ouverte seule (`/signage/`), elle garde son mot de passe.
   Réglages : `SIG_MARKETING_SSO=0` coupe l'ouverture ; `SIG_MARKETING_SSO_URL` donne la route
-  de session du module (défaut `http://127.0.0.1/marketing/api/v1/marketing/session`, le même
-  serveur derrière Apache). L'adresse vient toujours de la configuration, jamais de la requête.
+  de session du module (sans réglage : `http://localhost/marketing/api/v1/marketing/session`, puis
+  `http://127.0.0.1/…` — le même serveur derrière Apache ; la première qui répond en JSON est
+  retenue). L'adresse vient toujours de la configuration, jamais de la requête. La livraison
+  (`deploy-signage.yml`, dernière étape) dit en annotation laquelle répond sur le serveur.
 - **Barre supérieure** : surtitre, titre de l'écran, fil (film › élément au compositeur, état
   de l'écran ailleurs) ; annuler / rétablir, enregistrement, prix, mode urgence, *Voir le
   film*, **Publier** (l'action principale) et la langue de l'interface.

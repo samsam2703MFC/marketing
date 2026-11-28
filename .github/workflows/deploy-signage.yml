@@ -722,3 +722,52 @@ jobs:
           EXTRA=""
           if [ "${{ inputs.mutate }}" = "true" ]; then EXTRA="--mutate"; fi
           node test/live-test.js "$PUBLIC_URL" $EXTRA
+
+      # « Marketing en magasin » s'ouvre sans second mot de passe : la régie demande au module « qui est connecté »
+      # par sa route de session (server/marketing-sso.js). Ce contrôle, en LECTURE SEULE et sans cookie, dit depuis
+      # le serveur si cette route répond (401 ou 200 en JSON), et laquelle. Il ne fait jamais échouer la livraison.
+      - name: Ouverture depuis le Marketing — la route de session du module répond-elle ? (lecture seule)
+        continue-on-error: true
+        env:
+          MK_DIR: ${{ vars.DEPLOY_DIR || vars.DEPLOY_PATH || '/var/www/html/marketing' }}
+        run: |
+          MK_PATH=$(printf '%s' "$MK_DIR" | sed 's|^/var/www/html||; s|/$||')
+          [ -n "$MK_PATH" ] || MK_PATH=/marketing
+          out=$($SSH -o ConnectTimeout=10 "$SRV_USER@$SRV_HOST" "MK_PATH='$MK_PATH' bash -s" <<'SSO' 2>/dev/null
+          # Adresse réglée sur le serveur (SIG_MARKETING_SSO_URL de /etc/signage/signage.env), puis celles que la
+          # régie essaie d'elle-même (localhost d'abord, puis 127.0.0.1).
+          conf=$(sed -n 's/^SIG_MARKETING_SSO_URL="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' /etc/signage/signage.env 2>/dev/null | tail -n 1)
+          coupe=$(sed -n 's/^SIG_MARKETING_SSO="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' /etc/signage/signage.env 2>/dev/null | tail -n 1)
+          [ "$coupe" = "0" ] && echo "COUPE"
+          for u in $conf "http://localhost$MK_PATH/api/v1/marketing/session" "http://127.0.0.1$MK_PATH/api/v1/marketing/session" \
+                   "http://localhost/marketing/api/v1/marketing/session" "http://127.0.0.1/marketing/api/v1/marketing/session"; do
+            r=$(curl -s -o /tmp/sig-sso.$$ -w '%{http_code} %{content_type}' --max-time 8 -H 'Accept: application/json' "$u" 2>/dev/null) || r="000 -"
+            json=non; head -c 1 /tmp/sig-sso.$$ 2>/dev/null | grep -q '[{[]' && json=oui
+            rm -f /tmp/sig-sso.$$
+            printf 'URL %s %s json=%s %s\n' "$([ "$u" = "$conf" ] && echo conf || echo defaut)" "$u" "$json" "$r"
+          done
+          SSO
+          )
+          if [ -z "$out" ]; then echo "::warning title=Ouverture depuis le Marketing::contrôle impossible (SSH muet)"; exit 0; fi
+          printf '%s\n' "$out" | sed 's/^URL /  /'
+          printf '%s\n' "$out" | grep -q '^COUPE' && echo "::notice title=Ouverture depuis le Marketing::coupée sur le serveur (SIG_MARKETING_SSO=0) : la régie demande son mot de passe partout."
+          bonne=""
+          while read -r _ src url json code ctype; do
+            case "$code" in 200|401) ;; *) continue ;; esac
+            [ "$json" = json=oui ] || continue
+            case "$ctype" in *json*) ;; *) continue ;; esac
+            bonne="$src $url HTTP $code ($ctype)"; break
+          done <<< "$(printf '%s\n' "$out" | grep '^URL ' | awk '!vu[$3]++')"
+          if [ -n "$bonne" ]; then
+            regie=""
+            case "$bonne" in
+              conf*) regie=" (adresse réglée dans /etc/signage/signage.env)" ;;
+              *" http://localhost/marketing/api/v1/marketing/session "*|*" http://127.0.0.1/marketing/api/v1/marketing/session "*)
+                regie=" (une adresse que la régie essaie d'elle-même)" ;;
+              *) regie=" — la régie ne l'essaie pas d'elle-même : poser SIG_MARKETING_SSO_URL sur cette adresse" ;;
+            esac
+            echo "::notice title=Ouverture depuis le Marketing::la route de session répond sur le serveur — $bonne$regie"
+          else
+            echo "::warning title=Ouverture depuis le Marketing::aucune adresse de session ne répond en JSON (401/200) sur le serveur — « Marketing en magasin » redemandera le mot de passe. Codes : $(printf '%s\n' "$out" | grep '^URL ' | awk '!vu[$3]++ {printf "%s → %s %s ; ", $3, $5, $6}')"
+          fi
+          exit 0
