@@ -18,10 +18,21 @@
 //   SIG_MARKETING_SSO=0        coupe l'ouverture (mot de passe partout) ;
 //   SIG_MARKETING_SSO_URL=…    route de session du module (défaut : celle du
 //                              même serveur, derrière Apache).
+//
+// Sans réglage, la régie essaie le même serveur par « localhost » (l'adresse que
+// la recette du Marketing vérifie après chaque livraison), puis par 127.0.0.1 ;
+// la première qui répond en JSON est retenue pour la suite (campagnes, films).
 
-const DEFAULT_URL = 'http://127.0.0.1/marketing/api/v1/marketing/session';
+export const DEFAULT_URLS = [
+  'http://localhost/marketing/api/v1/marketing/session',
+  'http://127.0.0.1/marketing/api/v1/marketing/session',
+];
+let retenue = null;
 
-export const marketingSsoUrl = () => process.env.SIG_MARKETING_SSO_URL || DEFAULT_URL;
+export const marketingSsoUrl = () => process.env.SIG_MARKETING_SSO_URL || retenue || DEFAULT_URLS[0];
+const candidates = () => (process.env.SIG_MARKETING_SSO_URL
+  ? [process.env.SIG_MARKETING_SSO_URL]
+  : [...new Set([retenue, ...DEFAULT_URLS].filter(Boolean))]);
 export const marketingSsoEnabled = () => process.env.SIG_MARKETING_SSO !== '0';
 
 // Cookies du navigateur transmis au module, sans la session de la régie (elle
@@ -38,18 +49,31 @@ export async function marketingSession(req) {
   if (!marketingSsoEnabled()) {
     return { ok: false, status: 404, error: 'ouverture depuis le Marketing coupée (SIG_MARKETING_SSO=0)' };
   }
-  const url = marketingSsoUrl();
   const headers = { accept: 'application/json' };
   const cookie = forwardedCookies(req);
   if (cookie) headers.cookie = cookie;
   if (req.headers.authorization) headers.authorization = req.headers.authorization;
-  let res;
-  try {
-    res = await fetch(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(5000) });
-  } catch (e) {
-    return { ok: false, status: 502, error: `module Marketing injoignable (${url})` };
+  // Une adresse qui ne répond pas, ou pas en JSON (page HTML d'un autre site), fait essayer la suivante.
+  let res = null;
+  let json = null;
+  const essais = [];
+  for (const url of candidates()) {
+    let r;
+    try {
+      r = await fetch(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(5000) });
+    } catch (e) {
+      essais.push(url);
+      continue;
+    }
+    const j = await r.json().catch(() => null);
+    if (j === null && !process.env.SIG_MARKETING_SSO_URL) { essais.push(url); res = res || r; continue; }
+    res = r;
+    json = j;
+    essais.length = 0;
+    if (!process.env.SIG_MARKETING_SSO_URL) retenue = url;
+    break;
   }
-  const json = await res.json().catch(() => null);
+  if (!res) return { ok: false, status: 502, error: `module Marketing injoignable (${essais.join(', ')})` };
   // Le module répond { authenticated, role, … } ; accepte aussi l'enveloppe du standard.
   const s = json && json.data && typeof json.data === 'object' && 'authenticated' in json.data ? json.data : json;
   if (!res.ok || !s || typeof s !== 'object') {
