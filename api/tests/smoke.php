@@ -6716,9 +6716,10 @@ $gamRelu = array_column(call($catRouter, 'GET', $G)['body']['data'] ?? [], null,
 $pm = $gamRelu['presentation'] ?? [];
 check('gammes : la couleur réglée (palette, en capitales) et le modèle de la présentation — relus dans un ordre de clés fixe, les défauts complétés, l’adresse et la taille de chaque photo',
     $gamPut['status'] === 200 && ($gamRelu['color'] ?? '') === '#78554B' && ($gamRelu['colorSet'] ?? false) === true
-        && array_keys($pm) === ['layout', 'photos', 'title', 'kicker', 'text', 'background'] && ($pm['layout'] ?? '') === 'deux'
+        && array_keys($pm) === ['layout', 'photos', 'title', 'kicker', 'text', 'background', 'position', 'textPlace', 'ink'] && ($pm['layout'] ?? '') === 'deux'
+        && ($pm['position'] ?? '') === 'haut' && ($pm['textPlace'] ?? '') === 'bas' && ($pm['ink'] ?? '') === 'gamme'
         && array_keys($pm['title'] ?? []) === ['fr', 'nl', 'font', 'size', 'weight', 'color', 'align'] && ($pm['title']['fr'] ?? '') === 'Noël & Nouvel An'
-        && ($pm['photos'][0] ?? [])['x'] === 30 && ($pm['photos'][1]['zoom'] ?? 0) === 100 && array_keys($pm['photos'][0] ?? []) === ['mediaId', 'x', 'y', 'zoom', 'image']
+        && ($pm['photos'][0] ?? [])['x'] === 30 && ($pm['photos'][1]['zoom'] ?? 0) === 100 && array_keys($pm['photos'][0] ?? []) === ['mediaId', 'x', 'y', 'zoom', 'source', 'image'] && ($pm['photos'][0]['source'] ?? '') === 'media'
         && ($pm['photos'][0]['image']['width'] ?? 0) === 3200 && str_ends_with((string) ($pm['photos'][0]['image']['url'] ?? ''), 'gamme-buffet.jpg')
         && ($pm['kicker']['font'] ?? '') === 'playwrite' && ($pm['text']['weight'] ?? '') === 'light' && ($pm['text']['size'] ?? 0) === 9
         && ($pm['background'] ?? []) === ['kind' => 'color', 'color' => 'gamme-pale', 'mediaId' => null, 'veil' => 40, 'image' => null],
@@ -6818,9 +6819,74 @@ $relu = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idGam)['body'
 $reluP = (array) ($relu['presentations'] ?? []);
 $reluP = $reluP['14'] ?? $reluP[14] ?? [];
 check('gamme par gamme : la présentation relue dans un ordre de clés fixe, quel que soit l’ordre en base',
-    array_keys($reluP) === ['layout', 'photos', 'title', 'kicker', 'text', 'background'] && array_keys($reluP['title'] ?? []) === ['fr', 'nl', 'font', 'size', 'weight', 'color', 'align']
-        && array_keys($reluP['photos'][0] ?? []) === ['mediaId', 'x', 'y', 'zoom', 'image'],
+    array_keys($reluP) === ['layout', 'photos', 'title', 'kicker', 'text', 'background', 'position', 'textPlace', 'ink'] && array_keys($reluP['title'] ?? []) === ['fr', 'nl', 'font', 'size', 'weight', 'color', 'align']
+        && array_keys($reluP['photos'][0] ?? []) === ['mediaId', 'x', 'y', 'zoom', 'source', 'image'],
     json_encode($reluP));
+check('présentation d’avant (sans place ni source) : rendu inchangé — « pleine » d’avant, en haut, texte en bas, des photos, fond photo',
+    ($docPropre['layout'] ?? '') === 'pleine' && ($docPropre['position'] ?? '') === 'haut' && ($docPropre['textPlace'] ?? '') === 'bas'
+        && ($docPropre['photos'][0]['kind'] ?? '') === 'photo' && ($docPropre['background']['kind'] ?? '') === 'photo' && ($docPropre['ink'] ?? '') === '#78554B',
+    json_encode($docPropre, JSON_UNESCAPED_UNICODE));
+// 28/11/2026 — la place des images (haut, bas, gauche, droite, pleine page), l'illustration de la gamme comme source d'une
+// case ou du fond, le trait de la gamme ou à l'encre ; refus sur liste blanche ; ordre des clés fixe.
+$places = [];
+foreach (['haut', 'bas', 'gauche', 'droite'] as $pos) {
+    $r = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idGam, [], ['presentations' => ['14' => ['layout' => 'mosaique', 'position' => $pos,
+        'photos' => [['source' => 'illustration', 'mediaId' => null, 'x' => 40, 'zoom' => 120], ['mediaId' => $mGam['tartes']], ['mediaId' => $mGam['buffet']]]]]]);
+    $d = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idGam . '/document')['body']['data']['pages'][5]['design'] ?? [];
+    $places[] = [$r['status'], $d['position'] ?? '', $d['photos'][0]['kind'] ?? '', $d['photos'][1]['kind'] ?? ''];
+}
+check('présentation : les images en haut, en bas, à gauche, à droite — l’illustration de la gamme dans une case, les photos dans les autres',
+    $places === [[200, 'haut', 'illustration', 'photo'], [200, 'bas', 'illustration', 'photo'], [200, 'gauche', 'illustration', 'photo'], [200, 'droite', 'illustration', 'photo']],
+    json_encode($places));
+$pleinePut = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idGam, [], ['presentations' => ['14' => ['layout' => 'une', 'position' => 'pleine', 'textPlace' => 'centre', 'ink' => 'encre',
+    'photos' => [['source' => 'illustration', 'mediaId' => null, 'x' => 30, 'y' => 70, 'zoom' => 180]], 'title' => ['fr' => 'Noël', 'color' => 'rubis'],
+    'background' => ['kind' => 'illustration', 'color' => 'creme', 'veil' => 25]]]]);
+$docPleine = call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idGam . '/document')['body']['data'] ?? [];
+$dp = $docPleine['pages'][5]['design'] ?? [];
+$pp = ((array) ($pleinePut['body']['data']['presentations'] ?? []))['14'] ?? [];
+check('présentation : l’illustration de la gamme en pleine page — cadrée (position, zoom), texte au centre, trait à l’encre, fond illustration sous un voile ; pas d’image de la médiathèque, pas d’alerte',
+    $pleinePut['status'] === 200 && ($pp['position'] ?? '') === 'pleine' && ($pp['textPlace'] ?? '') === 'centre' && ($pp['ink'] ?? '') === 'encre'
+        && ($pp['photos'][0] ?? null) === ['mediaId' => null, 'x' => 30, 'y' => 70, 'zoom' => 180, 'source' => 'illustration', 'image' => null]
+        && ($pp['background']['kind'] ?? '') === 'illustration' && array_key_exists('mediaId', $pp['background'] ?? []) && $pp['background']['mediaId'] === null
+        && ($dp['position'] ?? '') === 'pleine' && ($dp['textPlace'] ?? '') === 'centre' && ($dp['ink'] ?? '') === '#241C1A'
+        && ($dp['drawing'] ?? '') === 'img/print/noel.png' && str_ends_with((string) ($dp['drawingUrl'] ?? ''), 'img/print/noel.png')
+        && ($dp['photos'][0]['kind'] ?? '') === 'illustration' && str_ends_with((string) ($dp['photos'][0]['url'] ?? ''), 'img/print/noel.png') && ($dp['photos'][0]['zoom'] ?? 0) === 180
+        && ($dp['background']['kind'] ?? '') === 'illustration' && str_ends_with((string) ($dp['background']['imageUrl'] ?? ''), 'img/print/noel.png') && ($dp['background']['veil'] ?? 0) === 25
+        && !in_array('PRESENTATION_NO_DRAWING', array_column($docPleine['warnings'] ?? [], 'code'), true) && !in_array('PRESENTATION_PHOTO_MISSING', array_column($docPleine['warnings'] ?? [], 'code'), true),
+    json_encode([$pleinePut['body'], $dp], JSON_UNESCAPED_UNICODE));
+$posRefus = array_map(static fn (array $pres): array => call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idGam, [], ['presentations' => ['14' => $pres]]), [
+    ['position' => 'milieu'],
+    ['position' => 'pleine', 'textPlace' => 'cote'],
+    ['ink' => 'rouge'],
+    ['photos' => [['source' => 'dessin', 'mediaId' => null]]],
+    ['photos' => [['source' => 'illustration', 'mediaId' => $mGam['tartes']]]],
+    ['photos' => [['source' => 'media', 'mediaId' => null]]],
+    ['background' => ['kind' => 'video']],
+]);
+check('présentation : refusés (422, champ nommé) — place inconnue, place du texte inconnue, trait hors liste, source inconnue, illustration avec une image, photo sans image, fond inconnu ; rien n’est écrit',
+    array_map(static fn (array $r): array => [$r['status'], $r['body']['error']['details'][0]['field'] ?? ''], $posRefus) === [
+        [422, 'presentations.14.position'], [422, 'presentations.14.textPlace'], [422, 'presentations.14.ink'], [422, 'presentations.14.photos[0].source'],
+        [422, 'presentations.14.photos[0].mediaId'], [422, 'presentations.14.photos[0].mediaId'], [422, 'presentations.14.background.kind']]
+        && ((array) (call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idGam)['body']['data']['presentations'] ?? []))['14']['position'] === 'pleine',
+    json_encode(array_map(static fn (array $r): mixed => $r['body'], $posRefus), JSON_UNESCAPED_UNICODE));
+$brut2 = json_decode((string) $pdo->query('SELECT settings FROM mar_catalogue WHERE id = ' . $idGam)->fetchColumn(), true);
+$brut2['presentations']['14'] = array_reverse($brut2['presentations']['14'], true);
+$brut2['presentations']['14']['photos'][0] = array_reverse($brut2['presentations']['14']['photos'][0], true);
+$pdo->prepare('UPDATE mar_catalogue SET settings = ? WHERE id = ?')->execute([json_encode($brut2, JSON_UNESCAPED_UNICODE), $idGam]);
+$relu2 = ((array) (call($catRouter, 'GET', '/api/v1/marketing/catalogues/' . $idGam)['body']['data']['presentations'] ?? []))['14'] ?? [];
+check('présentation : place, texte, trait et source relus dans l’ordre fixe, quel que soit l’ordre en base',
+    array_keys($relu2) === ['layout', 'photos', 'title', 'kicker', 'text', 'background', 'position', 'textPlace', 'ink'] && array_keys($relu2['photos'][0] ?? []) === ['mediaId', 'x', 'y', 'zoom', 'source', 'image']
+        && ($relu2['position'] ?? '') === 'pleine' && ($relu2['photos'][0]['source'] ?? '') === 'illustration',
+    json_encode($relu2));
+// Le modèle de la gamme prend les mêmes champs (l'illustration n'est pas une image de la médiathèque du réseau).
+$modelePos = call($catRouter, 'PUT', $G . '/14', [], ['presentation' => ['layout' => 'deux', 'position' => 'gauche', 'ink' => 'encre', 'photos' => [['source' => 'illustration', 'mediaId' => null], ['mediaId' => $mGam['buffet']]]]]);
+$modeleRefus = call($catRouter, 'PUT', $G . '/14', [], ['presentation' => ['position' => 'diagonale']]);
+check('modèle de gamme : la place et l’illustration enregistrées dans le modèle ; une place inconnue refusée (422)',
+    $modelePos['status'] === 200 && ($modelePos['body']['data']['presentation']['position'] ?? '') === 'gauche' && ($modelePos['body']['data']['presentation']['photos'][0]['source'] ?? '') === 'illustration'
+        && array_key_exists('image', $modelePos['body']['data']['presentation']['photos'][0] ?? []) && $modelePos['body']['data']['presentation']['photos'][0]['image'] === null && ($modelePos['body']['data']['presentation']['ink'] ?? '') === 'encre'
+        && $modeleRefus['status'] === 422 && ($modeleRefus['body']['error']['details'][0]['field'] ?? '') === 'presentation.position',
+    json_encode([$modelePos['body'], $modeleRefus['body']], JSON_UNESCAPED_UNICODE));
+call($catRouter, 'PUT', $G . '/14', [], ['presentation' => $modele]);
 // Réordonner les catégories dans un bloc (les pages envoyées) : l'ordre est gardé ; une page hors bloc est rangée à sa place.
 $ordre = call($catRouter, 'PUT', '/api/v1/marketing/catalogues/' . $idGam, [], ['pages' => [
     ['layout' => 'presentation', 'category' => null, 'gamme' => 14], ['layout' => 'liste', 'category' => 600, 'gamme' => 14], ['layout' => 'grille', 'category' => 500, 'gamme' => 14],

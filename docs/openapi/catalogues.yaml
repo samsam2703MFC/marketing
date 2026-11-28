@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Marketing — catalogues produits
-  version: 1.23.0
+  version: 1.24.0
   description: |
     Les catalogues produits du Marketing (prix du webshop, gammes) : un imprimé A5 (A4 en option)
     de **8 à 16 pages, toujours par 2** (`pageCount` : 8, 10, 12, 14 ou 16). Quatre pages viennent de la Charte des catalogues de la
@@ -177,6 +177,21 @@ info:
       brochure (6 produits au plus sur un leaflet, 9 sur un dépliant) ;
     - le dashboard franchisé (`…/brand-catalogues`) ne reçoit que des catalogues : un leaflet ou un dépliant n'y va pas
       (404 sur le sien).
+
+    v1.24 (28 novembre 2026, client : « une full page illustration avec haut et bas, gauche, droite, en utilisant
+    l'illustration ou des pictures de la médiathèque ») — `Presentation` gagne, APRÈS ses clés d'avant (ordre fixe) :
+    - `position` (`haut` · `bas` · `gauche` · `droite` · `pleine` ; défaut `haut`) : la place des images par rapport au
+      texte, combinée avec `layout` (1 · 2 · 3 cases) ; `pleine` : les images couvrent la page, le texte par-dessus, sous
+      le voile `background.veil` ; `layout: pleine` d'avant garde son rendu (une photo pleine page, texte sur un bandeau) ;
+    - `textPlace` (`haut` · `centre` · `bas` ; défaut `bas`) : où se place le texte sur une image pleine page ;
+    - `ink` (`gamme` · `encre` ; défaut `gamme`) : la couleur du trait de l'illustration de la gamme ;
+    - chaque photo : `source` (`media` · `illustration` ; défaut `media`, après `zoom`) — `illustration` = le dessin de
+      saison de la gamme (`mediaId` null ; cadré par `x`, `y`, `zoom` ; jamais d'alerte de résolution) ;
+    - `background.kind` gagne `illustration` (le dessin de saison pleine page, sous le voile).
+    Une valeur hors liste : 422 nommé (`presentations.<g>.position`, `….photos[i].source`…). Au document, `design` gagne
+    `position`, `textPlace`, `ink` (#RRGGBB), `drawing` / `drawingUrl` (le dessin de la gamme), `photos[i].kind`
+    (`photo` · `illustration`, l'adresse du dessin dans `url`) et `background.kind` ; avertissement
+    `PRESENTATION_NO_DRAWING` quand la gamme n'a pas de dessin. Un design d'avant (sans ces champs) s'imprime comme avant.
 
     v1.23 (27 novembre 2026, la construction « gamme par gamme », maquettes M1 · M2 · M3 validées) :
     - un catalogue peut se ranger en BLOCS : `gammeBlocks` (liste ordonnée de 1 à 8 gammes du webshop ; null = les pages
@@ -1472,21 +1487,22 @@ components:
       description: |
         v1.23 — Une page de présentation de gamme (modèle ou celle d'un catalogue), relue dans cet ordre de clés. Défauts :
         une grande photo ; titre Vank 40 pt à la couleur de la gamme ; accroche manuscrite 12 pt ; texte Gotham 9 pt ; fond
-        papier. En lecture, chaque photo et le fond portent aussi `image {url, width, height}` (null : image retirée).
+        papier. En lecture, chaque photo et le fond portent aussi `image {url, width, height}` (null : image retirée, ou
+        l'illustration de la gamme). v1.24 : `position`, `textPlace`, `ink` après `background`.
       properties:
-        layout: { type: string, enum: [une, deux, mosaique, pleine], description: '1 grande · 2 photos · 3 en mosaïque · pleine page.' }
+        layout: { type: string, enum: [une, deux, mosaique, pleine], description: '1 grande · 2 images · 3 en mosaïque ; pleine : la pleine page d''avant (une photo, texte sur un bandeau), gardée pour les designs anciens — v1.24 : préférer `position: pleine`.' }
         photos:
           type: array
           maxItems: 4
           items:
             type: object
             additionalProperties: false
-            required: [mediaId]
             properties:
-              mediaId: { type: integer }
+              mediaId: { type: [integer, 'null'], description: 'Exigée avec source media ; null avec source illustration.' }
               x: { type: integer, minimum: 0, maximum: 100, default: 50, description: 'Position horizontale du cadrage, en %.' }
               y: { type: integer, minimum: 0, maximum: 100, default: 50 }
               zoom: { type: integer, minimum: 100, maximum: 300, default: 100, description: 'Agrandissement, en %.' }
+              source: { type: string, enum: [media, illustration], default: media, description: 'v1.24 — une image de la médiathèque, ou l''illustration (dessin de saison) de la gamme.' }
         title: { $ref: '#/components/schemas/PresentationText' }
         kicker: { $ref: '#/components/schemas/PresentationText' }
         text: { $ref: '#/components/schemas/PresentationText' }
@@ -1494,10 +1510,13 @@ components:
           type: object
           additionalProperties: false
           properties:
-            kind: { type: string, enum: [color, photo] }
+            kind: { type: string, enum: [color, photo, illustration], description: 'v1.24 — illustration : le dessin de saison de la gamme pleine page.' }
             color: { type: string, enum: [papier, gamme-pale, gamme, creme, abricot, blanc] }
             mediaId: { type: [integer, 'null'], description: 'Exigée avec kind photo.' }
-            veil: { type: integer, minimum: 0, maximum: 80, default: 40, description: 'Le voile sur la photo, en %.' }
+            veil: { type: integer, minimum: 0, maximum: 80, default: 40, description: 'Le voile sur la photo (ou l''illustration), et sur les images en position pleine, en %.' }
+        position: { type: string, enum: [haut, bas, gauche, droite, pleine], default: haut, description: 'v1.24 — La place des images par rapport au texte ; pleine : les images couvrent la page, le texte par-dessus sous le voile.' }
+        textPlace: { type: string, enum: [haut, centre, bas], default: bas, description: 'v1.24 — Où se place le texte sur une image pleine page.' }
+        ink: { type: string, enum: [gamme, encre], default: gamme, description: 'v1.24 — La couleur du trait de l''illustration de la gamme.' }
     CatalogueGamme:
       type: object
       properties:
@@ -1768,12 +1787,17 @@ components:
                     description: 'v1.23 — La présentation gamme par gamme telle qu''elle s''imprime ; null : celle d''avant (gabarit).'
                     properties:
                       layout: { type: string, enum: [une, deux, mosaique, pleine] }
-                      photos: { type: array, items: { type: object, properties: { url: { type: [string, 'null'] }, x: { type: integer }, y: { type: integer }, zoom: { type: integer } } } }
+                      photos: { type: array, items: { type: object, properties: { url: { type: [string, 'null'] }, x: { type: integer }, y: { type: integer }, zoom: { type: integer }, kind: { type: string, enum: [photo, illustration], description: 'v1.24 — illustration : le dessin de la gamme (url), un trait peint à `ink`.' } } } }
                       title: { $ref: '#/components/schemas/DocPresText' }
                       kicker: { $ref: '#/components/schemas/DocPresText' }
                       text: { $ref: '#/components/schemas/DocPresText' }
-                      background: { type: object, properties: { color: { type: string }, imageUrl: { type: [string, 'null'] }, veil: { type: integer } } }
+                      background: { type: object, properties: { color: { type: string }, imageUrl: { type: [string, 'null'] }, veil: { type: integer }, kind: { type: string, enum: [color, photo, illustration], description: 'v1.24' } } }
                       gammeColor: { type: string }
+                      position: { type: string, enum: [haut, bas, gauche, droite, pleine], description: 'v1.24 — ignorée quand layout vaut pleine (la pleine page d''avant).' }
+                      textPlace: { type: string, enum: [haut, centre, bas], description: 'v1.24' }
+                      ink: { type: string, description: 'v1.24 — #RRGGBB, le trait de l''illustration.' }
+                      drawing: { type: [string, 'null'], description: 'v1.24 — le dessin de la gamme (img/print/…).' }
+                      drawingUrl: { type: [string, 'null'], description: 'v1.24 — son adresse absolue.' }
                   products: { type: array, items: { $ref: '#/components/schemas/DocProduct' } }
                   availabilityFooter: { type: [string, 'null'], description: 'La disponibilité des produits de la page en une ligne de pied de page (« Disponible du 1/12 au 31/12 · sur commande 48 h », puis les produits qui diffèrent, ou « certains produits : voir en boutique ») ; null sans donnée ou `showAvailability` faux. Les vignettes de promotions gardent leur période.' }
               - type: object

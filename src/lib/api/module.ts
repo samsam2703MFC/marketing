@@ -3358,6 +3358,12 @@ export type CatalogueDocPage =
 export type CataloguePresLayout = 'une' | 'deux' | 'mosaique' | 'pleine'
 export const CATALOGUE_PRES_SLOTS: Record<CataloguePresLayout, number> = { une: 1, deux: 2, mosaique: 3, pleine: 1 }
 export type CataloguePresElement = 'title' | 'kicker' | 'text'
+/** La place des images par rapport au texte (28/11/2026) : en haut, en bas, à gauche, à droite, ou la page entière. */
+export type CataloguePresPosition = 'haut' | 'bas' | 'gauche' | 'droite' | 'pleine'
+/** Où se place le texte sur une image pleine page. */
+export type CataloguePresTextPlace = 'haut' | 'centre' | 'bas'
+/** Le trait de l'illustration de la gamme : sa couleur, ou l'encre. */
+export type CataloguePresInk = 'gamme' | 'encre'
 export const CATALOGUE_PRES_SIZES: Record<CataloguePresElement, number[]> = { title: [24, 28, 32, 36, 40, 48, 56], kicker: [10, 12, 14, 16, 18, 20], text: [8, 9, 10, 11, 12] }
 export type CataloguePresWeight = 'light' | 'regular' | 'medium' | 'bold'
 export type CataloguePresTextColor = 'gamme' | 'rubis' | 'or' | 'encre' | 'creme' | 'blanc'
@@ -3392,10 +3398,12 @@ export interface CataloguePresImage {
   height: number | null
 }
 export interface CataloguePresPhoto {
-  mediaId: number
+  /** null : l'illustration de la gamme (`source: 'illustration'`). */
+  mediaId: number | null
   x: number
   y: number
   zoom: number
+  source: 'media' | 'illustration'
   /** En lecture : l'image (null : retirée de la médiathèque). */
   image?: CataloguePresImage | null
 }
@@ -3405,7 +3413,10 @@ export interface CataloguePresentation {
   title: CataloguePresText
   kicker: CataloguePresText
   text: CataloguePresText
-  background: { kind: 'color' | 'photo'; color: CataloguePresBgColor; mediaId: number | null; veil: number; image?: CataloguePresImage | null }
+  background: { kind: 'color' | 'photo' | 'illustration'; color: CataloguePresBgColor; mediaId: number | null; veil: number; image?: CataloguePresImage | null }
+  position: CataloguePresPosition
+  textPlace: CataloguePresTextPlace
+  ink: CataloguePresInk
 }
 /** Ce qu'on écrit d'une présentation : sans les images lues. */
 export type CataloguePresentationInput = Omit<CataloguePresentation, 'photos' | 'background'> & {
@@ -3414,11 +3425,14 @@ export type CataloguePresentationInput = Omit<CataloguePresentation, 'photos' | 
 }
 export const presentationInput = (p: CataloguePresentation): CataloguePresentationInput => ({
   layout: p.layout,
-  photos: p.photos.map((ph) => ({ mediaId: ph.mediaId, x: ph.x, y: ph.y, zoom: ph.zoom })),
+  photos: p.photos.map((ph) => ({ mediaId: ph.source === 'illustration' ? null : ph.mediaId, x: ph.x, y: ph.y, zoom: ph.zoom, source: ph.source })),
   title: p.title,
   kicker: p.kicker,
   text: p.text,
-  background: { kind: p.background.kind, color: p.background.color, mediaId: p.background.mediaId, veil: p.background.veil },
+  background: { kind: p.background.kind, color: p.background.color, mediaId: p.background.kind === 'illustration' ? null : p.background.mediaId, veil: p.background.veil },
+  position: p.position,
+  textPlace: p.textPlace,
+  ink: p.ink,
 })
 /** La présentation d'office (celle du serveur, `presentationDefault`). */
 export const presentationDefault = (): CataloguePresentation => ({
@@ -3428,6 +3442,9 @@ export const presentationDefault = (): CataloguePresentation => ({
   kicker: { fr: '', nl: '', font: 'playwrite', size: 12, weight: 'regular', color: 'encre', align: 'left' },
   text: { fr: '', nl: '', font: 'gotham', size: 9, weight: 'regular', color: 'encre', align: 'left' },
   background: { kind: 'color', color: 'papier', mediaId: null, veil: 40, image: null },
+  position: 'haut',
+  textPlace: 'bas',
+  ink: 'gamme',
 })
 /** Une gamme du webshop pour les catalogues : sa couleur et le modèle de sa présentation. */
 export interface CatalogueGamme {
@@ -3448,12 +3465,21 @@ export interface CatalogueDocPresText {
 }
 export interface CatalogueDocDesign {
   layout: CataloguePresLayout
-  photos: Array<{ url: string | null; x: number; y: number; zoom: number }>
+  /** `kind` absent (document d'avant) : une photo. */
+  photos: Array<{ url: string | null; x: number; y: number; zoom: number; kind?: 'photo' | 'illustration' }>
   title: CatalogueDocPresText
   kicker: CatalogueDocPresText
   text: CatalogueDocPresText
-  background: { color: string; imageUrl: string | null; veil: number }
+  background: { color: string; imageUrl: string | null; veil: number; kind?: 'color' | 'photo' | 'illustration' }
   gammeColor: string
+  /** 28/11/2026 — absents d'un document d'avant : en haut, texte en bas, trait de la gamme. */
+  position?: CataloguePresPosition
+  textPlace?: CataloguePresTextPlace
+  /** La couleur du trait de l'illustration (#RRGGBB). */
+  ink?: string
+  /** L'illustration de la gamme (`img/print/…`) et son adresse absolue. */
+  drawing?: string | null
+  drawingUrl?: string | null
 }
 
 export interface CatalogueDocFiller {
