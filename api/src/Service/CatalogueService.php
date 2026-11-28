@@ -84,6 +84,21 @@ final class CatalogueService
     private const GAMME_SEASON_COLORS = ['noel' => '#3F7A52', 'saint-nicolas' => '#8D1D2C', 'epiphanie' => '#B0792A', 'saint-valentin' => '#8D1D2C', 'chandeleur' => '#B0792A', 'paques' => '#3F7A52', 'fete-des-meres' => '#8D1D2C', 'printemps' => '#3F7A52', 'ete' => '#B0792A', 'automne' => '#78554B', 'hiver' => '#222222', 'glace' => '#7A736A', 'b2b' => '#7A736A', 'bureau' => '#7A736A'];
     /** La disposition des photos d'une présentation → nombre de cases : 1 grande · 2 photos · 3 en mosaïque · pleine page. */
     public const PRES_LAYOUTS = ['une' => 1, 'deux' => 2, 'mosaique' => 3, 'pleine' => 1];
+    /**
+     * La place des images par rapport au texte (28/11/2026, client : « une full page illustration avec haut et bas, gauche,
+     * droite ») : en haut (texte dessous, comme avant), en bas, à gauche, à droite, ou la page entière (le texte par-dessus,
+     * sous un voile). Elle se combine avec la disposition (1 · 2 · 3 cases). `layout` « pleine » reste celle d'avant
+     * (une photo pleine page, le texte sur un bandeau) : un design ancien garde son rendu.
+     */
+    public const PRES_POSITIONS = ['haut', 'bas', 'gauche', 'droite', 'pleine'];
+    /** Où se place le texte sur une image pleine page. */
+    public const PRES_TEXT_PLACES = ['haut', 'centre', 'bas'];
+    /** La couleur du trait de l'illustration de la gamme : celle de la gamme, ou l'encre. */
+    public const PRES_INKS = ['gamme', 'encre'];
+    /** La source d'une case : une image de la médiathèque, ou l'illustration (dessin de saison) de la gamme. */
+    public const PRES_SOURCES = ['media', 'illustration'];
+    /** Le fond : une couleur, une photo de la médiathèque, ou l'illustration de la gamme. */
+    public const PRES_BG_KINDS = ['color', 'photo', 'illustration'];
     private const PRES_PHOTOS_MAX = 4;
     /** Les tailles permises (points) de chaque texte d'une présentation. */
     public const PRES_SIZES = ['title' => [24, 28, 32, 36, 40, 48, 56], 'kicker' => [10, 12, 14, 16, 18, 20], 'text' => [8, 9, 10, 11, 12]];
@@ -2639,12 +2654,14 @@ final class CatalogueService
         $layout = is_string($saved['layout'] ?? null) && isset(self::PRES_LAYOUTS[$saved['layout']]) ? $saved['layout'] : 'une';
         $photos = [];
         foreach (is_array($saved['photos'] ?? null) ? array_values($saved['photos']) : [] as $photo) {
-            if (is_array($photo) && is_int($photo['mediaId'] ?? null) && count($photos) < self::PRES_PHOTOS_MAX) {
+            $drawn = is_array($photo) && ($photo['source'] ?? null) === 'illustration';
+            if (is_array($photo) && ($drawn || is_int($photo['mediaId'] ?? null)) && count($photos) < self::PRES_PHOTOS_MAX) {
                 $photos[] = [
-                    'mediaId' => $photo['mediaId'],
+                    'mediaId' => $drawn ? null : $photo['mediaId'],
                     'x'       => self::clampInt($photo['x'] ?? 50, 0, 100, 50),
                     'y'       => self::clampInt($photo['y'] ?? 50, 0, 100, 50),
                     'zoom'    => self::clampInt($photo['zoom'] ?? 100, 100, 300, 100),
+                    'source'  => $drawn ? 'illustration' : 'media',
                 ];
             }
         }
@@ -2670,11 +2687,15 @@ final class CatalogueService
             'kicker'     => $texts['kicker'],
             'text'       => $texts['text'],
             'background' => [
-                'kind'    => ($bg['kind'] ?? null) === 'photo' ? 'photo' : 'color',
+                'kind'    => in_array($bg['kind'] ?? null, self::PRES_BG_KINDS, true) ? $bg['kind'] : 'color',
                 'color'   => in_array($bg['color'] ?? null, self::PRES_BG_COLORS, true) ? $bg['color'] : 'papier',
-                'mediaId' => is_int($bg['mediaId'] ?? null) ? $bg['mediaId'] : null,
+                'mediaId' => ($bg['kind'] ?? null) !== 'illustration' && is_int($bg['mediaId'] ?? null) ? $bg['mediaId'] : null,
                 'veil'    => self::clampInt($bg['veil'] ?? 40, 0, 80, 40),
             ],
+            // 28/11/2026 — après les clés d'avant : un design ancien relu garde son ordre, et son rendu (haut, texte en bas).
+            'position'   => in_array($saved['position'] ?? null, self::PRES_POSITIONS, true) ? $saved['position'] : 'haut',
+            'textPlace'  => in_array($saved['textPlace'] ?? null, self::PRES_TEXT_PLACES, true) ? $saved['textPlace'] : 'bas',
+            'ink'        => in_array($saved['ink'] ?? null, self::PRES_INKS, true) ? $saved['ink'] : 'gamme',
         ];
     }
 
@@ -2692,12 +2713,17 @@ final class CatalogueService
     private static function presInput(mixed $value, string $field, callable $canUse, array &$errors): array
     {
         if (!is_array($value) || ($value !== [] && array_is_list($value))) {
-            $errors[] = ['field' => $field, 'message' => 'Forme attendue : {layout, photos, title, kicker, text, background}.'];
+            $errors[] = ['field' => $field, 'message' => 'Forme attendue : {layout, photos, title, kicker, text, background, position, textPlace, ink}.'];
 
             return self::presentationDefault();
         }
-        foreach (array_diff(array_keys($value), ['layout', 'photos', 'title', 'kicker', 'text', 'background']) as $key) {
+        foreach (array_diff(array_keys($value), ['layout', 'photos', 'title', 'kicker', 'text', 'background', 'position', 'textPlace', 'ink']) as $key) {
             $errors[] = ['field' => $field . '.' . $key, 'message' => 'Champ inconnu.'];
+        }
+        foreach (['position' => self::PRES_POSITIONS, 'textPlace' => self::PRES_TEXT_PLACES, 'ink' => self::PRES_INKS] as $k => $allowed) {
+            if (array_key_exists($k, $value) && !in_array($value[$k], $allowed, true)) {
+                $errors[] = ['field' => $field . '.' . $k, 'message' => 'Attendu : ' . implode(', ', $allowed) . '.'];
+            }
         }
         if (array_key_exists('layout', $value) && (!is_string($value['layout']) || !isset(self::PRES_LAYOUTS[$value['layout']]))) {
             $errors[] = ['field' => $field . '.layout', 'message' => 'Disposition : ' . implode(', ', array_keys(self::PRES_LAYOUTS)) . '.'];
@@ -2708,11 +2734,17 @@ final class CatalogueService
         } else {
             foreach ($photos as $i => $photo) {
                 $f = $field . '.photos[' . $i . ']';
-                if (!is_array($photo) || array_diff(array_keys($photo), ['mediaId', 'x', 'y', 'zoom']) !== []) {
-                    $errors[] = ['field' => $f, 'message' => 'Forme attendue : {mediaId, x, y, zoom}.'];
+                if (!is_array($photo) || array_diff(array_keys($photo), ['mediaId', 'x', 'y', 'zoom', 'source']) !== []) {
+                    $errors[] = ['field' => $f, 'message' => 'Forme attendue : {mediaId, x, y, zoom, source}.'];
                     continue;
                 }
-                if (!is_int($photo['mediaId'] ?? null) || !$canUse($photo['mediaId'])) {
+                if (array_key_exists('source', $photo) && !in_array($photo['source'], self::PRES_SOURCES, true)) {
+                    $errors[] = ['field' => $f . '.source', 'message' => 'Attendu : ' . implode(', ', self::PRES_SOURCES) . '.'];
+                } elseif (($photo['source'] ?? 'media') === 'illustration') {
+                    if (($photo['mediaId'] ?? null) !== null) {
+                        $errors[] = ['field' => $f . '.mediaId', 'message' => 'L’illustration de la gamme : mediaId null.'];
+                    }
+                } elseif (!is_int($photo['mediaId'] ?? null) || !$canUse($photo['mediaId'])) {
                     $errors[] = ['field' => $f . '.mediaId', 'message' => 'Image inconnue de la médiathèque (ou hors de celles que ce catalogue peut prendre).'];
                 }
                 foreach (['x' => [0, 100], 'y' => [0, 100], 'zoom' => [100, 300]] as $k => [$min, $max]) {
@@ -2750,8 +2782,8 @@ final class CatalogueService
             if (!is_array($bg) || array_diff(array_keys($bg), ['kind', 'color', 'mediaId', 'veil']) !== []) {
                 $errors[] = ['field' => $f, 'message' => 'Forme attendue : {kind, color, mediaId, veil}.'];
             } else {
-                if (array_key_exists('kind', $bg) && !in_array($bg['kind'], ['color', 'photo'], true)) {
-                    $errors[] = ['field' => $f . '.kind', 'message' => 'Attendu : color, photo.'];
+                if (array_key_exists('kind', $bg) && !in_array($bg['kind'], self::PRES_BG_KINDS, true)) {
+                    $errors[] = ['field' => $f . '.kind', 'message' => 'Attendu : ' . implode(', ', self::PRES_BG_KINDS) . '.'];
                 }
                 if (array_key_exists('color', $bg) && !in_array($bg['color'], self::PRES_BG_COLORS, true)) {
                     $errors[] = ['field' => $f . '.color', 'message' => 'Attendu : ' . implode(', ', self::PRES_BG_COLORS) . '.'];
@@ -2784,8 +2816,14 @@ final class CatalogueService
      * @param list<array<string,string>> $warnings
      * @return array<string,mixed>
      */
-    private function presDoc(array $pres, string $gammeColor, string $lang, int $no, string $title, string $body, array &$warnings): array
+    private function presDoc(array $pres, string $gammeColor, string $lang, int $no, string $title, string $body, array &$warnings, ?string $drawing = null): array
     {
+        $drawingUrl = $drawing !== null ? MediaService::publicUrl($drawing) : null;
+        $usesDrawing = $pres['background']['kind'] === 'illustration'
+            || in_array('illustration', array_column(array_slice($pres['photos'], 0, self::PRES_LAYOUTS[$pres['layout']]), 'source'), true);
+        if ($usesDrawing && $drawing === null) {
+            $warnings[] = ['code' => 'PRESENTATION_NO_DRAWING', 'message' => sprintf('Page %d : la gamme n’a pas d’illustration (dessin de saison) — sa case reste vide.', $no)];
+        }
         $hex = static fn (string $name): string => $name === 'gamme' ? $gammeColor : ($name === 'gamme-pale' ? self::paleOf($gammeColor) : (self::PRES_HEX[$name] ?? '#241C1A'));
         $image = function (?int $id) use ($no, &$warnings): ?string {
             if ($id === null) {
@@ -2811,14 +2849,31 @@ final class CatalogueService
         }
         $bg = $pres['background'];
 
+        $drawn = static fn (array $p): bool => $p['source'] === 'illustration';
+
         return [
             'layout'     => $pres['layout'],
-            'photos'     => array_map(static fn (array $p): array => ['url' => $image($p['mediaId']), 'x' => $p['x'], 'y' => $p['y'], 'zoom' => $p['zoom']], $pres['photos']),
+            'photos'     => array_map(static fn (array $p): array => [
+                'url'  => $drawn($p) ? $drawingUrl : $image($p['mediaId']),
+                'x'    => $p['x'], 'y' => $p['y'], 'zoom' => $p['zoom'],
+                'kind' => $drawn($p) ? 'illustration' : 'photo',
+            ], $pres['photos']),
             'title'      => $texts['title'],
             'kicker'     => $texts['kicker'],
             'text'       => $texts['text'],
-            'background' => ['color' => $hex($bg['color']), 'imageUrl' => $bg['kind'] === 'photo' ? $image($bg['mediaId']) : null, 'veil' => $bg['veil']],
+            'background' => [
+                'color'    => $hex($bg['color']),
+                'imageUrl' => $bg['kind'] === 'photo' ? $image($bg['mediaId']) : ($bg['kind'] === 'illustration' ? $drawingUrl : null),
+                'veil'     => $bg['veil'],
+                'kind'     => $bg['kind'],
+            ],
             'gammeColor' => $gammeColor,
+            // 28/11/2026 : la place des images, celle du texte sur une image pleine page, le trait de l'illustration.
+            'position'   => $pres['position'],
+            'textPlace'  => $pres['textPlace'],
+            'ink'        => $pres['ink'] === 'encre' ? self::PRES_HEX['encre'] : $gammeColor,
+            'drawing'    => $drawing,
+            'drawingUrl' => $drawingUrl,
         ];
     }
 
@@ -2920,7 +2975,7 @@ final class CatalogueService
             return ['url' => (string) $s['webUrl'], 'width' => $s['width'], 'height' => $s['height']];
         };
         unset($row);
-        $pres['photos'] = array_map(static fn (array $p): array => $p + ['image' => $media($p['mediaId'])], $pres['photos']);
+        $pres['photos'] = array_map(static fn (array $p): array => $p + ['image' => $p['mediaId'] !== null ? $media($p['mediaId']) : null], $pres['photos']);
         $pres['background'] += ['image' => $media($pres['background']['mediaId'])];
 
         return $pres;
@@ -4271,7 +4326,7 @@ final class CatalogueService
                 $design = null;
                 if ($gid !== null && isset($designs[$gid])) {
                     $color = $gammeSaved[$gid]['color'] ?? self::gammeColorDefault($gid, (string) ($gammesById[$gid]['name'] ?? ''));
-                    $design = $this->presDoc($designs[$gid], $color, $lang, $no, $title, $body, $warnings);
+                    $design = $this->presDoc($designs[$gid], $color, $lang, $no, $title, $body, $warnings, $visual['drawing'] ?? null);
                     $title = $design['title']['text'];
                     $body = $design['text']['text'];
                 }

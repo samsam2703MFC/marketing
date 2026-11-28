@@ -54,7 +54,14 @@ const HORS = 'hors'
 type Section = number | typeof HORS
 const CAT_LAYOUTS: CatalogueLayout[] = ['vedette', 'grille', 'liste', 'mosaique']
 const CAT_LABELS: Record<string, string> = { vedette: 'Vedette + 4', grille: 'Grille 2×3', liste: 'Liste', mosaique: '2 grandes' }
-const PRES_LAYOUTS: Array<[CataloguePresLayout, string]> = [['une', '1 grande'], ['deux', '2 photos'], ['mosaique', '3 mosaïque'], ['pleine', 'Pleine page']]
+/** Le nombre d'images (la « pleine » d'avant n'est plus proposée : c'est la place « Pleine page »). */
+const PRES_LAYOUTS: Array<[CataloguePresLayout, string]> = [['une', '1 grande'], ['deux', '2 images'], ['mosaique', '3 mosaïque']]
+/** La place des images par rapport au texte (28/11/2026, client : « haut et bas, gauche, droite »). */
+const PRES_POSITIONS: Array<[api.CataloguePresPosition, string]> = [['haut', 'Haut'], ['bas', 'Bas'], ['gauche', 'Gauche'], ['droite', 'Droite'], ['pleine', 'Pleine page']]
+const TEXT_PLACES: Array<[api.CataloguePresTextPlace, string]> = [['haut', 'En haut'], ['centre', 'Au centre'], ['bas', 'En bas']]
+const INKS: Array<[api.CataloguePresInk, string]> = [['gamme', 'Couleur de la gamme'], ['encre', 'Encre']]
+/** L'adresse d'un dessin livré avec le module (`img/print/…`). */
+const assetUrl = (path: string): string => new URL(`${import.meta.env.BASE_URL}${path}`, window.location.href).href
 const FONTS: Array<[api.CatalogueCoverFont, string]> = [['vank', 'Vank'], ['gotham', 'Gotham'], ['playwrite', 'Manuscrite']]
 const WEIGHTS: Array<[api.CataloguePresWeight, string]> = [['light', 'Light'], ['regular', 'Regular'], ['medium', 'Medium'], ['bold', 'Bold']]
 const ALIGNS: Array<[api.CataloguePresAlign, string]> = [['left', 'Gauche'], ['center', 'Centre'], ['right', 'Droite']]
@@ -63,6 +70,9 @@ const BG_COLORS: Array<[api.CataloguePresBgColor, string]> = [['papier', 'Papier
 const HORS_COLOR = '#7A736A'
 /** La largeur imprimée d'une case de photo (mm, A5) : sert à dire la résolution d'une photo. */
 const SLOT_MM: Record<CataloguePresLayout, number[]> = { une: [126], deux: [62, 62], mosaique: [74, 51, 51], pleine: [154] }
+/** La même, selon la place des images : à gauche ou à droite, une demi-page ; pleine page, toute la largeur. */
+const SLOT_MM_SIDE: Record<CataloguePresLayout, number[]> = { une: [63], deux: [63, 63], mosaique: [63, 31, 31], pleine: [154] }
+const SLOT_MM_FULL: Record<CataloguePresLayout, number[]> = { une: [154], deux: [77, 77], mosaique: [92, 62, 62], pleine: [154] }
 
 /** La couleur pâle d'une gamme : sa couleur mêlée à 18 % au papier (la règle du serveur, `paleOf`). */
 export function paleOf(hex: string): string {
@@ -175,7 +185,7 @@ function Seg<T extends string | number>({ value, options, onChange, label, disab
 }
 
 /** Ce que le document imprimera pour une présentation en cours d'édition (la règle de `presDoc` du serveur). */
-function docDesign(pres: CataloguePresentation, gammeColor: string, lang: CatalogueLang, title: string, text: string): CatalogueDocDesign {
+function docDesign(pres: CataloguePresentation, gammeColor: string, lang: CatalogueLang, title: string, text: string, drawing: string | null): CatalogueDocDesign {
   const hex = (name: string): string => (name === 'gamme' ? gammeColor : name === 'gamme-pale' ? paleOf(gammeColor) : (api.CATALOGUE_PRES_HEX[name] ?? '#241C1A'))
   const t = (el: CataloguePresElement, fallback: string) => {
     const e = pres[el]
@@ -184,12 +194,22 @@ function docDesign(pres: CataloguePresentation, gammeColor: string, lang: Catalo
   }
   return {
     layout: pres.layout,
-    photos: pres.photos.map((p) => ({ url: p.image?.url ?? null, x: p.x, y: p.y, zoom: p.zoom })),
+    photos: pres.photos.map((p) => ({ url: p.source === 'illustration' ? (drawing ? assetUrl(drawing) : null) : (p.image?.url ?? null), x: p.x, y: p.y, zoom: p.zoom, kind: p.source === 'illustration' ? 'illustration' : 'photo' })),
     title: t('title', title),
     kicker: t('kicker', ''),
     text: t('text', text),
-    background: { color: hex(pres.background.color), imageUrl: pres.background.kind === 'photo' ? (pres.background.image?.url ?? null) : null, veil: pres.background.veil },
+    background: {
+      color: hex(pres.background.color),
+      imageUrl: pres.background.kind === 'photo' ? (pres.background.image?.url ?? null) : pres.background.kind === 'illustration' && drawing ? assetUrl(drawing) : null,
+      veil: pres.background.veil,
+      kind: pres.background.kind,
+    },
     gammeColor,
+    position: pres.position,
+    textPlace: pres.textPlace,
+    ink: pres.ink === 'encre' ? api.CATALOGUE_PRES_HEX.encre : gammeColor,
+    drawing,
+    drawingUrl: drawing ? assetUrl(drawing) : null,
   }
 }
 
@@ -681,6 +701,14 @@ function PresentationEditor(
   const color = gamme?.color ?? '#8D1D2C'
   const page = presIdx >= 0 ? cat.pages[presIdx] : null
   const docPage = doc && presIdx >= 0 ? doc.pages[presIdx + 2] : undefined
+  // L'illustration de la gamme (son dessin de saison, `img/print/…`) : null quand la gamme n'en a pas.
+  const drawing = docPage && docPage.kind === 'presentation' ? (docPage.drawing ?? null) : null
+  const ink = pres.ink === 'encre' ? api.CATALOGUE_PRES_HEX.encre : color
+  // Une présentation d'avant en « pleine » (une photo pleine page, texte sur un bandeau) : montrée comme 1 image en pleine
+  // page ; elle garde son rendu tant qu'on ne touche ni au nombre d'images ni à leur place.
+  const legacy = pres.layout === 'pleine'
+  const shownLayout: CataloguePresLayout = legacy ? 'une' : pres.layout
+  const shownPos: api.CataloguePresPosition = legacy ? 'pleine' : pres.position
 
   // Une gamme sans présentation à elle dans ce catalogue : celle qu'on voit ici (le modèle, sinon celle d'office) est
   // enregistrée dès l'ouverture — le document imprime alors ce que montre l'éditeur.
@@ -709,18 +737,20 @@ function PresentationEditor(
   const preview: CatalogueDocument | null = useMemo(() => {
     if (!doc || !docPage || docPage.kind !== 'presentation') return null
     const gTitle = gamme?.title ?? docPage.title
-    const design = docDesign(pres, color, lang, gTitle, (lang === 'nl' ? page?.textNl || page?.text : page?.text) ?? '')
+    const design = docDesign(pres, color, lang, gTitle, (lang === 'nl' ? page?.textNl || page?.text : page?.text) ?? '', drawing)
     const pagesOut = doc.pages.map((x, i) => (i === presIdx + 2 && x.kind === 'presentation' ? { ...x, design, title: design.title.text, text: design.text.text } : x))
     return { ...doc, pages: pagesOut }
-  }, [doc, docPage, pres, color, lang, gamme?.title, page, presIdx])
+  }, [doc, docPage, pres, color, lang, gamme?.title, page, presIdx, drawing])
 
   const slots = api.CATALOGUE_PRES_SLOTS[pres.layout]
   const scale = cat.format === 'A4' ? 210 / 148 : 1
   const dpi = (i: number): number | null => {
     const ph = pres.photos[i]
     const w = ph?.image?.width
-    if (!ph || !w) return null
-    const mm = (SLOT_MM[pres.layout][i] ?? SLOT_MM[pres.layout][0]) * scale
+    // L'illustration de la gamme est un trait (un masque peint) : jamais d'alerte de résolution.
+    if (!ph || ph.source === 'illustration' || !w) return null
+    const table = legacy || pres.position === 'haut' || pres.position === 'bas' ? SLOT_MM : pres.position === 'pleine' ? SLOT_MM_FULL : SLOT_MM_SIDE
+    const mm = (table[pres.layout][i] ?? table[pres.layout][0]) * scale
     return Math.round((w / (mm / 25.4)) * (100 / ph.zoom))
   }
   const lowDpi = pres.photos.slice(0, slots).filter((_, i) => (dpi(i) ?? 999) < 300).length
@@ -730,11 +760,29 @@ function PresentationEditor(
     if (picking === 'background') {
       edit((x) => ({ ...x, background: { ...x.background, kind: 'photo', mediaId: Number(asset.id), image } }))
     } else {
-      edit((x) => ({ ...x, photos: [...x.photos, { mediaId: Number(asset.id), x: 50, y: 50, zoom: 100, image }].slice(0, 4) }))
+      edit((x) => ({ ...x, photos: [...x.photos, { mediaId: Number(asset.id), x: 50, y: 50, zoom: 100, source: 'media' as const, image }].slice(0, 4) }))
       setPhoto(Math.min(pres.photos.length, 3))
     }
     setPicking(null)
   }
+  function addIllustration() {
+    edit((x) => ({ ...x, photos: [...x.photos, { mediaId: null, x: 50, y: 50, zoom: 100, source: 'illustration' as const, image: null }].slice(0, 4) }))
+    setPhoto(Math.min(pres.photos.length, 3))
+  }
+  /** Le nombre d'images ou leur place : une présentation d'avant en « pleine » devient 1 image en pleine page. */
+  function setArrangement(patch: { layout?: CataloguePresLayout; position?: api.CataloguePresPosition }) {
+    edit((x) => ({ ...x, layout: patch.layout ?? (x.layout === 'pleine' ? 'une' : x.layout), position: patch.position ?? (x.layout === 'pleine' ? 'pleine' : x.position) }))
+  }
+  const usesDrawing = pres.background.kind === 'illustration' || pres.photos.slice(0, slots).some((ph) => ph.source === 'illustration')
+  const drawThumb = () =>
+    drawing ? (
+      <span
+        className="gp-draw"
+        style={{ backgroundColor: ink, WebkitMaskImage: `url("${assetUrl(drawing)}")`, maskImage: `url("${assetUrl(drawing)}")` } as CSSProperties}
+      />
+    ) : (
+      <span title="Pas d’illustration pour cette gamme">—</span>
+    )
   async function upload(files: FileList | null) {
     for (const file of Array.from(files ?? []).slice(0, 4)) {
       try {
@@ -848,9 +896,18 @@ function PresentationEditor(
           </div>
         </div>
         <div className="gp-panel">
-          <div className="gp-lab">
-            Photos · {pres.photos.length}
+          <div className="gp-lab gp-lab--src">
+            Images · {pres.photos.length}
             <span className="wz-grow" />
+            <button
+              type="button"
+              className="btn btn--sm"
+              onClick={addIllustration}
+              disabled={pres.photos.length >= 4 || !drawing}
+              title={drawing ? 'Le dessin de saison de la gamme, au trait : il se cadre comme une photo, sans souci de résolution' : 'Pas d’illustration (dessin de saison) pour cette gamme'}
+            >
+              Illustration de la gamme
+            </button>
             <button type="button" className="btn btn--sm" onClick={() => setPicking('photo')} disabled={pres.photos.length >= 4}>
               Médiathèque
             </button>
@@ -862,8 +919,8 @@ function PresentationEditor(
           <div className="gp-photos">
             {pres.photos.map((ph, i) => (
               <div
-                key={`${ph.mediaId}-${i}`}
-                className={`gp-ph${i === photo ? ' is-on' : ''}${i >= slots ? ' is-out' : ''}`}
+                key={`${ph.source}-${ph.mediaId ?? 'ill'}-${i}`}
+                className={`gp-ph${i === photo ? ' is-on' : ''}${i >= slots ? ' is-out' : ''}${ph.source === 'illustration' ? ' gp-ph--draw' : ''}`}
                 draggable
                 onDragStart={() => setDrag(i)}
                 onDragOver={(e) => { if (drag !== null) e.preventDefault() }}
@@ -871,7 +928,7 @@ function PresentationEditor(
                 onClick={() => setPhoto(i)}
                 title={i >= slots ? 'Hors de la disposition choisie : pas imprimée' : `Case ${i + 1} · glisser pour changer de case`}
               >
-                {ph.image?.url ? <img src={ph.image.url} alt="" /> : <span>?</span>}
+                {ph.source === 'illustration' ? drawThumb() : ph.image?.url ? <img src={ph.image.url} alt="" /> : <span>?</span>}
                 <span className="gp-ph__n">{i + 1}</span>
                 {(dpi(i) ?? 999) < 300 && i < slots ? <span className="gp-ph__warn">⚠ {dpi(i)} dpi</span> : null}
                 <button type="button" className="gp-ph__x" aria-label="Retirer la photo" onClick={(e) => { e.stopPropagation(); edit((x) => ({ ...x, photos: x.photos.filter((_, k) => k !== i) })); setPhoto(0) }}>
@@ -885,9 +942,10 @@ function PresentationEditor(
               </button>
             ) : null}
           </div>
-          <div className="gp-lays" role="group" aria-label="Disposition des photos">
+          <div className="gp-lab">Nombre d’images</div>
+          <div className="gp-lays gp-lays--3" role="group" aria-label="Nombre d’images">
             {PRES_LAYOUTS.map(([l, label]) => (
-              <button key={l} type="button" className={`gp-lay${pres.layout === l ? ' is-on' : ''}`} onClick={() => edit((x) => ({ ...x, layout: l }))}>
+              <button key={l} type="button" className={`gp-lay${shownLayout === l ? ' is-on' : ''}`} aria-pressed={shownLayout === l} onClick={() => setArrangement({ layout: l })}>
                 <span className={`gp-lay__ic gp-lay__ic--${l}`} aria-hidden="true">
                   {Array.from({ length: api.CATALOGUE_PRES_SLOTS[l] }, (_, k) => <i key={k} />)}
                 </span>
@@ -895,6 +953,36 @@ function PresentationEditor(
               </button>
             ))}
           </div>
+          <div className="gp-lab">Place des images</div>
+          <div className="gp-lays gp-lays--5" role="group" aria-label="Place des images par rapport au texte">
+            {PRES_POSITIONS.map(([pos, label]) => (
+              <button key={pos} type="button" className={`gp-lay${shownPos === pos ? ' is-on' : ''}`} aria-pressed={shownPos === pos} onClick={() => setArrangement({ position: pos })} title={pos === 'pleine' ? 'Les images couvrent toute la page, le texte par-dessus' : `Images ${pos === 'haut' ? 'en haut' : pos === 'bas' ? 'en bas' : pos === 'gauche' ? 'à gauche' : 'à droite'}, texte ${pos === 'haut' ? 'dessous' : pos === 'bas' ? 'dessus' : pos === 'gauche' ? 'à droite' : 'à gauche'}`}>
+                <span className={`gp-pos gp-pos--${pos}`} aria-hidden="true">
+                  <i />
+                  <b />
+                </span>
+                {label}
+              </button>
+            ))}
+          </div>
+          {shownPos === 'pleine' && !legacy ? (
+            <div className="gp-field">
+              <div className="gp-row">
+                <Seg label="Place du texte" value={pres.textPlace} options={TEXT_PLACES} onChange={(textPlace) => edit((x) => ({ ...x, textPlace }))} />
+              </div>
+              <label className="gp-range">
+                <span>Voile</span>
+                <input type="range" min={0} max={80} value={pres.background.veil} onChange={(ev) => { const v = Number(ev.target.value); edit((x) => ({ ...x, background: { ...x.background, veil: v } })) }} />
+                <b>{pres.background.veil}%</b>
+              </label>
+            </div>
+          ) : null}
+          {usesDrawing ? (
+            <div className="gp-row">
+              <span className="gp-sub">Trait de l’illustration</span>
+              <Seg label="Trait de l’illustration" value={pres.ink} options={INKS} onChange={(inkName) => edit((x) => ({ ...x, ink: inkName }))} />
+            </div>
+          ) : null}
           {pres.photos[photo] && photo < slots ? (
             <div className="gp-crop">
               <div className="gp-lab">
@@ -933,7 +1021,7 @@ function PresentationEditor(
               <Seg
                 label="Fond"
                 value={pres.background.kind}
-                options={[['color', 'Couleur'], ['photo', 'Photo pleine page']]}
+                options={drawing ? [['color', 'Couleur'], ['photo', 'Photo'], ['illustration', 'Illustration']] : [['color', 'Couleur'], ['photo', 'Photo']]}
                 onChange={(kind) => (kind === 'photo' && !pres.background.mediaId ? setPicking('background') : edit((x) => ({ ...x, background: { ...x.background, kind } })))}
               />
             </div>
@@ -945,12 +1033,18 @@ function PresentationEditor(
                 )
               })}
             </div>
-            {pres.background.kind === 'photo' ? (
+            {pres.background.kind === 'photo' || pres.background.kind === 'illustration' ? (
               <div className="gp-row">
-                {pres.background.image?.url ? <img className="gp-bgthumb" src={pres.background.image.url} alt="" /> : null}
-                <button type="button" className="btn btn--sm" onClick={() => setPicking('background')}>
-                  Changer la photo
-                </button>
+                {pres.background.kind === 'illustration' ? (
+                  <span className="gp-bgthumb gp-bgthumb--draw">{drawThumb()}</span>
+                ) : pres.background.image?.url ? (
+                  <img className="gp-bgthumb" src={pres.background.image.url} alt="" />
+                ) : null}
+                {pres.background.kind === 'photo' ? (
+                  <button type="button" className="btn btn--sm" onClick={() => setPicking('background')}>
+                    Changer la photo
+                  </button>
+                ) : null}
                 <label className="gp-range">
                   <span>Voile</span>
                   <input type="range" min={0} max={80} value={pres.background.veil} onChange={(ev) => { const v = Number(ev.target.value); edit((x) => ({ ...x, background: { ...x.background, veil: v } })) }} />

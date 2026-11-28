@@ -1194,6 +1194,16 @@ l'aperçu, imprime donc l'ancienne présentation tant qu'il ne lit pas `design`)
 
 Écarts résiduels : `GET …/catalogue-gammes` non paginée réellement (une dizaine de lignes) ; `PUT` sans `ETag`.
 
+**Place des images et illustration de la gamme (28 novembre 2026, OpenAPI v1.24).** Client : « une full page
+illustration avec haut et bas, gauche, droite, en utilisant l'illustration ou des pictures de la médiathèque ».
+`Presentation` (catalogue et modèle de gamme) gagne, après ses clés d'avant : `position` (`haut` · `bas` · `gauche` ·
+`droite` · `pleine`, défaut `haut`), `textPlace` (`haut` · `centre` · `bas`, défaut `bas`), `ink` (`gamme` · `encre`) ;
+chaque photo `source` (`media` · `illustration`, `mediaId` null pour l'illustration) ; `background.kind` gagne
+`illustration`. Liste blanche, 422 nommé ; relus dans l'ordre fixe (`presNormalize`). Au document, `design` gagne
+`position`, `textPlace`, `ink` (#RRGGBB), `drawing`/`drawingUrl`, `photos[i].kind`, `background.kind` ; avertissement
+`PRESENTATION_NO_DRAWING`. Un design d'avant garde son rendu (`layout: pleine` d'avant compris). Le dashboard franchisé
+(`consultant_BO`, `panel/public/dashboard/catalogue.js`) dessine les mêmes places et l'illustration.
+
 ## 15. Le référentiel des agences en écriture (21 novembre 2026)
 
 Le cockpit (dépôt `consultant_BO`, `marketing/src/mkt_agences.php`) écrivait `mar_agency` en SQL : son écran

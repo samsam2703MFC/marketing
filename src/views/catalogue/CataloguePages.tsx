@@ -692,36 +692,73 @@ export function CroppedPhoto({ url, x, y, zoom, className = '' }: { url: string 
 }
 
 /**
- * La page de présentation d'une gamme, gamme par gamme (maquettes M2-2 et M3, 27/11/2026) : ses photos dans la
- * disposition choisie (1 grande · 2 · 3 en mosaïque · pleine page), son accroche, son titre et son texte dans leurs
- * styles, sur un fond de couleur ou une photo pleine page sous un voile ; au choix, la liste de ses produits.
+ * L'illustration de la gamme (son dessin de saison) dans une case, cadrée comme une photo (position, agrandissement) :
+ * le trait est peint à la couleur choisie (celle de la gamme, ou l'encre) par le filtre de teinte du logo (`TintDefs`,
+ * posé sur la page) — un masque CSS ne s'imprime pas dans le PDF de Chromium. Jamais d'alerte de résolution. À 100 %,
+ * le dessin entier tient dans sa case.
+ */
+export function DrawnCase({ src, ink, x = 50, y = 50, zoom = 100, className = '' }: { src: string | null; ink: string; x?: number; y?: number; zoom?: number; className?: string }) {
+  return (
+    <div className={`cat-pd__ph cat-pd__ph--draw ${src ? '' : 'is-empty'} ${className}`}>
+      {src ? (
+        <img
+          className="cat-pd__draw"
+          src={src}
+          alt=""
+          style={{ objectPosition: `${x}% ${y}%`, transform: zoom !== 100 ? `scale(${zoom / 100})` : undefined, transformOrigin: `${x}% ${y}%`, filter: `url(#${tintId(ink)})` }}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * La page de présentation d'une gamme, gamme par gamme (maquettes M2-2 et M3, 27/11/2026) : ses images dans la
+ * disposition choisie (1 grande · 2 · 3 en mosaïque), à la place choisie par rapport au texte (28/11/2026 : en haut, en
+ * bas, à gauche, à droite, ou la page entière avec le texte par-dessus, sous un voile) ; chaque case est une photo ou
+ * l'illustration de la gamme. Son accroche, son titre et son texte dans leurs styles, sur un fond de couleur, une photo
+ * ou l'illustration pleine page sous un voile ; au choix, la liste de ses produits. `layout` « pleine » (d'avant) garde son
+ * rendu : une photo pleine page, le texte sur un bandeau.
  */
 function PresentationDesign({ page, design, lang }: { page: Extract<CatalogueDocPage, { kind: 'presentation' }>; design: CatalogueDocDesign; lang: CatalogueLang }) {
   const withList = page.layout === 'presentation_liste'
   const slots = CATALOGUE_PRES_SLOTS[design.layout]
-  const photos = Array.from({ length: slots }, (_, i) => design.photos[i] ?? { url: null, x: 50, y: 50, zoom: 100 })
+  const photos = Array.from({ length: slots }, (_, i) => design.photos[i] ?? { url: null, x: 50, y: 50, zoom: 100, kind: 'photo' as const })
   const light = ['#FFFFFF', '#F5EFE4'].includes(design.title.color.toUpperCase())
-  const full = design.layout === 'pleine'
+  const legacy = design.layout === 'pleine'
+  const position = legacy ? 'haut' : (design.position ?? 'haut')
+  const over = position === 'pleine'
+  const ink = design.ink ?? design.gammeColor
+  const drawSrc = design.drawing ? asset(design.drawing) : (design.drawingUrl ?? null)
+  const veilColor = light ? '#000' : design.background.color
+  const bgKind = design.background.kind ?? (design.background.imageUrl ? 'photo' : 'color')
+  const caseOf = (ph: (typeof photos)[number], i: number, className = '') =>
+    ph.kind === 'illustration' ? (
+      <DrawnCase key={i} src={drawSrc} ink={ink} x={ph.x} y={ph.y} zoom={ph.zoom} className={className} />
+    ) : (
+      <CroppedPhoto key={i} url={ph.url} x={ph.x} y={ph.y} zoom={ph.zoom} className={className} />
+    )
+  const place = design.textPlace ?? 'bas'
   return (
-    <div className={`cat-pd cat-pd--${design.layout}${withList ? ' cat-pd--liste' : ''}`}>
-      {design.background.imageUrl ? (
+    <div className={`cat-pd cat-pd--${design.layout}${legacy ? '' : ` cat-pd--pos-${position}`}${over ? ` cat-pd--place-${place}` : ''}${withList ? ' cat-pd--liste' : ''}`}>
+      {bgKind === 'photo' && design.background.imageUrl ? (
         <div className="cat-pd__bg">
           <img src={design.background.imageUrl} alt="" />
-          <i style={{ background: light ? '#000' : design.background.color, opacity: design.background.veil / 100 }} />
+          <i style={{ background: veilColor, opacity: design.background.veil / 100 }} />
+        </div>
+      ) : bgKind === 'illustration' ? (
+        <div className="cat-pd__bg">
+          <DrawnCase src={drawSrc} ink={ink} className="cat-pd__bgdraw" />
+          <i style={{ background: veilColor, opacity: design.background.veil / 100 }} />
         </div>
       ) : null}
-      {full ? (
-        <div className="cat-pd__bg">
-          <CroppedPhoto {...photos[0]} />
-        </div>
+      {legacy ? (
+        <div className="cat-pd__bg">{caseOf(photos[0], 0)}</div>
       ) : (
-        <div className="cat-pd__photos">
-          {photos.map((ph, i) => (
-            <CroppedPhoto key={i} {...ph} className={`cat-pd__ph--${i}`} />
-          ))}
-        </div>
+        <div className={`cat-pd__photos${over ? ' cat-pd__photos--over' : ''}`}>{photos.map((ph, i) => caseOf(ph, i, `cat-pd__ph--${i}`))}</div>
       )}
-      <div className="cat-pd__head" style={full ? { background: design.background.color } : undefined}>
+      {over ? <i className="cat-pd__veil" style={{ background: veilColor, opacity: design.background.veil / 100 }} /> : null}
+      <div className="cat-pd__head" style={legacy ? { background: design.background.color } : undefined}>
         {design.kicker.text ? (
           <div className="cat-pd__kicker" style={presTextStyle(design.kicker)}>
             {design.kicker.text}
@@ -934,9 +971,11 @@ export function CataloguePage({ doc, index }: { doc: CatalogueDocument; index: n
     // Gamme par gamme : le fond choisi de la présentation, jusqu'au fond perdu ; sa gamme pour les filets.
     ...(page.kind === 'presentation' && page.design ? { background: page.design.background.color, '--g': page.design.gammeColor } : {}),
   } as CSSProperties
+  // Les teintes de la page : le logo, et le trait de l'illustration d'une présentation (28/11/2026).
+  const tints = [...new Set([...('look' in page && page.look?.logo?.color ? [page.look.logo.color] : []), ...(page.kind === 'presentation' && page.design ? [page.design.ink ?? page.design.gammeColor] : [])])]
   return (
     <div className={`cat-face cat-face--${page.kind}${page.kind === 'products' || page.kind === 'presentation' ? ` cat-face--t${page.template ?? 'A'}` : ''}${page.kind === 'cover' ? ` cat-face--cover${page.template ?? 'A'}` : ''}`} style={style} lang={doc.version.lang}>
-      {'look' in page && page.look?.logo?.color ? <TintDefs colors={[page.look.logo.color]} /> : null}
+      {tints.length ? <TintDefs colors={tints} /> : null}
       <div className="cat-trim">
         {page.kind === 'cover' ? <Cover page={page} doc={doc} /> : null}
         {page.kind === 'brand' ? <Brand page={page} doc={doc} /> : null}

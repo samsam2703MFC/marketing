@@ -600,6 +600,29 @@
 .cat-pd__title { overflow-wrap: anywhere; max-height: 2.5em; overflow: hidden; padding-top: 0.16em; }
 .cat-pd__text { white-space: pre-line; overflow: hidden; }
 .cat-pd__list { margin-top: calc(var(--u) * 2mm); }
+/* La place des images (28/11/2026) : en haut (d'avant), en bas, à gauche, à droite, la page entière (texte par-dessus). */
+.cat-pd--pos-bas { flex-direction: column-reverse; }
+.cat-pd--pos-bas .cat-pd__head { justify-content: flex-start; }
+.cat-pd--pos-gauche, .cat-pd--pos-droite { flex-direction: row; }
+.cat-pd--pos-droite { flex-direction: row-reverse; }
+.cat-pd--pos-gauche .cat-pd__photos, .cat-pd--pos-droite .cat-pd__photos { flex: 0 0 50%; }
+.cat-pd--pos-gauche .cat-pd__head, .cat-pd--pos-droite .cat-pd__head { justify-content: center; }
+.cat-pd--pos-gauche.cat-pd--liste .cat-pd__photos, .cat-pd--pos-droite.cat-pd--liste .cat-pd__photos { flex-basis: 40%; }
+.cat-pd--pos-gauche.cat-pd--liste .cat-pd__head, .cat-pd--pos-droite.cat-pd--liste .cat-pd__head { justify-content: flex-start; padding-bottom: calc(var(--u) * 8mm); }
+.cat-pd--pos-gauche.cat-pd--deux .cat-pd__photos, .cat-pd--pos-droite.cat-pd--deux .cat-pd__photos { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+.cat-pd--pos-gauche.cat-pd--mosaique .cat-pd__photos, .cat-pd--pos-droite.cat-pd--mosaique .cat-pd__photos { grid-template-columns: 1fr 1fr; grid-template-rows: 1.45fr 1fr; }
+.cat-pd--pos-gauche.cat-pd--mosaique .cat-pd__ph--0, .cat-pd--pos-droite.cat-pd--mosaique .cat-pd__ph--0 { grid-row: auto; grid-column: 1 / span 2; }
+.cat-pd__photos--over { position: absolute; inset: calc(-1 * var(--b)); gap: 0; }
+.cat-pd__photos--over .cat-pd__ph { border-radius: 0; }
+.cat-pd__veil { position: absolute; inset: calc(-1 * var(--b)); }
+.cat-pd--pos-pleine .cat-pd__head { flex: 1 1 0; }
+.cat-pd--place-haut .cat-pd__head { justify-content: flex-start; }
+.cat-pd--place-centre .cat-pd__head { justify-content: center; }
+.cat-pd--place-bas .cat-pd__head { justify-content: flex-end; }
+/* L'illustration de la gamme : le trait teint à la couleur choisie (filtre SVG) ; à 100 %, le dessin entier dans sa case. */
+.cat-pd__ph--draw { background: transparent; }
+.cat-pd__ph img.cat-pd__draw { object-fit: contain; }
+.cat-pd__bg .cat-pd__bgdraw { position: absolute; inset: calc(var(--b) + var(--u) * 8mm); width: auto; height: auto; }
 /* Une page libre (gamme par gamme) : la photo à fond perdu, ou l'illustration de la gamme voisine au centre. */
 .cat-free { position: absolute; inset: 0; }
 .cat-free .cat-filler { position: absolute; inset: 0; border-radius: 0; background: transparent; }
