@@ -5013,6 +5013,31 @@ textarea:focus-visible {
   }
 }
 
+/* Entre 1000 et 1279 px, la même garde que sous 1000 px : une carte, une grille ou un champ ne s'élargit pas à son
+   contenu le plus large ; c'est le tableau qui défile dans son propre cadre, jamais la page. Au-delà, rien ne change. */
+@media (min-width: 1000px) and (max-width: 1279px) {
+  .app__body > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .app__body .card,
+  .app__body label,
+  .app__body .table-scroll {
+    min-width: 0;
+  }
+
+  /* Adresses et réglages : les cartes dans une colonne qui ne s'élargit pas, les tableaux qui se resserrent
+     (adresses et variables passent à la ligne). */
+  .addresses {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .addresses table {
+    min-width: 0;
+  }
+}
+
 /* Au-delà de 1000 px, la barre d'un écran en cadre n'a rien à porter : elle disparaît comme avant. */
 @media (min-width: 1000px) {
   .topbar--cadre {

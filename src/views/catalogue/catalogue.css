@@ -284,3 +284,18 @@
 /* Le titre d'un imprimé sur sa ligne, en entier (audit du 27/11/2026 : « … — catalogue » était coupé par les outils). */
 .catv-head__titre { flex: 1 1 100%; min-width: 0; }
 .catv-head__titre .catv-title { width: 100%; min-width: 0; text-overflow: ellipsis; }
+
+/* Entre 1000 et 1279 px (portable, tablette à l'horizontale), la liste tient dans sa carte : le tableau se resserre,
+   les textes passent à la ligne et les trois gestes d'une ligne s'empilent (« Bon de commande » sur deux lignes) à droite au lieu d'élargir l'écran. */
+@media (min-width: 1000px) and (max-width: 1279px) {
+  .catv-table { min-width: 0; }
+  .catv-table th, .catv-table td { padding-left: 6px; padding-right: 6px; }
+  .catv-table td:nth-child(3) { min-width: 0; }
+  .catv-table td:nth-child(4) .bro-tag { white-space: normal; }
+  .catv-table .catv-col-titre { min-width: 100px; }
+  .catv-table td:nth-child(7) { min-width: 96px; }
+  .catv-row-actions { white-space: normal; width: 1%; }
+  .catv-row-actions > * { margin: 2px 0 2px 6px; }
+  .catv-row-actions .btn { white-space: nowrap; }
+  .catv-row-actions .bdc-menu__btn { white-space: normal; text-align: left; }
+}
